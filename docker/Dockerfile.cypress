@@ -1,0 +1,4 @@
+## DOESNT WORK FROM DOCKERFILE, BUT IT WORKS MANUALLY WITH docker-compose run --entrypoint bash portfolio-cypress-app
+FROM cypress/included:14.2.1
+ENTRYPOINT ["bash", "-c"]
+CMD ["npm install && npx nx open-cypress shell-e2e --port 62525"]

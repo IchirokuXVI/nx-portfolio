@@ -1,0 +1,23 @@
+services:
+  portfolio-app:
+    image: node:22
+    container_name: portfolio-app
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    ports:
+      - '4200:4200'
+    command: >
+      sh -c "npm install && npx nx serve shell --host 0.0.0.0 --poll 1500"
+  ## DOESNT WORK, SEE ./docker/Dockerfile.cypress
+  # portfolio-cypress-app:
+  #   build:
+  #     dockerfile: ./docker/Dockerfile.cypress
+  #   container_name: portfolio-cypress-app
+  #   working_dir: /app
+  #   volumes:
+  #     - ./:/app
+  #     - /app/node_modules
+  #   ports:
+  #     - '62525:62525'
