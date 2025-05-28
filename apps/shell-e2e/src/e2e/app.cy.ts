@@ -1,13 +1,8 @@
-import { getGreeting } from '../support/app.po';
-
 describe('shell-e2e', () => {
-  beforeEach(() => cy.visit('/'));
+  beforeEach(() => cy.visit('/non-existing-path'));
 
-  it('should display welcome message', () => {
-    // Custom command example, see `../support/commands.ts` file
-    cy.login('my-email@something.com', 'myPassword');
-
-    // Function helper example, see `../support/app.po.ts` file
-    getGreeting().contains(/Welcome/);
+  it('should display 404 page', () => {
+    cy.get('h1').contains('404');
+    cy.get('h1').contains('Page Not Found');
   });
 });

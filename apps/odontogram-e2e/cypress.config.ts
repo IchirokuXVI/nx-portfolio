@@ -6,8 +6,8 @@ export default defineConfig({
     ...nxE2EPreset(__filename, {
       cypressDir: 'src',
       webServerCommands: {
-        default: 'npx nx run odontogram:serve',
-        production: 'npx nx run odontogram:serve-static',
+        default: 'npx nx run odontogram:serve --host 0.0.0.0',
+        production: 'npx nx run odontogram:serve-static --host 0.0.0.0',
       },
       ciWebServerCommand: 'npx nx run odontogram:serve-static',
       ciBaseUrl: 'http://localhost:4200',

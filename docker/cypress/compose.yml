@@ -1,0 +1,32 @@
+services:
+  portfolio-cypress-chrome:
+      build:
+        dockerfile: ./Dockerfile.cypress
+        args:
+          - CYPRESS_BROWSER=chrome
+      container_name: portfolio-cypress-chrome
+      working_dir: /app
+      volumes:
+        - ../../:/app
+        - /app/node_modules
+  portfolio-cypress-firefox:
+    build:
+      dockerfile: ./Dockerfile.cypress
+      args:
+        - CYPRESS_BROWSER=firefox
+    container_name: portfolio-cypress-firefox
+    working_dir: /app
+    volumes:
+      - ../../:/app
+      - /app/node_modules
+  # Note: Safari support is not available in Cypress as of now, it is currently in experimental support.
+  # portfolio-cypress-safari:
+  #   build:
+  #     dockerfile: ./docker/Dockerfile.cypress
+  #     args:
+  #       - CYPRESS_BROWSER=safari
+  #   container_name: portfolio-cypress-safari
+  #   working_dir: /app
+  #   volumes:
+  #     - ./:/app
+  #     - /app/node_modules
