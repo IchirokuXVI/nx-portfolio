@@ -2,104 +2,127 @@
 
 $primary-color: #1a1a1a;
 $accent-color: #e74c3c;
-$background-color: #ffffff;
-$card-background-color: #2a2a2a;
+$background-color: #2a2a2a;
+$card-background-color: #dddeee11;
 $text-color: #f0f0f0;
 
-:host {
+* {
+    box-sizing: border-box;
+}
+
+.landing-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   font-family: Arial, sans-serif;
   margin: 0;
   background-color: $background-color;
   color: $text-color;
-}
 
-header {
-  background-color: $primary-color;
-  color: white;
-  text-align: center;
-  padding: 2rem 1rem;
+  header {
+    background-color: $primary-color;
+    color: white;
+    text-align: center;
+    padding: 2rem 1rem;
 
-  h1 {
-    margin: 0;
-    font-size: 2.5rem;
-  }
+    h1 {
+      margin: 0;
+      font-size: 2.5rem;
+    }
 
-  p {
-    margin-top: 0.5rem;
-    font-size: 1.2rem;
-  }
-}
-
-section {
-  padding: 2rem 1rem;
-  max-width: 960px;
-  margin: 0 auto;
-  background-color: $primary-color;
-  border-radius: 8px;
-}
-
-.about {
-  background: $card-background-color;
-  border-radius: 8px;
-  box-shadow: 0 0 10px rgba(0,0,0,0.5);
-
-  h2, h3 {
-    color: $accent-color;
-  }
-
-  ul {
-    padding-left: 1.5rem;
-    li {
-      margin-bottom: 0.5rem;
+    p {
+      margin-top: 0.5rem;
+      font-size: 1.2rem;
     }
   }
-}
 
-.projects {
-  .project {
+  >main {
     display: flex;
-    flex-direction: column;
-    margin-bottom: 2rem;
+    gap: 2em;
+    padding: 1.5em;
+    flex-wrap: wrap;
+
+    > * {
+      padding: 1rem;
+      margin: 0 auto;
+      background-color: $primary-color;
+      border-radius: 8px;
+    }
+  }
+
+  .about {
+    flex: 1 1;
+    min-width: 480px;
     background: $card-background-color;
     border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 
-    img {
-      width: 100%;
-      height: auto;
-      display: block;
+    h2,
+    h3 {
+      color: $accent-color;
     }
 
-    .description {
-      padding: 1rem;
+    ul {
+      padding-left: 1.5rem;
 
-      h3 {
-        color: $accent-color;
-        margin-top: 0;
-      }
-
-      a {
-        color: $accent-color;
-        text-decoration: none;
-
-        &:hover {
-          text-decoration: underline;
-        }
+      li {
+        margin-bottom: 0.5rem;
       }
     }
   }
 
-  @media (min-width: 768px) {
+  .projects {
+    flex: 1 1;
+    min-width: 640px;
+
     .project {
-      flex-direction: row;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5em;
+      margin-bottom: 2rem;
+      background: $card-background-color;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 
       img {
-        width: 40%;
+        width: 100%;
+        height: auto;
+        display: block;
       }
 
       .description {
-        width: 60%;
+        padding: 1rem;
+
+        h3 {
+          font-size: 1.15em;
+          padding: 0.25em;
+          color: $accent-color;
+          margin-top: 0;
+        }
+
+        a {
+          color: $accent-color;
+          text-decoration: none;
+
+          &:hover {
+            text-decoration: underline;
+          }
+        }
+      }
+    }
+
+    @media (min-width: 768px) {
+      .project {
+        flex-direction: row;
+
+        img {
+          width: 40%;
+        }
+
+        .description {
+          width: 60%;
+        }
       }
     }
   }
