@@ -1,15 +1,14 @@
 :host {
-  margin: 0;
+  margin: 0 auto;
   padding: 0;
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background-color: #fff;
   font-family: Arial, sans-serif;
 }
 
 h1 {
-  color: red;
+  color: rgb(200, 50, 50);
   font-size: 3rem;
 }

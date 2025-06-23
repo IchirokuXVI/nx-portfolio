@@ -6,17 +6,14 @@ $background-color: #2a2a2a;
 $card-background-color: #dddeee11;
 $text-color: #f0f0f0;
 
-* {
-    box-sizing: border-box;
-}
-
 .landing-container {
   display: flex;
   flex-direction: column;
   width: 100%;
+  height: 100%;
+  background-color: $background-color;
   font-family: Arial, sans-serif;
   margin: 0;
-  background-color: $background-color;
   color: $text-color;
 
   header {
@@ -37,91 +34,95 @@ $text-color: #f0f0f0;
   }
 
   >main {
+    flex: 1 1;
     display: flex;
     gap: 2em;
     padding: 1.5em;
     flex-wrap: wrap;
 
-    > * {
-      padding: 1rem;
-      margin: 0 auto;
-      background-color: $primary-color;
-      border-radius: 8px;
-    }
-  }
-
-  .about {
-    flex: 1 1;
-    min-width: 480px;
-    background: $card-background-color;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-
-    h2,
-    h3 {
-      color: $accent-color;
-    }
-
-    ul {
-      padding-left: 1.5rem;
-
-      li {
-        margin-bottom: 0.5rem;
-      }
-    }
-  }
-
-  .projects {
-    flex: 1 1;
-    min-width: 640px;
-
-    .project {
+    >section {
       display: flex;
       flex-direction: column;
       gap: 0.5em;
-      margin-bottom: 2rem;
-      background: $card-background-color;
+      padding: 1rem;
+      background-color: $primary-color;
       border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+      line-height: 1.6;
 
-      img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
+      &.about {
+        flex: 1 1;
+        min-width: 480px;
+        background: $primary-color;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 
-      .description {
-        padding: 1rem;
-
+        h2,
         h3 {
-          font-size: 1.15em;
-          padding: 0.25em;
           color: $accent-color;
-          margin-top: 0;
         }
 
-        a {
-          color: $accent-color;
-          text-decoration: none;
+        ul {
+          padding-left: 1.5rem;
 
-          &:hover {
-            text-decoration: underline;
+          li {
+            margin-bottom: 0.5rem;
           }
         }
       }
-    }
 
-    @media (min-width: 768px) {
-      .project {
-        flex-direction: row;
+      &.projects {
+        flex: 1 1;
+        min-width: 640px;
+        gap: 1.5em;
 
-        img {
-          width: 40%;
+        .project {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5em;
+          background: $card-background-color;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+
+          img {
+            width: 100%;
+            height: auto;
+            display: block;
+          }
+
+          .description {
+            padding: 0.75rem;
+
+            h3 {
+              font-size: 1.15em;
+              line-height: 1.8;
+              color: $accent-color;
+              margin-top: 0;
+            }
+
+            a {
+              color: $accent-color;
+              text-decoration: none;
+
+              &:hover {
+                text-decoration: underline;
+              }
+            }
+          }
         }
 
-        .description {
-          width: 60%;
+        @media (min-width: 768px) {
+          .project {
+            flex-direction: row;
+
+            img {
+              width: 40%;
+            }
+
+            .description {
+              width: 60%;
+            }
+          }
         }
       }
     }
