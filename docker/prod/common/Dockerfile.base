@@ -1,0 +1,10 @@
+ARG APP_NAME
+
+FROM portfolio-builder AS builder
+ARG APP_NAME
+RUN npx nx build ${APP_NAME} --configuration=production
+
+FROM portfolio-http-server
+ARG APP_NAME
+COPY --from=builder /app/dist/apps/${APP_NAME} /var/www/html/
+CMD ["nginx", "-g", "daemon off;"]
