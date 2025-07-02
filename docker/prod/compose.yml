@@ -1,0 +1,61 @@
+services:
+  reverse-proxy:
+    build:
+      context: ./
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      # This volume is used to allow the reverse proxy to communicate with Docker.
+      # :ro means read-only and does not allow the use of some commands like docker exec or docker kill because they need to write.
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ./certs:/etc/nginx/certs
+    environment:
+      ACME_HTTP_CHALLENGE_LOCATION: false
+
+  certbot:
+    build:
+      context: ./certbot/
+    volumes:
+      - ./certbot/certs:/etc/letsencrypt # Store generated certificates in a volume to persist them across container restarts
+      - ./certs:/certs # Store final certificates with domain.tld.crt and domain.tld.key all in the same directory
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DOMAINS: |-
+        ichirokuxvi.com
+        mfe.ichirokuxvi.com
+        staging.ichirokuxvi.com
+        staging.mfe.ichirokuxvi.com
+      VIRTUAL_HOST: 'ichirokuxvi.com,mfe.ichirokuxvi.com,staging.ichirokuxvi.com,staging.mfe.ichirokuxvi.com'
+      VIRTUAL_PATH: '/.well-known/acme-challenge/'
+  shell:
+    build:
+      context: ./
+      dockerfile: common/Dockerfile.base
+      args:
+        APP_NAME: shell
+    environment:
+      VIRTUAL_HOST: 'ichirokuxvi.com'
+      VIRTUAL_PATH: '/'
+
+  landing:
+    build:
+      context: ./
+      dockerfile: common/Dockerfile.base
+      args:
+        APP_NAME: landing
+    environment:
+      VIRTUAL_HOST: 'mfe.ichirokuxvi.com'
+      VIRTUAL_DEST: '/'
+      VIRTUAL_PATH: '/landing'
+
+  odontogram:
+    build:
+      context: ./
+      dockerfile: common/Dockerfile.base
+      args:
+        APP_NAME: odontogram
+    environment:
+      VIRTUAL_HOST: 'mfe.ichirokuxvi.com'
+      VIRTUAL_DEST: '/'
+      VIRTUAL_PATH: '/odontogram'
