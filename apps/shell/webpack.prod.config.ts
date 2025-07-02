@@ -19,6 +19,10 @@ export default withModuleFederation(
      *   ['app2', 'https://app2.example.com'],
      * ]
      */
+    remotes: [
+      ['landing', 'https://mfe.ichirokuxvi.com/landing'],
+      ['odontogram', 'https://mfe.ichirokuxvi.com/odontogram'],
+    ],
   },
   { dts: false }
 );
