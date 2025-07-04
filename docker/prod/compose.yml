@@ -1,5 +1,6 @@
 services:
   reverse-proxy:
+    container_name: reverse-proxy
     build:
       context: ./
     ports:
