@@ -19,6 +19,8 @@ fi
 
 echo "🔍 Checking and requesting certificates..."
 
+NEW_CERTS=0
+
 # Loop over each domain and request cert if not found
 for domain in $DOMAINS; do
   CERT_DIR="/etc/letsencrypt/live/$domain"
@@ -30,10 +32,17 @@ for domain in $DOMAINS; do
       $EMAIL_ARG \
       --agree-tos --no-eff-email --non-interactive \
       --deploy-hook "/deploy-hook.sh"
+
+    NEW_CERTS=$((NEW_CERTS + 1))
   else
     echo "✅ Certificate for $domain already exists. Will renew if needed"
   fi
 done
+
+if [ "$NEW_CERTS" -gt 0 ]; then
+  echo "🔄 $NEW_CERTS were requested. Restarting proxy to regenerate config..."
+  docker restart reverse-proxy
+fi
 
 echo "🔁 Starting certbot renew loop..."
 trap exit TERM
