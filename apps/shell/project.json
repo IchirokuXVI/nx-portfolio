@@ -71,7 +71,13 @@
           "buildTarget": "shell:build:production"
         },
         "development": {
-          "buildTarget": "shell:build:development"
+          "buildTarget": "shell:build:development",
+          "devRemotes": [
+            "odontogram",
+            "landing"
+          ],
+          "poll": 1500,
+          "host": "0.0.0.0"
         }
       },
       "defaultConfiguration": "development"

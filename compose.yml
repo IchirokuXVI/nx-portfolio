@@ -1,7 +1,7 @@
 services:
   portfolio-app:
     image: node:22
-    container_name: portfolio-app
+    container_name: portfolio-dev-app
     working_dir: /app
     volumes:
       - ./:/app
@@ -10,5 +10,8 @@ services:
       - /app/.angular
     ports:
       - '4200-4300:4200-4300'
+
+    # Serve options are configured in the project.json file of the shell app
+    # (/apps/shell/project.json).
     command: >
-      sh -c "npm ci && npx nx serve shell --host 0.0.0.0 --poll 1500"
+      sh -c "npm i && npx nx serve shell"
