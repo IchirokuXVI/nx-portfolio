@@ -1,5 +1,5 @@
 import { Route } from '@angular/router';
-import { NotFoundComponent } from '@portfolio/ui';
+import { NotFoundComponent } from '@portfolio/shared/ui';
 
 export const appRoutes: Route[] = [
   {
