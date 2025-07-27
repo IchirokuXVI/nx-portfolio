@@ -1,1 +1,3 @@
-export * from './lib/odontogram/ui/odontogram/ui';
+export * from './lib/odontogram/odontogram';
+export * from './lib/tooth/tooth';
+export * from './lib/tooth-view/tooth-view';
