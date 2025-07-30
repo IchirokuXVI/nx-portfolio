@@ -18,9 +18,13 @@
       "@portfolio/odontogram/data-access": [
         "libs/odontogram/data-access/src/index.ts"
       ],
+      "@portfolio/odontogram/feature-shell": [
+        "libs/odontogram/feature-shell/src/index.ts"
+      ],
       "@portfolio/odontogram/models": ["libs/odontogram/models/src/index.ts"],
       "@portfolio/odontogram/ui": ["libs/odontogram/ui/src/index.ts"],
       "@portfolio/shared/data-access": ["libs/shared/data-access/src/index.ts"],
+      "@portfolio/shared/models": ["libs/shared/models/src/index.ts"],
       "@portfolio/shared/ui": ["libs/shared/ui/src/index.ts"],
       "@portfolio/shared/util": ["libs/shared/util/src/index.ts"],
       "landing/Routes": ["apps/landing/src/app/remote-entry/entry.routes.ts"],
