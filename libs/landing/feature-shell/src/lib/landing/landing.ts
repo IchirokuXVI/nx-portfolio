@@ -4,11 +4,11 @@ import { CommonModule } from '@angular/common';
 declare const __webpack_public_path__: string;
 
 @Component({
-  selector: 'app-landing',
+  selector: 'lib-landing',
   imports: [CommonModule],
   templateUrl: './landing.html',
   styleUrl: './landing.scss',
 })
-export class LandingComponent {
+export class Landing {
   publicPath = __webpack_public_path__ + 'public/';
 }

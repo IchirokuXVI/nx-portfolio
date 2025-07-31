@@ -1,7 +1,7 @@
 import { Route } from '@angular/router';
-import { LandingComponent } from '../landing/landing';
+import { Landing } from '@portfolio/landing/feature-shell';
 
 
 export const remoteRoutes: Route[] = [
-  { path: '', pathMatch: 'full', component: LandingComponent },
+  { path: '', pathMatch: 'full', component: Landing },
 ];

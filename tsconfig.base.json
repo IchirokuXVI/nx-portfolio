@@ -15,6 +15,9 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@portfolio/landing/feature-shell": [
+        "libs/landing/feature-shell/src/index.ts"
+      ],
       "@portfolio/odontogram/data-access": [
         "libs/odontogram/data-access/src/index.ts"
       ],
