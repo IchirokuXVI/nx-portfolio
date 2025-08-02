@@ -1,1 +1,2 @@
-export * from './lib/landing/landing';
+export { appRoutes as LandingShellRoutes } from './lib/routes';
+export * from './lib/landing-wrapper/landing-wrapper';
