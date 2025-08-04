@@ -1,1 +1,2 @@
-export * from './lib/util/util';
+export * from './lib/directives/ng-let.directive';
+export * from './lib/services/loading-notifier';

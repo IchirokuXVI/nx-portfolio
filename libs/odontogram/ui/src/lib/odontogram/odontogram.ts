@@ -1,15 +1,23 @@
-import { Component, Input, OnInit, Output } from '@angular/core';
+import { Component, inject, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Tooth, Odontogram as OdontogramModel, ToothTreatment, TeethNumbers } from '@portfolio/odontogram/models';
 import { Product } from '@portfolio/shared/models';
 import { BehaviorSubject, filter, Observable, Subject } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
+import { NgLetDirective } from '@portfolio/shared/util';
+import { LoadingNotifier } from '@portfolio/shared/util';
+
+export const loadable = ['teeth', 'image'] as const;
 
 @Component({
   selector: 'lib-odontogram',
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule, NgLetDirective],
   templateUrl: './odontogram.html',
   styleUrl: './odontogram.scss',
+  providers: [
+    { provide: LoadingNotifier.LOADABLE_ENTRIES, useValue: loadable }
+  ],
 })
 export class Odontogram implements OnInit {
   pediatricSectors = [4, 5, 6, 7];
@@ -44,6 +52,8 @@ export class Odontogram implements OnInit {
 
   @Output() toothSelected: Subject<Tooth> = new Subject();
 
+  public loadingNotf: LoadingNotifier<typeof loadable> = inject(LoadingNotifier);
+
   ngOnInit() {
     this.formatTeeth();
 
@@ -55,7 +65,7 @@ export class Odontogram implements OnInit {
   }
 
   private formatTeeth() {
-    // this.loadingServ.startLoading('teeth')
+    this.loadingNotf.startLoading('teeth')
 
     for (let i = 0; i < this.sectors.length; i++) {
       for (let j = 0; j < this.sectors[i]; j++) {
@@ -68,7 +78,7 @@ export class Odontogram implements OnInit {
       }
     }
 
-    // this.loadingServ.completeLoading('teeth')
+    this.loadingNotf.completeLoading('teeth')
   }
 
   switchPediatricSectors(state: boolean) {
@@ -78,5 +88,9 @@ export class Odontogram implements OnInit {
 
   selectTooth(tooth: Tooth) {
     this.toothSelected.next(tooth);
+  }
+
+  get displayedSectors() {
+    return this.sectors.map((_val, i) => i).filter((_val, i) => this.showPediatricSectors || !this.pediatricSectors.includes(i))
   }
 }

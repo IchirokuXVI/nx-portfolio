@@ -1,1 +1,23 @@
-<p>tooth works!</p>
+<div class="tooth" [class]="'tooth-' + tooth.number" [class.active]="active" [class.withTreatment]="tooth.treatments?.length > 0" (click)="onClick.next()" [keypress.enter]="onClick.next()">
+    <div class="lateral" *ngLet="getToothZoneStatus(tooth, toothZones.lateral) as status"
+        [class]="statusClass.get(status)">
+        <img #img src="/assets/images/teeth/{{ tooth.number }}.png" (load)="imageLoaded()">
+        <div class="implant" *ngLet="getToothImplantStatus(tooth) as status" [class]="statusClass.get(status)"></div>
+        <div class="cross" *ngLet="getToothExtractionStatus(tooth) as status" [class]="statusClass.get(status)"></div>
+    </div>
+    <div class="crown">
+        <img #img src="/assets/images/teeth/{{ tooth.number }}_crown.png" (load)="imageLoaded()">
+        <div class="top" *ngLet="getToothZoneStatus(tooth, toothZones.superior) as status"
+            [class]="statusClass.get(status)"></div>
+        <div class="right" *ngLet="getToothZoneStatus(tooth, toothZones.derecha) as status"
+            [class]="statusClass.get(status)"></div>
+        <div class="bottom" *ngLet="getToothZoneStatus(tooth, toothZones.inferior) as status"
+            [class]="statusClass.get(status)"></div>
+        <div class="left" *ngLet="getToothZoneStatus(tooth, toothZones.izquierda) as status"
+            [class]="statusClass.get(status)"></div>
+        <div class="middle" [class.smaller]="toInt(tooth.number.slice(1)) < 4"
+            *ngLet="getToothZoneStatus(tooth, toothZones.central) as status" [class]="statusClass.get(status)">
+        </div>
+    </div>
+    <div *ngIf="showNumber" class="number">{{ tooth.number }}</div>
+</div>
