@@ -1,16 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Odontogram } from './odontogram';
+import { OdontogramSectorsView } from './odontogram-sectors-view';
 
-describe('Odontogram', () => {
-  let component: Odontogram;
-  let fixture: ComponentFixture<Odontogram>;
+describe('OdontogramSectorsView', () => {
+  let component: OdontogramSectorsView;
+  let fixture: ComponentFixture<OdontogramSectorsView>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [Odontogram],
+      imports: [OdontogramSectorsView],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(Odontogram);
+    fixture = TestBed.createComponent(OdontogramSectorsView);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

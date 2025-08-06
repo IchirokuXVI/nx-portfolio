@@ -21,9 +21,9 @@
                     <ng-container
                         *ngLet="tooth && (!displayedSectors || displayedSectors.includes(sector)) as displayed">
                         <div class="tooth-component-container" [class.invisible]="!displayed">
-                            <lib-odontogram-tooth *ngIf="displayed" [tooth]="tooth" (onClick)="openTooth(tooth)"
-                                (onStartLoadingImages)="loadingNotf.startLoading('image')"
-                                (onCompleteLoadingImages)="loadingNotf.completeLoading('image')"></lib-odontogram-tooth>
+                            <lib-odontogram-single-tooth-image *ngIf="displayed" [tooth]="tooth" (selected)="selectTooth(tooth)"
+                                (startLoadingImages)="loadingNotf.startLoading('image')"
+                                (completeLoadingImages)="loadingNotf.completeLoading('image')"></lib-odontogram-single-tooth-image>
                         </div>
                     </ng-container>
                 </ng-container>

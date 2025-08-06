@@ -1,25 +1,28 @@
 import { Component, inject, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Tooth, Odontogram as OdontogramModel, ToothTreatment, TeethNumbers } from '@portfolio/odontogram/models';
+import { Tooth, Odontogram, ToothTreatment, TeethNumbers } from '@portfolio/odontogram/models';
 import { Product } from '@portfolio/shared/models';
 import { BehaviorSubject, filter, Observable, Subject } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { NgLetDirective } from '@portfolio/shared/util';
 import { LoadingNotifier } from '@portfolio/shared/util';
+import { SingleToothImage } from "../single-tooth-image/single-tooth-image";
 
 export const loadable = ['teeth', 'image'] as const;
 
 @Component({
   selector: 'lib-odontogram',
-  imports: [CommonModule, FormsModule, NgLetDirective],
-  templateUrl: './odontogram.html',
-  styleUrl: './odontogram.scss',
+  standalone: true,
+  imports: [CommonModule, FormsModule, NgLetDirective, SingleToothImage],
+  templateUrl: './odontogram-sectors-view.html',
+  styleUrl: './odontogram-sectors-view.scss',
   providers: [
-    { provide: LoadingNotifier.LOADABLE_ENTRIES, useValue: loadable }
+    { provide: LoadingNotifier.LOADABLE_ENTRIES, useValue: loadable },
+    LoadingNotifier
   ],
 })
-export class Odontogram implements OnInit {
+export class OdontogramSectorsView implements OnInit {
   pediatricSectors = [4, 5, 6, 7];
 
   // The array position is also the identifier of each sector
@@ -33,12 +36,12 @@ export class Odontogram implements OnInit {
   // The key of the map will be the tooth number (11-18, 21-28, 31-38...)
   public teeth: { [key: number]: Tooth } = {};
 
-  private _odontogram = new BehaviorSubject<OdontogramModel | undefined>(undefined);
-  odontogram$ = this._odontogram.asObservable().pipe(takeUntilDestroyed());
-  @Input() set odontogram(odontogram: OdontogramModel) {
+  private _odontogram = new BehaviorSubject<Odontogram | undefined>(undefined);
+  odontogram$: Observable<Odontogram | undefined>;
+  @Input() set odontogram(odontogram: Odontogram) {
     this._odontogram.next(odontogram);
   }
-  @Output() odontogramChange: Observable<OdontogramModel | undefined> = this.odontogram$;
+  @Output() odontogramChange: Observable<Odontogram | undefined>;
 
   productSuggestions: Product[] = [];
   productSearchTerm?: string;
@@ -53,6 +56,11 @@ export class Odontogram implements OnInit {
   @Output() toothSelected: Subject<Tooth> = new Subject();
 
   public loadingNotf: LoadingNotifier<typeof loadable> = inject(LoadingNotifier);
+
+  constructor() {
+    this.odontogram$ = this._odontogram.asObservable().pipe(takeUntilDestroyed());
+    this.odontogramChange = this.odontogram$;
+  }
 
   ngOnInit() {
     this.formatTeeth();

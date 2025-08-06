@@ -1,10 +1,9 @@
-import { Injectable } from "@angular/core";
+import { Injectable, OnDestroy } from "@angular/core";
 import { Observable, Subject } from "rxjs";
-import { distinctUntilChanged, map, finalize, shareReplay, filter } from "rxjs/operators";
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { distinctUntilChanged, map, finalize, shareReplay, filter, takeUntil } from "rxjs/operators";
 
 @Injectable()
-export class LoadingNotifier<Loadable extends readonly string[]> {
+export class LoadingNotifier<Loadable extends readonly string[]> implements OnDestroy {
   static readonly LOADABLE_ENTRIES = 'LoadingNotifier_LOADABLE_ENTRIES';
 
   private _loadings: { [key in Loadable[number]]?: { subj: Subject<boolean>, counter: number } } = {};
@@ -20,7 +19,15 @@ export class LoadingNotifier<Loadable extends readonly string[]> {
     })
   }
 
+  private _onDestroy = new Subject<void>();
+
+
   constructor() { }
+
+  ngOnDestroy() {
+    this._onDestroy.next();
+    this._onDestroy.complete();
+  }
 
   private addLoadable(loadable: Loadable[number]) {
     this._loadings[loadable] = {
@@ -31,7 +38,7 @@ export class LoadingNotifier<Loadable extends readonly string[]> {
     this._loadings$[loadable] = this._loadings[loadable].subj
       .asObservable()
       .pipe(
-        takeUntilDestroyed(),
+        takeUntil(this._onDestroy),
         map((loading) => {
           const loadingEntry = this._loadings[loadable];
 
