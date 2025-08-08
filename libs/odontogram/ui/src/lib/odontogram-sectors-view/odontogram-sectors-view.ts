@@ -12,7 +12,7 @@ import { SingleToothImage } from "../single-tooth-image/single-tooth-image";
 export const loadable = ['teeth', 'image'] as const;
 
 @Component({
-  selector: 'lib-odontogram',
+  selector: 'lib-odontogram-sectors-view',
   standalone: true,
   imports: [CommonModule, FormsModule, NgLetDirective, SingleToothImage],
   templateUrl: './odontogram-sectors-view.html',
@@ -37,11 +37,11 @@ export class OdontogramSectorsView implements OnInit {
   public teeth: { [key: number]: Tooth } = {};
 
   private _odontogram = new BehaviorSubject<Odontogram | undefined>(undefined);
-  odontogram$: Observable<Odontogram | undefined>;
+  odontogram$: Observable<Odontogram | undefined> = this._odontogram.asObservable();
   @Input() set odontogram(odontogram: Odontogram) {
     this._odontogram.next(odontogram);
   }
-  @Output() odontogramChange: Observable<Odontogram | undefined>;
+  @Output() odontogramChange: Observable<Odontogram | undefined> = this.odontogram$;
 
   productSuggestions: Product[] = [];
   productSearchTerm?: string;
@@ -56,11 +56,6 @@ export class OdontogramSectorsView implements OnInit {
   @Output() toothSelected: Subject<Tooth> = new Subject();
 
   public loadingNotf: LoadingNotifier<typeof loadable> = inject(LoadingNotifier);
-
-  constructor() {
-    this.odontogram$ = this._odontogram.asObservable().pipe(takeUntilDestroyed());
-    this.odontogramChange = this.odontogram$;
-  }
 
   ngOnInit() {
     this.formatTeeth();

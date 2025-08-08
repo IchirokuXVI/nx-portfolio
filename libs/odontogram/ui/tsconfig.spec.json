@@ -13,6 +13,5 @@
     "src/**/*.test.ts",
     "src/**/*.spec.ts",
     "src/**/*.d.ts",
-    "src/lib/single-tooth-image/single-tooth-image.ts"
   ]
 }

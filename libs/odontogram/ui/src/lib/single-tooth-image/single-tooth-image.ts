@@ -1,8 +1,9 @@
-import { AfterViewInit, Component, ElementRef, inject, Input, OnDestroy, Output, QueryList, ViewChildren } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, inject, Input, OnDestroy, Output, QueryList, ViewChildren, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LoadingNotifier, NgLetDirective } from '@portfolio/shared/util';
 import { Subject } from 'rxjs';
 import { Tooth, ToothTreatment, ToothZones, TreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
+import { ToothImageService } from '../tooth-image-service';
 
 const loadable = ['image'] as const;
 
@@ -17,7 +18,7 @@ const loadable = ['image'] as const;
     LoadingNotifier
   ]
 })
-export class SingleToothImage implements AfterViewInit, OnDestroy {
+export class SingleToothImage implements OnInit, AfterViewInit, OnDestroy {
   // Map treatment status to CSS classes
   public statusClass = new Map([
     [undefined, 'status-none'],
@@ -28,6 +29,7 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
   loadingNotf = inject(LoadingNotifier<typeof loadable>, { self: true });
 
   @Input() tooth!: Tooth;
+  toothImages = { crown: '', lateral: '' };
   @Input() treatments?: ToothTreatment[];
   @Output() selected: Subject<void> = new Subject();
   @Output() startLoadingImages = this.loadingNotf.onStartLoading('image');
@@ -37,6 +39,19 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
   @Input() active = false;
 
   @ViewChildren('img') images?: QueryList<ElementRef<HTMLImageElement>>;
+
+  private readonly _toothImageServ = inject(ToothImageService);
+
+  ngOnInit() {
+    if (!this.tooth) {
+      throw new Error('Tooth input is required for SingleToothImage component');
+    }
+
+    this._toothImageServ.getImage(this.tooth.number).subscribe((images) => {
+      this.toothImages.crown = (images as any)[0];
+      this.toothImages.lateral = (images as any)[1];
+    });
+  }
 
   ngAfterViewInit() {
     this.images?.forEach(() => this.loadingNotf.startLoading('image'));
