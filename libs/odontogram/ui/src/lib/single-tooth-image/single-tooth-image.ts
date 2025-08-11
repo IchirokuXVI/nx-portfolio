@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { LoadingNotifier, NgLetDirective } from '@portfolio/shared/util';
 import { Subject } from 'rxjs';
 import { Tooth, ToothTreatment, ToothZones, TreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
-import { ToothImageService } from '../tooth-image-service';
+import toothImg from '../../assets/teeth/11.png';
+import { ToothImageLoader } from '../services/tooth-image-loader';
 
 const loadable = ['image'] as const;
 
@@ -40,17 +41,18 @@ export class SingleToothImage implements OnInit, AfterViewInit, OnDestroy {
 
   @ViewChildren('img') images?: QueryList<ElementRef<HTMLImageElement>>;
 
-  private readonly _toothImageServ = inject(ToothImageService);
+  _toothImageLoader = inject(ToothImageLoader);
 
   ngOnInit() {
     if (!this.tooth) {
       throw new Error('Tooth input is required for SingleToothImage component');
     }
 
-    this._toothImageServ.getImage(this.tooth.number).subscribe((images) => {
-      this.toothImages.crown = (images as any)[0];
-      this.toothImages.lateral = (images as any)[1];
-    });
+    if (this.tooth.number != null) {
+      this._toothImageLoader.loadImage(this.tooth.number)?.subscribe(({ lateral, crown }) => {
+        this.toothImages = { lateral, crown };
+      });
+    }
   }
 
   ngAfterViewInit() {

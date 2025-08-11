@@ -21,6 +21,11 @@
             "glob": "**/*",
             "input": "apps/odontogram/public",
             "output": "/public"
+          },
+          {
+            "glob": "**/*",
+            "input": "libs/odontogram/ui/assets",
+            "output": "/public/ui-assets"
           }
         ],
         "styles": ["apps/odontogram/src/styles.scss"],
