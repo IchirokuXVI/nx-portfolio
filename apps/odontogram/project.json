@@ -7,35 +7,28 @@
   "tags": [],
   "targets": {
     "build": {
-      "executor": "@nx/angular:webpack-browser",
+      "executor": "@nx/rspack:rspack",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/apps/odontogram",
         "index": "apps/odontogram/src/index.html",
         "main": "apps/odontogram/src/main.ts",
-        "polyfills": ["zone.js"],
+        "polyfills": "node_modules/zone.js",
         "tsConfig": "apps/odontogram/tsconfig.app.json",
-        "inlineStyleLanguage": "scss",
         "assets": [
           {
             "glob": "**/*",
             "input": "apps/odontogram/public",
             "output": "/public"
-          },
-          {
-            "glob": "**/*",
-            "input": "libs/odontogram/ui/assets",
-            "output": "/public/ui-assets"
           }
         ],
         "styles": ["apps/odontogram/src/styles.scss"],
         "scripts": [],
-        "customWebpackConfig": {
-          "path": "apps/odontogram/webpack.config.ts"
-        }
+        "rspackConfig": "apps/odontogram/rspack.config.ts"
       },
       "configurations": {
         "production": {
+          "rspackConfig": "apps/odontogram/rspack.prod.config.ts",
           "budgets": [
             {
               "type": "initial",
@@ -48,10 +41,7 @@
               "maximumError": "8kb"
             }
           ],
-          "outputHashing": "all",
-          "customWebpackConfig": {
-            "path": "apps/odontogram/webpack.prod.config.ts"
-          }
+          "outputHashing": "all"
         },
         "development": {
           "buildOptimizer": false,
@@ -63,23 +53,6 @@
         }
       },
       "defaultConfiguration": "production"
-    },
-    "serve": {
-      "continuous": true,
-      "executor": "@nx/angular:dev-server",
-      "options": {
-        "port": 4202,
-        "publicHost": "http://localhost:4202"
-      },
-      "configurations": {
-        "production": {
-          "buildTarget": "odontogram:build:production"
-        },
-        "development": {
-          "buildTarget": "odontogram:build:development"
-        }
-      },
-      "defaultConfiguration": "development"
     },
     "extract-i18n": {
       "executor": "@angular-devkit/build-angular:extract-i18n",
@@ -114,6 +87,24 @@
           "buildTarget": "odontogram:build:production"
         }
       }
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/angular:dev-server",
+      "options": {
+        "port": 4202,
+        "publicHost": "http://localhost:4202"
+      },
+      "configurations": {
+        "production": {
+          "publicHost": "https://mfe.ichirokuxvi.com/odontogram",
+          "buildTarget": "odontogram:build:production"
+        },
+        "development": {
+          "buildTarget": "odontogram:build:development"
+        }
+      },
+      "defaultConfiguration": "development"
     }
   }
 }

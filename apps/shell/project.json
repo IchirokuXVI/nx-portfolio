@@ -7,15 +7,14 @@
   "tags": [],
   "targets": {
     "build": {
-      "executor": "@nx/angular:webpack-browser",
+      "executor": "@nx/rspack:rspack",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/apps/shell",
         "index": "apps/shell/src/index.html",
         "main": "apps/shell/src/main.ts",
-        "polyfills": ["zone.js"],
+        "polyfills": "node_modules/zone.js",
         "tsConfig": "apps/shell/tsconfig.app.json",
-        "inlineStyleLanguage": "scss",
         "assets": [
           {
             "glob": "**/*",
@@ -25,12 +24,11 @@
         ],
         "styles": ["apps/shell/src/styles.scss"],
         "scripts": [],
-        "customWebpackConfig": {
-          "path": "apps/shell/webpack.config.ts"
-        }
+        "rspackConfig": "apps/shell/rspack.config.ts"
       },
       "configurations": {
         "production": {
+          "rspackConfig": "apps/shell/rspack.prod.config.ts",
           "budgets": [
             {
               "type": "initial",
@@ -43,10 +41,7 @@
               "maximumError": "8kb"
             }
           ],
-          "outputHashing": "all",
-          "customWebpackConfig": {
-            "path": "apps/shell/webpack.prod.config.ts"
-          }
+          "outputHashing": "all"
         },
         "development": {
           "buildOptimizer": false,
@@ -58,29 +53,6 @@
         }
       },
       "defaultConfiguration": "production"
-    },
-    "serve": {
-      "continuous": true,
-      "executor": "@nx/angular:module-federation-dev-server",
-      "options": {
-        "port": 4200,
-        "publicHost": "http://localhost:4200"
-      },
-      "configurations": {
-        "production": {
-          "buildTarget": "shell:build:production"
-        },
-        "development": {
-          "buildTarget": "shell:build:development",
-          "devRemotes": [
-            "odontogram",
-            "landing"
-          ],
-          "poll": 1500,
-          "host": "0.0.0.0"
-        }
-      },
-      "defaultConfiguration": "development"
     },
     "extract-i18n": {
       "executor": "@angular-devkit/build-angular:extract-i18n",
@@ -100,12 +72,32 @@
     },
     "serve-static": {
       "continuous": true,
-      "executor": "@nx/web:file-server",
+      "executor": "@nx/rspack:module-federation-static-server",
       "options": {
         "buildTarget": "shell:build",
         "port": 4200,
         "spa": true
       }
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/rspack:module-federation-dev-server",
+      "options": {
+        "port": 4200,
+        "publicHost": "http://localhost:4200"
+      },
+      "configurations": {
+        "production": {
+          "buildTarget": "shell:build:production"
+        },
+        "development": {
+          "buildTarget": "shell:build:development",
+          "devRemotes": ["odontogram", "landing"],
+          "poll": 1500,
+          "host": "0.0.0.0"
+        }
+      },
+      "defaultConfiguration": "development"
     }
   }
 }

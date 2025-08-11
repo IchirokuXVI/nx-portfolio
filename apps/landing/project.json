@@ -7,15 +7,14 @@
   "tags": [],
   "targets": {
     "build": {
-      "executor": "@nx/angular:webpack-browser",
+      "executor": "@nx/rspack:rspack",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/apps/landing",
         "index": "apps/landing/src/index.html",
         "main": "apps/landing/src/main.ts",
-        "polyfills": ["zone.js"],
+        "polyfills": "node_modules/zone.js",
         "tsConfig": "apps/landing/tsconfig.app.json",
-        "inlineStyleLanguage": "scss",
         "assets": [
           {
             "glob": "**/*",
@@ -25,12 +24,11 @@
         ],
         "styles": ["apps/landing/src/styles.scss"],
         "scripts": [],
-        "customWebpackConfig": {
-          "path": "apps/landing/webpack.config.ts"
-        }
+        "rspackConfig": "apps/landing/rspack.config.ts"
       },
       "configurations": {
         "production": {
+          "rspackConfig": "apps/landing/rspack.prod.config.ts",
           "budgets": [
             {
               "type": "initial",
@@ -43,10 +41,7 @@
               "maximumError": "8kb"
             }
           ],
-          "outputHashing": "all",
-          "customWebpackConfig": {
-            "path": "apps/landing/webpack.prod.config.ts"
-          }
+          "outputHashing": "all"
         },
         "development": {
           "buildOptimizer": false,
@@ -58,23 +53,6 @@
         }
       },
       "defaultConfiguration": "production"
-    },
-    "serve": {
-      "continuous": true,
-      "executor": "@nx/angular:dev-server",
-      "options": {
-        "port": 4201,
-        "publicHost": "http://localhost:4201"
-      },
-      "configurations": {
-        "production": {
-          "buildTarget": "landing:build:production"
-        },
-        "development": {
-          "buildTarget": "landing:build:development"
-        }
-      },
-      "defaultConfiguration": "development"
     },
     "extract-i18n": {
       "executor": "@angular-devkit/build-angular:extract-i18n",
@@ -109,6 +87,24 @@
           "buildTarget": "landing:build:production"
         }
       }
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/angular:dev-server",
+      "options": {
+        "port": 4201,
+        "publicHost": "http://localhost:4201"
+      },
+      "configurations": {
+        "production": {
+          "publicHost": "https://mfe.ichirokuxvi.com/landing",
+          "buildTarget": "landing:build:production"
+        },
+        "development": {
+          "buildTarget": "landing:build:development"
+        }
+      },
+      "defaultConfiguration": "development"
     }
   }
 }

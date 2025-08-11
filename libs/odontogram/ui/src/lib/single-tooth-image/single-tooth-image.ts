@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { LoadingNotifier, NgLetDirective } from '@portfolio/shared/util';
 import { Subject } from 'rxjs';
 import { Tooth, ToothTreatment, ToothZones, TreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
-import toothImg from '../../assets/teeth/11.png';
 import { ToothImageLoader } from '../services/tooth-image-loader';
 
 const loadable = ['image'] as const;
