@@ -12,8 +12,8 @@ export class ToothImageLoader {
     }
 
     return forkJoin({
-      lateral: import(`../../../assets/teeth/${toothNumber}.png`),
-      crown: import(`../../../assets/teeth/${toothNumber}_crown.png`)
+      lateral: import(`../../../assets/teeth/${toothNumber}.png`).then((m) => m.default),
+      crown: import(`../../../assets/teeth/${toothNumber}_crown.png`).then((m) => m.default)
     });
   }
 }
