@@ -7,28 +7,28 @@
   "tags": [],
   "targets": {
     "build": {
-      "executor": "@nx/rspack:rspack",
+      "executor": "@nx/angular:webpack-browser",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/apps/landing",
         "index": "apps/landing/src/index.html",
         "main": "apps/landing/src/main.ts",
-        "polyfills": "node_modules/zone.js",
+        "polyfills": ["zone.js"],
         "tsConfig": "apps/landing/tsconfig.app.json",
+        "inlineStyleLanguage": "scss",
         "assets": [
           {
             "glob": "**/*",
-            "input": "apps/landing/public",
-            "output": "/public"
+            "input": "apps/landing/public"
           }
         ],
         "styles": ["apps/landing/src/styles.scss"],
-        "scripts": [],
-        "rspackConfig": "apps/landing/rspack.config.ts"
+        "customWebpackConfig": {
+          "path": "apps/landing/webpack.config.ts"
+        }
       },
       "configurations": {
         "production": {
-          "rspackConfig": "apps/landing/rspack.prod.config.ts",
           "budgets": [
             {
               "type": "initial",
@@ -41,7 +41,10 @@
               "maximumError": "8kb"
             }
           ],
-          "outputHashing": "all"
+          "outputHashing": "all",
+          "customWebpackConfig": {
+            "path": "apps/landing/webpack.prod.config.ts"
+          }
         },
         "development": {
           "buildOptimizer": false,
