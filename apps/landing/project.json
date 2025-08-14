@@ -19,7 +19,8 @@
         "assets": [
           {
             "glob": "**/*",
-            "input": "apps/landing/public"
+            "input": "apps/landing/public",
+            "output": "/public"
           }
         ],
         "styles": ["apps/landing/src/styles.scss"],

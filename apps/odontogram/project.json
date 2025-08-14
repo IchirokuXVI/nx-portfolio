@@ -19,7 +19,8 @@
         "assets": [
           {
             "glob": "**/*",
-            "input": "apps/odontogram/public"
+            "input": "apps/odontogram/public",
+            "output": "/public"
           }
         ],
         "styles": ["apps/odontogram/src/styles.scss"],

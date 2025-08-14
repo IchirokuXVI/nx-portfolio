@@ -1,9 +1,9 @@
 import { Route } from '@angular/router';
-import { OdontogramSectorsView } from '@portfolio/odontogram/ui';
+import { OdontogramFeatureFullOdontogramCrud } from '@portfolio/odontogram/feature-full-odontogram-crud';
 
 export const appRoutes: Route[] = [
   {
     path: '',
-    component: OdontogramSectorsView
+    component: OdontogramFeatureFullOdontogramCrud
   },
 ];

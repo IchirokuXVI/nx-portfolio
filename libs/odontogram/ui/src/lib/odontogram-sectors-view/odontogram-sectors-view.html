@@ -1,33 +1,41 @@
-<div class="showPediatric" *ngIf="showPediatricCheckbox">
-    <input type="checkbox" id="showPediatric" [ngModel]="showPediatricSectors"
-        (ngModelChange)="switchPediatricSectors($event)">
-    <label class="pl-2" for="showPediatric">Show pediatric odontogram</label>
+@if (showPediatricCheckbox) {
+<div class="showPediatric">
+  <input type="checkbox" id="showPediatric" [ngModel]="showPediatricSectors"
+    (ngModelChange)="switchPediatricSectors($event)">
+  <label class="pl-2" for="showPediatric">Show pediatric odontogram</label>
 </div>
+}
 <div class="odontogram" [class.loading]="loadingImages"
-    *ngLet="(loadingNotf.loadings$.image | async) ?? true as loadingImages">
-    <ng-container *ngLet="(loadingNotf.loadings$.teeth | async) || loadingImages as loading">
-        <div class="super-bg" *ngIf="loading || (!treatments && (odontogram$ | async) !== undefined)">
-            <div *ngIf="loading">
-                <i class="fas fa-circle-notch fa-spin fa-3x"></i>
-            </div>
-        </div>
-    </ng-container>
-    <div class="sector sector-{{sector}}"
-        [ngClass]="{ '0': 'upper-left', '1': 'upper-right', '2': 'bottom-right', '3': 'bottom-left' }[sector % 4]"
-        *ngFor="let numTeeth of sectors; let sector = index">
-        <ng-container *ngFor="let item of [].constructor(maxTeethNumber); let tIndex = index">
-            <ng-container *ngLet="(sector + 1) * 10 + tIndex + 1 as toothNumber">
-                <ng-container *ngLet="teeth?.[toothNumber] as tooth">
-                    <ng-container
-                        *ngLet="tooth && (!displayedSectors || displayedSectors.includes(sector)) as displayed">
-                        <div class="tooth-component-container" [class.invisible]="!displayed">
-                            <lib-odontogram-single-tooth-image *ngIf="displayed" [tooth]="tooth" (selected)="selectTooth(tooth)"
-                                (startLoadingImages)="loadingNotf.startLoading('image')"
-                                (completeLoadingImages)="loadingNotf.completeLoading('image')"></lib-odontogram-single-tooth-image>
-                        </div>
-                    </ng-container>
-                </ng-container>
-            </ng-container>
-        </ng-container>
+  *ngLet="(loadingNotf.loadings$.image | async) ?? true as loadingImages">
+  <ng-container *ngLet="(loadingNotf.loadings$.teeth | async) || loadingImages as loading">
+    @if (loading || (!treatments && (odontogram$ | async) !== undefined)) {
+    <div class="super-bg">
+      @if (loading) {
+      <div>
+        <lib-loading-icon size="xl" [sizeMultiplier]="3" thickness="thick"></lib-loading-icon>
+      </div>
+      }
     </div>
+    }
+  </ng-container>
+  @for (numTeeth of sectors; track $index; let sector=$index) {
+  <div class="sector sector-{{sector}}"
+    [ngClass]="{ '0': 'upper-left', '1': 'upper-right', '2': 'bottom-right', '3': 'bottom-left' }[sector % 4]">
+    @for(item of [].constructor(maxTeethNumber); track $index; let tIndex = $index) {
+    <ng-container *ngLet="(sector + 1) * 10 + tIndex + 1 as toothNumber">
+      <ng-container *ngLet="teeth?.[toothNumber] as tooth">
+        <ng-container *ngLet="tooth && (!displayedSectors || displayedSectors.includes(sector)) as displayed">
+          <div class="tooth-component-container" [class.invisible]="!displayed">
+            @if (displayed) {
+            <lib-odontogram-single-tooth-image [tooth]="tooth" (selected)="selectTooth(tooth)"
+              (startLoadingImages)="loadingNotf.startLoading('image')"
+              (completeLoadingImages)="loadingNotf.completeLoading('image')"></lib-odontogram-single-tooth-image>
+            }
+          </div>
+        </ng-container>
+      </ng-container>
+    </ng-container>
+    }
+  </div>
+  }
 </div>

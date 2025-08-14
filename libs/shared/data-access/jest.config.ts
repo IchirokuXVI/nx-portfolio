@@ -1,8 +1,8 @@
 export default {
-  displayName: 'data-access',
-  preset: '../../jest.preset.js',
+  displayName: 'shared/data-access',
+  preset: '../../../jest.preset.js',
   setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
-  coverageDirectory: '../../coverage/libs/data-access',
+  coverageDirectory: '../../../coverage/libs/shared/data-access',
   transform: {
     '^.+\\.(ts|mjs|js|html)$': [
       'jest-preset-angular',

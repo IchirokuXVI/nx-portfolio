@@ -3,18 +3,18 @@ import { CommonModule } from '@angular/common';
 import { Tooth, Odontogram, ToothTreatment, TeethNumbers } from '@portfolio/odontogram/models';
 import { Product } from '@portfolio/shared/models';
 import { BehaviorSubject, filter, Observable, Subject } from 'rxjs';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { NgLetDirective } from '@portfolio/shared/util';
 import { LoadingNotifier } from '@portfolio/shared/util';
 import { SingleToothImage } from "../single-tooth-image/single-tooth-image";
+import { LoadingIcon } from '@portfolio/shared/ui';
 
 export const loadable = ['teeth', 'image'] as const;
 
 @Component({
   selector: 'lib-odontogram-sectors-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgLetDirective, SingleToothImage],
+  imports: [CommonModule, FormsModule, NgLetDirective, SingleToothImage, LoadingIcon],
   templateUrl: './odontogram-sectors-view.html',
   styleUrl: './odontogram-sectors-view.scss',
   providers: [
@@ -49,7 +49,7 @@ export class OdontogramSectorsView implements OnInit {
   @Input() treatments?: ToothTreatment[];
   @Output() treatmentsOnChange: Subject<ToothTreatment[]> = new Subject();
 
-  @Input() showPediatricCheckbox = true;
+  @Input() showPediatricCheckbox = false;
   @Input() showPediatricSectors = true;
   @Output() showPediatricSectorsChange: Subject<boolean> = new BehaviorSubject(this.showPediatricSectors);
 
@@ -65,6 +65,10 @@ export class OdontogramSectorsView implements OnInit {
         tooth.odontogram = odontogram.id;
       }
     });
+
+    this.loadingNotf.loadings$.image?.subscribe((a) => {
+      console.log('loading image', a)
+    })
   }
 
   private formatTeeth() {

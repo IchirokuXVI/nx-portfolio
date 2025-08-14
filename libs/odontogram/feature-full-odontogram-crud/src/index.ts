@@ -1,1 +1,1 @@
-export * from './lib/odontogram/feature-full-odontogram-crud/odontogram/feature-full-odontogram-crud';
+export * from './lib/feature-full-odontogram-crud/feature-full-odontogram-crud';
