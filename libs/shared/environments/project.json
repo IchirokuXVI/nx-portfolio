@@ -1,0 +1,29 @@
+{
+  "name": "shared/environments",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "/libs/shared/environments/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/environments",
+        "main": "/libs/shared/environments/src/index.ts",
+        "tsConfig": "/libs/shared/environments/tsconfig.lib.json",
+        "assets": ["/libs/shared/environments/*.md"]
+      },
+      "configurations": {
+        "production": {
+          "fileReplacements": [
+            {
+              "replace": "libs/shared/environments/src/lib/environment.ts",
+              "with": "libs/shared/environments/src/lib/environment.prod.ts"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

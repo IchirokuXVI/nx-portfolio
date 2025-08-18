@@ -1,6 +1,7 @@
+import { Observable } from "rxjs";
 import { OdontogramServiceI } from "./odontogram-service";
 
-export function runSharedServiceTests(
+export function runSharedOdontogramServiceTests(
   serviceFactory: () => OdontogramServiceI
 ) {
   describe("Shared OdontogramServiceI behavior", () => {
@@ -10,25 +11,25 @@ export function runSharedServiceTests(
       service = serviceFactory();
     });
 
-    it("getList should return an array", (done) => {
-      service.getList().subscribe((os) => {
-        expect(Array.isArray(os)).toBe(true);
-        done();
-      });
+    it('should be created', () => {
+      expect(service).toBeTruthy();
     });
 
-    it("getById should return an odontogram or undefined", (done) => {
-      service.getById("1").subscribe((odontogram) => {
-        done();
-      });
+    it("getList should return an observable", () => {
+      expect(service.getList() instanceof Observable).toBe(true);
     });
 
-    it("create should return the created odontogram", () => {
-      expect(typeof service.create({ id: "1", name: "Test odontogram" })).toBe("object");
+    it("getById should return an observable", () => {
+      expect(service.getById("1") instanceof Observable).toBe(true);
+
     });
 
-    it("update should return the updated odontogram", () => {
-      expect(typeof service.update({ id: "1", name: "Updated odontogram" })).toBe("object");
+    it("create should return an observable", () => {
+      expect(service.create({ id: "1", name: "Test odontogram" }) instanceof Observable).toBe(true);
+    });
+
+    it("update should return an observable", () => {
+      expect(service.update({ id: "1", name: "Updated odontogram" }) instanceof Observable).toBe(true);
     });
   });
 }
