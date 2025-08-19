@@ -2,8 +2,13 @@ import { Odontogram } from '@portfolio/odontogram/models';
 import { Optional } from "@portfolio/shared/util";
 import { Observable } from "rxjs";
 
+export interface OdontogramGetListFilter {
+  ids?: string[];
+  client?: string;
+}
+
 export interface OdontogramServiceI {
-  getList(): Observable<Odontogram[]>;
+  getList(filter?: OdontogramGetListFilter): Observable<Odontogram[]>;
 
   getById(id: string): Observable<Odontogram | undefined>;
 

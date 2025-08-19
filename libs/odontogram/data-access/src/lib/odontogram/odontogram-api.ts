@@ -2,7 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Odontogram } from '@portfolio/odontogram/models';
 import { ApiConsumer, NotFoundResourceError, OwnApiUrlResolver } from '@portfolio/shared/data-access';
-import { OdontogramServiceI } from './odontogram-service';
+import { OdontogramGetListFilter, OdontogramServiceI } from './odontogram-service';
 import { throwError } from 'rxjs/internal/observable/throwError';
 import { catchError } from 'rxjs';
 
@@ -16,8 +16,8 @@ export class OdontogramApi extends ApiConsumer implements OdontogramServiceI {
     super(inject(OwnApiUrlResolver));
   }
 
-  getList() {
-    return this._http.get<Odontogram[]>(this._url + this._endpoint);
+  getList(filter?: OdontogramGetListFilter) {
+    return this._http.get<Odontogram[]>(this._url + this._endpoint, { params: { ...filter } });
   }
 
   getById(id: string) {

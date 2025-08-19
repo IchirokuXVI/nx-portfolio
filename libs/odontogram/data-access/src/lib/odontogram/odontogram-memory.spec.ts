@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { runSharedOdontogramServiceTests } from './odontogram-service.spec';
+import { runSharedOdontogramServiceTests } from './odontogram-service.shared-spec';
 import { NotFoundResourceError } from '@portfolio/shared/data-access';
-import { finalize, firstValueFrom, of, Subject, tap } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { OdontogramMemory } from './odontogram-memory';
 import { Odontogram } from '@portfolio/odontogram/models';
 
@@ -31,6 +31,13 @@ describe('OdontogramMemory', () => {
     const data = await firstValueFrom(service.getList());
     expect(Array.isArray(data)).toBe(true);
     expect(data.length).toBe(currentServiceData.size);
+  });
+
+  it('should apply filter by ids', async () => {
+    const data = await firstValueFrom(service.getList({ ids: ['1', '2'] }));
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.every(item => ['1', '2'].includes(item.id))).toBe(true);
+    expect(Array.from(currentServiceData.values()).filter((item) => item.id === '1' || item.id === '2')).toEqual(data);
   });
 
   it('should find object correctly', async () => {

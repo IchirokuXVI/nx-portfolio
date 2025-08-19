@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { OdontogramApi } from './odontogram-api';
-import { runSharedOdontogramServiceTests } from './odontogram-service.spec';
+import { runSharedOdontogramServiceTests } from './odontogram-service.shared-spec';
 import { NotFoundResourceError, OwnApiUrlResolver } from '@portfolio/shared/data-access';
 import { provideHttpClient } from '@angular/common/http';
 

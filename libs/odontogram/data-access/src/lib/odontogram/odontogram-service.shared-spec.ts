@@ -1,5 +1,6 @@
 import { Observable } from "rxjs";
 import { OdontogramServiceI } from "./odontogram-service";
+import { beforeEach, describe, expect, it } from "@jest/globals";
 
 export function runSharedOdontogramServiceTests(
   serviceFactory: () => OdontogramServiceI
@@ -21,7 +22,6 @@ export function runSharedOdontogramServiceTests(
 
     it("getById should return an observable", () => {
       expect(service.getById("1") instanceof Observable).toBe(true);
-
     });
 
     it("create should return an observable", () => {
