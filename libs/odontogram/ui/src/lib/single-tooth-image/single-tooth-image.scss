@@ -1,0 +1,279 @@
+.tooth {
+  // This variable indicates which class is being
+  // used by the zones without a status
+  // It is necessary to identify when they have
+  // an applied status and also avoid having to
+  // repeat styles multiple times per status
+  $noStatusClass: '.status-none';
+
+  // Colors for pending/finished status
+  $pendingColor: #fba2a2;
+  $finishedColor: #80DED9;
+
+  // Center tooth number (text) and make it bold
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  text-align: center;
+  font-weight: 550;
+  font-size: 1.15em;
+  overflow: hidden;
+
+  // Sets position relative to then place the colors
+  // in the correct place
+  position: relative;
+
+  // Sets the offset of the cross and implant to be aligned with the root
+  // It could further modified by tooth number so it could be more precise
+  $crossOffset: 20%;
+  $implantOffset: 27.5%;
+
+  @for $i from 1 through 2 {
+    @for $j from 1 through 8 {
+      &.tooth-#{$i}#{$j} {
+        .cross {
+
+          &:after,
+          &:before {
+            top: $crossOffset;
+          }
+        }
+
+        .implant {
+          top: $implantOffset;
+        }
+      }
+    }
+  }
+
+  @for $i from 3 through 4 {
+    @for $j from 1 through 8 {
+      &.tooth-#{$i}#{$j} {
+        flex-direction: column-reverse;
+
+        .cross {
+
+          &:after,
+          &:before {
+            bottom: $crossOffset;
+          }
+        }
+
+        .implant {
+          bottom: $implantOffset;
+        }
+      }
+    }
+  }
+
+  // Make images responsive
+  img {
+    width: 100%;
+    height: auto;
+
+    // Why is this needed ? I DONT FUCKING KNOW
+    // but it makes the container a bit smaller and align correctly -.-
+    vertical-align: middle;
+  }
+
+  // Adds a background color in the tooth number if the tooth has a treatment
+  &.withTreatment .number {
+    background-color: #0275d8;
+    color: #fff;
+
+    // En el componente de odontograma se quitan los bordes cuando se tocan entre ellos
+    // Keep in mind that odontogram component alters the border style to remove borders if needed
+    // by using ::ng-deep
+    border-radius: 0.375em;
+  }
+
+  // Sets the color for pending status
+  .status-pending {
+
+    &:not(.implant),
+    &:after,
+    &:before {
+      background-color: $pendingColor !important;
+    }
+
+    &.implant {
+      border-color: $pendingColor !important;
+    }
+  }
+
+  // Sets the color for finished status
+  .status-finished {
+
+    &:not(.implant),
+    &:after,
+    &:before {
+      background-color: $finishedColor !important;
+    }
+
+    &.implant {
+      border-color: $finishedColor !important;
+    }
+  }
+
+  .lateral {
+    position: relative;
+    // background-color: rgb(71, 151, 216);
+
+    // Draws a X over the tooth root
+    .cross {
+
+      &:before,
+      &:after {
+        position: absolute;
+        left: 47%;
+        content: "";
+        height: 50%;
+        width: 3%;
+      }
+
+      &:before {
+        transform: rotate(45deg);
+      }
+
+      &:after {
+        transform: rotate(-45deg);
+      }
+    }
+
+    // Two lines on the root to mark an implant
+    .implant {
+      content: "";
+      left: 35%;
+      position: absolute;
+      background-color: transparent;
+      width: 27.5%;
+      height: 32.5%;
+      border-left: 0.3em solid transparent;
+      border-right: 0.3em solid transparent;
+    }
+  }
+
+  .crown {
+    $crownBorderStyle: dashed;
+    $crownBorderColor: #fff;
+    $crownBorderSize: 2;
+    $crownBorderUnit: px;
+    // Positions relative to then place the triangles absolutely
+    position: relative;
+    overflow: hidden;
+
+    img {
+      position: relative; // Position relative to make z-index work
+      z-index: 2; // Increase z-index so the image is not covered by the triangles
+    }
+
+    // Makes the border of the last element visible. Needs special logic
+    // because I haven't found a way to make it work
+    // being the first div of the container
+    &:has(.left:not(#{$noStatusClass})) {
+      & .top {
+
+        &:not(#{$noStatusClass}) {
+          border-bottom-style: $crownBorderStyle;
+        }
+      }
+    }
+
+    div {
+      position: absolute;
+      width: 50%;
+      height: 50%;
+
+      // --border-radius: 35%;
+
+      // Makes a square of 50% of the container size
+      // Positions it right in the middle and rotates it 45 degrees to make a diamond
+      // Having overflow: hidden, only half of the diamond (a triangle) is visible
+      // Moves it back 10% so that the edges of each triangle coincide and stay aligned
+      // Finally, adds a circle in the middle that is white by default
+      // and changes color if it has a treatment
+
+      // Mxins to apply border styles without repeating code
+      @mixin applyBorder($position) {
+        &:not(#{$noStatusClass}) {
+          border-#{$position}-style: none;
+          border-#{$position}-width: $crownBorderSize + $crownBorderUnit;
+          border-#{$position}-color: $crownBorderColor;
+        }
+      }
+
+      @mixin showNextBorder($position) {
+        &:not(#{$noStatusClass})+:not(#{$noStatusClass}) {
+          border-#{$position}-style: $crownBorderStyle;
+        }
+      }
+
+      &.top {
+        left: 25%;
+        top: -10%;
+        // background-color: blue;
+        // border: 1px solid red;
+        transform: rotate(45deg);
+        // border-bottom-right-radius: var(--border-radius);
+
+        @include applyBorder(bottom);
+        border-bottom-width: ($crownBorderSize + 1) + $crownBorderUnit !important;
+
+        @include showNextBorder(left);
+      }
+
+      &.right {
+        right: -10%;
+        top: 25%;
+        // background-color: blue;
+        // border: 1px solid blue;
+        transform: rotate(45deg);
+        // border-bottom-left-radius: var(--border-radius);
+
+        @include applyBorder(left);
+        @include showNextBorder(top);
+      }
+
+      &.bottom {
+        left: 25%;
+        bottom: -10%;
+        // background-color: green;
+        // border: 1px solid green;
+        transform: rotate(45deg);
+        // border-top-left-radius: var(--border-radius);
+
+        @include applyBorder(top);
+        @include showNextBorder(right);
+      }
+
+      &.left {
+        left: -10%;
+        top: 25%;
+        // background-color: yellow;
+        // border: 1px solid yellow;
+        transform: rotate(45deg);
+        // border-top-right-radius: var(--border-radius);
+
+        @include applyBorder(right);
+      }
+
+      &.middle {
+        width: 25%;
+        height: 25%;
+        left: 37.5%;
+        top: 37.5%;
+        border-radius: 50%;
+        background-color: #fff;
+        border: 2px solid #fff;
+
+        // Makes the circle smaller so that it fits better in smaller teeth
+        &.smaller {
+          width: 17.5%;
+          height: 17.5%;
+          left: 41.25%;
+          top: 41.25%;
+        }
+      }
+    }
+  }
+}

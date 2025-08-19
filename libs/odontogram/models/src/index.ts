@@ -6,3 +6,4 @@ export * from './lib/treatment-status';
 export * from './lib/tooth';
 export * from './lib/tooth-zones';
 export * from './lib/tooth-treatment';
+export * from './lib/teeth-numbers';
