@@ -70,6 +70,10 @@
   img {
     width: 100%;
     height: auto;
+
+    // Why is this needed ? I DONT FUCKING KNOW
+    // but it makes the container a bit smaller and align correctly -.-
+    vertical-align: middle;
   }
 
   // Adds a background color in the tooth number if the tooth has a treatment

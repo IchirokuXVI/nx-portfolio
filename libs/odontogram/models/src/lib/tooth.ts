@@ -1,7 +1,9 @@
+import { Odontogram } from "./odontogram";
 import { TeethNumbers } from "./teeth-numbers";
+import { ToothTreatment } from "./tooth-treatment";
 
 export interface Tooth {
-  odontogram?: string,
+  odontogram?: Odontogram,
   number: typeof TeethNumbers[number],
-  treatments?: string[]
+  treatments?: ToothTreatment[]
 }

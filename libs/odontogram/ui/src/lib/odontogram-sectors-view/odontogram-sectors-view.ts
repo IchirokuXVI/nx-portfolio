@@ -1,4 +1,4 @@
-import { Component, inject, Input, OnInit, Output } from '@angular/core';
+import { Component, computed, inject, input, Input, OnInit, Output, Signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Tooth, Odontogram, ToothTreatment, TeethNumbers } from '@portfolio/odontogram/models';
 import { Product } from '@portfolio/shared/models';
@@ -34,7 +34,7 @@ export class OdontogramSectorsView implements OnInit {
   // Turns the array into a map for easier access when using conditions
   // on the template (ngIf, styles...)
   // The key of the map will be the tooth number (11-18, 21-28, 31-38...)
-  public teeth: { [key: number]: Tooth } = {};
+  public teeth: Signal<{ [key: number]: Tooth }>;
 
   private _odontogram = new BehaviorSubject<Odontogram | undefined>(undefined);
   odontogram$: Observable<Odontogram | undefined> = this._odontogram.asObservable();
@@ -46,46 +46,52 @@ export class OdontogramSectorsView implements OnInit {
   productSuggestions: Product[] = [];
   productSearchTerm?: string;
 
-  @Input() treatments?: ToothTreatment[];
+  treatments = input.required<ToothTreatment[]>();
   @Output() treatmentsOnChange: Subject<ToothTreatment[]> = new Subject();
 
   @Input() showPediatricCheckbox = false;
-  @Input() showPediatricSectors = true;
+  @Input() showPediatricSectors = false;
   @Output() showPediatricSectorsChange: Subject<boolean> = new BehaviorSubject(this.showPediatricSectors);
 
   @Output() toothSelected: Subject<Tooth> = new Subject();
 
   public loadingNotf: LoadingNotifier<typeof loadable> = inject(LoadingNotifier);
 
-  ngOnInit() {
-    this.formatTeeth();
-
-    this.odontogram$.pipe(filter((odont) => odont !== undefined)).subscribe((odontogram) => {
-      for (const tooth of Object.values(this.teeth)) {
-        tooth.odontogram = odontogram.id;
-      }
+  constructor() {
+    this.teeth = computed(() => {
+      return this.formatTeeth(this.treatments());
     });
 
-    this.loadingNotf.loadings$.image?.subscribe((a) => {
-      console.log('loading image', a)
-    })
+    this.loadingNotf.loadings$.image?.subscribe((l) => console.log('Loading images:', l));
   }
 
-  private formatTeeth() {
-    this.loadingNotf.startLoading('teeth')
+  ngOnInit() {
+    this.odontogram$.pipe(filter((odont) => odont !== undefined)).subscribe((odontogram) => {
+      for (const tooth of Object.values(this.teeth)) {
+        // tooth.odontogram = odontogram.id;
+      }
+    });
+  }
+
+  private formatTeeth(treatments: ToothTreatment[]) {
+    this.loadingNotf.startLoading('teeth');
+
+    const teeth: { [key: number]: Tooth } = {};
 
     for (let i = 0; i < this.sectors.length; i++) {
       for (let j = 0; j < this.sectors[i]; j++) {
         const teethNumb = ((i + 1).toString() + (j + 1).toString()) as typeof TeethNumbers[number];
 
-        this.teeth[teethNumb] = {
+        teeth[teethNumb] = {
           number: teethNumb,
-          treatments: [],
+          treatments: treatments?.filter(treatment => treatment.teeth.includes(teethNumb)) || [],
         };
       }
     }
 
-    this.loadingNotf.completeLoading('teeth')
+    this.loadingNotf.completeLoading('teeth');
+
+    return teeth;
   }
 
   switchPediatricSectors(state: boolean) {
@@ -98,6 +104,6 @@ export class OdontogramSectorsView implements OnInit {
   }
 
   get displayedSectors() {
-    return this.sectors.map((_val, i) => i).filter((_val, i) => this.showPediatricSectors || !this.pediatricSectors.includes(i))
+    return this.sectors.map((_val, i) => i).filter((_val, i) => this.showPediatricSectors || !this.pediatricSectors.includes(i));
   }
 }

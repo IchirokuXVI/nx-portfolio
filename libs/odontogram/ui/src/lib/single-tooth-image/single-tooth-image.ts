@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, inject, Input, OnDestroy, Output, QueryList, ViewChildren, OnInit } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, inject, Input, OnDestroy, Output, QueryList, ViewChildren, OnInit, input, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LoadingNotifier, NgLetDirective } from '@portfolio/shared/util';
 import { Subject } from 'rxjs';
@@ -18,7 +18,7 @@ const loadable = ['image'] as const;
     LoadingNotifier
   ]
 })
-export class SingleToothImage implements OnInit, AfterViewInit, OnDestroy {
+export class SingleToothImage implements AfterViewInit, OnDestroy {
   // Map treatment status to CSS classes
   public statusClass = new Map([
     [undefined, 'status-none'],
@@ -28,9 +28,8 @@ export class SingleToothImage implements OnInit, AfterViewInit, OnDestroy {
 
   loadingNotf = inject(LoadingNotifier<typeof loadable>, { self: true });
 
-  @Input() tooth!: Tooth;
+  tooth = input.required<Tooth>();
   toothImages = { crown: '', lateral: '' };
-  @Input() treatments?: ToothTreatment[];
   @Output() selected: Subject<void> = new Subject();
   @Output() startLoadingImages = this.loadingNotf.onStartLoading('image');
   @Output() completeLoadingImages = this.loadingNotf.onCompleteLoading('image');
@@ -42,16 +41,16 @@ export class SingleToothImage implements OnInit, AfterViewInit, OnDestroy {
 
   _toothImageLoader = inject(ToothImageLoader);
 
-  ngOnInit() {
-    if (!this.tooth) {
-      throw new Error('Tooth input is required for SingleToothImage component');
-    }
+  constructor() {
+    effect(() => {
+      const tooth = this.tooth();
 
-    if (this.tooth.number != null) {
-      this._toothImageLoader.loadImage(this.tooth.number)?.subscribe(({ lateral, crown }) => {
-        this.toothImages = { lateral, crown };
-      });
-    }
+      if (tooth.number != null) {
+        this._toothImageLoader.loadImage(tooth.number)?.subscribe(({ lateral, crown }) => {
+          this.toothImages = { lateral, crown };
+        });
+      }
+    });
   }
 
   ngAfterViewInit() {
@@ -95,7 +94,9 @@ export class SingleToothImage implements OnInit, AfterViewInit, OnDestroy {
    * @returns Status of the zone
    */
   public getToothZoneStatus(zone: ToothZones, filter?: (treatment: ToothTreatment) => boolean): TreatmentStatus | undefined {
-    const treatmentsZone = this.treatments?.filter((treatment) => treatment.zones?.includes(zone));
+    const tooth = this.tooth();
+
+    const treatmentsZone = tooth.treatments?.filter((treatment) => treatment.zones?.includes(zone));
 
     const treatmentsFiltered = filter ? treatmentsZone?.filter(filter) : treatmentsZone;
 
