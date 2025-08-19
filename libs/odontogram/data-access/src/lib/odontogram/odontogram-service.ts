@@ -1,5 +1,5 @@
 import { Odontogram } from '@portfolio/odontogram/models';
-import { Optional } from "@portfolio/shared/util";
+import { Optional, WithRequired } from "@portfolio/shared/util";
 import { Observable } from "rxjs";
 
 export interface OdontogramGetListFilter {
@@ -10,11 +10,11 @@ export interface OdontogramGetListFilter {
 export interface OdontogramServiceI {
   getList(filter?: OdontogramGetListFilter): Observable<Odontogram[]>;
 
-  getById(id: string): Observable<Odontogram | undefined>;
+  getById(id: string): Observable<Odontogram>;
 
-  create(odontogram: Optional<Odontogram, 'id'>): Observable<Odontogram | undefined>;
+  create(odontogram: Optional<Odontogram, 'id'>): Observable<Odontogram>;
 
-  update(odontogram: Odontogram): Observable<Odontogram | undefined>;
+  update(odontogram: WithRequired<Partial<Odontogram>, 'id'>): Observable<Odontogram>;
 
   delete(id: string): Observable<void>;
 }

@@ -1,6 +1,7 @@
 import deepEqual from 'deep-equal';
 import { findField } from '../functions/findField';
 import { RecursivePaths } from '../types/recursive-paths';
+import { WithRequired } from '../types/with-required';
 
 interface FilterConfig<DataType, FilterType> {
   check: CheckFunction<DataType, FilterType>,
@@ -10,7 +11,7 @@ interface FilterConfig<DataType, FilterType> {
 type CheckFunction<DataType, FilterType> = (
   itemValue: DataType,
   filterValue: FilterType[keyof FilterType],
-  filterConfig: Required<Pick<FilterConfig<DataType, FilterType>, 'dataField'>>
+  filterConfig: WithRequired<FilterConfig<DataType, FilterType>, 'dataField'>
 ) => boolean
 
 export class InMemoryFilter<DataType, FilterType> {
