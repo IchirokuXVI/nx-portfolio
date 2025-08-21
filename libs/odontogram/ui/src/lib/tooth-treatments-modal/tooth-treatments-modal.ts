@@ -1,7 +1,7 @@
 import { Component, computed, ElementRef, inject, input, OnInit, Signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Odontogram, TeethNumbers, Tooth, ToothTreatment, ToothZones, Treatment, TreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
-import { FormArray, FormControl, FormGroup, UntypedFormArray, UntypedFormGroup } from '@angular/forms';
+import { FormArray, FormControl, FormGroup, FormsModule, ReactiveFormsModule, UntypedFormArray, UntypedFormGroup } from '@angular/forms';
 import { Product } from '@portfolio/shared/models';
 import { map, of, Subject, switchMap } from 'rxjs';
 import { OdontogramMemory, TreatmentMemory } from '@portfolio/odontogram/data-access';
@@ -9,7 +9,7 @@ import { WithRequired } from '@portfolio/shared/util';
 
 @Component({
   selector: 'lib-tooth-treatments-modal',
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule],
   templateUrl: './tooth-treatments-modal.html',
   styleUrls: ['./tooth-treatments-modal.scss'],
 })

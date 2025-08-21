@@ -1,1 +1,140 @@
-<p>tooth-view works!</p>
+<div class="modal-header">
+  <h4 class="modal-title">Tooth {{tooth().number}}</h4>
+  @if (client()) {
+  <button mat-stroked-button class="button-primary-general" (click)="toggleHistory()">
+    <span class="content">
+      <i class="fas fa-plus"></i>
+      <span>Show treatment history</span>
+    </span>
+  </button>
+  }
+  <button mat-stroked-button class="button-primary-save" tooltip="Save" (click)="saveTooth()"
+    [disabled]="selectedTooth?.odontogram !== tooth().odontogram">
+    Save
+    <i class="ml-2 fas fa-floppy-disk"></i>
+  </button>
+  <button mat-icon-button>
+    <i class="fas fa-times"></i>
+  </button>
+</div>
+<div class="modal-body" [formGroup]="form">
+  <div class="main-container">
+    <div class="history-container" #historyContainer="bs-collapse" [collapse]="hideHistory" [isAnimated]="true">
+      <h4 class="history-title">
+        Tooth history
+      </h4>
+      <div #historyBar class="history-bar">
+        @for (toothHist of toothHistory; track $index) {
+        <div class="history-tooth" [class.current]="toothHist.odontogram === tooth.odontogram"
+          [class.active]="selectedTooth.odontogram === toothHist.odontogram" (click)="selectTooth(toothHist)">
+          <span class="odontogram-name" [title]="toothHist.populatedOdontogram?.nombre">
+            {{ toothHist.populatedOdontogram?.nombre ?? 'Actual' }}
+          </span>
+          <div class="tooth-container">
+            <odontogram-tooth [tooth]="toothHist" [showNumber]="false"></odontogram-tooth>
+          </div>
+        </div>
+        <span *ngIf="!$last" class="tooth-separator">
+          <i class="fas fa-arrow-right"></i>
+        </span>
+        }
+      </div>
+    </div>
+    <div class="form-container">
+      <p-autoComplete class="product-search" [(ngModel)]="productSearchTerm" [ngModelOptions]="{standalone: true}"
+        field="nombre" [suggestions]="productSuggestions" (onSelect)="addProduct($event)"
+        (completeMethod)="searchProduct($event.query)" placeholder="Busca un tratamiento para añadirlo"
+        *ngIf="!treatments.disabled">
+        <ng-template let-product pTemplate="item">
+          <div class="d-flex column-gap-05">
+            <span class="font-weight-bold">
+              Ref:
+            </span>
+            <span>
+              {{ product.ref }} - {{ product.nombre }}
+            </span>
+          </div>
+        </ng-template>
+      </p-autoComplete>
+      <div class="loading d-flex justify-content-center align-items-center" *ngIf="!tooth">
+        <i class="fas fa-circle-notch fa-spin fa-2x"></i>
+      </div>
+      @if (tooth() && treatments) {
+      <div class="treatments" formArrayName="treatments">
+        @for (treatment of treatments.controls; track $index; let i = $index) {
+        <div class="treatment" [ngClass]="{ pending: 'pending', completed: 'finished' }[treatment.get('status')?.value]"
+          [formGroup]="treatment">
+          <div class="treatmentCol align-items-center">
+            <ng-container formGroupName="producto">
+              <input type="text" class="form-control" formControlName="ref" readonly>
+            </ng-container>
+            <div class="zone-selector" [class]="treatment.get('status')?.value ?? 'pending'"
+              [class.pointer-events-none]="treatments.disabled"
+              [class.disabled]="treatment.get('type')?.value === 'implant' || treatment.get('type')?.value === 'extraction'">
+              <div class="main-zones">
+                @for (zone of ['superior', 'izquierda', 'central', 'derecha', 'inferior']; track $index) {
+                <div mat-ripple [class]="zone" [class.selected]="treatment.get('zones')?.value.includes(zone)"
+                  (click)="toggleZone(treatment, zone)"></div>
+                }
+              </div>
+              <div class="lateral-raiz">
+                @for (zone of ['lateral', 'root']; track $index) {
+                <div mat-ripple [class]="zone" [class.selected]="treatment.get('zones')?.value.includes(zone)"
+                  (click)="toggleZone(treatment, zone)">
+                </div>
+                }
+              </div>
+            </div>
+          </div>
+          <div class="treatmentCol secondCol">
+            <div class="d-flex">
+              <ng-container formGroupName="treatment">
+                <input name="name" type="text" class="form-control nombre" formControlName="name"
+                  placeholder="Treatment name">
+                <!-- <div class="precioVenta">
+                    <input type="number" class="form-control" formControlName="precioVenta" step="0.01">
+                </div> -->
+              </ng-container>
+              <button mat-icon-button (click)="removeTreatment(i)" *ngIf="!treatments.disabled">
+                <i class="fas fa-trash text-danger"></i>
+              </button>
+            </div>
+            <div class="treatment-info">
+              <div class="d-flex column-gap-05">
+                <div class="affected-teeth">
+                  <p-multiSelect class="d-flex flex-fill" styleClass="flex-fill" [options]="teeth"
+                    optionDisabled="disabled" optionLabel="number" optionValue="number"
+                    formControlName="dientes"></p-multiSelect>
+                </div>
+                <div class="groupTeeth">
+                  <mat-button-toggle-group #groupLotes="matButtonToggleGroup" formControlName="agruparDientes">
+                    <mat-button-toggle [value]="true">Agrupado</mat-button-toggle>
+                    <mat-button-toggle [value]="false">Individual</mat-button-toggle>
+                  </mat-button-toggle-group>
+                </div>
+                <div class="status" [class.pointer-events-none]="treatments.disabled">
+                  <div [class.active]="treatment.get('estado').value === 'pendiente'"
+                    (click)="setStatus(treatment, 'pendiente')">
+                    <i class="fas fa-square pending"></i>
+                    <span>Pendiente</span>
+                  </div>
+                  <div [class.active]="treatment.get('estado').value === 'realizado'"
+                    (click)="setStatus(treatment, 'realizado')">
+                    <i class="fas fa-square finished"></i>
+                    <span>Realizado</span>
+                  </div>
+                </div>
+              </div>
+              <div class="notes">
+                <textarea class="form-control" formControlName="observaciones"
+                  placeholder="Observaciones del tratamiento"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+        }
+      </div>
+      }
+    </div>
+  </div>
+</div>
