@@ -17,6 +17,7 @@ export class TreatmentMemory implements TreatmentServiceI {
     this._inMemoryFilter.setFilterConfig({
       ids: { check: this._inMemoryFilter.checks.filterIncludes, dataField: 'id' },
       odontogram: { check: this._inMemoryFilter.checks.strictEquals },
+      client: { check: this._inMemoryFilter.checks.strictEquals },
       teeth: { check: (val, filterVal) => val.teeth.every((t) => filterVal?.includes(t)) },
     });
   }
@@ -36,7 +37,8 @@ export class TreatmentMemory implements TreatmentServiceI {
   }
 
   create(treatment: Optional<ToothTreatment, 'id'>) {
-    const newOdont = { ...treatment, id: treatment.id || uuidv4() } as ToothTreatment;
+    const newOdont: WithRequired<ToothTreatment, 'id'> = { ...treatment, id: treatment.id || uuidv4() };
+
     this._treatments.set(newOdont.id, newOdont);
 
     return of(newOdont);

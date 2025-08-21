@@ -5,6 +5,7 @@ import { Observable } from "rxjs";
 export interface TreatmentGetListFilter {
   ids?: string[];
   odontogram?: string;
+  client: string;
   teeth?: Array<typeof TeethNumbers[number]>;
 }
 

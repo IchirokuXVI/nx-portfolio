@@ -1,6 +1,7 @@
 import { ToothTreatment, ToothZones, TreatmentStatus, TreatmentType } from "@portfolio/odontogram/models";
+import { WithRequired } from '@portfolio/shared/util';
 
-export const TREATMENTS: readonly ToothTreatment[] = [
+export const TREATMENTS: readonly WithRequired<ToothTreatment, 'id'>[] = [
   {
     id: "1",
     odontogram: "1",
