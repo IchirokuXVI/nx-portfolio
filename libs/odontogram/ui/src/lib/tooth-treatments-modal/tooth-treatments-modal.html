@@ -43,7 +43,7 @@
     <div class="form-container">
       <p-autoComplete class="product-search" [(ngModel)]="productSearchTerm" [ngModelOptions]="{standalone: true}"
         field="nombre" [suggestions]="productSuggestions" (onSelect)="addProduct($event)"
-        (completeMethod)="searchProduct($event.query)" placeholder="Busca un tratamiento para añadirlo"
+        (completeMethod)="searchProduct($event.query)" placeholder="Search a treatment to add it"
         *ngIf="!treatments.disabled">
         <ng-template let-product pTemplate="item">
           <div class="d-flex column-gap-05">
@@ -95,9 +95,11 @@
                     <input type="number" class="form-control" formControlName="precioVenta" step="0.01">
                 </div> -->
               </ng-container>
-              <button mat-icon-button (click)="removeTreatment(i)" *ngIf="!treatments.disabled">
-                <i class="fas fa-trash text-danger"></i>
-              </button>
+              @if (!treatments.disabled) {
+                <button mat-icon-button (click)="removeTreatment(i)" *ngIf="!treatments.disabled">
+                  <i class="fas fa-trash text-danger"></i>
+                </button>
+              }
             </div>
             <div class="treatment-info">
               <div class="d-flex column-gap-05">
@@ -107,27 +109,27 @@
                     formControlName="dientes"></p-multiSelect>
                 </div>
                 <div class="groupTeeth">
-                  <mat-button-toggle-group #groupLotes="matButtonToggleGroup" formControlName="agruparDientes">
-                    <mat-button-toggle [value]="true">Agrupado</mat-button-toggle>
+                  <mat-button-toggle-group #groupLotes="matButtonToggleGroup" formControlName="groupTeeth">
+                    <mat-button-toggle [value]="true">Grouped</mat-button-toggle>
                     <mat-button-toggle [value]="false">Individual</mat-button-toggle>
                   </mat-button-toggle-group>
                 </div>
                 <div class="status" [class.pointer-events-none]="treatments.disabled">
-                  <div [class.active]="treatment.get('estado').value === 'pendiente'"
+                  <div [class.active]="treatment.get('status').value === 'pending'"
                     (click)="setStatus(treatment, 'pendiente')">
                     <i class="fas fa-square pending"></i>
-                    <span>Pendiente</span>
+                    <span>Pending</span>
                   </div>
-                  <div [class.active]="treatment.get('estado').value === 'realizado'"
-                    (click)="setStatus(treatment, 'realizado')">
+                  <div [class.active]="treatment.get('status').value === 'completed'"
+                    (click)="setStatus(treatment, 'completed')">
                     <i class="fas fa-square finished"></i>
-                    <span>Realizado</span>
+                    <span>Completed</span>
                   </div>
                 </div>
               </div>
               <div class="notes">
-                <textarea class="form-control" formControlName="observaciones"
-                  placeholder="Observaciones del tratamiento"></textarea>
+                <textarea class="form-control" formControlName="additionalInformation"
+                  placeholder="Notes about the treatment"></textarea>
               </div>
             </div>
           </div>

@@ -184,7 +184,7 @@ export class ToothTreatmentModal implements OnInit {
       zones: [],
       status: TreatmentStatus.PENDING,
       type: treatment.treatmentType || TreatmentType.STANDARD,
-      groupedTeeth: true
+      groupTeeth: true
     });
 
     if (treatment.treatmentType === TreatmentType.EXTRACTION || treatment.treatmentType === TreatmentType.IMPLANT) {
@@ -198,7 +198,7 @@ export class ToothTreatmentModal implements OnInit {
     const group = new UntypedFormGroup({
       odontogram: new FormControl(toothTreatment.odontogram),
       treatment: new FormControl(toothTreatment.treatment),
-      groupedTeeth: new FormControl(toothTreatment.groupedTeeth ?? true),
+      groupTeeth: new FormControl(toothTreatment.groupTeeth ?? true),
       teeth: new FormControl([...toothTreatment.teeth]),
       zones: new FormControl([...toothTreatment.zones]),
       status: new FormControl(toothTreatment.status ?? 'pending'),

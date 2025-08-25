@@ -10,7 +10,7 @@ export function runSharedTreatmentServiceTests(
   describe("Shared TreatmentServiceI behavior", () => {
     let service: TreatmentServiceI;
 
-    const mockTreatment: Optional<ToothTreatment, 'id'> = { teeth: ["11"], groupedTeeth: false, status: TreatmentStatus.COMPLETED, type: TreatmentType.STANDARD, zones: [ToothZones.BOTTOM], additionalInformation: "Test treatment" };
+    const mockTreatment: Optional<ToothTreatment, 'id'> = { teeth: ["11"], groupTeeth: false, status: TreatmentStatus.COMPLETED, type: TreatmentType.STANDARD, zones: [ToothZones.BOTTOM], additionalInformation: "Test treatment" };
 
     beforeEach(() => {
       service = serviceFactory();

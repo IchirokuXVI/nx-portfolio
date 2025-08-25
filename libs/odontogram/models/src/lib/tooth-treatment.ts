@@ -5,7 +5,7 @@ import { TreatmentType } from "./treatment-type";
 
 export interface ToothTreatment extends OdontogramTreatment {
   teeth: (typeof TeethNumbers[number])[];
-  groupedTeeth: boolean;
+  groupTeeth: boolean;
   zones: ToothZones[];
   type: TreatmentType;
 }
