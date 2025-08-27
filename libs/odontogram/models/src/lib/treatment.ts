@@ -7,4 +7,6 @@ export interface Treatment {
   description?: string;
   treatmentType: TreatmentType;
   zones: ToothZones[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }

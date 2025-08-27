@@ -1,4 +1,4 @@
-import { TreatmentStatus } from "./treatment-status";
+import { TreatmentStatus } from "./tooth-treatment-status";
 
 export interface OdontogramTreatment {
   id?: string;

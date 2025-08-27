@@ -1,17 +1,22 @@
 import { Component, computed, ElementRef, inject, input, OnInit, Signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Odontogram, TeethNumbers, Tooth, ToothTreatment, ToothZones, Treatment, TreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
+import { Odontogram, TeethNumbers, Tooth, ToothTreatment, ToothZones, Treatment, ToothTreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
 import { FormArray, FormControl, FormGroup, FormsModule, ReactiveFormsModule, UntypedFormArray, UntypedFormGroup } from '@angular/forms';
-import { Product } from '@portfolio/shared/models';
 import { map, of, Subject, switchMap } from 'rxjs';
-import { OdontogramMemory, TreatmentMemory } from '@portfolio/odontogram/data-access';
+import { OdontogramMemory, ToothTreatmentMemory, TreatmentMemory } from '@portfolio/odontogram/data-access';
 import { WithRequired } from '@portfolio/shared/util';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
 
 @Component({
   selector: 'lib-tooth-treatments-modal',
-  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  imports: [CommonModule, SingleToothImage, FormsModule, ReactiveFormsModule, MatExpansionModule, MatFormFieldModule, MatIconModule, MatAutocompleteModule],
   templateUrl: './tooth-treatments-modal.html',
   styleUrls: ['./tooth-treatments-modal.scss'],
+  providers: []
 })
 export class ToothTreatmentModal implements OnInit {
   tooth = input.required<Tooth>();
@@ -37,8 +42,8 @@ export class ToothTreatmentModal implements OnInit {
    */
   tempTreatments?: ToothTreatment[];
 
-  productSearchTerm?: string;
-  productSuggestions?: Product[];
+  treatmentSearchTerm?: string;
+  treatmentSuggestions?: Treatment[];
 
   teeth: Signal<{ number: string, disabled: boolean }[]>;
 
@@ -47,8 +52,8 @@ export class ToothTreatmentModal implements OnInit {
 
   @ViewChild('historyBar') historyBar?: ElementRef<HTMLDivElement>;
 
-  private _productServ = inject(ProductService);
   private _treatmentServ = inject(TreatmentMemory);
+  private _toothTreatmentServ = inject(ToothTreatmentMemory);
   private _odontogramServ = inject(OdontogramMemory);
 
   constructor() {
@@ -95,7 +100,7 @@ export class ToothTreatmentModal implements OnInit {
       return of([this.tooth()]);
     }
 
-    return this._treatmentServ.getList({ teeth: [this.tooth().number], client }).pipe(
+    return this._toothTreatmentServ.getList({ teeth: [this.tooth().number], client }).pipe(
       map((treatments) => treatments.filter((treatment) => treatment.odontogram !== undefined) as WithRequired<ToothTreatment, 'odontogram'>[]),
       switchMap((historicalTreatments) => {
         // Using a set in case the same odontogram appears multiple times
@@ -157,7 +162,7 @@ export class ToothTreatmentModal implements OnInit {
     this.treatments.clear();
     this.selectedTooth = tooth;
 
-    treatments?.forEach((treatment) => this.addTreatment(treatment));
+    treatments?.forEach((treatment) => this.addToothTreatment(treatment));
 
     // Disable the form if a tooth from the history is selected
     if (tooth.odontogram !== inputTooth.odontogram)
@@ -165,48 +170,48 @@ export class ToothTreatmentModal implements OnInit {
   }
 
 
-  searchProduct(searchTerm: string) {
-    this._productServ.getProductos({ searchTerm: searchTerm, limit: 10 })
-      .subscribe((products: Product[]) => {
-        this.productSuggestions = products;
+  searchTreatment(searchTerm: string) {
+    this._treatmentServ.getList({ searchTerm: searchTerm, limit: 10 })
+      .subscribe((treatments: Treatment[]) => {
+        this.treatmentSuggestions = treatments;
       });
   }
 
   addTreatment(treatment: Treatment) {
     const tooth = this.tooth();
 
-    const treatmentForm = this.addToothTreatment({
+    this.addToothTreatment({
       odontogram: tooth.odontogram?.id,
       description: treatment.name,
       additionalInformation: treatment.description,
       treatment: treatment.id,
       teeth: [tooth.number],
       zones: [],
-      status: TreatmentStatus.PENDING,
+      status: ToothTreatmentStatus.PENDING,
       type: treatment.treatmentType || TreatmentType.STANDARD,
       groupTeeth: true
     });
 
-    if (treatment.treatmentType === TreatmentType.EXTRACTION || treatment.treatmentType === TreatmentType.IMPLANT) {
-      this.toggleZone(treatmentForm, ToothZones.ROOT);
-    }
-
-    this.productSearchTerm = '';
+    this.treatmentSearchTerm = '';
   }
 
   addToothTreatment(toothTreatment: ToothTreatment) {
     const group = new UntypedFormGroup({
-      odontogram: new FormControl(toothTreatment.odontogram),
-      treatment: new FormControl(toothTreatment.treatment),
-      groupTeeth: new FormControl(toothTreatment.groupTeeth ?? true),
-      teeth: new FormControl([...toothTreatment.teeth]),
-      zones: new FormControl([...toothTreatment.zones]),
-      status: new FormControl(toothTreatment.status ?? 'pending'),
-      type: new FormControl(toothTreatment.type ?? TreatmentType.STANDARD),
-      additionalInformation: new FormControl(toothTreatment.additionalInformation ?? ''),
+      odontogram: new FormControl<string | undefined>(toothTreatment.odontogram),
+      treatment: new FormControl<string | undefined>(toothTreatment.treatment),
+      groupTeeth: new FormControl<boolean>(toothTreatment.groupTeeth ?? true),
+      teeth: new FormControl<(typeof TeethNumbers[number])[]>([...toothTreatment.teeth]),
+      zones: new FormControl<ToothZones[]>([...toothTreatment.zones]),
+      status: new FormControl<ToothTreatmentStatus>(toothTreatment.status ?? ToothTreatmentStatus.PENDING),
+      type: new FormControl<TreatmentType>(toothTreatment.type ?? TreatmentType.STANDARD),
+      additionalInformation: new FormControl<string>(toothTreatment.additionalInformation ?? ''),
     });
 
     this.treatments.push(group);
+
+    if (toothTreatment.type === TreatmentType.EXTRACTION || toothTreatment.type === TreatmentType.IMPLANT) {
+      this.toggleZone(group, ToothZones.ROOT);
+    }
 
     return group;
   }
@@ -223,7 +228,7 @@ export class ToothTreatmentModal implements OnInit {
     }
   }
 
-  setStatus(treatment: FormGroup, status: TreatmentStatus) {
+  setStatus(treatment: FormGroup, status: ToothTreatmentStatus) {
     treatment.get('status')?.setValue(status);
   }
 

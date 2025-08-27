@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { InMemoryFilter, Optional, WithRequired } from '@portfolio/shared/util';
-import { ToothTreatment } from '@portfolio/odontogram/models';
+import { Treatment } from '@portfolio/odontogram/models';
 import { TreatmentGetListFilter, TreatmentServiceI } from './treatment-service';
 import { TREATMENTS } from './static-treatments-data';
 import { NotFoundResourceError } from '@portfolio/shared/data-access';
@@ -9,21 +9,20 @@ import { v4 as uuidv4 } from 'uuid';
 
 @Injectable({ providedIn: 'root' })
 export class TreatmentMemory implements TreatmentServiceI {
-  private _treatments: Map<string, ToothTreatment>;
-  private _inMemoryFilter = new InMemoryFilter<ToothTreatment, TreatmentGetListFilter>();
+  private _treatments: Map<string, Treatment>;
+  private _inMemoryFilter = new InMemoryFilter<Treatment, TreatmentGetListFilter>();
 
   constructor() {
-    this._treatments = new Map<string, ToothTreatment>(TREATMENTS.map(od => [od.id, od]));
+    this._treatments = new Map<string, Treatment>(TREATMENTS.map(od => [od.id, od]));
     this._inMemoryFilter.setFilterConfig({
       ids: { check: this._inMemoryFilter.checks.filterIncludes, dataField: 'id' },
-      odontogram: { check: this._inMemoryFilter.checks.strictEquals },
-      client: { check: this._inMemoryFilter.checks.strictEquals },
-      teeth: { check: (val, filterVal) => val.teeth.every((t) => filterVal?.includes(t)) },
+      searchTerm: { check: this._inMemoryFilter.checks.textSearch, dataField: ['name', 'description'] },
+      treatmentTypes: { check: this._inMemoryFilter.checks.filterIncludes, dataField: 'treatmentType' },
     });
   }
 
   getList(filter?: TreatmentGetListFilter) {
-    return of(this._inMemoryFilter.applyFilter(Array.from(this._treatments.values()), filter));
+    return of(this._inMemoryFilter.applyFilter(Array.from(this._treatments.values()), filter, { sort: filter?.sort, limit: filter?.limit }));
   }
 
   getById(id: string) {
@@ -36,15 +35,15 @@ export class TreatmentMemory implements TreatmentServiceI {
     return of(treatment);
   }
 
-  create(treatment: Optional<ToothTreatment, 'id'>) {
-    const newOdont: WithRequired<ToothTreatment, 'id'> = { ...treatment, id: treatment.id || uuidv4() };
+  create(treatment: Optional<Treatment, 'id'>) {
+    const newOdont: WithRequired<Treatment, 'id'> = { ...treatment, id: treatment.id || uuidv4() };
 
     this._treatments.set(newOdont.id, newOdont);
 
     return of(newOdont);
   }
 
-  update(treatment: WithRequired<Partial<ToothTreatment>, 'id'>): Observable<ToothTreatment> {
+  update(treatment: WithRequired<Partial<Treatment>, 'id'>): Observable<Treatment> {
     const oldTreatment = this._treatments.get(treatment.id);
 
     if (oldTreatment) {

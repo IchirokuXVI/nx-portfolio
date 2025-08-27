@@ -1,7 +1,7 @@
 import { Observable } from "rxjs";
 import { TreatmentServiceI } from "./treatment-service";
 import { beforeEach, describe, expect, it } from "@jest/globals";
-import { ToothTreatment, ToothZones, TreatmentStatus, TreatmentType } from "@portfolio/odontogram/models";
+import { ToothZones, TreatmentType, Treatment } from "@portfolio/odontogram/models";
 import { Optional } from "@portfolio/shared/util";
 
 export function runSharedTreatmentServiceTests(
@@ -10,7 +10,7 @@ export function runSharedTreatmentServiceTests(
   describe("Shared TreatmentServiceI behavior", () => {
     let service: TreatmentServiceI;
 
-    const mockTreatment: Optional<ToothTreatment, 'id'> = { teeth: ["11"], groupTeeth: false, status: TreatmentStatus.COMPLETED, type: TreatmentType.STANDARD, zones: [ToothZones.BOTTOM], additionalInformation: "Test treatment" };
+    const mockTreatment: Optional<Treatment, 'id'> = { name: "Test Treatment", description: "Test description", treatmentType: TreatmentType.STANDARD, zones: [ToothZones.BOTTOM] };
 
     beforeEach(() => {
       service = serviceFactory();
@@ -33,7 +33,7 @@ export function runSharedTreatmentServiceTests(
     });
 
     it("update should return an observable", () => {
-      expect(service.update({ id: "1", additionalInformation: "Updated treatment" }) instanceof Observable).toBe(true);
+      expect(service.update({ id: "1", name: "Updated treatment" }) instanceof Observable).toBe(true);
     });
   });
 }

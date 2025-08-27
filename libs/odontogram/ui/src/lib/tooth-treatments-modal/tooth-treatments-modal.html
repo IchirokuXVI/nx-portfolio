@@ -19,43 +19,45 @@
 </div>
 <div class="modal-body" [formGroup]="form">
   <div class="main-container">
-    <div class="history-container" #historyContainer="bs-collapse" [collapse]="hideHistory" [isAnimated]="true">
-      <h4 class="history-title">
-        Tooth history
-      </h4>
+    <mat-expansion-panel class="history-container">
+      <mat-expansion-panel-header>
+        <mat-panel-title class="history-title">
+          Tooth history
+        </mat-panel-title>
+      </mat-expansion-panel-header>
       <div #historyBar class="history-bar">
         @for (toothHist of toothHistory; track $index) {
-        <div class="history-tooth" [class.current]="toothHist.odontogram === tooth.odontogram"
-          [class.active]="selectedTooth.odontogram === toothHist.odontogram" (click)="selectTooth(toothHist)">
-          <span class="odontogram-name" [title]="toothHist.populatedOdontogram?.nombre">
-            {{ toothHist.populatedOdontogram?.nombre ?? 'Actual' }}
+        <div class="history-tooth" [class.current]="toothHist.odontogram === tooth().odontogram"
+          [class.active]="selectedTooth?.odontogram === toothHist.odontogram" (click)="selectTooth(toothHist)"
+          (keydown.enter)="selectTooth(toothHist)" tabindex="0">
+          <span class="odontogram-name" [title]="toothHist.odontogram?.name">
+            {{ toothHist.odontogram?.name ?? 'Actual' }}
           </span>
           <div class="tooth-container">
-            <odontogram-tooth [tooth]="toothHist" [showNumber]="false"></odontogram-tooth>
+            <lib-odontogram-single-tooth-image [tooth]="toothHist"
+              [showNumber]="false"></lib-odontogram-single-tooth-image>
           </div>
         </div>
-        <span *ngIf="!$last" class="tooth-separator">
+        @if (!$last) {
+        <span class="tooth-separator">
           <i class="fas fa-arrow-right"></i>
         </span>
         }
+        }
       </div>
-    </div>
+    </mat-expansion-panel>
     <div class="form-container">
-      <p-autoComplete class="product-search" [(ngModel)]="productSearchTerm" [ngModelOptions]="{standalone: true}"
-        field="nombre" [suggestions]="productSuggestions" (onSelect)="addProduct($event)"
-        (completeMethod)="searchProduct($event.query)" placeholder="Search a treatment to add it"
-        *ngIf="!treatments.disabled">
-        <ng-template let-product pTemplate="item">
-          <div class="d-flex column-gap-05">
-            <span class="font-weight-bold">
-              Ref:
-            </span>
-            <span>
-              {{ product.ref }} - {{ product.nombre }}
-            </span>
-          </div>
-        </ng-template>
-      </p-autoComplete>
+      @if (!treatments.disabled) {
+      <mat-form-field>
+        <input type="text" placeholder="Search a treatment" matInput [matAutocomplete]="autoCompleteTreatment"
+          [(ngModel)]="treatmentSearchTerm"  [ngModelOptions]="{ standalone: true }">
+      </mat-form-field>
+      <mat-autocomplete class="product-search" #autoCompleteTreatment="matAutocomplete" (optionSelected)="addTreatment($event.option.value)">
+        @for (option of treatmentSuggestions; track $index) {
+        <mat-option [value]="option">{{option.name}}</mat-option>
+        }
+      </mat-autocomplete>
+      }
       <div class="loading d-flex justify-content-center align-items-center" *ngIf="!tooth">
         <i class="fas fa-circle-notch fa-spin fa-2x"></i>
       </div>
@@ -96,9 +98,9 @@
                 </div> -->
               </ng-container>
               @if (!treatments.disabled) {
-                <button mat-icon-button (click)="removeTreatment(i)" *ngIf="!treatments.disabled">
-                  <i class="fas fa-trash text-danger"></i>
-                </button>
+              <button mat-icon-button (click)="removeTreatment(i)" *ngIf="!treatments.disabled">
+                <i class="fas fa-trash text-danger"></i>
+              </button>
               }
             </div>
             <div class="treatment-info">
