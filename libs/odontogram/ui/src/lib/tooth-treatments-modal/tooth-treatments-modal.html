@@ -17,7 +17,7 @@
     <i class="fas fa-times"></i>
   </button>
 </div>
-<div class="modal-body" [formGroup]="form">
+<div class="modal-body" [formGroup]="mainForm">
   <div class="main-container">
     <mat-expansion-panel class="history-container">
       <mat-expansion-panel-header>
@@ -47,42 +47,48 @@
       </div>
     </mat-expansion-panel>
     <div class="form-container">
-      @if (!treatments.disabled) {
+      @if (!treatmentsForm.disabled) {
       <mat-form-field>
         <input type="text" placeholder="Search a treatment" matInput [matAutocomplete]="autoCompleteTreatment"
-          [(ngModel)]="treatmentSearchTerm"  [ngModelOptions]="{ standalone: true }">
+          [(ngModel)]="treatmentSearchTerm" [ngModelOptions]="{ standalone: true }" tabIndex="1">
       </mat-form-field>
-      <mat-autocomplete class="product-search" #autoCompleteTreatment="matAutocomplete" (optionSelected)="addTreatment($event.option.value)">
+      <mat-autocomplete class="product-search" #autoCompleteTreatment="matAutocomplete"
+        (optionSelected)="addTreatment($event.option.value)">
         @for (option of treatmentSuggestions; track $index) {
         <mat-option [value]="option">{{option.name}}</mat-option>
         }
       </mat-autocomplete>
       }
-      <div class="loading d-flex justify-content-center align-items-center" *ngIf="!tooth">
+      @if (!tooth()) {
+      <div class="loading d-flex justify-content-center align-items-center">
         <i class="fas fa-circle-notch fa-spin fa-2x"></i>
       </div>
-      @if (tooth() && treatments) {
+      }
+      @if (tooth() && treatmentsForm) {
       <div class="treatments" formArrayName="treatments">
-        @for (treatment of treatments.controls; track $index; let i = $index) {
-        <div class="treatment" [ngClass]="{ pending: 'pending', completed: 'finished' }[treatment.get('status')?.value]"
+        @for (treatment of treatmentsForm.controls; track $index; let i = $index) {
+        <div class="treatment"
+          [ngClass]="toothTreatmentStatusToCssClass[treatment.get('status')?.value || toothTreatmentStatus.PENDING]"
           [formGroup]="treatment">
           <div class="treatmentCol align-items-center">
             <ng-container formGroupName="producto">
               <input type="text" class="form-control" formControlName="ref" readonly>
             </ng-container>
             <div class="zone-selector" [class]="treatment.get('status')?.value ?? 'pending'"
-              [class.pointer-events-none]="treatments.disabled"
+              [class.pointer-events-none]="treatmentsForm.disabled"
               [class.disabled]="treatment.get('type')?.value === 'implant' || treatment.get('type')?.value === 'extraction'">
               <div class="main-zones">
-                @for (zone of ['superior', 'izquierda', 'central', 'derecha', 'inferior']; track $index) {
-                <div mat-ripple [class]="zone" [class.selected]="treatment.get('zones')?.value.includes(zone)"
-                  (click)="toggleZone(treatment, zone)"></div>
+                @for (zone of [toothZones.TOP, toothZones.LEFT, toothZones.CENTER, toothZones.RIGHT, toothZones.BOTTOM];
+                track $index) {
+                <div mat-ripple [class]="zone" [class.selected]="treatment.get('zones')?.value?.includes(zone)"
+                  (click)="toggleZone(treatment, zone)" (keydown.enter)="toggleZone(treatment, zone)" tabindex="2">
+                </div>
                 }
               </div>
               <div class="lateral-raiz">
-                @for (zone of ['lateral', 'root']; track $index) {
-                <div mat-ripple [class]="zone" [class.selected]="treatment.get('zones')?.value.includes(zone)"
-                  (click)="toggleZone(treatment, zone)">
+                @for (zone of [toothZones.LATERAL, toothZones.ROOT]; track $index) {
+                <div mat-ripple [class]="zone" [class.selected]="treatment.get('zones')?.value?.includes(zone)"
+                  (click)="toggleZone(treatment, zone)" (keydown.enter)="toggleZone(treatment, zone)" tabindex="2">
                 </div>
                 }
               </div>
@@ -92,13 +98,13 @@
             <div class="d-flex">
               <ng-container formGroupName="treatment">
                 <input name="name" type="text" class="form-control nombre" formControlName="name"
-                  placeholder="Treatment name">
+                  placeholder="Treatment name" tabindex="3">
                 <!-- <div class="precioVenta">
                     <input type="number" class="form-control" formControlName="precioVenta" step="0.01">
                 </div> -->
               </ng-container>
-              @if (!treatments.disabled) {
-              <button mat-icon-button (click)="removeTreatment(i)" *ngIf="!treatments.disabled">
+              @if (!treatmentsForm.disabled) {
+              <button mat-icon-button (click)="removeTreatment(i)" (keydown.enter)="removeTreatment(i)" tabIndex="4">
                 <i class="fas fa-trash text-danger"></i>
               </button>
               }
@@ -106,9 +112,14 @@
             <div class="treatment-info">
               <div class="d-flex column-gap-05">
                 <div class="affected-teeth">
-                  <p-multiSelect class="d-flex flex-fill" styleClass="flex-fill" [options]="teeth"
-                    optionDisabled="disabled" optionLabel="number" optionValue="number"
-                    formControlName="dientes"></p-multiSelect>
+                  <mat-form-field tabindex="5">
+                    <mat-label>Teeth</mat-label>
+                    <mat-select formControlName="teeth" multiple>
+                      @for (tooth of teeth(); track $index) {
+                      <mat-option [value]="tooth.number" [disabled]="tooth.disabled">{{tooth.number}}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
                 </div>
                 <div class="groupTeeth">
                   <mat-button-toggle-group #groupLotes="matButtonToggleGroup" formControlName="groupTeeth">
@@ -116,14 +127,16 @@
                     <mat-button-toggle [value]="false">Individual</mat-button-toggle>
                   </mat-button-toggle-group>
                 </div>
-                <div class="status" [class.pointer-events-none]="treatments.disabled">
-                  <div [class.active]="treatment.get('status').value === 'pending'"
-                    (click)="setStatus(treatment, 'pendiente')">
+                <div class="status" [class.pointer-events-none]="treatmentsForm.disabled">
+                  <div [class.active]="treatment.get('status')?.value === toothTreatmentStatus.PENDING"
+                    (click)="setStatus(treatment, toothTreatmentStatus.PENDING)"
+                    (keydown.enter)="setStatus(treatment, toothTreatmentStatus.PENDING)" tabindex="2">
                     <i class="fas fa-square pending"></i>
                     <span>Pending</span>
                   </div>
-                  <div [class.active]="treatment.get('status').value === 'completed'"
-                    (click)="setStatus(treatment, 'completed')">
+                  <div [class.active]="treatment.get('status')?.value === toothTreatmentStatus.COMPLETED"
+                    (click)="setStatus(treatment, toothTreatmentStatus.COMPLETED)"
+                    (keydown.enter)="setStatus(treatment, toothTreatmentStatus.COMPLETED)" tabindex="2">
                     <i class="fas fa-square finished"></i>
                     <span>Completed</span>
                   </div>
