@@ -28,7 +28,7 @@ export class ToothTreatmentModal implements OnInit {
 
   toothTreatmentStatusToCssClass: { [key in ToothTreatmentStatus]: string } = {
     [ToothTreatmentStatus.PENDING]: 'pending',
-    [ToothTreatmentStatus.COMPLETED]: 'finished',
+    [ToothTreatmentStatus.COMPLETED]: 'finished'
   };
 
   tooth = input.required<Tooth>();

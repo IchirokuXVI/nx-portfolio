@@ -1,7 +1,5 @@
+@use '../common-variables.scss' as common;
 @use "sass:list";
-
-$pendingColor: #fba2a2;
-$finishedColor: #80ded9;
 
 * {
   box-sizing: border-box;
@@ -234,13 +232,13 @@ $finishedColor: #80ded9;
           align-items: center;
 
           .pending {
-            color: $pendingColor;
-            text-decoration-color: $pendingColor;
+            color: common.$pendingColor;
+            text-decoration-color: common.$pendingColor;
           }
 
           .finished {
-            color: $finishedColor;
-            text-decoration-color: $finishedColor;
+            color: common.$finishedColor;
+            text-decoration-color: common.$finishedColor;
           }
 
           &.active {

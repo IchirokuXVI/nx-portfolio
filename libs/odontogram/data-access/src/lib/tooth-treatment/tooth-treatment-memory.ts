@@ -15,7 +15,6 @@ export class ToothTreatmentMemory implements ToothTreatmentServiceI {
   constructor() {
     this._toothTreatments = new Map<string, ToothTreatment>(TOOTH_TREATMENTS.map(od => [od.id, od]));
     this._inMemoryFilter.setFilterConfig({
-      // @ts-expect-error For some reason this line is supposedly too deep in type resolution
       ids: { check: this._inMemoryFilter.checks.filterIncludes, dataField: 'id' },
       odontogram: { check: this._inMemoryFilter.checks.strictEquals },
       client: { check: this._inMemoryFilter.checks.strictEquals },

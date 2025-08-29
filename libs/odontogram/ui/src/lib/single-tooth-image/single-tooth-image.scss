@@ -1,15 +1,6 @@
+@use '../common-variables.scss' as common;
+
 .tooth {
-  // This variable indicates which class is being
-  // used by the zones without a status
-  // It is necessary to identify when they have
-  // an applied status and also avoid having to
-  // repeat styles multiple times per status
-  $noStatusClass: '.status-none';
-
-  // Colors for pending/finished status
-  $pendingColor: #fba2a2;
-  $finishedColor: #80DED9;
-
   // Center tooth number (text) and make it bold
   display: flex;
   flex: 0 1 auto;
@@ -93,11 +84,11 @@
     &:not(.implant),
     &:after,
     &:before {
-      background-color: $pendingColor !important;
+      background-color: common.$pendingColor !important;
     }
 
     &.implant {
-      border-color: $pendingColor !important;
+      border-color: common.$pendingColor !important;
     }
   }
 
@@ -107,11 +98,11 @@
     &:not(.implant),
     &:after,
     &:before {
-      background-color: $finishedColor !important;
+      background-color: common.$finishedColor !important;
     }
 
     &.implant {
-      border-color: $finishedColor !important;
+      border-color: common.$finishedColor !important;
     }
   }
 
@@ -170,10 +161,10 @@
     // Makes the border of the last element visible. Needs special logic
     // because I haven't found a way to make it work
     // being the first div of the container
-    &:has(.left:not(#{$noStatusClass})) {
+    &:has(.left:not(#{common.$noStatusClass})) {
       & .top {
 
-        &:not(#{$noStatusClass}) {
+        &:not(#{common.$noStatusClass}) {
           border-bottom-style: $crownBorderStyle;
         }
       }
@@ -195,7 +186,7 @@
 
       // Mxins to apply border styles without repeating code
       @mixin applyBorder($position) {
-        &:not(#{$noStatusClass}) {
+        &:not(#{common.$noStatusClass}) {
           border-#{$position}-style: none;
           border-#{$position}-width: $crownBorderSize + $crownBorderUnit;
           border-#{$position}-color: $crownBorderColor;
@@ -203,7 +194,7 @@
       }
 
       @mixin showNextBorder($position) {
-        &:not(#{$noStatusClass})+:not(#{$noStatusClass}) {
+        &:not(#{common.$noStatusClass})+:not(#{common.$noStatusClass}) {
           border-#{$position}-style: $crownBorderStyle;
         }
       }

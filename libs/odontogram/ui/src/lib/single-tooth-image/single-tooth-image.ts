@@ -2,7 +2,7 @@ import { AfterViewInit, Component, ElementRef, inject, Input, OnDestroy, Output,
 import { CommonModule } from '@angular/common';
 import { LoadingNotifier, NgLetDirective } from '@portfolio/shared/util';
 import { Subject } from 'rxjs';
-import { Tooth, ToothTreatment, ToothZones, TreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
+import { Tooth, ToothTreatment, ToothZones, ToothTreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
 import { ToothImageLoader } from '../services/tooth-image-loader';
 
 const loadable = ['image'] as const;
@@ -22,8 +22,8 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
   // Map treatment status to CSS classes
   public statusClass = new Map([
     [undefined, 'status-none'],
-    [TreatmentStatus.PENDING, 'status-pending'],
-    [TreatmentStatus.COMPLETED, 'status-finished']
+    [ToothTreatmentStatus.PENDING, 'status-pending'],
+    [ToothTreatmentStatus.COMPLETED, 'status-finished']
   ]);
 
   loadingNotf = inject(LoadingNotifier<typeof loadable>, { self: true });
@@ -93,7 +93,7 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
    * @param filter Before checking the status, removes all treatments that do not meet the filter
    * @returns Status of the zone
    */
-  public getToothZoneStatus(zone: ToothZones, filter?: (treatment: ToothTreatment) => boolean): TreatmentStatus | undefined {
+  public getToothZoneStatus(zone: ToothZones, filter?: (treatment: ToothTreatment) => boolean): ToothTreatmentStatus | undefined {
     const tooth = this.tooth();
 
     const treatmentsZone = tooth.treatments?.filter((treatment) => treatment.zones?.includes(zone));
@@ -102,11 +102,11 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
 
     if (!treatmentsFiltered || treatmentsFiltered.length === 0) return undefined;
 
-    let status = TreatmentStatus.COMPLETED;
+    let status = ToothTreatmentStatus.COMPLETED;
 
     for (const treatment of treatmentsFiltered) {
-      if (treatment.status === TreatmentStatus.PENDING) {
-        status = TreatmentStatus.PENDING;
+      if (treatment.status === ToothTreatmentStatus.PENDING) {
+        status = ToothTreatmentStatus.PENDING;
         break;
       }
     }

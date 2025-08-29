@@ -1,3 +1,356 @@
+@use '../common-variables.scss' as common;
 @use '@angular/cdk' as cdk;
 
 @include cdk.overlay();
+
+.main-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+
+  .history-container {
+    display: flex;
+    flex-direction: column;
+
+    .history-title {
+      width: 100%;
+    }
+
+    .history-bar {
+      flex: 1 0 auto;
+      width: 100%;
+
+      display: flex;
+      flex-direction: row;
+      gap: 0.25em;
+      align-items: center;
+      padding: 0.75em;
+      overflow-x: auto;
+
+      .tooth-separator {
+        font-size: 2em;
+      }
+
+      .history-tooth {
+        flex: 0 0;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        width: 128px;
+        max-width: 128px;
+        min-width: 128px;
+        align-items: center;
+        padding: 0.25em;
+        cursor: pointer;
+
+        .odontogram-name {
+          max-width: 100%;
+          overflow-x: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          user-select: none;
+        }
+
+        .tooth-container {
+          max-width: 48px;
+        }
+
+        &.current {
+          border: 2px solid #80deb2;
+          border-radius: 0.25rem;
+        }
+
+        &:hover,
+        &.active {
+
+          // Añade un color de fondo sobre el diente
+          // Tiene alpha para no ocultar las imágenes
+          &:before {
+            content: '';
+            width: 100%;
+            height: 100%;
+            background-color: #11111111;
+            position: absolute;
+            z-index: 3;
+            border-radius: 0.25rem;
+            pointer-events: none;
+            top: 0;
+          }
+        }
+
+        &.active {
+          cursor: inherit;
+        }
+      }
+    }
+  }
+
+  .form-container {
+    flex: 1 1 100%;
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.5em;
+
+    .product-search {
+      ::ng-deep {
+
+        &,
+        .p-autocomplete,
+        .p-autocomplete-input {
+          width: 100%;
+        }
+      }
+    }
+
+    .treatments {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      row-gap: 0.5em;
+
+      .treatment {
+        flex: 1 1;
+        display: flex;
+        flex-direction: row;
+        width: 100%;
+        border: 1px solid #33333344;
+        padding: 0.75em;
+
+        column-gap: 1em;
+        row-gap: 0.35em;
+
+        background-color: #88888811;
+        box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.2);
+        transition: 0.3s;
+
+        &.pending {
+          --status-color: #{common.$pendingColor};
+        }
+
+        &.finished {
+          --status-color: #{common.$finishedColor};
+        }
+
+        &:hover {
+          box-shadow: 0 6px 12px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        .secondCol {
+          width: 100%;
+        }
+
+        .treatmentCol {
+          display: flex;
+          flex-direction: column;
+          row-gap: 0.5em;
+
+          .ref {}
+
+          .nombre {
+            width: 100%;
+          }
+
+          // .precioVenta {
+          //     flex: 0 0 15%;
+
+          //     position: relative;
+
+          //     input {
+
+          //         &::-webkit-outer-spin-button,
+          //         &::-webkit-inner-spin-button {
+          //             appearance: none;
+          //         }
+          //     }
+
+          //     &:after {
+          //         content: '€';
+          //         font-size: 1.25em;
+          //         position: absolute;
+          //         right: 15%;
+          //         top: calc(49% - 0.75em);
+          //     }
+
+          // }
+
+          .zone-selector {
+            position: relative;
+            flex-grow: 1;
+            flex-shrink: 0;
+            max-width: min-content;
+            display: flex;
+            flex-direction: column;
+            row-gap: 0.5em;
+            padding: 0.25em;
+
+            &.disabled {
+              pointer-events: none;
+
+              &:after {
+                content: "";
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                position: absolute;
+                background-color: #11111144;
+                z-index: 2;
+              }
+            }
+
+            .main-zones,
+            .lateral-raiz {
+              div {
+                cursor: pointer;
+                background-color: #ABABAB;
+
+                &.selected {
+                  background-color: var(--status-color)
+                }
+              }
+            }
+
+            .main-zones {
+              display: grid;
+
+              width: 128px;
+              height: 128px;
+              border: 2px solid #78bed3;
+              border-radius: 50%;
+              padding: 2px;
+
+              grid-template-columns: repeat(3, 1fr);
+              grid-template-rows: repeat(3, 1fr);
+              gap: 1px;
+              grid-template-areas:
+                ". superior ."
+                "izquierda central derecha"
+                ". inferior .";
+
+              .superior {
+                grid-area: superior;
+              }
+
+              .central {
+                grid-area: central;
+              }
+
+              .izquierda {
+                grid-area: izquierda;
+              }
+
+              .derecha {
+                grid-area: derecha;
+              }
+
+              .inferior {
+                grid-area: inferior;
+              }
+            }
+
+            .lateral-raiz {
+              display: flex;
+              flex-direction: column;
+              row-gap: 4px;
+              width: 128px;
+              height: 128px;
+
+              .lateral {
+                height: 32px;
+                width: 100%;
+              }
+
+              .raiz {
+                height: 96px;
+                clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+                transform: rotate(180deg);
+              }
+            }
+          }
+
+          .treatment-info {
+            flex: 1 1;
+            display: flex;
+            flex-direction: column;
+            column-gap: 0.25em;
+            row-gap: 0.35em;
+            flex-wrap: wrap;
+
+            .affected-teeth {
+              flex: 1;
+            }
+
+            .status {
+              display: flex;
+              column-gap: 0.5em;
+              flex-wrap: wrap;
+              justify-content: space-around;
+              align-items: center;
+              padding: 0.35em;
+              border-radius: 0.25em;
+              background: #11111111;
+              margin-left: auto;
+
+              div {
+                display: flex;
+                column-gap: 0.15em;
+                cursor: pointer;
+                align-items: center;
+
+                .pending {
+                  color: common.$pendingColor;
+                  text-decoration-color: common.$pendingColor;
+                }
+
+                .finished {
+                  color: common.$finishedColor;
+                  text-decoration-color: common.$finishedColor;
+                }
+
+                &.active {
+                  font-weight: 700;
+                  cursor: default;
+                }
+
+                &:hover,
+                &.active {
+                  span {
+                    text-decoration: underline;
+                  }
+                }
+              }
+            }
+
+            .notes {
+              flex: 1;
+              width: 100%;
+
+              textarea {
+                height: 100%;
+                width: 100%;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+button {
+  margin: 0 auto;
+  align-self: center;
+  margin: 0.25em;
+
+  .content {
+    display: flex;
+    gap: 0.5em;
+
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.column-gap-05 {
+  column-gap: 0.5em;
+}
