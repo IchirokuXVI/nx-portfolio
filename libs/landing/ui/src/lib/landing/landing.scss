@@ -1,10 +1,17 @@
-// styles.scss
+// $primary-color: #;
+// $accent-color: #;
+$background-color: #2A2A2A;
+// $card-background-color: #DDDEE011;
+$text-color: #F0F0F0;
+$text-accent-color: #F2D45B;
 
-$primary-color: #1a1a1a;
-$accent-color: #e74c3c;
-$background-color: #2a2a2a;
-$card-background-color: #dddeee11;
-$text-color: #f0f0f0;
+:host {
+  width: 100%;
+}
+
+a {
+  color: $text-color;
+}
 
 .landing-container {
   display: flex;
@@ -16,113 +23,137 @@ $text-color: #f0f0f0;
   margin: 0;
   color: $text-color;
 
-  header {
-    background-color: $primary-color;
-    color: white;
-    text-align: center;
-    padding: 2rem 1rem;
-
-    h1 {
-      margin: 0;
-      font-size: 2.5rem;
-    }
-
-    p {
-      margin-top: 0.5rem;
-      font-size: 1.2rem;
-    }
-  }
-
   >main {
     flex: 1 1;
     display: flex;
+    flex-direction: column;
     gap: 2em;
     padding: 1.5em;
     flex-wrap: wrap;
+    align-items: center;
 
-    >section {
+    .intersection {
+      width: 100%;
       display: flex;
       flex-direction: column;
-      gap: 0.5em;
-      padding: 1rem;
-      background-color: $primary-color;
-      border-radius: 8px;
-      line-height: 1.6;
+      align-items: center;
+      color: $text-accent-color;
+      position: relative;
 
-      &.about {
-        flex: 1 1;
-        min-width: 480px;
-        background: $primary-color;
-        border-radius: 8px;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+      &:before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 0;
+        width: 100%;
+        border-top: 1px solid $text-accent-color;
+        z-index: 0;
+      }
 
-        h2,
-        h3 {
-          color: $accent-color;
-        }
+      .intersection__title {
+        font-size: 1.5em;
+        padding: 0 2em;
+        background-color: $background-color;
+        z-index: 1;
+      }
+    }
 
-        ul {
-          padding-left: 1.5rem;
+    .welcome {
+      margin-top: 4em;
+      display: flex;
+      flex-direction: column;
+      font-size: 1.5em;
+      gap: 1em;
+      align-items: center;
+      line-height: 1.6em;
 
-          li {
-            margin-bottom: 0.5rem;
-          }
+      h1.welcome__title {
+        font-weight: unset;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.25em;
+        color: $text-accent-color;
+        font-size: 2em;
+
+        img {
+          width: 1.3em;
+          height: auto;
         }
       }
 
-      &.projects {
-        flex: 1 1;
-        min-width: 640px;
-        gap: 1.5em;
+      p.welcome__subtitle {
+        margin: 0;
+      }
 
-        .project {
+      div.welcome__social-info {
+        display: flex;
+        gap: 1em;
+        align-items: center;
+
+        a {
           display: flex;
-          flex-direction: column;
-          gap: 0.5em;
-          background: $card-background-color;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+          gap: 0.25em;
 
           img {
-            width: 100%;
+            width: 1.3em;
             height: auto;
-            display: block;
           }
+        }
+      }
+    }
 
-          .description {
-            padding: 0.75rem;
+    .projects {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6em;
 
-            h3 {
-              font-size: 1.15em;
-              line-height: 1.8;
-              color: $accent-color;
-              margin-top: 0;
-            }
+      .projects__project {
+        display: flex;
+        flex-direction: column;
+        gap: 1em;
+        width: 48em;
+        height: 32em;
 
-            a {
-              color: $accent-color;
-              text-decoration: none;
+        .project__title {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5em;
+          font-size: 2em;
+          margin: 0;
+          color: $text-accent-color;
 
-              &:hover {
-                text-decoration: underline;
-              }
+          a {
+            display: flex;
+
+            img {
+              width: 1em;
+              height: auto;
             }
           }
         }
 
-        @media (min-width: 768px) {
-          .project {
-            flex-direction: row;
+        .project__img {
+          height: auto;
+          width: 48em;
+          height: 22.5em;
 
-            img {
-              width: 40%;
-            }
-
-            .description {
-              width: 60%;
-            }
+          &.stub {
+            background-color: #11111111;
           }
+
+          img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+          }
+        }
+
+        .project__description {
+          font-size: 1.25em;
+          line-height: 1.5em;
         }
       }
     }
