@@ -44,7 +44,7 @@
     "@swc/helpers": "~0.5.11",
     "@types/deep-equal": "^1.0.4",
     "@types/jest": "30.0.0",
-    "@types/node": "18.16.9",
+    "@types/node": "20.19.9",
     "@typescript-eslint/utils": "^8.29.0",
     "angular-eslint": "20.0.0",
     "autoprefixer": "^10.4.0",

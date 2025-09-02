@@ -59,19 +59,20 @@ a {
     }
 
     .welcome {
-      margin-top: 4em;
+      margin-top: 3em;
       display: flex;
       flex-direction: column;
       font-size: 1.5em;
-      gap: 1em;
+      gap: 0.75em;
       align-items: center;
       line-height: 1.6em;
+      min-width: 0;
 
       h1.welcome__title {
-        font-weight: unset;
-        margin: 0;
         display: flex;
+        font-weight: unset;
         align-items: center;
+        margin: 0;
         gap: 0.25em;
         color: $text-accent-color;
         font-size: 2em;
@@ -83,13 +84,18 @@ a {
       }
 
       p.welcome__subtitle {
-        margin: 0;
+        min-width: 100%;
+        max-width: min-content;
+        padding: 0 2em;
+        text-align: center;
       }
 
       div.welcome__social-info {
         display: flex;
+        flex-wrap: wrap;
         gap: 1em;
         align-items: center;
+        justify-content: center;
 
         a {
           display: flex;
@@ -105,16 +111,20 @@ a {
 
     .projects {
       display: flex;
+      min-width: 0;
+      width: 100%;
       flex-wrap: wrap;
       justify-content: center;
-      gap: 6em;
+      gap: 4em;
 
       .projects__project {
+        flex: 0 1 100%;
         display: flex;
         flex-direction: column;
         gap: 1em;
-        width: 48em;
-        height: 32em;
+        max-width: 48em;
+        height: min-content;
+        max-height: 36em;
 
         .project__title {
           display: flex;
@@ -135,12 +145,40 @@ a {
           }
         }
 
-        .project__img {
-          height: auto;
-          width: 48em;
-          height: 22.5em;
+        .project__areas {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1em;
 
-          &.stub {
+          .project__area {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+          }
+
+          .area__meter {
+            height: 3em;
+            width: 6em;
+          }
+
+          .area__label {
+            font-size: 0.75em;
+            font-weight: bold;
+            position: absolute;
+            color: #1a1a1a;
+            z-index: 1;
+          }
+        }
+
+        .project__img {
+          width: 100%;
+          height: auto;
+          max-width: 48em;
+          aspect-ratio: 16/9;
+          min-width: 0;
+
+          &:not(:has(img)) {
             background-color: #11111111;
           }
 
@@ -151,9 +189,18 @@ a {
           }
         }
 
-        .project__description {
+        .project__description_container {
           font-size: 1.25em;
           line-height: 1.5em;
+
+          .project__description {
+            display: inline;
+            overflow: hidden;
+          }
+
+          a {
+            display: inline;
+          }
         }
       }
     }

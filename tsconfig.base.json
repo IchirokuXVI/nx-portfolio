@@ -16,9 +16,13 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@portfolio/landing/data-access": [
+        "libs/landing/data-access/src/index.ts"
+      ],
       "@portfolio/landing/feature-shell": [
         "libs/landing/feature-shell/src/index.ts"
       ],
+      "@portfolio/landing/models": ["libs/landing/models/src/index.ts"],
       "@portfolio/landing/ui": ["libs/landing/ui/src/index.ts"],
       "@portfolio/odontogram/data-access": [
         "libs/odontogram/data-access/src/index.ts"

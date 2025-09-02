@@ -6,8 +6,8 @@
         I'm Daniel!
       </h1>
       <p class="welcome__subtitle">
-        coding lover and problem solver, creating<br>
-        solutions to make hard tasks easier and<br>
+        coding lover and problem solver, creating
+        solutions to make hard tasks easier and
         find a way to automate those easy tasks
       </p>
       <div class="welcome__social-info">
@@ -35,44 +35,39 @@
       </span>
     </div>
     <section class="projects">
+      @for (project of projects(); track $index) {
       <article class="projects__project">
         <h2 class="project__title">
-          <a [routerLink]="['odontogram']">Odontogram</a>
-          <a href="https://github.com/ichirokuxvi/nx-portfolio" target="_blank">
+          <a [routerLink]="[project.appLink]">{{ project.name }}</a>
+          <a [href]="project.repoLink" target="_blank">
             <img [src]="githubIcon | async" alt="GitHub" />
           </a>
         </h2>
-        <!-- <div class="project__technologies">
-          <span class="technologies__item">Angular</span>
-          <span class="technologies__item">NestJS</span>
-          <span class="technologies__item">PostgreSQL</span>
-          <span class="technologies__item">TypeORM</span>
-          <span class="technologies__item">Docker</span>
+        <!-- <div class="project__areas">
+          @for (area of project.areas; track $index) {
+          <div class="project__area">
+            <meter class="area__meter" min="0" max="100" optimum="100" low="100" [value]="area.progress">
+            </meter>
+            <div class="area__label">
+              {{ area.name }}
+            </div>
+          </div>
+          }
         </div> -->
-        <a class="project__img" [routerLink]="['odontogram']">
-          <img [src]="odontogramScreenshot | async" alt="Odontogram Project" />
+        <a class="project__img" [routerLink]="[project.appLink]">
+          @if (project.image) {
+          <img [src]="typeof project.image === 'string' ? project.image : project.image | async"
+            alt="Odontogram Project" />
+          }
         </a>
-        <p class="project__description">
-          Full odontogram to save treatments and keep the history of patients. One of my first UI projects made solely by
-          me. Teeth can have treatments that affect up to six zones and also more than one tooth. <a
-            [routerLink]="['odontogram']">View project</a>
-        </p>
+        <div class="project__description_container">
+          <p class="project__description">
+            {{ project.description }}
+          </p>
+          <a [routerLink]="[project.appLink]">View project</a>
+        </div>
       </article>
-      <article class="projects__project">
-        <h2 class="project__title">
-          <a href="#">Restaurant Point Of Sale</a>
-          <a href="https://github.com/ichirokuxvi/nx-portfolio" target="_blank">
-            <img [src]="githubIcon | async" alt="GitHub" />
-          </a>
-        </h2>
-        <a class="project__img stub" [routerLink]="['']">
-        </a>
-        <p class="project__description">
-          My biggest project so far. Complete POS with support for remote printing over internet (not only local),
-          WebSocket, fully responsive with a exclusive mobile view for easier use and many more. <a href="#">View
-            project</a>
-        </p>
-      </article>
+      }
     </section>
   </main>
 </div>
