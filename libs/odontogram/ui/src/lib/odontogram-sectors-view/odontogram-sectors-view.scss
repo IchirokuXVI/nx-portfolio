@@ -13,8 +13,6 @@
 }
 
 .odontogram {
-  border: 1px solid #444444;
-
   grid-area: odontogram;
   user-select: none;
   display: flex;
@@ -26,11 +24,6 @@
   width: 100%;
   height: 100%;
   padding: 0.5em;
-
-  // Background color to match the images,
-  // ideally we should find a way to make the images transparent
-  // so we could use whichever background color we want
-  background-color: #fff;
 
   &.loading {
     .sector {

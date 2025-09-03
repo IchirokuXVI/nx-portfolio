@@ -29,7 +29,7 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
   loadingNotf = inject(LoadingNotifier<typeof loadable>, { self: true });
 
   tooth = input.required<Tooth>();
-  toothImages = { crown: '', lateral: '' };
+  toothImages = { crown: '', lateral: '', root_mask: '', crown_mask: '' };
   @Output() selected: Subject<void> = new Subject();
   @Output() startLoadingImages = this.loadingNotf.onStartLoading('image');
   @Output() completeLoadingImages = this.loadingNotf.onCompleteLoading('image');
@@ -46,8 +46,8 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
       const tooth = this.tooth();
 
       if (tooth.number != null) {
-        this._toothImageLoader.loadImage(tooth.number)?.subscribe(({ lateral, crown }) => {
-          this.toothImages = { lateral, crown };
+        this._toothImageLoader.loadImage(tooth.number).subscribe(({ lateral, crown, root_mask, crown_mask }) => {
+          this.toothImages = { lateral, crown, root_mask, crown_mask };
         });
       }
     });

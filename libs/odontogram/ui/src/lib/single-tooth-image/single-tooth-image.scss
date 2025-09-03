@@ -81,7 +81,44 @@
   // Sets the color for pending status
   .status-pending {
 
-    &:not(.implant),
+    img,
+    &.top,
+    &.bottom,
+    &.right,
+    &.left,
+    &.cross,
+    &:after,
+    &:before {
+      background-color: common.$pendingColor !important;
+    }
+
+    &.implant {
+      border-color: common.$pendingColor !important;
+    }
+  }
+
+  .status-none {
+
+    img,
+    &.top,
+    &.bottom,
+    &.right,
+    &.middle,
+    &.left {
+      background-color: #fff !important;
+    }
+  }
+
+  // Sets the color for pending status
+  .status-pending {
+
+    img,
+    &.top,
+    &.bottom,
+    &.right,
+    &.left,
+    &.middle,
+    &.cross,
     &:after,
     &:before {
       background-color: common.$pendingColor !important;
@@ -95,7 +132,13 @@
   // Sets the color for finished status
   .status-finished {
 
-    &:not(.implant),
+    img,
+    &.top,
+    &.bottom,
+    &.right,
+    &.left,
+    &.middle,
+    &.cross,
     &:after,
     &:before {
       background-color: common.$finishedColor !important;
@@ -254,8 +297,6 @@
         left: 37.5%;
         top: 37.5%;
         border-radius: 50%;
-        background-color: #fff;
-        border: 2px solid #fff;
 
         // Makes the circle smaller so that it fits better in smaller teeth
         &.smaller {

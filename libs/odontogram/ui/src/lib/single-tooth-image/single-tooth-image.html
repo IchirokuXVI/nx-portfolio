@@ -3,11 +3,13 @@
   [class.withTreatment]="inputTooth.treatments?.length" (click)="selected.next()" (keydown.enter)="selected.next()"
   tabindex="0">
   <div class="lateral" *ngLet="getToothZoneStatus(toothZones.LATERAL) as status" [class]="statusClass.get(status)">
-    <img #img [src]="toothImages.lateral" (load)="imageLoaded()" alt="Tooth {{ inputTooth.number }}">
+    <img #img [src]="toothImages.lateral" (load)="imageLoaded()"
+      [ngStyle]="{ maskImage: 'url(' + toothImages.root_mask + ')', maskSize: '100%, 100%', maskMode: 'alpha' }"
+      alt="Tooth Lateral {{ inputTooth.number }}">
     <div class="implant" *ngLet="getToothImplantStatus() as status" [class]="statusClass.get(status)"></div>
     <div class="cross" *ngLet="getToothExtractionStatus() as status" [class]="statusClass.get(status)"></div>
   </div>
-  <div class="crown">
+  <div class="crown" [ngStyle]="{ maskImage: 'url(' + toothImages.crown_mask + ')', maskSize: '100%, 100%', maskMode: 'alpha' }">
     <img #img [src]="toothImages.crown" (load)="imageLoaded()" alt="Crown of tooth {{ inputTooth.number }}">
     <div class="top" *ngLet="getToothZoneStatus(toothZones.TOP) as status" [class]="statusClass.get(status)">
     </div>
