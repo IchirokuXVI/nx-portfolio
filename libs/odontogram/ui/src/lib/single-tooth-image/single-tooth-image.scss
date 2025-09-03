@@ -67,10 +67,16 @@
     vertical-align: middle;
   }
 
+  .number {
+    color: #fff;
+    font-weight: 650;
+  }
+
   // Adds a background color in the tooth number if the tooth has a treatment
   &.withTreatment .number {
-    background-color: #0275d8;
-    color: #fff;
+    // background-color: #0275d8;
+    background-color: #7a7a7a;
+    color: #F2D45B;
 
     // En el componente de odontograma se quitan los bordes cuando se tocan entre ellos
     // Keep in mind that odontogram component alters the border style to remove borders if needed
@@ -215,10 +221,11 @@
 
     div {
       position: absolute;
-      width: 50%;
-      height: 50%;
-
-      // --border-radius: 35%;
+      // Borders appeared between each diamond, adding 1px to width and height fixes it
+      width: calc(50% + 1px);
+      height: calc(50% + 1px);
+      // Rotate to turn square into diamond
+      transform: rotate(45deg);
 
       // Makes a square of 50% of the container size
       // Positions it right in the middle and rotates it 45 degrees to make a diamond
@@ -245,10 +252,6 @@
       &.top {
         left: 25%;
         top: -10%;
-        // background-color: blue;
-        // border: 1px solid red;
-        transform: rotate(45deg);
-        // border-bottom-right-radius: var(--border-radius);
 
         @include applyBorder(bottom);
         border-bottom-width: ($crownBorderSize + 1) + $crownBorderUnit !important;
@@ -259,10 +262,6 @@
       &.right {
         right: -10%;
         top: 25%;
-        // background-color: blue;
-        // border: 1px solid blue;
-        transform: rotate(45deg);
-        // border-bottom-left-radius: var(--border-radius);
 
         @include applyBorder(left);
         @include showNextBorder(top);
@@ -271,10 +270,6 @@
       &.bottom {
         left: 25%;
         bottom: -10%;
-        // background-color: green;
-        // border: 1px solid green;
-        transform: rotate(45deg);
-        // border-top-left-radius: var(--border-radius);
 
         @include applyBorder(top);
         @include showNextBorder(right);
@@ -283,10 +278,6 @@
       &.left {
         left: -10%;
         top: 25%;
-        // background-color: yellow;
-        // border: 1px solid yellow;
-        transform: rotate(45deg);
-        // border-top-right-radius: var(--border-radius);
 
         @include applyBorder(right);
       }
@@ -297,6 +288,9 @@
         left: 37.5%;
         top: 37.5%;
         border-radius: 50%;
+        border-color: $crownBorderColor;
+        border-style: $crownBorderStyle;
+        border-width: $crownBorderSize + $crownBorderUnit;
 
         // Makes the circle smaller so that it fits better in smaller teeth
         &.smaller {

@@ -1,8 +1,9 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { OdontogramSectorsView } from '@portfolio/odontogram/ui';
+import { OdontogramSectorsView, ToothTreatmentsModal } from '@portfolio/odontogram/ui';
 import { ToothTreatmentMemory } from '@portfolio/odontogram/data-access';
-import { ToothTreatment } from '@portfolio/odontogram/models';
+import { Tooth, ToothTreatment } from '@portfolio/odontogram/models';
+import { MatDialog } from '@angular/material/dialog';
 
 @Component({
   selector: 'lib-odontogram-feature-full-odontogram-crud',
@@ -12,6 +13,7 @@ import { ToothTreatment } from '@portfolio/odontogram/models';
 })
 export class OdontogramFeatureFullOdontogramCrud implements OnInit {
   private _treatmentServ = inject(ToothTreatmentMemory);
+  private _dialog = inject(MatDialog);
 
   treatments?: ToothTreatment[];
 
@@ -19,5 +21,11 @@ export class OdontogramFeatureFullOdontogramCrud implements OnInit {
     this._treatmentServ.getList().subscribe((treatments) => {
       this.treatments = treatments;
     });
+  }
+
+  onToothSelected(tooth: Tooth) {
+    const ref = this._dialog.open(ToothTreatmentsModal);
+
+    ref.componentRef?.setInput('tooth', tooth);
   }
 }

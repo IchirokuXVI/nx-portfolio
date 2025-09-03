@@ -1,7 +1,4 @@
 @use '../common-variables.scss' as common;
-@use '@angular/cdk' as cdk;
-
-@include cdk.overlay();
 
 .main-container {
   display: flex;

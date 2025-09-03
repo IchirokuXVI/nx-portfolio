@@ -21,7 +21,7 @@ import { mapFormToToothTreatment, ToothTreatmentForm } from './tooth-treatment-f
   styleUrls: ['./tooth-treatments-modal.scss'],
   providers: []
 })
-export class ToothTreatmentModal implements OnInit {
+export class ToothTreatmentsModal implements OnInit {
   toothZones = ToothZones;
   toothTreatmentStatus = ToothTreatmentStatus;
   toothTreatmentStatusArr = Object.values(ToothTreatmentStatus);
@@ -31,7 +31,7 @@ export class ToothTreatmentModal implements OnInit {
     [ToothTreatmentStatus.COMPLETED]: 'finished'
   };
 
-  tooth = input.required<Tooth>();
+  tooth = input<Tooth>({ number: '11', treatments: [] });
   toothConfirmedChanges = output<Tooth>();
 
   /**
@@ -77,6 +77,8 @@ export class ToothTreatmentModal implements OnInit {
   }
 
   ngOnInit() {
+    console.log(this.tooth())
+
     this.selectTooth(this.tooth());
   }
 
