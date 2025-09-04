@@ -68,8 +68,6 @@ export class OdontogramSectorsView {
 
       return this.sectors.map((_val, i) => i).filter((_val, i) => showPediatric || !this.pediatricSectors.includes(i));
     });
-
-    this.loadingNotf.loadings$.image?.subscribe((l) => console.log('Loading images:', l));
   }
 
   private formatTeeth(treatments: ToothTreatment[]) {

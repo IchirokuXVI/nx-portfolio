@@ -33,7 +33,16 @@ export class InMemoryFilter<DataType, FilterType> {
 
       return fieldValue.includes(filterValue);
     }),
-    filterIncludes: (itemValue, filterValue, filterConfig) => filterConfig.dataField.every((dataField) => (Array.isArray(filterValue) ? filterValue : [filterValue]).every((filterVal) => filterVal.includes(findField(itemValue, dataField)))),
+    filterIncludes: (itemValue, filterValue, filterConfig) => filterConfig.dataField.every((dataField) => {
+      const itemFieldValue = findField(itemValue, dataField);
+
+      return (Array.isArray(filterValue) ? filterValue : [filterValue]).every((filterVal) => filterVal.includes(itemFieldValue));
+    }),
+    filterIncludesAny: (itemValue, filterValue, filterConfig) => filterConfig.dataField.every((dataField) => {
+      const itemFieldValue = findField(itemValue, dataField);
+
+      return (Array.isArray(filterValue) ? filterValue : [filterValue]).some((filterVal) => filterVal.includes(itemFieldValue));
+    }),
     deepEquals: (itemValue, filterValue, filterConfig) => filterConfig.dataField.every((dataField) => deepEqual(findField(itemValue, dataField), filterValue, { strict: true })),
     textSearch: (itemValue, filterValue, filterConfig) => filterConfig.dataField.every((dataField) => (findField(itemValue, dataField) as string).match((filterValue as RegExp))),
   } satisfies Record<

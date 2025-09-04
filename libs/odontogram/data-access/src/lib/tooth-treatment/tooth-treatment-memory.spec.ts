@@ -44,6 +44,15 @@ describe('ToothTreatmentMemory', () => {
   });
 
   it('should apply filter by odontogram', async () => {
+    const odontogramIds: string[] = ['1', '3'];
+
+    const data = await firstValueFrom(service.getList({ odontogram: odontogramIds }));
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.every(item => odontogramIds.includes(item.odontogram as string))).toBe(true);
+    expect(Array.from(currentServiceData.values()).filter((item) => odontogramIds.includes(item.odontogram as string))).toEqual(data);
+  });
+
+  it('should apply filter by client', async () => {
     const data = await firstValueFrom(service.getList({ odontogram: '1' }));
     expect(Array.isArray(data)).toBe(true);
     expect(data.every(item => item.odontogram === '1')).toBe(true);

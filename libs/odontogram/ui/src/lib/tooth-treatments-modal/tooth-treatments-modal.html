@@ -1,24 +1,9 @@
 <div>
   <h4>Tooth {{tooth().number}}</h4>
-  @if (client()) {
-  <button mat-stroked-button class="button-primary-general" (click)="toggleHistory()">
-    <span class="content">
-      <i class="fas fa-plus"></i>
-      <span>Show treatment history</span>
-    </span>
-  </button>
-  }
-  <button mat-stroked-button class="button-primary-save" tooltip="Save" (click)="saveTooth()"
-    [disabled]="selectedTooth?.odontogram !== tooth().odontogram">
-    Save
-    <i class="ml-2 fas fa-floppy-disk"></i>
-  </button>
-  <button mat-icon-button>
-    <i class="fas fa-times"></i>
-  </button>
 </div>
 <div class="main-container">
-  <mat-expansion-panel class="history-container">
+  @if (client()) {
+  <mat-expansion-panel class="history-container" (opened)="onOpenHistory()">
     <mat-expansion-panel-header>
       <mat-panel-title class="history-title">
         Tooth history
@@ -27,7 +12,7 @@
     <div #historyBar class="history-bar">
       @for (toothHist of toothHistory; track $index) {
       <div class="history-tooth" [class.current]="toothHist.odontogram === tooth().odontogram"
-        [class.active]="selectedTooth?.odontogram === toothHist.odontogram" (click)="selectTooth(toothHist)"
+        [class.active]="selectedTooth?.odontogram?.id === toothHist.odontogram?.id" (click)="selectTooth(toothHist)"
         (keydown.enter)="selectTooth(toothHist)" tabindex="0">
         <span class="odontogram-name" [title]="toothHist.odontogram?.name">
           {{ toothHist.odontogram?.name ?? 'Actual' }}
@@ -45,18 +30,21 @@
       }
     </div>
   </mat-expansion-panel>
-  <div class="form-container">
+  }
+  <!-- <div class="form-container">
     @if (!treatmentsForm.disabled) {
     <mat-form-field>
-      <input type="text" placeholder="Search a treatment" matInput [matAutocomplete]="autoCompleteTreatment"
+      <mat-label>Treatment</mat-label>
+      <input matInput type="text" placeholder="Search a treatment" [matAutocomplete]="autoCompleteTreatment"
         [(ngModel)]="treatmentSearchTerm" [ngModelOptions]="{ standalone: true }" tabIndex="1">
+      <mat-autocomplete class="product-search" #autoCompleteTreatment="matAutocomplete"
+        (optionSelected)="addTreatment($event.option.value)">
+        @for (option of treatmentSuggestions; track $index) {
+        <mat-option [value]="option">{{option.name}}</mat-option>
+        }
+      </mat-autocomplete>
     </mat-form-field>
-    <mat-autocomplete class="product-search" #autoCompleteTreatment="matAutocomplete"
-      (optionSelected)="addTreatment($event.option.value)">
-      @for (option of treatmentSuggestions; track $index) {
-      <mat-option [value]="option">{{option.name}}</mat-option>
-      }
-    </mat-autocomplete>
+
     }
     @if (!tooth()) {
     <div class="loading d-flex justify-content-center align-items-center">
@@ -144,5 +132,5 @@
       }
     </div>
     }
-  </div>
+  </div> -->
 </div>

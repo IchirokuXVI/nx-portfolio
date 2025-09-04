@@ -15,8 +15,8 @@ export class ToothTreatmentMemory implements ToothTreatmentServiceI {
   constructor() {
     this._toothTreatments = new Map<string, ToothTreatment>(TOOTH_TREATMENTS.map(od => [od.id, od]));
     this._inMemoryFilter.setFilterConfig({
-      ids: { check: this._inMemoryFilter.checks.filterIncludes, dataField: 'id' },
-      odontogram: { check: this._inMemoryFilter.checks.strictEquals },
+      ids: { check: this._inMemoryFilter.checks.filterIncludesAny, dataField: 'id' },
+      odontogram: { check: this._inMemoryFilter.checks.filterIncludesAny },
       client: { check: this._inMemoryFilter.checks.strictEquals },
       teeth: { check: (val, filterVal) => val.teeth.every((t) => filterVal?.includes(t)) },
     });

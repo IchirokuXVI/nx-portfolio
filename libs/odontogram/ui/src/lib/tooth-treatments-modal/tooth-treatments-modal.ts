@@ -1,8 +1,8 @@
 import { Component, computed, ElementRef, inject, input, OnInit, output, Signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Odontogram, TeethNumbers, Tooth, ToothTreatment, ToothZones, Treatment, ToothTreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
-import { FormArray, FormControl, FormGroup, FormsModule, ReactiveFormsModule, UntypedFormArray, UntypedFormGroup } from '@angular/forms';
-import { map, of, Subject, switchMap } from 'rxjs';
+import { FormArray, FormControl, FormGroup, FormsModule, ReactiveFormsModule, UntypedFormGroup } from '@angular/forms';
+import { map, of, switchMap } from 'rxjs';
 import { OdontogramMemory, ToothTreatmentMemory, TreatmentMemory } from '@portfolio/odontogram/data-access';
 import { WithRequired } from '@portfolio/shared/util';
 import { MatExpansionModule } from '@angular/material/expansion';
@@ -77,24 +77,15 @@ export class ToothTreatmentsModal implements OnInit {
   }
 
   ngOnInit() {
-    console.log(this.tooth())
-
     this.selectTooth(this.tooth());
   }
 
-  async toggleHistory() {
-    const clientId = this.client();
-
-    if (clientId && this.hideHistory) {
-      this.loadHistory().subscribe(() => {
-        setTimeout(() => {
-          this.hideHistory = false;
-          this.historyBar?.nativeElement.scrollTo({ left: this.historyBar.nativeElement.scrollWidth });
-        }, 0);
-      });
-    } else {
-      this.hideHistory = true;
-    }
+  onOpenHistory() {
+    this.loadHistory().subscribe(() => {
+      setTimeout(() => {
+        this.historyBar?.nativeElement.scrollTo({ left: this.historyBar.nativeElement.scrollWidth });
+      }, 0);
+    });
   }
 
   loadHistory() {
@@ -106,30 +97,34 @@ export class ToothTreatmentsModal implements OnInit {
       return of([this.tooth()]);
     }
 
-    return this._toothTreatmentServ.getList({ teeth: [this.tooth().number], client }).pipe(
-      map((treatments) => treatments.filter((treatment) => treatment.odontogram !== undefined) as WithRequired<ToothTreatment, 'odontogram'>[]),
-      switchMap((historicalTreatments) => {
+    return this._odontogramServ.getList({ client }).pipe(
+      switchMap((historicalOdontograms) => {
         // Using a set in case the same odontogram appears multiple times
         // because a tooth could have multiple treatments in the same odontogram
         const ids: Set<string> = new Set();
 
-        for (const treatment of historicalTreatments) {
-          ids.add(treatment.odontogram);
+        for (const odontogram of historicalOdontograms) {
+          ids.add(odontogram.id);
         }
 
-        const odontogramsRequest = this._odontogramServ.getList({ ids: Array.from(ids) }).pipe(
-          map((historicalOdontograms) => {
-            const treatmentsByOdontogram = new Map<Odontogram, ToothTreatment[]>();
-
-            for (const odontogram of historicalOdontograms.sort((a, b) => (a.effectiveDate?.getTime() || a.createdAt?.getTime() || 0) - (b.effectiveDate?.getTime() || b.createdAt?.getTime() || 0))) {
-              treatmentsByOdontogram.set(odontogram, historicalTreatments.filter(treatment => treatment.odontogram === odontogram.id));
-            }
-
-            return treatmentsByOdontogram;
-          })
+        return this._toothTreatmentServ.getList({ odontogram: Array.from(ids), teeth: [this.tooth().number] }).pipe(
+          map(historicalTreatments => [historicalOdontograms, historicalTreatments as WithRequired<ToothTreatment, 'odontogram'>[]] as const),
         );
+      }),
+      map(([historicalOdontograms, historicalTreatments]) => {
+        const treatmentsByOdontogram = new Map<Odontogram, WithRequired<ToothTreatment, 'odontogram'>[]>();
 
-        return odontogramsRequest;
+        const sortedOdontograms = historicalOdontograms.sort((a, b) => (a.effectiveDate?.getTime() || a.createdAt?.getTime() || 0) - (b.effectiveDate?.getTime() || b.createdAt?.getTime() || 0));
+
+        for (const odontogram of sortedOdontograms) {
+          const treatments = historicalTreatments.filter(treatment => treatment.odontogram === odontogram.id);
+
+          if (treatments.length || odontogram.id === this.tooth()?.odontogram?.id) {
+            treatmentsByOdontogram.set(odontogram, treatments);
+          }
+        }
+
+        return treatmentsByOdontogram;
       }),
       map((treatmentsByOdontogram) => {
         const inputTooth = this.tooth();
