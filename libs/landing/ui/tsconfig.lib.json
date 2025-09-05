@@ -13,5 +13,9 @@
     "jest.config.ts",
     "src/**/*.test.ts"
   ],
-  "include": ["src/**/*.ts", "../../../types/shared/png.d.ts", "../../../types/shared/svg.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../../../types/shared/png.d.ts",
+    "../../../types/shared/svg.d.ts"
+  ]
 }

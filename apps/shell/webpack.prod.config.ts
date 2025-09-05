@@ -3,33 +3,30 @@ import { composePlugins } from '@nx/webpack';
 import mfeConfig from './module-federation.config';
 import merge from 'webpack-merge';
 
-export default composePlugins(
-  async (config, { options, context }) => {
-    const federatedModules = await withModuleFederation(
-      {
-        ...mfeConfig,
-        remotes: [
-          ['landing', 'https://mfe.ichirokuxvi.com/landing'],
-          ['odontogram', 'https://mfe.ichirokuxvi.com/odontogram'],
-        ]
-      },
-      { dts: false }
-    );
+export default composePlugins(async (config, { options, context }) => {
+  const federatedModules = await withModuleFederation(
+    {
+      ...mfeConfig,
+      remotes: [
+        ['landing', 'https://mfe.ichirokuxvi.com/landing'],
+        ['odontogram', 'https://mfe.ichirokuxvi.com/odontogram'],
+      ],
+    },
+    { dts: false }
+  );
 
-    return merge(
-      federatedModules(config),
-      {
-        module: {
-          rules: [
+  return merge(federatedModules(config), {
+    module: {
+      rules: [
+        {
+          test: /\.(jpe?g|png|svg)$/,
+          use: [
             {
-              test: /\.(jpe?g|png|svg)$/,
-              use: [{
-                loader: 'file-loader'
-              }]
+              loader: 'file-loader',
             },
-          ]
-        }
-      }
-    )
-  }
-);
+          ],
+        },
+      ],
+    },
+  });
+});

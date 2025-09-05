@@ -1,16 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ToothTreatmentModal } from './tooth-treatments-modal';
+import { ToothTreatmentsModal } from './tooth-treatments-modal';
 
 describe('ToothView', () => {
-  let component: ToothTreatmentModal;
-  let fixture: ComponentFixture<ToothTreatmentModal>;
+  let component: ToothTreatmentsModal;
+  let fixture: ComponentFixture<ToothTreatmentsModal>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ToothTreatmentModal],
+      imports: [ToothTreatmentsModal],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(ToothTreatmentModal);
+    fixture = TestBed.createComponent(ToothTreatmentsModal);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

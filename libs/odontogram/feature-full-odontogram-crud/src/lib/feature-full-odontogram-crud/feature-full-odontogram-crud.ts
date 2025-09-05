@@ -1,8 +1,18 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { OdontogramSectorsView, ToothTreatmentsModal } from '@portfolio/odontogram/ui';
-import { OdontogramMemory, ToothTreatmentMemory } from '@portfolio/odontogram/data-access';
-import { Odontogram, Tooth, ToothTreatment } from '@portfolio/odontogram/models';
+import {
+  OdontogramSectorsView,
+  ToothTreatmentsModal,
+} from '@portfolio/odontogram/ui';
+import {
+  OdontogramMemory,
+  ToothTreatmentMemory,
+} from '@portfolio/odontogram/data-access';
+import {
+  Odontogram,
+  Tooth,
+  ToothTreatment,
+} from '@portfolio/odontogram/models';
 import { MatDialog } from '@angular/material/dialog';
 
 @Component({
@@ -27,9 +37,11 @@ export class OdontogramFeatureFullOdontogramCrud implements OnInit {
 
       this.selectedOdontogram = odontograms[2];
 
-      this._treatmentServ.getList({ odontogram: this.selectedOdontogram?.id }).subscribe((treatments) => {
-        this.treatments = treatments;
-      });
+      this._treatmentServ
+        .getList({ odontogram: this.selectedOdontogram?.id })
+        .subscribe((treatments) => {
+          this.treatments = treatments;
+        });
     });
   }
 

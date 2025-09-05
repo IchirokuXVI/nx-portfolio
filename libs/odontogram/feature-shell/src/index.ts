@@ -1,1 +1,1 @@
-export { appRoutes as OdontogramShellRoutes } from './lib/routes'
+export { appRoutes as OdontogramShellRoutes } from './lib/routes';

@@ -28,10 +28,8 @@ describe('LoadingIcon', () => {
 
     const el: HTMLElement = fixture.nativeElement;
     const icon = el.querySelector('.three-quarter-circle');
-    expect(icon?.classList)
-      .toContain('xl');
-    expect(icon?.classList)
-      .toContain('x3');
+    expect(icon?.classList).toContain('xl');
+    expect(icon?.classList).toContain('x3');
   });
 
   it('should apply size multiplier', () => {

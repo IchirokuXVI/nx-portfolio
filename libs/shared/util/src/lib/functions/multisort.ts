@@ -1,4 +1,4 @@
-import { findField } from "./findField";
+import { findField } from './findField';
 
 // Named checkers defined once and reusable
 const checkers: Record<
@@ -12,20 +12,20 @@ const checkers: Record<
     condition: (a, b) =>
       typeof a === typeof b &&
       a !== null &&
-      typeof a === "object" &&
-      (typeof (a as any).compare === "function" ||
-        typeof (a as any).compareTo === "function"),
+      typeof a === 'object' &&
+      (typeof (a as any).compare === 'function' ||
+        typeof (a as any).compareTo === 'function'),
     compare: (a, b) =>
-      typeof (a as any).compare === "function"
+      typeof (a as any).compare === 'function'
         ? (a as any).compare(b)
         : (a as any).compareTo(b),
   },
   numbers: {
-    condition: (a, b) => typeof a === "number" && typeof b === "number",
+    condition: (a, b) => typeof a === 'number' && typeof b === 'number',
     compare: (a, b) => a - b,
   },
   strings: {
-    condition: (a, b) => typeof a === "string" && typeof b === "string",
+    condition: (a, b) => typeof a === 'string' && typeof b === 'string',
     compare: (a, b) => a.localeCompare(b),
   },
   dates: {
@@ -33,7 +33,7 @@ const checkers: Record<
     compare: (a, b) => a.getTime() - b.getTime(),
   },
   booleans: {
-    condition: (a, b) => typeof a === "boolean" && typeof b === "boolean",
+    condition: (a, b) => typeof a === 'boolean' && typeof b === 'boolean',
     compare: (a, b) => Number(a) - Number(b),
   },
   fallback: {
@@ -44,12 +44,12 @@ const checkers: Record<
 
 // The order in which checkers are applied
 const checkerOrder = [
-  "comparableObjects",
-  "numbers",
-  "strings",
-  "dates",
-  "booleans",
-  "fallback",
+  'comparableObjects',
+  'numbers',
+  'strings',
+  'dates',
+  'booleans',
+  'fallback',
 ];
 
 /**
@@ -62,16 +62,16 @@ export function multiSort<T>(fields: string) {
   return (a: T, b: T): number => {
     let result = 0;
 
-    for (let field of fields.split(" ")) {
+    for (let field of fields.split(' ')) {
       let direction = 1;
-      if (field.startsWith("-")) {
+      if (field.startsWith('-')) {
         direction = -1;
         field = field.slice(1);
-      } else if (field.startsWith("+")) {
+      } else if (field.startsWith('+')) {
         field = field.slice(1);
       }
 
-      const path = field.split(".");
+      const path = field.split('.');
       // findField<T> makes the compiler complain about being too deep and possibly infinite
       const valA = findField<any>(a, path);
       const valB = findField<any>(b, path);

@@ -1,12 +1,12 @@
 import { ToothTreatment, TeethNumbers } from '@portfolio/odontogram/models';
-import { Optional, WithRequired } from "@portfolio/shared/util";
-import { Observable } from "rxjs";
+import { Optional, WithRequired } from '@portfolio/shared/util';
+import { Observable } from 'rxjs';
 
 export interface ToothTreatmentGetListFilter {
   ids?: string[];
   odontogram?: string | string[];
   client?: string;
-  teeth?: Array<typeof TeethNumbers[number]>;
+  teeth?: Array<(typeof TeethNumbers)[number]>;
 }
 
 export interface ToothTreatmentServiceI {
@@ -16,7 +16,9 @@ export interface ToothTreatmentServiceI {
 
   create(treatment: Optional<ToothTreatment, 'id'>): Observable<ToothTreatment>;
 
-  update(treatment: WithRequired<Partial<ToothTreatment>, 'id'>): Observable<ToothTreatment>;
+  update(
+    treatment: WithRequired<Partial<ToothTreatment>, 'id'>
+  ): Observable<ToothTreatment>;
 
   delete(id: string): Observable<void>;
 }

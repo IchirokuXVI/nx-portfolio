@@ -1,12 +1,23 @@
-import { Injectable, OnDestroy } from "@angular/core";
-import { Observable, Subject } from "rxjs";
-import { distinctUntilChanged, map, finalize, shareReplay, filter, takeUntil } from "rxjs/operators";
+import { Injectable, OnDestroy } from '@angular/core';
+import { Observable, Subject } from 'rxjs';
+import {
+  distinctUntilChanged,
+  map,
+  finalize,
+  shareReplay,
+  filter,
+  takeUntil,
+} from 'rxjs/operators';
 
 @Injectable()
-export class LoadingNotifier<Loadable extends readonly string[]> implements OnDestroy {
+export class LoadingNotifier<Loadable extends readonly string[]>
+  implements OnDestroy
+{
   static readonly LOADABLE_ENTRIES = 'LoadingNotifier_LOADABLE_ENTRIES';
 
-  private _loadings: { [key in Loadable[number]]?: { subj: Subject<boolean>, counter: number } } = {};
+  private _loadings: {
+    [key in Loadable[number]]?: { subj: Subject<boolean>; counter: number };
+  } = {};
   private _loadings$: { [key in Loadable[number]]?: Observable<boolean> } = {};
 
   get loadings$() {
@@ -15,14 +26,13 @@ export class LoadingNotifier<Loadable extends readonly string[]> implements OnDe
     return new Proxy(this._loadings$, {
       get(target, key) {
         return that.getLoadable(key.toString(), true);
-      }
-    })
+      },
+    });
   }
 
   private _onDestroy = new Subject<void>();
 
-
-  constructor() { }
+  constructor() {}
 
   ngOnDestroy() {
     this._onDestroy.next();
@@ -33,7 +43,7 @@ export class LoadingNotifier<Loadable extends readonly string[]> implements OnDe
     this._loadings[loadable] = {
       subj: new Subject(),
       counter: 0,
-    }
+    };
 
     this._loadings$[loadable] = this._loadings[loadable].subj
       .asObservable()
@@ -43,25 +53,31 @@ export class LoadingNotifier<Loadable extends readonly string[]> implements OnDe
           const loadingEntry = this._loadings[loadable];
 
           if (!loadingEntry) {
-            throw new Error(`Expected loading entry for "${loadable}" to be defined`);
+            throw new Error(
+              `Expected loading entry for "${loadable}" to be defined`
+            );
           }
 
-          if (loading)
-            ++loadingEntry.counter;
-          else if (loadingEntry.counter > 0)
-            --loadingEntry.counter;
+          if (loading) ++loadingEntry.counter;
+          else if (loadingEntry.counter > 0) --loadingEntry.counter;
 
           return loadingEntry.counter > 0;
         }),
         distinctUntilChanged(),
         shareReplay(1)
-      )
+      );
 
     this._loadings$[loadable].subscribe();
   }
 
-  private getLoadable(loadable: Loadable[number], obs: true): (typeof this._loadings$)[string];
-  private getLoadable(loadable: Loadable[number], obs?: false): (typeof this._loadings)[string];
+  private getLoadable(
+    loadable: Loadable[number],
+    obs: true
+  ): (typeof this._loadings$)[string];
+  private getLoadable(
+    loadable: Loadable[number],
+    obs?: false
+  ): (typeof this._loadings)[string];
   private getLoadable(loadable: Loadable[number], obs: boolean = false) {
     if (!this._loadings[loadable]) this.addLoadable(loadable);
 
@@ -105,7 +121,10 @@ export class LoadingNotifier<Loadable extends readonly string[]> implements OnDe
    * returns a piped observable that completes the loading automatically on finalize
    * @returns If obs is provided, piped observable using finalize to automatically complete the loading. Otherwise, undefined
    */
-  startLoading<T = any>(loadable: Loadable[number], obs?: Observable<T>): Observable<T> | undefined | null {
+  startLoading<T = any>(
+    loadable: Loadable[number],
+    obs?: Observable<T>
+  ): Observable<T> | undefined | null {
     this.nextLoading(loadable, true);
 
     return obs?.pipe(finalize(() => this.completeLoading(loadable)));

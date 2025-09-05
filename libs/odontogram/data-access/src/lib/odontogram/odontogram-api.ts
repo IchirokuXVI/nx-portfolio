@@ -1,8 +1,15 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Odontogram } from '@portfolio/odontogram/models';
-import { ApiConsumer, NotFoundResourceError, OwnApiUrlResolver } from '@portfolio/shared/data-access';
-import { OdontogramGetListFilter, OdontogramServiceI } from './odontogram-service';
+import {
+  ApiConsumer,
+  NotFoundResourceError,
+  OwnApiUrlResolver,
+} from '@portfolio/shared/data-access';
+import {
+  OdontogramGetListFilter,
+  OdontogramServiceI,
+} from './odontogram-service';
 import { throwError } from 'rxjs/internal/observable/throwError';
 import { catchError } from 'rxjs';
 
@@ -17,39 +24,55 @@ export class OdontogramApi extends ApiConsumer implements OdontogramServiceI {
   }
 
   getList(filter?: OdontogramGetListFilter) {
-    return this._http.get<Odontogram[]>(this._url + this._endpoint, { params: { ...filter } });
+    return this._http.get<Odontogram[]>(this._url + this._endpoint, {
+      params: { ...filter },
+    });
   }
 
   getById(id: string) {
-    return this._http.get<Odontogram>(`${this._url + this._endpoint}/${id}`).pipe(
-      catchError((error) => {
-        let newError: Error = error;
+    return this._http
+      .get<Odontogram>(`${this._url + this._endpoint}/${id}`)
+      .pipe(
+        catchError((error) => {
+          let newError: Error = error;
 
-        if (error.status === 404) {
-          newError = new NotFoundResourceError(`Odontogram with id ${id} not found`);
-        }
+          if (error.status === 404) {
+            newError = new NotFoundResourceError(
+              `Odontogram with id ${id} not found`
+            );
+          }
 
-        return throwError(() => newError);
-      })
-    );
+          return throwError(() => newError);
+        })
+      );
   }
 
   create(odontogram: Odontogram) {
-    return this._http.post<Odontogram>(`${this._url + this._endpoint}`, odontogram);
+    return this._http.post<Odontogram>(
+      `${this._url + this._endpoint}`,
+      odontogram
+    );
   }
 
   update(odontogram: Odontogram) {
-    return this._http.put<Odontogram>(`${this._url + this._endpoint}/${odontogram.id}`, odontogram).pipe(
-      catchError((error) => {
-        let newError: Error = error;
+    return this._http
+      .put<Odontogram>(
+        `${this._url + this._endpoint}/${odontogram.id}`,
+        odontogram
+      )
+      .pipe(
+        catchError((error) => {
+          let newError: Error = error;
 
-        if (error.status === 404) {
-          newError = new NotFoundResourceError(`Odontogram with id ${odontogram.id} not found`);
-        }
+          if (error.status === 404) {
+            newError = new NotFoundResourceError(
+              `Odontogram with id ${odontogram.id} not found`
+            );
+          }
 
-        return throwError(() => newError);
-      })
-    );
+          return throwError(() => newError);
+        })
+      );
   }
 
   delete(id: string) {

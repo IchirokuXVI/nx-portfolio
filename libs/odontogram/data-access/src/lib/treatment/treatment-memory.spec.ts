@@ -3,13 +3,17 @@ import { runSharedTreatmentServiceTests } from './treatment-service.shared-spec'
 import { NotFoundResourceError } from '@portfolio/shared/data-access';
 import { firstValueFrom } from 'rxjs';
 import { TreatmentMemory } from './treatment-memory';
-import { Treatment, ToothZones, TreatmentType } from '@portfolio/odontogram/models';
+import {
+  Treatment,
+  ToothZones,
+  TreatmentType,
+} from '@portfolio/odontogram/models';
 import { Optional } from '@portfolio/shared/util';
 
 function serviceFactory() {
   TestBed.configureTestingModule({
     imports: [],
-    providers: []
+    providers: [],
   });
 
   const service = TestBed.inject(TreatmentMemory);
@@ -23,7 +27,12 @@ describe('TreatmentMemory', () => {
   let service: TreatmentMemory;
   let currentServiceData: Map<string, Treatment>;
 
-  const mockTreatment: Optional<Treatment, 'id'> = { name: "Test Treatment", description: "Test description", treatmentType: TreatmentType.STANDARD, zones: [ToothZones.BOTTOM] };
+  const mockTreatment: Optional<Treatment, 'id'> = {
+    name: 'Test Treatment',
+    description: 'Test description',
+    treatmentType: TreatmentType.STANDARD,
+    zones: [ToothZones.BOTTOM],
+  };
 
   beforeEach(() => {
     service = serviceFactory();
@@ -39,16 +48,26 @@ describe('TreatmentMemory', () => {
   it('should apply filter by ids', async () => {
     const data = await firstValueFrom(service.getList({ ids: ['1', '2'] }));
     expect(Array.isArray(data)).toBe(true);
-    expect(data.every(item => item.id && ['1', '2'].includes(item.id))).toBe(true);
-    expect(Array.from(currentServiceData.values()).filter((item) => item.id === '1' || item.id === '2')).toEqual(data);
+    expect(data.every((item) => item.id && ['1', '2'].includes(item.id))).toBe(
+      true
+    );
+    expect(
+      Array.from(currentServiceData.values()).filter(
+        (item) => item.id === '1' || item.id === '2'
+      )
+    ).toEqual(data);
   });
 
   it('should apply filter by searchTerm', async () => {
     const regex = /^tooth/i;
     const data = await firstValueFrom(service.getList({ searchTerm: regex }));
     expect(Array.isArray(data)).toBe(true);
-    expect(data.every(item => item.name.match(regex))).toBe(true);
-    expect(Array.from(currentServiceData.values()).filter((item) => item.name.match(regex))).toEqual(data);
+    expect(data.every((item) => item.name.match(regex))).toBe(true);
+    expect(
+      Array.from(currentServiceData.values()).filter((item) =>
+        item.name.match(regex)
+      )
+    ).toEqual(data);
   });
 
   it('should find object correctly', async () => {
@@ -81,19 +100,26 @@ describe('TreatmentMemory', () => {
     const data = await firstValueFrom(service.create(newItem));
     expect(data).toEqual({ ...newItem, id: data.id });
     expect(currentServiceData.get(data.id)).toBeDefined();
-    expect(currentServiceData.get(data.id)).toEqual({ ...newItem, id: data.id });
+    expect(currentServiceData.get(data.id)).toEqual({
+      ...newItem,
+      id: data.id,
+    });
   });
 
   it('should update an existing item', async () => {
     const updatedItem = { id: '1', name: 'Updated treatment' };
     const data = await firstValueFrom(service.update(updatedItem));
     expect(data.name).toEqual(updatedItem.name);
-    expect(currentServiceData.get(updatedItem.id)?.name).toEqual(updatedItem.name);
+    expect(currentServiceData.get(updatedItem.id)?.name).toEqual(
+      updatedItem.name
+    );
   });
 
   it('should return error if not found on update', async () => {
     try {
-      await firstValueFrom(service.update({ id: '161616', name: 'Non Existent Item' }));
+      await firstValueFrom(
+        service.update({ id: '161616', name: 'Non Existent Item' })
+      );
       fail('Should have failed');
     } catch (error) {
       expect(error instanceof NotFoundResourceError).toBe(true);

@@ -5,7 +5,7 @@ export enum ToothZones {
   LEFT = 'left',
   CENTER = 'center',
   LATERAL = 'lateral',
-  ROOT = 'root'
+  ROOT = 'root',
 }
 
 export const ToothZonesTranslationKey = {
@@ -15,5 +15,5 @@ export const ToothZonesTranslationKey = {
   [ToothZones.LEFT]: 'odontogram.zone.left',
   [ToothZones.CENTER]: 'odontogram.zone.center',
   [ToothZones.LATERAL]: 'odontogram.zone.lateral',
-  [ToothZones.ROOT]: 'odontogram.zone.root'
+  [ToothZones.ROOT]: 'odontogram.zone.root',
 };

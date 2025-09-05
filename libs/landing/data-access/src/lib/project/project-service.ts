@@ -1,5 +1,5 @@
 import { Project } from '@portfolio/landing/models';
-import { Observable } from "rxjs";
+import { Observable } from 'rxjs';
 
 export interface ProjectServiceI {
   getList(): Observable<Project[]>;

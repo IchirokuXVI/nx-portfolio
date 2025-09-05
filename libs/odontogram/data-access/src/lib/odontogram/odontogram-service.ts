@@ -1,6 +1,6 @@
 import { Odontogram } from '@portfolio/odontogram/models';
-import { Optional, WithRequired } from "@portfolio/shared/util";
-import { Observable } from "rxjs";
+import { Optional, WithRequired } from '@portfolio/shared/util';
+import { Observable } from 'rxjs';
 
 export interface OdontogramGetListFilter {
   ids?: string[];
@@ -14,7 +14,9 @@ export interface OdontogramServiceI {
 
   create(odontogram: Optional<Odontogram, 'id'>): Observable<Odontogram>;
 
-  update(odontogram: WithRequired<Partial<Odontogram>, 'id'>): Observable<Odontogram>;
+  update(
+    odontogram: WithRequired<Partial<Odontogram>, 'id'>
+  ): Observable<Odontogram>;
 
   delete(id: string): Observable<void>;
 }

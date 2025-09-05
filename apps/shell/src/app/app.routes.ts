@@ -10,5 +10,5 @@ export const appRoutes: Route[] = [
     path: '',
     loadChildren: () => import('landing/Routes').then((m) => m.remoteRoutes),
   },
-  { path: '**', component: NotFoundComponent }
+  { path: '**', component: NotFoundComponent },
 ];

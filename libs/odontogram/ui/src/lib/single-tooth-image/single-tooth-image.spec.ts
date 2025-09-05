@@ -8,19 +8,19 @@ describe('SingleToothImage', () => {
 
   const mockTooth: Tooth = {
     number: '11',
-    treatments: []
+    treatments: [],
   };
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [SingleToothImage  ],
+      imports: [SingleToothImage],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SingleToothImage);
     component = fixture.componentInstance;
 
     // Set the required tooth input
-    component.tooth = mockTooth;
+    fixture.componentRef.setInput('tooth', mockTooth);
 
     fixture.detectChanges();
   });

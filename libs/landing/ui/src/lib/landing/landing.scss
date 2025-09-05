@@ -1,9 +1,9 @@
 // $primary-color: #;
 // $accent-color: #;
-$background-color: #2A2A2A;
+$background-color: #2a2a2a;
 // $card-background-color: #DDDEE011;
-$text-color: #F0F0F0;
-$text-accent-color: #F2D45B;
+$text-color: #f0f0f0;
+$text-accent-color: #f2d45b;
 
 :host {
   width: 100%;
@@ -23,7 +23,7 @@ a {
   margin: 0;
   color: $text-color;
 
-  >main {
+  > main {
     flex: 1 1;
     display: flex;
     flex-direction: column;
@@ -41,7 +41,7 @@ a {
       position: relative;
 
       &:before {
-        content: "";
+        content: '';
         position: absolute;
         top: 50%;
         left: 0;

@@ -1,5 +1,5 @@
 @use '../common-variables.scss' as common;
-@use "sass:list";
+@use 'sass:list';
 
 * {
   box-sizing: border-box;
@@ -59,7 +59,7 @@
     $sectors: ();
 
     @for $i from 0 through 3 {
-      $sectors: list.append($sectors, "&.sector-#{$i}", comma);
+      $sectors: list.append($sectors, '&.sector-#{$i}', comma);
     }
 
     #{$sectors} {
@@ -83,7 +83,7 @@
     $sectors: (); // Reset the list
 
     @for $i from 4 through 7 {
-      $sectors: list.append($sectors, "&.sector-#{$i}", comma);
+      $sectors: list.append($sectors, '&.sector-#{$i}', comma);
     }
 
     #{$sectors} {
@@ -136,7 +136,7 @@
         // Adds a background color over the tooth
         // It has alpha to not hide the images
         &:before {
-          content: "";
+          content: '';
           width: 100%;
           height: 100%;
           background-color: #11111111;

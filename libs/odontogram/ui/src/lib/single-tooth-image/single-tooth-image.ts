@@ -1,8 +1,28 @@
-import { AfterViewInit, Component, ElementRef, inject, Input, OnDestroy, Output, QueryList, ViewChildren, OnInit, input, computed, effect } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  ElementRef,
+  inject,
+  Input,
+  OnDestroy,
+  Output,
+  QueryList,
+  ViewChildren,
+  OnInit,
+  input,
+  computed,
+  effect,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LoadingNotifier, NgLetDirective } from '@portfolio/shared/util';
 import { Subject } from 'rxjs';
-import { Tooth, ToothTreatment, ToothZones, ToothTreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
+import {
+  Tooth,
+  ToothTreatment,
+  ToothZones,
+  ToothTreatmentStatus,
+  TreatmentType,
+} from '@portfolio/odontogram/models';
 import { ToothImageLoader } from '../services/tooth-image-loader';
 
 const loadable = ['image'] as const;
@@ -15,15 +35,15 @@ const loadable = ['image'] as const;
   styleUrl: './single-tooth-image.scss',
   providers: [
     { provide: LoadingNotifier.LOADABLE_ENTRIES, useValue: loadable },
-    LoadingNotifier
-  ]
+    LoadingNotifier,
+  ],
 })
 export class SingleToothImage implements AfterViewInit, OnDestroy {
   // Map treatment status to CSS classes
   public statusClass = new Map([
     [undefined, 'status-none'],
     [ToothTreatmentStatus.PENDING, 'status-pending'],
-    [ToothTreatmentStatus.COMPLETED, 'status-finished']
+    [ToothTreatmentStatus.COMPLETED, 'status-finished'],
   ]);
 
   loadingNotf = inject(LoadingNotifier<typeof loadable>, { self: true });
@@ -46,9 +66,11 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
       const tooth = this.tooth();
 
       if (tooth.number != null) {
-        this._toothImageLoader.loadImage(tooth.number).subscribe(({ lateral, crown, root_mask, crown_mask }) => {
-          this.toothImages = { lateral, crown, root_mask, crown_mask };
-        });
+        this._toothImageLoader
+          .loadImage(tooth.number)
+          .subscribe(({ lateral, crown, root_mask, crown_mask }) => {
+            this.toothImages = { lateral, crown, root_mask, crown_mask };
+          });
       }
     });
   }
@@ -74,7 +96,10 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
    * @returns Status of the implant
    */
   public getToothImplantStatus() {
-    return this.getToothZoneStatus(ToothZones.ROOT, (treatment) => treatment.type == TreatmentType.IMPLANT);
+    return this.getToothZoneStatus(
+      ToothZones.ROOT,
+      (treatment) => treatment.type == TreatmentType.IMPLANT
+    );
   }
 
   /**
@@ -82,7 +107,10 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
    * @returns Status of the extraction
    */
   public getToothExtractionStatus() {
-    return this.getToothZoneStatus(ToothZones.ROOT, (treatment) => treatment.type == TreatmentType.EXTRACTION);
+    return this.getToothZoneStatus(
+      ToothZones.ROOT,
+      (treatment) => treatment.type == TreatmentType.EXTRACTION
+    );
   }
 
   /**
@@ -93,14 +121,22 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
    * @param filter Before checking the status, removes all treatments that do not meet the filter
    * @returns Status of the zone
    */
-  public getToothZoneStatus(zone: ToothZones, filter?: (treatment: ToothTreatment) => boolean): ToothTreatmentStatus | undefined {
+  public getToothZoneStatus(
+    zone: ToothZones,
+    filter?: (treatment: ToothTreatment) => boolean
+  ): ToothTreatmentStatus | undefined {
     const tooth = this.tooth();
 
-    const treatmentsZone = tooth.treatments?.filter((treatment) => treatment.zones?.includes(zone));
+    const treatmentsZone = tooth.treatments?.filter((treatment) =>
+      treatment.zones?.includes(zone)
+    );
 
-    const treatmentsFiltered = filter ? treatmentsZone?.filter(filter) : treatmentsZone;
+    const treatmentsFiltered = filter
+      ? treatmentsZone?.filter(filter)
+      : treatmentsZone;
 
-    if (!treatmentsFiltered || treatmentsFiltered.length === 0) return undefined;
+    if (!treatmentsFiltered || treatmentsFiltered.length === 0)
+      return undefined;
 
     let status = ToothTreatmentStatus.COMPLETED;
 

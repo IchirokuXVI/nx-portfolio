@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { LandingWrapper } from './landing-wrapper';
+import { provideRouter } from '@angular/router';
 
 describe('LandingWrapper', () => {
   let component: LandingWrapper;
@@ -8,6 +9,7 @@ describe('LandingWrapper', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LandingWrapper],
+      providers: [provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LandingWrapper);

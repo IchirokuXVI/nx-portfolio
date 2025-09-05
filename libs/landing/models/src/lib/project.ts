@@ -1,4 +1,4 @@
-import { ProjectArea } from "./project-area";
+import { ProjectArea } from './project-area';
 
 export interface Project {
   id: string;
@@ -8,5 +8,5 @@ export interface Project {
   repoLink: string;
   image: string | Promise<string>;
   // Area would be things like API, FrontEnd, database, websocket... or whatever it uses and is relevant to the progress of the project
-  areas: ProjectArea[]
+  areas: ProjectArea[];
 }

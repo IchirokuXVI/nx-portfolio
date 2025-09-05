@@ -1,4 +1,4 @@
-import { ApiUrlResolver } from "./api-url-resolver";
+import { ApiUrlResolver } from './api-url-resolver';
 
 export class ApiConsumer {
   _url: string;

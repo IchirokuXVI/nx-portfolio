@@ -8,7 +8,7 @@ import { Odontogram } from '@portfolio/odontogram/models';
 function serviceFactory() {
   TestBed.configureTestingModule({
     imports: [],
-    providers: []
+    providers: [],
   });
 
   const service = TestBed.inject(OdontogramMemory);
@@ -36,8 +36,12 @@ describe('OdontogramMemory', () => {
   it('should apply filter by ids', async () => {
     const data = await firstValueFrom(service.getList({ ids: ['1', '2'] }));
     expect(Array.isArray(data)).toBe(true);
-    expect(data.every(item => ['1', '2'].includes(item.id))).toBe(true);
-    expect(Array.from(currentServiceData.values()).filter((item) => item.id === '1' || item.id === '2')).toEqual(data);
+    expect(data.every((item) => ['1', '2'].includes(item.id))).toBe(true);
+    expect(
+      Array.from(currentServiceData.values()).filter(
+        (item) => item.id === '1' || item.id === '2'
+      )
+    ).toEqual(data);
   });
 
   it('should find object correctly', async () => {
@@ -74,12 +78,16 @@ describe('OdontogramMemory', () => {
     const updatedItem = { id: '1', name: 'Updated Item' };
     const data = await firstValueFrom(service.update(updatedItem));
     expect(data).toEqual(updatedItem);
-    expect(currentServiceData.get(updatedItem.id)?.name).toEqual(updatedItem.name);
+    expect(currentServiceData.get(updatedItem.id)?.name).toEqual(
+      updatedItem.name
+    );
   });
 
   it('should return error if not found on update', async () => {
     try {
-      await firstValueFrom(service.update({ id: '161616', name: 'Non Existent Item' }));
+      await firstValueFrom(
+        service.update({ id: '161616', name: 'Non Existent Item' })
+      );
       fail('Should have failed');
     } catch (error) {
       expect(error instanceof NotFoundResourceError).toBe(true);

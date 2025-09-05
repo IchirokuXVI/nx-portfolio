@@ -5,7 +5,7 @@ import { of } from 'rxjs';
 import { NotFoundResourceError } from '@portfolio/shared/data-access';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class ProjectMemory implements ProjectServiceI {
   private _projects = PROJECTS;
@@ -15,7 +15,7 @@ export class ProjectMemory implements ProjectServiceI {
   }
 
   getByName(name: string) {
-    const project = this._projects.find(project => project.name === name);
+    const project = this._projects.find((project) => project.name === name);
 
     if (!project) {
       throw new NotFoundResourceError(`Project with name ${name} not found`);

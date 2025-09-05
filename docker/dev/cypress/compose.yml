@@ -1,14 +1,14 @@
 services:
   portfolio-cypress-chrome:
-      build:
-        dockerfile: ./Dockerfile.cypress
-        args:
-          - CYPRESS_BROWSER=chrome
-      container_name: portfolio-cypress-chrome
-      working_dir: /app
-      volumes:
-        - ../../:/app
-        - /app/node_modules
+    build:
+      dockerfile: ./Dockerfile.cypress
+      args:
+        - CYPRESS_BROWSER=chrome
+    container_name: portfolio-cypress-chrome
+    working_dir: /app
+    volumes:
+      - ../../:/app
+      - /app/node_modules
   portfolio-cypress-firefox:
     build:
       dockerfile: ./Dockerfile.cypress

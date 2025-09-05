@@ -5,5 +5,5 @@ export enum ToothTreatmentStatus {
 
 export const ToothTreatmentStatusTranslationKey = {
   [ToothTreatmentStatus.PENDING]: 'odontogram.treatment.status.pending',
-  [ToothTreatmentStatus.COMPLETED]: 'odontogram.treatment.status.completed'
+  [ToothTreatmentStatus.COMPLETED]: 'odontogram.treatment.status.completed',
 };

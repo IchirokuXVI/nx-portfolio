@@ -4,6 +4,9 @@ export const remoteRoutes: Route[] = [
   {
     path: '',
     pathMatch: 'full',
-    loadChildren: () => import('@portfolio/landing/feature-shell').then(m => m.LandingShellRoutes)
+    loadChildren: () =>
+      import('@portfolio/landing/feature-shell').then(
+        (m) => m.LandingShellRoutes
+      ),
   },
 ];

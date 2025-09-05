@@ -4,6 +4,6 @@ import { LandingWrapper } from './landing-wrapper/landing-wrapper';
 export const appRoutes: Route[] = [
   {
     path: '',
-    component: LandingWrapper
+    component: LandingWrapper,
   },
 ];

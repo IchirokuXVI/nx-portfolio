@@ -1,8 +1,14 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+} from '@angular/common/http/testing';
 import { OdontogramApi } from './odontogram-api';
 import { runSharedOdontogramServiceTests } from './odontogram-service.shared-spec';
-import { NotFoundResourceError, OwnApiUrlResolver } from '@portfolio/shared/data-access';
+import {
+  NotFoundResourceError,
+  OwnApiUrlResolver,
+} from '@portfolio/shared/data-access';
 import { provideHttpClient } from '@angular/common/http';
 
 const API_URL = 'https://api.example.com';
@@ -13,8 +19,8 @@ function serviceFactory() {
     providers: [
       provideHttpClient(),
       provideHttpClientTesting(),
-      OwnApiUrlResolver
-    ]
+      OwnApiUrlResolver,
+    ],
   });
 
   TestBed.inject(OwnApiUrlResolver).getApiUrl = () => API_URL; // Mock the API URL resolver
@@ -29,7 +35,10 @@ describe('OdontogramApi', () => {
   let service: OdontogramApi;
   let httpMock: HttpTestingController;
   let finalUrl: string;
-  const mockData = [{ id: 1, name: 'Test Data' }, { id: 2, name: 'More Test Data' }];
+  const mockData = [
+    { id: 1, name: 'Test Data' },
+    { id: 2, name: 'More Test Data' },
+  ];
 
   beforeEach(() => {
     service = serviceFactory();
@@ -44,7 +53,7 @@ describe('OdontogramApi', () => {
   });
 
   it('should make GET request and return data', () => {
-    service.getList().subscribe(data => {
+    service.getList().subscribe((data) => {
       expect(data).toEqual(mockData);
     });
 
@@ -52,7 +61,7 @@ describe('OdontogramApi', () => {
     expect(req.request.method).toEqual('GET');
     req.flush([mockData]);
 
-    service.getById('1').subscribe(data => {
+    service.getById('1').subscribe((data) => {
       expect(data).toEqual(mockData[0]);
     });
 
@@ -68,7 +77,7 @@ describe('OdontogramApi', () => {
       next: () => fail('Should have failed'),
       error: (error) => {
         expect(error instanceof NotFoundResourceError).toEqual(true);
-      }
+      },
     });
 
     const req = httpMock.expectOne(finalUrl);
@@ -76,9 +85,9 @@ describe('OdontogramApi', () => {
   });
 
   it('should make POST request with payload', () => {
-    const testPayload = { id: "1" };
+    const testPayload = { id: '1' };
 
-    service.create(testPayload).subscribe(data => {
+    service.create(testPayload).subscribe((data) => {
       expect(data).toEqual(testPayload);
     });
 
@@ -96,7 +105,7 @@ describe('OdontogramApi', () => {
       next: () => fail('Should have failed'),
       error: (error) => {
         expect(error.status).toEqual(mockError.status);
-      }
+      },
     });
 
     const req = httpMock.expectOne(finalUrl);
@@ -104,9 +113,9 @@ describe('OdontogramApi', () => {
   });
 
   it('should make PUT request with payload', () => {
-    const testPayload = { id: "1" };
+    const testPayload = { id: '1' };
 
-    service.update(testPayload).subscribe(data => {
+    service.update(testPayload).subscribe((data) => {
       expect(data).toEqual(testPayload);
     });
 
@@ -124,7 +133,7 @@ describe('OdontogramApi', () => {
       next: () => fail('Should have failed'),
       error: (error) => {
         expect(error instanceof NotFoundResourceError).toEqual(true);
-      }
+      },
     });
 
     const req = httpMock.expectOne(finalUrl + `/${testPayload.id}`);
@@ -132,7 +141,7 @@ describe('OdontogramApi', () => {
   });
 
   it('should make DELETE request with payload', () => {
-    service.delete("1").subscribe(data => {
+    service.delete('1').subscribe((data) => {
       expect(data).toBeUndefined();
     });
 
@@ -144,11 +153,11 @@ describe('OdontogramApi', () => {
   it('should handle DELETE errors', () => {
     const mockError = { status: 500, statusText: 'Server Error' };
 
-    service.delete("1").subscribe({
+    service.delete('1').subscribe({
       next: () => fail('Should have failed'),
       error: (error) => {
         expect(error.status).toEqual(mockError.status);
-      }
+      },
     });
 
     const req = httpMock.expectOne(finalUrl + '/1');

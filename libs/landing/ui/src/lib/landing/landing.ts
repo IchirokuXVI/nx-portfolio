@@ -19,7 +19,7 @@ export class Landing {
   // @ts-expect-error For some reason the svg module does not work so even tho the IDE shows no error, the compiler does
   githubIcon = import(`../../../assets/github.svg`).then((m) => m.default);
   // @ts-expect-error For some reason the svg module does not work so even tho the IDE shows no error, the compiler does
-  linkedinIcon = import(`../../../assets/linkedin.svg`).then((m) => m.default)
+  linkedinIcon = import(`../../../assets/linkedin.svg`).then((m) => m.default);
   // @ts-expect-error For some reason the png module does not work so even tho the IDE shows no error, the compiler does
   resumeIcon = import(`../../../assets/cv.png`).then((m) => m.default);
 

@@ -6,9 +6,8 @@
         I'm Daniel!
       </h1>
       <p class="welcome__subtitle">
-        coding lover and problem solver, creating
-        solutions to make hard tasks easier and
-        find a way to automate those easy tasks
+        coding lover and problem solver, creating solutions to make hard tasks
+        easier and find a way to automate those easy tasks
       </p>
       <div class="welcome__social-info">
         <a href="" target="_blank">
@@ -30,9 +29,7 @@
       </div>
     </section>
     <div class="intersection">
-      <span class="intersection__title">
-        PROJECTS
-      </span>
+      <span class="intersection__title"> PROJECTS </span>
     </div>
     <section class="projects">
       @for (project of projects(); track $index) {
@@ -56,14 +53,14 @@
         </div> -->
         <a class="project__img" [routerLink]="[project.appLink]">
           @if (project.image) {
-          <img [src]="typeof project.image === 'string' ? project.image : project.image | async"
-            alt="Odontogram Project" />
+          <img
+            [src]="typeof project.image === 'string' ? project.image : project.image | async"
+            alt="Odontogram Project"
+          />
           }
         </a>
         <div class="project__description_container">
-          <p class="project__description">
-            {{ project.description }}
-          </p>
+          <p class="project__description">{{ project.description }}</p>
           <a [routerLink]="[project.appLink]">View project</a>
         </div>
       </article>

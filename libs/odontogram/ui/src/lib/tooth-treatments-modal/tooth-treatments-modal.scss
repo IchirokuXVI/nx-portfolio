@@ -1,6 +1,5 @@
 @use '../common-variables.scss' as common;
 
-
 .main-container {
   display: flex;
   flex-direction: column;
@@ -69,7 +68,6 @@
 
         &:hover,
         &.active {
-
           // Añade un color de fondo sobre el diente
           // Tiene alpha para no ocultar las imágenes
           &:before {
@@ -100,7 +98,6 @@
 
     .product-search {
       ::ng-deep {
-
         &,
         .p-autocomplete,
         .p-autocomplete-input {
@@ -151,7 +148,8 @@
           flex-direction: column;
           row-gap: 0.5em;
 
-          .ref {}
+          .ref {
+          }
 
           .nombre {
             width: 100%;
@@ -194,7 +192,7 @@
               pointer-events: none;
 
               &:after {
-                content: "";
+                content: '';
                 top: 0;
                 left: 0;
                 width: 100%;
@@ -209,10 +207,10 @@
             .lateral-raiz {
               div {
                 cursor: pointer;
-                background-color: #ABABAB;
+                background-color: #ababab;
 
                 &.selected {
-                  background-color: var(--status-color)
+                  background-color: var(--status-color);
                 }
               }
             }
@@ -230,9 +228,9 @@
               grid-template-rows: repeat(3, 1fr);
               gap: 1px;
               grid-template-areas:
-                ". superior ."
-                "izquierda central derecha"
-                ". inferior .";
+                '. superior .'
+                'izquierda central derecha'
+                '. inferior .';
 
               .superior {
                 grid-area: superior;

@@ -4,6 +4,6 @@ import { OdontogramFeatureFullOdontogramCrud } from '@portfolio/odontogram/featu
 export const appRoutes: Route[] = [
   {
     path: '',
-    component: OdontogramFeatureFullOdontogramCrud
+    component: OdontogramFeatureFullOdontogramCrud,
   },
 ];

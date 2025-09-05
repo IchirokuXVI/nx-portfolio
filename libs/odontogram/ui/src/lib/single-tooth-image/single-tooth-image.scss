@@ -23,7 +23,6 @@
     @for $j from 1 through 8 {
       &.tooth-#{$i}#{$j} {
         .cross {
-
           &:after,
           &:before {
             top: $crossOffset;
@@ -43,7 +42,6 @@
         flex-direction: column-reverse;
 
         .cross {
-
           &:after,
           &:before {
             bottom: $crossOffset;
@@ -76,7 +74,7 @@
   &.withTreatment .number {
     // background-color: #0275d8;
     background-color: #7a7a7a;
-    color: #F2D45B;
+    color: #f2d45b;
 
     // En el componente de odontograma se quitan los bordes cuando se tocan entre ellos
     // Keep in mind that odontogram component alters the border style to remove borders if needed
@@ -86,7 +84,6 @@
 
   // Sets the color for pending status
   .status-pending {
-
     img,
     &.top,
     &.bottom,
@@ -104,7 +101,6 @@
   }
 
   .status-none {
-
     img,
     &.top,
     &.bottom,
@@ -117,7 +113,6 @@
 
   // Sets the color for pending status
   .status-pending {
-
     img,
     &.top,
     &.bottom,
@@ -137,7 +132,6 @@
 
   // Sets the color for finished status
   .status-finished {
-
     img,
     &.top,
     &.bottom,
@@ -161,12 +155,11 @@
 
     // Draws a X over the tooth root
     .cross {
-
       &:before,
       &:after {
         position: absolute;
         left: 47%;
-        content: "";
+        content: '';
         height: 50%;
         width: 3%;
       }
@@ -182,7 +175,7 @@
 
     // Two lines on the root to mark an implant
     .implant {
-      content: "";
+      content: '';
       left: 35%;
       position: absolute;
       background-color: transparent;
@@ -212,7 +205,6 @@
     // being the first div of the container
     &:has(.left:not(#{common.$noStatusClass})) {
       & .top {
-
         &:not(#{common.$noStatusClass}) {
           border-bottom-style: $crownBorderStyle;
         }
@@ -244,7 +236,7 @@
       }
 
       @mixin showNextBorder($position) {
-        &:not(#{common.$noStatusClass})+:not(#{common.$noStatusClass}) {
+        &:not(#{common.$noStatusClass}) + :not(#{common.$noStatusClass}) {
           border-#{$position}-style: $crownBorderStyle;
         }
       }

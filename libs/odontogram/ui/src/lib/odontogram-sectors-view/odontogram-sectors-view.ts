@@ -1,12 +1,29 @@
-import { Component, computed, effect, inject, input, Input, model, OnInit, output, Output, Signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  Input,
+  model,
+  OnInit,
+  output,
+  Output,
+  Signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Tooth, Odontogram, ToothTreatment, TeethNumbers } from '@portfolio/odontogram/models';
+import {
+  Tooth,
+  Odontogram,
+  ToothTreatment,
+  TeethNumbers,
+} from '@portfolio/odontogram/models';
 import { Product } from '@portfolio/shared/models';
 import { BehaviorSubject, filter, Observable, Subject } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { NgLetDirective } from '@portfolio/shared/util';
 import { LoadingNotifier } from '@portfolio/shared/util';
-import { SingleToothImage } from "../single-tooth-image/single-tooth-image";
+import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
 import { LoadingIcon } from '@portfolio/shared/ui';
 
 export const loadable = ['teeth', 'image'] as const;
@@ -14,12 +31,18 @@ export const loadable = ['teeth', 'image'] as const;
 @Component({
   selector: 'lib-odontogram-sectors-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgLetDirective, SingleToothImage, LoadingIcon],
+  imports: [
+    CommonModule,
+    FormsModule,
+    NgLetDirective,
+    SingleToothImage,
+    LoadingIcon,
+  ],
   templateUrl: './odontogram-sectors-view.html',
   styleUrl: './odontogram-sectors-view.scss',
   providers: [
     { provide: LoadingNotifier.LOADABLE_ENTRIES, useValue: loadable },
-    LoadingNotifier
+    LoadingNotifier,
   ],
 })
 export class OdontogramSectorsView {
@@ -46,7 +69,8 @@ export class OdontogramSectorsView {
 
   toothSelected = output<Tooth>();
 
-  public loadingNotf: LoadingNotifier<typeof loadable> = inject(LoadingNotifier);
+  public loadingNotf: LoadingNotifier<typeof loadable> =
+    inject(LoadingNotifier);
 
   constructor() {
     this.teeth = computed(() => {
@@ -66,7 +90,11 @@ export class OdontogramSectorsView {
     this.displayedSectors = computed(() => {
       const showPediatric = this.showPediatricSectors();
 
-      return this.sectors.map((_val, i) => i).filter((_val, i) => showPediatric || !this.pediatricSectors.includes(i));
+      return this.sectors
+        .map((_val, i) => i)
+        .filter(
+          (_val, i) => showPediatric || !this.pediatricSectors.includes(i)
+        );
     });
   }
 
@@ -77,11 +105,15 @@ export class OdontogramSectorsView {
 
     for (let i = 0; i < this.sectors.length; i++) {
       for (let j = 0; j < this.sectors[i]; j++) {
-        const teethNumb = ((i + 1).toString() + (j + 1).toString()) as typeof TeethNumbers[number];
+        const teethNumb = ((i + 1).toString() +
+          (j + 1).toString()) as (typeof TeethNumbers)[number];
 
         teeth[teethNumb] = {
           number: teethNumb,
-          treatments: treatments?.filter(treatment => treatment.teeth.includes(teethNumb)) || [],
+          treatments:
+            treatments?.filter((treatment) =>
+              treatment.teeth.includes(teethNumb)
+            ) || [],
         };
       }
     }

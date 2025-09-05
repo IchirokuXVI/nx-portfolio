@@ -1,4 +1,4 @@
-import { RecursivePaths } from "../types/recursive-paths";
+import { RecursivePaths } from '../types/recursive-paths';
 
 /**
  * Loops the fields specified recursively searching for the last field to return its value.
@@ -34,7 +34,9 @@ export function findField<T>(obj: T, fields: RecursivePaths<T>): any {
     let lastFieldValues = [];
 
     // Converts the object to an array if it's not (so it can be iterated with a for)
-    let items = Array.isArray(obj[firstField]) ? obj[firstField] : [obj[firstField]];
+    let items = Array.isArray(obj[firstField])
+      ? obj[firstField]
+      : [obj[firstField]];
 
     // If it's an array it will iterate over it and add all found values in the array.
     for (const item of items) {

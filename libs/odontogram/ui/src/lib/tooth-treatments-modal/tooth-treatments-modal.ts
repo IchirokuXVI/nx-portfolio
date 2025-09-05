@@ -1,9 +1,39 @@
-import { Component, computed, ElementRef, inject, input, OnInit, output, Signal, ViewChild } from '@angular/core';
+import {
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  input,
+  OnInit,
+  output,
+  Signal,
+  ViewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Odontogram, TeethNumbers, Tooth, ToothTreatment, ToothZones, Treatment, ToothTreatmentStatus, TreatmentType } from '@portfolio/odontogram/models';
-import { FormArray, FormControl, FormGroup, FormsModule, ReactiveFormsModule, UntypedFormGroup } from '@angular/forms';
+import {
+  Odontogram,
+  TeethNumbers,
+  Tooth,
+  ToothTreatment,
+  ToothZones,
+  Treatment,
+  ToothTreatmentStatus,
+  TreatmentType,
+} from '@portfolio/odontogram/models';
+import {
+  FormArray,
+  FormControl,
+  FormGroup,
+  FormsModule,
+  ReactiveFormsModule,
+  UntypedFormGroup,
+} from '@angular/forms';
 import { map, of, switchMap } from 'rxjs';
-import { OdontogramMemory, ToothTreatmentMemory, TreatmentMemory } from '@portfolio/odontogram/data-access';
+import {
+  OdontogramMemory,
+  ToothTreatmentMemory,
+  TreatmentMemory,
+} from '@portfolio/odontogram/data-access';
 import { WithRequired } from '@portfolio/shared/util';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -12,14 +42,28 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSelectModule } from '@angular/material/select';
 import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
-import { mapFormToToothTreatment, ToothTreatmentForm } from './tooth-treatment-form';
+import {
+  mapFormToToothTreatment,
+  ToothTreatmentForm,
+} from './tooth-treatment-form';
 
 @Component({
   selector: 'lib-tooth-treatments-modal',
-  imports: [CommonModule, SingleToothImage, FormsModule, ReactiveFormsModule, MatExpansionModule, MatFormFieldModule, MatIconModule, MatAutocompleteModule, MatButtonToggleModule, MatSelectModule],
+  imports: [
+    CommonModule,
+    SingleToothImage,
+    FormsModule,
+    ReactiveFormsModule,
+    MatExpansionModule,
+    MatFormFieldModule,
+    MatIconModule,
+    MatAutocompleteModule,
+    MatButtonToggleModule,
+    MatSelectModule,
+  ],
   templateUrl: './tooth-treatments-modal.html',
   styleUrls: ['./tooth-treatments-modal.scss'],
-  providers: []
+  providers: [],
 })
 export class ToothTreatmentsModal implements OnInit {
   toothZones = ToothZones;
@@ -28,7 +72,7 @@ export class ToothTreatmentsModal implements OnInit {
 
   toothTreatmentStatusToCssClass: { [key in ToothTreatmentStatus]: string } = {
     [ToothTreatmentStatus.PENDING]: 'pending',
-    [ToothTreatmentStatus.COMPLETED]: 'finished'
+    [ToothTreatmentStatus.COMPLETED]: 'finished',
   };
 
   tooth = input<Tooth>({ number: '11', treatments: [] });
@@ -45,7 +89,9 @@ export class ToothTreatmentsModal implements OnInit {
   hideHistory = true;
 
   treatmentsForm = new FormArray<FormGroup<ToothTreatmentForm>>([]);
-  mainForm = new FormGroup<{ treatments: FormArray<FormGroup<ToothTreatmentForm>> }>({ treatments: this.treatmentsForm });
+  mainForm = new FormGroup<{
+    treatments: FormArray<FormGroup<ToothTreatmentForm>>;
+  }>({ treatments: this.treatmentsForm });
 
   /**
    * Se guarda de forma temporal el formulario original
@@ -56,7 +102,7 @@ export class ToothTreatmentsModal implements OnInit {
   treatmentSearchTerm?: string;
   treatmentSuggestions?: Treatment[];
 
-  teeth: Signal<{ number: string, disabled: boolean }[]>;
+  teeth: Signal<{ number: string; disabled: boolean }[]>;
 
   @ViewChild('historyBar') historyBar?: ElementRef<HTMLDivElement>;
 
@@ -66,9 +112,10 @@ export class ToothTreatmentsModal implements OnInit {
 
   constructor() {
     this.teeth = computed(() =>
-      TeethNumbers.map((toothNumber) =>
-        ({ number: toothNumber, disabled: toothNumber == this.tooth().number })
-      )
+      TeethNumbers.map((toothNumber) => ({
+        number: toothNumber,
+        disabled: toothNumber == this.tooth().number,
+      }))
     );
 
     // this.bsModalRef.onHidden.subscribe(() => {
@@ -83,13 +130,16 @@ export class ToothTreatmentsModal implements OnInit {
   onOpenHistory() {
     this.loadHistory().subscribe(() => {
       setTimeout(() => {
-        this.historyBar?.nativeElement.scrollTo({ left: this.historyBar.nativeElement.scrollWidth });
+        this.historyBar?.nativeElement.scrollTo({
+          left: this.historyBar.nativeElement.scrollWidth,
+        });
       }, 0);
     });
   }
 
   loadHistory() {
-    if (this.toothHistory && this.toothHistory.length) return of(this.toothHistory);
+    if (this.toothHistory && this.toothHistory.length)
+      return of(this.toothHistory);
 
     const client = this.client();
 
@@ -107,19 +157,45 @@ export class ToothTreatmentsModal implements OnInit {
           ids.add(odontogram.id);
         }
 
-        return this._toothTreatmentServ.getList({ odontogram: Array.from(ids), teeth: [this.tooth().number] }).pipe(
-          map(historicalTreatments => [historicalOdontograms, historicalTreatments as WithRequired<ToothTreatment, 'odontogram'>[]] as const),
-        );
+        return this._toothTreatmentServ
+          .getList({
+            odontogram: Array.from(ids),
+            teeth: [this.tooth().number],
+          })
+          .pipe(
+            map(
+              (historicalTreatments) =>
+                [
+                  historicalOdontograms,
+                  historicalTreatments as WithRequired<
+                    ToothTreatment,
+                    'odontogram'
+                  >[],
+                ] as const
+            )
+          );
       }),
       map(([historicalOdontograms, historicalTreatments]) => {
-        const treatmentsByOdontogram = new Map<Odontogram, WithRequired<ToothTreatment, 'odontogram'>[]>();
+        const treatmentsByOdontogram = new Map<
+          Odontogram,
+          WithRequired<ToothTreatment, 'odontogram'>[]
+        >();
 
-        const sortedOdontograms = historicalOdontograms.sort((a, b) => (a.effectiveDate?.getTime() || a.createdAt?.getTime() || 0) - (b.effectiveDate?.getTime() || b.createdAt?.getTime() || 0));
+        const sortedOdontograms = historicalOdontograms.sort(
+          (a, b) =>
+            (a.effectiveDate?.getTime() || a.createdAt?.getTime() || 0) -
+            (b.effectiveDate?.getTime() || b.createdAt?.getTime() || 0)
+        );
 
         for (const odontogram of sortedOdontograms) {
-          const treatments = historicalTreatments.filter(treatment => treatment.odontogram === odontogram.id);
+          const treatments = historicalTreatments.filter(
+            (treatment) => treatment.odontogram === odontogram.id
+          );
 
-          if (treatments.length || odontogram.id === this.tooth()?.odontogram?.id) {
+          if (
+            treatments.length ||
+            odontogram.id === this.tooth()?.odontogram?.id
+          ) {
             treatmentsByOdontogram.set(odontogram, treatments);
           }
         }
@@ -127,11 +203,18 @@ export class ToothTreatmentsModal implements OnInit {
         return treatmentsByOdontogram;
       }),
       map((treatmentsByOdontogram) => {
-        console.log(treatmentsByOdontogram)
+        console.log(treatmentsByOdontogram);
         const inputTooth = this.tooth();
 
-        for (const [odontogram, treatments] of treatmentsByOdontogram.entries()) {
-          this.toothHistory.push({ odontogram, number: inputTooth.number, treatments });
+        for (const [
+          odontogram,
+          treatments,
+        ] of treatmentsByOdontogram.entries()) {
+          this.toothHistory.push({
+            odontogram,
+            number: inputTooth.number,
+            treatments,
+          });
         }
 
         if (!inputTooth.odontogram) {
@@ -140,14 +223,17 @@ export class ToothTreatmentsModal implements OnInit {
 
         return this.toothHistory;
       })
-    )
+    );
   }
 
   selectTooth(tooth: Tooth) {
     const inputTooth = this.tooth();
 
     // If a tooth from the history is selected, save the current form state to restore it later
-    if (this.selectedTooth?.odontogram === inputTooth.odontogram && tooth.odontogram !== inputTooth.odontogram) {
+    if (
+      this.selectedTooth?.odontogram === inputTooth.odontogram &&
+      tooth.odontogram !== inputTooth.odontogram
+    ) {
       this.tempTreatments = this.treatmentsForm.controls;
     }
 
@@ -158,7 +244,9 @@ export class ToothTreatmentsModal implements OnInit {
       this.treatmentsForm.enable();
       delete this.tempTreatments;
     } else {
-      tooth.treatments?.forEach((treatment) => this.addToothTreatment(treatment));
+      tooth.treatments?.forEach((treatment) =>
+        this.addToothTreatment(treatment)
+      );
     }
 
     this.selectedTooth = tooth;
@@ -169,9 +257,9 @@ export class ToothTreatmentsModal implements OnInit {
     }
   }
 
-
   searchTreatment(searchTerm: string) {
-    this._treatmentServ.getList({ searchTerm: searchTerm, limit: 10 })
+    this._treatmentServ
+      .getList({ searchTerm: searchTerm, limit: 10 })
       .subscribe((treatments: Treatment[]) => {
         this.treatmentSuggestions = treatments;
       });
@@ -189,7 +277,7 @@ export class ToothTreatmentsModal implements OnInit {
       zones: [],
       status: ToothTreatmentStatus.PENDING,
       type: treatment.treatmentType || TreatmentType.STANDARD,
-      groupTeeth: true
+      groupTeeth: true,
     });
 
     this.treatmentSearchTerm = '';
@@ -197,19 +285,32 @@ export class ToothTreatmentsModal implements OnInit {
 
   addToothTreatment(toothTreatment: ToothTreatment) {
     const group = new UntypedFormGroup({
-      odontogram: new FormControl<string | undefined>(toothTreatment.odontogram),
+      odontogram: new FormControl<string | undefined>(
+        toothTreatment.odontogram
+      ),
       treatment: new FormControl<string | undefined>(toothTreatment.treatment),
       groupTeeth: new FormControl<boolean>(toothTreatment.groupTeeth ?? true),
-      teeth: new FormControl<(typeof TeethNumbers[number])[]>([...toothTreatment.teeth]),
+      teeth: new FormControl<(typeof TeethNumbers)[number][]>([
+        ...toothTreatment.teeth,
+      ]),
       zones: new FormControl<ToothZones[]>([...toothTreatment.zones]),
-      status: new FormControl<ToothTreatmentStatus>(toothTreatment.status ?? ToothTreatmentStatus.PENDING),
-      type: new FormControl<TreatmentType>(toothTreatment.type ?? TreatmentType.STANDARD),
-      additionalInformation: new FormControl<string>(toothTreatment.additionalInformation ?? ''),
+      status: new FormControl<ToothTreatmentStatus>(
+        toothTreatment.status ?? ToothTreatmentStatus.PENDING
+      ),
+      type: new FormControl<TreatmentType>(
+        toothTreatment.type ?? TreatmentType.STANDARD
+      ),
+      additionalInformation: new FormControl<string>(
+        toothTreatment.additionalInformation ?? ''
+      ),
     });
 
     this.treatmentsForm.push(group);
 
-    if (toothTreatment.type === TreatmentType.EXTRACTION || toothTreatment.type === TreatmentType.IMPLANT) {
+    if (
+      toothTreatment.type === TreatmentType.EXTRACTION ||
+      toothTreatment.type === TreatmentType.IMPLANT
+    ) {
       this.toggleZone(group, ToothZones.ROOT);
     }
 
@@ -222,9 +323,9 @@ export class ToothTreatmentsModal implements OnInit {
     const index = zones.findIndex((currZone) => currZone === zone);
 
     if (index === -1) {
-      zones.push(zone)
+      zones.push(zone);
     } else {
-      zones.splice(index, 1)
+      zones.splice(index, 1);
     }
   }
 
