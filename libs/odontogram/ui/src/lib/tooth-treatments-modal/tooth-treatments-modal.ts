@@ -127,13 +127,14 @@ export class ToothTreatmentsModal implements OnInit {
         return treatmentsByOdontogram;
       }),
       map((treatmentsByOdontogram) => {
+        console.log(treatmentsByOdontogram)
         const inputTooth = this.tooth();
 
         for (const [odontogram, treatments] of treatmentsByOdontogram.entries()) {
           this.toothHistory.push({ odontogram, number: inputTooth.number, treatments });
         }
 
-        if (!inputTooth.treatments || !inputTooth.treatments.length || !inputTooth.odontogram) {
+        if (!inputTooth.odontogram) {
           this.toothHistory.push(structuredClone(inputTooth));
         }
 

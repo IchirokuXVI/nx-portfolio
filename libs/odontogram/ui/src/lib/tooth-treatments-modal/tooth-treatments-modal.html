@@ -1,7 +1,7 @@
-<div>
-  <h4>Tooth {{tooth().number}}</h4>
-</div>
 <div class="main-container">
+  <div class="tooth-header">
+    <h4>Tooth {{tooth().number}}</h4>
+  </div>
   @if (client()) {
   <mat-expansion-panel class="history-container" (opened)="onOpenHistory()">
     <mat-expansion-panel-header>
@@ -31,7 +31,7 @@
     </div>
   </mat-expansion-panel>
   }
-  <!-- <div class="form-container">
+  <div class="form-container">
     @if (!treatmentsForm.disabled) {
     <mat-form-field>
       <mat-label>Treatment</mat-label>
@@ -132,5 +132,5 @@
       }
     </div>
     }
-  </div> -->
+  </div>
 </div>

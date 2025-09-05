@@ -1,9 +1,18 @@
 @use '../common-variables.scss' as common;
 
+
 .main-container {
   display: flex;
   flex-direction: column;
   gap: 0.5em;
+
+  .tooth-header {
+    display: flex;
+    flex-direction: row;
+    margin: 0 auto;
+    column-gap: 1em;
+    padding: 0.5em 0;
+  }
 
   .history-container {
     display: flex;
@@ -16,6 +25,7 @@
     .history-bar {
       flex: 1 0 auto;
       width: 100%;
+      min-width: 0;
 
       display: flex;
       flex-direction: row;
