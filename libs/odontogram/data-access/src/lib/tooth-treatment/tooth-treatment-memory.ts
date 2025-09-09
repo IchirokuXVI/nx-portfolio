@@ -1,14 +1,14 @@
 import { Injectable } from '@angular/core';
-import { InMemoryFilter, Optional, WithRequired } from '@portfolio/shared/util';
 import { ToothTreatment } from '@portfolio/odontogram/models';
+import { NotFoundResourceError } from '@portfolio/shared/data-access';
+import { InMemoryFilter, Optional, WithRequired } from '@portfolio/shared/util';
+import { Observable, of, throwError } from 'rxjs';
+import { v4 as uuidv4 } from 'uuid';
+import { TOOTH_TREATMENTS } from './static-tooth-treatments-data';
 import {
   ToothTreatmentGetListFilter,
   ToothTreatmentServiceI,
 } from './tooth-treatment-service';
-import { TOOTH_TREATMENTS } from './static-tooth-treatments-data';
-import { NotFoundResourceError } from '@portfolio/shared/data-access';
-import { Observable, of, throwError } from 'rxjs';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable({ providedIn: 'root' })
 export class ToothTreatmentMemory implements ToothTreatmentServiceI {

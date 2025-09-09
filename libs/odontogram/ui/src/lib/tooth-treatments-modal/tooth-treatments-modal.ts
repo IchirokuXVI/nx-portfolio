@@ -1,3 +1,4 @@
+import { CommonModule } from '@angular/common';
 import {
   Component,
   computed,
@@ -9,17 +10,6 @@ import {
   Signal,
   ViewChild,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import {
-  Odontogram,
-  TeethNumbers,
-  Tooth,
-  ToothTreatment,
-  ToothZones,
-  Treatment,
-  ToothTreatmentStatus,
-  TreatmentType,
-} from '@portfolio/odontogram/models';
 import {
   FormArray,
   FormControl,
@@ -28,19 +18,29 @@ import {
   ReactiveFormsModule,
   UntypedFormGroup,
 } from '@angular/forms';
-import { map, of, switchMap } from 'rxjs';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatSelectModule } from '@angular/material/select';
 import {
   OdontogramMemory,
   ToothTreatmentMemory,
   TreatmentMemory,
 } from '@portfolio/odontogram/data-access';
+import {
+  Odontogram,
+  TeethNumbers,
+  Tooth,
+  ToothTreatment,
+  ToothTreatmentStatus,
+  ToothZones,
+  Treatment,
+  TreatmentType,
+} from '@portfolio/odontogram/models';
 import { WithRequired } from '@portfolio/shared/util';
-import { MatExpansionModule } from '@angular/material/expansion';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatAutocompleteModule } from '@angular/material/autocomplete';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { MatSelectModule } from '@angular/material/select';
+import { map, of, switchMap } from 'rxjs';
 import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
 import {
   mapFormToToothTreatment,

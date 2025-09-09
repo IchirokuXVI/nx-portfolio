@@ -33,14 +33,14 @@
     </div>
     <section class="projects">
       @for (project of projects(); track $index) {
-      <article class="projects__project">
-        <h2 class="project__title">
-          <a [routerLink]="[project.appLink]">{{ project.name }}</a>
-          <a [href]="project.repoLink" target="_blank">
-            <img [src]="githubIcon | async" alt="GitHub" />
-          </a>
-        </h2>
-        <!-- <div class="project__areas">
+        <article class="projects__project">
+          <h2 class="project__title">
+            <a [routerLink]="[project.appLink]">{{ project.name }}</a>
+            <a [href]="project.repoLink" target="_blank">
+              <img [src]="githubIcon | async" alt="GitHub" />
+            </a>
+          </h2>
+          <!-- <div class="project__areas">
           @for (area of project.areas; track $index) {
           <div class="project__area">
             <meter class="area__meter" min="0" max="100" optimum="100" low="100" [value]="area.progress">
@@ -51,19 +51,23 @@
           </div>
           }
         </div> -->
-        <a class="project__img" [routerLink]="[project.appLink]">
-          @if (project.image) {
-          <img
-            [src]="typeof project.image === 'string' ? project.image : project.image | async"
-            alt="Odontogram Project"
-          />
-          }
-        </a>
-        <div class="project__description_container">
-          <p class="project__description">{{ project.description }}</p>
-          <a [routerLink]="[project.appLink]">View project</a>
-        </div>
-      </article>
+          <a [routerLink]="[project.appLink]" class="project__img">
+            @if (project.image) {
+              <img
+                [src]="
+                  typeof project.image === 'string'
+                    ? project.image
+                    : (project.image | async)
+                "
+                alt="Odontogram Project"
+              />
+            }
+          </a>
+          <div class="project__description_container">
+            <p class="project__description">{{ project.description }}</p>
+            <a [routerLink]="[project.appLink]">View project</a>
+          </div>
+        </article>
       }
     </section>
   </main>

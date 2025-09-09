@@ -1,4 +1,4 @@
-import { ToothTreatment, TeethNumbers } from '@portfolio/odontogram/models';
+import { TeethNumbers, ToothTreatment } from '@portfolio/odontogram/models';
 import { Optional, WithRequired } from '@portfolio/shared/util';
 import { Observable } from 'rxjs';
 

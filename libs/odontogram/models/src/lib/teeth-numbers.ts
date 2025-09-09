@@ -53,7 +53,10 @@ export const TeethNumbers = [
   '85',
 ] as const;
 
-export const TeethNumbersTranslationKey = TeethNumbers.reduce((acc, number) => {
-  acc[number] = `odontogram.tooth.${number}`;
-  return acc;
-}, {} as { [key in (typeof TeethNumbers)[number]]: string });
+export const TeethNumbersTranslationKey = TeethNumbers.reduce(
+  (acc, number) => {
+    acc[number] = `odontogram.tooth.${number}`;
+    return acc;
+  },
+  {} as { [key in (typeof TeethNumbers)[number]]: string }
+);

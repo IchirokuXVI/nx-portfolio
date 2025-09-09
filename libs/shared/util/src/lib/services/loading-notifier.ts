@@ -2,10 +2,10 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 import {
   distinctUntilChanged,
-  map,
-  finalize,
-  shareReplay,
   filter,
+  finalize,
+  map,
+  shareReplay,
   takeUntil,
 } from 'rxjs/operators';
 

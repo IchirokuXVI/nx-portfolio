@@ -1,10 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { OdontogramSectorsView } from './odontogram-sectors-view';
 import {
   ToothTreatmentStatus,
   ToothZones,
   TreatmentType,
 } from '@portfolio/odontogram/models';
+import { OdontogramSectorsView } from './odontogram-sectors-view';
 
 describe('OdontogramSectorsView', () => {
   let component: OdontogramSectorsView;

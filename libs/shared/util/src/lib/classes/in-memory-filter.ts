@@ -1,8 +1,8 @@
 import deepEqual from 'deep-equal';
 import { findField } from '../functions/findField';
+import { multiSort } from '../functions/multisort';
 import { RecursivePaths } from '../types/recursive-paths';
 import { WithRequired } from '../types/with-required';
-import { multiSort } from '../functions/multisort';
 
 interface FilterConfig<DataType, FilterType> {
   check: CheckFunction<DataType, FilterType>;

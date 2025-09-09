@@ -1,29 +1,24 @@
+import { CommonModule } from '@angular/common';
 import {
   Component,
   computed,
   effect,
   inject,
   input,
-  Input,
   model,
-  OnInit,
   output,
-  Output,
   Signal,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import {
-  Tooth,
-  Odontogram,
-  ToothTreatment,
-  TeethNumbers,
-} from '@portfolio/odontogram/models';
-import { Product } from '@portfolio/shared/models';
-import { BehaviorSubject, filter, Observable, Subject } from 'rxjs';
 import { FormsModule } from '@angular/forms';
+import {
+  Odontogram,
+  TeethNumbers,
+  Tooth,
+  ToothTreatment,
+} from '@portfolio/odontogram/models';
+import { LoadingIcon } from '@portfolio/shared/ui';
 import { LoadingNotifier } from '@portfolio/shared/util';
 import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
-import { LoadingIcon } from '@portfolio/shared/ui';
 
 export const loadable = ['teeth', 'image'] as const;
 

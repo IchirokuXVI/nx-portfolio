@@ -1,15 +1,15 @@
 import { TestBed } from '@angular/core/testing';
-import { runSharedTreatmentServiceTests } from './tooth-treatment-service.shared-spec';
-import { NotFoundResourceError } from '@portfolio/shared/data-access';
-import { firstValueFrom } from 'rxjs';
-import { ToothTreatmentMemory } from './tooth-treatment-memory';
 import {
   ToothTreatment,
-  ToothZones,
   ToothTreatmentStatus,
+  ToothZones,
   TreatmentType,
 } from '@portfolio/odontogram/models';
+import { NotFoundResourceError } from '@portfolio/shared/data-access';
 import { Optional } from '@portfolio/shared/util';
+import { firstValueFrom } from 'rxjs';
+import { ToothTreatmentMemory } from './tooth-treatment-memory';
+import { runSharedTreatmentServiceTests } from './tooth-treatment-service.shared-spec';
 
 function serviceFactory() {
   TestBed.configureTestingModule({

@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { LandingWrapper } from './landing-wrapper';
 import { provideRouter } from '@angular/router';
+import { LandingWrapper } from './landing-wrapper';
 
 describe('LandingWrapper', () => {
   let component: LandingWrapper;

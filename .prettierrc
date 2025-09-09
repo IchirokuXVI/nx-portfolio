@@ -19,7 +19,7 @@
   "attributeSort": "ASC",
   "overrides": [
     {
-      "files": ["*.component.html"],
+      "files": ["*.html"],
       "options": { "parser": "angular" }
     }
   ]

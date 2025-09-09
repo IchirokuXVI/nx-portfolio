@@ -1,52 +1,64 @@
 @if (showPediatricCheckbox()) {
-<div class="showPediatric">
-  <input
-    type="checkbox"
-    id="showPediatric"
-    [ngModel]="showPediatricSectors"
-    (ngModelChange)="switchPediatricSectors($event)"
-  />
-  <label class="pl-2" for="showPediatric">Show pediatric odontogram</label>
-</div>
+  <div class="showPediatric">
+    <input
+      (ngModelChange)="switchPediatricSectors($event)"
+      [ngModel]="showPediatricSectors"
+      id="showPediatric"
+      type="checkbox"
+    />
+    <label class="pl-2" for="showPediatric">Show pediatric odontogram</label>
+  </div>
 }
 @let loadingImages = (loadingNotf.loadings$.image | async) ?? true;
 @let loading = (loadingNotf.loadings$.teeth | async) || loadingImages;
-<div class="odontogram" [class.loading]="loadingImages">
-    @if (loading || (!treatments && odontogram() !== undefined)) {
+<div [class.loading]="loadingImages" class="odontogram">
+  @if (loading || (!treatments && odontogram() !== undefined)) {
     <div class="super-bg">
       @if (loading) {
-      <div>
-        <lib-loading-icon
-          size="xl"
-          [sizeMultiplier]="3"
-          thickness="thick"
-        ></lib-loading-icon>
-      </div>
+        <div>
+          <lib-loading-icon
+            [sizeMultiplier]="3"
+            size="xl"
+            thickness="thick"
+          ></lib-loading-icon>
+        </div>
       }
     </div>
-    }
-  @for (numTeeth of sectors; track $index; let sector=$index) {
-  <div
-    [class.hide-while-loading]="loading"
-    class="sector sector-{{sector}}"
-    [ngClass]="{ '0': 'upper-left', '1': 'upper-right', '2': 'bottom-right', '3': 'bottom-left' }[sector % 4]"
-  >
-    @for(item of [].constructor(maxTeethNumber); track $index; let tIndex = $index) {
-      @let toothNumber = (sector + 1) * 10 + tIndex + 1;
-      @let _teeth = teeth();
-      @let tooth = _teeth[toothNumber];
-      @let displayed = tooth && (!displayedSectors() || displayedSectors().includes(sector));
-      <div class="tooth-component-container" [class.invisible]="!displayed">
-        @if (displayed) {
-        <lib-odontogram-single-tooth-image
-          [tooth]="tooth"
-          (selected)="selectTooth(tooth)"
-          (startLoadingImages)="loadingNotf.startLoading('image')"
-          (completeLoadingImages)="loadingNotf.completeLoading('image')"
-        ></lib-odontogram-single-tooth-image>
-        }
-      </div>
-    }
-  </div>
+  }
+  @for (numTeeth of sectors; track $index; let sector = $index) {
+    <div
+      [class.hide-while-loading]="loading"
+      [ngClass]="
+        {
+          '0': 'upper-left',
+          '1': 'upper-right',
+          '2': 'bottom-right',
+          '3': 'bottom-left',
+        }[sector % 4]
+      "
+      class="sector sector-{{ sector }}"
+    >
+      @for (
+        item of [].constructor(maxTeethNumber);
+        track $index;
+        let tIndex = $index
+      ) {
+        @let toothNumber = (sector + 1) * 10 + tIndex + 1;
+        @let _teeth = teeth();
+        @let tooth = _teeth[toothNumber];
+        @let displayed =
+          tooth && (!displayedSectors() || displayedSectors().includes(sector));
+        <div [class.invisible]="!displayed" class="tooth-component-container">
+          @if (displayed) {
+            <lib-odontogram-single-tooth-image
+              (completeLoadingImages)="loadingNotf.completeLoading('image')"
+              (selected)="selectTooth(tooth)"
+              (startLoadingImages)="loadingNotf.startLoading('image')"
+              [tooth]="tooth"
+            ></lib-odontogram-single-tooth-image>
+          }
+        </div>
+      }
+    </div>
   }
 </div>

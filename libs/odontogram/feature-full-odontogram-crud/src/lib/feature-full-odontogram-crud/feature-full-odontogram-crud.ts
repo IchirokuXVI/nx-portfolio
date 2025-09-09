@@ -1,9 +1,6 @@
-import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import {
-  OdontogramSectorsView,
-  ToothTreatmentsModal,
-} from '@portfolio/odontogram/ui';
+import { Component, inject, OnInit } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import {
   OdontogramMemory,
   ToothTreatmentMemory,
@@ -13,7 +10,10 @@ import {
   Tooth,
   ToothTreatment,
 } from '@portfolio/odontogram/models';
-import { MatDialog } from '@angular/material/dialog';
+import {
+  OdontogramSectorsView,
+  ToothTreatmentsModal,
+} from '@portfolio/odontogram/ui';
 
 @Component({
   selector: 'lib-odontogram-feature-full-odontogram-crud',

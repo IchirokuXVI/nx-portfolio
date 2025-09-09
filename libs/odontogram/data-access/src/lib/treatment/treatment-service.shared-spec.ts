@@ -1,12 +1,12 @@
-import { Observable } from 'rxjs';
-import { TreatmentServiceI } from './treatment-service';
 import { beforeEach, describe, expect, it } from '@jest/globals';
 import {
   ToothZones,
-  TreatmentType,
   Treatment,
+  TreatmentType,
 } from '@portfolio/odontogram/models';
 import { Optional } from '@portfolio/shared/util';
+import { Observable } from 'rxjs';
+import { TreatmentServiceI } from './treatment-service';
 
 export function runSharedTreatmentServiceTests(
   serviceFactory: () => TreatmentServiceI

@@ -1,9 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { runSharedOdontogramServiceTests } from './odontogram-service.shared-spec';
+import { Odontogram } from '@portfolio/odontogram/models';
 import { NotFoundResourceError } from '@portfolio/shared/data-access';
 import { firstValueFrom } from 'rxjs';
 import { OdontogramMemory } from './odontogram-memory';
-import { Odontogram } from '@portfolio/odontogram/models';
+import { runSharedOdontogramServiceTests } from './odontogram-service.shared-spec';
 
 function serviceFactory() {
   TestBed.configureTestingModule({

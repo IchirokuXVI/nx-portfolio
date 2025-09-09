@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
+import { NotFoundResourceError } from '@portfolio/shared/data-access';
+import { of } from 'rxjs';
 import { ProjectServiceI } from './project-service';
 import { PROJECTS } from './static-projects-data';
-import { of } from 'rxjs';
-import { NotFoundResourceError } from '@portfolio/shared/data-access';
 
 @Injectable({
   providedIn: 'root',

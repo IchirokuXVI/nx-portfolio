@@ -1,6 +1,6 @@
+import { beforeEach, describe, expect, it } from '@jest/globals';
 import { Observable } from 'rxjs';
 import { OdontogramServiceI } from './odontogram-service';
-import { beforeEach, describe, expect, it } from '@jest/globals';
 
 export function runSharedOdontogramServiceTests(
   serviceFactory: () => OdontogramServiceI

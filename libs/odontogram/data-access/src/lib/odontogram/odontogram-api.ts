@@ -1,17 +1,17 @@
-import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { inject, Injectable } from '@angular/core';
 import { Odontogram } from '@portfolio/odontogram/models';
 import {
   ApiConsumer,
   NotFoundResourceError,
   OwnApiUrlResolver,
 } from '@portfolio/shared/data-access';
+import { catchError } from 'rxjs';
+import { throwError } from 'rxjs/internal/observable/throwError';
 import {
   OdontogramGetListFilter,
   OdontogramServiceI,
 } from './odontogram-service';
-import { throwError } from 'rxjs/internal/observable/throwError';
-import { catchError } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class OdontogramApi extends ApiConsumer implements OdontogramServiceI {

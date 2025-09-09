@@ -1,28 +1,26 @@
+import { CommonModule } from '@angular/common';
 import {
   AfterViewInit,
   Component,
+  effect,
   ElementRef,
   inject,
   Input,
+  input,
   OnDestroy,
   Output,
   QueryList,
   ViewChildren,
-  OnInit,
-  input,
-  computed,
-  effect,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { LoadingNotifier, NgLetDirective } from '@portfolio/shared/util';
-import { Subject } from 'rxjs';
 import {
   Tooth,
   ToothTreatment,
-  ToothZones,
   ToothTreatmentStatus,
+  ToothZones,
   TreatmentType,
 } from '@portfolio/odontogram/models';
+import { LoadingNotifier, NgLetDirective } from '@portfolio/shared/util';
+import { Subject } from 'rxjs';
 import { ToothImageLoader } from '../services/tooth-image-loader';
 
 const loadable = ['image'] as const;

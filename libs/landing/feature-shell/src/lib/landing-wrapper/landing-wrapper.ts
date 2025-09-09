@@ -1,8 +1,8 @@
-import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Landing } from '@portfolio/landing/ui';
+import { Component, inject, OnInit } from '@angular/core';
 import { ProjectMemory } from '@portfolio/landing/data-access';
 import { Project } from '@portfolio/landing/models';
+import { Landing } from '@portfolio/landing/ui';
 
 @Component({
   selector: 'lib-landing-wrapper',

@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { SingleToothImage } from './single-tooth-image';
 import { Tooth } from '@portfolio/odontogram/models';
+import { SingleToothImage } from './single-tooth-image';
 
 describe('SingleToothImage', () => {
   let component: SingleToothImage;

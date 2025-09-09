@@ -1,5 +1,5 @@
-import { TreatmentType } from './treatment-type';
 import { ToothZones } from './tooth-zones';
+import { TreatmentType } from './treatment-type';
 
 export interface Treatment {
   id: string;

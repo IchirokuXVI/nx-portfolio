@@ -1,7 +1,7 @@
 import {
   ToothZones,
-  TreatmentType,
   Treatment,
+  TreatmentType,
 } from '@portfolio/odontogram/models';
 import { WithRequired } from '@portfolio/shared/util';
 
