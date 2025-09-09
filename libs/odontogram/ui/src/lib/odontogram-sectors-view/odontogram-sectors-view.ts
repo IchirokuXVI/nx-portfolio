@@ -30,12 +30,7 @@ export const loadable = ['teeth', 'image'] as const;
 @Component({
   selector: 'lib-odontogram-sectors-view',
   standalone: true,
-  imports: [
-    CommonModule,
-    FormsModule,
-    SingleToothImage,
-    LoadingIcon,
-  ],
+  imports: [CommonModule, FormsModule, SingleToothImage, LoadingIcon],
   templateUrl: './odontogram-sectors-view.html',
   styleUrl: './odontogram-sectors-view.scss',
   providers: [
