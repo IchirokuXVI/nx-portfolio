@@ -31,20 +31,21 @@
     class="sector sector-{{sector}}"
     [ngClass]="{ '0': 'upper-left', '1': 'upper-right', '2': 'bottom-right', '3': 'bottom-left' }[sector % 4]"
   >
-    @for(item of [].constructor(maxTeethNumber); track $index; let tIndex =
-    $index) { @let toothNumber = (sector + 1) * 10 + tIndex + 1; @let _teeth =
-    teeth(); @let tooth = _teeth[toothNumber]; @let displayed = tooth &&
-    (!displayedSectors() || displayedSectors().includes(sector));
-    <div class="tooth-component-container" [class.invisible]="!displayed">
-      @if (displayed) {
-      <lib-odontogram-single-tooth-image
-        [tooth]="tooth"
-        (selected)="selectTooth(tooth)"
-        (startLoadingImages)="loadingNotf.startLoading('image')"
-        (completeLoadingImages)="loadingNotf.completeLoading('image')"
-      ></lib-odontogram-single-tooth-image>
-      }
-    </div>
+    @for(item of [].constructor(maxTeethNumber); track $index; let tIndex = $index) {
+      @let toothNumber = (sector + 1) * 10 + tIndex + 1;
+      @let _teeth = teeth();
+      @let tooth = _teeth[toothNumber];
+      @let displayed = tooth && (!displayedSectors() || displayedSectors().includes(sector));
+      <div class="tooth-component-container" [class.invisible]="!displayed">
+        @if (displayed) {
+        <lib-odontogram-single-tooth-image
+          [tooth]="tooth"
+          (selected)="selectTooth(tooth)"
+          (startLoadingImages)="loadingNotf.startLoading('image')"
+          (completeLoadingImages)="loadingNotf.completeLoading('image')"
+        ></lib-odontogram-single-tooth-image>
+        }
+      </div>
     }
   </div>
   }

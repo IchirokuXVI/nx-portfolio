@@ -16,5 +16,11 @@
     "$DEFAULT",
     "^data-"
   ],
-  "attributeSort": "ASC"
+  "attributeSort": "ASC",
+  "overrides": [
+    {
+      "files": ["*.component.html"],
+      "options": { "parser": "angular" }
+    }
+  ]
 }
