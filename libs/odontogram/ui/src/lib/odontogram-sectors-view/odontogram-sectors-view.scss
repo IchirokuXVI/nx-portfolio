@@ -12,6 +12,12 @@
   width: 100%;
 }
 
+.hide-while-loading {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .odontogram {
   grid-area: odontogram;
   user-select: none;

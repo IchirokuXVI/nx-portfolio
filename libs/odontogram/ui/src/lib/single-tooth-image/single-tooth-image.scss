@@ -213,11 +213,16 @@
 
     div {
       position: absolute;
-      // Borders appeared between each diamond, adding 1px to width and height fixes it
-      width: calc(50% + 1px);
-      height: calc(50% + 1px);
+      width: 50%;
+      height: 50%;
       // Rotate to turn square into diamond
       transform: rotate(45deg);
+
+      &.status-none {
+        // Default border to hide a little imperfection between each triangle
+        // when they are white (no status) over a dark background
+        border: #{$crownBorderSize + $crownBorderUnit} solid #fff;
+      }
 
       // Makes a square of 50% of the container size
       // Positions it right in the middle and rotates it 45 degrees to make a diamond
@@ -246,6 +251,8 @@
         top: -10%;
 
         @include applyBorder(bottom);
+
+        // This border needs to be a bit bigger to cover the gap
         border-bottom-width: ($crownBorderSize + 1) + $crownBorderUnit !important;
 
         @include showNextBorder(left);

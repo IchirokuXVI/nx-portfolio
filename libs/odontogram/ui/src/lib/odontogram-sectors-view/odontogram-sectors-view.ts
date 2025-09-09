@@ -21,7 +21,6 @@ import {
 import { Product } from '@portfolio/shared/models';
 import { BehaviorSubject, filter, Observable, Subject } from 'rxjs';
 import { FormsModule } from '@angular/forms';
-import { NgLetDirective } from '@portfolio/shared/util';
 import { LoadingNotifier } from '@portfolio/shared/util';
 import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
 import { LoadingIcon } from '@portfolio/shared/ui';
@@ -34,7 +33,6 @@ export const loadable = ['teeth', 'image'] as const;
   imports: [
     CommonModule,
     FormsModule,
-    NgLetDirective,
     SingleToothImage,
     LoadingIcon,
   ],
@@ -64,7 +62,7 @@ export class OdontogramSectorsView {
   treatments = model.required<ToothTreatment[]>();
 
   showPediatricCheckbox = input(false);
-  showPediatricSectors = model(false);
+  showPediatricSectors = model(true);
   displayedSectors: Signal<number[]>;
 
   toothSelected = output<Tooth>();

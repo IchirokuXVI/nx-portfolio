@@ -9,14 +9,9 @@
   <label class="pl-2" for="showPediatric">Show pediatric odontogram</label>
 </div>
 }
-<div
-  class="odontogram"
-  [class.loading]="loadingImages"
-  *ngLet="(loadingNotf.loadings$.image | async) ?? true as loadingImages"
->
-  <ng-container
-    *ngLet="(loadingNotf.loadings$.teeth | async) || loadingImages as loading"
-  >
+@let loadingImages = (loadingNotf.loadings$.image | async) ?? true;
+@let loading = (loadingNotf.loadings$.teeth | async) || loadingImages;
+<div class="odontogram" [class.loading]="loadingImages">
     @if (loading || (!treatments && odontogram() !== undefined)) {
     <div class="super-bg">
       @if (loading) {
@@ -30,9 +25,9 @@
       }
     </div>
     }
-  </ng-container>
   @for (numTeeth of sectors; track $index; let sector=$index) {
   <div
+    [class.hide-while-loading]="loading"
     class="sector sector-{{sector}}"
     [ngClass]="{ '0': 'upper-left', '1': 'upper-right', '2': 'bottom-right', '3': 'bottom-left' }[sector % 4]"
   >
