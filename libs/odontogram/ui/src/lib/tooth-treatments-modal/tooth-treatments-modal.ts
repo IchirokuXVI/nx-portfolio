@@ -5,6 +5,7 @@ import {
   ElementRef,
   inject,
   input,
+  model,
   OnInit,
   output,
   Signal,
@@ -23,6 +24,7 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import {
   OdontogramMemory,
@@ -60,6 +62,7 @@ import {
     MatAutocompleteModule,
     MatButtonToggleModule,
     MatSelectModule,
+    MatInputModule,
   ],
   templateUrl: './tooth-treatments-modal.html',
   styleUrls: ['./tooth-treatments-modal.scss'],
@@ -99,7 +102,7 @@ export class ToothTreatmentsModal implements OnInit {
    */
   tempTreatments?: FormGroup<ToothTreatmentForm>[];
 
-  treatmentSearchTerm?: string;
+  treatmentSearchTerm = model<string | Treatment | null>();
   treatmentSuggestions?: Treatment[];
 
   teeth: Signal<{ number: string; disabled: boolean }[]>;
@@ -118,6 +121,13 @@ export class ToothTreatmentsModal implements OnInit {
       }))
     );
 
+    // Filters the treatment suggestions as the user types
+    this.treatmentSearchTerm.subscribe((term) => {
+      if (typeof term === 'string' || term === null) {
+        this.searchTreatment(term);
+      }
+    });
+
     // this.bsModalRef.onHidden.subscribe(() => {
     //   this.savedTreatments.complete();
     // });
@@ -125,6 +135,11 @@ export class ToothTreatmentsModal implements OnInit {
 
   ngOnInit() {
     this.selectTooth(this.tooth());
+
+    // Search for initial treatments to show suggestions
+    // ahead of time, preventing the user from having to wait
+    // for the first loading
+    this.treatmentSearchTerm.set(null);
   }
 
   onOpenHistory() {
@@ -257,12 +272,22 @@ export class ToothTreatmentsModal implements OnInit {
     }
   }
 
-  searchTreatment(searchTerm: string) {
+  searchTreatment(searchTerm?: string | null | RegExp) {
+    let regexSearchTerm;
+
+    if (searchTerm != null) {
+      regexSearchTerm = new RegExp(searchTerm, 'i');
+    }
+
     this._treatmentServ
-      .getList({ searchTerm: searchTerm, limit: 10 })
+      .getList({ searchTerm: regexSearchTerm, limit: 10 })
       .subscribe((treatments: Treatment[]) => {
         this.treatmentSuggestions = treatments;
       });
+  }
+
+  displayTreatmentOption(treatment: Treatment) {
+    return treatment?.name || '';
   }
 
   addTreatment(treatment: Treatment) {
@@ -279,8 +304,6 @@ export class ToothTreatmentsModal implements OnInit {
       type: treatment.treatmentType || TreatmentType.STANDARD,
       groupTeeth: true,
     });
-
-    this.treatmentSearchTerm = '';
   }
 
   addToothTreatment(toothTreatment: ToothTreatment) {

@@ -36,10 +36,12 @@ export class TreatmentMemory implements TreatmentServiceI {
   }
 
   getList(filter?: TreatmentGetListFilter) {
+    const { sort, limit, ...actualFilter } = filter || {};
+
     return of(
       this._inMemoryFilter.applyFilter(
         Array.from(this._treatments.values()),
-        filter,
+        actualFilter,
         { sort: filter?.sort, limit: filter?.limit }
       )
     );

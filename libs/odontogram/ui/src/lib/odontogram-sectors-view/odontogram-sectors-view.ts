@@ -52,7 +52,7 @@ export class OdontogramSectorsView {
   treatments = model.required<ToothTreatment[]>();
 
   showPediatricCheckbox = input(false);
-  showPediatricSectors = model(true);
+  showPediatricSectors = model(false);
   displayedSectors: Signal<number[]>;
 
   toothSelected = output<Tooth>();
