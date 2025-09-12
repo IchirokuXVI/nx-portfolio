@@ -4,11 +4,13 @@ import { MatDialog } from '@angular/material/dialog';
 import {
   OdontogramMemory,
   ToothTreatmentMemory,
+  TreatmentMemory,
 } from '@portfolio/odontogram/data-access';
 import {
   Odontogram,
   Tooth,
   ToothTreatment,
+  Treatment,
 } from '@portfolio/odontogram/models';
 import {
   OdontogramSectorsView,
@@ -22,7 +24,8 @@ import {
   styleUrl: './feature-full-odontogram-crud.scss',
 })
 export class OdontogramFeatureFullOdontogramCrud implements OnInit {
-  private _treatmentServ = inject(ToothTreatmentMemory);
+  private _treatmentServ = inject(TreatmentMemory);
+  private _toothTreatmentServ = inject(ToothTreatmentMemory);
   private _odontogramServ = inject(OdontogramMemory);
   private _dialog = inject(MatDialog);
 
@@ -37,7 +40,7 @@ export class OdontogramFeatureFullOdontogramCrud implements OnInit {
 
       this.selectedOdontogram = odontograms[2];
 
-      this._treatmentServ
+      this._toothTreatmentServ
         .getList({ odontogram: this.selectedOdontogram?.id })
         .subscribe((treatments) => {
           this.treatments = treatments;
@@ -50,5 +53,19 @@ export class OdontogramFeatureFullOdontogramCrud implements OnInit {
 
     ref.componentRef?.setInput('tooth', tooth);
     ref.componentRef?.setInput('client', '1');
+  }
+
+  searchTreatments(searchTerm?: string | null | RegExp) {
+    let regexSearchTerm;
+
+    if (searchTerm != null) {
+      regexSearchTerm = new RegExp(searchTerm, 'i');
+    }
+
+    this._treatmentServ
+      .getList({ searchTerm: regexSearchTerm, limit: 10 })
+      .subscribe((treatments: Treatment[]) => {
+        // Somehow return this data to the autocomplete like 2 levels below
+      });
   }
 }

@@ -8,17 +8,11 @@ import {
   model,
   OnInit,
   output,
+  signal,
   Signal,
   ViewChild,
 } from '@angular/core';
-import {
-  FormArray,
-  FormControl,
-  FormGroup,
-  FormsModule,
-  ReactiveFormsModule,
-  UntypedFormGroup,
-} from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatExpansionModule } from '@angular/material/expansion';
@@ -36,18 +30,11 @@ import {
   TeethNumbers,
   Tooth,
   ToothTreatment,
-  ToothTreatmentStatus,
-  ToothZones,
   Treatment,
-  TreatmentType,
 } from '@portfolio/odontogram/models';
 import { WithRequired } from '@portfolio/shared/util';
-import { map, of, switchMap } from 'rxjs';
+import { map, of, ReplaySubject, switchMap } from 'rxjs';
 import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
-import {
-  mapFormToToothTreatment,
-  ToothTreatmentForm,
-} from './tooth-treatment-form';
 
 @Component({
   selector: 'lib-tooth-treatments-modal',
@@ -69,16 +56,7 @@ import {
   providers: [],
 })
 export class ToothTreatmentsModal implements OnInit {
-  toothZones = ToothZones;
-  toothTreatmentStatus = ToothTreatmentStatus;
-  toothTreatmentStatusArr = Object.values(ToothTreatmentStatus);
-
-  toothTreatmentStatusToCssClass: { [key in ToothTreatmentStatus]: string } = {
-    [ToothTreatmentStatus.PENDING]: 'pending',
-    [ToothTreatmentStatus.COMPLETED]: 'finished',
-  };
-
-  tooth = input<Tooth>({ number: '11', treatments: [] });
+  tooth = input.required<Tooth>();
   toothConfirmedChanges = output<Tooth>();
 
   /**
@@ -86,24 +64,20 @@ export class ToothTreatmentsModal implements OnInit {
    */
   client = input<string>();
 
-  selectedTooth?: Tooth;
+  selectedTooth = signal<Tooth | null>(null);
 
   toothHistory: Tooth[] = [];
-  hideHistory = true;
 
-  treatmentsForm = new FormArray<FormGroup<ToothTreatmentForm>>([]);
-  mainForm = new FormGroup<{
-    treatments: FormArray<FormGroup<ToothTreatmentForm>>;
-  }>({ treatments: this.treatmentsForm });
+  treatments: ToothTreatment[] = [];
+
+  initialSuggestedTreatments: ReplaySubject<Treatment[]> = new ReplaySubject();
 
   /**
    * Se guarda de forma temporal el formulario original
    * para no perder los cambios al cambiar en el historial
    */
-  tempTreatments?: FormGroup<ToothTreatmentForm>[];
-
-  treatmentSearchTerm = model<string | Treatment | null>();
-  treatmentSuggestions?: Treatment[];
+  tempTreatments?: ToothTreatment[];
+  disableForms = model(false);
 
   teeth: Signal<{ number: string; disabled: boolean }[]>;
 
@@ -120,26 +94,18 @@ export class ToothTreatmentsModal implements OnInit {
         disabled: toothNumber == this.tooth().number,
       }))
     );
-
-    // Filters the treatment suggestions as the user types
-    this.treatmentSearchTerm.subscribe((term) => {
-      if (typeof term === 'string' || term === null) {
-        this.searchTreatment(term);
-      }
-    });
-
-    // this.bsModalRef.onHidden.subscribe(() => {
-    //   this.savedTreatments.complete();
-    // });
   }
 
   ngOnInit() {
-    this.selectTooth(this.tooth());
+    this.selectedTooth.set(this.tooth());
 
     // Search for initial treatments to show suggestions
     // ahead of time, preventing the user from having to wait
     // for the first loading
-    this.treatmentSearchTerm.set(null);
+    this._treatmentServ.getList({ limit: 10 }).subscribe((treatments) => {
+      this.initialSuggestedTreatments.next(treatments);
+      this.initialSuggestedTreatments.complete();
+    });
   }
 
   onOpenHistory() {
@@ -241,133 +207,55 @@ export class ToothTreatmentsModal implements OnInit {
     );
   }
 
-  selectTooth(tooth: Tooth) {
-    const inputTooth = this.tooth();
+  selectTooth(newSelectedTooth: Tooth) {
+    const originalTooth = this.tooth();
+    const currentSelectedTooth = this.selectedTooth();
 
-    // If a tooth from the history is selected, save the current form state to restore it later
+    // If a tooth from the history is selected, save the current forms state to restore it later
     if (
-      this.selectedTooth?.odontogram === inputTooth.odontogram &&
-      tooth.odontogram !== inputTooth.odontogram
+      currentSelectedTooth?.odontogram === originalTooth.odontogram &&
+      newSelectedTooth.odontogram !== originalTooth.odontogram
     ) {
-      this.tempTreatments = this.treatmentsForm.controls;
+      this.tempTreatments = this.treatments;
     }
 
-    this.treatmentsForm.clear();
+    this.treatments = [];
 
-    if (tooth.odontogram === inputTooth.odontogram && this.tempTreatments) {
-      this.treatmentsForm.controls = this.tempTreatments;
-      this.treatmentsForm.enable();
+    if (
+      newSelectedTooth.odontogram === originalTooth.odontogram &&
+      this.tempTreatments
+    ) {
+      this.treatments = this.tempTreatments;
+      this.disableForms.set(false);
       delete this.tempTreatments;
     } else {
-      tooth.treatments?.forEach((treatment) =>
+      newSelectedTooth.treatments?.forEach((treatment) =>
         this.addToothTreatment(treatment)
       );
     }
 
-    this.selectedTooth = tooth;
+    this.selectedTooth.set(newSelectedTooth);
 
-    // Disable the form if a tooth from the history is selected
-    if (tooth.odontogram !== inputTooth.odontogram) {
-      this.treatmentsForm.disable();
+    // Disable the forms if a tooth from the history is selected
+    if (newSelectedTooth.odontogram !== originalTooth.odontogram) {
+      this.disableForms.set(true);
     }
   }
 
-  searchTreatment(searchTerm?: string | null | RegExp) {
-    let regexSearchTerm;
-
-    if (searchTerm != null) {
-      regexSearchTerm = new RegExp(searchTerm, 'i');
-    }
-
-    this._treatmentServ
-      .getList({ searchTerm: regexSearchTerm, limit: 10 })
-      .subscribe((treatments: Treatment[]) => {
-        this.treatmentSuggestions = treatments;
-      });
-  }
-
-  displayTreatmentOption(treatment: Treatment) {
-    return treatment?.name || '';
-  }
-
-  addTreatment(treatment: Treatment) {
-    const tooth = this.tooth();
-
-    this.addToothTreatment({
-      odontogram: tooth.odontogram?.id,
-      description: treatment.name,
-      additionalInformation: treatment.description,
-      treatment: treatment.id,
-      teeth: [tooth.number],
-      zones: [],
-      status: ToothTreatmentStatus.PENDING,
-      type: treatment.treatmentType || TreatmentType.STANDARD,
-      groupTeeth: true,
-    });
-  }
-
-  addToothTreatment(toothTreatment: ToothTreatment) {
-    const group = new UntypedFormGroup({
-      odontogram: new FormControl<string | undefined>(
-        toothTreatment.odontogram
-      ),
-      treatment: new FormControl<string | undefined>(toothTreatment.treatment),
-      groupTeeth: new FormControl<boolean>(toothTreatment.groupTeeth ?? true),
-      teeth: new FormControl<(typeof TeethNumbers)[number][]>([
-        ...toothTreatment.teeth,
-      ]),
-      zones: new FormControl<ToothZones[]>([...toothTreatment.zones]),
-      status: new FormControl<ToothTreatmentStatus>(
-        toothTreatment.status ?? ToothTreatmentStatus.PENDING
-      ),
-      type: new FormControl<TreatmentType>(
-        toothTreatment.type ?? TreatmentType.STANDARD
-      ),
-      additionalInformation: new FormControl<string>(
-        toothTreatment.additionalInformation ?? ''
-      ),
-    });
-
-    this.treatmentsForm.push(group);
-
-    if (
-      toothTreatment.type === TreatmentType.EXTRACTION ||
-      toothTreatment.type === TreatmentType.IMPLANT
-    ) {
-      this.toggleZone(group, ToothZones.ROOT);
-    }
+  addToothTreatment(toothTreatment?: ToothTreatment) {
+    this.treatmentsForm.push(toothTreatment);
 
     return group;
   }
 
-  toggleZone(treatment: FormGroup, zone: ToothZones) {
-    const zones: ToothZones[] = treatment.get('zones')?.value;
-
-    const index = zones.findIndex((currZone) => currZone === zone);
-
-    if (index === -1) {
-      zones.push(zone);
-    } else {
-      zones.splice(index, 1);
-    }
-  }
-
-  setStatus(treatment: FormGroup, status: ToothTreatmentStatus) {
-    treatment.get('status')?.setValue(status);
-  }
-
   removeTreatment(index: number) {
-    this.treatmentsForm.removeAt(index);
+    this.treatments.splice.removeAt(index);
   }
 
   saveTooth() {
     const tooth = this.tooth();
 
     const treatments: ToothTreatment[] = [];
-
-    for (const treatmentForm of this.treatmentsForm.controls) {
-      treatments.push(mapFormToToothTreatment(treatmentForm));
-    }
 
     this.toothConfirmedChanges.emit({ ...tooth, treatments });
   }

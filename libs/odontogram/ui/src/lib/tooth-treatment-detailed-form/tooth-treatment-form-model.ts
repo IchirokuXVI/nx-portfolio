@@ -4,12 +4,13 @@ import {
   ToothTreatment,
   ToothTreatmentStatus,
   ToothZones,
+  Treatment,
   TreatmentType,
 } from '@portfolio/odontogram/models';
 
-export interface ToothTreatmentForm {
+export interface ToothTreatmentFormModel {
   odontogram: FormControl<string | null>;
-  treatment: FormControl<string | null | undefined>;
+  treatment: FormControl<string | Treatment | null | undefined>;
   groupTeeth: FormControl<boolean | null>;
   teeth: FormControl<(typeof TeethNumbers)[number][] | null>;
   zones: FormControl<ToothZones[] | null>;
@@ -19,40 +20,43 @@ export interface ToothTreatmentForm {
 }
 
 export function mapToothTreatmentToForm(
-  toothTreatment: ToothTreatment
-): ToothTreatmentForm {
-  return {
+  toothTreatment?: ToothTreatment
+): FormGroup<ToothTreatmentFormModel> {
+  return new FormGroup<ToothTreatmentFormModel>({
     odontogram: new FormControl<string | null>(
-      toothTreatment.odontogram ?? null
+      toothTreatment?.odontogram ?? null
     ),
     treatment: new FormControl<string | null | undefined>(
-      toothTreatment.treatment || null
+      toothTreatment?.treatment || null
     ),
-    groupTeeth: new FormControl<boolean>(toothTreatment.groupTeeth ?? true),
+    groupTeeth: new FormControl<boolean>(toothTreatment?.groupTeeth ?? true),
     teeth: new FormControl<(typeof TeethNumbers)[number][]>([
-      ...toothTreatment.teeth,
+      ...(toothTreatment?.teeth || []),
     ]),
-    zones: new FormControl<ToothZones[]>([...toothTreatment.zones]),
+    zones: new FormControl<ToothZones[]>([...(toothTreatment?.zones || [])]),
     status: new FormControl<ToothTreatmentStatus | null>(
-      toothTreatment.status ?? ToothTreatmentStatus.PENDING
+      toothTreatment?.status ?? ToothTreatmentStatus.PENDING
     ),
     type: new FormControl<TreatmentType | null>(
-      toothTreatment.type ?? TreatmentType.STANDARD
+      toothTreatment?.type ?? TreatmentType.STANDARD
     ),
     additionalInformation: new FormControl<string | null>(
-      toothTreatment.additionalInformation ?? null
+      toothTreatment?.additionalInformation ?? null
     ),
-  };
+  });
 }
 
 export function mapFormToToothTreatment(
-  form: FormGroup<ToothTreatmentForm>
+  form: FormGroup<ToothTreatmentFormModel>
 ): ToothTreatment {
   const formValue = form.value;
 
   return {
     odontogram: formValue.odontogram ?? undefined,
-    treatment: formValue.treatment ?? undefined,
+    treatment:
+      (typeof formValue.treatment === 'string'
+        ? formValue.treatment
+        : formValue.treatment?.name) ?? '',
     groupTeeth: formValue.groupTeeth ?? false,
     teeth: formValue.teeth ?? [],
     zones: formValue.zones ?? [],

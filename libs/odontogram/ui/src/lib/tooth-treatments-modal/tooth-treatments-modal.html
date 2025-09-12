@@ -13,14 +13,14 @@
             (click)="selectTooth(toothHist)"
             (keydown.enter)="selectTooth(toothHist)"
             [class.active]="
-              selectedTooth?.odontogram?.id === toothHist.odontogram?.id
+              selectedTooth()?.odontogram?.id === toothHist.odontogram?.id
             "
             [class.current]="toothHist.odontogram === tooth().odontogram"
             class="history-tooth"
             tabindex="0"
           >
             <span [title]="toothHist.odontogram?.name" class="odontogram-name">
-              {{ toothHist.odontogram?.name ?? 'Actual' }}
+              {{ toothHist.odontogram?.name ?? 'Current' }}
             </span>
             <div class="tooth-container">
               <lib-odontogram-single-tooth-image
@@ -39,206 +39,15 @@
     </mat-expansion-panel>
   }
   <div class="form-container">
-    @if (!treatmentsForm.disabled) {
-      <mat-form-field>
-        <mat-label>Treatment</mat-label>
-        <input
-          [(ngModel)]="treatmentSearchTerm"
-          [matAutocomplete]="autoCompleteTreatment"
-          [ngModelOptions]="{ standalone: true }"
-          matInput
-          placeholder="Search a treatment"
-          tabindex="1"
-          type="text"
-        />
-        <mat-autocomplete
-          (optionSelected)="addTreatment($event.option.value)"
-          [displayWith]="displayTreatmentOption"
-          #autoCompleteTreatment="matAutocomplete"
-          class="product-search"
-        >
-          @for (option of treatmentSuggestions; track $index) {
-            <mat-option [value]="option">{{ option.name }}</mat-option>
-          }
-        </mat-autocomplete>
-      </mat-form-field>
+    @if (!tooth()) {
+      <div class="loading d-flex justify-content-center align-items-center">
+        <i class="fas fa-circle-notch fa-spin fa-2x"></i>
+      </div>
     }
-    <!-- @if (false) {
-      @if (!tooth()) {
-        <div class="loading d-flex justify-content-center align-items-center">
-          <i class="fas fa-circle-notch fa-spin fa-2x"></i>
-        </div>
-      }
-      @if (tooth() && treatmentsForm) {
-        <div class="treatments" formArrayName="treatments">
-          @for (
-            treatment of treatmentsForm.controls;
-            track $index;
-            let i = $index
-          ) {
-            <div
-              [formGroup]="treatment"
-              [ngClass]="
-                toothTreatmentStatusToCssClass[
-                  treatment.get('status')?.value || toothTreatmentStatus.PENDING
-                ]
-              "
-              class="treatment"
-            >
-              <div class="treatmentCol align-items-center">
-                <div
-                  [class.disabled]="
-                    treatment.get('type')?.value === 'implant' ||
-                    treatment.get('type')?.value === 'extraction'
-                  "
-                  [class.pointer-events-none]="treatmentsForm.disabled"
-                  [class]="treatment.get('status')?.value ?? 'pending'"
-                  class="zone-selector"
-                >
-                  <div class="main-zones">
-                    @for (
-                      zone of [
-                        toothZones.TOP,
-                        toothZones.LEFT,
-                        toothZones.CENTER,
-                        toothZones.RIGHT,
-                        toothZones.BOTTOM,
-                      ];
-                      track $index
-                    ) {
-                      <div
-                        (click)="toggleZone(treatment, zone)"
-                        (keydown.enter)="toggleZone(treatment, zone)"
-                        [class.selected]="
-                          treatment.get('zones')?.value?.includes(zone)
-                        "
-                        [class]="zone"
-                        mat-ripple
-                        tabindex="2"
-                      ></div>
-                    }
-                  </div>
-                  <div class="lateral-raiz">
-                    @for (
-                      zone of [toothZones.LATERAL, toothZones.ROOT];
-                      track $index
-                    ) {
-                      <div
-                        (click)="toggleZone(treatment, zone)"
-                        (keydown.enter)="toggleZone(treatment, zone)"
-                        [class.selected]="
-                          treatment.get('zones')?.value?.includes(zone)
-                        "
-                        [class]="zone"
-                        mat-ripple
-                        tabindex="2"
-                      ></div>
-                    }
-                  </div>
-                </div>
-              </div>
-              <div class="treatmentCol secondCol">
-                <div class="d-flex">
-                  <ng-container>
-                    <input
-                      class="nombre"
-                      formControlName="name"
-                      name="name"
-                      placeholder="Treatment name"
-                      tabindex="3"
-                      type="text"
-                    />
-                  </ng-container>
-                  @if (!treatmentsForm.disabled) {
-                    <button
-                      (click)="removeTreatment(i)"
-                      (keydown.enter)="removeTreatment(i)"
-                      mat-icon-button
-                      tabindex="4"
-                    >
-                      <i class="fas fa-trash text-danger"></i>
-                    </button>
-                  }
-                </div>
-                <div class="treatment-info">
-                  <div class="d-flex column-gap-05">
-                    <div class="affected-teeth">
-                      <mat-form-field tabindex="5">
-                        <mat-label>Teeth</mat-label>
-                        <mat-select formControlName="teeth" multiple>
-                          @for (tooth of teeth(); track $index) {
-                            <mat-option
-                              [disabled]="tooth.disabled"
-                              [value]="tooth.number"
-                              >{{ tooth.number }}</mat-option
-                            >
-                          }
-                        </mat-select>
-                      </mat-form-field>
-                    </div>
-                    <div class="groupTeeth">
-                      <mat-button-toggle-group
-                        #groupLotes="matButtonToggleGroup"
-                        formControlName="groupTeeth"
-                      >
-                        <mat-button-toggle [value]="true"
-                          >Grouped</mat-button-toggle
-                        >
-                        <mat-button-toggle [value]="false"
-                          >Individual</mat-button-toggle
-                        >
-                      </mat-button-toggle-group>
-                    </div>
-                    <div
-                      [class.pointer-events-none]="treatmentsForm.disabled"
-                      class="status"
-                    >
-                      <div
-                        (click)="
-                          setStatus(treatment, toothTreatmentStatus.PENDING)
-                        "
-                        (keydown.enter)="
-                          setStatus(treatment, toothTreatmentStatus.PENDING)
-                        "
-                        [class.active]="
-                          treatment.get('status')?.value ===
-                          toothTreatmentStatus.PENDING
-                        "
-                        tabindex="2"
-                      >
-                        <i class="fas fa-square pending"></i>
-                        <span>Pending</span>
-                      </div>
-                      <div
-                        (click)="
-                          setStatus(treatment, toothTreatmentStatus.COMPLETED)
-                        "
-                        (keydown.enter)="
-                          setStatus(treatment, toothTreatmentStatus.COMPLETED)
-                        "
-                        [class.active]="
-                          treatment.get('status')?.value ===
-                          toothTreatmentStatus.COMPLETED
-                        "
-                        tabindex="2"
-                      >
-                        <i class="fas fa-square finished"></i>
-                        <span>Completed</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="notes">
-                    <textarea
-                      formControlName="additionalInformation"
-                      placeholder="Notes about the treatment"
-                    ></textarea>
-                  </div>
-                </div>
-              </div>
-            </div>
-          }
-        </div>
-      }
-    } -->
+    @if (tooth()) {
+      <div class="treatments">
+        <ng-container #treatmentsContainer></ng-container>
+      </div>
+    }
   </div>
 </div>
