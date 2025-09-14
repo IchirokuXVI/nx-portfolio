@@ -14,7 +14,7 @@ for pid in "${pids[@]}"; do
 done
 
 if [ "$FAIL" -eq 0 ]; then
-  docker-compose --file "$SCRIPT_DIR/compose.yml" build && docker-compose --file "$SCRIPT_DIR/compose.yml" up
+  docker compose --file "$SCRIPT_DIR/compose.yml" build && docker compose --file "$SCRIPT_DIR/compose.yml" up
 else
   echo "Builder or HTTP server failed to start."
 fi
