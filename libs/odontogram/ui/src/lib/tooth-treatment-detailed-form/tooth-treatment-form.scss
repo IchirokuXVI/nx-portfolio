@@ -1,0 +1,245 @@
+@use '../common-variables.scss' as common;
+
+:host {
+  container-type: inline-size;
+}
+
+.treatment-container {
+  display: flex;
+  flex-direction: row;
+  padding: 0.75em;
+
+  column-gap: 1em;
+  row-gap: 0.35em;
+
+  background-color: #88888811;
+  transition: 0.3s;
+
+  @container (width < 520px) {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  &.pending {
+    --status-color: #{common.$pendingColor};
+  }
+
+  &.finished {
+    --status-color: #{common.$finishedColor};
+  }
+
+  &:hover {
+    box-shadow: 0 6px 12px 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .secondCol {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.5em;
+    width: 100%;
+  }
+
+  .treatmentCol {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.5em;
+
+    .zone-selector {
+      position: relative;
+      flex-grow: 1;
+      flex-shrink: 0;
+      max-width: min-content;
+      display: flex;
+      flex-direction: column;
+      row-gap: 0.5em;
+      padding: 0.25em;
+
+      &.disabled {
+        pointer-events: none;
+
+        &:after {
+          content: '';
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          position: absolute;
+          background-color: #11111144;
+          z-index: 2;
+        }
+      }
+
+      .main-zones,
+      .lateral-root {
+        div {
+          cursor: pointer;
+          background-color: #ababab;
+
+          &.selected {
+            background-color: var(--status-color);
+          }
+        }
+      }
+
+      .main-zones {
+        display: grid;
+
+        width: 128px;
+        height: 128px;
+        border: 2px solid #78bed3;
+        border-radius: 50%;
+        padding: 2px;
+
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+        gap: 1px;
+        grid-template-areas:
+          '. top .'
+          'left center right'
+          '. bottom .';
+
+        .top {
+          grid-area: top;
+        }
+
+        .center {
+          grid-area: center;
+        }
+
+        .left {
+          grid-area: left;
+        }
+
+        .right {
+          grid-area: right;
+        }
+
+        .bottom {
+          grid-area: bottom;
+        }
+      }
+
+      .lateral-root {
+        display: flex;
+        flex-direction: column;
+        row-gap: 4px;
+        width: 128px;
+        height: 128px;
+
+        .lateral {
+          height: 32px;
+          width: 100%;
+        }
+
+        .root {
+          height: 96px;
+          clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+          transform: rotate(180deg);
+        }
+      }
+    }
+
+    .treatment-info {
+      flex: 1 1;
+      display: flex;
+      flex-direction: column;
+      column-gap: 0.25em;
+      row-gap: 0.5em;
+      flex-wrap: wrap;
+
+      .treatment-info__first-row {
+        display: flex;
+        column-gap: 0.5em;
+        align-items: center;
+        row-gap: 0.35em;
+        flex-wrap: wrap;
+
+        .affected-teeth {
+          flex-grow: 1;
+
+          > * {
+            width: 100%;
+          }
+        }
+
+        .status {
+          display: flex;
+          column-gap: 0.5em;
+          flex-wrap: wrap;
+          justify-content: space-around;
+          align-items: center;
+          padding: 0.35em;
+          border-radius: 0.25em;
+          background: #11111111;
+
+          div {
+            display: flex;
+            column-gap: 0.25em;
+            cursor: pointer;
+            align-items: center;
+
+            .pending {
+              color: common.$pendingColor;
+              text-decoration-color: common.$pendingColor;
+            }
+
+            .finished {
+              color: common.$finishedColor;
+              text-decoration-color: common.$finishedColor;
+            }
+
+            &.active {
+              font-weight: 700;
+              cursor: default;
+            }
+
+            &:hover,
+            &.active {
+              span {
+                text-decoration: underline;
+              }
+            }
+          }
+        }
+      }
+
+      .treatment-info__notes {
+        display: flex;
+        flex-grow: 1;
+        width: 100%;
+
+        mat-form-field {
+          flex-grow: 1;
+          height: 100%;
+
+          ::ng-deep {
+            .mat-mdc-form-field-flex,
+            .mat-mdc-form-field-infix {
+              height: 100%;
+            }
+          }
+
+          textarea[matInput] {
+            flex-grow: 1;
+            height: 100%;
+          }
+        }
+      }
+    }
+  }
+}
+
+.square-icon {
+  width: 1em;
+  height: 1em;
+  display: inline;
+  border-radius: 0.25em;
+
+  &.pending {
+    background-color: #{common.$pendingColor};
+  }
+
+  &.finished {
+    background-color: #{common.$finishedColor};
+  }
+}

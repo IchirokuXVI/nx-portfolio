@@ -15,13 +15,16 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import {
+  TeethNumbers,
   ToothTreatment,
   ToothTreatmentStatus,
   ToothZones,
   Treatment,
   TreatmentType,
 } from '@portfolio/odontogram/models';
+import { BasicOptionToggle } from '@portfolio/shared/ui';
 import {
+  mapFormToToothTreatment,
   mapToothTreatmentToForm,
   ToothTreatmentFormModel,
 } from './tooth-treatment-form-model';
@@ -32,6 +35,7 @@ import {
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
+    BasicOptionToggle,
     MatFormFieldModule,
     MatIconModule,
     MatAutocompleteModule,
@@ -56,6 +60,7 @@ export class ToothTreatmentForm {
   disabled = input(false);
 
   toothTreatment = input.required<ToothTreatment>();
+  toothTreatmentChange = output<ToothTreatment>();
 
   toothTreatmentForm: Signal<FormGroup<ToothTreatmentFormModel>>;
 
@@ -63,9 +68,28 @@ export class ToothTreatmentForm {
 
   deleteTreatment = output<void>();
 
+  teeth: Signal<{ number: (typeof TeethNumbers)[number]; disabled: boolean }[]>;
+  disabledTeeth = input<(typeof TeethNumbers)[number][]>([]);
+
   constructor() {
     this.toothTreatmentForm = computed(() =>
       mapToothTreatmentToForm(this.toothTreatment())
+    );
+
+    effect(() => {
+      const form = this.toothTreatmentForm();
+
+      form.valueChanges.subscribe(() => {
+        console.log(form.value);
+        this.toothTreatmentChange.emit(mapFormToToothTreatment(form));
+      });
+    });
+
+    this.teeth = computed(() =>
+      TeethNumbers.map((toothNumber) => ({
+        number: toothNumber,
+        disabled: this.disabledTeeth().includes(toothNumber),
+      }))
     );
 
     // Automatically toggle the ROOT zone when the treatment type is EXTRACTION or IMPLANT
@@ -94,8 +118,8 @@ export class ToothTreatmentForm {
     });
   }
 
-  displayTreatmentOption(treatment: Treatment) {
-    return treatment?.name || '';
+  displayTreatmentOption(treatment: Treatment | string) {
+    return typeof treatment === 'string' ? treatment : treatment?.name || '';
   }
 
   toggleZone(zone: ToothZones) {
@@ -116,7 +140,7 @@ export class ToothTreatmentForm {
     }
   }
 
-  setStatus(treatment: FormGroup, status: ToothTreatmentStatus) {
-    treatment.get('status')?.setValue(status);
+  setStatus(status: ToothTreatmentStatus) {
+    this.toothTreatmentForm().get('status')?.setValue(status);
   }
 }

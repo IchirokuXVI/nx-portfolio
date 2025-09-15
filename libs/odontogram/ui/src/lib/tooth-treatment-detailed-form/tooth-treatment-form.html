@@ -6,7 +6,7 @@
       form.get('status')?.value || toothTreatmentStatus.PENDING
     ]
   "
-  class="treatment"
+  class="treatment-container"
 >
   <div class="treatmentCol align-items-center">
     <div
@@ -39,7 +39,7 @@
           ></div>
         }
       </div>
-      <div class="lateral-raiz">
+      <div class="lateral-root">
         @for (zone of [toothZones.LATERAL, toothZones.ROOT]; track $index) {
           <div
             (click)="toggleZone(zone)"
@@ -54,42 +54,39 @@
     </div>
   </div>
   <div class="treatmentCol secondCol">
-    <div class="d-flex">
-      <mat-form-field>
-        <mat-label>Treatment</mat-label>
-        <input
-          [matAutocomplete]="autoCompleteTreatment"
-          formControlName="treatment"
-          matInput
-          placeholder="Search a treatment"
-          tabindex="1"
-          type="text"
-        />
-        <mat-autocomplete
-          [displayWith]="displayTreatmentOption"
-          #autoCompleteTreatment="matAutocomplete"
-          class="product-search"
-        >
-          @for (option of treatmentSuggestions(); track $index) {
-            <mat-option [value]="option">{{ option.name }}</mat-option>
-          }
-        </mat-autocomplete>
-      </mat-form-field>
-      @if (!form.disabled) {
-        <button
-          (click)="deleteTreatment.emit()"
-          (keydown.enter)="deleteTreatment.emit()"
-          mat-icon-button
-          tabindex="4"
-        >
-          <i class="fas fa-trash text-danger"></i>
-        </button>
-      }
-    </div>
+    <mat-form-field subscriptSizing="dynamic">
+      <mat-label>Treatment</mat-label>
+      <input
+        [matAutocomplete]="autoCompleteTreatment"
+        formControlName="treatment"
+        matInput
+        placeholder="Search a treatment"
+        tabindex="1"
+        type="text"
+      />
+      <mat-autocomplete
+        [displayWith]="displayTreatmentOption"
+        #autoCompleteTreatment="matAutocomplete"
+      >
+        @for (option of treatmentSuggestions(); track $index) {
+          <mat-option [value]="option">{{ option.name }}</mat-option>
+        }
+      </mat-autocomplete>
+    </mat-form-field>
+    <!-- @if (!form.disabled) {
+      <button
+        (click)="deleteTreatment.emit()"
+        (keydown.enter)="deleteTreatment.emit()"
+        mat-icon-button
+        tabindex="4"
+      >
+        <i class="fas fa-trash text-danger"></i>
+      </button>
+    } -->
     <div class="treatment-info">
-      <div class="d-flex column-gap-05">
+      <div class="treatment-info__first-row">
         <div class="affected-teeth">
-          <mat-form-field tabindex="5">
+          <mat-form-field subscriptSizing="dynamic" tabindex="5">
             <mat-label>Teeth</mat-label>
             <mat-select formControlName="teeth" multiple>
               @for (tooth of teeth(); track $index) {
@@ -111,41 +108,42 @@
             <mat-button-toggle [value]="false">Individual</mat-button-toggle>
           </mat-button-toggle-group>
         </div>
-        <div
-          [class.pointer-events-none]="treatmentsForm.disabled"
-          class="status"
-        >
+        <div [class.pointer-events-none]="form.disabled" class="status">
           <div
-            (click)="setStatus(treatment, toothTreatmentStatus.PENDING)"
-            (keydown.enter)="setStatus(treatment, toothTreatmentStatus.PENDING)"
+            (click)="setStatus(toothTreatmentStatus.PENDING)"
+            (keydown.enter)="setStatus(toothTreatmentStatus.PENDING)"
             [class.active]="
-              treatment.get('status')?.value === toothTreatmentStatus.PENDING
+              toothTreatmentForm().get('status')?.value ===
+              toothTreatmentStatus.PENDING
             "
             tabindex="2"
           >
-            <i class="fas fa-square pending"></i>
+            <span class="square-icon pending"></span>
             <span>Pending</span>
           </div>
           <div
-            (click)="setStatus(treatment, toothTreatmentStatus.COMPLETED)"
-            (keydown.enter)="
-              setStatus(treatment, toothTreatmentStatus.COMPLETED)
-            "
+            (click)="setStatus(toothTreatmentStatus.COMPLETED)"
+            (keydown.enter)="setStatus(toothTreatmentStatus.COMPLETED)"
             [class.active]="
-              treatment.get('status')?.value === toothTreatmentStatus.COMPLETED
+              toothTreatmentForm().get('status')?.value ===
+              toothTreatmentStatus.COMPLETED
             "
             tabindex="2"
           >
-            <i class="fas fa-square finished"></i>
+            <span class="square-icon finished"></span>
             <span>Completed</span>
           </div>
         </div>
       </div>
-      <div class="notes">
-        <textarea
-          formControlName="additionalInformation"
-          placeholder="Notes about the treatment"
-        ></textarea>
+      <div class="treatment-info__notes">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>Additional information</mat-label>
+          <textarea
+            formControlName="additionalInformation"
+            matInput
+            placeholder="Notes about the treatment"
+          ></textarea>
+        </mat-form-field>
       </div>
     </div>
   </div>

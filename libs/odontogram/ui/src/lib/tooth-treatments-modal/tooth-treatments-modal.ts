@@ -1,16 +1,21 @@
 import { CommonModule } from '@angular/common';
 import {
+  afterNextRender,
   Component,
-  computed,
+  ComponentRef,
+  effect,
   ElementRef,
   inject,
+  Injector,
   input,
   model,
   OnInit,
   output,
+  runInInjectionContext,
   signal,
-  Signal,
+  untracked,
   ViewChild,
+  ViewContainerRef,
 } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -27,7 +32,6 @@ import {
 } from '@portfolio/odontogram/data-access';
 import {
   Odontogram,
-  TeethNumbers,
   Tooth,
   ToothTreatment,
   Treatment,
@@ -35,6 +39,7 @@ import {
 import { WithRequired } from '@portfolio/shared/util';
 import { map, of, ReplaySubject, switchMap } from 'rxjs';
 import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
+import { ToothTreatmentForm } from '../tooth-treatment-detailed-form/tooth-treatment-form';
 
 @Component({
   selector: 'lib-tooth-treatments-modal',
@@ -57,6 +62,8 @@ import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
 })
 export class ToothTreatmentsModal implements OnInit {
   tooth = input.required<Tooth>();
+  prevTooth = signal<Tooth | null>(null);
+
   toothConfirmedChanges = output<Tooth>();
 
   /**
@@ -68,7 +75,7 @@ export class ToothTreatmentsModal implements OnInit {
 
   toothHistory: Tooth[] = [];
 
-  treatments: ToothTreatment[] = [];
+  treatments: Map<ComponentRef<ToothTreatmentForm>, ToothTreatment> = new Map();
 
   initialSuggestedTreatments: ReplaySubject<Treatment[]> = new ReplaySubject();
 
@@ -79,26 +86,34 @@ export class ToothTreatmentsModal implements OnInit {
   tempTreatments?: ToothTreatment[];
   disableForms = model(false);
 
-  teeth: Signal<{ number: string; disabled: boolean }[]>;
-
   @ViewChild('historyBar') historyBar?: ElementRef<HTMLDivElement>;
+  @ViewChild('treatmentsContainer', { read: ViewContainerRef })
+  treatmentsContainer?: ViewContainerRef;
 
   private _treatmentServ = inject(TreatmentMemory);
   private _toothTreatmentServ = inject(ToothTreatmentMemory);
   private _odontogramServ = inject(OdontogramMemory);
 
+  private _injector = inject(Injector);
+
   constructor() {
-    this.teeth = computed(() =>
-      TeethNumbers.map((toothNumber) => ({
-        number: toothNumber,
-        disabled: toothNumber == this.tooth().number,
-      }))
-    );
+    afterNextRender(() => {
+      runInInjectionContext(this._injector, () => {
+        effect(() => {
+          const prevTooth = untracked(this.prevTooth);
+          const selectedTooth = untracked(this.selectedTooth);
+
+          if (!prevTooth || selectedTooth?.number === prevTooth?.number) {
+            this.selectTooth(this.tooth());
+          }
+
+          this.prevTooth.set(selectedTooth);
+        });
+      });
+    });
   }
 
   ngOnInit() {
-    this.selectedTooth.set(this.tooth());
-
     // Search for initial treatments to show suggestions
     // ahead of time, preventing the user from having to wait
     // for the first loading
@@ -184,7 +199,6 @@ export class ToothTreatmentsModal implements OnInit {
         return treatmentsByOdontogram;
       }),
       map((treatmentsByOdontogram) => {
-        console.log(treatmentsByOdontogram);
         const inputTooth = this.tooth();
 
         for (const [
@@ -208,31 +222,48 @@ export class ToothTreatmentsModal implements OnInit {
   }
 
   selectTooth(newSelectedTooth: Tooth) {
+    console.log(newSelectedTooth);
     const originalTooth = this.tooth();
-    const currentSelectedTooth = this.selectedTooth();
+    const currentSelectedTooth = untracked(this.selectedTooth);
+
+    // Skip if the same tooth is selected
+    if (
+      newSelectedTooth === currentSelectedTooth ||
+      (newSelectedTooth.odontogram === currentSelectedTooth?.odontogram &&
+        newSelectedTooth.number === currentSelectedTooth?.number)
+    ) {
+      return;
+    }
 
     // If a tooth from the history is selected, save the current forms state to restore it later
     if (
       currentSelectedTooth?.odontogram === originalTooth.odontogram &&
       newSelectedTooth.odontogram !== originalTooth.odontogram
     ) {
-      this.tempTreatments = this.treatments;
+      this.tempTreatments = Array.from(this.treatments.values());
     }
 
-    this.treatments = [];
+    this.treatments.clear();
+    this.treatmentsContainer?.clear();
+
+    let treatmentsToAdd: ToothTreatment[];
 
     if (
       newSelectedTooth.odontogram === originalTooth.odontogram &&
       this.tempTreatments
     ) {
-      this.treatments = this.tempTreatments;
+      treatmentsToAdd = this.tempTreatments;
+
+      // Restore the forms state and clear the temporary storage
       this.disableForms.set(false);
       delete this.tempTreatments;
     } else {
-      newSelectedTooth.treatments?.forEach((treatment) =>
-        this.addToothTreatment(treatment)
-      );
+      treatmentsToAdd = newSelectedTooth.treatments || [];
     }
+
+    treatmentsToAdd.forEach((treatment) => {
+      this.addToothTreatment(treatment);
+    });
 
     this.selectedTooth.set(newSelectedTooth);
 
@@ -243,13 +274,25 @@ export class ToothTreatmentsModal implements OnInit {
   }
 
   addToothTreatment(toothTreatment?: ToothTreatment) {
-    this.treatmentsForm.push(toothTreatment);
+    if (!this.treatmentsContainer) {
+      throw new Error(
+        'Treatments container was not found. Maybe it was not rendered yet.'
+      );
+    }
 
-    return group;
-  }
+    const comp = this.treatmentsContainer.createComponent(ToothTreatmentForm);
 
-  removeTreatment(index: number) {
-    this.treatments.splice.removeAt(index);
+    comp.setInput('toothTreatment', toothTreatment);
+    comp.setInput('disabledTeeth', this.tooth().number);
+
+    comp.instance.deleteTreatment.subscribe(() => {
+      this.treatments.delete(comp);
+      comp.destroy();
+    });
+
+    comp.instance.toothTreatmentChange.subscribe((toothTreatment) => {
+      this.treatments.set(comp, toothTreatment);
+    });
   }
 
   saveTooth() {

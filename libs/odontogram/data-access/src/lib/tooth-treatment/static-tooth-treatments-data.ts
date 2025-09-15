@@ -10,6 +10,7 @@ export const TOOTH_TREATMENTS: readonly WithRequired<ToothTreatment, 'id'>[] = [
   {
     id: '1',
     odontogram: '1',
+    treatment: 'Extraction',
     teeth: ['11', '12', '21'],
     groupTeeth: true,
     status: ToothTreatmentStatus.COMPLETED,
@@ -22,6 +23,7 @@ export const TOOTH_TREATMENTS: readonly WithRequired<ToothTreatment, 'id'>[] = [
   {
     id: '2',
     odontogram: '1',
+    treatment: 'Standard',
     teeth: ['37'],
     groupTeeth: true,
     status: ToothTreatmentStatus.PENDING,
@@ -34,6 +36,7 @@ export const TOOTH_TREATMENTS: readonly WithRequired<ToothTreatment, 'id'>[] = [
   {
     id: '3',
     odontogram: '2',
+    treatment: 'Implant',
     teeth: ['11', '12', '21'],
     groupTeeth: false,
     status: ToothTreatmentStatus.PENDING,
@@ -46,6 +49,7 @@ export const TOOTH_TREATMENTS: readonly WithRequired<ToothTreatment, 'id'>[] = [
   {
     id: '4',
     odontogram: '3',
+    treatment: 'Filling',
     teeth: ['28'],
     groupTeeth: false,
     status: ToothTreatmentStatus.COMPLETED,
@@ -58,6 +62,7 @@ export const TOOTH_TREATMENTS: readonly WithRequired<ToothTreatment, 'id'>[] = [
   {
     id: '5',
     odontogram: '3',
+    treatment: 'Filling',
     teeth: ['27'],
     groupTeeth: false,
     status: ToothTreatmentStatus.COMPLETED,
@@ -70,6 +75,7 @@ export const TOOTH_TREATMENTS: readonly WithRequired<ToothTreatment, 'id'>[] = [
   {
     id: '6',
     odontogram: '3',
+    treatment: 'Filling',
     teeth: ['37'],
     groupTeeth: false,
     status: ToothTreatmentStatus.COMPLETED,
@@ -82,6 +88,7 @@ export const TOOTH_TREATMENTS: readonly WithRequired<ToothTreatment, 'id'>[] = [
   {
     id: '7',
     odontogram: '3',
+    treatment: 'Filling procedure',
     teeth: ['44'],
     groupTeeth: false,
     status: ToothTreatmentStatus.COMPLETED,
@@ -94,6 +101,7 @@ export const TOOTH_TREATMENTS: readonly WithRequired<ToothTreatment, 'id'>[] = [
   {
     id: '8',
     odontogram: '3',
+    treatment: 'Filling procedure',
     teeth: ['44'],
     groupTeeth: false,
     status: ToothTreatmentStatus.PENDING,

@@ -49,7 +49,11 @@ export class OdontogramFeatureFullOdontogramCrud implements OnInit {
   }
 
   onToothSelected(tooth: Tooth) {
-    const ref = this._dialog.open(ToothTreatmentsModal);
+    const ref = this._dialog.open(ToothTreatmentsModal, {
+      maxWidth: '920px',
+      width: '920px',
+      minWidth: '340px',
+    });
 
     ref.componentRef?.setInput('tooth', tooth);
     ref.componentRef?.setInput('client', '1');
