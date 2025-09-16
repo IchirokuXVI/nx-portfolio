@@ -7,7 +7,7 @@ import { RecursivePaths } from '../types/recursive-paths';
  * @param fields Fields to search in order
  * @returns Array with the values of the last specified field or undefined if it doesn't exist
  */
-export function findField<T>(obj: T, fields: RecursivePaths<T>): any {
+export function findField<T = {}>(obj: T, fields: RecursivePaths<T>): any {
   if (!fields) return obj;
 
   // If the object is an array it will iterate over it and add all found values in the array.

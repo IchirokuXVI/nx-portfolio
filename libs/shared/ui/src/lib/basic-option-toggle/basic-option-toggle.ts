@@ -54,6 +54,7 @@ export class BasicOptionToggle implements ControlValueAccessor {
   }
 
   onSelectOption(option: any) {
+    // @ts-ignore
     const val = findField(option, this.valueField());
 
     this.onTouched();
@@ -62,7 +63,7 @@ export class BasicOptionToggle implements ControlValueAccessor {
   }
 
   findFieldAndJoin(value: any, field: string) {
-    // @ts-expect-error This errors because of supposed infinite recursion -.-
+    // @ts-ignore
     return findField(value, field).join(', ');
   }
 }
