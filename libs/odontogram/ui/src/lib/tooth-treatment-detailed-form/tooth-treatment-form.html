@@ -104,36 +104,18 @@
             #groupLotes="matButtonToggleGroup"
             formControlName="groupTeeth"
           >
-            <mat-button-toggle [value]="true">Grouped</mat-button-toggle>
-            <mat-button-toggle [value]="false">Individual</mat-button-toggle>
+            <mat-button-toggle [value]="true" i18n>
+              odontogram.groupTeeth.grouped
+            </mat-button-toggle>
+            <mat-button-toggle [value]="false" i18n>
+              odontogram.groupTeeth.individual
+            </mat-button-toggle>
           </mat-button-toggle-group>
         </div>
-        <div [class.pointer-events-none]="form.disabled" class="status">
-          <div
-            (click)="setStatus(toothTreatmentStatus.PENDING)"
-            (keydown.enter)="setStatus(toothTreatmentStatus.PENDING)"
-            [class.active]="
-              toothTreatmentForm().get('status')?.value ===
-              toothTreatmentStatus.PENDING
-            "
-            tabindex="2"
-          >
-            <span class="square-icon pending"></span>
-            <span>Pending</span>
-          </div>
-          <div
-            (click)="setStatus(toothTreatmentStatus.COMPLETED)"
-            (keydown.enter)="setStatus(toothTreatmentStatus.COMPLETED)"
-            [class.active]="
-              toothTreatmentForm().get('status')?.value ===
-              toothTreatmentStatus.COMPLETED
-            "
-            tabindex="2"
-          >
-            <span class="square-icon finished"></span>
-            <span>Completed</span>
-          </div>
-        </div>
+        <lib-basic-option-toggle
+          [options]="toothTreatmentStatusArr"
+          formControlName="status"
+        ></lib-basic-option-toggle>
       </div>
       <div class="treatment-info__notes">
         <mat-form-field subscriptSizing="dynamic">

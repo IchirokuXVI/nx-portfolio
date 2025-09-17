@@ -18,6 +18,7 @@ import {
   TeethNumbers,
   ToothTreatment,
   ToothTreatmentStatus,
+  ToothTreatmentStatusTranslationKey,
   ToothZones,
   Treatment,
   TreatmentType,
@@ -50,7 +51,12 @@ import {
 export class ToothTreatmentForm {
   toothZones = ToothZones;
   toothTreatmentStatus = ToothTreatmentStatus;
-  toothTreatmentStatusArr = Object.values(ToothTreatmentStatus);
+  toothTreatmentStatusArr = Object.values(ToothTreatmentStatus).map(
+    (status) => ({
+      value: status,
+      label: ToothTreatmentStatusTranslationKey[status],
+    })
+  );
 
   toothTreatmentStatusToCssClass: { [key in ToothTreatmentStatus]: string } = {
     [ToothTreatmentStatus.PENDING]: 'pending',

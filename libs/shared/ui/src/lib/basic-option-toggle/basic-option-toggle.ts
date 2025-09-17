@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import {
+  ChangeDetectionStrategy,
   Component,
   ContentChild,
   forwardRef,
@@ -22,9 +23,10 @@ import { findField } from '@portfolio/shared/util';
     },
   ],
   imports: [CommonModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BasicOptionToggle implements ControlValueAccessor {
-  options = input.required<any[]>();
+  options = input.required<string[] | any[]>();
 
   selectedOption = signal<any>(null);
 
@@ -55,7 +57,10 @@ export class BasicOptionToggle implements ControlValueAccessor {
 
   onSelectOption(option: any) {
     // @ts-ignore
-    const val = findField(option, this.valueField());
+    const val =
+      typeof option === 'string'
+        ? option
+        : findField(option, this.valueField());
 
     this.onTouched();
     this.onChange(val);
@@ -63,7 +68,11 @@ export class BasicOptionToggle implements ControlValueAccessor {
   }
 
   findFieldAndJoin(value: any, field: string) {
+    if (typeof value === 'string') {
+      return value;
+    }
+
     // @ts-ignore
-    return findField(value, field).join(', ');
+    return findField(value, field);
   }
 }
