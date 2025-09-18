@@ -56,11 +56,11 @@ export class BasicOptionToggle implements ControlValueAccessor {
   }
 
   onSelectOption(option: any) {
-    // @ts-ignore
     const val =
       typeof option === 'string'
         ? option
-        : findField(option, this.valueField());
+        : // @ts-ignore
+          findField(option, this.valueField());
 
     this.onTouched();
     this.onChange(val);

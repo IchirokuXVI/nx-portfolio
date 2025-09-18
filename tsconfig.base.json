@@ -9,6 +9,7 @@
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "importHelpers": true,
+    "resolveJsonModule": true,
     "target": "es2015",
     "module": "esnext",
     "lib": ["es2020", "dom"],
@@ -24,6 +25,12 @@
       ],
       "@portfolio/landing/models": ["libs/landing/models/src/index.ts"],
       "@portfolio/landing/ui": ["libs/landing/ui/src/index.ts"],
+      "@portfolio/localization/rokutranslator": [
+        "libs/shared/localization/rokutranslator/src/index.ts"
+      ],
+      "@portfolio/localization/rokutranslator-angular": [
+        "libs/shared/localization/rokutranslator-angular/src/index.ts"
+      ],
       "@portfolio/odontogram/data-access": [
         "libs/odontogram/data-access/src/index.ts"
       ],

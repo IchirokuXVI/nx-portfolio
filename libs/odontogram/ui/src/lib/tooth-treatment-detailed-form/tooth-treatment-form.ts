@@ -14,6 +14,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import {
   TeethNumbers,
   ToothTreatment,
@@ -78,6 +79,17 @@ export class ToothTreatmentForm {
   disabledTeeth = input<(typeof TeethNumbers)[number][]>([]);
 
   constructor() {
+    RokuTranslator.setLocale('en');
+    RokuTranslator.addNamespace('odontogram/ui');
+
+    RokuTranslator.addTranslations(
+      'en',
+      'odontogram/ui',
+      () => import('../../../assets/i18n/en.json')
+    ).then(() => {
+      console.log(RokuTranslator.t('form.additionalInformation'));
+    });
+
     this.toothTreatmentForm = computed(() =>
       mapToothTreatmentToForm(this.toothTreatment())
     );

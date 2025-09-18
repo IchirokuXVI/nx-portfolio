@@ -104,10 +104,10 @@
             #groupLotes="matButtonToggleGroup"
             formControlName="groupTeeth"
           >
-            <mat-button-toggle [value]="true" i18n>
+            <mat-button-toggle [value]="true">
               odontogram.groupTeeth.grouped
             </mat-button-toggle>
-            <mat-button-toggle [value]="false" i18n>
+            <mat-button-toggle [value]="false">
               odontogram.groupTeeth.individual
             </mat-button-toggle>
           </mat-button-toggle-group>
@@ -119,7 +119,7 @@
       </div>
       <div class="treatment-info__notes">
         <mat-form-field subscriptSizing="dynamic">
-          <mat-label>Additional information</mat-label>
+          <mat-label>form.additionalInformation</mat-label>
           <textarea
             formControlName="additionalInformation"
             matInput
