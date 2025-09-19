@@ -105,10 +105,10 @@
             formControlName="groupTeeth"
           >
             <mat-button-toggle [value]="true">
-              odontogram.groupTeeth.grouped
+              {{ t('odontogram.groupTeeth.grouped') }}
             </mat-button-toggle>
             <mat-button-toggle [value]="false">
-              odontogram.groupTeeth.individual
+              {{ t('odontogram.groupTeeth.individual') }}
             </mat-button-toggle>
           </mat-button-toggle-group>
         </div>
@@ -119,7 +119,7 @@
       </div>
       <div class="treatment-info__notes">
         <mat-form-field subscriptSizing="dynamic">
-          <mat-label>form.additionalInformation</mat-label>
+          <mat-label>{{ t('tooth.form.additionalInformation') }}</mat-label>
           <textarea
             formControlName="additionalInformation"
             matInput

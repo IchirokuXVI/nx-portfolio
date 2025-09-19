@@ -1,13 +1,14 @@
 import { CommonModule } from '@angular/common';
 import { Component, input } from '@angular/core';
 import { RouterModule } from '@angular/router';
-import { Project } from '@portfolio/landing/models';
+import { TranslatedProject } from '@portfolio/landing/models';
+import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 
 // declare const __webpack_public_path__: string;
 
 @Component({
-  selector: 'lib-landing-ui',
   imports: [CommonModule, RouterModule],
+  selector: 'lib-landing-ui',
   templateUrl: './landing.html',
   styleUrl: './landing.scss',
 })
@@ -26,5 +27,9 @@ export class Landing {
   // Used for assets in micro-frontend setup
   // publicPath = __webpack_public_path__ + 'public/';
 
-  projects = input<Project[]>([]);
+  projects = input<TranslatedProject[]>([]);
+
+  t(s: string) {
+    return RokuTranslator.t(s);
+  }
 }

@@ -1,8 +1,8 @@
-import { Project } from '@portfolio/landing/models';
+import { TranslatedProject } from '@portfolio/landing/models';
 import { Observable } from 'rxjs';
 
 export interface ProjectServiceI {
-  getList(): Observable<Project[]>;
+  getList(locale: string): Observable<TranslatedProject[]>;
 
-  getByName(name: string): Observable<Project>;
+  getByName(name: string, locale: string): Observable<TranslatedProject>;
 }

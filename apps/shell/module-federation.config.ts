@@ -15,6 +15,18 @@ const config: ModuleFederationConfig = {
    *
    */
   remotes: ['landing', 'odontogram'],
+  shared: (lib, config) => {
+    // roku-translator is a singleton as it holds the current locale and i18next instance
+    // We want all micro-frontends to use the same instance to avoid configuration issues
+    // and to be able to change the locale from the shell and have it reflected in the remotes
+    if (lib === '@portfolio/localization/roku-translator') {
+      return {
+        singleton: true,
+        strictVersion: true,
+        requiredVersion: 'auto',
+      };
+    }
+  },
 };
 
 /**

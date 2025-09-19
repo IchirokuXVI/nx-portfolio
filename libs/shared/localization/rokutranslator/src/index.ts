@@ -1,1 +1,1 @@
-export { RokuTranslator } from './lib/roku-translator';
+export { RokuTranslator } from './lib/rokutranslator';

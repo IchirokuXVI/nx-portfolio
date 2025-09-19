@@ -1,7 +1,7 @@
 {
   "name": "localization/rokutranslator-angular",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "libs/shared/localization/rokutranslator-angular/src",
+  "sourceRoot": "/libs/shared/localization/rokutranslator-angular/src",
   "prefix": "lib",
   "projectType": "library",
   "tags": [],

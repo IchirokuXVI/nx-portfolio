@@ -1,1 +1,3 @@
-<h1>404 - Page Not Found</h1>
+@if (compReady()) {
+  <h1>404 - {{ t('page_not_found') }}</h1>
+}

@@ -4,6 +4,7 @@
   "sourceRoot": "libs/shared/localization/rokutranslator/src",
   "projectType": "library",
   "tags": [],
+  "implicitDependencies": [],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",

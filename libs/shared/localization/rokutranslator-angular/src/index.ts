@@ -1,1 +1,1 @@
-export * from './lib/roku-translator-service';
+export * from './lib/translations-loader';

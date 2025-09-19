@@ -124,7 +124,7 @@ a {
         gap: 1em;
         max-width: 48em;
         height: min-content;
-        max-height: 36em;
+        // max-height: 36em;
 
         .project__title {
           display: flex;
@@ -196,6 +196,7 @@ a {
           .project__description {
             display: inline;
             overflow: hidden;
+            margin-right: 0.35em;
           }
 
           a {

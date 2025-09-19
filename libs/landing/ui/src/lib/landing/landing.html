@@ -2,34 +2,33 @@
   <main>
     <section class="welcome">
       <h1 class="welcome__title">
-        <img [src]="hiBubble | async" alt="Hi" />
-        I'm Daniel!
+        <img [alt]="t('Hi')" [src]="hiBubble | async" />
+        {{ t('landing.welcome_title') }}
       </h1>
       <p class="welcome__subtitle">
-        coding lover and problem solver, creating solutions to make hard tasks
-        easier and find a way to automate those easy tasks
+        {{ t('landing.welcome_subtitle') }}
       </p>
       <div class="welcome__social-info">
         <a href="" target="_blank">
           <img [src]="resumeIcon | async" alt="Resume" />
-          <span class="social-info__label">Resume</span>
+          <span class="social-info__label">{{ t('landing.resume') }}</span>
         </a>
         <a href="https://github.com/ichirokuxvi" target="_blank">
           <img [src]="githubIcon | async" alt="GitHub" />
-          <span class="social-info__label">GitHub</span>
+          <span class="social-info__label">{{ t('landing.github') }}</span>
         </a>
         <a href="https://www.linkedin.com/in/ichiroku/" target="_blank">
           <img [src]="linkedinIcon | async" alt="LinkedIn" />
-          <span class="social-info__label">LinkedIn</span>
+          <span class="social-info__label">{{ t('landing.linkedin') }}</span>
         </a>
         <a href="mailto:ichiroku.work@gmail.com" target="_blank">
           <img [src]="mailIcon | async" alt="Mail" />
-          <span class="social-info__label">Contact</span>
+          <span class="social-info__label">{{ t('landing.contact') }}</span>
         </a>
       </div>
     </section>
     <div class="intersection">
-      <span class="intersection__title"> PROJECTS </span>
+      <span class="intersection__title">{{ t('landing.projects') }}</span>
     </div>
     <section class="projects">
       @for (project of projects(); track $index) {
@@ -41,16 +40,16 @@
             </a>
           </h2>
           <!-- <div class="project__areas">
-          @for (area of project.areas; track $index) {
-          <div class="project__area">
-            <meter class="area__meter" min="0" max="100" optimum="100" low="100" [value]="area.progress">
-            </meter>
-            <div class="area__label">
-              {{ area.name }}
+            @for (area of project.areas; track $index) {
+            <div class="project__area">
+              <meter class="area__meter" min="0" max="100" optimum="100" low="100" [value]="area.progress">
+              </meter>
+              <div class="area__label">
+                {{ area.name }}
+              </div>
             </div>
-          </div>
-          }
-        </div> -->
+            }
+          </div> -->
           <a [routerLink]="[project.appLink]" class="project__img">
             @if (project.image) {
               <img
@@ -65,7 +64,9 @@
           </a>
           <div class="project__description_container">
             <p class="project__description">{{ project.description }}</p>
-            <a [routerLink]="[project.appLink]">View project</a>
+            <a [routerLink]="[project.appLink]">
+              {{ t('landing.project_view') }}
+            </a>
           </div>
         </article>
       }

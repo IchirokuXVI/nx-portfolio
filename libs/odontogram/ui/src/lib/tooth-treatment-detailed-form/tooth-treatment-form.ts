@@ -47,7 +47,6 @@ import {
   ],
   templateUrl: './tooth-treatment-form.html',
   styleUrls: ['./tooth-treatment-form.scss'],
-  providers: [],
 })
 export class ToothTreatmentForm {
   toothZones = ToothZones;
@@ -79,17 +78,6 @@ export class ToothTreatmentForm {
   disabledTeeth = input<(typeof TeethNumbers)[number][]>([]);
 
   constructor() {
-    RokuTranslator.setLocale('en');
-    RokuTranslator.addNamespace('odontogram/ui');
-
-    RokuTranslator.addTranslations(
-      'en',
-      'odontogram/ui',
-      () => import('../../../assets/i18n/en.json')
-    ).then(() => {
-      console.log(RokuTranslator.t('form.additionalInformation'));
-    });
-
     this.toothTreatmentForm = computed(() =>
       mapToothTreatmentToForm(this.toothTreatment())
     );
@@ -160,5 +148,9 @@ export class ToothTreatmentForm {
 
   setStatus(status: ToothTreatmentStatus) {
     this.toothTreatmentForm().get('status')?.setValue(status);
+  }
+
+  t(s: string) {
+    return RokuTranslator.t(s);
   }
 }

@@ -1,3 +1,5 @@
 {
-  "form.additionalInformation": "Additional information"
+  "odontogram.groupTeeth.grouped": "Grouped",
+  "odontogram.groupTeeth.individual": "Individual",
+  "tooth.form.additionalInformation": "Additional information"
 }

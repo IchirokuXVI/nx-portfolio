@@ -1,9 +1,9 @@
 import { ProjectAreaStatus } from './project-area-status';
 
-export interface ProjectArea {
+export interface ProjectAreaInternalArea {
   id: string;
-  project: string;
-  area: string;
+  projectArea: string;
+  internalArea: string;
   progress: number;
   status: ProjectAreaStatus;
 }
