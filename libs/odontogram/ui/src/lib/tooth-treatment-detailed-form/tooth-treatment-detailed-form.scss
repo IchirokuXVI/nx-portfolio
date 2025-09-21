@@ -221,7 +221,7 @@
     background-color: #{common.$pendingColor};
   }
 
-  &.finished {
+  &.completed {
     background-color: #{common.$finishedColor};
   }
 }

@@ -1,3 +1,5 @@
+export { default as en } from './lib/i18n/en.json';
+export { default as es } from './lib/i18n/es.json';
 export * from './lib/odontogram';
 export * from './lib/odontogram-treatment';
 export * from './lib/teeth-numbers';

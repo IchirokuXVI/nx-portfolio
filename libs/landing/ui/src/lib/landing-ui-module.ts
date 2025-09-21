@@ -1,23 +1,20 @@
 import { NgModule } from '@angular/core';
-import { provideTranslationsLoader } from '@portfolio/localization/rokutranslator-angular';
+import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
 import { Landing } from './landing/landing';
 
 const components = [Landing];
 
 @NgModule({
-  imports: components,
+  imports: [
+    RokuTranslatorModule.withConfig({
+      locales: ['en', 'es'],
+      defaultNamespace: 'landing',
+      loader: (locale) => import(`../../assets/i18n/${locale}.json`),
+    }),
+    ...components,
+  ],
   exports: components,
   declarations: [],
-  providers: [
-    provideTranslationsLoader({
-      locales: 'test',
-      namespaces: 'prueba',
-      loader: async () => ({}),
-    }),
-  ],
+  providers: [],
 })
-export class LandingUiModule {
-  // constructor() {
-  //   inject(TranslationsLoader);
-  // }
-}
+export class LandingUiModule {}

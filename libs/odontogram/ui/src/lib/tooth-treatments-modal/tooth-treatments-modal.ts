@@ -17,6 +17,7 @@ import {
   ViewChild,
   ViewContainerRef,
 } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -25,6 +26,10 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   OdontogramMemory,
   ToothTreatmentMemory,
@@ -37,9 +42,9 @@ import {
   Treatment,
 } from '@portfolio/odontogram/models';
 import { WithRequired } from '@portfolio/shared/util';
-import { map, of, ReplaySubject, switchMap } from 'rxjs';
+import { filter, first, map, of, ReplaySubject, switchMap } from 'rxjs';
 import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
-import { ToothTreatmentForm } from '../tooth-treatment-detailed-form/tooth-treatment-form';
+import { ToothTreatmentDetailedForm } from '../tooth-treatment-detailed-form/tooth-treatment-detailed-form';
 
 @Component({
   selector: 'lib-tooth-treatments-modal',
@@ -47,6 +52,7 @@ import { ToothTreatmentForm } from '../tooth-treatment-detailed-form/tooth-treat
     CommonModule,
     SingleToothImage,
     FormsModule,
+    RokuTranslatorPipe,
     ReactiveFormsModule,
     MatExpansionModule,
     MatFormFieldModule,
@@ -61,6 +67,8 @@ import { ToothTreatmentForm } from '../tooth-treatment-detailed-form/tooth-treat
   providers: [],
 })
 export class ToothTreatmentsModal implements OnInit {
+  compReady = signal(false);
+
   tooth = input.required<Tooth>();
   prevTooth = signal<Tooth | null>(null);
 
@@ -75,7 +83,8 @@ export class ToothTreatmentsModal implements OnInit {
 
   toothHistory: Tooth[] = [];
 
-  treatments: Map<ComponentRef<ToothTreatmentForm>, ToothTreatment> = new Map();
+  treatments: Map<ComponentRef<ToothTreatmentDetailedForm>, ToothTreatment> =
+    new Map();
 
   initialSuggestedTreatments: ReplaySubject<Treatment[]> = new ReplaySubject();
 
@@ -96,18 +105,35 @@ export class ToothTreatmentsModal implements OnInit {
 
   private _injector = inject(Injector);
 
+  private _translateServ = inject(RokuTranslatorService);
+
   constructor() {
-    afterNextRender(() => {
+    this._translateServ.loaded$.pipe(first()).subscribe(() => {
+      this.compReady.set(true);
+    });
+
+    effect(() => {
+      if (!this.compReady()) return;
+
       runInInjectionContext(this._injector, () => {
-        effect(() => {
-          const prevTooth = untracked(this.prevTooth);
-          const selectedTooth = untracked(this.selectedTooth);
+        afterNextRender(() => {
+          runInInjectionContext(this._injector, () => {
+            toObservable(this.compReady)
+              .pipe(
+                filter((r) => r),
+                first()
+              )
+              .subscribe(() => {
+                const prevTooth = untracked(this.prevTooth);
+                const selectedTooth = untracked(this.selectedTooth);
 
-          if (!prevTooth || selectedTooth?.number === prevTooth?.number) {
-            this.selectTooth(this.tooth());
-          }
+                if (!prevTooth || selectedTooth?.number === prevTooth?.number) {
+                  this.selectTooth(this.tooth());
+                }
 
-          this.prevTooth.set(selectedTooth);
+                this.prevTooth.set(selectedTooth);
+              });
+          });
         });
       });
     });
@@ -280,7 +306,9 @@ export class ToothTreatmentsModal implements OnInit {
       );
     }
 
-    const comp = this.treatmentsContainer.createComponent(ToothTreatmentForm);
+    const comp = this.treatmentsContainer.createComponent(
+      ToothTreatmentDetailedForm
+    );
 
     comp.setInput('toothTreatment', toothTreatment);
     comp.setInput('disabledTeeth', this.tooth().number);

@@ -179,11 +179,15 @@ class RokuTranslator {
     this.loadersByLocaleAndNamespace.get(locale)?.set(namespace, loader);
   }
 
-  async addTranslations(
-    locale: string,
-    namespace: string,
-    translations: LoaderFunction
-  ): Promise<void> {
+  async addTranslations({
+    locale,
+    namespace = 'translation',
+    translations,
+  }: {
+    locale: string;
+    namespace: string;
+    translations: LoaderFunction;
+  }): Promise<void> {
     if (locale !== this.config.locale && !this.isLocaleValid(locale)) {
       throw new Error(`Invalid locale: ${locale}`);
     }
@@ -214,8 +218,6 @@ class RokuTranslator {
     }
 
     const loadedTranslations = await translations();
-
-    console.log('loadedTranslations', loadedTranslations);
 
     this.i18nextInstance.addResources(locale, namespace, loadedTranslations);
   }

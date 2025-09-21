@@ -10,6 +10,7 @@ import {
   Signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   Odontogram,
   TeethNumbers,
@@ -25,7 +26,13 @@ export const loadable = ['teeth', 'image'] as const;
 @Component({
   selector: 'lib-odontogram-sectors-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, SingleToothImage, LoadingIcon],
+  imports: [
+    CommonModule,
+    FormsModule,
+    SingleToothImage,
+    LoadingIcon,
+    RokuTranslatorPipe,
+  ],
   templateUrl: './odontogram-sectors-view.html',
   styleUrl: './odontogram-sectors-view.scss',
   providers: [

@@ -6,7 +6,8 @@
   align-items: center;
   padding: 0.35em;
   border-radius: 0.25em;
-  background: #11111111;
+  background-color: #11111111;
+  user-select: none;
 
   div {
     display: flex;

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, Injector, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import {
   OdontogramMemory,
@@ -13,13 +13,13 @@ import {
   Treatment,
 } from '@portfolio/odontogram/models';
 import {
-  OdontogramSectorsView,
+  OdontogramUiModule,
   ToothTreatmentsModal,
 } from '@portfolio/odontogram/ui';
 
 @Component({
   selector: 'lib-odontogram-feature-full-odontogram-crud',
-  imports: [CommonModule, OdontogramSectorsView],
+  imports: [CommonModule, OdontogramUiModule],
   templateUrl: './feature-full-odontogram-crud.html',
   styleUrl: './feature-full-odontogram-crud.scss',
 })
@@ -28,6 +28,7 @@ export class OdontogramFeatureFullOdontogramCrud implements OnInit {
   private _toothTreatmentServ = inject(ToothTreatmentMemory);
   private _odontogramServ = inject(OdontogramMemory);
   private _dialog = inject(MatDialog);
+  private _injector = inject(Injector);
 
   odontograms?: Odontogram[];
   treatments?: ToothTreatment[];
@@ -53,6 +54,10 @@ export class OdontogramFeatureFullOdontogramCrud implements OnInit {
       maxWidth: '920px',
       width: '920px',
       minWidth: '340px',
+      // The modal needs the injector to be able to inject the translation service
+      // the instance used is the one that was already shared from other components,
+      // it doesn't create a new one
+      injector: this._injector,
     });
 
     ref.componentRef?.setInput('tooth', tooth);

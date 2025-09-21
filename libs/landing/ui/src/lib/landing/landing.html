@@ -1,45 +1,56 @@
-<div class="landing-container">
-  <main>
-    <section class="welcome">
-      <h1 class="welcome__title">
-        <img [alt]="t('Hi')" [src]="hiBubble | async" />
-        {{ t('landing.welcome_title') }}
-      </h1>
-      <p class="welcome__subtitle">
-        {{ t('landing.welcome_subtitle') }}
-      </p>
-      <div class="welcome__social-info">
-        <a href="" target="_blank">
-          <img [src]="resumeIcon | async" alt="Resume" />
-          <span class="social-info__label">{{ t('landing.resume') }}</span>
-        </a>
-        <a href="https://github.com/ichirokuxvi" target="_blank">
-          <img [src]="githubIcon | async" alt="GitHub" />
-          <span class="social-info__label">{{ t('landing.github') }}</span>
-        </a>
-        <a href="https://www.linkedin.com/in/ichiroku/" target="_blank">
-          <img [src]="linkedinIcon | async" alt="LinkedIn" />
-          <span class="social-info__label">{{ t('landing.linkedin') }}</span>
-        </a>
-        <a href="mailto:ichiroku.work@gmail.com" target="_blank">
-          <img [src]="mailIcon | async" alt="Mail" />
-          <span class="social-info__label">{{ t('landing.contact') }}</span>
-        </a>
+@if (compReady()) {
+  <div class="landing-container">
+    <main>
+      <section class="welcome">
+        <h1 class="welcome__title">
+          <img [alt]="'Hi' | rokuT" [src]="hiBubble | async" />
+          {{ 'landing.welcome_title' | rokuT }}
+        </h1>
+        <p class="welcome__subtitle">
+          {{ 'landing.welcome_subtitle' | rokuT }}
+        </p>
+        <div class="welcome__social-info">
+          <a href="" target="_blank">
+            <img [src]="resumeIcon | async" alt="Resume" />
+            <span class="social-info__label">{{
+              'landing.resume' | rokuT
+            }}</span>
+          </a>
+          <a href="https://github.com/ichirokuxvi" target="_blank">
+            <img [src]="githubIcon | async" alt="GitHub" />
+            <span class="social-info__label">{{
+              'landing.github' | rokuT
+            }}</span>
+          </a>
+          <a href="https://www.linkedin.com/in/ichiroku/" target="_blank">
+            <img [src]="linkedinIcon | async" alt="LinkedIn" />
+            <span class="social-info__label">{{
+              'landing.linkedin' | rokuT
+            }}</span>
+          </a>
+          <a href="mailto:ichiroku.work@gmail.com" target="_blank">
+            <img [src]="mailIcon | async" alt="Mail" />
+            <span class="social-info__label">{{
+              'landing.contact' | rokuT
+            }}</span>
+          </a>
+        </div>
+      </section>
+      <div class="intersection">
+        <span class="intersection__title">{{
+          'landing.projects' | rokuT
+        }}</span>
       </div>
-    </section>
-    <div class="intersection">
-      <span class="intersection__title">{{ t('landing.projects') }}</span>
-    </div>
-    <section class="projects">
-      @for (project of projects(); track $index) {
-        <article class="projects__project">
-          <h2 class="project__title">
-            <a [routerLink]="[project.appLink]">{{ project.name }}</a>
-            <a [href]="project.repoLink" target="_blank">
-              <img [src]="githubIcon | async" alt="GitHub" />
-            </a>
-          </h2>
-          <!-- <div class="project__areas">
+      <section class="projects">
+        @for (project of projects(); track $index) {
+          <article class="projects__project">
+            <h2 class="project__title">
+              <a [routerLink]="[project.appLink]">{{ project.name }}</a>
+              <a [href]="project.repoLink" target="_blank">
+                <img [src]="githubIcon | async" alt="GitHub" />
+              </a>
+            </h2>
+            <!-- <div class="project__areas">
             @for (area of project.areas; track $index) {
             <div class="project__area">
               <meter class="area__meter" min="0" max="100" optimum="100" low="100" [value]="area.progress">
@@ -50,26 +61,27 @@
             </div>
             }
           </div> -->
-          <a [routerLink]="[project.appLink]" class="project__img">
-            @if (project.image) {
-              <img
-                [src]="
-                  typeof project.image === 'string'
-                    ? project.image
-                    : (project.image | async)
-                "
-                alt="Odontogram Project"
-              />
-            }
-          </a>
-          <div class="project__description_container">
-            <p class="project__description">{{ project.description }}</p>
-            <a [routerLink]="[project.appLink]">
-              {{ t('landing.project_view') }}
+            <a [routerLink]="[project.appLink]" class="project__img">
+              @if (project.image) {
+                <img
+                  [src]="
+                    typeof project.image === 'string'
+                      ? project.image
+                      : (project.image | async)
+                  "
+                  alt="Odontogram Project"
+                />
+              }
             </a>
-          </div>
-        </article>
-      }
-    </section>
-  </main>
-</div>
+            <div class="project__description_container">
+              <p class="project__description">{{ project.description }}</p>
+              <a [routerLink]="[project.appLink]">{{
+                'landing.project_view' | rokuT
+              }}</a>
+            </div>
+          </article>
+        }
+      </section>
+    </main>
+  </div>
+}

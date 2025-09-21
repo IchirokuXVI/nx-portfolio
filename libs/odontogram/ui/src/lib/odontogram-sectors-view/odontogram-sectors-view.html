@@ -6,7 +6,9 @@
       id="showPediatric"
       type="checkbox"
     />
-    <label class="pl-2" for="showPediatric">Show pediatric odontogram</label>
+    <label class="pl-2" for="showPediatric">{{
+      'Show pediatric odontogram' | rokuT
+    }}</label>
   </div>
 }
 @let loadingImages = (loadingNotf.loadings$.image | async) ?? true;

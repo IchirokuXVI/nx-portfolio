@@ -1,53 +1,60 @@
-<div class="main-container">
-  <div class="tooth-header">
-    <h4>Tooth {{ tooth().number }}</h4>
-  </div>
-  @if (client()) {
-    <mat-expansion-panel (opened)="onOpenHistory()" class="history-container">
-      <mat-expansion-panel-header>
-        <mat-panel-title class="history-title"> Tooth history </mat-panel-title>
-      </mat-expansion-panel-header>
-      <div #historyBar class="history-bar">
-        @for (toothHist of toothHistory; track $index) {
-          <div
-            (click)="selectTooth(toothHist)"
-            (keydown.enter)="selectTooth(toothHist)"
-            [class.active]="
-              selectedTooth()?.odontogram?.id === toothHist.odontogram?.id
-            "
-            [class.current]="toothHist.odontogram === tooth().odontogram"
-            class="history-tooth"
-            tabindex="0"
-          >
-            <span [title]="toothHist.odontogram?.name" class="odontogram-name">
-              {{ toothHist.odontogram?.name ?? 'Current' }}
-            </span>
-            <div class="tooth-container">
-              <lib-odontogram-single-tooth-image
-                [showNumber]="false"
-                [tooth]="toothHist"
-              ></lib-odontogram-single-tooth-image>
+@if (compReady()) {
+  <div class="main-container">
+    <div class="tooth-header">
+      <h4>{{ 'odontogram.tooth' | rokuT }} {{ tooth().number }}</h4>
+    </div>
+    @if (client()) {
+      <mat-expansion-panel (opened)="onOpenHistory()" class="history-container">
+        <mat-expansion-panel-header>
+          <mat-panel-title class="history-title">{{
+            'odontogram.treatmentsModal.toothHistory' | rokuT
+          }}</mat-panel-title>
+        </mat-expansion-panel-header>
+        <div #historyBar class="history-bar">
+          @for (toothHist of toothHistory; track $index) {
+            <div
+              (click)="selectTooth(toothHist)"
+              (keydown.enter)="selectTooth(toothHist)"
+              [class.active]="
+                selectedTooth()?.odontogram?.id === toothHist.odontogram?.id
+              "
+              [class.current]="toothHist.odontogram === tooth().odontogram"
+              class="history-tooth"
+              tabindex="0"
+            >
+              <span
+                [title]="toothHist.odontogram?.name"
+                class="odontogram-name"
+              >
+                {{ toothHist.odontogram?.name ?? 'odontogram.current' | rokuT }}
+              </span>
+              <div class="tooth-container">
+                <lib-odontogram-single-tooth-image
+                  [showNumber]="false"
+                  [tooth]="toothHist"
+                ></lib-odontogram-single-tooth-image>
+              </div>
             </div>
-          </div>
-          @if (!$last) {
-            <span class="tooth-separator">
-              <i class="fas fa-arrow-right"></i>
-            </span>
+            @if (!$last) {
+              <span class="tooth-separator">
+                <i class="fas fa-arrow-right"></i>
+              </span>
+            }
           }
-        }
-      </div>
-    </mat-expansion-panel>
-  }
-  <div class="form-container">
-    @if (!tooth()) {
-      <div class="loading d-flex justify-content-center align-items-center">
-        <i class="fas fa-circle-notch fa-spin fa-2x"></i>
-      </div>
+        </div>
+      </mat-expansion-panel>
     }
-    @if (tooth()) {
-      <div class="treatments">
-        <ng-container #treatmentsContainer></ng-container>
-      </div>
-    }
+    <div class="form-container">
+      @if (!tooth()) {
+        <div class="loading d-flex justify-content-center align-items-center">
+          <i class="fas fa-circle-notch fa-spin fa-2x"></i>
+        </div>
+      }
+      @if (tooth()) {
+        <div class="treatments">
+          <ng-container #treatmentsContainer></ng-container>
+        </div>
+      }
+    </div>
   </div>
-</div>
+}

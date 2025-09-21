@@ -1,9 +1,10 @@
 <div [class.pointer-events-none]="disabled()" class="basic-option-toggle">
   @for (option of options(); track $index) {
+    @let selected = findValue(selectedOption()) === findValue(option);
     <div
       (click)="onSelectOption(option)"
       (keydown.enter)="onSelectOption(option)"
-      [class.active]="selectedOption === option"
+      [class.active]="selected"
       tabindex="2"
     >
       <ng-template
@@ -12,7 +13,6 @@
           context: { $implicit: option, index: $index }
         "
       ></ng-template>
-      <span class="square-icon pending"></span>
       <span>{{ findFieldAndJoin(option, labelField()) }}</span>
     </div>
   }

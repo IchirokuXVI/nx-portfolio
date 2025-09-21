@@ -1,5 +1,11 @@
 {
-  "odontogram.groupTeeth.grouped": "Agrupado",
-  "odontogram.groupTeeth.individual": "Individual",
-  "tooth.form.additionalInformation": "Información adicional"
+  "odontogram.tooth": "Diente",
+  "odontogram.teeth": "Dientes",
+  "odontogram.treatmentsModal.toothHistory": "Historial del diente",
+  "odontogram.toothForm.treatmentSearch.label": "Buscar tratamiento",
+  "odontogram.toothForm.treatmentSearch.placeholder": "Escribe para buscar tratamientos",
+  "odontogram.toothForm.groupTeeth.grouped": "Agrupados",
+  "odontogram.toothForm.groupTeeth.individual": "Individuales",
+  "odontogram.toothForm.additionalInformation.label": "Información adicional",
+  "odontogram.toothForm.additionalInformation.placeholder": "Añade información adicional para el tratamiento"
 }

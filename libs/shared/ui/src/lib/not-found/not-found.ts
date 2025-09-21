@@ -1,37 +1,32 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal } from '@angular/core';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
-import { forkJoin } from 'rxjs';
+import { Component, inject, signal } from '@angular/core';
+import {
+  provideRokuTranslator,
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 
 @Component({
   selector: 'lib-not-found',
-  imports: [CommonModule],
+  imports: [CommonModule, RokuTranslatorPipe],
   templateUrl: './not-found.html',
   styleUrl: './not-found.scss',
+  providers: [
+    provideRokuTranslator({
+      locales: ['en', 'es'],
+      defaultNamespace: 'shared/ui',
+      loader: (locale) => import(`./i18n/${locale}.json`),
+    }),
+  ],
 })
 export class NotFoundComponent {
   compReady = signal(false);
 
-  constructor() {
-    RokuTranslator.addNamespace('not-found');
+  private _translateServ = inject(RokuTranslatorService);
 
-    forkJoin([
-      RokuTranslator.addTranslations(
-        'en',
-        'not-found',
-        () => import('./i18n/en.json')
-      ),
-      RokuTranslator.addTranslations(
-        'es',
-        'not-found',
-        () => import('./i18n/es.json')
-      ),
-    ]).subscribe(() => {
+  constructor() {
+    this._translateServ.loaded$.subscribe(() => {
       this.compReady.set(true);
     });
-  }
-
-  t(s: string) {
-    return RokuTranslator.t(s);
   }
 }

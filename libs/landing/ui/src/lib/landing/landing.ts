@@ -1,18 +1,30 @@
 import { CommonModule } from '@angular/common';
-import { Component, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { TranslatedProject } from '@portfolio/landing/models';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 
 // declare const __webpack_public_path__: string;
 
 @Component({
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, RokuTranslatorPipe],
   selector: 'lib-landing-ui',
   templateUrl: './landing.html',
   styleUrl: './landing.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Landing {
+  compReady = signal(false);
+
   // @ts-expect-error For some reason the png module does not work so even tho the IDE shows no error, the compiler does
   hiBubble = import(`../../../assets/hi_bubble.png`).then((m) => m.default);
   // @ts-expect-error For some reason the png module does not work so even tho the IDE shows no error, the compiler does
@@ -29,7 +41,11 @@ export class Landing {
 
   projects = input<TranslatedProject[]>([]);
 
-  t(s: string) {
-    return RokuTranslator.t(s);
+  private _rokuTranslatorServ = inject(RokuTranslatorService);
+
+  constructor() {
+    this._rokuTranslatorServ.loaded$.subscribe(() => {
+      this.compReady.set(true);
+    });
   }
 }

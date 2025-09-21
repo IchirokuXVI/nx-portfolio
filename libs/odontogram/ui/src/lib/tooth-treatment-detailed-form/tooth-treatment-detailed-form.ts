@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   effect,
+  inject,
   input,
   output,
   Signal,
@@ -15,6 +16,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   TeethNumbers,
   ToothTreatment,
@@ -29,7 +34,7 @@ import {
   mapFormToToothTreatment,
   mapToothTreatmentToForm,
   ToothTreatmentFormModel,
-} from './tooth-treatment-form-model';
+} from './tooth-treatment-detailed-form-model';
 
 @Component({
   selector: 'lib-tooth-treatment-form',
@@ -44,17 +49,20 @@ import {
     MatButtonToggleModule,
     MatSelectModule,
     MatInputModule,
+    RokuTranslatorPipe,
   ],
-  templateUrl: './tooth-treatment-form.html',
-  styleUrls: ['./tooth-treatment-form.scss'],
+  templateUrl: './tooth-treatment-detailed-form.html',
+  styleUrls: ['./tooth-treatment-detailed-form.scss'],
 })
-export class ToothTreatmentForm {
+export class ToothTreatmentDetailedForm {
+  private _translateServ = inject(RokuTranslatorService);
+
   toothZones = ToothZones;
   toothTreatmentStatus = ToothTreatmentStatus;
   toothTreatmentStatusArr = Object.values(ToothTreatmentStatus).map(
     (status) => ({
       value: status,
-      label: ToothTreatmentStatusTranslationKey[status],
+      label: this._translateServ.t(ToothTreatmentStatusTranslationKey[status]),
     })
   );
 
