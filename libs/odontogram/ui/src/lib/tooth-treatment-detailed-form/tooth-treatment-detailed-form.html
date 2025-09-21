@@ -1,0 +1,144 @@
+@let form = toothTreatmentForm();
+<div
+  [formGroup]="form"
+  [ngClass]="
+    toothTreatmentStatusToCssClass[
+      form.get('status')?.value || toothTreatmentStatus.PENDING
+    ]
+  "
+  class="treatment-container"
+>
+  <div class="treatmentCol align-items-center">
+    <div
+      [class.disabled]="
+        form.get('type')?.value === 'implant' ||
+        form.get('type')?.value === 'extraction'
+      "
+      [class.pointer-events-none]="form.disabled"
+      [class]="form.get('status')?.value ?? 'pending'"
+      class="zone-selector"
+    >
+      <div class="main-zones">
+        @for (
+          zone of [
+            toothZones.TOP,
+            toothZones.LEFT,
+            toothZones.CENTER,
+            toothZones.RIGHT,
+            toothZones.BOTTOM,
+          ];
+          track $index
+        ) {
+          <div
+            (click)="toggleZone(zone)"
+            (keydown.enter)="toggleZone(zone)"
+            [class.selected]="form.get('zones')?.value?.includes(zone)"
+            [class]="zone"
+            mat-ripple
+            tabindex="2"
+          ></div>
+        }
+      </div>
+      <div class="lateral-root">
+        @for (zone of [toothZones.LATERAL, toothZones.ROOT]; track $index) {
+          <div
+            (click)="toggleZone(zone)"
+            (keydown.enter)="toggleZone(zone)"
+            [class.selected]="form.get('zones')?.value?.includes(zone)"
+            [class]="zone"
+            mat-ripple
+            tabindex="2"
+          ></div>
+        }
+      </div>
+    </div>
+  </div>
+  <div class="treatmentCol secondCol">
+    <mat-form-field subscriptSizing="dynamic">
+      <mat-label>{{
+        'odontogram.toothForm.treatmentSearch.label' | rokuT
+      }}</mat-label>
+      <input
+        [matAutocomplete]="autoCompleteTreatment"
+        [placeholder]="
+          'odontogram.toothForm.treatmentSearch.placeholder' | rokuT
+        "
+        formControlName="treatment"
+        matInput
+        tabindex="1"
+        type="text"
+      />
+      <mat-autocomplete
+        [displayWith]="displayTreatmentOption"
+        #autoCompleteTreatment="matAutocomplete"
+      >
+        @for (option of treatmentSuggestions(); track $index) {
+          <mat-option [value]="option">{{ option.name }}</mat-option>
+        }
+      </mat-autocomplete>
+    </mat-form-field>
+    <!-- @if (!form.disabled) {
+      <button
+        (click)="deleteTreatment.emit()"
+        (keydown.enter)="deleteTreatment.emit()"
+        mat-icon-button
+        tabindex="4"
+      >
+        <i class="fas fa-trash text-danger"></i>
+      </button>
+    } -->
+    <div class="treatment-info">
+      <div class="treatment-info__first-row">
+        <div class="affected-teeth">
+          <mat-form-field subscriptSizing="dynamic" tabindex="5">
+            <mat-label>{{ 'odontogram.teeth' | rokuT }}</mat-label>
+            <mat-select formControlName="teeth" multiple>
+              @for (tooth of teeth(); track $index) {
+                <mat-option
+                  [disabled]="tooth.disabled"
+                  [value]="tooth.number"
+                  >{{ tooth.number }}</mat-option
+                >
+              }
+            </mat-select>
+          </mat-form-field>
+        </div>
+        <div class="groupTeeth">
+          <mat-button-toggle-group
+            #groupLotes="matButtonToggleGroup"
+            formControlName="groupTeeth"
+          >
+            <mat-button-toggle [value]="true">
+              {{ 'odontogram.toothForm.groupTeeth.grouped' | rokuT }}
+            </mat-button-toggle>
+            <mat-button-toggle [value]="false">
+              {{ 'odontogram.toothForm.groupTeeth.individual' | rokuT }}
+            </mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
+        <lib-basic-option-toggle
+          [options]="toothTreatmentStatusArr"
+          formControlName="status"
+        >
+          <ng-template #icon let-i="index" let-option>
+            <span [class]="option.value" class="square-icon"></span>
+          </ng-template>
+        </lib-basic-option-toggle>
+      </div>
+      <div class="treatment-info__notes">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{
+            'odontogram.toothForm.additionalInformation.label' | rokuT
+          }}</mat-label>
+          <textarea
+            [placeholder]="
+              'odontogram.toothForm.additionalInformation.placeholder' | rokuT
+            "
+            formControlName="additionalInformation"
+            matInput
+          ></textarea>
+        </mat-form-field>
+      </div>
+    </div>
+  </div>
+</div>

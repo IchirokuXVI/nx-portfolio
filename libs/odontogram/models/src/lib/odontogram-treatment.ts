@@ -1,8 +1,11 @@
-import { TreatmentStatus } from "./treatment-status";
+import { ToothTreatmentStatus } from './tooth-treatment-status';
 
 export interface OdontogramTreatment {
+  id?: string;
   odontogram?: string;
-  status: TreatmentStatus;
+  description?: string;
+  treatment?: string;
+  status: ToothTreatmentStatus;
   additionalInformation?: string;
   createdAt?: Date;
   updatedAt?: Date;

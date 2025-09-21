@@ -1,0 +1,19 @@
+<div [class.pointer-events-none]="disabled()" class="basic-option-toggle">
+  @for (option of options(); track $index) {
+    @let selected = findValue(selectedOption()) === findValue(option);
+    <div
+      (click)="onSelectOption(option)"
+      (keydown.enter)="onSelectOption(option)"
+      [class.active]="selected"
+      tabindex="2"
+    >
+      <ng-template
+        *ngTemplateOutlet="
+          iconTemplate;
+          context: { $implicit: option, index: $index }
+        "
+      ></ng-template>
+      <span>{{ findFieldAndJoin(option, labelField()) }}</span>
+    </div>
+  }
+</div>

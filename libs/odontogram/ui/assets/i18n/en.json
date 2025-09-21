@@ -1,0 +1,11 @@
+{
+  "odontogram.tooth": "Tooth",
+  "odontogram.teeth": "Teeth",
+  "odontogram.treatmentsModal.toothHistory": "Tooth history",
+  "odontogram.toothForm.treatmentSearch.label": "Search treatment",
+  "odontogram.toothForm.treatmentSearch.placeholder": "Type to search treatments",
+  "odontogram.toothForm.groupTeeth.grouped": "Grouped",
+  "odontogram.toothForm.groupTeeth.individual": "Individual",
+  "odontogram.toothForm.additionalInformation.label": "Additional information",
+  "odontogram.toothForm.additionalInformation.placeholder": "Type additional information for the treatment"
+}

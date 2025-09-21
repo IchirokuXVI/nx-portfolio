@@ -1,0 +1,227 @@
+@use '../common-variables.scss' as common;
+
+:host {
+  container-type: inline-size;
+}
+
+.treatment-container {
+  display: flex;
+  flex-direction: row;
+  padding: 0.75em;
+
+  column-gap: 1em;
+  row-gap: 0.35em;
+
+  background-color: #88888811;
+  transition: 0.3s;
+
+  @container (width < 520px) {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  &.pending {
+    --status-color: #{common.$pendingColor};
+  }
+
+  &.finished {
+    --status-color: #{common.$finishedColor};
+  }
+
+  &:hover {
+    box-shadow: 0 6px 12px 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .secondCol {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.5em;
+    width: 100%;
+  }
+
+  .treatmentCol {
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.5em;
+
+    .zone-selector {
+      position: relative;
+      flex-grow: 1;
+      flex-shrink: 0;
+      max-width: min-content;
+      display: flex;
+      flex-direction: column;
+      row-gap: 0.5em;
+      padding: 0.25em;
+
+      &.disabled {
+        pointer-events: none;
+
+        &:after {
+          content: '';
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          position: absolute;
+          background-color: #11111144;
+          z-index: 2;
+        }
+      }
+
+      .main-zones,
+      .lateral-root {
+        div {
+          cursor: pointer;
+          background-color: #ababab;
+
+          &.selected {
+            background-color: var(--status-color);
+          }
+        }
+      }
+
+      .main-zones {
+        position: relative;
+        display: grid;
+
+        width: 128px;
+        height: 128px;
+
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+        gap: 1px;
+        grid-template-areas:
+          '. top .'
+          'left center right'
+          '. bottom .';
+
+        // Creates a circle border around the selectable zones
+        // and hides the corners of the zones that are outside the circle
+        // The border is created with a pseudo element to
+        // allow for another border or size changes in the parent
+        border-radius: 50%;
+        overflow: hidden;
+        &:before {
+          $borderSize: 6;
+
+          content: '';
+          position: absolute;
+          width: calc(100% + #{$borderSize}px);
+          height: calc(100% + #{$borderSize}px);
+          border: #{$borderSize}px solid #507f8d;
+          top: #{calc($borderSize / 2 * -1)}px;
+          left: #{calc($borderSize / 2 * -1)}px;
+          box-sizing: border-box;
+          border-radius: 50%;
+          pointer-events: none;
+        }
+
+        .top {
+          grid-area: top;
+        }
+
+        .center {
+          grid-area: center;
+        }
+
+        .left {
+          grid-area: left;
+        }
+
+        .right {
+          grid-area: right;
+        }
+
+        .bottom {
+          grid-area: bottom;
+        }
+      }
+
+      .lateral-root {
+        display: flex;
+        flex-direction: column;
+        row-gap: 4px;
+        width: 128px;
+        height: 128px;
+
+        .lateral {
+          height: 32px;
+          width: 100%;
+        }
+
+        .root {
+          height: 96px;
+          clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+          transform: rotate(180deg);
+        }
+      }
+    }
+
+    .treatment-info {
+      flex: 1 1;
+      display: flex;
+      flex-direction: column;
+      column-gap: 0.25em;
+      row-gap: 0.5em;
+      flex-wrap: wrap;
+
+      .treatment-info__first-row {
+        display: flex;
+        column-gap: 0.5em;
+        align-items: center;
+        row-gap: 0.35em;
+        flex-wrap: wrap;
+
+        .affected-teeth {
+          flex-grow: 1;
+
+          > * {
+            width: 100%;
+          }
+        }
+
+        .status {
+        }
+      }
+
+      .treatment-info__notes {
+        display: flex;
+        flex-grow: 1;
+        width: 100%;
+
+        mat-form-field {
+          flex-grow: 1;
+          height: 100%;
+
+          ::ng-deep {
+            .mat-mdc-form-field-flex,
+            .mat-mdc-form-field-infix {
+              height: 100%;
+            }
+          }
+
+          textarea[matInput] {
+            flex-grow: 1;
+            height: 100%;
+          }
+        }
+      }
+    }
+  }
+}
+
+.square-icon {
+  width: 1em;
+  height: 1em;
+  display: inline;
+  border-radius: 0.25em;
+
+  &.pending {
+    background-color: #{common.$pendingColor};
+  }
+
+  &.completed {
+    background-color: #{common.$finishedColor};
+  }
+}

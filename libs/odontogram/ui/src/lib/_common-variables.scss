@@ -1,0 +1,10 @@
+// This variable indicates which class is being
+// used by the zones without a status
+// It is necessary to identify when they have
+// an applied status and also avoid having to
+// repeat styles multiple times per status
+$noStatusClass: '.status-none';
+
+// Colors for pending/finished status
+$pendingColor: #fba2a2;
+$finishedColor: #80ded9;

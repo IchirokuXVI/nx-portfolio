@@ -1,8 +1,11 @@
+export { default as en } from './lib/i18n/en.json';
+export { default as es } from './lib/i18n/es.json';
 export * from './lib/odontogram';
 export * from './lib/odontogram-treatment';
-export * from './lib/tooth-treatment';
-export * from './lib/treatment-type';
-export * from './lib/treatment-status';
+export * from './lib/teeth-numbers';
 export * from './lib/tooth';
-export * from './lib/tooth-zones';
 export * from './lib/tooth-treatment';
+export * from './lib/tooth-treatment-status';
+export * from './lib/tooth-zones';
+export * from './lib/treatment';
+export * from './lib/treatment-type';

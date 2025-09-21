@@ -24,7 +24,6 @@
           }
         ],
         "styles": ["apps/landing/src/styles.scss"],
-        "scripts": [],
         "customWebpackConfig": {
           "path": "apps/landing/webpack.config.ts"
         }
@@ -39,8 +38,8 @@
             },
             {
               "type": "anyComponentStyle",
-              "maximumWarning": "4kb",
-              "maximumError": "8kb"
+              "maximumWarning": "12kb",
+              "maximumError": "16kb"
             }
           ],
           "outputHashing": "all",
@@ -58,23 +57,6 @@
         }
       },
       "defaultConfiguration": "production"
-    },
-    "serve": {
-      "continuous": true,
-      "executor": "@nx/angular:dev-server",
-      "options": {
-        "port": 4201,
-        "publicHost": "http://localhost:4201"
-      },
-      "configurations": {
-        "production": {
-          "buildTarget": "landing:build:production"
-        },
-        "development": {
-          "buildTarget": "landing:build:development"
-        }
-      },
-      "defaultConfiguration": "development"
     },
     "extract-i18n": {
       "executor": "@angular-devkit/build-angular:extract-i18n",
@@ -109,6 +91,24 @@
           "buildTarget": "landing:build:production"
         }
       }
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/angular:dev-server",
+      "options": {
+        "port": 4201,
+        "publicHost": "http://localhost:4201"
+      },
+      "configurations": {
+        "production": {
+          "publicHost": "https://mfe.ichirokuxvi.com/landing",
+          "buildTarget": "landing:build:production"
+        },
+        "development": {
+          "buildTarget": "landing:build:development"
+        }
+      },
+      "defaultConfiguration": "development"
     }
   }
 }

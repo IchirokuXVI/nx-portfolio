@@ -5,15 +5,15 @@ export enum ToothZones {
   LEFT = 'left',
   CENTER = 'center',
   LATERAL = 'lateral',
-  ROOT = 'root'
+  ROOT = 'root',
 }
 
 export const ToothZonesTranslationKey = {
-  [ToothZones.TOP]: 'odontogram.zone.top',
-  [ToothZones.RIGHT]: 'odontogram.zone.right',
-  [ToothZones.BOTTOM]: 'odontogram.zone.bottom',
-  [ToothZones.LEFT]: 'odontogram.zone.left',
-  [ToothZones.CENTER]: 'odontogram.zone.center',
-  [ToothZones.LATERAL]: 'odontogram.zone.lateral',
-  [ToothZones.ROOT]: 'odontogram.zone.root'
+  [ToothZones.TOP]: 'odontogram.toothZone.top',
+  [ToothZones.RIGHT]: 'odontogram.toothZone.right',
+  [ToothZones.BOTTOM]: 'odontogram.toothZone.bottom',
+  [ToothZones.LEFT]: 'odontogram.toothZone.left',
+  [ToothZones.CENTER]: 'odontogram.toothZone.center',
+  [ToothZones.LATERAL]: 'odontogram.toothZone.lateral',
+  [ToothZones.ROOT]: 'odontogram.toothZone.root',
 };

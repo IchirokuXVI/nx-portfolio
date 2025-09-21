@@ -1,0 +1,27 @@
+{
+  "name": "localization/rokutranslator",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/localization/rokutranslator/src",
+  "projectType": "library",
+  "tags": [],
+  "implicitDependencies": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/localization/rokutranslator",
+        "main": "libs/shared/localization/rokutranslator/src/index.ts",
+        "tsConfig": "libs/shared/localization/rokutranslator/tsconfig.lib.json",
+        "assets": ["libs/shared/localization/rokutranslator/*.md"]
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/shared/localization/rokutranslator/jest.config.ts"
+      }
+    }
+  }
+}

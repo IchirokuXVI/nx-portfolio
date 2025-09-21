@@ -1,9 +1,28 @@
 import { withModuleFederation } from '@nx/module-federation/angular';
-import config from './module-federation.config';
+import { composePlugins } from '@nx/webpack';
+import merge from 'webpack-merge';
+import mfeConfig from './module-federation.config';
 
-/**
- * DTS Plugin is disabled in Nx Workspaces as Nx already provides Typing support for Module Federation
- * The DTS Plugin can be enabled by setting dts: true
- * Learn more about the DTS Plugin here: https://module-federation.io/configure/dts.html
- */
-export default withModuleFederation(config, { dts: false });
+export default composePlugins(async (config, { options, context }) => {
+  const federatedModules = await withModuleFederation(
+    {
+      ...mfeConfig,
+    },
+    { dts: false }
+  );
+
+  return merge(federatedModules(config), {
+    module: {
+      rules: [
+        {
+          test: /\.(jpe?g|png|svg)$/,
+          use: [
+            {
+              loader: 'file-loader',
+            },
+          ],
+        },
+      ],
+    },
+  });
+});

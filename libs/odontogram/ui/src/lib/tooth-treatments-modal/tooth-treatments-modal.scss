@@ -1,0 +1,132 @@
+@use '../common-variables.scss' as common;
+
+.main-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  padding: 1em;
+
+  .tooth-header {
+    display: flex;
+    flex-direction: row;
+    margin: 0 auto;
+    column-gap: 1em;
+    padding: 0.5em 0;
+  }
+
+  .history-container {
+    display: flex;
+    flex-direction: column;
+
+    .history-title {
+      width: 100%;
+    }
+
+    .history-bar {
+      flex: 1 0 auto;
+      width: 100%;
+      min-width: 0;
+
+      display: flex;
+      flex-direction: row;
+      gap: 0.25em;
+      align-items: center;
+      padding: 0.75em;
+      overflow-x: auto;
+
+      .tooth-separator {
+        font-size: 2em;
+      }
+
+      .history-tooth {
+        flex: 0 0;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        width: 128px;
+        max-width: 128px;
+        min-width: 128px;
+        align-items: center;
+        padding: 0.25em;
+        cursor: pointer;
+
+        .odontogram-name {
+          max-width: 100%;
+          overflow-x: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          user-select: none;
+        }
+
+        .tooth-container {
+          max-width: 48px;
+        }
+
+        &.current {
+          border: 2px solid #80deb2;
+          border-radius: 0.25rem;
+        }
+
+        &:hover,
+        &.active {
+          // Añade un color de fondo sobre el diente
+          // Tiene alpha para no ocultar las imágenes
+          &:before {
+            content: '';
+            width: 100%;
+            height: 100%;
+            background-color: #ababab33;
+            position: absolute;
+            z-index: 3;
+            border-radius: 0.25rem;
+            pointer-events: none;
+            top: 0;
+          }
+        }
+
+        &.active {
+          cursor: inherit;
+        }
+      }
+    }
+  }
+
+  .form-container {
+    flex: 1 1 100%;
+    display: flex;
+    flex-direction: column;
+    row-gap: 0.5em;
+
+    .treatments {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      row-gap: 0.5em;
+
+      .treatment {
+        flex: 1 1;
+        width: 100%;
+        border: 1px solid #33333344;
+        box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.2);
+      }
+    }
+  }
+}
+
+button {
+  margin: 0 auto;
+  align-self: center;
+  margin: 0.25em;
+
+  .content {
+    display: flex;
+    gap: 0.5em;
+
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.column-gap-05 {
+  column-gap: 0.5em;
+}

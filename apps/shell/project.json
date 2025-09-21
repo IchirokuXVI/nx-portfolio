@@ -24,7 +24,6 @@
           }
         ],
         "styles": ["apps/shell/src/styles.scss"],
-        "scripts": [],
         "customWebpackConfig": {
           "path": "apps/shell/webpack.config.ts"
         }
@@ -39,8 +38,8 @@
             },
             {
               "type": "anyComponentStyle",
-              "maximumWarning": "4kb",
-              "maximumError": "8kb"
+              "maximumWarning": "12kb",
+              "maximumError": "16kb"
             }
           ],
           "outputHashing": "all",
@@ -58,29 +57,6 @@
         }
       },
       "defaultConfiguration": "production"
-    },
-    "serve": {
-      "continuous": true,
-      "executor": "@nx/angular:module-federation-dev-server",
-      "options": {
-        "port": 4200,
-        "publicHost": "http://localhost:4200"
-      },
-      "configurations": {
-        "production": {
-          "buildTarget": "shell:build:production"
-        },
-        "development": {
-          "buildTarget": "shell:build:development",
-          "devRemotes": [
-            "odontogram",
-            "landing"
-          ],
-          "poll": 1500,
-          "host": "0.0.0.0"
-        }
-      },
-      "defaultConfiguration": "development"
     },
     "extract-i18n": {
       "executor": "@angular-devkit/build-angular:extract-i18n",
@@ -100,12 +76,32 @@
     },
     "serve-static": {
       "continuous": true,
-      "executor": "@nx/web:file-server",
+      "executor": "@nx/angular:module-federation-dev-server",
       "options": {
         "buildTarget": "shell:build",
         "port": 4200,
         "spa": true
       }
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/angular:module-federation-dev-server",
+      "options": {
+        "port": 4200,
+        "publicHost": "http://localhost:4200"
+      },
+      "configurations": {
+        "production": {
+          "buildTarget": "shell:build:production"
+        },
+        "development": {
+          "buildTarget": "shell:build:development",
+          "devRemotes": ["odontogram", "landing"],
+          "poll": 1500,
+          "host": "0.0.0.0"
+        }
+      },
+      "defaultConfiguration": "development"
     }
   }
 }

@@ -1,3 +1,3 @@
-export * from './lib/ui/ui';
-
+export * from './lib/basic-option-toggle/basic-option-toggle';
+export * from './lib/loading-icon/loading-icon';
 export * from './lib/not-found/not-found';

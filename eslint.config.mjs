@@ -39,4 +39,15 @@ export default [
     // Override or add rules here
     rules: {},
   },
+  {
+    files: ['*.html'],
+    excludedFiles: ['*inline-template-*.component.html'],
+    extends: [
+      'plugin:@angular-eslint/template/recommended',
+      'plugin:prettier/recommended',
+    ],
+    rules: {
+      'prettier/prettier': ['error', { parser: 'angular' }],
+    },
+  },
 ];

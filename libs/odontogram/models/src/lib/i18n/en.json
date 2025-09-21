@@ -1,0 +1,14 @@
+{
+  "odontogram.treatmentStatus.pending": "Pending",
+  "odontogram.treatmentStatus.completed": "Completed",
+  "odontogram.toothZone.top": "Top",
+  "odontogram.toothZone.right": "Right",
+  "odontogram.toothZone.bottom": "Bottom",
+  "odontogram.toothZone.left": "Left",
+  "odontogram.toothZone.center": "Center",
+  "odontogram.toothZone.lateral": "Lateral",
+  "odontogram.toothZone.root": "Root",
+  "odontogram.treatment.standard": "Standard",
+  "odontogram.treatment.implant": "Implant",
+  "odontogram.treatment.extraction": "Extraction"
+}

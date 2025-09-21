@@ -1,0 +1,209 @@
+// $primary-color: #;
+// $accent-color: #;
+$background-color: #2a2a2a;
+// $card-background-color: #DDDEE011;
+$text-color: #f0f0f0;
+$text-accent-color: #f2d45b;
+
+:host {
+  width: 100%;
+}
+
+a {
+  color: $text-color;
+}
+
+.landing-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: $background-color;
+  font-family: Arial, sans-serif;
+  margin: 0;
+  color: $text-color;
+
+  > main {
+    flex: 1 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2em;
+    padding: 1.5em;
+    flex-wrap: wrap;
+    align-items: center;
+
+    .intersection {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: $text-accent-color;
+      position: relative;
+
+      &:before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        width: 100%;
+        border-top: 1px solid $text-accent-color;
+        z-index: 0;
+      }
+
+      .intersection__title {
+        font-size: 1.5em;
+        padding: 0 2em;
+        background-color: $background-color;
+        z-index: 1;
+      }
+    }
+
+    .welcome {
+      margin-top: 3em;
+      display: flex;
+      flex-direction: column;
+      font-size: 1.5em;
+      gap: 0.75em;
+      align-items: center;
+      line-height: 1.6em;
+      min-width: 0;
+
+      h1.welcome__title {
+        display: flex;
+        font-weight: unset;
+        align-items: center;
+        margin: 0;
+        gap: 0.25em;
+        color: $text-accent-color;
+        font-size: 2em;
+
+        img {
+          width: 1.3em;
+          height: auto;
+        }
+      }
+
+      p.welcome__subtitle {
+        min-width: 100%;
+        max-width: min-content;
+        padding: 0 2em;
+        text-align: center;
+      }
+
+      div.welcome__social-info {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1em;
+        align-items: center;
+        justify-content: center;
+
+        a {
+          display: flex;
+          gap: 0.25em;
+
+          img {
+            width: 1.3em;
+            height: auto;
+          }
+        }
+      }
+    }
+
+    .projects {
+      display: flex;
+      min-width: 0;
+      width: 100%;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 4em;
+
+      .projects__project {
+        flex: 0 1 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 1em;
+        max-width: 48em;
+        height: min-content;
+        // max-height: 36em;
+
+        .project__title {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5em;
+          font-size: 2em;
+          margin: 0;
+          color: $text-accent-color;
+
+          a {
+            display: flex;
+
+            img {
+              width: 1em;
+              height: auto;
+            }
+          }
+        }
+
+        .project__areas {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1em;
+
+          .project__area {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+          }
+
+          .area__meter {
+            height: 3em;
+            width: 6em;
+          }
+
+          .area__label {
+            font-size: 0.75em;
+            font-weight: bold;
+            position: absolute;
+            color: #1a1a1a;
+            z-index: 1;
+          }
+        }
+
+        .project__img {
+          width: 100%;
+          height: auto;
+          max-width: 48em;
+          aspect-ratio: 16/9;
+          min-width: 0;
+
+          &:not(:has(img)) {
+            background-color: #11111111;
+          }
+
+          img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+          }
+        }
+
+        .project__description_container {
+          font-size: 1.25em;
+          line-height: 1.5em;
+
+          .project__description {
+            display: inline;
+            overflow: hidden;
+            margin-right: 0.35em;
+          }
+
+          a {
+            display: inline;
+          }
+        }
+      }
+    }
+  }
+}

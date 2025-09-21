@@ -1,7 +1,7 @@
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { Router, RouterModule } from '@angular/router';
 import { AppComponent } from './app';
 import { NxWelcomeComponent } from './nx-welcome';
-import { Router, RouterModule } from '@angular/router';
 
 describe('AppComponent', () => {
   beforeEach(async () => {

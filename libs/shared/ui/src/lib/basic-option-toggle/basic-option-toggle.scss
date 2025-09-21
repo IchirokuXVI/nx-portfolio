@@ -1,0 +1,30 @@
+.basic-option-toggle {
+  display: flex;
+  column-gap: 0.5em;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0.35em;
+  border-radius: 0.25em;
+  background-color: #11111111;
+  user-select: none;
+
+  div {
+    display: flex;
+    column-gap: 0.25em;
+    cursor: pointer;
+    align-items: center;
+
+    &.active {
+      font-weight: 650;
+      cursor: default;
+    }
+
+    &:hover,
+    &.active {
+      span {
+        text-decoration: underline;
+      }
+    }
+  }
+}
