@@ -14,7 +14,9 @@ import { ToothTreatmentsModal } from './tooth-treatments-modal/tooth-treatments-
       namespaces: ['odontogram/models'],
       loader: (locale, namespace: string | undefined) => {
         if (namespace === 'odontogram/models') {
-          return import(`@portfolio/odontogram/models`).then((m) => m[locale]);
+          return import('@portfolio/odontogram/models-localization').then(
+            (m) => m[locale]
+          );
         }
 
         return import(`../../assets/i18n/${locale}.json`);

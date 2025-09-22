@@ -1,0 +1,19 @@
+{
+  "name": "odontogram/models-localization",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/odontogram/models-localization/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/odontogram/models-localization",
+        "main": "libs/odontogram/models-localization/src/index.ts",
+        "tsConfig": "libs/odontogram/models-localization/tsconfig.lib.json",
+        "assets": ["libs/odontogram/models-localization/*.md"]
+      }
+    }
+  }
+}

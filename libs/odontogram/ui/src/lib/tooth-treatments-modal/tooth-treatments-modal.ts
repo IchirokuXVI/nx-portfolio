@@ -11,7 +11,6 @@ import {
   model,
   OnInit,
   output,
-  runInInjectionContext,
   signal,
   untracked,
   ViewChild,
@@ -115,27 +114,26 @@ export class ToothTreatmentsModal implements OnInit {
     effect(() => {
       if (!this.compReady()) return;
 
-      runInInjectionContext(this._injector, () => {
-        afterNextRender(() => {
-          runInInjectionContext(this._injector, () => {
-            toObservable(this.compReady)
-              .pipe(
-                filter((r) => r),
-                first()
-              )
-              .subscribe(() => {
-                const prevTooth = untracked(this.prevTooth);
-                const selectedTooth = untracked(this.selectedTooth);
+      afterNextRender(
+        () => {
+          toObservable(this.compReady, { injector: this._injector })
+            .pipe(
+              filter((r) => r),
+              first()
+            )
+            .subscribe(() => {
+              const prevTooth = untracked(this.prevTooth);
+              const selectedTooth = untracked(this.selectedTooth);
 
-                if (!prevTooth || selectedTooth?.number === prevTooth?.number) {
-                  this.selectTooth(this.tooth());
-                }
+              if (!prevTooth || selectedTooth?.number === prevTooth?.number) {
+                this.selectTooth(this.tooth());
+              }
 
-                this.prevTooth.set(selectedTooth);
-              });
-          });
-        });
-      });
+              this.prevTooth.set(selectedTooth);
+            });
+        },
+        { injector: this._injector }
+      );
     });
   }
 
