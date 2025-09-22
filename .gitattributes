@@ -1,0 +1,4 @@
+# Make sure bash and config files use LF so it doesn't break in Linux
+* text=auto
+*.sh text eol=lf
+*.conf text eol=lf
