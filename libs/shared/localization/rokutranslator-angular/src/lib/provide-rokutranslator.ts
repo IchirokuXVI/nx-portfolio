@@ -14,7 +14,7 @@ export function provideRokuTranslator<L extends string>({
   defaultNamespace,
   loader,
 }: {
-  locales?: string | string[];
+  locales?: L | L[];
   namespaces?: string | string[];
   defaultNamespace?: string;
   loader: LoaderFunction<L>;
