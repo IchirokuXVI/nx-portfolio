@@ -37,6 +37,17 @@
     flex-direction: column;
     row-gap: 0.5em;
     width: 100%;
+
+    .treatment-search-delete-row {
+      display: flex;
+      flex-direction: row;
+      gap: 0.5em;
+      align-items: center;
+
+      mat-form-field {
+        flex-grow: 1;
+      }
+    }
   }
 
   .treatmentCol {

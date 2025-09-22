@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -29,7 +30,7 @@ import {
   Treatment,
   TreatmentType,
 } from '@portfolio/odontogram/models';
-import { BasicOptionToggle } from '@portfolio/shared/ui';
+import { BasicOptionToggle, TrashIcon } from '@portfolio/shared/ui';
 import {
   mapFormToToothTreatment,
   mapToothTreatmentToForm,
@@ -45,11 +46,13 @@ import {
     BasicOptionToggle,
     MatFormFieldModule,
     MatIconModule,
+    MatButtonModule,
     MatAutocompleteModule,
     MatButtonToggleModule,
     MatSelectModule,
     MatInputModule,
     RokuTranslatorPipe,
+    TrashIcon,
   ],
   templateUrl: './tooth-treatment-detailed-form.html',
   styleUrls: ['./tooth-treatment-detailed-form.scss'],

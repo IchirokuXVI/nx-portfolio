@@ -61,5 +61,6 @@
       ]
     }
   },
+  "include": ["./types/shared/png.d.ts", "./types/shared/svg.d.ts"],
   "exclude": ["node_modules", "tmp"]
 }

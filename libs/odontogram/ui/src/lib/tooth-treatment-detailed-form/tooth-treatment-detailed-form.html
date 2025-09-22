@@ -54,39 +54,41 @@
     </div>
   </div>
   <div class="treatmentCol secondCol">
-    <mat-form-field subscriptSizing="dynamic">
-      <mat-label>{{
-        'odontogram.toothForm.treatmentSearch.label' | rokuT
-      }}</mat-label>
-      <input
-        [matAutocomplete]="autoCompleteTreatment"
-        [placeholder]="
-          'odontogram.toothForm.treatmentSearch.placeholder' | rokuT
-        "
-        formControlName="treatment"
-        matInput
-        tabindex="1"
-        type="text"
-      />
-      <mat-autocomplete
-        [displayWith]="displayTreatmentOption"
-        #autoCompleteTreatment="matAutocomplete"
-      >
-        @for (option of treatmentSuggestions(); track $index) {
-          <mat-option [value]="option">{{ option.name }}</mat-option>
-        }
-      </mat-autocomplete>
-    </mat-form-field>
-    <!-- @if (!form.disabled) {
-      <button
-        (click)="deleteTreatment.emit()"
-        (keydown.enter)="deleteTreatment.emit()"
-        mat-icon-button
-        tabindex="4"
-      >
-        <i class="fas fa-trash text-danger"></i>
-      </button>
-    } -->
+    <div class="treatment-search-delete-row">
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{
+          'odontogram.toothForm.treatmentSearch.label' | rokuT
+        }}</mat-label>
+        <input
+          [matAutocomplete]="autoCompleteTreatment"
+          [placeholder]="
+            'odontogram.toothForm.treatmentSearch.placeholder' | rokuT
+          "
+          formControlName="treatment"
+          matInput
+          tabindex="1"
+          type="text"
+        />
+        <mat-autocomplete
+          [displayWith]="displayTreatmentOption"
+          #autoCompleteTreatment="matAutocomplete"
+        >
+          @for (option of treatmentSuggestions(); track $index) {
+            <mat-option [value]="option">{{ option.name }}</mat-option>
+          }
+        </mat-autocomplete>
+      </mat-form-field>
+      @if (!form.disabled) {
+        <button
+          (click)="deleteTreatment.emit()"
+          (keydown.enter)="deleteTreatment.emit()"
+          mat-icon-button
+          tabindex="4"
+        >
+          <lib-trash-icon size="md" thickness="normal" />
+        </button>
+      }
+    </div>
     <div class="treatment-info">
       <div class="treatment-info__first-row">
         <div class="affected-teeth">
