@@ -3,14 +3,15 @@ import {
   afterNextRender,
   Component,
   ComponentRef,
+  computed,
   effect,
   ElementRef,
   inject,
   Injector,
   input,
-  model,
   OnInit,
   output,
+  Signal,
   signal,
   untracked,
   ViewChild,
@@ -92,7 +93,7 @@ export class ToothTreatmentsModal implements OnInit {
    * para no perder los cambios al cambiar en el historial
    */
   tempTreatments?: ToothTreatment[];
-  disableForms = model(false);
+  disableForms: Signal<boolean>;
 
   @ViewChild('historyBar') historyBar?: ElementRef<HTMLDivElement>;
   @ViewChild('treatmentsContainer', { read: ViewContainerRef })
@@ -135,6 +136,10 @@ export class ToothTreatmentsModal implements OnInit {
         { injector: this._injector }
       );
     });
+
+    this.disableForms = computed(
+      () => this.tooth().odontogram === this.selectedTooth()?.odontogram
+    );
   }
 
   ngOnInit() {
@@ -246,7 +251,6 @@ export class ToothTreatmentsModal implements OnInit {
   }
 
   selectTooth(newSelectedTooth: Tooth) {
-    console.log(newSelectedTooth);
     const originalTooth = this.tooth();
     const currentSelectedTooth = untracked(this.selectedTooth);
 
@@ -278,8 +282,6 @@ export class ToothTreatmentsModal implements OnInit {
     ) {
       treatmentsToAdd = this.tempTreatments;
 
-      // Restore the forms state and clear the temporary storage
-      this.disableForms.set(false);
       delete this.tempTreatments;
     } else {
       treatmentsToAdd = newSelectedTooth.treatments || [];
@@ -290,11 +292,6 @@ export class ToothTreatmentsModal implements OnInit {
     });
 
     this.selectedTooth.set(newSelectedTooth);
-
-    // Disable the forms if a tooth from the history is selected
-    if (newSelectedTooth.odontogram !== originalTooth.odontogram) {
-      this.disableForms.set(true);
-    }
   }
 
   addToothTreatment(toothTreatment?: ToothTreatment) {
@@ -308,6 +305,7 @@ export class ToothTreatmentsModal implements OnInit {
       ToothTreatmentDetailedForm
     );
 
+    comp.setInput('disabled', this.disableForms());
     comp.setInput('toothTreatment', toothTreatment);
     comp.setInput('disabledTeeth', this.tooth().number);
 

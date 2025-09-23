@@ -1,7 +1,8 @@
 <i
-  [class]="[size, 'x' + sizeMultiplier, 'thickness-' + thickness]"
+  [class]="[size, 'x' + sizeMultiplier]"
   [style.color]="color"
+  #iconContainer
   class="trash-icon"
 >
-  <svg [innerHtml]="_icon"></svg>
+  <svg [innerHTML]="_icon()"></svg>
 </i>

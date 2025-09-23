@@ -93,6 +93,8 @@ export class ToothTreatmentDetailedForm {
       mapToothTreatmentToForm(this.toothTreatment())
     );
 
+    effect(() => console.log(this.disabled()));
+
     effect(() => {
       const form = this.toothTreatmentForm();
 

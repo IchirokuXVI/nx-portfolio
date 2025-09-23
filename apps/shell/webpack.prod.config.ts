@@ -20,11 +20,13 @@ export default composePlugins(async (config, { options, context }) => {
       rules: [
         {
           test: /\.(jpe?g|png|svg)$/,
-          use: [
-            {
-              loader: 'file-loader',
-            },
-          ],
+          type: 'asset/resource',
+          resourceQuery: { not: [/raw/] },
+        },
+        {
+          test: /\.svg$/,
+          type: 'asset/source',
+          resourceQuery: /raw/,
         },
       ],
     },

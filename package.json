@@ -15,7 +15,6 @@
     "@angular/router": "20.1.3",
     "@nx/angular": "21.4.1",
     "deep-equal": "^2.2.3",
-    "raw-loader": "^4.0.2",
     "rxjs": "~7.8.0",
     "uuid": "^11.1.0",
     "zone.js": "~0.15.0"
@@ -54,7 +53,6 @@
     "eslint-config-prettier": "^10.0.0",
     "eslint-plugin-cypress": "^3.5.0",
     "eslint-plugin-prettier": "^5.5.4",
-    "file-loader": "^6.2.0",
     "jest": "30.0.5",
     "jest-environment-jsdom": "30.0.5",
     "jest-environment-node": "^30.0.2",

@@ -12,9 +12,9 @@
     <div
       [class.disabled]="
         form.get('type')?.value === 'implant' ||
-        form.get('type')?.value === 'extraction'
+        form.get('type')?.value === 'extraction' ||
+        form.disabled
       "
-      [class.pointer-events-none]="form.disabled"
       [class]="form.get('status')?.value ?? 'pending'"
       class="zone-selector"
     >
