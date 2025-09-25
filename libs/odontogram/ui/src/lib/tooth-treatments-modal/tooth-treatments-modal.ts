@@ -20,6 +20,7 @@ import {
 import { toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -41,6 +42,7 @@ import {
   ToothTreatment,
   Treatment,
 } from '@portfolio/odontogram/models';
+import { LoadingIcon } from '@portfolio/shared/ui';
 import { WithRequired } from '@portfolio/shared/util';
 import { filter, first, map, of, ReplaySubject, switchMap } from 'rxjs';
 import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
@@ -61,6 +63,8 @@ import { ToothTreatmentDetailedForm } from '../tooth-treatment-detailed-form/too
     MatButtonToggleModule,
     MatSelectModule,
     MatInputModule,
+    MatButtonModule,
+    LoadingIcon,
   ],
   templateUrl: './tooth-treatments-modal.html',
   styleUrls: ['./tooth-treatments-modal.scss'],
@@ -138,7 +142,7 @@ export class ToothTreatmentsModal implements OnInit {
     });
 
     this.disableForms = computed(
-      () => this.tooth().odontogram === this.selectedTooth()?.odontogram
+      () => this.tooth().odontogram !== this.selectedTooth()?.odontogram
     );
   }
 
@@ -287,11 +291,11 @@ export class ToothTreatmentsModal implements OnInit {
       treatmentsToAdd = newSelectedTooth.treatments || [];
     }
 
+    this.selectedTooth.set(newSelectedTooth);
+
     treatmentsToAdd.forEach((treatment) => {
       this.addToothTreatment(treatment);
     });
-
-    this.selectedTooth.set(newSelectedTooth);
   }
 
   addToothTreatment(toothTreatment?: ToothTreatment) {

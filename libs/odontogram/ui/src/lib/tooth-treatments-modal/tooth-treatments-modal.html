@@ -46,14 +46,26 @@
     }
     <div class="form-container">
       @if (!tooth()) {
-        <div class="loading d-flex justify-content-center align-items-center">
-          <i class="fas fa-circle-notch fa-spin fa-2x"></i>
+        <div class="loading">
+          <lib-loading-icon size="xl"></lib-loading-icon>
         </div>
       }
       @if (tooth()) {
         <div class="treatments">
           <ng-container #treatmentsContainer></ng-container>
         </div>
+      }
+      @if (!disableForms()) {
+        <button
+          (click)="addToothTreatment()"
+          (keydown.enter)="addToothTreatment()"
+          class="add-treatment-button"
+          color="primary"
+          mat-raised-button
+          tabindex="3"
+        >
+          {{ 'odontogram.treatmentsModal.addTreatment' | rokuT }}
+        </button>
       }
     </div>
   </div>

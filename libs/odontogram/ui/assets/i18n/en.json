@@ -7,5 +7,6 @@
   "odontogram.toothForm.groupTeeth.grouped": "Grouped",
   "odontogram.toothForm.groupTeeth.individual": "Individual",
   "odontogram.toothForm.additionalInformation.label": "Additional information",
-  "odontogram.toothForm.additionalInformation.placeholder": "Type additional information for the treatment"
+  "odontogram.toothForm.additionalInformation.placeholder": "Type additional information for the treatment",
+  "odontogram.treatmentsModal.addTreatment": "Add more treatments"
 }

@@ -93,13 +93,10 @@ export class ToothTreatmentDetailedForm {
       mapToothTreatmentToForm(this.toothTreatment())
     );
 
-    effect(() => console.log(this.disabled()));
-
     effect(() => {
       const form = this.toothTreatmentForm();
 
       form.valueChanges.subscribe(() => {
-        console.log(form.value);
         this.toothTreatmentChange.emit(mapFormToToothTreatment(form));
       });
     });

@@ -97,6 +97,13 @@
     flex-direction: column;
     row-gap: 0.5em;
 
+    .loading {
+      display: flex;
+      flex: 1 1 100%;
+      justify-content: center;
+      align-items: center;
+    }
+
     .treatments {
       display: flex;
       flex-direction: column;
@@ -110,20 +117,13 @@
         box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.2);
       }
     }
-  }
-}
 
-button {
-  margin: 0 auto;
-  align-self: center;
-  margin: 0.25em;
-
-  .content {
-    display: flex;
-    gap: 0.5em;
-
-    align-items: center;
-    justify-content: center;
+    .add-treatment-button {
+      display: flex;
+      align-self: center;
+      background-color: #0f683d;
+      color: #fff;
+    }
   }
 }
 
