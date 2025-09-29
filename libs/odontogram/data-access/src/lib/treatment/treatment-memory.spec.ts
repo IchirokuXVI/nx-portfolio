@@ -70,6 +70,17 @@ describe('TreatmentMemory', () => {
     ).toEqual(data);
   });
 
+  it('should apply limit correctly', async () => {
+    const data = await firstValueFrom(service.getList({ limit: 5 }));
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.length).toBeLessThanOrEqual(5);
+
+    const dataLessThanLimit = await firstValueFrom(
+      service.getList({ limit: currentServiceData.size + 16 })
+    );
+    expect(dataLessThanLimit.length).toBe(currentServiceData.size);
+  });
+
   it('should find object correctly', async () => {
     const data = await firstValueFrom(service.getById('1'));
     expect(data).toEqual(currentServiceData.get('1'));

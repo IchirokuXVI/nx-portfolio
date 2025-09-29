@@ -2,11 +2,12 @@
   "odontogram.tooth": "Diente",
   "odontogram.teeth": "Dientes",
   "odontogram.treatmentsModal.toothHistory": "Historial del diente",
-  "odontogram.toothForm.treatmentSearch.label": "Buscar tratamiento",
+  "odontogram.toothForm.treatmentSearch.label": "Nombre del tratamiento",
   "odontogram.toothForm.treatmentSearch.placeholder": "Escribe para buscar tratamientos",
   "odontogram.toothForm.groupTeeth.grouped": "Agrupados",
   "odontogram.toothForm.groupTeeth.individual": "Individuales",
   "odontogram.toothForm.additionalInformation.label": "Información adicional",
   "odontogram.toothForm.additionalInformation.placeholder": "Añade información adicional para el tratamiento",
-  "odontogram.treatmentsModal.addTreatment": "Añadir más tratamientos"
+  "odontogram.treatmentsModal.addTreatment": "Añadir más tratamientos",
+  "odontogram.treatmentsModal.saveTreatment": "Guardar tratamientos"
 }

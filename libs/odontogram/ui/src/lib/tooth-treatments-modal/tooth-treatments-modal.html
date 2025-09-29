@@ -3,70 +3,89 @@
     <div class="tooth-header">
       <h4>{{ 'odontogram.tooth' | rokuT }} {{ tooth().number }}</h4>
     </div>
-    @if (client()) {
-      <mat-expansion-panel (opened)="onOpenHistory()" class="history-container">
-        <mat-expansion-panel-header>
-          <mat-panel-title class="history-title">{{
-            'odontogram.treatmentsModal.toothHistory' | rokuT
-          }}</mat-panel-title>
-        </mat-expansion-panel-header>
-        <div #historyBar class="history-bar">
-          @for (toothHist of toothHistory; track $index) {
-            <div
-              (click)="selectTooth(toothHist)"
-              (keydown.enter)="selectTooth(toothHist)"
-              [class.active]="
-                selectedTooth()?.odontogram?.id === toothHist.odontogram?.id
-              "
-              [class.current]="toothHist.odontogram === tooth().odontogram"
-              class="history-tooth"
-              tabindex="0"
-            >
-              <span
-                [title]="toothHist.odontogram?.name"
-                class="odontogram-name"
-              >
-                {{ toothHist.odontogram?.name ?? 'odontogram.current' | rokuT }}
-              </span>
-              <div class="tooth-container">
-                <lib-odontogram-single-tooth-image
-                  [showNumber]="false"
-                  [tooth]="toothHist"
-                ></lib-odontogram-single-tooth-image>
-              </div>
-            </div>
-            @if (!$last) {
-              <span class="tooth-separator">
-                <i class="fas fa-arrow-right"></i>
-              </span>
-            }
-          }
-        </div>
-      </mat-expansion-panel>
-    }
-    <div class="form-container">
-      @if (!tooth()) {
-        <div class="loading">
-          <lib-loading-icon size="xl"></lib-loading-icon>
-        </div>
-      }
-      @if (tooth()) {
-        <div class="treatments">
-          <ng-container #treatmentsContainer></ng-container>
-        </div>
-      }
-      @if (!disableForms()) {
-        <button
-          (click)="addToothTreatment()"
-          (keydown.enter)="addToothTreatment()"
-          class="add-treatment-button"
-          color="primary"
-          mat-raised-button
-          tabindex="3"
+    <div class="content-container">
+      @if (client()) {
+        <mat-expansion-panel
+          (opened)="onOpenHistory()"
+          class="history-container"
         >
-          {{ 'odontogram.treatmentsModal.addTreatment' | rokuT }}
-        </button>
+          <mat-expansion-panel-header>
+            <mat-panel-title class="history-title">{{
+              'odontogram.treatmentsModal.toothHistory' | rokuT
+            }}</mat-panel-title>
+          </mat-expansion-panel-header>
+          <div #historyBar class="history-bar">
+            @for (toothHist of toothHistory; track $index) {
+              <div
+                (click)="selectTooth(toothHist)"
+                (keydown.enter)="selectTooth(toothHist)"
+                [class.active]="
+                  selectedTooth()?.odontogram?.id === toothHist.odontogram?.id
+                "
+                [class.current]="toothHist.odontogram === tooth().odontogram"
+                class="history-tooth"
+                tabindex="0"
+              >
+                <span
+                  [title]="toothHist.odontogram?.name"
+                  class="odontogram-name"
+                >
+                  {{
+                    toothHist.odontogram?.name ?? 'odontogram.current' | rokuT
+                  }}
+                </span>
+                <div class="tooth-container">
+                  <lib-odontogram-single-tooth-image
+                    [showNumber]="false"
+                    [tooth]="toothHist"
+                  ></lib-odontogram-single-tooth-image>
+                </div>
+              </div>
+              @if (!$last) {
+                <span class="tooth-separator">
+                  <i class="fas fa-arrow-right"></i>
+                </span>
+              }
+            }
+          </div>
+        </mat-expansion-panel>
       }
+      <div class="form-container">
+        @if (!tooth()) {
+          <div class="form-container__loading">
+            <lib-loading-icon size="xl"></lib-loading-icon>
+          </div>
+        }
+        @if (tooth()) {
+          <div class="form-container__treatments">
+            <ng-container #treatmentsContainer></ng-container>
+          </div>
+        }
+        @if (!disableForms()) {
+          <div class="form-container__buttons-row">
+            <button
+              (click)="addToothTreatment()"
+              (keydown.enter)="addToothTreatment()"
+              class="add-treatment-button"
+              color="primary"
+              mat-raised-button
+              tabindex="3"
+            >
+              {{ 'odontogram.treatmentsModal.addTreatment' | rokuT }}
+            </button>
+            <button
+              (click)="saveTooth()"
+              (keydown.enter)="saveTooth()"
+              class="save-treatments-button"
+              color="primary"
+              mat-raised-button
+              tabindex="4"
+            >
+              {{ 'odontogram.treatmentsModal.saveTreatment' | rokuT }}
+            </button>
+          </div>
+        }
+      </div>
     </div>
   </div>
 }

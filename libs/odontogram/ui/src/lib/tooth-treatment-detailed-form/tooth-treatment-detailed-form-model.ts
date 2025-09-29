@@ -9,6 +9,7 @@ import {
 } from '@portfolio/odontogram/models';
 
 export interface ToothTreatmentFormModel {
+  id: FormControl<string | null>;
   odontogram: FormControl<string | null>;
   treatment: FormControl<string | Treatment | null | undefined>;
   groupTeeth: FormControl<boolean | null>;
@@ -23,6 +24,7 @@ export function mapToothTreatmentToForm(
   toothTreatment?: ToothTreatment
 ): FormGroup<ToothTreatmentFormModel> {
   return new FormGroup<ToothTreatmentFormModel>({
+    id: new FormControl<string | null>(toothTreatment?.id ?? null),
     odontogram: new FormControl<string | null>(
       toothTreatment?.odontogram ?? null
     ),
@@ -52,6 +54,7 @@ export function mapFormToToothTreatment(
   const formValue = form.value;
 
   return {
+    id: formValue.id ?? undefined,
     odontogram: formValue.odontogram ?? undefined,
     treatment:
       (typeof formValue.treatment === 'string'

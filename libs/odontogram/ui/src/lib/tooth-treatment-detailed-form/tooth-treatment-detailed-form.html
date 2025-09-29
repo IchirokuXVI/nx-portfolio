@@ -105,27 +105,29 @@
             </mat-select>
           </mat-form-field>
         </div>
-        <div class="groupTeeth">
-          <mat-button-toggle-group
-            #groupLotes="matButtonToggleGroup"
-            formControlName="groupTeeth"
+        <div class="groupTeeth-and-status">
+          <div class="groupTeeth">
+            <mat-button-toggle-group
+              #groupLotes="matButtonToggleGroup"
+              formControlName="groupTeeth"
+            >
+              <mat-button-toggle [value]="true">
+                {{ 'odontogram.toothForm.groupTeeth.grouped' | rokuT }}
+              </mat-button-toggle>
+              <mat-button-toggle [value]="false">
+                {{ 'odontogram.toothForm.groupTeeth.individual' | rokuT }}
+              </mat-button-toggle>
+            </mat-button-toggle-group>
+          </div>
+          <lib-basic-option-toggle
+            [options]="toothTreatmentStatusArr"
+            formControlName="status"
           >
-            <mat-button-toggle [value]="true">
-              {{ 'odontogram.toothForm.groupTeeth.grouped' | rokuT }}
-            </mat-button-toggle>
-            <mat-button-toggle [value]="false">
-              {{ 'odontogram.toothForm.groupTeeth.individual' | rokuT }}
-            </mat-button-toggle>
-          </mat-button-toggle-group>
+            <ng-template #icon let-i="index" let-option>
+              <span [class]="option.value" class="square-icon"></span>
+            </ng-template>
+          </lib-basic-option-toggle>
         </div>
-        <lib-basic-option-toggle
-          [options]="toothTreatmentStatusArr"
-          formControlName="status"
-        >
-          <ng-template #icon let-i="index" let-option>
-            <span [class]="option.value" class="square-icon"></span>
-          </ng-template>
-        </lib-basic-option-toggle>
       </div>
       <div class="treatment-info__notes">
         <mat-form-field subscriptSizing="dynamic">

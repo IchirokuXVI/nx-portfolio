@@ -1,128 +1,145 @@
 @use '../common-variables.scss' as common;
 
 .main-container {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.5em;
-  padding: 1em;
+  max-height: 75dvh;
 
   .tooth-header {
     display: flex;
     flex-direction: row;
-    margin: 0 auto;
-    column-gap: 1em;
-    padding: 0.5em 0;
+    justify-content: center;
+    width: 100%;
+    padding: 0.5em;
+    border-bottom: 1px solid #ccc;
+    padding: 1.25em;
   }
 
-  .history-container {
+  .content-container {
+    position: relative;
     display: flex;
     flex-direction: column;
+    gap: 0.5em;
+    padding: 1em;
+    overflow: auto;
 
-    .history-title {
-      width: 100%;
-    }
-
-    .history-bar {
-      flex: 1 0 auto;
-      width: 100%;
-      min-width: 0;
-
-      display: flex;
-      flex-direction: row;
-      gap: 0.25em;
-      align-items: center;
-      padding: 0.75em;
-      overflow-x: auto;
-
-      .tooth-separator {
-        font-size: 2em;
-      }
-
-      .history-tooth {
-        flex: 0 0;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-        width: 128px;
-        max-width: 128px;
-        min-width: 128px;
-        align-items: center;
-        padding: 0.25em;
-        cursor: pointer;
-
-        .odontogram-name {
-          max-width: 100%;
-          overflow-x: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          user-select: none;
-        }
-
-        .tooth-container {
-          max-width: 48px;
-        }
-
-        &.current {
-          border: 2px solid #80deb2;
-          border-radius: 0.25rem;
-        }
-
-        &:hover,
-        &.active {
-          // Añade un color de fondo sobre el diente
-          // Tiene alpha para no ocultar las imágenes
-          &:before {
-            content: '';
-            width: 100%;
-            height: 100%;
-            background-color: #ababab33;
-            position: absolute;
-            z-index: 3;
-            border-radius: 0.25rem;
-            pointer-events: none;
-            top: 0;
-          }
-        }
-
-        &.active {
-          cursor: inherit;
-        }
-      }
-    }
-  }
-
-  .form-container {
-    flex: 1 1 100%;
-    display: flex;
-    flex-direction: column;
-    row-gap: 0.5em;
-
-    .loading {
-      display: flex;
-      flex: 1 1 100%;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .treatments {
+    .history-container {
       display: flex;
       flex-direction: column;
-      width: 100%;
-      row-gap: 0.5em;
 
-      .treatment {
-        flex: 1 1;
+      .history-title {
         width: 100%;
-        border: 1px solid #33333344;
-        box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.2);
+      }
+
+      .history-bar {
+        flex: 1 0 auto;
+        width: 100%;
+        min-width: 0;
+
+        display: flex;
+        flex-direction: row;
+        gap: 0.25em;
+        align-items: center;
+        padding: 0.75em;
+        overflow-x: auto;
+
+        .tooth-separator {
+          font-size: 2em;
+        }
+
+        .history-tooth {
+          flex: 0 0;
+          display: flex;
+          flex-direction: column;
+          position: relative;
+          width: 128px;
+          max-width: 128px;
+          min-width: 128px;
+          align-items: center;
+          padding: 0.25em;
+          cursor: pointer;
+
+          .odontogram-name {
+            max-width: 100%;
+            overflow-x: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            user-select: none;
+          }
+
+          .tooth-container {
+            max-width: 48px;
+          }
+
+          &.current {
+            border: 2px solid #80deb2;
+            border-radius: 0.25rem;
+          }
+
+          &:hover,
+          &.active {
+            // Añade un color de fondo sobre el diente
+            // Tiene alpha para no ocultar las imágenes
+            &:before {
+              content: '';
+              width: 100%;
+              height: 100%;
+              background-color: #ababab33;
+              position: absolute;
+              z-index: 3;
+              border-radius: 0.25rem;
+              pointer-events: none;
+              top: 0;
+            }
+          }
+
+          &.active {
+            cursor: inherit;
+          }
+        }
       }
     }
 
-    .add-treatment-button {
+    .form-container {
+      flex: 1 1 100%;
       display: flex;
-      align-self: center;
-      background-color: #0f683d;
-      color: #fff;
+      flex-direction: column;
+      row-gap: 0.5em;
+
+      .form-container__loading {
+        display: flex;
+        flex: 1 1 100%;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .form-container__treatments {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        row-gap: 0.5em;
+      }
+
+      .form-container__buttons-row {
+        display: flex;
+        flex-direction: row;
+        gap: 3.5em;
+
+        button {
+          padding: 0.75em;
+          margin: 0 auto;
+          color: #fff;
+
+          &.add-treatment-button {
+            background-color: #411188;
+          }
+
+          &.save-treatments-button {
+            background-color: #0f683d;
+          }
+        }
+      }
     }
   }
 }

@@ -1,4 +1,5 @@
 export * from './lib/classes/in-memory-filter';
+export * from './lib/classes/observable-map';
 export * from './lib/directives/ng-let.directive';
 export * from './lib/functions/findField';
 export * from './lib/services/loading-notifier';
