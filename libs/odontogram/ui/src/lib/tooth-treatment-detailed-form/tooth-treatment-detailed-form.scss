@@ -192,6 +192,8 @@
         }
 
         .groupTeeth-and-status {
+          flex-grow: 1;
+          justify-content: center;
           display: flex;
           flex-direction: row;
           align-items: center;

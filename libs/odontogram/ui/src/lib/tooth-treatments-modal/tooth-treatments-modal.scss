@@ -5,6 +5,7 @@
   display: flex;
   flex-direction: column;
   max-height: 75dvh;
+  background-color: #2a2a2a;
 
   .tooth-header {
     display: flex;
@@ -25,11 +26,17 @@
     overflow: auto;
 
     .history-container {
+      flex: 1 0;
       display: flex;
       flex-direction: column;
+      background-color: #88888811;
 
-      .history-title {
-        width: 100%;
+      .history-header {
+        background-color: inherit;
+
+        .history-title {
+          width: 100%;
+        }
       }
 
       .history-bar {
