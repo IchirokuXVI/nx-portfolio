@@ -1,0 +1,10 @@
+<div>
+  @for (
+    odontogram of odontograms();
+    track trackByOdontogramId($index, odontogram)
+  ) {
+    <div>
+      {{ odontogram.name }}
+    </div>
+  }
+</div>

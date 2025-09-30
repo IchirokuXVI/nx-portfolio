@@ -13,7 +13,9 @@ import {
 export class LoadingNotifier<Loadable extends readonly string[]>
   implements OnDestroy
 {
-  static readonly LOADABLE_ENTRIES = 'LoadingNotifier_LOADABLE_ENTRIES';
+  // static readonly LOADABLE_ENTRIES = new InjectionToken<string[]>(
+  //   'Loadable entries for LoadingNotifier'
+  // );
 
   private _loadings: {
     [key in Loadable[number]]?: { subj: Subject<boolean>; counter: number };

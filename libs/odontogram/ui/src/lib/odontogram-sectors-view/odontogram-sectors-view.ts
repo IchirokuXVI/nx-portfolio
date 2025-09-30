@@ -35,10 +35,7 @@ export const loadable = ['teeth', 'image'] as const;
   ],
   templateUrl: './odontogram-sectors-view.html',
   styleUrl: './odontogram-sectors-view.scss',
-  providers: [
-    { provide: LoadingNotifier.LOADABLE_ENTRIES, useValue: loadable },
-    LoadingNotifier,
-  ],
+  providers: [LoadingNotifier],
 })
 export class OdontogramSectorsView {
   pediatricSectors = [4, 5, 6, 7];

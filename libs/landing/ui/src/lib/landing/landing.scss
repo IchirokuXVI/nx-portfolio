@@ -40,7 +40,7 @@ a {
       color: $text-accent-color;
       position: relative;
 
-      &:before {
+      &::before {
         content: '';
         position: absolute;
         top: 50%;

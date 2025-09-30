@@ -68,7 +68,7 @@
       &.disabled {
         pointer-events: none;
 
-        &:after {
+        &::after {
           content: '';
           top: 0;
           left: 0;
@@ -113,7 +113,7 @@
         // allow for another border or size changes in the parent
         border-radius: 50%;
         overflow: hidden;
-        &:before {
+        &::before {
           $borderSize: 6;
 
           content: '';

@@ -13,6 +13,7 @@ import {
   Treatment,
 } from '@portfolio/odontogram/models';
 import {
+  OdontogramSelectorList,
   OdontogramUiModule,
   ToothTreatmentsModal,
 } from '@portfolio/odontogram/ui';
@@ -20,7 +21,7 @@ import { forkJoin, ReplaySubject, tap } from 'rxjs';
 
 @Component({
   selector: 'lib-odontogram-feature-full-odontogram-crud',
-  imports: [CommonModule, OdontogramUiModule],
+  imports: [CommonModule, OdontogramUiModule, OdontogramSelectorList],
   templateUrl: './feature-full-odontogram-crud.html',
   styleUrl: './feature-full-odontogram-crud.scss',
 })

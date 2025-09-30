@@ -2,4 +2,19 @@
   display: flex;
   min-height: 100%;
   min-width: 100%;
+  padding: 1.5em;
+}
+
+lib-odontogram-selector-list {
+  flex: 1 0 240px;
+}
+
+lib-odontogram-sectors-view {
+  flex: 1 1 100%;
+  // height: min-content;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border-color, #ccc);
+  align-items: center;
 }

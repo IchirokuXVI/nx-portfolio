@@ -24,6 +24,13 @@
       #img
       alt="Tooth Lateral {{ inputTooth.number }}"
     />
+    <!-- <img
+      (load)="imageLoaded()"
+      [src]="toothImages.lateral"
+      [style.visibility]="'hidden'"
+      #img
+      alt="Tooth Lateral {{ inputTooth.number }}"
+    /> -->
     <div
       [class]="statusClass.get(status)"
       *ngLet="getToothImplantStatus() as status"
@@ -43,6 +50,7 @@
     }"
     class="crown"
   >
+    <!-- <div class="crown"> -->
     <img
       (load)="imageLoaded()"
       [src]="toothImages.crown"

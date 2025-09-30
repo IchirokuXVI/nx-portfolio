@@ -46,8 +46,8 @@ import { Component, ViewEncapsulation } from '@angular/core';
         margin: 0;
       }
       *,
-      ::before,
-      ::after {
+      :::before,
+      :::after {
         box-sizing: border-box;
         border-width: 0;
         border-style: solid;
@@ -848,11 +848,11 @@ import { Component, ViewEncapsulation } from '@angular/core';
               Build, test and lint your app
             </summary>
             <pre><span># Build</span>
-nx build 
+nx build
 <span># Test</span>
-nx test 
+nx test
 <span># Lint</span>
-nx lint 
+nx lint
 <span># Run them together!</span>
 nx run-many -t build test lint</pre>
           </details>
