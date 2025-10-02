@@ -1,4 +1,7 @@
 @use '../common-variables.scss' as common;
+@use 'sass:list';
+@use 'sass:map';
+@use 'sass:math';
 
 .tooth {
   // Center tooth number (text) and make it bold
@@ -200,88 +203,49 @@
       z-index: 2; // Increase z-index so the image is not covered by the triangles
     }
 
-    // Makes the border of the last element visible. Needs special logic
-    // because I haven't found a way to make it work
-    // being the first div of the container
-    &:has(.left:not(#{common.$noStatusClass})) {
-      & .top {
-        &:not(#{common.$noStatusClass}) {
-          border-bottom-style: $crownBorderStyle;
-        }
-      }
-    }
+    // Makes a square of 50% of the container size
+    // Positions it right in the middle and rotates it 45 degrees to make a diamond
+    // Keeps rotating it 90 degrees for each position (top, right, bottom, left)
+    // so that it is easier to apply borders since for example bottom border is always the left one
+    // Having overflow: hidden, only half of the diamond (a triangle) is visible
+    // Finally, adds a circle in the middle that is white by default
+    // and changes color if it has a treatment
 
-    div {
-      position: absolute;
-      width: 50%;
-      height: 50%;
-      // Rotate to turn square into diamond
-      transform: rotate(45deg);
+    $positions: (top, right, bottom, left);
+    $positionToOffset: (
+      top: left,
+      right: top,
+      bottom: left,
+      left: top,
+    );
 
-      &.status-none {
-        // Default border to hide a little imperfection between each triangle
-        // when they are white (no status) over a dark background
-        border: #{$crownBorderSize + $crownBorderUnit} solid #fff;
-      }
+    $len: list.length($positions);
 
-      // Makes a square of 50% of the container size
-      // Positions it right in the middle and rotates it 45 degrees to make a diamond
-      // Having overflow: hidden, only half of the diamond (a triangle) is visible
-      // Moves it back 10% so that the edges of each triangle coincide and stay aligned
-      // Finally, adds a circle in the middle that is white by default
-      // and changes color if it has a treatment
+    @for $index from 1 through $len {
+      $pos: list.nth($positions, $index);
+      $offsetPos: map.get($positionToOffset, $pos);
 
-      // Mxins to apply border styles without repeating code
-      @mixin applyBorder($position) {
-        &:not(#{common.$noStatusClass}) {
-          border-#{$position}-style: none;
-          border-#{$position}-width: $crownBorderSize + $crownBorderUnit;
-          border-#{$position}-color: $crownBorderColor;
-        }
-      }
+      .innerSquare.#{$pos} {
+        position: absolute;
 
-      @mixin showNextBorder($position) {
-        &:not(#{common.$noStatusClass}) + :not(#{common.$noStatusClass}) {
-          border-#{$position}-style: $crownBorderStyle;
-        }
+        $innerSquareSize: math.sqrt(2) * 50%;
+
+        width: $innerSquareSize;
+        height: $innerSquareSize;
+        box-sizing: content-box;
+        // rotate: -45, 45, 135, 225
+        transform: rotate(-45deg + ($index - 1) * 90deg);
+
+        // Center it along the perpendicular axis
+        #{$offsetPos}: calc((100% - $innerSquareSize) / 2);
+
+        // Offset it outward on its main axis
+        #{$pos}: calc($innerSquareSize / -2);
       }
 
-      &.top {
-        left: 25%;
-        top: -10%;
+      .middle {
+        position: absolute;
 
-        @include applyBorder(bottom);
-
-        // This border needs to be a bit bigger to cover the gap
-        border-bottom-width: ($crownBorderSize + 1) + $crownBorderUnit !important;
-
-        @include showNextBorder(left);
-      }
-
-      &.right {
-        right: -10%;
-        top: 25%;
-
-        @include applyBorder(left);
-        @include showNextBorder(top);
-      }
-
-      &.bottom {
-        left: 25%;
-        bottom: -10%;
-
-        @include applyBorder(top);
-        @include showNextBorder(right);
-      }
-
-      &.left {
-        left: -10%;
-        top: 25%;
-
-        @include applyBorder(right);
-      }
-
-      &.middle {
         width: 25%;
         height: 25%;
         left: 37.5%;
@@ -297,6 +261,55 @@
           height: 17.5%;
           left: 41.25%;
           top: 41.25%;
+        }
+      }
+
+      $borderPositions: (bottom, left);
+
+      // Default border if no treatment is assigned so that there is no gap between triangles
+      @each $borderPos in $borderPositions {
+        .innerSquare {
+          border-#{$borderPos}-style: $crownBorderStyle;
+          border-#{$borderPos}-width: $crownBorderSize + $crownBorderUnit;
+          border-#{$borderPos}-color: $crownBorderColor;
+        }
+
+        // Add borders to the triangles if the zone has a treatment
+        // By default it is invisible unless the next rule is applied
+        // when its previous/next sibling also has a treatment
+        .innerSquare.#{$pos}:not(#{common.$noStatusClass}) {
+          border-#{$borderPos}-style: none;
+          border-#{$borderPos}-width: $crownBorderSize + $crownBorderUnit;
+          border-#{$borderPos}-color: $crownBorderColor;
+        }
+      }
+
+      // Subtract 2 because SASS is index 1 based so we need to substract 1 to make it 0 based
+      // and then another 1 to get the previous index of the list. By using modulo we make sure
+      // the index is always between 0 and length-1. Then we add 1 to make it back to 1 based index
+      $prevIndex: (($index - 2 + $len) % $len) + 1;
+      // Now there is no need to substract because SASS is index 1 based so we are already starting at 1
+      $nextIndex: (($index + $len) % $len) + 1;
+
+      // define the two siblings with their order
+      $siblingIndexes: ($prevIndex, $nextIndex);
+
+      @for $s from 1 through length($siblingIndexes) {
+        $siblingIndex: list.nth($siblingIndexes, $s);
+        $sibling: list.nth($positions, $siblingIndex);
+
+        &:has(.innerSquare.#{$pos}:not(#{common.$noStatusClass})):has(
+            .innerSquare.#{$sibling}:not(#{common.$noStatusClass})
+          ) {
+          // current gets border at index $s
+          .innerSquare.#{$pos} {
+            border-#{list.nth($borderPositions, $s)}-style: $crownBorderStyle;
+          }
+
+          // sibling gets the other border, flip using modulo
+          .innerSquare.#{$sibling} {
+            border-#{list.nth($borderPositions, (($s % 2) + 1))}-style: $crownBorderStyle;
+          }
         }
       }
     }
