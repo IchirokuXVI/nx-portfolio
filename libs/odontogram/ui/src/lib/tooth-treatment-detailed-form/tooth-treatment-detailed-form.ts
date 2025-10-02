@@ -172,6 +172,8 @@ export class ToothTreatmentDetailedForm {
     } else {
       zones.splice(index, 1);
     }
+
+    form.get('zones')?.setValue([...zones]);
   }
 
   setStatus(status: ToothTreatmentStatus) {

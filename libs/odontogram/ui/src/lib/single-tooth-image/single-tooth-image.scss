@@ -269,7 +269,7 @@
       // Default border if no treatment is assigned so that there is no gap between triangles
       @each $borderPos in $borderPositions {
         .innerSquare {
-          border-#{$borderPos}-style: $crownBorderStyle;
+          border-#{$borderPos}-style: solid;
           border-#{$borderPos}-width: $crownBorderSize + $crownBorderUnit;
           border-#{$borderPos}-color: $crownBorderColor;
         }
@@ -292,7 +292,7 @@
       $nextIndex: (($index + $len) % $len) + 1;
 
       // define the two siblings with their order
-      $siblingIndexes: ($prevIndex, $nextIndex);
+      $siblingIndexes: ($nextIndex, $prevIndex);
 
       @for $s from 1 through length($siblingIndexes) {
         $siblingIndex: list.nth($siblingIndexes, $s);
