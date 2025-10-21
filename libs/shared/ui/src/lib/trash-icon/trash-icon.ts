@@ -11,8 +11,6 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 export class TrashIcon {
   _icon = signal<SafeHtml | null>(null);
 
-  @Input() size: 'sm' | 'md' | 'lg' | 'xl' = 'md';
-  @Input() sizeMultiplier: 1 | 2 | 3 = 1;
   @Input() color: string = '#994040';
 
   private _sanitizer = inject(DomSanitizer);

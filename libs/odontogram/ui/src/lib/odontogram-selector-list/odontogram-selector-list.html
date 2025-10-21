@@ -1,10 +1,13 @@
-<div>
+<div class="odontogram-selector-list">
   @for (
     odontogram of odontograms();
     track trackByOdontogramId($index, odontogram)
   ) {
-    <div>
-      {{ odontogram.name }}
+    <div class="odontogram-selector-list_item">
+      <lib-in-place-crud
+        [(ngModel)]="odontogram.name"
+        [class.active]="selectedOdontogram()?.id === odontogram.id"
+      ></lib-in-place-crud>
     </div>
   }
 </div>

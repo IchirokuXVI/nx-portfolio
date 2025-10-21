@@ -3,16 +3,17 @@ import { Component, inject, Input, signal, ViewChild } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 @Component({
-  selector: 'lib-close-icon',
+  selector: 'lib-save-icon',
   imports: [CommonModule],
-  templateUrl: './close-icon.html',
-  styleUrl: './close-icon.scss',
+  templateUrl: './save-icon.html',
+  styleUrl: './save-icon.scss',
 })
-export class CloseIcon {
+export class SaveIcon {
   _icon = signal<SafeHtml | null>(null);
 
   @Input() size: 'sm' | 'md' | 'lg' | 'xl' = 'md';
   @Input() sizeMultiplier: 1 | 2 | 3 = 1;
+  @Input() color: string = '#66aa33';
 
   private _sanitizer = inject(DomSanitizer);
 
@@ -20,7 +21,7 @@ export class CloseIcon {
 
   constructor() {
     // @ts-expect-error I guess at some point I have to fix this...
-    import('./close-icon.svg?raw').then((m) => {
+    import('./save-icon.svg?raw').then((m) => {
       // TO-DO: Avoid using bypassSecurityTrustHtml and install DOMPurify or similar to sanitize the SVG
       const safeSvg = this._sanitizer.bypassSecurityTrustHtml(m.default);
       this._icon.set(safeSvg);
