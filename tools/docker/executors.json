@@ -1,0 +1,14 @@
+{
+  "executors": {
+    "build": {
+      "implementation": "./build/build",
+      "schema": "./build/schema.json",
+      "description": "build executor"
+    },
+    "push": {
+      "implementation": "./push/push",
+      "schema": "./push/schema.json",
+      "description": "push executor"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "version": 2,
+  "title": "Docker Build Executor",
+  "description": "Executor for building Docker images using Docker CLI.",
+  "type": "object",
+  "properties": {
+    "registry": {
+      "type": "string",
+      "description": "Docker registry base URL",
+      "default": ""
+    },
+    "imageName": {
+      "type": "string",
+      "description": "Docker image name"
+    },
+    "dockerfile": {
+      "type": "string",
+      "description": "Path to the Dockerfile",
+      "default": "Dockerfile"
+    },
+    "context": {
+      "type": "enum",
+      "enum": ["project", "root"],
+      "description": "Docker build context",
+      "default": "project"
+    },
+    "tag": {
+      "type": "string",
+      "description": "Docker tag (default latest)",
+      "default": "latest"
+    },
+    "noCache": {
+      "type": "boolean",
+      "description": "Build without cache",
+      "default": false
+    }
+  },
+  "required": ["imageName"]
+}

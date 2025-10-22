@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "docker/builder",
+  "projectType": "application",
+  "sourceRoot": "apps/docker/certbot",
+  "targets": {
+    "build": {
+      "executor": "@portfolio/docker:build",
+      "options": {
+        "imageName": "builder",
+        "context": "root"
+      }
+    },
+    "push": {
+      "executor": "@portfolio/docker:push"
+    }
+  },
+  "tags": []
+}

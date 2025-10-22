@@ -17,6 +17,7 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@portfolio/docker": ["tools/docker/src/index.ts"],
       "@portfolio/landing/data-access": [
         "libs/landing/data-access/src/index.ts"
       ],
