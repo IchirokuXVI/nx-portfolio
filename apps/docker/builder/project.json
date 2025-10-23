@@ -9,10 +9,17 @@
       "options": {
         "imageName": "builder",
         "context": "root"
+      },
+      "configurations": {
+        "development": {
+          "noCache": true,
+          "tag": "dev"
+        },
+        "production": {
+          "tag": "latest",
+          "pushToRegistry": true
+        }
       }
-    },
-    "push": {
-      "executor": "@portfolio/docker:push"
     }
   },
   "tags": []

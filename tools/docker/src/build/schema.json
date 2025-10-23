@@ -20,10 +20,10 @@
       "default": "Dockerfile"
     },
     "context": {
-      "type": "enum",
-      "enum": ["project", "root"],
+      "type": "string",
+      "enum": ["project", "root", "dockerfile"],
       "description": "Docker build context",
-      "default": "project"
+      "default": "dockerfile"
     },
     "tag": {
       "type": "string",
@@ -33,6 +33,11 @@
     "noCache": {
       "type": "boolean",
       "description": "Build without cache",
+      "default": false
+    },
+    "pushToRegistry": {
+      "type": "boolean",
+      "description": "Push the built image to the Docker registry after a successful build",
       "default": false
     }
   },
