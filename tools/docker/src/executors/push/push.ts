@@ -29,12 +29,12 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
   const registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY;
 
   const skipLogin =
-    options.skipLogin || process.env.PORTFOLIO_DOCKER_SKIP_LOGIN === 'true';
+    options.skipLogin || process.env.PORTFOLIO_DOCKER_SKIP_LOGIN == 'true';
 
   const username = process.env.PORTFOLIO_DOCKER_USERNAME;
   const password = process.env.PORTFOLIO_DOCKER_PASSWORD;
 
-  if (!registry || (!skipLogin && !username) || !password) {
+  if (!registry || (!skipLogin && (!username || !password))) {
     throw new Error(
       `Missing required Docker configuration:
       DOCKER_REGISTRY=${registry || '(unset)'}

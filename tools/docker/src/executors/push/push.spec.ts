@@ -116,6 +116,16 @@ describe('Push Executor', () => {
     expect(mockedExec).not.toHaveBeenCalled();
   });
 
+  it('does not throw error if user/pass missing but skipLogin is true', async () => {
+    delete process.env.PORTFOLIO_DOCKER_USERNAME;
+    delete process.env.PORTFOLIO_DOCKER_PASSWORD;
+    process.env.PORTFOLIO_DOCKER_SKIP_LOGIN = 'true';
+
+    await executor(options, context);
+
+    expect(mockedExec).toHaveBeenCalled();
+  });
+
   it('builds the image if not found locally', async () => {
     mockedExec.mockImplementation(
       (
