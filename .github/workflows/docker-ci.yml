@@ -49,7 +49,11 @@ jobs:
       - name: Install Nx
         run: npm install nx@$NX_VERSION
 
+      - name: Get affected docker apps
+        run: |
+          echo "AFFECTED_DOCKER_APPS=$(npx nx show projects --affected)" >> $GITHUB_ENV
+
       # Build affected docker apps
       - name: Build affected docker apps
         run: |
-          npx nx affected -t build --configuration production --projects tag:type:docker
+          npx nx affected -t build --configuration production --projects name:${{ env.AFFECTED_DOCKER_APPS }}
