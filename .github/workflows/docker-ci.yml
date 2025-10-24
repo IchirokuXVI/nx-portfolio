@@ -51,9 +51,9 @@ jobs:
 
       - name: Get affected docker apps
         run: |
-          echo "AFFECTED_DOCKER_APPS=$(npx nx show projects --affected)" >> $GITHUB_ENV
+          echo "AFFECTED_DOCKER_APPS=$(npx nx show projects --affected --base dev)" >> $GITHUB_ENV
 
       # Build affected docker apps
       - name: Build affected docker apps
         run: |
-          npx nx affected -t build --configuration production --projects name:${{ env.AFFECTED_DOCKER_APPS }}
+          npx nx run-many -t build --configuration production --projects name:${{ env.AFFECTED_DOCKER_APPS }}
