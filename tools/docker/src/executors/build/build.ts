@@ -74,23 +74,23 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   try {
     const result = await execAsync(buildCommand);
-
-    console.log(`Built image: ${fullImage}`);
-
-    if (options.pushToRegistry) {
-      push(options, context);
-    }
-
-    return {
-      success: true,
-    };
   } catch (err) {
-    console.error('Error during Docker build: ', err);
-
-    return {
-      success: false,
-    };
+    throw new Error(`Error during Docker build: ${err.message}`);
   }
+
+  console.log(`Built image: ${fullImage}`);
+
+  if (options.pushToRegistry) {
+    try {
+      await push(options, context);
+    } catch (err) {
+      throw new Error(`Error during Docker push: ${err.message}`);
+    }
+  }
+
+  return {
+    success: true,
+  };
 };
 
 export default runExecutor;

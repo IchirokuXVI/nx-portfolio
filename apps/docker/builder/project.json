@@ -15,7 +15,7 @@
           "versionTag": "dev"
         },
         "production": {
-          "versionTag": "latestr",
+          "versionTag": "latest",
           "pushToRegistry": true
         }
       },
