@@ -26,6 +26,7 @@
       }
     }
   },
+  "neverConnectToCloud": true,
   "targetDefaults": {
     "@angular-devkit/build-angular:application": {
       "cache": true,
