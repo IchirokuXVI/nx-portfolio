@@ -73,7 +73,8 @@
         "production": {
           "pushToRegistry": true
         }
-      }
+      },
+      "defaultConfiguration": "development"
     },
     "lint": {
       "executor": "@nx/eslint:lint"

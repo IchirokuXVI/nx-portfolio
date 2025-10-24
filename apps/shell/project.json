@@ -58,11 +58,23 @@
       },
       "defaultConfiguration": "production"
     },
-    "extract-i18n": {
-      "executor": "@angular-devkit/build-angular:extract-i18n",
+    "build:docker": {
+      "executor": "@portfolio/docker:build",
       "options": {
-        "buildTarget": "shell:build"
-      }
+        "imageName": "nx-portfolio/shell",
+        "buildArgs": {
+          "APP_NAME": "shell"
+        }
+      },
+      "configurations": {
+        "development": {
+          "versionTag": "dev"
+        },
+        "production": {
+          "pushToRegistry": true
+        }
+      },
+      "defaultConfiguration": "development"
     },
     "lint": {
       "executor": "@nx/eslint:lint"

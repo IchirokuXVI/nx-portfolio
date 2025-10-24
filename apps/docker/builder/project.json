@@ -19,7 +19,8 @@
           "versionTag": "latest",
           "pushToRegistry": true
         }
-      }
+      },
+      "defaultConfiguration": "development"
     }
   },
   "tags": ["type:docker"]
