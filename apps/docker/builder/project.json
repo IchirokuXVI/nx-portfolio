@@ -12,7 +12,6 @@
       },
       "configurations": {
         "development": {
-          "noCache": true,
           "versionTag": "dev"
         },
         "production": {
