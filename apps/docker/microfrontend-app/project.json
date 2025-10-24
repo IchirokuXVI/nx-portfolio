@@ -1,26 +1,22 @@
 {
+  "name": "docker/microfrontend-app",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "name": "docker/builder",
   "projectType": "application",
-  "sourceRoot": "apps/docker/builder",
+  "sourceRoot": "apps/docker/microfrontend-app/src",
   "targets": {
     "build": {
       "executor": "@portfolio/docker:build",
       "options": {
-        "imageName": "nx-portfolio/builder",
-        "context": "root"
+        "imageName": "nx-portfolio/microfrontend-app"
       },
       "configurations": {
         "development": {
-          "noCache": true,
           "tag": "dev"
         },
         "production": {
-          "tag": "latest",
           "pushToRegistry": true
         }
       }
     }
-  },
-  "tags": []
+  }
 }

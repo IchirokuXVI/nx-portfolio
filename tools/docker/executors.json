@@ -1,13 +1,13 @@
 {
   "executors": {
     "build": {
-      "implementation": "./src/build/build.ts",
-      "schema": "./src/build/schema.json",
+      "implementation": "./src/executors/build/build.ts",
+      "schema": "./src/executors/build/schema.json",
       "description": "Build docker image using Docker CLI"
     },
     "push": {
-      "implementation": "./src/push/push.ts",
-      "schema": "./src/push/schema.json",
+      "implementation": "./src/executors/push/push.ts",
+      "schema": "./src/executors/push/schema.json",
       "description": "Push docker image to registry using Docker CLI"
     }
   }

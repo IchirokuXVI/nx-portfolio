@@ -1,26 +1,22 @@
 {
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "name": "docker/builder",
+  "name": "docker/certbot",
   "projectType": "application",
-  "sourceRoot": "apps/docker/builder",
+  "sourceRoot": "apps/docker/certbot/src",
   "targets": {
     "build": {
       "executor": "@portfolio/docker:build",
       "options": {
-        "imageName": "nx-portfolio/builder",
-        "context": "root"
+        "imageName": "nx-portfolio/certbot"
       },
       "configurations": {
         "development": {
-          "noCache": true,
           "tag": "dev"
         },
         "production": {
-          "tag": "latest",
           "pushToRegistry": true
         }
       }
     }
-  },
-  "tags": []
+  }
 }

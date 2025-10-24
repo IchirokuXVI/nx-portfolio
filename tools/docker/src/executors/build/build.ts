@@ -33,7 +33,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   const dockerfile = options.dockerfile
     ? path.join(projectRoot, options.dockerfile)
-    : path.join(projectRoot, 'Dockerfile');
+    : path.join(projectRoot, 'src/Dockerfile');
 
   const mappedContexts = {
     project: projectRoot,

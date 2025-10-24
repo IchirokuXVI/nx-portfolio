@@ -9,5 +9,6 @@
     "@nx/devkit": "21.4.1",
     "tslib": "^2.3.0"
   },
-  "executors": "./executors.json"
+  "executors": "./executors.json",
+  "generators": "./generators.json"
 }
