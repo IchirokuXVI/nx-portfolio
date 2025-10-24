@@ -11,12 +11,13 @@
       },
       "configurations": {
         "development": {
-          "tag": "dev"
+          "versionTag": "dev"
         },
         "production": {
           "pushToRegistry": true
         }
       }
     }
-  }
+  },
+  "tags": ["type:docker"]
 }

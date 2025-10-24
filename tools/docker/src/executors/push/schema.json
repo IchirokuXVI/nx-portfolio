@@ -7,7 +7,7 @@
   "properties": {
     "registry": {
       "type": "string",
-      "description": "Docker registry base URL",
+      "description": "Docker registry base URL. If not provided, the PORTFOLIO_DOCKER_REGISTRY environment variable will be used.",
       "default": ""
     },
     "imageName": {
@@ -17,7 +17,7 @@
     "dockerfile": {
       "type": "string",
       "description": "Path to the Dockerfile",
-      "default": "Dockerfile"
+      "default": "src/Dockerfile"
     },
     "context": {
       "type": "string",
@@ -25,10 +25,23 @@
       "description": "Docker build context",
       "default": "dockerfile"
     },
-    "tag": {
+    "versionTag": {
       "type": "string",
       "description": "Docker tag (default latest)",
       "default": "latest"
+    },
+    "buildArgs": {
+      "type": "object",
+      "description": "Build arguments to pass to the Docker build command",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "addNodeEnv": {
+      "type": "boolean",
+      "description": "Add NODE_ENV build argument based on the current process.env.NODE_ENV value",
+      "default": true
     },
     "skipLogin": {
       "type": "boolean",

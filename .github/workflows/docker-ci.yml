@@ -1,0 +1,55 @@
+name: Nx Docker Build & Push (Runner Only)
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      PORTFOLIO_DOCKER_REGISTRY: ghcr.io/ichirokuxvi
+      PORTFOLIO_DOCKER_SKIP_LOGIN: true
+
+    steps:
+      # Checkout full history so Nx can detect changes
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Setup Node.js & Nx
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Read the Nx version dynamically from package.json
+      - name: Get Nx version
+        id: nx-version
+        run: echo "NX_VERSION=$(npm pkg get devDependencies.nx | tr -d '\"')" >> $GITHUB_ENV
+
+      # Cache Nx installation
+      - name: Cache Nx
+        id: cache-nx
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: nx-${{ runner.os }}-${{ env.NX_VERSION }}
+
+      - name: Install Nx
+        run: npm install nx@$NX_VERSION
+
+      # Build affected docker apps
+      - name: Build affected docker apps
+        run: |
+          npx nx affected -t=build --configuration=production --tag=type:docker

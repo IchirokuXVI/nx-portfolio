@@ -20,7 +20,11 @@ const options: PushExecutorSchema = {
   imageName: 'my-test-image',
   dockerfile: 'Dockerfile',
   context: 'dockerfile',
-  tag: 'latest',
+  versionTag: 'latest',
+  buildArgs: {
+    testArg: 'testValue',
+  },
+  addNodeEnv: true,
   noCache: false,
   skipLogin: false,
 };
@@ -40,6 +44,7 @@ const context: ExecutorContext = {
         root: 'apps/my-test-project',
         sourceRoot: 'apps/my-test-project/src',
         projectType: 'application',
+        tags: ['type:docker'],
       },
     },
     version: 2,

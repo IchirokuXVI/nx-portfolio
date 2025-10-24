@@ -13,14 +13,14 @@
       "configurations": {
         "development": {
           "noCache": true,
-          "tag": "dev"
+          "versionTag": "dev"
         },
         "production": {
-          "tag": "latest",
+          "versionTag": "latest",
           "pushToRegistry": true
         }
       }
     }
   },
-  "tags": []
+  "tags": ["type:docker"]
 }

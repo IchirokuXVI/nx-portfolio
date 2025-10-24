@@ -33,6 +33,7 @@ export async function applicationGenerator(
         },
       },
     },
+    tags: ['type:docker'],
   });
 
   generateFiles(tree, path.join(__dirname, 'files'), projectRoot, options);

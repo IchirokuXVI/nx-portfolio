@@ -1,9 +1,9 @@
-ARG APP_NAME
-
 # Use the builder image to build the microfrontend app
 FROM nx-portfolio/builder AS builder
 ARG APP_NAME
-RUN npx nx build ${APP_NAME} --configuration=production
+ARG NODE_ENV=development
+ENV NODE_ENV=$NODE_ENV
+RUN npx nx build ${APP_NAME} --configuration=${NODE_ENV}
 
 # Use the local-http-server image as the base for serving the app
 FROM nx-portfolio/local-http-server

@@ -25,7 +25,8 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
     throw new Error(`Project ${context.projectName} not found.`);
   }
 
-  const { registry, imageName, tag } = options;
+  const { imageName, versionTag } = options;
+  const registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY;
 
   const username = process.env.PORTFOLIO_DOCKER_USERNAME;
   const password = process.env.PORTFOLIO_DOCKER_PASSWORD;
@@ -39,7 +40,7 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
     );
   }
 
-  const fullImage = `${registry}/${imageName}:${tag}`;
+  const fullImage = `${registry}/${imageName}:${versionTag}`;
 
   console.log(`Checking for local image: ${fullImage}`);
 

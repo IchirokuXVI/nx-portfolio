@@ -28,8 +28,8 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   const projectRoot = path.join(context.root, project.root);
 
-  const registry = options.registry || process.env.DOCKER_REGISTRY;
-  const tag = options.tag || process.env.DOCKER_TAG;
+  const registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY;
+  const versionTag = options.versionTag;
 
   const dockerfile = options.dockerfile
     ? path.join(projectRoot, options.dockerfile)
@@ -38,18 +38,37 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   const mappedContexts = {
     project: projectRoot,
     root: context.root,
-    dockerfile: dockerfile,
+    dockerfile: path.dirname(dockerfile),
   } as const;
 
   const contextDir = mappedContexts[options.context];
 
-  const fullImage = `${registry ? `${registry}/` : ''}${options.imageName}:${tag}`;
+  const fullImage = `${registry ? `${registry}/` : ''}${options.imageName}:${versionTag}`;
 
   const noCacheFlag = options.noCache ? ' --no-cache' : '';
 
+  const buildArgs = [];
+
+  if (!options.buildArgs.NODE_ENV && options.addNodeEnv) {
+    options.buildArgs.NODE_ENV = process.env.NODE_ENV || 'development';
+  }
+
+  for (const [key, value] of Object.entries(options.buildArgs || {})) {
+    buildArgs.push(`--build-arg ${key}=${value}`);
+  }
+
   // noCacheFlag has no space after build because it includes the leading space in itself
   // do not add the space because the test will fail
-  const buildCommand = `docker build${noCacheFlag} -f ${dockerfile} -t ${fullImage} ${contextDir}`;
+  const buildCommand = [
+    'docker build',
+    noCacheFlag,
+    `-f ${dockerfile}`,
+    `-t ${fullImage}`,
+    ...buildArgs,
+    contextDir,
+  ]
+    .filter((v) => v)
+    .join(' ');
 
   console.log(`Running command: ${buildCommand}`);
 

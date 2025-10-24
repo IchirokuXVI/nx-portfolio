@@ -15,7 +15,11 @@ const options: BuildExecutorSchema = {
   dockerfile: 'Dockerfile',
   context: 'dockerfile',
   registry: 'my-test-registry',
-  tag: 'latest',
+  versionTag: 'latest',
+  buildArgs: {
+    testArg: 'testValue',
+  },
+  addNodeEnv: true,
   noCache: false,
   pushToRegistry: false,
 };
@@ -35,6 +39,7 @@ const context: ExecutorContext = {
         root: 'apps/my-test-project',
         sourceRoot: 'apps/my-test-project/src',
         projectType: 'application',
+        tags: ['type:docker'],
       },
     },
     version: 2,
@@ -62,7 +67,7 @@ describe('Build Executor', () => {
     expect(output.success).toBe(true);
 
     expect(mockedExec).toHaveBeenCalledWith(
-      `docker build -f ${path.join('apps/my-test-project/Dockerfile')} -t my-test-registry/my-test-image:latest ${path.join('apps/my-test-project/Dockerfile')}`,
+      `docker build -f ${path.join('apps/my-test-project/Dockerfile')} -t my-test-registry/my-test-image:latest --build-arg testArg=testValue --build-arg NODE_ENV=test ${path.join('apps/my-test-project')}`,
       expect.any(Function)
     );
   });
@@ -77,7 +82,7 @@ describe('Build Executor', () => {
     expect(output.success).toBe(false);
 
     expect(mockedExec).toHaveBeenCalledWith(
-      `docker build -f ${path.join('apps/my-test-project/Dockerfile')} -t my-test-registry/my-test-image:latest ${path.join('apps/my-test-project/Dockerfile')}`,
+      `docker build -f ${path.join('apps/my-test-project/Dockerfile')} -t my-test-registry/my-test-image:latest --build-arg testArg=testValue --build-arg NODE_ENV=test ${path.join('apps/my-test-project')}`,
       expect.any(Function)
     );
   });
