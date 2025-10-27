@@ -5,7 +5,6 @@ export interface BuildExecutorSchema {
   context: 'root' | 'project' | 'dockerfile';
   versionTag: string;
   buildArgs: { [key: string]: string };
-  addNodeEnv: boolean;
   noCache: boolean;
   pushToRegistry: boolean;
 }

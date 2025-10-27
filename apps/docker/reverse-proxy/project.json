@@ -20,5 +20,5 @@
       "defaultConfiguration": "production"
     }
   },
-  "tags": ["type:docker"]
+  "tags": ["type:static-docker"]
 }

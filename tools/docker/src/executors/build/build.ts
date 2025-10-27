@@ -28,7 +28,12 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   const projectRoot = path.join(context.root, project.root);
 
-  const registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY;
+  let registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY;
+
+  if (registry && !registry.endsWith('/')) {
+    registry += '/';
+  }
+
   const versionTag = options.versionTag;
 
   const dockerfile = options.dockerfile
@@ -43,18 +48,23 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   const contextDir = mappedContexts[options.context];
 
-  const fullImage = `${registry ? `${registry}/` : ''}${options.imageName}:${versionTag}`;
+  const fullImage = `${registry ? `${registry}` : ''}${options.imageName}:${versionTag}`;
 
   const noCacheFlag = options.noCache ? ' --no-cache' : '';
 
   const buildArgs = [];
 
-  if (!options.buildArgs.NODE_ENV && options.addNodeEnv) {
+  if (!options.buildArgs.NODE_ENV) {
     options.buildArgs.NODE_ENV = process.env.NODE_ENV || 'development';
   }
 
+  options.buildArgs.NX_APP = context.projectName;
+  options.buildArgs.TARGET_REGISTRY = options.registry;
+
   for (const [key, value] of Object.entries(options.buildArgs || {})) {
-    buildArgs.push(`--build-arg ${key}=${value}`);
+    if (value) {
+      buildArgs.push(`--build-arg ${key}=${value}`);
+    }
   }
 
   // noCacheFlag has no space after build because it includes the leading space in itself

@@ -38,11 +38,6 @@
       },
       "default": {}
     },
-    "addNodeEnv": {
-      "type": "boolean",
-      "description": "Add NODE_ENV build argument based on the current process.env.NODE_ENV value",
-      "default": true
-    },
     "skipLogin": {
       "type": "boolean",
       "description": "Skip login to the Docker registry. Useful for CI/CD or development environments since the user should already be authenticated."

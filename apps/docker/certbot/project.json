@@ -20,5 +20,5 @@
       "defaultConfiguration": "development"
     }
   },
-  "tags": ["type:docker"]
+  "tags": ["type:static-docker"]
 }

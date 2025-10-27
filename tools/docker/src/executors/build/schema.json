@@ -38,11 +38,6 @@
       },
       "default": {}
     },
-    "addNodeEnv": {
-      "type": "boolean",
-      "description": "Add NODE_ENV build argument based on the current process.env.NODE_ENV value",
-      "default": true
-    },
     "noCache": {
       "type": "boolean",
       "description": "Build without cache",
