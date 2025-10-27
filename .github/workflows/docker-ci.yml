@@ -57,7 +57,9 @@ jobs:
         run: npm install nx@$NX_VERSION
 
       - name: Pull existing docker builder image (if any) to leverage build cache
-        run: docker pull ghcr.io/${{ github.repository }}/builder:latest || true
+        run: |
+          REPO_LOWERCASE=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker pull ghcr.io/${REPO_LOWERCASE}/builder:latest || true
 
       - name: Build main docker builder
         run: npx nx build docker/builder --configuration=production
@@ -65,8 +67,8 @@ jobs:
       - name: Get last successful commit on current branch
         id: last_success
         run: |
-          branch=${GITHUB_REF_NAME}
-          workflow_id=$($GITHUB_WORKFLOW)
+          branch="${GITHUB_REF_NAME}"
+          workflow_id="${GITHUB_WORKFLOW}"
 
           # Find the most recent successful run (excluding the current one)
           last_run=$(gh run list \
