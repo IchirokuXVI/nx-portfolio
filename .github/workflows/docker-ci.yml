@@ -66,7 +66,7 @@ jobs:
         id: last_success
         run: |
           branch=${GITHUB_REF_NAME}
-          workflow_id=$(basename $GITHUB_WORKFLOW)
+          workflow_id=$($GITHUB_WORKFLOW)
 
           # Find the most recent successful run (excluding the current one)
           last_run=$(gh run list \
