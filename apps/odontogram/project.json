@@ -61,14 +61,14 @@
     "build:docker": {
       "executor": "@portfolio/docker:build",
       "options": {
-        "imageName": "nx-portfolio/odontogram",
-        "buildArgs": {
-          "APP_NAME": "odontogram"
-        }
+        "imageName": "nx-portfolio/odontogram"
       },
       "configurations": {
         "development": {
-          "versionTag": "dev"
+          "versionTag": "dev",
+          "buildArgs": {
+            "BUILDER_TAG": "dev"
+          }
         },
         "production": {
           "pushToRegistry": true

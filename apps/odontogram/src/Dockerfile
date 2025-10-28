@@ -1,20 +1,23 @@
 ARG NODE_ENV=development
+ARG BUILDER_TAG=latest
+ARG TARGET_REGISTRY
+ARG NX_APP
 
 # Use the builder image to build the microfrontend app
 # TO-DO: set the builder image tag, right now it uses latest always which means
 # that dev tag is never used at all which is confusing
 # Also it might not make much sense to use another image as base if we are going to
 # build an app and the image might not have the code updated
-FROM nx-portfolio/builder AS builder
+FROM ${TARGET_REGISTRY}nx-portfolio/builder:${BUILDER_TAG} AS builder
 ARG NODE_ENV=development
 ENV NODE_ENV=$NODE_ENV
-ARG APP_NAME
-RUN npx nx build ${APP_NAME} --configuration=${NODE_ENV}
+ARG NX_APP
+RUN npx nx build ${NX_APP} --configuration=${NODE_ENV}
 
 # Use the local-http-server image as the base for serving the app
-FROM nx-portfolio/local-http-server
-ARG APP_NAME
-COPY --from=builder /app/dist/apps/${APP_NAME} /var/www/html/
+FROM ${TARGET_REGISTRY}nx-portfolio/local-http-server:${BUILDER_TAG}
+ARG NX_APP
+COPY --from=builder /app/dist/apps/${NX_APP} /var/www/html/
 
 # Run nginx in the foreground to keep the container running
 CMD ["nginx", "-g", "daemon off;"]
