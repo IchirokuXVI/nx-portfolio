@@ -59,7 +59,8 @@ jobs:
 
       - name: Pull existing docker builder image (if any) to leverage build cache
         run: |
-          echo "REPO_LOWERCASE=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "REPO_LOWERCASE=$REPO_LC" >> $GITHUB_ENV
           docker pull ghcr.io/${{ env.REPO_LOWERCASE}}/builder:latest || true
 
       - name: Build main docker builder
@@ -90,7 +91,7 @@ jobs:
           docker_apps=$(npx nx show projects --projects tag:type:*docker | paste -sd, -)
           echo "docker_apps=$docker_apps" >> "$GITHUB_OUTPUT"
 
-          other_apps=$(npx nx show projects --exclude "$docker_apps" --exclude name:*-e2e | paste -sd, -)
+          other_apps=$(npx nx show projects --exclude "$docker_apps,*-e2e" | paste -sd, -)
           echo "other_apps=$other_apps" >> "$GITHUB_OUTPUT"
 
           affected_docker_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --projects "$docker_apps" | paste -sd, -)
