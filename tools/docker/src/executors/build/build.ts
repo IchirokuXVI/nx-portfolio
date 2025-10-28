@@ -59,7 +59,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   }
 
   options.buildArgs.NX_APP = context.projectName;
-  options.buildArgs.TARGET_REGISTRY = options.registry;
+  options.buildArgs.TARGET_REGISTRY = registry;
 
   for (const [key, value] of Object.entries(options.buildArgs || {})) {
     if (value) {
