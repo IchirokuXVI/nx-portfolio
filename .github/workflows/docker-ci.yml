@@ -107,8 +107,8 @@ jobs:
       # Test and build remaining affected apps
       - name: Test and build remaining affected apps
         run: |
-          docker run --rm \
-            ghcr.io/${REPO_LOWERCASE}/builder:latest \
+          docker run \
+            --rm ghcr.io/${REPO_LOWERCASE}/builder:latest \
             npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
           npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
         # npx nx run-many -t e2e --projects ${{ steps.get-remaining-apps.outputs.affected }}
