@@ -38,7 +38,7 @@ const context: ExecutorContext = {
         root: 'apps/my-test-project',
         sourceRoot: 'apps/my-test-project/src',
         projectType: 'application',
-        tags: ['type:docker'],
+        tags: ['type:static-docker'],
       },
     },
     version: 2,
