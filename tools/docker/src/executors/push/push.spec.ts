@@ -80,12 +80,12 @@ describe('Push Executor', () => {
 
     expect(output.success).toBe(true);
 
-    expect(mockedExec).toHaveBeenCalledTimes(3);
+    expect(mockedExec).toHaveBeenCalledTimes(2);
 
-    expect(mockedExec).toHaveBeenCalledWith(
-      `docker image inspect my-test-registry/my-test-image:latest`,
-      expect.any(Function)
-    );
+    // expect(mockedExec).toHaveBeenCalledWith(
+    //   `docker image inspect my-test-registry/my-test-image:latest`,
+    //   expect.any(Function)
+    // );
 
     expect(mockedExec).toHaveBeenCalledWith(
       `echo \"testpass\" | docker login my-test-registry -u testuser --password-stdin`,
@@ -125,32 +125,33 @@ describe('Push Executor', () => {
     expect(mockedExec).toHaveBeenCalled();
   });
 
-  it('builds the image if not found locally', async () => {
-    mockedExec.mockImplementation(
-      (
-        command: any,
-        callback: (error: any, stdout: any, stderr: any) => void
-      ) => {
-        if (command.startsWith('docker image inspect')) {
-          // Simulate image not found
-          callback(new Error('not found'), null, null);
-        } else {
-          callback(null, 'stdout', null);
-        }
-      }
-    );
+  // Not needed anymore since we always build before push
+  // it('builds the image if not found locally', async () => {
+  //   mockedExec.mockImplementation(
+  //     (
+  //       command: any,
+  //       callback: (error: any, stdout: any, stderr: any) => void
+  //     ) => {
+  //       if (command.startsWith('docker image inspect')) {
+  //         // Simulate image not found
+  //         callback(new Error('not found'), null, null);
+  //       } else {
+  //         callback(null, 'stdout', null);
+  //       }
+  //     }
+  //   );
 
-    mockedBuildExecutor.mockImplementation(async () => ({ success: true }));
+  //   mockedBuildExecutor.mockImplementation(async () => ({ success: true }));
 
-    const output = await executor(options, context);
+  //   const output = await executor(options, context);
 
-    expect(output.success).toBe(true);
+  //   expect(output.success).toBe(true);
 
-    expect(mockedBuildExecutor).toHaveBeenCalledWith(
-      { ...options, pushToRegistry: false },
-      context
-    );
-  });
+  //   expect(mockedBuildExecutor).toHaveBeenCalledWith(
+  //     { ...options, pushToRegistry: false },
+  //     context
+  //   );
+  // });
 
   it('skips login if set in env', async () => {
     process.env.PORTFOLIO_DOCKER_SKIP_LOGIN = 'true';
