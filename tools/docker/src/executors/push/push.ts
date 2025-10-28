@@ -47,29 +47,28 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
 
   console.log(`Checking for local image: ${fullImage}`);
 
+  // Commented the code about checking local image existence to always build before push
+  // Docker should already have caching mechanisms to avoid rebuilding unchanged layers
   // Check if image exists locally
-  let imageExists = false;
-  try {
-    await execAsync(`docker image inspect ${fullImage}`);
-    imageExists = true;
-    console.log(`Image ${fullImage} already built locally`);
-  } catch {
-    console.log(`Image ${fullImage} not found locally, building...`);
-  }
+  // let imageExists = false;
+  // try {
+  //   await execAsync(`docker image inspect ${fullImage}`);
+  //   imageExists = true;
+  //   console.log(`Image ${fullImage} already built locally`);
+  // } catch {
+  //   console.log(`Image ${fullImage} not found locally, building...`);
+  // }
 
   // Build if missing
-  if (!imageExists) {
-    try {
-      const result = await build(
-        { ...options, pushToRegistry: false },
-        context
-      );
+  // if (!imageExists) {
+  try {
+    const result = await build({ ...options, pushToRegistry: false }, context);
 
-      if (!result.success) throw new Error("Build executor didn't succeed.");
-    } catch (err) {
-      throw new Error(`Failed to build image ${fullImage} before push: ${err}`);
-    }
+    if (!result.success) throw new Error("Build executor didn't succeed.");
+  } catch (err) {
+    throw new Error(`Failed to build image ${fullImage} before push: ${err}`);
   }
+  // }
 
   // Login
   if (!skipLogin) {
