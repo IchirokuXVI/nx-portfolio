@@ -59,8 +59,8 @@ jobs:
 
       - name: Pull existing docker builder image (if any) to leverage build cache
         run: |
-          REPO_LOWERCASE=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          docker pull ghcr.io/${REPO_LOWERCASE}/builder:latest || true
+          echo "REPO_LOWERCASE=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          docker pull ghcr.io/${{ env.REPO_LOWERCASE}}/builder:latest || true
 
       - name: Build main docker builder
         run: npx nx build docker/builder --configuration=production
@@ -108,7 +108,7 @@ jobs:
       - name: Test and build remaining affected apps
         run: |
           docker run \
-            --rm ghcr.io/${REPO_LOWERCASE}/builder:latest \
+            --rm "ghcr.io/${{ env.REPO_LOWERCASE}}/builder:latest" \
             npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
           npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
         # npx nx run-many -t e2e --projects ${{ steps.get-remaining-apps.outputs.affected }}
