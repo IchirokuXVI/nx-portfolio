@@ -1,37 +1,23 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import {
-  ToothTreatmentStatus,
-  ToothZones,
-  TreatmentType,
-} from '@portfolio/odontogram/models';
-import { OdontogramSectorsView } from './odontogram-sectors-view';
+import { OdontogramSelectorList } from './odontogram-selector-list';
 
-describe('OdontogramSectorsView', () => {
-  let component: OdontogramSectorsView;
-  let fixture: ComponentFixture<OdontogramSectorsView>;
+describe('OdontogramSelectorList', () => {
+  let component: OdontogramSelectorList;
+  let fixture: ComponentFixture<OdontogramSelectorList>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [OdontogramSectorsView],
+      imports: [OdontogramSelectorList],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(OdontogramSectorsView);
+    fixture = TestBed.createComponent(OdontogramSelectorList);
     component = fixture.componentInstance;
 
-    fixture.componentRef.setInput('odontogram', {
-      id: 1616,
-      name: 'Test Odontogram',
-      client: 5,
-    });
-
-    fixture.componentRef.setInput('treatments', [
+    fixture.componentRef.setInput('odontograms', [
       {
-        id: 83116,
-        teeth: ['16'],
-        type: TreatmentType.STANDARD,
-        zones: [ToothZones.TOP],
-        status: ToothTreatmentStatus.PENDING,
-        groupTeeth: false,
+        id: 1616,
+        name: 'Test Odontogram',
+        client: 5,
       },
     ]);
 

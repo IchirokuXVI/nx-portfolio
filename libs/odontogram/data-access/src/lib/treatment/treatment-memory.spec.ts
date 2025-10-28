@@ -62,10 +62,14 @@ describe('TreatmentMemory', () => {
     const regex = /^tooth/i;
     const data = await firstValueFrom(service.getList({ searchTerm: regex }));
     expect(Array.isArray(data)).toBe(true);
-    expect(data.every((item) => item.name.match(regex))).toBe(true);
     expect(
-      Array.from(currentServiceData.values()).filter((item) =>
-        item.name.match(regex)
+      data.every(
+        (item) => item.name.match(regex) || item.description?.match(regex)
+      )
+    ).toBe(true);
+    expect(
+      Array.from(currentServiceData.values()).filter(
+        (item) => item.name.match(regex) || item.description?.match(regex)
       )
     ).toEqual(data);
   });

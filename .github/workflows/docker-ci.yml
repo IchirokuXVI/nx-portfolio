@@ -84,24 +84,29 @@ jobs:
         run: |
           echo "Last successful commit SHA: ${{ steps.last_success.outputs.sha }}"
 
-      - name: Get affected docker apps
-        id: get-docker-apps
+      - name: Get affected apps
+        id: get-affected-apps
         run: |
-          echo "affected=$(npx nx show projects --affected --base ${{ steps.last_success.outputs.sha }} --projects tag:type:static-docker | paste -sd, -)" >> $GITHUB_OUTPUT
+          docker_apps=$(npx nx show projects --projects tag:type:*docker | paste -sd, -)
+          echo "docker_apps=$docker_apps" >> "$GITHUB_OUTPUT"
+
+          other_apps=$(npx nx show projects --exclude "$docker_apps" --exclude name:*-e2e | paste -sd, -)
+          echo "other_apps=$other_apps" >> "$GITHUB_OUTPUT"
+
+          affected_docker_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --projects "$docker_apps" | paste -sd, -)
+          echo "affected_docker_apps=$affected_docker_apps" >> "$GITHUB_OUTPUT"
+
+          affected_other_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --projects "$other_apps" | paste -sd, -)
+          echo "affected_other_apps=$affected_other_apps" >> "$GITHUB_OUTPUT"
 
       # Build affected docker apps
       - name: Build affected docker apps
         run: |
-          npx nx run-many -t build --configuration production --projects name:${{ steps.get-docker-apps.outputs.affected }}
-
-      - name: Get remaining affected apps
-        id: get-remaining-apps
-        run: |
-          echo "affected=$(npx nx show projects --affected --base ${{ steps.last_success.outputs.sha }} --exclude steps.get-docker-apps.outputs.affected | paste -sd, -)" >> $GITHUB_OUTPUT
+          npx nx run-many -t build --configuration production --projects name:${{ steps.get-affected-apps.outputs.affected_docker_apps }}
 
       # Test and build remaining affected apps
       - name: Test and build remaining affected apps
         run: |
-          npx nx run-many -t test:docker --projects ${{ steps.get-remaining-apps.outputs.affected }}
-          npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-remaining-apps.outputs.affected }}
+          npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
+          npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
         # npx nx run-many -t e2e --projects ${{ steps.get-remaining-apps.outputs.affected }}

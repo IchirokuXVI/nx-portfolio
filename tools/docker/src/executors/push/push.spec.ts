@@ -24,7 +24,6 @@ const options: PushExecutorSchema = {
   buildArgs: {
     testArg: 'testValue',
   },
-  addNodeEnv: true,
   noCache: false,
   skipLogin: false,
 };

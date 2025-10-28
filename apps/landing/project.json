@@ -76,22 +76,6 @@
       },
       "defaultConfiguration": "development"
     },
-    "test:docker": {
-      "executor": "@portfolio/docker:build",
-      "options": {
-        "imageName": "nx-portfolio/landing"
-      },
-      "configurations": {
-        "development": {
-          "versionTag": "dev",
-          "buildArgs": {
-            "BUILDER_TAG": "dev"
-          }
-        },
-        "production": {}
-      },
-      "defaultConfiguration": "development"
-    },
     "lint": {
       "executor": "@nx/eslint:lint"
     },

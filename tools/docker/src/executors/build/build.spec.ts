@@ -19,7 +19,6 @@ const options: BuildExecutorSchema = {
   buildArgs: {
     testArg: 'testValue',
   },
-  addNodeEnv: true,
   noCache: false,
   pushToRegistry: false,
 };
@@ -67,7 +66,7 @@ describe('Build Executor', () => {
     expect(output.success).toBe(true);
 
     expect(mockedExec).toHaveBeenCalledWith(
-      `docker build -f ${path.join('apps/my-test-project/Dockerfile')} -t my-test-registry/my-test-image:latest --build-arg testArg=testValue --build-arg NODE_ENV=test ${path.join('apps/my-test-project')}`,
+      `docker build -f ${path.join('apps/my-test-project/Dockerfile')} -t my-test-registry/my-test-image:latest --build-arg testArg=testValue --build-arg NODE_ENV=test --build-arg NX_APP=my-test-project --build-arg TARGET_REGISTRY=my-test-registry ${path.join('apps/my-test-project')}`,
       expect.any(Function)
     );
   });
@@ -77,12 +76,12 @@ describe('Build Executor', () => {
       callback(new Error('exec error'), null, null);
     });
 
-    const output = await executor(options, context);
-
-    expect(output.success).toBe(false);
+    await expect(executor(options, context)).rejects.toThrow(
+      'Error during Docker build: exec error'
+    );
 
     expect(mockedExec).toHaveBeenCalledWith(
-      `docker build -f ${path.join('apps/my-test-project/Dockerfile')} -t my-test-registry/my-test-image:latest --build-arg testArg=testValue --build-arg NODE_ENV=test ${path.join('apps/my-test-project')}`,
+      `docker build -f ${path.join('apps/my-test-project/Dockerfile')} -t my-test-registry/my-test-image:latest --build-arg testArg=testValue --build-arg NODE_ENV=test --build-arg NX_APP=my-test-project --build-arg TARGET_REGISTRY=my-test-registry ${path.join('apps/my-test-project')}`,
       expect.any(Function)
     );
   });

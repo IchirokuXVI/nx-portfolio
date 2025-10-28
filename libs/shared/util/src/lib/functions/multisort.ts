@@ -71,10 +71,10 @@ export function multiSort<T>(fields: string) {
         field = field.slice(1);
       }
 
-      const path = field.split('.');
       // findField<T> makes the compiler complain about being too deep and possibly infinite
-      const valA = findField<any>(a, path);
-      const valB = findField<any>(b, path);
+      // @ts-nocheck
+      const valA = findField<any>(a, field);
+      const valB = findField<any>(b, field);
 
       if (valA === valB) continue;
 
