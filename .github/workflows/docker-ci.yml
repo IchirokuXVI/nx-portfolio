@@ -57,10 +57,13 @@ jobs:
       - name: Install Nx
         run: npm install nx@$NX_VERSION
 
-      - name: Pull existing docker builder image (if any) to leverage build cache
+      - name: Set lowercase repo
         run: |
           REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "REPO_LOWERCASE=$REPO_LC" >> $GITHUB_ENV
+
+      - name: Pull existing docker builder image (if any) to leverage build cache
+        run: |
           docker pull ghcr.io/${{ env.REPO_LOWERCASE}}/builder:latest || true
 
       - name: Build main docker builder
