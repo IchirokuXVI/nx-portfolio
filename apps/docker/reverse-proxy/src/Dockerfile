@@ -1,1 +1,1 @@
-FROM nginxproxy/nginx-proxy:latest
+FROM nginx:latest

@@ -18,4 +18,5 @@ cp "$RENEWED_LINEAGE/fullchain.pem" "$TARGET_DIR/$DOMAIN_FOLDER.crt"
 
 echo "Certificates copied to $TARGET_DIR"
 
-docker exec reverse-proxy nginx -s reload
+# Reload Nginx in same pod to apply new certificates
+pkill -HUP nginx || nginx -s reload
