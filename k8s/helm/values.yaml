@@ -2,12 +2,12 @@ namespace: nx-portfolio
 replicaCount: 1
 
 proxyImage:
-  repository: nginx
+  image: nginx
   pullPolicy: IfNotPresent
   tag: 'latest'
 
 certbotImage:
-  repository: certbot/certbot
+  image: ghcr.io/ichirokuxvi/nx-portfolio/certbot
   pullPolicy: IfNotPresent
   tag: 'latest'
 

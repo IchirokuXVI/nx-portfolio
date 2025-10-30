@@ -17,7 +17,7 @@ spec:
         {{- include "reverse-proxy.initContainer" . | nindent 8 }}
       containers:
         - name: reverse-proxy
-          image: "{{ .Values.proxyImage.repository }}:{{ .Values.proxyImage.tag }}"
+          image: "{{ .Values.proxyImage.image }}:{{ .Values.proxyImage.tag }}"
           imagePullPolicy: {{ .Values.proxyImage.pullPolicy }}
           ports:
             - containerPort: 80
@@ -26,6 +26,8 @@ spec:
             - name: nginx-config
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
+            - name: certbot-webroot
+              mountPath: /var/www/certbot
             - name: certs
               mountPath: /etc/nginx/certs
           resources:
@@ -36,7 +38,7 @@ spec:
               cpu: 500m
               memory: 512Mi
         - name: certbot
-          image: "{{ .Values.certbotImage.repository }}:{{ .Values.certbotImage.tag }}"
+          image: "{{ .Values.certbotImage.image }}:{{ .Values.certbotImage.tag }}"
           imagePullPolicy: {{ .Values.certbotImage.pullPolicy }}
           env:
             - name: DOMAINS
@@ -51,6 +53,8 @@ spec:
           volumeMounts:
             - name: certs
               mountPath: /certs
+            - name: certbot-webroot
+              mountPath: /var/www/certbot
       volumes:
         - name: nginx-config
           configMap:

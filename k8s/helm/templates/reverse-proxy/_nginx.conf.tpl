@@ -10,6 +10,11 @@ http {
   sendfile on;
   keepalive_timeout 65;
 
+  # Acme Challenge Location
+  location /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+  }
+
   {{- $appsByHost := dict }}
   {{- range .Values.apps }}
     {{- $host := .host }}

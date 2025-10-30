@@ -27,7 +27,7 @@ for domain in $DOMAINS; do
   if [ ! -d "$CERT_DIR" ]; then
     echo "Requesting certificate for $domain..."
     certbot certonly \
-      --standalone \
+      --webroot -w /var/www/certbot \
       -d "$domain" \
       $EMAIL_ARG \
       --agree-tos --no-eff-email --non-interactive \
