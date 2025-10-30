@@ -10,11 +10,6 @@ http {
   sendfile on;
   keepalive_timeout 65;
 
-  # Acme Challenge Location
-  location /.well-known/acme-challenge/ {
-    root /var/www/certbot;
-  }
-
   {{- $appsByHost := dict }}
   {{- range .Values.apps }}
     {{- $host := .host }}
@@ -34,7 +29,12 @@ http {
       ssl_certificate     /etc/nginx/certs/{{ $host }}.crt;
       ssl_certificate_key /etc/nginx/certs/{{ $host }}.key;
 
+      location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+      }
+
       {{- range $apps }}
+        # Acme Challenge Location
         location {{ .path }} {
           proxy_pass http://{{ .name }}:80;
           {{- if ne .path "/" }}

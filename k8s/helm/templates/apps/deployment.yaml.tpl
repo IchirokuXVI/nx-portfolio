@@ -18,6 +18,7 @@ spec:
       containers:
         - name: {{ .name }}
           image: {{ .image }}
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           resources:

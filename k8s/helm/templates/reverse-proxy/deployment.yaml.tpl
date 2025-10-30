@@ -13,6 +13,8 @@ spec:
       labels:
         app: reverse-proxy
     spec:
+    # Needed in order to restart nginx from the certbot container
+      shareProcessNamespace: true
       initContainers:
         {{- include "reverse-proxy.initContainer" . | nindent 8 }}
       containers:
@@ -51,10 +53,15 @@ spec:
                   {{- end }}
                 {{- end }}
           volumeMounts:
-            - name: certs
-              mountPath: /certs
+          # To avoid renewing certificates every time the pod restarts
+            - name: letsencrypt-data
+              mountPath: /etc/letsencrypt
+          # To serve the acme-challenge responses via nginx reverse proxy
             - name: certbot-webroot
               mountPath: /var/www/certbot
+          # To share the certs with other containers
+            - name: certs
+              mountPath: /certs
       volumes:
         - name: nginx-config
           configMap:
@@ -62,3 +69,8 @@ spec:
         - name: certs
           persistentVolumeClaim:
             claimName: {{ .Values.certsVolume.claimName }}
+        - name: certbot-webroot
+          emptyDir: {}
+        - name: letsencrypt-data
+          persistentVolumeClaim:
+            claimName: letsencrypt-pvc

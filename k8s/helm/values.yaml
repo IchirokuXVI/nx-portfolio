@@ -3,12 +3,12 @@ replicaCount: 1
 
 proxyImage:
   image: nginx
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   tag: 'latest'
 
 certbotImage:
   image: ghcr.io/ichirokuxvi/nx-portfolio/certbot
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   tag: 'latest'
 
 certsVolume:
