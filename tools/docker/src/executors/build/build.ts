@@ -96,6 +96,8 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   buildCommandArr.push(contextDir);
 
+  buildCommandArr.push('--load');
+
   const buildCommand = buildCommandArr.filter((v) => v).join(' ');
 
   console.log(`Running command: ${buildCommand}`);
