@@ -12,10 +12,10 @@
       },
       "configurations": {
         "development": {
-          "versionTag": "dev"
+          "versionTags": ["dev"]
         },
         "production": {
-          "versionTag": "latest",
+          "versionTags": ["latest"],
           "pushToRegistry": true
         }
       },

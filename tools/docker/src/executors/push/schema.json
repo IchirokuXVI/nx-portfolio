@@ -25,10 +25,10 @@
       "description": "Docker build context",
       "default": "dockerfile"
     },
-    "versionTag": {
-      "type": "string",
-      "description": "Docker tag (default latest)",
-      "default": "latest"
+    "versionTags": {
+      "type": "array",
+      "description": "Docker tags",
+      "default": []
     },
     "buildArgs": {
       "type": "object",
@@ -40,7 +40,8 @@
     },
     "skipLogin": {
       "type": "boolean",
-      "description": "Skip login to the Docker registry. Useful for CI/CD or development environments since the user should already be authenticated."
+      "description": "Skip login to the Docker registry. Useful for CI/CD or development environments since the user should already be authenticated.",
+      "default": false
     },
     "noCache": {
       "type": "boolean",

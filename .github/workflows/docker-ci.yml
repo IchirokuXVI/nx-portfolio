@@ -33,6 +33,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       # Setup Node.js & Nx
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -62,9 +65,13 @@ jobs:
           REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "REPO_LOWERCASE=$REPO_LC" >> $GITHUB_ENV
 
-      - name: Pull existing docker builder image (if any) to leverage build cache
-        run: |
-          docker pull ghcr.io/${{ env.REPO_LOWERCASE}}/builder:latest || true
+      - name: Restore Docker cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
 
       - name: Build main docker builder
         run: npx nx build docker/builder --configuration=production
@@ -91,16 +98,16 @@ jobs:
       - name: Get affected apps
         id: get-affected-apps
         run: |
-          docker_apps=$(npx nx show projects --projects tag:type:*docker | paste -sd, -)
+          docker_apps=$(npx nx show projects --projects tag:type:static-docker | paste -sd, -)
           echo "docker_apps=$docker_apps" >> "$GITHUB_OUTPUT"
 
           other_apps=$(npx nx show projects --exclude "$docker_apps,*-e2e" | paste -sd, -)
           echo "other_apps=$other_apps" >> "$GITHUB_OUTPUT"
 
-          affected_docker_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --projects "$docker_apps" | paste -sd, -)
+          affected_docker_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$docker_apps" | paste -sd, -)
           echo "affected_docker_apps=$affected_docker_apps" >> "$GITHUB_OUTPUT"
 
-          affected_other_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --projects "$other_apps" | paste -sd, -)
+          affected_other_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$other_apps" | paste -sd, -)
           echo "affected_other_apps=$affected_other_apps" >> "$GITHUB_OUTPUT"
 
       # Build affected docker apps
@@ -116,3 +123,9 @@ jobs:
             npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
           npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
         # npx nx run-many -t e2e --projects ${{ steps.get-remaining-apps.outputs.affected }}
+
+      - name: Save Docker cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}

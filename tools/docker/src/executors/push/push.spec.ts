@@ -20,7 +20,7 @@ const options: PushExecutorSchema = {
   imageName: 'my-test-image',
   dockerfile: 'Dockerfile',
   context: 'dockerfile',
-  versionTag: 'latest',
+  versionTags: ['latest', '0.0.1'],
   buildArgs: {
     testArg: 'testValue',
   },
@@ -80,7 +80,8 @@ describe('Push Executor', () => {
 
     expect(output.success).toBe(true);
 
-    expect(mockedExec).toHaveBeenCalledTimes(2);
+    // One for login and an additional one for each version tag that is pushed
+    expect(mockedExec).toHaveBeenCalledTimes(3);
 
     // expect(mockedExec).toHaveBeenCalledWith(
     //   `docker image inspect my-test-registry/my-test-image:latest`,

@@ -4,7 +4,7 @@ export interface PushExecutorSchema {
   imageName: string;
   dockerfile: string;
   context: 'root' | 'project' | 'dockerfile';
+  versionTags: string[];
   buildArgs: { [key: string]: string };
-  versionTag: string;
   noCache: boolean;
 }

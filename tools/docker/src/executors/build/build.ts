@@ -1,9 +1,12 @@
 import { PromiseExecutor } from '@nx/devkit';
 import { exec } from 'child_process';
+import fs from 'fs/promises';
+import os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import push from '../push/push';
 import { BuildExecutorSchema } from './schema';
+import { simpleHash } from './simple-hash';
 
 const execAsync = promisify(exec);
 
@@ -34,7 +37,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     registry += '/';
   }
 
-  const versionTag = options.versionTag;
+  const versionTags = options.versionTags || [];
 
   const dockerfile = options.dockerfile
     ? path.join(projectRoot, options.dockerfile)
@@ -47,10 +50,6 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   } as const;
 
   const contextDir = mappedContexts[options.context];
-
-  const fullImage = `${registry ? `${registry}` : ''}${options.imageName}:${versionTag}`;
-
-  const noCacheFlag = options.noCache ? ' --no-cache' : '';
 
   const buildArgs = [];
 
@@ -67,18 +66,37 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     }
   }
 
-  // noCacheFlag has no space after build because it includes the leading space in itself
-  // do not add the space because the test will fail
-  const buildCommand = [
-    'docker build',
-    noCacheFlag,
-    `-f ${dockerfile}`,
-    `-t ${fullImage}`,
-    ...buildArgs,
-    contextDir,
-  ]
-    .filter((v) => v)
-    .join(' ');
+  const imagesToCreate = versionTags.map(
+    (tag) => `${registry ? `${registry}` : ''}${options.imageName}:${tag}`
+  );
+
+  const buildCommandArr = [];
+
+  buildCommandArr.push('docker buildx build');
+
+  if (options.noCache) {
+    buildCommandArr.push('--no-cache');
+  }
+
+  buildCommandArr.push(`-f ${dockerfile}`);
+
+  imagesToCreate.forEach((image) => {
+    buildCommandArr.push(`-t ${image}`);
+  });
+
+  buildCommandArr.push(buildArgs.join(' '));
+
+  const { cacheCurrent, cacheNew } = getCachePaths(options.imageName);
+
+  if (!options.noCache) {
+    buildCommandArr.push(`--cache-from=type=local,src="${cacheCurrent}"`);
+
+    buildCommandArr.push(`--cache-to=type=local,dest="${cacheNew}",mode=max`);
+  }
+
+  buildCommandArr.push(contextDir);
+
+  const buildCommand = buildCommandArr.filter((v) => v).join(' ');
 
   console.log(`Running command: ${buildCommand}`);
 
@@ -88,7 +106,17 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     throw new Error(`Error during Docker build: ${err.message}`);
   }
 
-  console.log(`Built image: ${fullImage}`);
+  console.log(`Built images: ${imagesToCreate.join(', ')}`);
+
+  if (!options.noCache) {
+    try {
+      await fs.rm(cacheCurrent, { recursive: true, force: true });
+      await fs.mkdir(path.dirname(cacheCurrent), { recursive: true });
+      await fs.rename(cacheNew, cacheCurrent);
+    } catch (err) {
+      console.warn(`Error moving new cache into place: ${err.message}`);
+    }
+  }
 
   if (options.pushToRegistry) {
     try {
@@ -102,5 +130,17 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     success: true,
   };
 };
+
+function getCachePaths(imageName: string) {
+  const baseTmp = path.join(os.tmpdir(), 'docker-cache');
+  const cacheCurrent = path.join(baseTmp, `.buildx-${simpleHash(imageName)}`);
+  const cacheNew = path.join(
+    baseTmp,
+    `..`,
+    'docker-cache-new',
+    `.buildx-${simpleHash(imageName)}`
+  );
+  return { baseTmp, cacheCurrent, cacheNew };
+}
 
 export default runExecutor;

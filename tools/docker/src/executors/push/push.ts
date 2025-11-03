@@ -25,7 +25,7 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
     throw new Error(`Project ${context.projectName} not found.`);
   }
 
-  const { imageName, versionTag } = options;
+  const { imageName, versionTags } = options;
   const registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY;
 
   const skipLogin =
@@ -43,32 +43,39 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
     );
   }
 
-  const fullImage = `${registry}/${imageName}:${versionTag}`;
+  const fullImages = versionTags.map(
+    (tag) => `${registry}/${imageName}:${tag}`
+  );
 
-  console.log(`Checking for local image: ${fullImage}`);
+  for (const fullImage of fullImages) {
+    // Commented the code about checking local image existence to always build before push
+    // Docker should already have caching mechanisms to avoid rebuilding unchanged layers
+    // console.log(`Checking for local image: ${fullImage}`);
 
-  // Commented the code about checking local image existence to always build before push
-  // Docker should already have caching mechanisms to avoid rebuilding unchanged layers
-  // Check if image exists locally
-  // let imageExists = false;
-  // try {
-  //   await execAsync(`docker image inspect ${fullImage}`);
-  //   imageExists = true;
-  //   console.log(`Image ${fullImage} already built locally`);
-  // } catch {
-  //   console.log(`Image ${fullImage} not found locally, building...`);
-  // }
+    // Check if image exists locally
+    // let imageExists = false;
+    // try {
+    //   await execAsync(`docker image inspect ${fullImage}`);
+    //   imageExists = true;
+    //   console.log(`Image ${fullImage} already built locally`);
+    // } catch {
+    //   console.log(`Image ${fullImage} not found locally, building...`);
+    // }
 
-  // Build if missing
-  // if (!imageExists) {
-  try {
-    const result = await build({ ...options, pushToRegistry: false }, context);
+    // Build if missing
+    // if (!imageExists) {
+    try {
+      const result = await build(
+        { ...options, pushToRegistry: false },
+        context
+      );
 
-    if (!result.success) throw new Error("Build executor didn't succeed.");
-  } catch (err) {
-    throw new Error(`Failed to build image ${fullImage} before push: ${err}`);
+      if (!result.success) throw new Error("Build executor didn't succeed.");
+    } catch (err) {
+      throw new Error(`Failed to build image ${fullImage} before push: ${err}`);
+    }
+    // }
   }
-  // }
 
   // Login
   if (!skipLogin) {
@@ -85,14 +92,17 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
   }
 
   // Push
-  try {
-    console.log(`Pushing image ${fullImage}`);
-    await execAsync(`docker push ${fullImage}`);
-  } catch (err) {
-    throw new Error(`Docker push failed: ${err.message}`);
-  }
+  for (const tag of versionTags) {
+    try {
+      const fullImage = `${registry}/${imageName}:${tag}`;
+      console.log(`Pushing image ${fullImage}`);
+      await execAsync(`docker push ${fullImage}`);
 
-  console.log(`Successfully pushed ${fullImage}`);
+      console.log(`Successfully pushed ${fullImage}`);
+    } catch (err) {
+      throw new Error(`Docker push failed: ${err.message}`);
+    }
+  }
 
   return { success: true };
 };

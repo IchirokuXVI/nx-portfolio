@@ -3,8 +3,9 @@ export interface BuildExecutorSchema {
   imageName: string;
   dockerfile: string;
   context: 'root' | 'project' | 'dockerfile';
-  versionTag: string;
+  versionTags: string[];
   buildArgs: { [key: string]: string };
   noCache: boolean;
   pushToRegistry: boolean;
+  skipLogin?: boolean;
 }

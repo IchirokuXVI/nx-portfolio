@@ -11,9 +11,10 @@
       },
       "configurations": {
         "development": {
-          "versionTag": "dev"
+          "versionTags": ["dev"]
         },
         "production": {
+          "versionTags": ["latest"],
           "pushToRegistry": true
         }
       },
