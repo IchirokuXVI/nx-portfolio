@@ -65,13 +65,14 @@
       },
       "configurations": {
         "development": {
-          "versionTag": "dev",
+          "versionTags": ["dev"],
           "buildArgs": {
             "BUILDER_TAG": "dev"
           }
         },
         "production": {
-          "pushToRegistry": true
+          "pushToRegistry": true,
+          "versionTags": ["latest"]
         }
       },
       "defaultConfiguration": "development"
