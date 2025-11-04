@@ -3,7 +3,7 @@ name: Nx Docker Build & Push (Runner Only)
 on:
   push:
     branches:
-      - dev
+      - main
   pull_request:
 
 jobs:
@@ -129,3 +129,18 @@ jobs:
         with:
           path: /tmp/docker-cache
           key: ${{ runner.os }}-buildx-${{ github.sha }}
+
+      - name: Set up SSH for deployment
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
+
+      - name: Sync files and redeploy via Helm
+        run: |
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
+            ./k8s ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} << 'EOF'
+            echo "Upgrading helm release..."
+            helm upgrade nx-portfolio ./k8s/helm -n nx-portfolio -f k8s/helm/values.yaml --reuse-values
+            echo "Deployment complete."
+          EOF
