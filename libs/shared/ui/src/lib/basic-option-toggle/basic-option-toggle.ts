@@ -32,6 +32,7 @@ export class BasicOptionToggle implements ControlValueAccessor {
 
   labelField = input('label');
   valueField = input('value');
+  disabledField = input('disabled');
 
   private onChange: (value: any) => void = () => {};
   private onTouched: () => void = () => {};
@@ -56,7 +57,7 @@ export class BasicOptionToggle implements ControlValueAccessor {
   }
 
   onSelectOption(option: any) {
-    const val = this.findValue(option);
+    const val = this.findField(option, this.valueField());
 
     if (this.selectedOption() === val) return;
 
@@ -65,19 +66,16 @@ export class BasicOptionToggle implements ControlValueAccessor {
     this.selectedOption.set(option);
   }
 
-  findValue(option: any) {
+  findField(option: any, field: string) {
     return typeof option === 'string'
       ? option
       : // @ts-ignore
-        findField(option, this.valueField());
+        findField(option, field);
   }
 
   findFieldAndJoin(value: any, field: string) {
-    if (typeof value === 'string') {
-      return value;
-    }
+    const val = this.findField(value, field);
 
-    // @ts-ignore
-    return findField(value, field);
+    return Array.isArray(val) ? val.join(', ') : val;
   }
 }

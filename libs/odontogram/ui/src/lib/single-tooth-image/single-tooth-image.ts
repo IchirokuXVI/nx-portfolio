@@ -31,10 +31,7 @@ const loadable = ['image'] as const;
   imports: [CommonModule, NgLetDirective],
   templateUrl: './single-tooth-image.html',
   styleUrl: './single-tooth-image.scss',
-  providers: [
-    { provide: LoadingNotifier.LOADABLE_ENTRIES, useValue: loadable },
-    LoadingNotifier,
-  ],
+  providers: [LoadingNotifier],
 })
 export class SingleToothImage implements AfterViewInit, OnDestroy {
   // Map treatment status to CSS classes

@@ -1,0 +1,31 @@
+namespace: nx-portfolio
+replicaCount: 1
+
+proxyImage:
+  image: nginx
+  pullPolicy: Always
+  tag: 'latest'
+
+certbotImage:
+  image: ghcr.io/ichirokuxvi/nx-portfolio/certbot
+  pullPolicy: Always
+  tag: 'latest'
+
+certsVolume:
+  claimName: certs-pvc
+
+ipAddress: 46.62.204.230
+
+apps:
+  - name: shell
+    image: ghcr.io/ichirokuxvi/nx-portfolio/shell:latest
+    host: ichirokuxvi.com
+    path: /
+  - name: landing
+    image: ghcr.io/ichirokuxvi/nx-portfolio/landing:latest
+    host: mfe.ichirokuxvi.com
+    path: /landing
+  - name: odontogram
+    image: ghcr.io/ichirokuxvi/nx-portfolio/odontogram:latest
+    host: mfe.ichirokuxvi.com
+    path: /odontogram

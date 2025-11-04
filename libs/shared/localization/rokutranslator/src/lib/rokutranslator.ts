@@ -3,11 +3,18 @@ import i18next, { i18n, TOptions } from 'i18next';
 interface RokuTranslatorConfig {
   locale: string | undefined;
   /**
+   * Hardcoded locales to know which languages are supported.
+   * If not set, any locale will be considered valid.
+   * If the user doesn't have a locale from this array, the first one will be used.
+   */
+  supportedLocales: string[];
+  /**
    * List of namespaces to use. This makes translations
    * able to be overrided by priority (first one is the highest priority).
    */
   namespaces: string[];
   lowercaseLocale: boolean;
+  languageOnly: boolean;
 }
 
 type LoaderFunction = () => Promise<
@@ -21,6 +28,8 @@ class RokuTranslator {
     locale: undefined,
     namespaces: [],
     lowercaseLocale: true,
+    supportedLocales: [],
+    languageOnly: true,
   };
   private loadersByLocaleAndNamespace: LoadersByLocaleAndNamespace = new Map();
 
@@ -38,7 +47,7 @@ class RokuTranslator {
       if (savedLocale && this.isLocaleValid(savedLocale)) {
         this.config.locale = savedLocale;
       } else {
-        this.config.locale = 'en';
+        this.config.locale = this.getBrowserLocale();
       }
     }
 
@@ -84,6 +93,7 @@ class RokuTranslator {
             fallbackLng: 'en-US',
             ns: [],
             defaultNS: this.config.namespaces,
+            load: 'languageOnly',
             // From the docs:
             // Please make sure to at least pass in an empty resources object on init.
             // Else i18next will try to load translations and give you a warning that
@@ -102,8 +112,56 @@ class RokuTranslator {
     });
   }
 
-  private _formatLocale(locale: string): string {
-    return this.config.lowercaseLocale ? locale.toLowerCase() : locale;
+  getBrowserLocale(): string | undefined {
+    const navigatorLocales =
+      navigator.languages && navigator.languages.length
+        ? navigator.languages
+        : [navigator.language];
+
+    let selectedLocale: string | undefined = undefined;
+
+    for (const locale of navigatorLocales) {
+      if (this.isLocaleSupported(locale)) {
+        selectedLocale = this.formatLocale(locale);
+        break;
+      }
+    }
+
+    return selectedLocale;
+  }
+
+  getSupportedLocales(): string[] {
+    return this.config.supportedLocales;
+  }
+
+  formatLocale(locale: string): string {
+    if (this.config.languageOnly) {
+      locale = locale.split('-')[0];
+    }
+
+    if (this.config.lowercaseLocale) {
+      locale = locale.toLowerCase();
+    }
+
+    return locale;
+  }
+
+  isLocaleSupported(locale: string, strict: boolean = false) {
+    if (!this.config.supportedLocales.length) {
+      return true;
+    }
+
+    locale = this.formatLocale(locale);
+
+    if (strict) {
+      return this.config.supportedLocales.includes(locale);
+    }
+
+    return this.config.supportedLocales.some((supportedLocale) =>
+      supportedLocale
+        .toLowerCase()
+        .startsWith(locale.toLowerCase().split('-')[0])
+    );
   }
 
   getLocale() {
@@ -111,10 +169,12 @@ class RokuTranslator {
       throw new Error('No locale set. Did you call init() ?');
     }
 
-    return this._formatLocale(this.config.locale);
+    return this.formatLocale(this.config.locale);
   }
 
   async changeLocale(locale: string): Promise<void> {
+    locale = this.formatLocale(locale);
+
     if (!this.isLocaleValid(locale)) {
       throw new Error(`Invalid locale: ${locale}`);
     }
@@ -129,7 +189,7 @@ class RokuTranslator {
   }
 
   isLocaleValid(locale: string) {
-    return /^[a-z]{2}(-[A-Z]{2})?$/.test(locale);
+    return /^[a-z]{2}(-[A-Z]{2})?$/i.test(this.formatLocale(locale));
   }
 
   async addNamespace(...namespaces: string[]): Promise<void> {
@@ -166,7 +226,9 @@ class RokuTranslator {
   }
 
   getLocaleNamespaceLoader(locale: string, namespace: string) {
-    const namespaceLoaders = this.loadersByLocaleAndNamespace.get(locale);
+    const namespaceLoaders = this.loadersByLocaleAndNamespace.get(
+      this.formatLocale(locale)
+    );
 
     return namespaceLoaders?.get(namespace);
   }
@@ -176,7 +238,9 @@ class RokuTranslator {
     namespace: string,
     loader: LoaderFunction
   ): void {
-    this.loadersByLocaleAndNamespace.get(locale)?.set(namespace, loader);
+    this.loadersByLocaleAndNamespace
+      .get(this.formatLocale(this.formatLocale(locale)))
+      ?.set(namespace, loader);
   }
 
   async addTranslations({
@@ -188,6 +252,8 @@ class RokuTranslator {
     namespace: string;
     translations: LoaderFunction;
   }): Promise<void> {
+    locale = this.formatLocale(locale);
+
     if (locale !== this.config.locale && !this.isLocaleValid(locale)) {
       throw new Error(`Invalid locale: ${locale}`);
     }
@@ -219,7 +285,11 @@ class RokuTranslator {
 
     const loadedTranslations = await translations();
 
-    this.i18nextInstance.addResources(locale, namespace, loadedTranslations);
+    this.i18nextInstance.addResources(
+      this.formatLocale(locale),
+      namespace,
+      loadedTranslations
+    );
   }
 
   t(key: string, options?: TOptions): string {

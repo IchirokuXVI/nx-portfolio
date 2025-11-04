@@ -10,7 +10,7 @@
           {{ 'landing.welcome_subtitle' | rokuT }}
         </p>
         <div class="welcome__social-info">
-          <a href="" target="_blank">
+          <a [href]="resumeLink | async" target="_blank">
             <img [src]="resumeIcon | async" alt="Resume" />
             <span class="social-info__label">{{
               'landing.resume' | rokuT

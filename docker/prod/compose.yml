@@ -1,8 +1,7 @@
 services:
   reverse-proxy:
     container_name: reverse-proxy
-    build:
-      context: ./
+    image: nginxproxy/nginx-proxy:latest
     ports:
       - '80:80'
       - '443:443'
@@ -15,8 +14,7 @@ services:
       ACME_HTTP_CHALLENGE_LOCATION: false
 
   certbot:
-    build:
-      context: ./certbot/
+    image: nx-portfolio/certbot:latest
     volumes:
       - ./certbot/certs:/etc/letsencrypt # Store generated certificates in a volume to persist them across container restarts
       - ./certs:/certs # Store final certificates with domain.tld.crt and domain.tld.key all in the same directory
@@ -30,32 +28,20 @@ services:
       VIRTUAL_HOST: 'ichirokuxvi.com,mfe.ichirokuxvi.com,staging.ichirokuxvi.com,staging.mfe.ichirokuxvi.com'
       VIRTUAL_PATH: '/.well-known/acme-challenge/'
   shell:
-    build:
-      context: ./
-      dockerfile: common/Dockerfile.base
-      args:
-        APP_NAME: shell
+    image: nx-portfolio/shell:latest
     environment:
       VIRTUAL_HOST: 'ichirokuxvi.com'
       VIRTUAL_PATH: '/'
 
   landing:
-    build:
-      context: ./
-      dockerfile: common/Dockerfile.base
-      args:
-        APP_NAME: landing
+    image: nx-portfolio/landing:latest
     environment:
       VIRTUAL_HOST: 'mfe.ichirokuxvi.com'
       VIRTUAL_DEST: '/'
       VIRTUAL_PATH: '/landing'
 
   odontogram:
-    build:
-      context: ./
-      dockerfile: common/Dockerfile.base
-      args:
-        APP_NAME: odontogram
+    image: nx-portfolio/odontogram:latest
     environment:
       VIRTUAL_HOST: 'mfe.ichirokuxvi.com'
       VIRTUAL_DEST: '/'

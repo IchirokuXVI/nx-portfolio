@@ -28,6 +28,8 @@
     </div>
   }
   @for (numTeeth of sectors; track $index; let sector = $index) {
+    @let isSectorDisplayeyed =
+      !displayedSectors() || displayedSectors().includes(sector);
     <div
       [class.hide-while-loading]="loading"
       [ngClass]="
@@ -38,6 +40,7 @@
           '3': 'bottom-left',
         }[sector % 4]
       "
+      [style.display]="!isSectorDisplayeyed ? 'none' : null"
       class="sector sector-{{ sector }}"
     >
       @for (
@@ -48,8 +51,7 @@
         @let toothNumber = (sector + 1) * 10 + tIndex + 1;
         @let _teeth = teeth();
         @let tooth = _teeth[toothNumber];
-        @let displayed =
-          tooth && (!displayedSectors() || displayedSectors().includes(sector));
+        @let displayed = tooth && isSectorDisplayeyed;
         <div [class.invisible]="!displayed" class="tooth-component-container">
           @if (displayed) {
             <lib-odontogram-single-tooth-image

@@ -1,0 +1,25 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "docker/certbot",
+  "projectType": "application",
+  "sourceRoot": "apps/docker/certbot/src",
+  "targets": {
+    "build": {
+      "executor": "@portfolio/docker:build",
+      "options": {
+        "imageName": "nx-portfolio/certbot"
+      },
+      "configurations": {
+        "development": {
+          "versionTags": ["dev"]
+        },
+        "production": {
+          "versionTags": ["latest"],
+          "pushToRegistry": true
+        }
+      },
+      "defaultConfiguration": "development"
+    }
+  },
+  "tags": ["type:static-docker"]
+}

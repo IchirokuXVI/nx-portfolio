@@ -1,0 +1,25 @@
+{
+  "name": "docker/local-http-server",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/docker/local-http-server/src",
+  "targets": {
+    "build": {
+      "executor": "@portfolio/docker:build",
+      "options": {
+        "imageName": "nx-portfolio/local-http-server"
+      },
+      "configurations": {
+        "development": {
+          "versionTags": ["dev"]
+        },
+        "production": {
+          "versionTags": ["latest"],
+          "pushToRegistry": true
+        }
+      },
+      "defaultConfiguration": "production"
+    }
+  },
+  "tags": ["type:static-docker"]
+}

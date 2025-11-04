@@ -1,10 +1,14 @@
-<div [class.pointer-events-none]="disabled()" class="basic-option-toggle">
+<div class="basic-option-toggle">
   @for (option of options(); track $index) {
-    @let selected = findValue(selectedOption()) === findValue(option);
+    @let isOptionDisabled = disabled() || findField(option, disabledField());
+    @let selected =
+      findField(selectedOption(), valueField()) ===
+      findField(option, valueField());
     <div
       (click)="onSelectOption(option)"
       (keydown.enter)="onSelectOption(option)"
       [class.active]="selected"
+      [class.disabled]="isOptionDisabled"
       tabindex="2"
     >
       <ng-template

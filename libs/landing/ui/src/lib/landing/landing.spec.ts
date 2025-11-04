@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { Landing } from './landing';
 
 describe('Landing', () => {
@@ -8,6 +9,7 @@ describe('Landing', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [Landing],
+      providers: [provideRokuTranslatorTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Landing);

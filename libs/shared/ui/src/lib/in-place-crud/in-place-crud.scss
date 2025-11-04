@@ -1,0 +1,59 @@
+.in-place-crud-container {
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  column-gap: 0.25em;
+  align-items: center;
+
+  border-bottom: 1px solid #11111111;
+
+  .input-val {
+    display: flex;
+    font-weight: 550;
+
+    input {
+      &:focus-visible {
+        outline: 0;
+      }
+
+      &:not(.editing) {
+        border-color: transparent;
+        background: inherit;
+        cursor: inherit;
+        overflow-x: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+    }
+  }
+
+  .edit-icons {
+    margin-left: auto;
+    display: flex;
+    column-gap: 0.5em;
+    flex-grow: 1;
+    justify-content: center;
+    align-items: center;
+
+    span > * {
+      width: 1.5em;
+      height: 1.5em;
+      display: block;
+      cursor: pointer;
+    }
+
+    .disabled {
+      pointer-events: none;
+      color: #11111144;
+    }
+
+    .edit-icon {
+      color: #dddddd88;
+    }
+
+    .cancel-icon {
+      color: #994040;
+    }
+  }
+}

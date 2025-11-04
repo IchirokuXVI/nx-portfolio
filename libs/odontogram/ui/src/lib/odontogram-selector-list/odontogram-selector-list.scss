@@ -1,0 +1,31 @@
+@use '../common-variables.scss' as common;
+
+.odontogram-selector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  padding: 0.5em;
+
+  .odontogram-selector-list_item {
+    display: flex;
+    padding: 0.5em;
+
+    &.active {
+      cursor: inherit;
+    }
+
+    &:hover:not(.editing),
+    &.active {
+      &:after {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background-color: #11111111;
+        left: 0;
+        top: 0;
+        pointer-events: none;
+      }
+    }
+  }
+}

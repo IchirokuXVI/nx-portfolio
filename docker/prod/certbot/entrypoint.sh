@@ -4,7 +4,7 @@ set -e
 # EMAIL="you@example.com"
 
 if [ -z "$DOMAINS" ]; then
-  echo "❌ Error: DOMAINS environment variable is required"
+  echo "Error: DOMAINS environment variable is required"
   exit 1
 fi
 
@@ -17,7 +17,7 @@ else
   EMAIL_ARG="--register-unsafely-without-email"
 fi
 
-echo "🔍 Checking and requesting certificates..."
+echo "Checking and requesting certificates..."
 
 NEW_CERTS=0
 
@@ -25,7 +25,7 @@ NEW_CERTS=0
 for domain in $DOMAINS; do
   CERT_DIR="/etc/letsencrypt/live/$domain"
   if [ ! -d "$CERT_DIR" ]; then
-    echo "⚡ Requesting certificate for $domain..."
+    echo "Requesting certificate for $domain..."
     certbot certonly \
       --standalone \
       -d "$domain" \
@@ -40,11 +40,12 @@ for domain in $DOMAINS; do
 done
 
 if [ "$NEW_CERTS" -gt 0 ]; then
-  echo "🔄 $NEW_CERTS were requested. Restarting proxy to regenerate config..."
-  docker restart reverse-proxy
+  echo "$NEW_CERTS were requested. Reloading Nginx inside the same Pod..."
+  # Send reload signal to Nginx process (in the same Pod)
+  pkill -HUP nginx || nginx -s reload
 fi
 
-echo "🔁 Starting certbot renew loop..."
+echo "Starting certbot renew loop..."
 trap exit TERM
 while :; do
   certbot renew --deploy-hook "/deploy-hook.sh"

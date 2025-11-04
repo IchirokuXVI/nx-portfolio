@@ -24,6 +24,13 @@
       #img
       alt="Tooth Lateral {{ inputTooth.number }}"
     />
+    <!-- <img
+      (load)="imageLoaded()"
+      [src]="toothImages.lateral"
+      [style.visibility]="'hidden'"
+      #img
+      alt="Tooth Lateral {{ inputTooth.number }}"
+    /> -->
     <div
       [class]="statusClass.get(status)"
       *ngLet="getToothImplantStatus() as status"
@@ -43,6 +50,7 @@
     }"
     class="crown"
   >
+    <!-- <div class="crown"> -->
     <img
       (load)="imageLoaded()"
       [src]="toothImages.crown"
@@ -52,22 +60,22 @@
     <div
       [class]="statusClass.get(status)"
       *ngLet="getToothZoneStatus(toothZones.TOP) as status"
-      class="top"
+      class="innerSquare top"
     ></div>
     <div
       [class]="statusClass.get(status)"
       *ngLet="getToothZoneStatus(toothZones.RIGHT) as status"
-      class="right"
+      class="innerSquare right"
     ></div>
     <div
       [class]="statusClass.get(status)"
       *ngLet="getToothZoneStatus(toothZones.BOTTOM) as status"
-      class="bottom"
+      class="innerSquare bottom"
     ></div>
     <div
       [class]="statusClass.get(status)"
       *ngLet="getToothZoneStatus(toothZones.LEFT) as status"
-      class="left"
+      class="innerSquare left"
     ></div>
     <div
       [class.smaller]="toInt(inputTooth.number.slice(1)) < 4"

@@ -6,7 +6,8 @@
   "arrowParens": "always",
   "plugins": [
     "prettier-plugin-organize-attributes",
-    "prettier-plugin-organize-imports"
+    "prettier-plugin-organize-imports",
+    "prettier-plugin-go-template"
   ],
   "attributeGroups": [
     "$ANGULAR_OUTPUT",
@@ -21,6 +22,10 @@
     {
       "files": ["*.html"],
       "options": { "parser": "angular" }
+    },
+    {
+      "files": ["*.yaml.tpl"],
+      "options": { "parser": "go-template-yaml" }
     }
   ]
 }

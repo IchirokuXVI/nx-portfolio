@@ -18,7 +18,7 @@ export const ROKU_TRANSLATOR_LOADER = new InjectionToken<
 export type LoaderFunction<L = string> = (
   locale: L,
   namespace?: string
-) => Promise<Record<string, string>>;
+) => Promise<Record<string, string> | { default: Record<string, string> }>;
 
 @Injectable()
 export class RokuTranslatorService implements OnDestroy {

@@ -70,7 +70,7 @@ export class InMemoryFilter<DataType, FilterType> {
         })
       ),
     textSearch: (itemValue, filterValue, filterConfig) =>
-      filterConfig.dataField.every((dataField) =>
+      filterConfig.dataField.some((dataField) =>
         (findField(itemValue, dataField) as string).match(filterValue as RegExp)
       ),
   } satisfies Record<string, CheckFunction<DataType, FilterType>>;

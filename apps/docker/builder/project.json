@@ -1,0 +1,26 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "docker/builder",
+  "projectType": "application",
+  "sourceRoot": "apps/docker/builder",
+  "targets": {
+    "build": {
+      "executor": "@portfolio/docker:build",
+      "options": {
+        "imageName": "nx-portfolio/builder",
+        "context": "root"
+      },
+      "configurations": {
+        "development": {
+          "versionTags": ["dev"]
+        },
+        "production": {
+          "versionTags": ["latest"],
+          "pushToRegistry": true
+        }
+      },
+      "defaultConfiguration": "development"
+    }
+  },
+  "tags": ["type:dynamic-docker"]
+}

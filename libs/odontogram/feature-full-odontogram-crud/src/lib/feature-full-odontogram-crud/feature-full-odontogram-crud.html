@@ -1,7 +1,11 @@
-@if (treatments) {
-  <lib-odontogram-sectors-view
-    (toothSelected)="onToothSelected($event)"
-    [odontogram]="selectedOdontogram"
-    [treatments]="treatments"
-  ></lib-odontogram-sectors-view>
+@if (odontograms()) {
+  <lib-odontogram-selector-list
+    [(selectedOdontogram)]="selectedOdontogram"
+    [odontograms]="odontograms() || []"
+  ></lib-odontogram-selector-list>
 }
+<lib-odontogram-sectors-view
+  (toothSelected)="onToothSelected($event)"
+  [odontogram]="selectedOdontogram"
+  [treatments]="treatments() || []"
+></lib-odontogram-sectors-view>

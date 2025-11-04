@@ -1,0 +1,146 @@
+name: Nx Docker Build & Push (Runner Only)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PORTFOLIO_DOCKER_REGISTRY: ghcr.io/ichirokuxvi
+      PORTFOLIO_DOCKER_SKIP_LOGIN: true
+
+    steps:
+      # Checkout full history so Nx can detect changes
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Setup Node.js & Nx
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Read the Nx version dynamically from package.json
+      - name: Get Nx version
+        id: nx-version
+        run: echo "NX_VERSION=$(npm pkg get devDependencies.nx | tr -d '\"')" >> $GITHUB_ENV
+
+      # Cache Nx installation
+      - name: Cache Nx
+        id: cache-nx
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: nx-${{ runner.os }}-${{ env.NX_VERSION }}
+
+      - name: Install Nx
+        run: npm install nx@$NX_VERSION
+
+      - name: Set lowercase repo
+        run: |
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "REPO_LOWERCASE=$REPO_LC" >> $GITHUB_ENV
+
+      - name: Restore Docker cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build main docker builder
+        run: npx nx build docker/builder --configuration=production
+
+      - name: Get last successful commit on current branch
+        id: last_success
+        run: |
+          branch="${GITHUB_REF_NAME}"
+          workflow_id="${GITHUB_WORKFLOW}"
+
+          # Find the most recent successful run (excluding the current one)
+          last_run=$(gh run list \
+            --branch "$branch" \
+            --workflow "$workflow_id" \
+            --json headSha,conclusion \
+            --jq '[.[] | select(.conclusion=="success")][0].headSha')
+
+          echo "sha=$last_run" >> $GITHUB_OUTPUT
+
+      - name: Print last successful commit
+        run: |
+          echo "Last successful commit SHA: ${{ steps.last_success.outputs.sha }}"
+
+      - name: Get affected apps
+        id: get-affected-apps
+        run: |
+          docker_apps=$(npx nx show projects --projects tag:type:static-docker | paste -sd, -)
+          echo "docker_apps=$docker_apps" >> "$GITHUB_OUTPUT"
+
+          other_apps=$(npx nx show projects --exclude "$docker_apps,*-e2e" | paste -sd, -)
+          echo "other_apps=$other_apps" >> "$GITHUB_OUTPUT"
+
+          affected_docker_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$docker_apps" | paste -sd, -)
+          echo "affected_docker_apps=$affected_docker_apps" >> "$GITHUB_OUTPUT"
+
+          affected_other_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$other_apps" | paste -sd, -)
+          echo "affected_other_apps=$affected_other_apps" >> "$GITHUB_OUTPUT"
+
+      # Build affected docker apps
+      - name: Build affected docker apps
+        run: |
+          npx nx run-many -t build --configuration production --projects name:${{ steps.get-affected-apps.outputs.affected_docker_apps }}
+
+      # Test and build remaining affected apps
+      - name: Test and build remaining affected apps
+        run: |
+          docker run \
+            --rm "ghcr.io/${{ env.REPO_LOWERCASE}}/builder:latest" \
+            npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
+          npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
+        # npx nx run-many -t e2e --projects ${{ steps.get-remaining-apps.outputs.affected }}
+
+      - name: Save Docker cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+
+      - name: Set up SSH for deployment
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
+
+      - name: Sync files and redeploy via Helm
+        run: |
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
+            ./k8s ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} << 'EOF'
+            echo "Upgrading helm release..."
+            helm upgrade nx-portfolio ./k8s/helm -n nx-portfolio -f k8s/helm/values.yaml --reuse-values
+            echo "Deployment complete."
+          EOF

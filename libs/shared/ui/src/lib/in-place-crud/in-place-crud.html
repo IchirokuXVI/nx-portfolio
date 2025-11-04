@@ -1,0 +1,121 @@
+<div class="in-place-crud-container">
+  @let isLoadingSave = (loadingNotifier.loadings$.save | async) ?? false;
+  @let isLoadingDelete = (loadingNotifier.loadings$.delete | async) ?? false;
+  <div class="input-val">
+    <input
+      [(ngModel)]="currentValue"
+      [class.editing]="editing()"
+      [disabled]="isLoadingSave"
+      [readonly]="!editing()"
+      [title]="currentValue()"
+      type="text"
+    />
+  </div>
+  <span class="edit-icons">
+    @if (editing()) {
+      @if (!isLoadingSave) {
+        <span
+          (click)="onConfirmedChange()"
+          class="save-icon"
+          container="body"
+          tooltip="Guardar"
+        >
+          @if (saveIconTemplate) {
+            <ng-template
+              *ngTemplateOutlet="
+                saveIconTemplate;
+                context: { $implicit: currentValue() }
+              "
+            ></ng-template>
+          } @else {
+            <lib-save-icon></lib-save-icon>
+          }
+        </span>
+      } @else {
+        <span class="loading-icon">
+          @if (loadingIconTemplate) {
+            <ng-template
+              *ngTemplateOutlet="
+                loadingIconTemplate;
+                context: {
+                  $implicit: currentValue(),
+                  loading: loadingNotifier.loadings$,
+                }
+              "
+            ></ng-template>
+          } @else {
+            <lib-loading-icon></lib-loading-icon>
+          }
+        </span>
+      }
+
+      <span (click)="onCancelChange()" class="cancel-icon">
+        @if (cancelIconTemplate) {
+          <ng-template
+            *ngTemplateOutlet="
+              cancelIconTemplate;
+              context: { $implicit: currentValue() }
+            "
+          ></ng-template>
+        } @else {
+          <lib-close-icon></lib-close-icon>
+        }
+      </span>
+    } @else {
+      <span
+        (click)="onEditIconClick()"
+        [class.disabled]="loadingNotifier.loadings$.save | async"
+        class="edit-icon"
+      >
+        @if (editIconTemplate) {
+          <ng-template
+            *ngTemplateOutlet="
+              editIconTemplate;
+              context: {
+                $implicit: currentValue(),
+              }
+            "
+          ></ng-template>
+        } @else {
+          <lib-edit-icon></lib-edit-icon>
+        }
+      </span>
+      <span
+        (click)="onDeleteIconClick()"
+        [class.disabled]="isLoadingDelete"
+        class="delete-icon"
+      >
+        @if (!isLoadingDelete) {
+          @if (deleteIconTemplate) {
+            <ng-template
+              *ngTemplateOutlet="
+                deleteIconTemplate;
+                context: {
+                  $implicit: currentValue(),
+                }
+              "
+            ></ng-template>
+          } @else {
+            <lib-trash-icon></lib-trash-icon>
+          }
+        } @else {
+          <span class="loading-icon">
+            @if (loadingIconTemplate) {
+              <ng-template
+                *ngTemplateOutlet="
+                  loadingIconTemplate;
+                  context: {
+                    $implicit: currentValue(),
+                    loading: loadingNotifier.loadings$,
+                  }
+                "
+              ></ng-template>
+            } @else {
+              <lib-loading-icon></lib-loading-icon>
+            }
+          </span>
+        }
+      </span>
+    }
+  </span>
+</div>

@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -29,7 +30,8 @@ import {
   Treatment,
   TreatmentType,
 } from '@portfolio/odontogram/models';
-import { BasicOptionToggle } from '@portfolio/shared/ui';
+import { BasicOptionToggle, TrashIcon } from '@portfolio/shared/ui';
+import { map } from 'rxjs';
 import {
   mapFormToToothTreatment,
   mapToothTreatmentToForm,
@@ -45,11 +47,13 @@ import {
     BasicOptionToggle,
     MatFormFieldModule,
     MatIconModule,
+    MatButtonModule,
     MatAutocompleteModule,
     MatButtonToggleModule,
     MatSelectModule,
     MatInputModule,
     RokuTranslatorPipe,
+    TrashIcon,
   ],
   templateUrl: './tooth-treatment-detailed-form.html',
   styleUrls: ['./tooth-treatment-detailed-form.scss'],
@@ -78,7 +82,8 @@ export class ToothTreatmentDetailedForm {
 
   toothTreatmentForm: Signal<FormGroup<ToothTreatmentFormModel>>;
 
-  treatmentSuggestions = input(<Treatment[]>[]);
+  searchTreatmentSuggestions = output<string | null | undefined>();
+  treatmentSuggestions = input<Treatment[]>([]);
 
   deleteTreatment = output<void>();
 
@@ -93,10 +98,21 @@ export class ToothTreatmentDetailedForm {
     effect(() => {
       const form = this.toothTreatmentForm();
 
-      form.valueChanges.subscribe(() => {
-        console.log(form.value);
-        this.toothTreatmentChange.emit(mapFormToToothTreatment(form));
+      form.get('treatment')?.valueChanges.subscribe((treatment) => {
+        if (!treatment || typeof treatment === 'string') {
+          this.searchTreatmentSuggestions.emit(treatment);
+        }
+
+        if (treatment && typeof treatment !== 'string') {
+          form.get('type')?.setValue(treatment.treatmentType);
+        }
       });
+
+      form.valueChanges
+        .pipe(map(() => mapFormToToothTreatment(form)))
+        .subscribe((toothTreatment) => {
+          this.toothTreatmentChange.emit(toothTreatment);
+        });
     });
 
     this.teeth = computed(() =>
@@ -111,12 +127,14 @@ export class ToothTreatmentDetailedForm {
     effect(() => {
       const form = this.toothTreatmentForm();
 
-      if (
-        form.get('type')?.value === TreatmentType.EXTRACTION ||
-        form.get('type')?.value === TreatmentType.IMPLANT
-      ) {
-        this.toggleZone(ToothZones.ROOT);
-      }
+      form.get('type')?.valueChanges.subscribe((type) => {
+        if (
+          type === TreatmentType.EXTRACTION ||
+          type === TreatmentType.IMPLANT
+        ) {
+          form.get('zones')?.setValue([ToothZones.ROOT]);
+        }
+      });
     });
 
     // When disabled changes, set the form to disabled or enabled
@@ -124,10 +142,12 @@ export class ToothTreatmentDetailedForm {
     effect(() => {
       const form = this.toothTreatmentForm();
 
+      // Emit event false to prevent this.toothTreatmentChange from emitting
+      // because the form is disabled/enabled not because the user changed something
       if (this.disabled()) {
-        form.disable();
+        form.disable({ emitEvent: false });
       } else {
-        form.enable();
+        form.enable({ emitEvent: false });
       }
     });
   }
@@ -152,6 +172,8 @@ export class ToothTreatmentDetailedForm {
     } else {
       zones.splice(index, 1);
     }
+
+    form.get('zones')?.setValue([...zones]);
   }
 
   setStatus(status: ToothTreatmentStatus) {

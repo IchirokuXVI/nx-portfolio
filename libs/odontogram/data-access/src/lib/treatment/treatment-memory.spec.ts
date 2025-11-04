@@ -62,12 +62,27 @@ describe('TreatmentMemory', () => {
     const regex = /^tooth/i;
     const data = await firstValueFrom(service.getList({ searchTerm: regex }));
     expect(Array.isArray(data)).toBe(true);
-    expect(data.every((item) => item.name.match(regex))).toBe(true);
     expect(
-      Array.from(currentServiceData.values()).filter((item) =>
-        item.name.match(regex)
+      data.every(
+        (item) => item.name.match(regex) || item.description?.match(regex)
+      )
+    ).toBe(true);
+    expect(
+      Array.from(currentServiceData.values()).filter(
+        (item) => item.name.match(regex) || item.description?.match(regex)
       )
     ).toEqual(data);
+  });
+
+  it('should apply limit correctly', async () => {
+    const data = await firstValueFrom(service.getList({ limit: 5 }));
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.length).toBeLessThanOrEqual(5);
+
+    const dataLessThanLimit = await firstValueFrom(
+      service.getList({ limit: currentServiceData.size + 16 })
+    );
+    expect(dataLessThanLimit.length).toBe(currentServiceData.size);
   });
 
   it('should find object correctly', async () => {

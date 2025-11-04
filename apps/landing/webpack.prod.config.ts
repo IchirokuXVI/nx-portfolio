@@ -15,12 +15,11 @@ export default composePlugins(async (config, { options, context }) => {
     module: {
       rules: [
         {
-          test: /\.(jpe?g|png|svg)$/,
-          use: [
-            {
-              loader: 'file-loader',
-            },
-          ],
+          test: /\.(pdf|png|jpe?g|gif|ico|bmp|webp)$/,
+          type: 'asset/resource',
+          generator: {
+            filename: 'assets/[path][name].[hash][ext]',
+          },
         },
       ],
     },

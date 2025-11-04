@@ -3,24 +3,25 @@ import {
   afterNextRender,
   Component,
   ComponentRef,
+  computed,
   effect,
   ElementRef,
   inject,
   Injector,
   input,
-  model,
-  OnInit,
   output,
-  runInInjectionContext,
+  Signal,
   signal,
   untracked,
   ViewChild,
   ViewContainerRef,
 } from '@angular/core';
-import { toObservable } from '@angular/core/rxjs-interop';
+import { outputToObservable, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatDialogModule } from '@angular/material/dialog';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -33,7 +34,6 @@ import {
 import {
   OdontogramMemory,
   ToothTreatmentMemory,
-  TreatmentMemory,
 } from '@portfolio/odontogram/data-access';
 import {
   Odontogram,
@@ -41,8 +41,19 @@ import {
   ToothTreatment,
   Treatment,
 } from '@portfolio/odontogram/models';
-import { WithRequired } from '@portfolio/shared/util';
-import { filter, first, map, of, ReplaySubject, switchMap } from 'rxjs';
+import { LoadingIcon } from '@portfolio/shared/ui';
+import { ObservableMap, WithRequired } from '@portfolio/shared/util';
+import {
+  combineLatest,
+  debounceTime,
+  filter,
+  first,
+  map,
+  Observable,
+  of,
+  startWith,
+  switchMap,
+} from 'rxjs';
 import { SingleToothImage } from '../single-tooth-image/single-tooth-image';
 import { ToothTreatmentDetailedForm } from '../tooth-treatment-detailed-form/tooth-treatment-detailed-form';
 
@@ -61,51 +72,56 @@ import { ToothTreatmentDetailedForm } from '../tooth-treatment-detailed-form/too
     MatButtonToggleModule,
     MatSelectModule,
     MatInputModule,
+    MatButtonModule,
+    LoadingIcon,
+    MatDialogModule,
   ],
   templateUrl: './tooth-treatments-modal.html',
   styleUrls: ['./tooth-treatments-modal.scss'],
   providers: [],
 })
-export class ToothTreatmentsModal implements OnInit {
-  compReady = signal(false);
+export class ToothTreatmentsModal {
+  readonly compReady = signal(false);
 
-  tooth = input.required<Tooth>();
-  prevTooth = signal<Tooth | null>(null);
+  readonly tooth = input.required<Tooth>();
+  readonly prevTooth = signal<Tooth | null>(null);
 
-  toothConfirmedChanges = output<Tooth>();
+  readonly toothConfirmedChanges = output<Tooth>();
 
   /**
    * Usado para cargar el historial del cliente
    */
-  client = input<string>();
+  readonly client = input<string>();
 
-  selectedTooth = signal<Tooth | null>(null);
+  readonly selectedTooth = signal<Tooth | null>(null);
 
   toothHistory: Tooth[] = [];
 
-  treatments: Map<ComponentRef<ToothTreatmentDetailedForm>, ToothTreatment> =
-    new Map();
+  readonly treatments: ObservableMap<
+    ComponentRef<ToothTreatmentDetailedForm>,
+    Partial<ToothTreatment>
+  > = new ObservableMap();
 
-  initialSuggestedTreatments: ReplaySubject<Treatment[]> = new ReplaySubject();
+  readonly searchTreatment =
+    input<(term: string | null | undefined) => Observable<Treatment[]>>();
 
   /**
    * Se guarda de forma temporal el formulario original
    * para no perder los cambios al cambiar en el historial
    */
-  tempTreatments?: ToothTreatment[];
-  disableForms = model(false);
+  tempTreatments?: Partial<ToothTreatment>[];
+  disableForms: Signal<boolean>;
 
-  @ViewChild('historyBar') historyBar?: ElementRef<HTMLDivElement>;
+  @ViewChild('historyBar') readonly historyBar?: ElementRef<HTMLDivElement>;
   @ViewChild('treatmentsContainer', { read: ViewContainerRef })
-  treatmentsContainer?: ViewContainerRef;
+  readonly treatmentsContainer?: ViewContainerRef;
 
-  private _treatmentServ = inject(TreatmentMemory);
-  private _toothTreatmentServ = inject(ToothTreatmentMemory);
-  private _odontogramServ = inject(OdontogramMemory);
+  private readonly _toothTreatmentServ = inject(ToothTreatmentMemory);
+  private readonly _odontogramServ = inject(OdontogramMemory);
 
-  private _injector = inject(Injector);
+  private readonly _injector = inject(Injector);
 
-  private _translateServ = inject(RokuTranslatorService);
+  private readonly _translateServ = inject(RokuTranslatorService);
 
   constructor() {
     this._translateServ.loaded$.pipe(first()).subscribe(() => {
@@ -115,38 +131,69 @@ export class ToothTreatmentsModal implements OnInit {
     effect(() => {
       if (!this.compReady()) return;
 
-      runInInjectionContext(this._injector, () => {
-        afterNextRender(() => {
-          runInInjectionContext(this._injector, () => {
-            toObservable(this.compReady)
-              .pipe(
-                filter((r) => r),
-                first()
+      afterNextRender(
+        () => {
+          toObservable(this.compReady, { injector: this._injector })
+            .pipe(
+              filter((r) => r),
+              first()
+            )
+            .subscribe(() => {
+              const prevTooth = untracked(this.prevTooth);
+              const selectedTooth = untracked(this.selectedTooth);
+
+              if (!prevTooth || selectedTooth?.number === prevTooth?.number) {
+                this.selectTooth(this.tooth());
+              }
+
+              this.prevTooth.set(selectedTooth);
+            });
+        },
+        { injector: this._injector }
+      );
+    });
+
+    this.disableForms = computed(
+      () => this.tooth().odontogram !== this.selectedTooth()?.odontogram
+    );
+
+    // Disabled for now in favor of a Save button to avoid too many requests
+    // and also to give the user more control over when to save and thus allow
+    // to cancel changes more easily
+    // Might work right away but it will make way more requests than it should
+    // because the ObservableMap emits changes when a form is added
+    // before it is even initialized
+    const enableAutoSave = false;
+    if (enableAutoSave) {
+      const treatmentsAddedOrDeleted$ = this.treatments.onChange$.pipe(
+        filter(({ type }) => type === 'add' || type === 'delete')
+      );
+
+      treatmentsAddedOrDeleted$
+        .pipe(
+          filter(() => !this.disableForms()),
+          switchMap(() => {
+            const comps = Array.from(this.treatments.keys());
+
+            // combineLatest only emits when all observables emit at least once
+            // so we use startWith to emit an initial value for each observable
+            // this way we ensure that combineLatest emits even if some forms
+            // have not been touched yet
+            return combineLatest(
+              comps.map((comp) =>
+                outputToObservable(comp.instance.toothTreatmentChange).pipe(
+                  startWith(undefined)
+                )
               )
-              .subscribe(() => {
-                const prevTooth = untracked(this.prevTooth);
-                const selectedTooth = untracked(this.selectedTooth);
-
-                if (!prevTooth || selectedTooth?.number === prevTooth?.number) {
-                  this.selectTooth(this.tooth());
-                }
-
-                this.prevTooth.set(selectedTooth);
-              });
-          });
+            ).pipe(
+              debounceTime(250) // wait until silence across all streams
+            );
+          })
+        )
+        .subscribe((treatments) => {
+          // Request a save for the changed treatments...
         });
-      });
-    });
-  }
-
-  ngOnInit() {
-    // Search for initial treatments to show suggestions
-    // ahead of time, preventing the user from having to wait
-    // for the first loading
-    this._treatmentServ.getList({ limit: 10 }).subscribe((treatments) => {
-      this.initialSuggestedTreatments.next(treatments);
-      this.initialSuggestedTreatments.complete();
-    });
+    }
   }
 
   onOpenHistory() {
@@ -248,7 +295,6 @@ export class ToothTreatmentsModal implements OnInit {
   }
 
   selectTooth(newSelectedTooth: Tooth) {
-    console.log(newSelectedTooth);
     const originalTooth = this.tooth();
     const currentSelectedTooth = untracked(this.selectedTooth);
 
@@ -272,7 +318,7 @@ export class ToothTreatmentsModal implements OnInit {
     this.treatments.clear();
     this.treatmentsContainer?.clear();
 
-    let treatmentsToAdd: ToothTreatment[];
+    let treatmentsToAdd: Partial<ToothTreatment>[];
 
     if (
       newSelectedTooth.odontogram === originalTooth.odontogram &&
@@ -280,43 +326,59 @@ export class ToothTreatmentsModal implements OnInit {
     ) {
       treatmentsToAdd = this.tempTreatments;
 
-      // Restore the forms state and clear the temporary storage
-      this.disableForms.set(false);
       delete this.tempTreatments;
     } else {
       treatmentsToAdd = newSelectedTooth.treatments || [];
     }
 
+    this.selectedTooth.set(newSelectedTooth);
+
     treatmentsToAdd.forEach((treatment) => {
       this.addToothTreatment(treatment);
     });
-
-    this.selectedTooth.set(newSelectedTooth);
-
-    // Disable the forms if a tooth from the history is selected
-    if (newSelectedTooth.odontogram !== originalTooth.odontogram) {
-      this.disableForms.set(true);
-    }
   }
 
-  addToothTreatment(toothTreatment?: ToothTreatment) {
+  addToothTreatment(toothTreatment?: Partial<ToothTreatment>) {
     if (!this.treatmentsContainer) {
       throw new Error(
         'Treatments container was not found. Maybe it was not rendered yet.'
       );
     }
 
+    const teeth = toothTreatment ? toothTreatment.teeth : [];
+
+    if (!toothTreatment?.teeth?.includes(this.tooth().number)) {
+      teeth?.push(this.tooth().number);
+    }
+
     const comp = this.treatmentsContainer.createComponent(
       ToothTreatmentDetailedForm
     );
 
-    comp.setInput('toothTreatment', toothTreatment);
+    const formattedTreatment: Partial<ToothTreatment> = {
+      ...toothTreatment,
+      teeth,
+      odontogram: this.tooth().odontogram?.id,
+    };
+
+    comp.setInput('disabled', this.disableForms());
+    comp.setInput('toothTreatment', formattedTreatment);
     comp.setInput('disabledTeeth', this.tooth().number);
 
     comp.instance.deleteTreatment.subscribe(() => {
       this.treatments.delete(comp);
       comp.destroy();
     });
+
+    comp.instance.searchTreatmentSuggestions.subscribe((searchTerm) => {
+      if (!this.searchTreatment()) return;
+
+      this.searchTreatment()?.(searchTerm).subscribe((treatments) => {
+        comp.setInput('treatmentSuggestions', treatments);
+      });
+    });
+
+    this.treatments.set(comp, formattedTreatment);
 
     comp.instance.toothTreatmentChange.subscribe((toothTreatment) => {
       this.treatments.set(comp, toothTreatment);
@@ -326,7 +388,9 @@ export class ToothTreatmentsModal implements OnInit {
   saveTooth() {
     const tooth = this.tooth();
 
-    const treatments: ToothTreatment[] = [];
+    const treatments: ToothTreatment[] = Array.from(
+      this.treatments.values()
+    ) as ToothTreatment[];
 
     this.toothConfirmedChanges.emit({ ...tooth, treatments });
   }

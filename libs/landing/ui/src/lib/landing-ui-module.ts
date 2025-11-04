@@ -9,7 +9,10 @@ const components = [Landing];
     RokuTranslatorModule.withConfig({
       locales: ['en', 'es'],
       defaultNamespace: 'landing',
-      loader: (locale) => import(`../../assets/i18n/${locale}.json`),
+      loader: (locale) => {
+        console.log('loading ', locale);
+        return import(`../../assets/i18n/${locale}.json`);
+      },
     }),
     ...components,
   ],

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "version": 2,
+  "title": "Push executor",
+  "description": "",
+  "type": "object",
+  "properties": {
+    "registry": {
+      "type": "string",
+      "description": "Docker registry base URL. If not provided, the PORTFOLIO_DOCKER_REGISTRY environment variable will be used.",
+      "default": ""
+    },
+    "imageName": {
+      "type": "string",
+      "description": "Docker image name"
+    },
+    "dockerfile": {
+      "type": "string",
+      "description": "Path to the Dockerfile",
+      "default": "src/Dockerfile"
+    },
+    "context": {
+      "type": "string",
+      "enum": ["project", "root", "dockerfile"],
+      "description": "Docker build context",
+      "default": "dockerfile"
+    },
+    "versionTags": {
+      "type": "array",
+      "description": "Docker tags",
+      "default": []
+    },
+    "buildArgs": {
+      "type": "object",
+      "description": "Build arguments to pass to the Docker build command",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "skipLogin": {
+      "type": "boolean",
+      "description": "Skip login to the Docker registry. Useful for CI/CD or development environments since the user should already be authenticated.",
+      "default": false
+    },
+    "noCache": {
+      "type": "boolean",
+      "description": "Build without cache",
+      "default": false
+    }
+  },
+  "required": []
+}

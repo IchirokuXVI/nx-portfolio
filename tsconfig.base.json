@@ -17,6 +17,7 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@portfolio/docker": ["tools/docker/src/index.ts"],
       "@portfolio/landing/data-access": [
         "libs/landing/data-access/src/index.ts"
       ],
@@ -41,6 +42,12 @@
         "libs/odontogram/feature-shell/src/index.ts"
       ],
       "@portfolio/odontogram/models": ["libs/odontogram/models/src/index.ts"],
+      "@portfolio/odontogram/models-localization": [
+        "libs/odontogram/models-localization/src/index.ts"
+      ],
+      "@portfolio/odontogram/models/translations": [
+        "libs/odontogram/models/src/translations-index.ts"
+      ],
       "@portfolio/odontogram/ui": ["libs/odontogram/ui/src/index.ts"],
       "@portfolio/shared/data-access": ["libs/shared/data-access/src/index.ts"],
       "@portfolio/shared/environments": [
@@ -55,5 +62,6 @@
       ]
     }
   },
+  "include": ["./types/**/*.d.ts"],
   "exclude": ["node_modules", "tmp"]
 }

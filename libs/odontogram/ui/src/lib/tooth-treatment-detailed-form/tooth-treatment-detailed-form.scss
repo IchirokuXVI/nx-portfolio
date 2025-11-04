@@ -37,6 +37,17 @@
     flex-direction: column;
     row-gap: 0.5em;
     width: 100%;
+
+    .treatment-search-delete-row {
+      display: flex;
+      flex-direction: row;
+      gap: 0.5em;
+      align-items: center;
+
+      mat-form-field {
+        flex-grow: 1;
+      }
+    }
   }
 
   .treatmentCol {
@@ -57,7 +68,7 @@
       &.disabled {
         pointer-events: none;
 
-        &:after {
+        &::after {
           content: '';
           top: 0;
           left: 0;
@@ -102,7 +113,7 @@
         // allow for another border or size changes in the parent
         border-radius: 50%;
         overflow: hidden;
-        &:before {
+        &::before {
           $borderSize: 6;
 
           content: '';
@@ -168,9 +179,8 @@
 
       .treatment-info__first-row {
         display: flex;
-        column-gap: 0.5em;
+        gap: 0.5em;
         align-items: center;
-        row-gap: 0.35em;
         flex-wrap: wrap;
 
         .affected-teeth {
@@ -181,7 +191,14 @@
           }
         }
 
-        .status {
+        .groupTeeth-and-status {
+          flex-grow: 1;
+          justify-content: center;
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 0.75em;
+          flex-wrap: wrap;
         }
       }
 
