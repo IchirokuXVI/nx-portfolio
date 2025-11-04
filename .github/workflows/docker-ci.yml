@@ -97,17 +97,23 @@ jobs:
       - name: Get affected apps
         id: get-affected-apps
         run: |
-          docker_apps=$(npx nx show projects --projects tag:type:static-docker | paste -sd, -)
+          docker_apps=$(npx nx show projects --type "app" --projects tag:type:static-docker | paste -sd, -)
           echo "docker_apps=$docker_apps" >> "$GITHUB_OUTPUT"
 
-          other_apps=$(npx nx show projects --exclude "$docker_apps,*-e2e" | paste -sd, -)
-          echo "other_apps=$other_apps" >> "$GITHUB_OUTPUT"
+          testable_apps=$(npx nx show projects --with-target test | paste -sd, -)
+          echo "testable_apps=$testable_apps" >> "$GITHUB_OUTPUT"
+
+          apps_tobuild=$(npx nx show projects --type "app" --with-target build:docker | paste -sd, -)
+          echo "apps_tobuild=$apps_tobuild" >> "$GITHUB_OUTPUT"
 
           affected_docker_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$docker_apps" | paste -sd, -)
           echo "affected_docker_apps=$affected_docker_apps" >> "$GITHUB_OUTPUT"
 
-          affected_other_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$other_apps" | paste -sd, -)
-          echo "affected_other_apps=$affected_other_apps" >> "$GITHUB_OUTPUT"
+          affected_testable_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$other_apps" | paste -sd, -)
+          echo "affected_testable_apps=$affected_testable_apps" >> "$GITHUB_OUTPUT"
+
+          affected_apps_tobuild=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$apps_tobuild" | paste -sd, -)
+          echo "affected_apps_tobuild=$affected_apps_tobuild" >> "$GITHUB_OUTPUT"
 
       # Build affected docker apps
       - name: Build affected docker apps
@@ -119,9 +125,9 @@ jobs:
         run: |
           docker run \
             --rm "ghcr.io/${{ env.REPO_LOWERCASE}}/builder:latest" \
-            npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
-          npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_other_apps }}
-        # npx nx run-many -t e2e --projects ${{ steps.get-remaining-apps.outputs.affected }}
+            npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_testable_apps }}
+          npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}
+        # npx nx run-many -t e2e --projects ${{ steps.get-remaining-apps.outputs.affected_apps_tobuild }}
 
       - name: Save Docker cache
         uses: actions/cache@v4
@@ -140,6 +146,6 @@ jobs:
             ./k8s ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} << 'EOF'
             echo "Upgrading helm release..."
-            helm upgrade nx-portfolio ./k8s/helm -n nx-portfolio -f k8s/helm/values.yaml --reuse-values
+            helm upgrade nx-portfolio ./k8s/helm -n nx-portfolio
             echo "Deployment complete."
           EOF
