@@ -19,14 +19,19 @@ export default composePlugins(async (config, { options, context }) => {
     module: {
       rules: [
         {
-          test: /\.(jpe?g|png|svg)$/,
-          type: 'asset/resource',
-          resourceQuery: { not: [/raw/] },
-        },
-        {
           test: /\.svg$/,
-          type: 'asset/source',
-          resourceQuery: /raw/,
+          oneOf: [
+            {
+              resourceQuery: /raw/,
+              type: 'asset/source',
+            },
+            {
+              type: 'asset/resource',
+              generator: {
+                filename: 'assets/[path][name].[hash][ext]',
+              },
+            },
+          ],
         },
       ],
     },

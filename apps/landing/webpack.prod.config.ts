@@ -15,14 +15,11 @@ export default composePlugins(async (config, { options, context }) => {
     module: {
       rules: [
         {
-          test: /\.(jpe?g|png|svg)$/,
+          test: /\.(pdf|png|jpe?g|gif|ico|bmp|webp)$/,
           type: 'asset/resource',
-          resourceQuery: { not: [/raw/] },
-        },
-        {
-          test: /\.svg$/,
-          type: 'asset/source',
-          resourceQuery: /raw/,
+          generator: {
+            filename: 'assets/[path][name].[hash][ext]',
+          },
         },
       ],
     },

@@ -13,8 +13,6 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 
-// declare const __webpack_public_path__: string;
-
 @Component({
   imports: [CommonModule, RouterModule, RokuTranslatorPipe],
   selector: 'lib-landing-ui',
@@ -25,19 +23,23 @@ import {
 export class Landing {
   compReady = signal(false);
 
-  // @ts-expect-error For some reason the png module does not work so even tho the IDE shows no error, the compiler does
+  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   hiBubble = import(`../../../assets/hi_bubble.png`).then((m) => m.default);
-  // @ts-expect-error For some reason the png module does not work so even tho the IDE shows no error, the compiler does
+  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   mailIcon = import(`../../../assets/email.png`).then((m) => m.default);
-  // @ts-expect-error For some reason the svg module does not work so even tho the IDE shows no error, the compiler does
+  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   githubIcon = import(`../../../assets/github.svg`).then((m) => m.default);
-  // @ts-expect-error For some reason the svg module does not work so even tho the IDE shows no error, the compiler does
+  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   linkedinIcon = import(`../../../assets/linkedin.svg`).then((m) => m.default);
-  // @ts-expect-error For some reason the png module does not work so even tho the IDE shows no error, the compiler does
+  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   resumeIcon = import(`../../../assets/cv.png`).then((m) => m.default);
 
-  // Used for assets in micro-frontend setup
-  // publicPath = __webpack_public_path__ + 'public/';
+  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
+  resumeLink = import(`../../../assets/resume.pdf?asset`).then((m) => {
+    // Remove query parameter from the URL if present
+    const url = m.default;
+    return url.includes('?') ? url.split('?')[0] : url;
+  });
 
   projects = input<TranslatedProject[]>([]);
 

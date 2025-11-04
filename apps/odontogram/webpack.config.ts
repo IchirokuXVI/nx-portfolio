@@ -15,7 +15,7 @@ export default composePlugins(async (config, { options, context }) => {
     module: {
       rules: [
         {
-          test: /\.(jpe?g|png|svg)$/,
+          test: /\.(jpe?g|png|svg|pdf)$/,
           type: 'asset/resource',
           resourceQuery: { not: [/raw/] },
         },

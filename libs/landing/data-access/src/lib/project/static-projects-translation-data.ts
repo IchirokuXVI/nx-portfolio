@@ -31,7 +31,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     description:
       'Full odontogram to save treatments and keep the history of patients. One of my first UI projects made solely by me. Teeth can have treatments that affect up to six zones and also more than one tooth.',
     appLink: '/en/odontogram',
-    // @ts-expect-error For some reason the png module does not work so even tho the IDE shows no error, the compiler does
+    // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
     image: import(`../../../assets/odontogram_screenshot.png`).then(
       (m) => m.default
     ),
@@ -44,7 +44,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     description:
       'Odontograma completo para guardar tratamientos y mantener el historial de los pacientes. Uno de mis primeros proyectos centrado en la interfaz hecho completamente por mí. Los dientes pueden tener tratamientos que afectan hasta seis zonas y también a más de un diente.',
     appLink: '/es/odontogram',
-    // @ts-expect-error For some reason the png module does not work so even tho the IDE shows no error, the compiler does
+    // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
     image: import(`../../../assets/odontogram_screenshot.png`).then(
       (m) => m.default
     ),
@@ -59,7 +59,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     description:
       'My biggest project so far. Complete POS with support for remote printing over the internet (not only local), WebSocket, fully responsive with an exclusive mobile view for easier use and many more features.',
     appLink: '/en/point-of-sale',
-    // @ts-expect-error For some reason the png module does not work so even tho the IDE shows no error, the compiler does
+    // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
     image: import(`../../../assets/pos_screenshot.png`).then((m) => m.default),
   },
   {
@@ -70,7 +70,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     description:
       'Mi proyecto más grande hasta ahora. TPV completo con soporte para impresión remota a través de internet (no solo local), WebSocket, totalmente responsive con una vista exclusiva para móviles para un uso más sencillo y muchas más funcionalidades.',
     appLink: '/es/point-of-sale',
-    // @ts-expect-error For some reason the png module does not work so even tho the IDE shows no error, the compiler does
+    // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
     image: import(`../../../assets/pos_screenshot.png`).then((m) => m.default),
   },
 ];
