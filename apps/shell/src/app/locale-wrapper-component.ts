@@ -4,8 +4,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 
-const SUPPORTED_LOCALES = ['en', 'es'];
-
 @Component({
   selector: 'ng-shell-locale-wrapper',
   styles: `
@@ -25,14 +23,14 @@ export class LocaleWrapperComponent {
     this.route.paramMap
       .pipe(takeUntilDestroyed(this._destroyRef))
       .subscribe(async (params) => {
-        const originalLocale = params.get('locale');
-        let locale = originalLocale;
+        const originalLocale = params.get('locale') || '';
+        let locale = RokuTranslator.formatLocale(originalLocale);
 
         if (!locale) {
           locale = RokuTranslator.getLocale();
         }
 
-        if (!locale || !SUPPORTED_LOCALES.includes(locale)) {
+        if (!locale || !RokuTranslator.isLocaleSupported(locale)) {
           locale = 'en';
         }
 
