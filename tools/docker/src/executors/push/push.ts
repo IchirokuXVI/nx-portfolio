@@ -86,7 +86,7 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
       await execAsync(
         `echo "${password}" | docker login ${registry} -u ${username} --password-stdin`
       );
-    } catch (err) {
+    } catch (err: any) {
       throw new Error(`Docker login failed: ${err.message}`);
     }
   }
@@ -99,7 +99,7 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
       await execAsync(`docker push ${fullImage}`);
 
       console.log(`Successfully pushed ${fullImage}`);
-    } catch (err) {
+    } catch (err: any) {
       throw new Error(`Docker push failed: ${err.message}`);
     }
   }

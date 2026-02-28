@@ -59,6 +59,16 @@
       "landing/Routes": ["apps/landing/src/app/remote-entry/entry.routes.ts"],
       "odontogram/Routes": [
         "apps/odontogram/src/app/remote-entry/entry.routes.ts"
+      ],
+      "damoclesSword/Routes": [
+        "apps/damoclesSword/src/app/remote-entry/entry.routes.ts"
+      ],
+      "@portfolio/damoclesSword/feature-shell": [
+        "libs/damoclesSword/feature-shell/src/index.ts"
+      ],
+      "@portfolio/damoclesSword/ui": ["libs/damoclesSword/ui/src/index.ts"],
+      "@portfolio/damoclesSword/data-access": [
+        "libs/damoclesSword/data-access/src/index.ts"
       ]
     }
   },

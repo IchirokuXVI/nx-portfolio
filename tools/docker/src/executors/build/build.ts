@@ -31,7 +31,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   const projectRoot = path.join(context.root, project.root);
 
-  let registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY;
+  let registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY || '';
 
   if (registry && !registry.endsWith('/')) {
     registry += '/';
@@ -104,7 +104,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   try {
     const result = await execAsync(buildCommand);
-  } catch (err) {
+  } catch (err: any) {
     throw new Error(`Error during Docker build: ${err.message}`);
   }
 
@@ -115,7 +115,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
       await fs.rm(cacheCurrent, { recursive: true, force: true });
       await fs.mkdir(path.dirname(cacheCurrent), { recursive: true });
       await fs.rename(cacheNew, cacheCurrent);
-    } catch (err) {
+    } catch (err: any) {
       console.warn(`Error moving new cache into place: ${err.message}`);
     }
   }
@@ -123,7 +123,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   if (options.pushToRegistry) {
     try {
       await push(options, context);
-    } catch (err) {
+    } catch (err: any) {
       throw new Error(`Error during Docker push: ${err.message}`);
     }
   }
