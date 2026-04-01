@@ -118,5 +118,6 @@
       "linter": "eslint",
       "unitTestRunner": "jest"
     }
-  }
+  },
+  "analytics": true
 }
