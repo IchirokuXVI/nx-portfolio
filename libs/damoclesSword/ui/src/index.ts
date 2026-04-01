@@ -1,1 +1,1 @@
-export * from './lib/damoclesSword/ui/damoclesSword/ui';
+export * from './lib/main-header/main-header';

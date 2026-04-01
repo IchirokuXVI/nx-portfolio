@@ -1,1 +1,1 @@
-export * from './lib/damoclesSword/feature-shell/damoclesSword/feature-shell';
+export * from './lib/routes';
