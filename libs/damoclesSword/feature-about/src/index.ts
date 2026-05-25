@@ -1,1 +1,1 @@
-export * from './lib/damoclesSword/feature-about/damoclesSword/feature-about';
+export * from './lib/feature-about/feature-about';
