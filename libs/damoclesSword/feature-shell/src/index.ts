@@ -1,1 +1,1 @@
-export * from './lib/routes';
+export { appRoutes as DamoclesSwordRoutes } from './lib/routes';

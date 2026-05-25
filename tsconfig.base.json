@@ -70,6 +70,15 @@
       "@portfolio/damoclesSword/ui": ["./libs/damoclesSword/ui/src/index.ts"],
       "@portfolio/damoclesSword/data-access": [
         "./libs/damoclesSword/data-access/src/index.ts"
+      ],
+      "@portfolio/damoclesSword/feature-home": [
+        "./libs/damoclesSword/feature-home/src/index.ts"
+      ],
+      "@portfolio/damoclesSword/feature-about": [
+        "./libs/damoclesSword/feature-about/src/index.ts"
+      ],
+      "@portfolio/damoclesSword/feature-contact": [
+        "./libs/damoclesSword/feature-contact/src/index.ts"
       ]
     }
   },

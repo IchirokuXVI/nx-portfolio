@@ -1,16 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { DamoclesSwordDataAccess } from './data-access';
+import { DamoclesSwordFeatureHome } from './feature-home';
 
-describe('DamoclesSwordDataAccess', () => {
-  let component: DamoclesSwordDataAccess;
-  let fixture: ComponentFixture<DamoclesSwordDataAccess>;
+describe('DamoclesSwordFeatureHome', () => {
+  let component: DamoclesSwordFeatureHome;
+  let fixture: ComponentFixture<DamoclesSwordFeatureHome>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [DamoclesSwordDataAccess],
+      imports: [DamoclesSwordFeatureHome],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(DamoclesSwordDataAccess);
+    fixture = TestBed.createComponent(DamoclesSwordFeatureHome);
     component = fixture.componentInstance;
     await fixture.whenStable();
   });

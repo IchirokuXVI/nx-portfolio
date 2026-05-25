@@ -1,4 +1,11 @@
 import { Route } from '@angular/router';
-import { RemoteEntry } from './entry';
 
-export const remoteRoutes: Route[] = [];
+export const remoteRoutes: Route[] = [
+  {
+    path: '',
+    loadChildren: () =>
+      import('@portfolio/damoclesSword/feature-shell').then(
+        (m) => m.DamoclesSwordRoutes
+      ),
+  },
+];
