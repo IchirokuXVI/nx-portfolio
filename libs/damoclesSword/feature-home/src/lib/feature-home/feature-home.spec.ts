@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { DamoclesSwordFeatureHome } from '../damoclesSword/feature-home/damoclesSword/feature-home';
+import { DamoclesSwordFeatureHome } from './feature-home';
 
 describe('DamoclesSwordFeatureHome', () => {
   let component: DamoclesSwordFeatureHome;
