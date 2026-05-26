@@ -31,7 +31,8 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   const projectRoot = path.join(context.root, project.root);
 
-  let registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY || '';
+  let registry =
+    options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY || '';
 
   if (registry && !registry.endsWith('/')) {
     registry += '/';
@@ -81,7 +82,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   buildCommandArr.push(`-f ${dockerfile}`);
 
   imagesToCreate.forEach((image) => {
-    buildCommandArr.push(`-t ${image}`);
+    buildCommandArr.push(`-t ${image.toLowerCase()}`);
   });
 
   buildCommandArr.push(buildArgs.join(' '));
