@@ -15,7 +15,7 @@ spec:
       labels:
         app: {{ .name }}
       annotations:
-        rollme: "{{ randAlphaNum 8 | quote }}"
+        rollme: {{ randAlphaNum 8 | quote }}
     spec:
       containers:
         - name: {{ .name }}

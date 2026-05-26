@@ -94,7 +94,7 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
   // Push
   for (const tag of versionTags) {
     try {
-      const fullImage = `${registry}/${imageName}:${tag}`;
+      const fullImage = `${registry}/${imageName}:${tag}`.toLowerCase();
       console.log(`Pushing image ${fullImage}`);
       await execAsync(`docker push ${fullImage}`);
 
