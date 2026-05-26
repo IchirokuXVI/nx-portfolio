@@ -1,1 +1,52 @@
-<div class="damoclesSword-header"></div>
+<div class="damoclesSword-header">
+  <a [routerLink]="['./home']" class="logo-container">
+    <img
+      [src]="damoclesLogo | async"
+      alt="Damocles Sword Logo"
+      class="header-logo"
+    />
+    <div class="logo-text">
+      <span class="logo-text-blue">D</span>
+      <span class="logo-text-white">AMOCLE</span>
+      <span class="logo-text-yellow">'SWORD</span>
+    </div>
+  </a>
+  <div class="header-navigation-container">
+    <div class="navigation-links">
+      <a
+        [routerLink]="['./']"
+        [routerLinkActive]="['active-link']"
+        [routerLinkActiveOptions]="{ exact: true }"
+        class="nav-link"
+        >Home</a
+      >
+      <a
+        [routerLink]="['./about']"
+        [routerLinkActive]="['active-link']"
+        class="nav-link"
+        >About us</a
+      >
+      <a
+        [routerLink]="['./contact']"
+        [routerLinkActive]="['active-link']"
+        class="nav-link"
+        >Contact</a
+      >
+    </div>
+    <div class="header-language-container">
+      <div class="language-selector">
+        <div class="selected-language-container">
+          <span class="language-label">
+            ES
+            <span class="dropdown-arrow">▼</span>
+          </span>
+        </div>
+        <!-- <div class="selectable-languages">
+          <button class="language-label">EN</button>
+          <button class="language-label selected-language">ES</button>
+          <button class="language-label">FR</button>
+        </div> -->
+      </div>
+    </div>
+  </div>
+</div>

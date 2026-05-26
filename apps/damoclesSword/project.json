@@ -19,6 +19,11 @@
           {
             "glob": "**/*",
             "input": "apps/damoclesSword/public"
+          },
+          {
+            "glob": "**/*",
+            "input": "libs/damoclesSword/ui/assets",
+            "output": "assets/damoclesSword/ui"
           }
         ],
         "styles": ["apps/damoclesSword/src/styles.scss"],
