@@ -67,8 +67,8 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     }
   }
 
-  const imagesToCreate = versionTags.map(
-    (tag) => `${registry ? `${registry}` : ''}${options.imageName}:${tag}`
+  const imagesToCreate = versionTags.map((tag) =>
+    `${registry ? `${registry}` : ''}${options.imageName}:${tag}`.toLowerCase()
   );
 
   const buildCommandArr = [];
@@ -82,7 +82,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   buildCommandArr.push(`-f ${dockerfile}`);
 
   imagesToCreate.forEach((image) => {
-    buildCommandArr.push(`-t ${image.toLowerCase()}`);
+    buildCommandArr.push(`-t ${image}`);
   });
 
   buildCommandArr.push(buildArgs.join(' '));
