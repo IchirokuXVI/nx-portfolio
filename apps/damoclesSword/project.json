@@ -1,0 +1,131 @@
+{
+  "name": "damoclesSword",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "prefix": "app",
+  "sourceRoot": "apps/damoclesSword/src",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/angular:webpack-browser",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/damoclesSword",
+        "index": "apps/damoclesSword/src/index.html",
+        "main": "apps/damoclesSword/src/main.ts",
+        "tsConfig": "apps/damoclesSword/tsconfig.app.json",
+        "inlineStyleLanguage": "scss",
+        "assets": [
+          {
+            "glob": "**/*",
+            "input": "apps/damoclesSword/public"
+          },
+          {
+            "glob": "**/*",
+            "input": "libs/damoclesSword/ui/assets",
+            "output": "assets/damoclesSword/ui"
+          }
+        ],
+        "styles": ["apps/damoclesSword/src/styles.scss"],
+        "customWebpackConfig": {
+          "path": "apps/damoclesSword/webpack.config.ts"
+        }
+      },
+      "configurations": {
+        "production": {
+          "budgets": [
+            {
+              "type": "initial",
+              "maximumWarning": "500kb",
+              "maximumError": "1mb"
+            },
+            {
+              "type": "anyComponentStyle",
+              "maximumWarning": "4kb",
+              "maximumError": "8kb"
+            }
+          ],
+          "outputHashing": "all",
+          "customWebpackConfig": {
+            "path": "apps/damoclesSword/webpack.prod.config.ts"
+          }
+        },
+        "development": {
+          "buildOptimizer": false,
+          "optimization": false,
+          "vendorChunk": true,
+          "extractLicenses": false,
+          "sourceMap": true,
+          "namedChunks": true
+        }
+      },
+      "defaultConfiguration": "production"
+    },
+    "build:docker": {
+      "executor": "@portfolio/docker:build",
+      "options": {
+        "imageName": "nx-portfolio/damoclesSword"
+      },
+      "configurations": {
+        "development": {
+          "versionTags": ["dev"],
+          "buildArgs": {
+            "BUILDER_TAG": "dev"
+          }
+        },
+        "production": {
+          "pushToRegistry": true,
+          "versionTags": ["latest"]
+        }
+      },
+      "defaultConfiguration": "development"
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/angular:dev-server",
+      "options": {
+        "port": 4203,
+        "publicHost": "http://localhost:4203"
+      },
+      "configurations": {
+        "production": {
+          "buildTarget": "damoclesSword:build:production"
+        },
+        "development": {
+          "buildTarget": "damoclesSword:build:development"
+        }
+      },
+      "defaultConfiguration": "development",
+      "dependsOn": ["shell:serve"]
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "apps/damoclesSword/jest.config.cts",
+        "tsConfig": "apps/damoclesSword/tsconfig.spec.json"
+      }
+    },
+    "serve-static": {
+      "continuous": true,
+      "executor": "@nx/web:file-server",
+      "defaultConfiguration": "production",
+      "options": {
+        "buildTarget": "damoclesSword:build",
+        "port": 4203,
+        "watch": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "damoclesSword:build:development"
+        },
+        "production": {
+          "buildTarget": "damoclesSword:build:production"
+        }
+      }
+    }
+  }
+}

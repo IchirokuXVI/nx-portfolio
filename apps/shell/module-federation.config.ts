@@ -14,7 +14,7 @@ const config: ModuleFederationConfig = {
    * declare module 'my-external-remote';
    *
    */
-  remotes: ['landing', 'odontogram'],
+  remotes: ['landing', 'odontogram', 'damoclesSword'],
   shared: (lib, config) => {
     // roku-translator is a singleton as it holds the current locale and i18next instance
     // We want all micro-frontends to use the same instance to avoid configuration issues

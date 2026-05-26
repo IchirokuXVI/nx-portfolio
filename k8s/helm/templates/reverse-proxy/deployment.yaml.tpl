@@ -12,6 +12,8 @@ spec:
     metadata:
       labels:
         app: reverse-proxy
+      annotations:
+        rollme: "{{ randAlphaNum 8 | quote }}"
     spec:
     # Needed in order to restart nginx from the certbot container
       shareProcessNamespace: true

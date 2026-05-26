@@ -297,7 +297,10 @@ class RokuTranslator {
       throw new Error('RokuTranslator not initialized. Call init() first.');
     }
 
-    return this.i18nextInstance.t(key, { ...options });
+    return this.i18nextInstance.t(
+      key,
+      options as Omit<TOptions, 'context'> & { context?: string }
+    );
   }
 }
 

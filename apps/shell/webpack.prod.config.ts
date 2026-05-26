@@ -10,6 +10,7 @@ export default composePlugins(async (config, { options, context }) => {
       remotes: [
         ['landing', 'https://mfe.ichirokuxvi.com/landing'],
         ['odontogram', 'https://mfe.ichirokuxvi.com/odontogram'],
+        ['damoclesSword', 'https://mfe.ichirokuxvi.com/damoclesSword'],
       ],
     },
     { dts: false }

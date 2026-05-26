@@ -4,7 +4,7 @@
     "rootDir": ".",
     "sourceMap": true,
     "declaration": false,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "emitDecoratorMetadata": true,
     "esModuleInterop": true,
     "experimentalDecorators": true,
@@ -15,50 +15,70 @@
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
-    "baseUrl": ".",
     "paths": {
-      "@portfolio/docker": ["tools/docker/src/index.ts"],
+      "@portfolio/docker": ["./tools/docker/src/index.ts"],
       "@portfolio/landing/data-access": [
-        "libs/landing/data-access/src/index.ts"
+        "./libs/landing/data-access/src/index.ts"
       ],
       "@portfolio/landing/feature-shell": [
-        "libs/landing/feature-shell/src/index.ts"
+        "./libs/landing/feature-shell/src/index.ts"
       ],
-      "@portfolio/landing/models": ["libs/landing/models/src/index.ts"],
-      "@portfolio/landing/ui": ["libs/landing/ui/src/index.ts"],
+      "@portfolio/landing/models": ["./libs/landing/models/src/index.ts"],
+      "@portfolio/landing/ui": ["./libs/landing/ui/src/index.ts"],
       "@portfolio/localization/rokutranslator": [
-        "libs/shared/localization/rokutranslator/src/index.ts"
+        "./libs/shared/localization/rokutranslator/src/index.ts"
       ],
       "@portfolio/localization/rokutranslator-angular": [
-        "libs/shared/localization/rokutranslator-angular/src/index.ts"
+        "./libs/shared/localization/rokutranslator-angular/src/index.ts"
       ],
       "@portfolio/odontogram/data-access": [
-        "libs/odontogram/data-access/src/index.ts"
+        "./libs/odontogram/data-access/src/index.ts"
       ],
       "@portfolio/odontogram/feature-full-odontogram-crud": [
-        "libs/odontogram/feature-full-odontogram-crud/src/index.ts"
+        "./libs/odontogram/feature-full-odontogram-crud/src/index.ts"
       ],
       "@portfolio/odontogram/feature-shell": [
-        "libs/odontogram/feature-shell/src/index.ts"
+        "./libs/odontogram/feature-shell/src/index.ts"
       ],
-      "@portfolio/odontogram/models": ["libs/odontogram/models/src/index.ts"],
+      "@portfolio/odontogram/models": ["./libs/odontogram/models/src/index.ts"],
       "@portfolio/odontogram/models-localization": [
-        "libs/odontogram/models-localization/src/index.ts"
+        "./libs/odontogram/models-localization/src/index.ts"
       ],
       "@portfolio/odontogram/models/translations": [
-        "libs/odontogram/models/src/translations-index.ts"
+        "./libs/odontogram/models/src/translations-index.ts"
       ],
-      "@portfolio/odontogram/ui": ["libs/odontogram/ui/src/index.ts"],
-      "@portfolio/shared/data-access": ["libs/shared/data-access/src/index.ts"],
+      "@portfolio/odontogram/ui": ["./libs/odontogram/ui/src/index.ts"],
+      "@portfolio/shared/data-access": [
+        "./libs/shared/data-access/src/index.ts"
+      ],
       "@portfolio/shared/environments": [
-        "libs/shared/environments/src/index.ts"
+        "./libs/shared/environments/src/index.ts"
       ],
-      "@portfolio/shared/models": ["libs/shared/models/src/index.ts"],
-      "@portfolio/shared/ui": ["libs/shared/ui/src/index.ts"],
-      "@portfolio/shared/util": ["libs/shared/util/src/index.ts"],
-      "landing/Routes": ["apps/landing/src/app/remote-entry/entry.routes.ts"],
+      "@portfolio/shared/models": ["./libs/shared/models/src/index.ts"],
+      "@portfolio/shared/ui": ["./libs/shared/ui/src/index.ts"],
+      "@portfolio/shared/util": ["./libs/shared/util/src/index.ts"],
+      "landing/Routes": ["./apps/landing/src/app/remote-entry/entry.routes.ts"],
       "odontogram/Routes": [
-        "apps/odontogram/src/app/remote-entry/entry.routes.ts"
+        "./apps/odontogram/src/app/remote-entry/entry.routes.ts"
+      ],
+      "damoclesSword/Routes": [
+        "./apps/damoclesSword/src/app/remote-entry/entry.routes.ts"
+      ],
+      "@portfolio/damoclesSword/feature-shell": [
+        "./libs/damoclesSword/feature-shell/src/index.ts"
+      ],
+      "@portfolio/damoclesSword/ui": ["./libs/damoclesSword/ui/src/index.ts"],
+      "@portfolio/damoclesSword/data-access": [
+        "./libs/damoclesSword/data-access/src/index.ts"
+      ],
+      "@portfolio/damoclesSword/feature-home": [
+        "./libs/damoclesSword/feature-home/src/index.ts"
+      ],
+      "@portfolio/damoclesSword/feature-about": [
+        "./libs/damoclesSword/feature-about/src/index.ts"
+      ],
+      "@portfolio/damoclesSword/feature-contact": [
+        "./libs/damoclesSword/feature-contact/src/index.ts"
       ]
     }
   },

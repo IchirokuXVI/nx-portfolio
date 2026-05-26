@@ -13,6 +13,11 @@ export const appRoutes: Route[] = [
           import('odontogram/Routes').then((m) => m.remoteRoutes),
       },
       {
+        path: 'damoclesSword',
+        loadChildren: () =>
+          import('damoclesSword/Routes').then((m) => m.remoteRoutes),
+      },
+      {
         path: '',
         loadChildren: () =>
           import('landing/Routes').then((m) => m.remoteRoutes),

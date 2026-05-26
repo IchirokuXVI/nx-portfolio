@@ -294,7 +294,7 @@
       // define the two siblings with their order
       $siblingIndexes: ($nextIndex, $prevIndex);
 
-      @for $s from 1 through length($siblingIndexes) {
+      @for $s from 1 through list.length($siblingIndexes) {
         $siblingIndex: list.nth($siblingIndexes, $s);
         $sibling: list.nth($positions, $siblingIndex);
 
