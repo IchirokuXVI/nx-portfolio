@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { LandingWrapper } from './landing-wrapper';
+import { DamoclesSwordWrapper } from './damoclesSword-wrapper';
 
 jest.mock('@portfolio/localization/rokutranslator', () => {
   return {
@@ -13,17 +13,17 @@ jest.mock('@portfolio/localization/rokutranslator', () => {
   };
 });
 
-describe('LandingWrapper', () => {
-  let component: LandingWrapper;
-  let fixture: ComponentFixture<LandingWrapper>;
+describe('DamoclesSwordWrapper', () => {
+  let component: DamoclesSwordWrapper;
+  let fixture: ComponentFixture<DamoclesSwordWrapper>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [LandingWrapper],
+      imports: [DamoclesSwordWrapper],
       providers: [provideRouter([])],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(LandingWrapper);
+    fixture = TestBed.createComponent(DamoclesSwordWrapper);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });
