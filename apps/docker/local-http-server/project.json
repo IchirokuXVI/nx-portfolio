@@ -18,7 +18,7 @@
           "pushToRegistry": true
         }
       },
-      "defaultConfiguration": "production"
+      "defaultConfiguration": "development"
     }
   },
   "tags": ["type:static-docker"]
