@@ -34,19 +34,11 @@
       >
     </div>
     <div class="header-language-container">
-      <div class="language-selector">
-        <div class="selected-language-container">
-          <span class="language-label">
-            ES
-            <span class="dropdown-arrow">▼</span>
-          </span>
-        </div>
-        <!-- <div class="selectable-languages">
-          <button class="language-label">EN</button>
-          <button class="language-label selected-language">ES</button>
-          <button class="language-label">FR</button>
-        </div> -->
-      </div>
+      <damoclesSword-language-selector
+        (selectedLanguageChange)="languageChange.emit($event)"
+        [languages]="languages()"
+        [selectedLanguage]="selectedLanguage()"
+      ></damoclesSword-language-selector>
     </div>
   </div>
 </div>

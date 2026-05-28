@@ -146,7 +146,7 @@ jobs:
       - name: Sync files and redeploy via Helm
         run: |
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
-            ./k8s ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
+            ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} << 'EOF'
             echo "Upgrading helm release..."
             helm upgrade nx-portfolio ./k8s/helm -n nx-portfolio

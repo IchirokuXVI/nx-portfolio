@@ -1,0 +1,31 @@
+<div class="language-selector">
+  <div (click)="toggleShowOptions()" class="selected-language-container">
+    <span class="language-label">
+      @let selectedLanguage = this.selectedLanguage();
+      @if (selectedLanguage != null) {
+        <img
+          [alt]="selectedLanguage"
+          [src]="languageFlags()[selectedLanguage] | async"
+        />
+        <span>
+          {{ selectedLanguage }}
+        </span>
+      }
+      <span class="dropdown-arrow">▼</span>
+    </span>
+  </div>
+  <div [class.shown]="showLanguageOptions()" class="selectable-languages">
+    @for (lang of languages(); track $index) {
+      <button
+        (click)="onLanguageChange(lang)"
+        [class.selected-language]="selectedLanguage === lang"
+        class="language-label"
+      >
+        <img [alt]="lang" [src]="languageFlags()[lang] | async" />
+        <span>
+          {{ lang }}
+        </span>
+      </button>
+    }
+  </div>
+</div>

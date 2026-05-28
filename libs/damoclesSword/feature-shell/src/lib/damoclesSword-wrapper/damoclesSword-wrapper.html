@@ -1,2 +1,6 @@
-<lib-damoclesSword-main-header></lib-damoclesSword-main-header>
+<lib-damoclesSword-main-header
+  (languageChange)="changeLocale($event)"
+  [languages]="locales"
+  [selectedLanguage]="selectedLocale"
+></lib-damoclesSword-main-header>
 <router-outlet></router-outlet>

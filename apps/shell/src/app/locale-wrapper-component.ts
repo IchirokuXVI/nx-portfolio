@@ -20,6 +20,28 @@ export class LocaleWrapperComponent {
   private _destroyRef = inject(DestroyRef);
 
   constructor() {
+    RokuTranslator.onLocaleChange = (locale: string) => {
+      const currentLocale = this.route.snapshot.paramMap.get('locale');
+
+      if (locale !== currentLocale) {
+        // Parse the FULL current URL string into a UrlTree
+        // (This preserves all child routes, query params, and fragments automatically)
+        const urlTree = this.router.parseUrl(this.router.url);
+
+        // Access the primary routing segments
+        const primaryOutlet = urlTree.root.children['primary'];
+
+        // Ensure segments exist, then replace the first segment (the locale)
+        if (primaryOutlet && primaryOutlet.segments.length > 0) {
+          primaryOutlet.segments[0].path = locale;
+        }
+
+        // Navigate using the modified tree without reloading the app
+        // this.router.navigateByUrl(urlTree, { replaceUrl: true });
+        window.location.href = urlTree.toString();
+      }
+    };
+
     this.route.paramMap
       .pipe(takeUntilDestroyed(this._destroyRef))
       .subscribe(async (params) => {
@@ -34,24 +56,7 @@ export class LocaleWrapperComponent {
           locale = 'en';
         }
 
-        if (locale !== originalLocale) {
-          // Rebuild the URL, replace first segment (locale) only
-          const tree = this.router.createUrlTree(
-            [
-              locale,
-              ...this.route.snapshot.url.map((seg) => seg.path).slice(1),
-            ],
-            {
-              queryParams: this.route.snapshot.queryParams,
-              fragment: this.route.snapshot.fragment || undefined,
-            }
-          );
-
-          // Navigate without reloading the whole app
-          this.router.navigateByUrl(tree, { replaceUrl: true });
-        } else {
-          RokuTranslator.changeLocale(locale);
-        }
+        RokuTranslator.changeLocale(locale);
       });
   }
 }
