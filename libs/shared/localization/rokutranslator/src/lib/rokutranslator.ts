@@ -35,6 +35,8 @@ class RokuTranslator {
 
   private i18nextInstance?: i18n;
 
+  public onLocaleChange: (locale: string) => void = () => {};
+
   async init(config: Partial<RokuTranslatorConfig> = {}): Promise<void> {
     this.config = {
       ...this.config,
@@ -186,6 +188,8 @@ class RokuTranslator {
     }
 
     localStorage.setItem('roku-locale', locale);
+
+    this.onLocaleChange(locale);
   }
 
   isLocaleValid(locale: string) {
