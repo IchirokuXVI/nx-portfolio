@@ -1,11 +1,15 @@
 import { AsyncPipe } from '@angular/common';
-import { Component, input, output } from '@angular/core';
+import { Component, inject, input, output, signal } from '@angular/core';
 import { RouterModule } from '@angular/router';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import { LanguageSelector } from '../language-selector/language-selector';
 
 @Component({
   selector: 'lib-damoclesSword-main-header',
-  imports: [AsyncPipe, RouterModule, LanguageSelector],
+  imports: [AsyncPipe, RouterModule, LanguageSelector, RokuTranslatorPipe],
   templateUrl: './main-header.html',
   styleUrl: './main-header.scss',
 })
@@ -15,7 +19,17 @@ export class MainHeader {
     (m) => m.default
   );
 
+  compReady = signal(false);
+
   languages = input<string[]>([]);
   selectedLanguage = input<string>('en');
   languageChange = output<string>();
+
+  _rokuTranslatorServ = inject(RokuTranslatorService);
+
+  constructor() {
+    this._rokuTranslatorServ.loaded$.subscribe(() => {
+      this.compReady.set(true);
+    });
+  }
 }

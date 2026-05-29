@@ -1,14 +1,15 @@
 import { NgModule } from '@angular/core';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
-import { Landing } from './landing/landing';
+import { LanguageSelector } from './language-selector/language-selector';
+import { MainHeader } from './main-header/main-header';
 
-const components = [Landing];
+const components = [LanguageSelector, MainHeader];
 
 @NgModule({
   imports: [
     RokuTranslatorModule.withConfig({
-      locales: ['en', 'es'],
-      defaultNamespace: 'landing',
+      locales: ['en', 'es', 'fr'],
+      defaultNamespace: 'damoclesSword',
       loader: (locale) => import(`../../assets/i18n/${locale}.json`),
     }),
     ...components,
@@ -17,4 +18,4 @@ const components = [Landing];
   declarations: [],
   providers: [],
 })
-export class LandingUiModule {}
+export class DamoclesSwordUiModule {}

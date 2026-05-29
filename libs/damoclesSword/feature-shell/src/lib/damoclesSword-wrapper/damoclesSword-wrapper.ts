@@ -1,11 +1,11 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
-import { MainHeader } from '@portfolio/damoclesSword/ui';
+import { DamoclesSwordUiModule } from '@portfolio/damoclesSword/ui';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 @Component({
   selector: 'lib-damoclesSword-wrapper',
-  imports: [CommonModule, MainHeader, RouterOutlet],
+  imports: [CommonModule, DamoclesSwordUiModule, RouterOutlet],
   templateUrl: './damoclesSword-wrapper.html',
   styleUrl: './damoclesSword-wrapper.scss',
 })
