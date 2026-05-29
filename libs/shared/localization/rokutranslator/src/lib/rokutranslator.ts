@@ -132,7 +132,7 @@ class RokuTranslator {
     return selectedLocale;
   }
 
-  getSupportedLocales(): string[] {
+  public getSupportedLocales(): string[] {
     return this.config.supportedLocales;
   }
 
@@ -166,7 +166,7 @@ class RokuTranslator {
     );
   }
 
-  getLocale() {
+  public getLocale() {
     if (!this.config.locale) {
       throw new Error('No locale set. Did you call init() ?');
     }

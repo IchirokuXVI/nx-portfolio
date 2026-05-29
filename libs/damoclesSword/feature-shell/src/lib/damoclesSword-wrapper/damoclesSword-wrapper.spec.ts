@@ -9,6 +9,7 @@ jest.mock('@portfolio/localization/rokutranslator', () => {
       addNamespace: jest.fn(),
       addTranslations: jest.fn(),
       removeNamespace: jest.fn(),
+      getSupportedLocales: jest.fn().mockReturnValue(['en', 'es', 'fr']),
     },
   };
 });
