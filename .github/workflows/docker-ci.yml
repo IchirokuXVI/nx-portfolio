@@ -149,6 +149,10 @@ jobs:
             ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} << 'EOF'
             echo "Upgrading helm release..."
+
+            # Point Helm to the remote server's kubeconfig
+            export KUBECONFIG=~/.kube/config
+
             helm upgrade nx-portfolio ./k8s/helm -n nx-portfolio
             echo "Deployment complete."
           EOF
