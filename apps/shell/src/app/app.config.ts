@@ -7,7 +7,7 @@ import { provideRouter } from '@angular/router';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { appRoutes } from './app.routes';
 
-const SUPPORTED_LOCALES = ['en', 'es'];
+const SUPPORTED_LOCALES = ['en', 'es', 'fr'];
 
 export const appConfig: ApplicationConfig = {
   providers: [

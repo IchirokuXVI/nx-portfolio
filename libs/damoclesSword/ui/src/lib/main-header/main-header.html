@@ -1,44 +1,46 @@
-<div class="damoclesSword-header">
-  <a [routerLink]="['./home']" class="logo-container">
-    <img
-      [src]="damoclesLogo | async"
-      alt="Damocles Sword Logo"
-      class="header-logo"
-    />
-    <div class="logo-text">
-      <span class="logo-text-blue">D</span>
-      <span class="logo-text-white">AMOCLE</span>
-      <span class="logo-text-yellow">'SWORD</span>
-    </div>
-  </a>
-  <div class="header-navigation-container">
-    <div class="navigation-links">
-      <a
-        [routerLink]="['./']"
-        [routerLinkActive]="['active-link']"
-        [routerLinkActiveOptions]="{ exact: true }"
-        class="nav-link"
-        >Home</a
-      >
-      <a
-        [routerLink]="['./about']"
-        [routerLinkActive]="['active-link']"
-        class="nav-link"
-        >About us</a
-      >
-      <a
-        [routerLink]="['./contact']"
-        [routerLinkActive]="['active-link']"
-        class="nav-link"
-        >Contact</a
-      >
-    </div>
-    <div class="header-language-container">
-      <damoclesSword-language-selector
-        (selectedLanguageChange)="languageChange.emit($event)"
-        [languages]="languages()"
-        [selectedLanguage]="selectedLanguage()"
-      ></damoclesSword-language-selector>
+@if (compReady()) {
+  <div class="damoclesSword-header">
+    <a [routerLink]="['./home']" class="logo-container">
+      <img
+        [src]="damoclesLogo | async"
+        alt="Damocles Sword Logo"
+        class="header-logo"
+      />
+      <div class="logo-text">
+        <span class="logo-text-blue">D</span>
+        <span class="logo-text-white">AMOCLE</span>
+        <span class="logo-text-yellow">'SWORD</span>
+      </div>
+    </a>
+    <div class="header-navigation-container">
+      <div class="navigation-links">
+        <a
+          [routerLink]="['./']"
+          [routerLinkActive]="['active-link']"
+          [routerLinkActiveOptions]="{ exact: true }"
+          class="nav-link"
+          >{{ 'header.home' | rokuT }}</a
+        >
+        <a
+          [routerLink]="['./about']"
+          [routerLinkActive]="['active-link']"
+          class="nav-link"
+          >{{ 'header.about' | rokuT }}</a
+        >
+        <a
+          [routerLink]="['./contact']"
+          [routerLinkActive]="['active-link']"
+          class="nav-link"
+          >{{ 'header.contact' | rokuT }}</a
+        >
+      </div>
+      <div class="header-language-container">
+        <damoclesSword-language-selector
+          (selectedLanguageChange)="languageChange.emit($event)"
+          [languages]="languages()"
+          [selectedLanguage]="selectedLanguage()"
+        ></damoclesSword-language-selector>
+      </div>
     </div>
   </div>
-</div>
+}

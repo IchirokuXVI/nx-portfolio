@@ -23,6 +23,13 @@ export class LocaleWrapperComponent {
     RokuTranslator.onLocaleChange = (locale: string) => {
       const currentLocale = this.route.snapshot.paramMap.get('locale');
 
+      if (!locale) {
+        console.error(
+          'Locale change event triggered with empty locale. Defaulting to "en".'
+        );
+        locale = 'en';
+      }
+
       if (locale !== currentLocale) {
         // Parse the FULL current URL string into a UrlTree
         // (This preserves all child routes, query params, and fragments automatically)
@@ -31,14 +38,19 @@ export class LocaleWrapperComponent {
         // Access the primary routing segments
         const primaryOutlet = urlTree.root.children['primary'];
 
-        // Ensure segments exist, then replace the first segment (the locale)
+        let newUrl;
+
         if (primaryOutlet && primaryOutlet.segments.length > 0) {
+          // Replace the first segment (the locale) with the new locale
           primaryOutlet.segments[0].path = locale;
+          newUrl = urlTree.toString();
+        } else {
+          // If there are no segments, we are likely at the root. Just prepend the locale.
+          newUrl = `/${locale}`;
         }
 
         // Navigate using the modified tree without reloading the app
-        // this.router.navigateByUrl(urlTree, { replaceUrl: true });
-        window.location.href = urlTree.toString();
+        window.location.href = newUrl;
       }
     };
 
