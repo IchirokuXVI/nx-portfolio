@@ -153,6 +153,6 @@ jobs:
             # Point Helm to the remote server's kubeconfig
             export KUBECONFIG=~/.kube/config
 
-            helm upgrade nx-portfolio ./k8s/helm -n nx-portfolio
+            microk8s helm3 upgrade nx-portfolio ./k8s/helm -n nx-portfolio
             echo "Deployment complete."
           EOF
