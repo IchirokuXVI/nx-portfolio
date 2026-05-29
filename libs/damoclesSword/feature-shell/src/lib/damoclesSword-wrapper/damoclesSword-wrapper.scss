@@ -1,5 +1,17 @@
 :host {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   background-color: #fdfdfd;
   color: #221;
+  align-items: center;
+}
+
+.damocles-sword-main-container {
+  height: 100%;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1920px;
 }
