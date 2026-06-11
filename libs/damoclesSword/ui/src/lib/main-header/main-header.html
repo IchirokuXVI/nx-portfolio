@@ -14,25 +14,15 @@
     </a>
     <div class="header-navigation-container">
       <div class="navigation-links">
-        <a
-          [routerLink]="['./']"
-          [routerLinkActive]="['active-link']"
-          [routerLinkActiveOptions]="{ exact: true }"
-          class="nav-link"
-          >{{ 'header.home' | rokuT }}</a
-        >
-        <a
-          [routerLink]="['./about']"
-          [routerLinkActive]="['active-link']"
-          class="nav-link"
-          >{{ 'header.about' | rokuT }}</a
-        >
-        <a
-          [routerLink]="['./contact']"
-          [routerLinkActive]="['active-link']"
-          class="nav-link"
-          >{{ 'header.contact' | rokuT }}</a
-        >
+        @for (navLink of navLinks; track $index) {
+          <a
+            [routerLink]="navLink.url"
+            [routerLinkActive]="['active-link']"
+            [routerLinkActiveOptions]="{ exact: true }"
+            class="nav-link"
+            >{{ navLink.label | rokuT }}</a
+          >
+        }
       </div>
       <div class="header-language-container">
         <damoclesSword-language-selector

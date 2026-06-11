@@ -25,6 +25,25 @@ export class MainHeader {
   selectedLanguage = input<string>('en');
   languageChange = output<string>();
 
+  navLinks = [
+    {
+      label: 'header.home',
+      url: ['./'],
+    },
+    {
+      label: 'header.services',
+      url: ['./services'],
+    },
+    {
+      label: 'header.about',
+      url: ['./about'],
+    },
+    {
+      label: 'header.contact',
+      url: ['./contact'],
+    },
+  ];
+
   _rokuTranslatorServ = inject(RokuTranslatorService);
 
   constructor() {

@@ -3,6 +3,7 @@
   flex-direction: row;
   position: relative;
   font-size: 1em;
+  cursor: pointer;
 
   .selected-language-container {
     display: flex;
@@ -27,6 +28,8 @@
 
   .language-label {
     font-family: 'Audiowide';
+    width: 100%;
+    flex-grow: 1;
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
@@ -39,6 +42,22 @@
 
     &.selected-language {
       background-color: #00b7f5;
+    }
+
+    &:not(.selected-language):hover {
+      cursor: pointer;
+      position: relative;
+
+      &::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 100%;
+        width: 100%;
+        background-color: #11111111;
+      }
     }
 
     img {
