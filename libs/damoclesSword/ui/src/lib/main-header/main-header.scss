@@ -164,11 +164,19 @@ $header-border-bottom-size: 0.375em;
       grid-template-rows: 0fr;
       overflow: hidden;
       transition: grid-template-rows 0.3s ease-in-out;
-      background-color: #7a7a7a;
+      background-color: #1a1a1a;
+      color: #fff;
       padding: 0em 2em;
 
       &.show-nav-menu {
         grid-template-rows: 1fr;
+        animation: 1s delay-overflow forwards;
+      }
+
+      @keyframes delay-overflow {
+        to {
+          overflow: visible;
+        }
       }
 
       .position-helper {
