@@ -88,18 +88,20 @@ $header-border-bottom-size: 0.375em;
       flex-direction: row;
       gap: 2.5em;
       justify-content: space-around;
-      padding: 0 4em;
+      align-items: center;
+      padding: 0 3em;
     }
 
     .navigation-links {
       flex-grow: 1;
       display: flex;
       flex-direction: row;
-      gap: 1em;
+      gap: 1.5em;
       font-size: 1.75em;
       font-family: 'Audiowide';
       text-transform: uppercase;
-      justify-content: space-evenly;
+      text-align: center;
+      align-items: center;
 
       .nav-link {
         &.active-link {
@@ -112,7 +114,6 @@ $header-border-bottom-size: 0.375em;
 
   .header-language-container {
     display: flex;
-    height: 1.75em;
   }
 }
 
@@ -193,6 +194,8 @@ $header-border-bottom-size: 0.375em;
           width: 100%;
           flex-direction: column;
           gap: 0.5em;
+          text-align: left;
+          align-items: flex-start;
         }
 
         .header-language-container {
