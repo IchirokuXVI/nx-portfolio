@@ -80,6 +80,9 @@
       ],
       "@portfolio/damoclesSword/feature-contact": [
         "./libs/damoclesSword/feature-contact/src/index.ts"
+      ],
+      "@portfolio/damoclesSword/feature-services": [
+        "./libs/damoclesSword/feature-services/src/index.ts"
       ]
     }
   },

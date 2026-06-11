@@ -29,6 +29,13 @@ export const appRoutes: Route[] = [
           ),
       },
       {
+        path: 'services',
+        loadComponent: () =>
+          import('@portfolio/damoclesSword/feature-services').then(
+            (m) => m.DamoclesSwordFeatureServices
+          ),
+      },
+      {
         path: '**',
         redirectTo: '',
       },
