@@ -1,8 +1,13 @@
 <div class="damocles-sword-main-container">
-  <lib-damoclesSword-main-header
-    (languageChange)="changeLocale($event)"
-    [languages]="locales"
-    [selectedLanguage]="selectedLocale"
-  ></lib-damoclesSword-main-header>
-  <router-outlet></router-outlet>
+  <div class="damocles-sword-header">
+    <lib-damoclesSword-main-header
+      (languageChange)="changeLocale($event)"
+      [languages]="locales"
+      [navLinks]="headerNavLinks"
+      [selectedLanguage]="selectedLocale"
+    ></lib-damoclesSword-main-header>
+  </div>
+  <div class="damocles-sword-content">
+    <router-outlet></router-outlet>
+  </div>
 </div>

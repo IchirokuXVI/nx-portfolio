@@ -13,6 +13,25 @@ export class DamoclesSwordWrapper implements OnInit {
   router = inject(Router);
   activatedRoute = inject(ActivatedRoute);
 
+  headerNavLinks = [
+    {
+      label: 'header.home',
+      url: ['./'],
+    },
+    {
+      label: 'header.services',
+      url: ['./services'],
+    },
+    {
+      label: 'header.about',
+      url: ['./about'],
+    },
+    {
+      label: 'header.contact',
+      url: ['./contact'],
+    },
+  ];
+
   locales: string[];
 
   selectedLocale: string;

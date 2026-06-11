@@ -3,6 +3,8 @@ import {
   Component,
   computed,
   effect,
+  ElementRef,
+  inject,
   input,
   model,
   Signal,
@@ -14,6 +16,9 @@ import {
   imports: [AsyncPipe],
   templateUrl: './language-selector.html',
   styleUrl: './language-selector.scss',
+  host: {
+    '(document:click)': 'onDocumentClick($event.target)',
+  },
 })
 export class LanguageSelector {
   languages = input<string[]>([]);
@@ -21,6 +26,8 @@ export class LanguageSelector {
   showLanguageOptions = signal(false);
 
   languageFlags: Signal<Record<string, Promise<string>>>;
+
+  elementRef = inject(ElementRef);
 
   constructor() {
     // Validate the selected language and default to the first one if it's not valid
@@ -70,6 +77,20 @@ export class LanguageSelector {
 
   toggleShowOptions() {
     this.showLanguageOptions.update((show) => !show);
+  }
+
+  onDocumentClick(target: EventTarget | null) {
+    const showingOptions = this.showLanguageOptions();
+
+    // Skip if the dropdown is not open
+    if (!showingOptions) return;
+
+    const clickedInside =
+      target && this.elementRef.nativeElement.contains(target);
+
+    if (!clickedInside) {
+      this.showLanguageOptions.set(false); // Close the dropdown if clicked outside
+    }
   }
 
   onLanguageChange(selectedOption: string) {
