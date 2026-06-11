@@ -1,16 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FeatureServices } from './feature-services';
+import { DamoclesSwordFeatureServices } from './feature-services';
 
-describe('FeatureServices', () => {
-  let component: FeatureServices;
-  let fixture: ComponentFixture<FeatureServices>;
+describe('DamoclesSwordFeatureServices', () => {
+  let component: DamoclesSwordFeatureServices;
+  let fixture: ComponentFixture<DamoclesSwordFeatureServices>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [FeatureServices],
+      imports: [DamoclesSwordFeatureServices],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(FeatureServices);
+    fixture = TestBed.createComponent(DamoclesSwordFeatureServices);
     component = fixture.componentInstance;
     await fixture.whenStable();
   });
