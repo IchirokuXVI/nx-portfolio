@@ -14,7 +14,7 @@
     </a>
     <div class="header-navigation-container">
       <div class="navigation-links">
-        @for (navLink of navLinks; track $index) {
+        @for (navLink of navLinks(); track $index) {
           <a
             [routerLink]="navLink.url"
             [routerLinkActive]="['active-link']"
