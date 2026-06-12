@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { DamoclesSwordUiModule } from '@portfolio/damoclesSword/ui';
+import { MockModule } from 'ng-mocks';
 import { DamoclesSwordWrapper } from './damoclesSword-wrapper';
 
 jest.mock('@portfolio/localization/rokutranslator', () => {
@@ -20,7 +22,7 @@ describe('DamoclesSwordWrapper', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [DamoclesSwordWrapper],
+      imports: [DamoclesSwordWrapper, MockModule(DamoclesSwordUiModule)],
       providers: [provideRouter([])],
     }).compileComponents();
 

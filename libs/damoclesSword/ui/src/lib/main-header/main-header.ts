@@ -20,9 +20,8 @@ export interface HeaderBreakpoints {
 
 const DEFAULT_LANGUAGE = 'en';
 export const DEFAULT_HEADER_BREAKPOINT = '-16';
-const MOBILE_DROPDOWN_BREAKPOINT = '1600px';
 
-enum HeaderBreakpointKeys {
+export enum HeaderBreakpointKeys {
   MOBILE_DROPDOWN = 'mobileDropdown',
 }
 
@@ -61,7 +60,8 @@ export class MainHeader {
   navLinks = input<{ label: string; url: string[] }[]>([]);
 
   breakpoints = input<HeaderBreakpoints>({
-    [HeaderBreakpointKeys.MOBILE_DROPDOWN]: MOBILE_DROPDOWN_BREAKPOINT,
+    [HeaderBreakpointKeys.MOBILE_DROPDOWN]:
+      HeaderBreakpointDefaultValues[HeaderBreakpointKeys.MOBILE_DROPDOWN],
   });
 
   showNavMenu = signal(false);

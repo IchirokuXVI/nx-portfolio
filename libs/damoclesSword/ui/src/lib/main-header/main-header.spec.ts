@@ -3,6 +3,9 @@ import { RouterModule } from '@angular/router';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { MainHeader } from './main-header';
 
+// Attach it to the global object before tests run
+global.ResizeObserver = require('resize-observer-polyfill');
+
 describe('MainHeader', () => {
   let component: MainHeader;
   let fixture: ComponentFixture<MainHeader>;
