@@ -1,7 +1,7 @@
 import { AsyncPipe, CommonModule } from '@angular/common';
 import {
   Component,
-  HostBinding,
+  ElementRef,
   inject,
   input,
   output,
@@ -18,7 +18,21 @@ export interface HeaderBreakpoints {
   mobileDropdown?: string;
 }
 
+const DEFAULT_LANGUAGE = 'en';
 export const DEFAULT_HEADER_BREAKPOINT = '-16';
+const MOBILE_DROPDOWN_BREAKPOINT = '1600px';
+
+enum HeaderBreakpointKeys {
+  MOBILE_DROPDOWN = 'mobileDropdown',
+}
+
+const HeaderBreakpointDefaultValues = {
+  [HeaderBreakpointKeys.MOBILE_DROPDOWN]: '1600px',
+};
+
+const HeaderBreakpointClasses = {
+  [HeaderBreakpointKeys.MOBILE_DROPDOWN]: 'mobile-version',
+};
 
 @Component({
   selector: 'lib-damoclesSword-main-header',
@@ -41,23 +55,22 @@ export class MainHeader {
   compReady = signal(false);
 
   languages = input<string[]>([]);
-  selectedLanguage = input<string>('en');
+  selectedLanguage = input<string>(DEFAULT_LANGUAGE);
   languageChange = output<string>();
 
   navLinks = input<{ label: string; url: string[] }[]>([]);
 
   breakpoints = input<HeaderBreakpoints>({
-    mobileDropdown: '1600px',
+    [HeaderBreakpointKeys.MOBILE_DROPDOWN]: MOBILE_DROPDOWN_BREAKPOINT,
   });
 
   showNavMenu = signal(false);
 
-  _rokuTranslatorServ = inject(RokuTranslatorService);
-
-  @HostBinding('style.--damoclesSword-header-bp-mobile-dropdown')
-  get mobileDropdownBp() {
-    return this.breakpoints().mobileDropdown || '1600px';
-  }
+  private _rokuTranslatorServ = inject(RokuTranslatorService);
+  private _resizeObserver = new ResizeObserver((entries) =>
+    this._onResize(entries[0])
+  );
+  private _elementRef = inject(ElementRef);
 
   constructor() {
     this._rokuTranslatorServ.loaded$.subscribe(() => {
@@ -65,7 +78,44 @@ export class MainHeader {
     });
   }
 
+  ngOnInit() {
+    this._resizeObserver.observe(this._elementRef.nativeElement);
+  }
+
+  ngOnDestroy() {
+    this._resizeObserver.disconnect();
+  }
+
   toggleNavMenu() {
     this.showNavMenu.update((show) => !show);
+  }
+
+  private _onResize(entry: ResizeObserverEntry) {
+    // Undefined would be the default design (desktop)
+    let breakpointToSet: HeaderBreakpointKeys | undefined;
+
+    for (const [key, value] of Object.entries(this.breakpoints())) {
+      const breakpointValue = parseInt(value);
+      if (entry.contentRect.width <= breakpointValue) {
+        breakpointToSet = key as HeaderBreakpointKeys;
+        break; // Stop at the first matching breakpoint
+      }
+    }
+
+    this._switchBreakpointClass(breakpointToSet);
+  }
+
+  private _switchBreakpointClass(breakpointKey?: HeaderBreakpointKeys) {
+    if (breakpointKey) {
+      const className = HeaderBreakpointClasses[breakpointKey];
+      this._elementRef.nativeElement.classList.add(className);
+    }
+
+    // Remove other breakpoint classes
+    for (const [key, otherClass] of Object.entries(HeaderBreakpointClasses)) {
+      if (key !== breakpointKey && otherClass) {
+        this._elementRef.nativeElement.classList.remove(otherClass);
+      }
+    }
   }
 }

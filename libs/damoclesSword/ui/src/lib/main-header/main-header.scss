@@ -39,7 +39,7 @@ $header-border-bottom-size: 0.375em;
     height: 6em;
     background-color: #1a1a1a;
     padding: 1.25em 4em;
-    gap: 2em;
+    gap: 1.5em;
 
     .logo-container {
       display: flex;
@@ -120,7 +120,7 @@ $header-border-bottom-size: 0.375em;
 /**
   * Mobile layout
   */
-@container (max-width: 1600px) {
+:host.mobile-version {
   .damoclesSword-header {
     flex-direction: column;
 
@@ -128,7 +128,7 @@ $header-border-bottom-size: 0.375em;
       flex-grow: 1;
       width: 100%;
       padding: 0.5em;
-      height: 5em;
+      height: 4em;
 
       .logo-container {
         gap: 1em;
@@ -148,12 +148,12 @@ $header-border-bottom-size: 0.375em;
         display: flex;
         align-items: center;
         margin-left: auto;
-        margin-right: 2em;
+        margin-right: 1.5em;
 
         .icon-container {
           display: flex;
           color: #fff;
-          padding: 4px;
+          padding: 3px;
           cursor: pointer;
         }
       }
