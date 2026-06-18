@@ -1,9 +1,11 @@
 import { NgModule } from '@angular/core';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
+import { FooterLogo } from './footer-logo/footer-logo';
 import { LanguageSelector } from './language-selector/language-selector';
+import { LogoBrand } from './logoBrand/logoBrand';
 import { MainHeader } from './main-header/main-header';
 
-const components = [LanguageSelector, MainHeader];
+const components = [LanguageSelector, MainHeader, LogoBrand, FooterLogo];
 
 @NgModule({
   imports: [

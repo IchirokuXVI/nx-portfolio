@@ -2,16 +2,7 @@
   <div class="damoclesSword-header">
     <div class="first-header-section">
       <a [routerLink]="['./home']" class="logo-container">
-        <img
-          [src]="damoclesLogo | async"
-          alt="Damocles Sword Logo"
-          class="header-logo"
-        />
-        <div class="logo-text">
-          <span class="logo-text-blue">D</span>
-          <span class="logo-text-white">AMOCLE</span>
-          <span class="logo-text-yellow">'SWORD</span>
-        </div>
+        <lib-damoclesSword-logo-brand></lib-damoclesSword-logo-brand>
       </a>
       <div class="dropdown-icon">
         <div (click)="toggleNavMenu()" class="icon-container">

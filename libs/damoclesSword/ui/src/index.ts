@@ -1,2 +1,4 @@
 export * from './lib/damoclesSword-ui-module';
+export * from './lib/footer-logo/footer-logo';
+export * from './lib/logoBrand/logoBrand';
 export * from './lib/main-header/main-header';

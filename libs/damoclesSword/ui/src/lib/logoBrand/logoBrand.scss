@@ -1,0 +1,86 @@
+// Duplicated code, I have to figure out how to remove the base64 and use an asset in scss (taking into account this is a library)
+@font-face {
+  font-family: 'Audiowide';
+  font-style: normal;
+  font-weight: 400;
+  // The font is subsetted to only include the characters used in the header title to reduce file size (DAMOCLE'SWORD and the link labels)
+  // Downloaded from https://fonts.googleapis.com/css2?family=Audiowide&text=%27ABCDEFGHIJKLMN%C3%91OPQRSTUVWXYZ
+  src: url('data:application/octet-stream;base64,d09GMgABAAAAAAwoABAAAAAAFrgAAAvNAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG4o0HBgGYABsCAIJgnMREAqUSJBEC0gAATYCJAOBDAQgBYROByAMBBtYEyNSs3ogU0fqwp8//37Q0+/3uvfd95kCJDNxjSsQKiDQUSVwZVVNKKuBKExnCp3WCi0YhERNF7ElY+IGZ7km3eQOfLbAOdwlV6pLTWlYKXDXxdWUVkknpRXMzDl338u1Ajz0ddbrruT3AOgxuOtkVr7NaSWdxJOOIPL3a62KST8JicwQSZGQ2L/L2TtFbBHzPUStMh2SqTfIYtFzpTRaJ8SCxXDKEakYU2bUf5Qmj9VkaRggSBk1mK2r9m7Hj0uXdTlw27Ju9ywfwwcXp2a27gT7mLCdjROj2722hjzIm5Koq2pbgwYoz/mj/+rUV71Tk5CoB2VotVVVT+HN5s9qQtVCfdKa+qzPellV3QbUf0TU6qbmz/yaft3SNv6vqno1qlM/9EGtwl7HpFuXniYyRyVRV6+UvdKc2tSuRjU4q+Ob2yihVsqFNPQkjwcE1pFuVat+qEOz7fBZwUfNa2LThXrVpX7dpNsCHRKe3/WdmknlEEKWRGe7G3ORLBzgnBqos1KXBIYUxcQoo4o8BodKxugkgjARFcoe0hIr5nLxEsGPjwBRgtANYSFy+kG5o6VaXDx48eEnQJAQYSJExcwx4iRIkiJNhiw5oOaoEXwkMSRPcKrLRqZQQ5nDmAZLktLO4I56Ceki5erFK26k6smokZx+kFcnBX2gWK34yegXWfWS03fyaqegnxSpiWINUKVePITUQEb15PSbgropUguGalx5MnEecYdrXOUCJzhEHQfZzlqWs4g5XKMOQ5wVCg+FJUgEs50ceQoUUUwpBqMWHIy6Seoj7NVlyv6GH9+y9YLG1WSpuunQ9aHbjOU2IKyeUl0swrpI6uW3bDP0OIPWD9kGKLVCl0vjLFlChVq3zpzamSaec54RDqZc+9rnrM+0jAO2r+JeEe8YB+GMvE8yfu7kKYyjwmz0NQzdg4+vwZlW8c5KH3ek51wJFenCL7y+QJozrnVdlnGTcmUW50OAApmgEVwHT0EcyUI6k0mrJplg5uyMyd8lv01eTTYnK5OOX3/49ZyTbNWdzIkBYHbEgMLFHUOQj/kYknwnBmzjzwIFQNtaLTGAmCnK3mWLIm5LDEjMMYDk0JYYQM1UWRQ1lVVzRp4SKbHCL1JlVKfHH4WmMqrT46/mjAGRz6OioIbroqKglqOjVp7soqI/qQI8P8USA9CFPBSLPBypbmv5bqyM/oslBqRmBy4AneDiqrhoyEZGrTaepGnKHr3i4qJXbCTN85YYkLFMQFH2pV1j+MqmSGQ5JV/uYJQaLmolo4AXRWMcIx0NiSIpGvlOczFwpbISAYpWuxioKFHUZI8hIdd835CRJvsrNtJGmidp3maJAYXZUcPZbSRN85bMusmBZJ+3TyazTAJg/JAt42QggeSfAMBaszBz1gHJ+YDQxEthCTItyApRUl2rTkmPNYxRwZFQmYNDlQIqU0eNGZNDjsnKk5O4Ac8YQUEBRzUSXBoeTvxBqY6cvXgYLNZKcfGFcAVCCJNiGvHcpSOIInz08nmlNhJHLABCL2rPDraHh4eeDWEqlIgknicQJIypZNrI3rUbEUEjDsEMkYYToyq1Eo34BMDQU6XWoUWVvNoFDw+BCVPJ1JFEHETQoNqgA3skZQ0/vUQn+6+UBtU26eS4sKCDQujQhRi2LSO9ROeHqlCtVzLC2EQQl2ogLhAELhCBmaDayPPhCAFfiKHKRcT8zvmgY3YKAiHXC3jK4n13MPFezqAMF8KJiXtPndo/NigcTRSfioOGMy2JOBPPDqY4BbzlPJRNZSURHJ5YKSAJxeNxJREmomIdPxWqvh1F2BHTOOITIMcVtnhysA5OaudaD16/4cA5+Fyslyi8Yc8eTJM+IqMsCooGJYGEj1+6h6m2IAzvOsoLEIor1cpT7ZASVHJcoUKF4IWq1JMEDC1buZJQEMLidQ8w8VHOIBEUhMWbnhSdHHplMJL7GEodJII9B+8rI3ezuwShg5i/AG/344sWEgwiMAmOYhvUQQkJ92m9mzOJxwkEJYTNL7IWayU6cSj1SCJX0KD6SDzeI4lDjx5hYuzQphEY439cJP7woTJy/ujW0QLWqPS4AXSvcMOHm3tSLl+Udm1kya8KS8kK74kVBXdxp8xPDkxuCUxb1we8v5vKUH1sy6IZDcOGr9JLDavIUuNXhnamj25lZyxqyLdbthSUnXM6JvvopU5YmOZaX5VayMrihVWp61NdhfmTSv60ojEl/4czIwEfBQcyqjUuY8WkSS66+7UrGZpqo2tyhWtSF/3aAXigsK74UkF7wQHg/T33VuPw1i3DfPiSYYsnfyk8zG/d0vjyTehklvLcEsY5fcV05xKG55gllaAmnS2WFafUuA6ULDf11peLgQMWq10JddmFdUX7QM0KtkRWMs+uWwOBdPTi3gSe375lKE3/ytAqQxrSa8wuOykrNnxtnEGCsc9dn7EQSDdAVjuAzeWp1D7tm1X8jtvzTskbZ+FZpr7AIgMdbjCnvOKM7Ex5xZzfPvjuAcmv6QrYEc9bAaSj4RoazLkCZPWG57mqx8b0oyrDV7n1EEhzLUX2g7YV/T/uMEGpCUoDrrRzG4vtFuADA4Y30r8ixyDGqb7f/n9wXFlma96sStWFqb7f/B+Cjjdtb/HDW7d+zoXd4WFu69bG4bd0bza+3BrT9bjDn/Nbt/Av34SVzBKOW8I43FH001UySyIraq2v13v9VT43wnZ7HN15vSMZJ3TqXdTatFkFC61pVV2VVCFbVFdogRZ/eaS3bvmEEicXMXezrIfpHtnLtOKr9BdF3Z+831OTmvff4A93QFuMfGhMlvmm1Bcrxr84D52oi9qbNqtw16g9GC1vzPBf1HDDohlsK9XHgLbP9lROGCxtqZvZlN2qz/kH/IejuoHNaIrszagv/cy8xFe9fcGC6m1L/J+ZSxfABWw1zzqq69l6yactI5pza161tpiCoHH+mulr4JoZsOG/AHisbxlKC74i2Zr9xi1sZF7nlqkPlj2ED/unrW0JDEz2k04ZfncNBD7ThpwFHck/TzD9WZ0T6DCmva1I26UAwp82qKXWRcFF75anzRx/XTX+uQo/mp73+tTlapNVjl0/sf4j/Gh6+lbz2o+w6ydAgW/DqaSv85H/nufET8d+8vruBR65Qevzc7w5UtHtdXQxvSOZroQs0cn0juxmPA622/wh91v420JdnpWrqz1i7uaV2fwLqsp9qKHer/SxaemauK3nJ2iW+WcGf5bNSkbjLpyfpFnhnxlMat6LzoCFOZXN3jHxRX7r4lSPMKcG48N1gfNy65uDYyJy/c4t8vUIc2gwweZC/w6/H9+Q/bEEFNykIKlY9kcGFNwkC2mN7I8VoOAmxUkHZP97/rEU3P4/ltplfxwWu7lK7Y8HnIcYDFYa3opIJYpZYhLhoMxn2PBWTFOWG5aKMeUdSh4zQNgpeU/to13yGz9vXYdl6jcj4wdV3xur83r1cHejjOf+z/p3ymRUeVITGD+TyEjEfWi3Td7+z/r/zmT0DjHUR14Db4cg9jNLTGe59jeLxAqWC1MWa1+yUqxgkbjBajleTKJ9SKBYwGrtU1YqR4WquBL3McNCx1J9khtYKZLp1N4hUOxlhgg3/DHSUiBKsRKZ1GiPk6sZ4bB0lE471FzsxwzL8YalVJxZXB9modD4HIMUz+SuyF7S9ULBiP47ZonGuOPxn9e/6DlI8AA0GQuu28AjkSWgafBmIk2LC/U0gTexXIt6KzCIHj0TSSaCCHT0MJkhJqKHbji6rY4lnAlMZoAIKsinlCxG6GWICUxlCCvtI4xq+hhghLF0MZl6+phs+VYTGI9KFOFEEklMbZmaicZN6YRVkEf+d56ay8bIgcrNkeREpocGAyHvRCWQHoJQiSaSKKJR6WY6KtkE6OItW4xmUBDkEDrXYVPRMYbEze1Qs1DJQofeKTmOrm/ocU2wJ2spaqJpIF2U4jJNwoYXfhPAZFgQoajcPfQMpgh0SaVOoY9ezMlnhILglgPGJbIk77AF3g/lncLQTz/K9xSEAAAAAA==')
+    format('woff2');
+}
+
+:host {
+  container-type: inline-size;
+  display: block;
+  width: 100%;
+  flex-grow: 1;
+}
+
+.damocles-logo-brand {
+  display: flex;
+  width: 100%;
+  flex-direction: row;
+  gap: 0.75em;
+  height: 100%;
+  // justify-content: center;
+  font-family: 'Audiowide';
+
+  &.centered-logo {
+    justify-content: center;
+  }
+
+  .logo-img {
+    max-height: 56px;
+    width: auto;
+    padding: 0.75em 0em;
+  }
+
+  .logo-text {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    font-size: 1.25em;
+
+    .logo-text-blue {
+      color: #00b7f5;
+    }
+
+    .logo-text-dynamic {
+      color: inherit;
+    }
+
+    .logo-text-yellow {
+      color: #ffcb26;
+    }
+  }
+}
+
+@container (298px <= inline-size <= 399px) {
+  .damocles-logo-brand {
+    gap: 0.75em;
+    // justify-content: center;
+
+    .logo-img {
+      padding: 0.5em 0;
+    }
+
+    .logo-text {
+      font-size: 1.5em;
+    }
+  }
+}
+
+@container (400px <= inline-size) {
+  .damocles-logo-brand {
+    gap: 1.5em;
+    // justify-content: flex-start;
+
+    .logo-img {
+      padding: 0;
+    }
+
+    .logo-text {
+      font-size: 2em;
+    }
+  }
+}
