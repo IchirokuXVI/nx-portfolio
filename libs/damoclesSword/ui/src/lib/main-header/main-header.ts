@@ -1,4 +1,4 @@
-import { AsyncPipe, CommonModule } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import {
   Component,
   ElementRef,
@@ -13,34 +13,38 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { LanguageSelector } from '../language-selector/language-selector';
+import { LogoBrand } from '../logoBrand/logoBrand';
 
-export interface HeaderBreakpoints {
-  mobileDropdown?: string;
-}
+export type HeaderBreakpoints = {
+  [key in HeaderBreakpointKeys]: number;
+};
 
 const DEFAULT_LANGUAGE = 'en';
 export const DEFAULT_HEADER_BREAKPOINT = '-16';
 
 export enum HeaderBreakpointKeys {
   MOBILE_DROPDOWN = 'mobileDropdown',
+  DESKTOP = 'desktop',
 }
 
 const HeaderBreakpointDefaultValues = {
-  [HeaderBreakpointKeys.MOBILE_DROPDOWN]: '1600px',
+  [HeaderBreakpointKeys.MOBILE_DROPDOWN]: 1600,
+  [HeaderBreakpointKeys.DESKTOP]: Number.MAX_SAFE_INTEGER,
 };
 
 const HeaderBreakpointClasses = {
   [HeaderBreakpointKeys.MOBILE_DROPDOWN]: 'mobile-version',
+  [HeaderBreakpointKeys.DESKTOP]: 'desktop-version',
 };
 
 @Component({
   selector: 'lib-damoclesSword-main-header',
   imports: [
     CommonModule,
-    AsyncPipe,
     RouterModule,
     LanguageSelector,
     RokuTranslatorPipe,
+    LogoBrand,
   ],
   templateUrl: './main-header.html',
   styleUrl: './main-header.scss',
@@ -62,9 +66,14 @@ export class MainHeader {
   breakpoints = input<HeaderBreakpoints>({
     [HeaderBreakpointKeys.MOBILE_DROPDOWN]:
       HeaderBreakpointDefaultValues[HeaderBreakpointKeys.MOBILE_DROPDOWN],
+    [HeaderBreakpointKeys.DESKTOP]:
+      HeaderBreakpointDefaultValues[HeaderBreakpointKeys.DESKTOP],
   });
 
   showNavMenu = signal(false);
+  currentBreakpoint = signal<HeaderBreakpointKeys>(
+    HeaderBreakpointKeys.DESKTOP
+  );
 
   private _rokuTranslatorServ = inject(RokuTranslatorService);
   private _resizeObserver = new ResizeObserver((entries) =>
@@ -91,16 +100,23 @@ export class MainHeader {
   }
 
   private _onResize(entry: ResizeObserverEntry) {
-    // Undefined would be the default design (desktop)
+    const configuredBreakpoints = this.breakpoints();
     let breakpointToSet: HeaderBreakpointKeys | undefined;
 
-    for (const [key, value] of Object.entries(this.breakpoints())) {
-      const breakpointValue = parseInt(value);
-      if (entry.contentRect.width <= breakpointValue) {
+    for (const [key, value] of Object.entries(configuredBreakpoints)) {
+      const breakpointValue = value;
+
+      const matchesBreakpoint = entry.contentRect.width <= breakpointValue;
+      const isLowerThanPreviousMatch =
+        !breakpointToSet ||
+        breakpointValue < configuredBreakpoints[breakpointToSet];
+
+      if (matchesBreakpoint && isLowerThanPreviousMatch) {
         breakpointToSet = key as HeaderBreakpointKeys;
-        break; // Stop at the first matching breakpoint
       }
     }
+
+    console.log(breakpointToSet);
 
     this._switchBreakpointClass(breakpointToSet);
   }

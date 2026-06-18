@@ -3,13 +3,13 @@ $header-border-bottom-size: 0.375em;
 :host {
   display: block;
   width: 100%;
-  container-type: inline-size;
 }
 
 /**
   * Desktop layout
   */
 .damoclesSword-header {
+  // Duplicated code, I have to figure out how to remove the base64 and use an asset in scss (taking into account this is a library)
   @font-face {
     font-family: 'Audiowide';
     font-style: normal;
@@ -42,34 +42,10 @@ $header-border-bottom-size: 0.375em;
     gap: 1.5em;
 
     .logo-container {
+      flex-grow: 1;
       display: flex;
-      flex-direction: row;
-      gap: 1.5em;
-      height: 100%;
-      font-family: 'Audiowide';
-
-      .header-logo {
-        height: 100%;
-      }
-
-      .logo-text {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        font-size: 2em;
-
-        .logo-text-blue {
-          color: #00b7f5;
-        }
-
-        .logo-text-white {
-          color: #fff;
-        }
-
-        .logo-text-yellow {
-          color: #ffcb26;
-        }
-      }
+      color: #fff; // Set the color for the dynamic part of the logo
+      min-width: 400px;
     }
 
     .dropdown-icon {
@@ -110,10 +86,10 @@ $header-border-bottom-size: 0.375em;
         }
       }
     }
-  }
 
-  .header-language-container {
-    display: flex;
+    .header-language-container {
+      display: flex;
+    }
   }
 }
 
@@ -131,16 +107,8 @@ $header-border-bottom-size: 0.375em;
       height: 4em;
 
       .logo-container {
-        gap: 1em;
-
-        .header-logo {
-          padding: 0.5em 0em;
-          justify-content: center;
-        }
-
-        .logo-text {
-          font-size: 1.5em;
-        }
+        width: 100%;
+        min-width: 0;
       }
 
       .dropdown-icon {
@@ -148,7 +116,7 @@ $header-border-bottom-size: 0.375em;
         display: flex;
         align-items: center;
         margin-left: auto;
-        margin-right: 1.5em;
+        margin-right: 1em;
 
         .icon-container {
           display: flex;

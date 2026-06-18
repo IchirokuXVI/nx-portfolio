@@ -1,0 +1,32 @@
+<div class="footer-main">
+  <div class="footer-main-container">
+    <div class="footer-links-grid">
+      @for (section of gridSections(); track $index) {
+        <div [class]="section" class="grid-section">
+          @for (link of sectionLinks()[section]; track $index) {
+            @if (isExternal(link.url)) {
+              <a [href]="link.url" rel="noopener noreferrer" target="_blank">
+                > {{ link.label }}
+              </a>
+            } @else {
+              <a [routerLink]="link.url"> > {{ link.label }} </a>
+            }
+          }
+        </div>
+      }
+    </div>
+    <div class="footer-links-bottom">
+      @for (link of sectionLinks()[Section.BOTTOM_ICONS]; track $index) {
+        @if (isExternal(link.url)) {
+          <a [href]="link.url" rel="noopener noreferrer" target="_blank">
+            <img [alt]="link.label" [src]="link.icon | async" />
+          </a>
+        } @else {
+          <a [routerLink]="link.url">
+            <img [alt]="link.label" [src]="link.icon | async" />
+          </a>
+        }
+      }
+    </div>
+  </div>
+</div>
