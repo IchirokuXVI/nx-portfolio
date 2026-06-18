@@ -1,0 +1,47 @@
+<div class="damocles-trailer-video">
+  <div class="limited-width-container">
+    <div class="trailer-container">
+      <iframe
+        allow="
+          accelerometer;
+          autoplay;
+          clipboard-write;
+          encrypted-media;
+          gyroscope;
+          picture-in-picture;
+          web-share;
+        "
+        allowfullscreen
+        frameborder="0"
+        referrerpolicy="strict-origin-when-cross-origin"
+        src="https://www.youtube.com/embed/qkD7Emx3AoY"
+        title="Starlit: Ascension Gameplay Trailer"
+      ></iframe>
+    </div>
+  </div>
+  <div class="game-logo-container">
+    <div class="starlit-logo-container">
+      <img [src]="starlitLogo | async" />
+    </div>
+    <!-- <div class="trailer-button-container">
+      <a href="https://www.youtube.com/watch?v=qkD7Emx3AoY">
+        <button>WATCH FULL TRAILER</button>
+      </a>
+    </div> -->
+  </div>
+  <div class="socials-container">
+    @for (trailerLink of trailerLinks(); track $index) {
+      <a [href]="trailerLink.url" class="social-button" target="_blank">
+        <span class="button-icon">
+          <img [src]="trailerLink.icon | async" />
+        </span>
+        <span class="button-label">
+          {{ trailerLink.label }}
+        </span>
+      </a>
+    }
+  </div>
+  <div class="see-more-container">
+    <a class="see-more-button"> See More </a>
+  </div>
+</div>

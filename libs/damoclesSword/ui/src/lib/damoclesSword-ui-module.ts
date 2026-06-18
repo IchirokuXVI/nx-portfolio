@@ -5,6 +5,7 @@ import { FooterMain } from './footer-main/footer-main';
 import { LanguageSelector } from './language-selector/language-selector';
 import { LogoBrand } from './logoBrand/logoBrand';
 import { MainHeader } from './main-header/main-header';
+import { TrailerVideo } from './trailer-video/trailer-video';
 
 const components = [
   LanguageSelector,
@@ -12,6 +13,7 @@ const components = [
   LogoBrand,
   FooterLogo,
   FooterMain,
+  TrailerVideo,
 ];
 
 @NgModule({
