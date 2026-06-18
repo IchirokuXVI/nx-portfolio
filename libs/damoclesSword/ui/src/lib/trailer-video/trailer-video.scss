@@ -1,0 +1,117 @@
+.damocles-trailer-video {
+  position: relative;
+  background-color: #000;
+  width: 100%;
+  height: auto;
+  display: flex;
+  justify-content: center;
+
+  .limited-width-container {
+    width: 100%;
+    flex-grow: 1;
+    max-width: 1536px;
+    display: flex;
+
+    .trailer-container {
+      display: flex;
+      flex-grow: 1;
+      width: 100%;
+
+      iframe {
+        aspect-ratio: 16/9;
+        width: 100%;
+      }
+    }
+  }
+
+  .game-logo-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    padding: 5%;
+
+    .trailer-button-container {
+      a {
+        text-decoration: none;
+      }
+
+      button {
+        background-color: #fff;
+        color: #333;
+        width: 100%;
+        padding: 0.5em 1.25em;
+        font-size: 1.25em;
+        border-radius: 0.25em;
+        font-weight: 550;
+        border: 1px solid black;
+      }
+    }
+  }
+
+  .socials-container {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    padding: 5% 7.5%;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5em;
+
+    .social-button {
+      background-color: black;
+      border: 2px solid white;
+      border-radius: 0.25em;
+      width: 100%;
+      display: flex;
+      gap: 1em;
+      align-items: center;
+      padding: 1em 2em;
+      text-decoration: none;
+      cursor: pointer;
+
+      .button-icon {
+        img {
+          height: 24px;
+          width: auto;
+        }
+      }
+
+      .button-label {
+        font-size: 1.25em;
+        margin-left: auto;
+        text-transform: uppercase;
+        color: #fff;
+      }
+    }
+  }
+
+  .see-more-container {
+    position: absolute;
+    margin: 0 auto;
+    align-self: flex-end;
+    display: flex;
+
+    .see-more-button {
+      $border-size: 2px;
+
+      position: relative;
+      padding: 0.75em 3em;
+      font-weight: 550;
+      color: #333;
+      background-color: #ffcb26;
+      border: $border-size solid black;
+      text-transform: uppercase;
+      font-size: 1.25em;
+
+      &::before {
+        position: absolute;
+        content: '';
+        bottom: -(4px + $border-size);
+        left: -($border-size);
+        height: 4px;
+        width: calc(100% + $border-size * 2);
+        background-color: #00b7f5;
+      }
+    }
+  }
+}
