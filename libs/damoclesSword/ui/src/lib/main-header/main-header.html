@@ -1,8 +1,13 @@
 @if (compReady()) {
-  <div class="damoclesSword-header">
+  <div [class]="breakpointClass()" class="damoclesSword-header">
     <div class="first-header-section">
       <a [routerLink]="['./home']" class="logo-container">
-        <lib-damoclesSword-logo-brand></lib-damoclesSword-logo-brand>
+        <lib-damoclesSword-logo-brand
+          [centerLogo]="
+            currentBreakpoint() === BREAKPOINT_KEYS.DESKTOP ||
+            currentBreakpoint() === BREAKPOINT_KEYS.SMALL_DESKTOP
+          "
+        ></lib-damoclesSword-logo-brand>
       </a>
       <div class="dropdown-icon">
         <div (click)="toggleNavMenu()" class="icon-container">

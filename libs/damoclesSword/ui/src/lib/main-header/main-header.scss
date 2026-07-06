@@ -39,9 +39,11 @@ $header-border-bottom-size: 0.375em;
     display: flex;
     flex-direction: row;
     height: 6em;
+    width: 100%;
+    max-width: 528px;
     background-color: #1a1a1a;
-    padding: 1.25em 4em;
     gap: 1.5em;
+    padding: 1.25em 1.5em;
 
     .logo-container {
       flex-grow: 1;
@@ -59,6 +61,7 @@ $header-border-bottom-size: 0.375em;
     flex-grow: 1;
     display: flex;
     flex-direction: row;
+    padding: 0 2.5%;
 
     .position-helper {
       flex-grow: 1;
@@ -67,7 +70,6 @@ $header-border-bottom-size: 0.375em;
       gap: 2.5em;
       justify-content: space-around;
       align-items: center;
-      padding: 0 3em;
     }
 
     .navigation-links {
@@ -82,6 +84,9 @@ $header-border-bottom-size: 0.375em;
       align-items: center;
 
       .nav-link {
+        word-wrap: nowrap;
+        white-space: nowrap;
+
         &.active-link {
           color: #00b7f5;
           text-decoration: underline;
@@ -97,84 +102,103 @@ $header-border-bottom-size: 0.375em;
 }
 
 /**
+  * Desktop small
+  */
+.damoclesSword-header.small-desktop-version {
+  font-size: 0.9em;
+
+  .first-header-section {
+    height: 5em;
+    padding: 1.25em 0.75em;
+  }
+
+  .header-navigation-container {
+    padding: 0 1.25em;
+
+    .navigation-links {
+      gap: 1.25em;
+    }
+  }
+}
+
+/**
   * Mobile layout
   */
-:host.mobile-version {
-  .damoclesSword-header {
-    flex-direction: column;
+.damoclesSword-header.mobile-version {
+  flex-direction: column;
 
-    .first-header-section {
-      flex-grow: 1;
+  .first-header-section {
+    flex-grow: 1;
+    width: 100%;
+    padding: 0.5em;
+    height: 4em;
+    max-width: unset;
+
+    .logo-container {
       width: 100%;
-      padding: 0.5em;
-      height: 4em;
+      min-width: 0;
+    }
 
-      .logo-container {
-        width: 100%;
-        min-width: 0;
-      }
+    .dropdown-icon {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      margin-left: auto;
+      margin-right: 1em;
 
-      .dropdown-icon {
-        height: 100%;
+      .icon-container {
         display: flex;
-        align-items: center;
-        margin-left: auto;
-        margin-right: 1em;
+        color: #fff;
+        padding: 3px;
+        cursor: pointer;
+      }
+    }
+  }
 
-        .icon-container {
-          display: flex;
-          color: #fff;
-          padding: 3px;
-          cursor: pointer;
-        }
+  .header-navigation-container {
+    min-height: 0;
+    width: 100%;
+    display: grid;
+    grid-template-rows: 0fr;
+    overflow: hidden;
+    transition: grid-template-rows 0.3s ease-in-out;
+    background-color: #1a1a1a;
+    color: #fff;
+    padding: 0em 2em;
+
+    &.show-nav-menu {
+      grid-template-rows: 1fr;
+      animation: 1s delay-overflow forwards;
+    }
+
+    @keyframes delay-overflow {
+      to {
+        overflow: visible;
       }
     }
 
-    .header-navigation-container {
+    .position-helper {
       min-height: 0;
+      display: flex;
+      flex-direction: column;
       width: 100%;
-      display: grid;
-      grid-template-rows: 0fr;
-      overflow: hidden;
-      transition: grid-template-rows 0.3s ease-in-out;
-      background-color: #1a1a1a;
-      color: #fff;
-      padding: 0em 2em;
+      flex-direction: column;
+      padding: 0;
+      gap: 1em;
 
-      &.show-nav-menu {
-        grid-template-rows: 1fr;
-        animation: 1s delay-overflow forwards;
-      }
-
-      @keyframes delay-overflow {
-        to {
-          overflow: visible;
-        }
-      }
-
-      .position-helper {
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
+      .navigation-links {
+        padding-top: 0.5em;
         width: 100%;
         flex-direction: column;
-        padding: 0;
-        gap: 1em;
+        gap: 0.5em;
+        text-align: left;
+        align-items: flex-start;
+      }
 
-        .navigation-links {
-          padding-top: 0.5em;
-          width: 100%;
-          flex-direction: column;
-          gap: 0.5em;
-          text-align: left;
-          align-items: flex-start;
-        }
-
-        .header-language-container {
-          height: 100%;
-          margin-left: auto;
-          padding-bottom: 1em;
-        }
+      .header-language-container {
+        height: 100%;
+        margin-left: auto;
+        padding-bottom: 1em;
       }
     }
   }
