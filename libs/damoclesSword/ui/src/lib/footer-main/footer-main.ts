@@ -1,8 +1,7 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, computed, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { RokuTranslatorPipe } from '../../../../../shared/localization/rokutranslator-angular/src/lib/rokutranslator-pipe';
-
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 interface FooterLink {
   key: string;
   label: string;
