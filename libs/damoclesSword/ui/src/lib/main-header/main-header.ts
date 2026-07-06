@@ -9,10 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { RouterModule } from '@angular/router';
-import {
-  RokuTranslatorPipe,
-  RokuTranslatorService,
-} from '@portfolio/localization/rokutranslator-angular';
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { LanguageSelector } from '../language-selector/language-selector';
 import { LogoBrand } from '../logoBrand/logoBrand';
 
@@ -59,8 +56,6 @@ export class MainHeader {
     (m) => m.default
   );
 
-  compReady = signal(false);
-
   languages = input<string[]>([]);
   selectedLanguage = input<string>(DEFAULT_LANGUAGE);
   languageChange = output<string>();
@@ -85,17 +80,10 @@ export class MainHeader {
     () => HeaderBreakpointClasses[this.currentBreakpoint()]
   );
 
-  private _rokuTranslatorServ = inject(RokuTranslatorService);
   private _resizeObserver = new ResizeObserver((entries) =>
     this._onResize(entries[0])
   );
   private _elementRef = inject(ElementRef);
-
-  constructor() {
-    this._rokuTranslatorServ.loaded$.subscribe(() => {
-      this.compReady.set(true);
-    });
-  }
 
   ngOnInit() {
     this._resizeObserver.observe(this._elementRef.nativeElement);

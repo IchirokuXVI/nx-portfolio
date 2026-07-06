@@ -2,5 +2,12 @@
   "header.home": "Inicio",
   "header.about": "Sobre nosotros",
   "header.services": "Nuestros Servicios",
-  "header.contact": "Contacto"
+  "header.contact": "Contacto",
+  "trailer-video.see_more": "Ver más",
+  "footer.home": "Inicio",
+  "footer.about": "Sobre nosotros",
+  "footer.services": "Nuestros Servicios",
+  "footer.contact": "Contacto",
+  "footer.privacyPolicy": "Política de Privacidad",
+  "footer.termsOfUse": "Términos de Uso"
 }

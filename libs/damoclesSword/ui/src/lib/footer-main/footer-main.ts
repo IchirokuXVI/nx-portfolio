@@ -1,6 +1,7 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, computed, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { RokuTranslatorPipe } from '../../../../../shared/localization/rokutranslator-angular/src/lib/rokutranslator-pipe';
 
 interface FooterLink {
   key: string;
@@ -22,7 +23,7 @@ type SectionsLinks = {
 
 @Component({
   selector: 'lib-damoclesSword-footer-main',
-  imports: [RouterLink, AsyncPipe],
+  imports: [RouterLink, AsyncPipe, RokuTranslatorPipe],
   templateUrl: './footer-main.html',
   styleUrl: './footer-main.scss',
 })
@@ -30,17 +31,17 @@ export class FooterMain {
   footerLinks = input<FooterLink[]>([
     {
       key: 'home',
-      label: 'Home',
+      label: 'footer.home',
       url: './home',
     },
     {
       key: 'about',
-      label: 'About us',
+      label: 'footer.about',
       url: './about',
     },
     {
       key: 'contact',
-      label: 'Contact',
+      label: 'footer.contact',
       url: './contact',
     },
     {
@@ -62,17 +63,17 @@ export class FooterMain {
     },
     {
       key: 'policy',
-      label: 'Private Policy',
+      label: 'footer.privacyPolicy',
       url: 'https://www.patreon.com/profile/creators?u=162538734',
     },
     {
       key: 'terms',
-      label: 'Terms of Use',
+      label: 'footer.termsOfUse',
       url: 'https://www.patreon.com/profile/creators?u=162538734',
     },
     {
       key: 'services',
-      label: 'Our Services',
+      label: 'footer.services',
       url: './services',
     },
     {
