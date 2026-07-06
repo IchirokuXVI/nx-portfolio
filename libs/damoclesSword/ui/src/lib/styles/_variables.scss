@@ -1,0 +1,21 @@
+$z-layers: (
+  'logo': 5,
+  'dropdown': 24,
+  'modal': 25,
+);
+
+$modal-layer-offset: 100;
+
+// Calculates the index when needed
+@function get-z($key, $level: 1) {
+  @if not map-has-key($z-layers, $key) {
+    @error "No z-index found for key '#{$key}' in $z-layers map.";
+  }
+
+  $base: map-get($z-layers, $key);
+
+  // Levels are 1-indexed (Level 1 = base, Level 2 = base + offset...)
+  $offset: ($level - 1) * $modal-layer-offset;
+
+  @return $base + $offset;
+}

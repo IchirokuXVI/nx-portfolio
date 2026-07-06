@@ -1,3 +1,5 @@
+@import '../styles/variables';
+
 $header-border-bottom-size: 0.375em;
 
 :host {
@@ -89,6 +91,7 @@ $header-border-bottom-size: 0.375em;
 
     .header-language-container {
       display: flex;
+      z-index: get-z('dropdown');
     }
   }
 }

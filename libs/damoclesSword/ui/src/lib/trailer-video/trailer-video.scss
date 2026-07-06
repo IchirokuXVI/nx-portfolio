@@ -1,3 +1,10 @@
+:host {
+  container-type: inline-size;
+  display: block;
+  width: 100%;
+  flex-grow: 1;
+}
+
 .damocles-trailer-video {
   position: relative;
   background-color: #000;
@@ -111,6 +118,42 @@
         height: 4px;
         width: calc(100% + $border-size * 2);
         background-color: #00b7f5;
+      }
+    }
+  }
+}
+
+@container (inline-size < 1400px) {
+  .damocles-trailer-video {
+    .game-logo-container {
+      left: 0;
+      top: 0;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+
+    .socials-container {
+      display: none;
+    }
+  }
+}
+
+@container (inline-size < 768px) {
+  .damocles-trailer-video {
+    .game-logo-container {
+      .starlit-logo-container {
+        img {
+          max-width: 160px;
+          height: auto;
+        }
+      }
+    }
+
+    .see-more-container {
+      .see-more-button {
+        padding: 0.5em 2em;
+        font-size: 0.9em;
       }
     }
   }
