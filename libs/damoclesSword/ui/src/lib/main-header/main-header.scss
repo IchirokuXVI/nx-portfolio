@@ -86,6 +86,7 @@ $header-border-bottom-size: 0.375em;
       .nav-link {
         white-space: nowrap;
         text-underline-offset: 8px;
+        cursor: pointer;
 
         &.active-link {
           color: #00b7f5;
