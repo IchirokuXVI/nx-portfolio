@@ -56,6 +56,8 @@ $borders-gap: 4px;
   }
 
   &.center-aligned {
+    // Currently the center alignment makes the borders smaller than the text,
+    // this is intended in order to follow the design in Figma.
     $centered-width-modifier: 87.5%;
     $centered-offset-ratio: 1.15;
 
