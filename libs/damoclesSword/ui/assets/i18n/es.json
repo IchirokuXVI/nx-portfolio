@@ -9,5 +9,7 @@
   "footer.services": "Nuestros Servicios",
   "footer.contact": "Contacto",
   "footer.privacyPolicy": "Política de Privacidad",
-  "footer.termsOfUse": "Términos de Uso"
+  "footer.termsOfUse": "Términos de Uso",
+  "section-projects.main-title": "Proyectos Relevantes",
+  "section-projects.client-projects-title": "Proyectos para clientes"
 }

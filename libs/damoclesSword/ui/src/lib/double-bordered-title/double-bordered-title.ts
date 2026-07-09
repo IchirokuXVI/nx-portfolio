@@ -1,4 +1,16 @@
-import { Component } from '@angular/core';
+import { Component, input } from '@angular/core';
+
+export enum BorderAlignment {
+  CENTER = 'center',
+  LEFT = 'left',
+  RIGHT = 'right',
+}
+
+const BorderAlignmentClass = {
+  [BorderAlignment.CENTER]: 'center-aligned',
+  [BorderAlignment.LEFT]: 'left-aligned',
+  [BorderAlignment.RIGHT]: 'right-aligned',
+};
 
 @Component({
   selector: 'lib-damoclesSword-double-bordered-title',
@@ -6,4 +18,10 @@ import { Component } from '@angular/core';
   templateUrl: './double-bordered-title.html',
   styleUrl: './double-bordered-title.scss',
 })
-export class DoubleBorderedTitle {}
+export class DoubleBorderedTitle {
+  borderAlignment = input(BorderAlignment.LEFT);
+
+  get borderAlignmentClass(): string {
+    return BorderAlignmentClass[this.borderAlignment()];
+  }
+}

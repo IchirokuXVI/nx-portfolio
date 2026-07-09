@@ -24,6 +24,11 @@ export default composePlugins(async (config, { options, context }) => {
           type: 'asset/source',
           resourceQuery: /raw/,
         },
+        {
+          test: /\.(woff|woff2|eot|ttf|otf)$/,
+          type: 'asset/resource',
+          resourceQuery: { not: [/raw/] },
+        },
       ],
     },
   });

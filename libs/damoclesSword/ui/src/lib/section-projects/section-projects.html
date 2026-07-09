@@ -1,5 +1,14 @@
 <div class="section-projects-container">
   <div class="section-title">
-    <lib-damoclesSword-double-bordered-title></lib-damoclesSword-double-bordered-title>
+    <lib-damoclesSword-double-bordered-title
+      [borderAlignment]="BorderAlignment.CENTER"
+    >
+      {{ 'section-projects.main-title' | rokuT }}
+    </lib-damoclesSword-double-bordered-title>
+  </div>
+  <div class="subsection-client-projects">
+    <div class="subsection-title">
+      {{ 'section-projects.client-projects-title' | rokuT }}
+    </div>
   </div>
 </div>
