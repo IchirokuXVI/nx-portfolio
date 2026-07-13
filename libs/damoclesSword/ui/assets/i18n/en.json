@@ -1,15 +1,11 @@
 {
-  "header.home": "Home",
-  "header.about": "About us",
-  "header.services": "Our Services",
-  "header.contact": "Contact",
+  "nav.home": "Home",
+  "nav.about": "About us",
+  "nav.services": "Our Services",
+  "nav.contact": "Contact",
   "trailer-video.see_more": "See More",
-  "footer.home": "Home",
-  "footer.about": "About us",
-  "footer.services": "Our Services",
-  "footer.contact": "Contact",
-  "footer.privacyPolicy": "Privacy Policy",
-  "footer.termsOfUse": "Terms of Use",
+  "nav.privacyPolicy": "Privacy Policy",
+  "nav.termsOfUse": "Terms of Use",
   "section-projects.main-title": "Relevant Projects",
   "section-projects.client-projects-title": "Projects for clients"
 }

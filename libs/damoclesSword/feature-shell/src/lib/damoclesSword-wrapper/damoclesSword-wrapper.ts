@@ -17,19 +17,19 @@ export class DamoclesSwordWrapper implements OnInit {
 
   headerNavLinks = [
     {
-      label: 'header.home',
+      label: 'nav.home',
       url: ['./'],
     },
     {
-      label: 'header.services',
+      label: 'nav.services',
       url: ['./services'],
     },
     {
-      label: 'header.about',
+      label: 'nav.about',
       url: ['./about'],
     },
     {
-      label: 'header.contact',
+      label: 'nav.contact',
       url: ['./contact'],
     },
   ];

@@ -30,17 +30,17 @@ export class FooterMain {
   footerLinks = input<FooterLink[]>([
     {
       key: 'home',
-      label: 'footer.home',
+      label: 'nav.home',
       url: './home',
     },
     {
       key: 'about',
-      label: 'footer.about',
+      label: 'nav.about',
       url: './about',
     },
     {
       key: 'contact',
-      label: 'footer.contact',
+      label: 'nav.contact',
       url: './contact',
     },
     {
@@ -62,17 +62,17 @@ export class FooterMain {
     },
     {
       key: 'policy',
-      label: 'footer.privacyPolicy',
+      label: 'nav.privacyPolicy',
       url: 'https://www.patreon.com/profile/creators?u=162538734',
     },
     {
       key: 'terms',
-      label: 'footer.termsOfUse',
+      label: 'nav.termsOfUse',
       url: 'https://www.patreon.com/profile/creators?u=162538734',
     },
     {
       key: 'services',
-      label: 'footer.services',
+      label: 'nav.services',
       url: './services',
     },
     {
