@@ -4,12 +4,13 @@
   "nav.services": "Nos Services",
   "nav.contact": "Contact",
   "trailer-video.see_more": "Voir plus",
-  "nav.home": "Accueil",
-  "nav.about": "A propos",
-  "nav.services": "Nos Services",
-  "nav.contact": "Contact",
   "nav.privacyPolicy": "Politique de Confidentialité",
   "nav.termsOfUse": "Conditions d'Utilisation",
   "section-projects.main-title": "Projets Pertinents",
-  "section-projects.client-projects-title": "Projets pour les clients"
+  "section-projects.client-projects-title": "Projets pour les clients",
+  "section-projects.client-projects-description": "Chez Damocle'Sword, nous disposons d'un secteur spécialisé dans l'offre de services aux autres entreprises qui cherchent à intégrer la réalité virtuelle pour leurs propres objectifs commerciaux. Nous les contactons, nous proposons une offre basée sur les besoins de chaque entreprise spécifique et nous réalisons le projet en question pour elles.",
+  "section-projects.client-projects-vr-sickness-reducer-description": "Un test conçu pour réduire les vertiges causés par l'exposition à des environnements de réalité virtuelle, composé de 5 phases où le niveau d'intensité des vertiges est progressivement augmenté. \n\nL'intensité progressive aide l'utilisateur à mieux s'adapter aux entrées qui le font tourner la tête, faisant de ce projet un programme d'entraînement qui réduit les vertiges grâce à une exposition progressive contrôlée.",
+  "section-projects.games-title": "Jeux Vidéo",
+  "section-projects.client-projects-realistic-interactor-description": "Un simulateur qui teste le réalisme dans des environnements virtuels, tant au niveau graphique que dans les interactions avec l'environnement généré. \n\nCe projet est une expérience en cours qui vise un réalisme pur. Il sert de vitrine de nos capacités de développement et de conception au sein de l'industrie, permettant à nos clients d'observer et d'imaginer le type de fonctionnalités que leurs projets pourraient avoir.",
+  "section-projects.games-starlit-ascension-description": "Starlit: Ascension est un VR Shooter à l'ambiance catholico-futuriste, où vous serez le sujet de test d'une expérience avancée sur l'association de la conscience. \n\nDans un monde dominé par la religion et le progrès technologique, vous serez un sujet sans souvenirs qui devra reconstituer son passé tout en affrontant de nombreuses épreuves de combat au cours desquelles vous anéantirez des bêtes extraterrestres libérées par un mystérieux composé... Serez-vous capable de survivre et de vous souvenir de qui vous êtes vraiment ?"
 }

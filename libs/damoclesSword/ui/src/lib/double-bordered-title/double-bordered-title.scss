@@ -12,9 +12,10 @@ $borders-gap: 4px;
     font-family: 'Audiowide', sans-serif;
     display: flex;
     flex-direction: column;
-    white-space: nowrap;
+    white-space: wrap;
     gap: $text-to-border-gap;
     padding-right: $offset-border-x;
+    text-align: center;
 
     .borders {
       position: relative;
