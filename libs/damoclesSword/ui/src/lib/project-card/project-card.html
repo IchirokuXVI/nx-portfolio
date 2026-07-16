@@ -1,0 +1,34 @@
+<div class="card">
+  <div class="card-content">
+    <div class="card-title">{{ project().label | rokuT }}</div>
+    <div class="card-main-content">
+      {{ project().description | rokuT }}
+    </div>
+  </div>
+  @if (rightAddon() || topRightAddon()) {
+    <div class="card-right-column">
+      @if (topRightAddon(); as addon) {
+        <div class="card-top-right-addon">
+          <img [src]="addon.src | async" [alt]="addon.alt ?? ''" />
+        </div>
+      }
+      @if (rightAddon(); as addon) {
+        <div class="card-right-addon">
+          @switch (addon.kind) {
+            @case ('video') {
+              @let videoSrc = addon.src | async;
+              @if (videoSrc) {
+                <video autoplay loop muted>
+                  <source [src]="videoSrc" type="video/mp4" />
+                </video>
+              }
+            }
+            @case ('image') {
+              <img [src]="addon.src | async" [alt]="addon.alt ?? ''" />
+            }
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

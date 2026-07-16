@@ -1,17 +1,10 @@
-<div class="damocles-sword-main-container">
-  <div class="damocles-sword-header">
-    <lib-damoclesSword-main-header
-      (languageChange)="changeLocale($event)"
-      [languages]="locales"
-      [navLinks]="headerNavLinks"
-      [selectedLanguage]="selectedLocale"
-    ></lib-damoclesSword-main-header>
-  </div>
-  <div class="damocles-sword-content">
+<lib-damoclesSword-layout
+  (languageChange)="changeLocale($event)"
+  [languages]="locales"
+  [navLinks]="headerNavLinks"
+  [selectedLanguage]="selectedLocale"
+>
+  <ng-template libDamoclesSwordLayoutContent>
     <router-outlet></router-outlet>
-  </div>
-  <div class="damocles-sword-footer">
-    <lib-damoclesSword-footer-logo></lib-damoclesSword-footer-logo>
-    <lib-damoclesSword-footer-main></lib-damoclesSword-footer-main>
-  </div>
-</div>
+  </ng-template>
+</lib-damoclesSword-layout>

@@ -1,6 +1,16 @@
 {
-  "header.home": "Home",
-  "header.about": "About us",
-  "header.services": "Our Services",
-  "header.contact": "Contact"
+  "nav.home": "Home",
+  "nav.about": "About us",
+  "nav.services": "Our Services",
+  "nav.contact": "Contact",
+  "trailer-video.see_more": "See More",
+  "nav.privacyPolicy": "Privacy Policy",
+  "nav.termsOfUse": "Terms of Use",
+  "section-projects.main-title": "Relevant Projects",
+  "section-projects.client-projects-title": "Projects for clients",
+  "section-projects.client-projects-description": "At Damocle'Sword, we have a specialized department that offers services to other companies looking to integrate virtual reality into their business objectives. We contact them, provide a proposal tailored to their specific needs, and then carry out the project for them.",
+  "section-projects.client-projects-vr-sickness-reducer-description": "A test designed to reduce dizziness caused by exposure to virtual reality environments, consisting of 5 phases where the level of dizziness intensity is gradually increased. \n\nProgressive intensity helps the user adapt better to the inputs that make them dizzy, making this project a training program that reduces dizziness through controlled progressive exposure.",
+  "section-projects.games-title": "Video Games",
+  "section-projects.client-projects-realistic-interactor-description": "A simulator that tests realism in virtual environments, both in terms of graphics and interactions with the generated environment. \n\nThis project is an ongoing experiment that strives for pure realism. It serves as a showcase of our development and design capabilities within the industry, allowing our clients to observe and envision the types of features our projects could have.",
+  "section-projects.games-starlit-ascension-description": "Starlit: Ascension is a VR Shooter with a Catholic-futuristic setting, where you will be the test subject for an advanced experiment on the association of consciousness. \n\nIn a world dominated by religion and technological advancement, you will be a subject with no memories who must piece together their past while facing numerous combat trials where you will annihilate alien beasts unleashed by a mysterious compound... Will you be able to survive and remember who you truly are?"
 }

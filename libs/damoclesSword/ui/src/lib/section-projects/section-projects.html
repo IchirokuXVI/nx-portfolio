@@ -1,0 +1,32 @@
+<div class="section-projects-container">
+  <div class="section-title">
+    <lib-damoclesSword-double-bordered-title
+      [borderAlignment]="BorderAlignment.CENTER"
+    >
+      {{ 'section-projects.main-title' | rokuT }}
+    </lib-damoclesSword-double-bordered-title>
+  </div>
+  <div class="subsection subsection-client-projects">
+    <div class="subsection-title">
+      {{ 'section-projects.client-projects-title' | rokuT }}
+    </div>
+    <div class="subsection-description">
+      {{ 'section-projects.client-projects-description' | rokuT }}
+    </div>
+    <div class="subsection-content">
+      @for (project of clientProjects(); track $index) {
+        <lib-damoclesSword-project-card [project]="project" />
+      }
+    </div>
+  </div>
+  <div class="subsection subsection-games">
+    <div class="subsection-title">
+      {{ 'section-projects.games-title' | rokuT }}
+    </div>
+    <div class="subsection-content">
+      @for (project of games(); track $index) {
+        <lib-damoclesSword-project-card [project]="project" />
+      }
+    </div>
+  </div>
+</div>

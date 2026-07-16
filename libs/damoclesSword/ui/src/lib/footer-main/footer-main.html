@@ -6,10 +6,10 @@
           @for (link of sectionLinks()[section]; track $index) {
             @if (isExternal(link.url)) {
               <a [href]="link.url" rel="noopener noreferrer" target="_blank">
-                > {{ link.label }}
+                > {{ link.label | rokuT }}
               </a>
             } @else {
-              <a [routerLink]="link.url"> > {{ link.label }} </a>
+              <a [routerLink]="link.url"> > {{ link.label | rokuT }} </a>
             }
           }
         </div>
@@ -19,11 +19,11 @@
       @for (link of sectionLinks()[Section.BOTTOM_ICONS]; track $index) {
         @if (isExternal(link.url)) {
           <a [href]="link.url" rel="noopener noreferrer" target="_blank">
-            <img [alt]="link.label" [src]="link.icon | async" />
+            <img [alt]="link.label | rokuT" [src]="link.icon | async" />
           </a>
         } @else {
           <a [routerLink]="link.url">
-            <img [alt]="link.label" [src]="link.icon | async" />
+            <img [alt]="link.label | rokuT" [src]="link.icon | async" />
           </a>
         }
       }

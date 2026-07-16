@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import {
   Component,
+  computed,
   ElementRef,
   inject,
   input,
@@ -8,10 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { RouterModule } from '@angular/router';
-import {
-  RokuTranslatorPipe,
-  RokuTranslatorService,
-} from '@portfolio/localization/rokutranslator-angular';
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { LanguageSelector } from '../language-selector/language-selector';
 import { LogoBrand } from '../logoBrand/logoBrand';
 
@@ -24,16 +22,19 @@ export const DEFAULT_HEADER_BREAKPOINT = '-16';
 
 export enum HeaderBreakpointKeys {
   MOBILE_DROPDOWN = 'mobileDropdown',
+  SMALL_DESKTOP = 'smallDesktop',
   DESKTOP = 'desktop',
 }
 
 const HeaderBreakpointDefaultValues = {
-  [HeaderBreakpointKeys.MOBILE_DROPDOWN]: 1600,
+  [HeaderBreakpointKeys.MOBILE_DROPDOWN]: 1280,
+  [HeaderBreakpointKeys.SMALL_DESKTOP]: 1536,
   [HeaderBreakpointKeys.DESKTOP]: Number.MAX_SAFE_INTEGER,
 };
 
 const HeaderBreakpointClasses = {
   [HeaderBreakpointKeys.MOBILE_DROPDOWN]: 'mobile-version',
+  [HeaderBreakpointKeys.SMALL_DESKTOP]: 'small-desktop-version',
   [HeaderBreakpointKeys.DESKTOP]: 'desktop-version',
 };
 
@@ -55,8 +56,6 @@ export class MainHeader {
     (m) => m.default
   );
 
-  compReady = signal(false);
-
   languages = input<string[]>([]);
   selectedLanguage = input<string>(DEFAULT_LANGUAGE);
   languageChange = output<string>();
@@ -66,26 +65,25 @@ export class MainHeader {
   breakpoints = input<HeaderBreakpoints>({
     [HeaderBreakpointKeys.MOBILE_DROPDOWN]:
       HeaderBreakpointDefaultValues[HeaderBreakpointKeys.MOBILE_DROPDOWN],
+    [HeaderBreakpointKeys.SMALL_DESKTOP]:
+      HeaderBreakpointDefaultValues[HeaderBreakpointKeys.SMALL_DESKTOP],
     [HeaderBreakpointKeys.DESKTOP]:
       HeaderBreakpointDefaultValues[HeaderBreakpointKeys.DESKTOP],
   });
 
   showNavMenu = signal(false);
+
   currentBreakpoint = signal<HeaderBreakpointKeys>(
     HeaderBreakpointKeys.DESKTOP
   );
+  breakpointClass = computed(
+    () => HeaderBreakpointClasses[this.currentBreakpoint()]
+  );
 
-  private _rokuTranslatorServ = inject(RokuTranslatorService);
   private _resizeObserver = new ResizeObserver((entries) =>
     this._onResize(entries[0])
   );
   private _elementRef = inject(ElementRef);
-
-  constructor() {
-    this._rokuTranslatorServ.loaded$.subscribe(() => {
-      this.compReady.set(true);
-    });
-  }
 
   ngOnInit() {
     this._resizeObserver.observe(this._elementRef.nativeElement);
@@ -116,22 +114,10 @@ export class MainHeader {
       }
     }
 
-    console.log(breakpointToSet);
-
-    this._switchBreakpointClass(breakpointToSet);
+    this.currentBreakpoint.set(breakpointToSet || HeaderBreakpointKeys.DESKTOP);
   }
 
-  private _switchBreakpointClass(breakpointKey?: HeaderBreakpointKeys) {
-    if (breakpointKey) {
-      const className = HeaderBreakpointClasses[breakpointKey];
-      this._elementRef.nativeElement.classList.add(className);
-    }
-
-    // Remove other breakpoint classes
-    for (const [key, otherClass] of Object.entries(HeaderBreakpointClasses)) {
-      if (key !== breakpointKey && otherClass) {
-        this._elementRef.nativeElement.classList.remove(otherClass);
-      }
-    }
+  get BREAKPOINT_KEYS() {
+    return HeaderBreakpointKeys;
   }
 }

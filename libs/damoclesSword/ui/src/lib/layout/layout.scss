@@ -1,0 +1,26 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex-grow: 1;
+}
+
+.damocles-sword-main-container {
+  height: 100%;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+
+  .damocles-sword-header {
+    width: 100%;
+  }
+
+  .damocles-sword-content {
+    flex-grow: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-self: center;
+  }
+}

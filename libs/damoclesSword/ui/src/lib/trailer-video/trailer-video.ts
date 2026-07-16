@@ -1,9 +1,10 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, input } from '@angular/core';
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 
 @Component({
   selector: 'lib-damoclesSword-trailer-video',
-  imports: [AsyncPipe],
+  imports: [AsyncPipe, RokuTranslatorPipe],
   templateUrl: './trailer-video.html',
   styleUrl: './trailer-video.scss',
 })

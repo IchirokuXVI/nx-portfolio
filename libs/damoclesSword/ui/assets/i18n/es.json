@@ -1,6 +1,16 @@
 {
-  "header.home": "Inicio",
-  "header.about": "Sobre nosotros",
-  "header.services": "Nuestros Servicios",
-  "header.contact": "Contacto"
+  "nav.home": "Inicio",
+  "nav.about": "Sobre nosotros",
+  "nav.services": "Nuestros Servicios",
+  "nav.contact": "Contacto",
+  "trailer-video.see_more": "Ver más",
+  "nav.privacyPolicy": "Política de Privacidad",
+  "nav.termsOfUse": "Términos de Uso",
+  "section-projects.main-title": "Proyectos Relevantes",
+  "section-projects.client-projects-title": "Proyectos a clientes",
+  "section-projects.client-projects-description": "En Damocle'Sword tenemos un sector especializado en ofrecer servicios a otras empresas que busquen integrar la realidad virtual para sus propios objetivos empresariales. Nosotros contactamos con ellas, ofrecemos propuesta en base a las necesidades de cada empresa específica y realizamos el proyecto en cuestión para ellos.",
+  "section-projects.client-projects-vr-sickness-reducer-description": "Una prueba diseñada para reducir los mareos provocados por la exposición a entornos de realidad virtual que consta de 5 fases donde poco a poco se sube el nivel de intensidad de mareo. \n\nLa intensidad progresiva ayuda al usuario a una mejor adaptación a los inputs que le hacen marearse, haciendo de éste proyecto un entrenamiento que consigue reducir los mareos mediante la exposición progresiva controlada.",
+  "section-projects.games-title": "Videojuegos",
+  "section-projects.client-projects-realistic-interactor-description": "Un simulador que pone a prueba el realismo en entornos virtuales, tanto a nivel gráfico como en las interacciones con el entorno generado. \n\nEste proyecto es un experimento en curso que persigue el realismo puro. Sirve como muestra de nuestras capacidades de desarrollo y diseño dentro de la industria, permitiendo a nuestros clientes observar e imaginar el tipo de funcionalidades que podrían tener sus proyectos.",
+  "section-projects.games-starlit-ascension-description": "Starlit: Ascension es un VR Shooter con una ambientación católico-futurista, donde serás el sujeto de pruebas de un experimento avanzado sobre la asociación de la conciencia. \n\nEn un mundo dominado por la religión y el avance tecnológico, serás un sujeto sin recuerdos que deberá reconstruir su pasado mientras se enfrenta a numerosas pruebas de combate en las que aniquilará bestias alienígenas liberadas por un misterioso compuesto... ¿Serás capaz de sobrevivir y recordar quién eres realmente?"
 }

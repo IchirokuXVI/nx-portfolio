@@ -1,34 +1,33 @@
-import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import { DamoclesSwordUiModule } from '@portfolio/damoclesSword/ui';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 
 @Component({
   selector: 'lib-damoclesSword-wrapper',
-  imports: [CommonModule, DamoclesSwordUiModule, RouterOutlet],
+  imports: [DamoclesSwordUiModule, RouterOutlet],
   templateUrl: './damoclesSword-wrapper.html',
   styleUrl: './damoclesSword-wrapper.scss',
 })
-export class DamoclesSwordWrapper implements OnInit {
+export class DamoclesSwordWrapper {
   router = inject(Router);
   activatedRoute = inject(ActivatedRoute);
 
   headerNavLinks = [
     {
-      label: 'header.home',
+      label: 'nav.home',
       url: ['./'],
     },
     {
-      label: 'header.services',
+      label: 'nav.services',
       url: ['./services'],
     },
     {
-      label: 'header.about',
+      label: 'nav.about',
       url: ['./about'],
     },
     {
-      label: 'header.contact',
+      label: 'nav.contact',
       url: ['./contact'],
     },
   ];
@@ -41,8 +40,6 @@ export class DamoclesSwordWrapper implements OnInit {
     this.locales = RokuTranslator.getSupportedLocales();
     this.selectedLocale = RokuTranslator.getLocale();
   }
-
-  ngOnInit() {}
 
   changeLocale(language: string) {
     console.log('Locale in damoclesSword changed to:', language);
