@@ -9,6 +9,8 @@ import { DoubleBorderedTitle } from './double-bordered-title/double-bordered-tit
 import { FooterLogo } from './footer-logo/footer-logo';
 import { FooterMain } from './footer-main/footer-main';
 import { LanguageSelector } from './language-selector/language-selector';
+import { Layout } from './layout/layout';
+import { LayoutContent } from './layout/layout-content';
 import { LogoBrand } from './logoBrand/logoBrand';
 import { MainHeader } from './main-header/main-header';
 import { SectionProjects } from './section-projects/section-projects';
@@ -16,6 +18,8 @@ import { LibFontLoaderComponent } from './services/font-loader/font-loader';
 import { TrailerVideo } from './trailer-video/trailer-video';
 
 const components = [
+  Layout,
+  LayoutContent,
   LanguageSelector,
   MainHeader,
   LogoBrand,

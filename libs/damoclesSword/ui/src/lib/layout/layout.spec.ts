@@ -1,18 +1,22 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { RouterModule } from '@angular/router';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
-import { TrailerVideo } from './trailer-video';
+import { Layout } from './layout';
 
-describe('TrailerVideo', () => {
-  let component: TrailerVideo;
-  let fixture: ComponentFixture<TrailerVideo>;
+// Attach it to the global object before tests run
+global.ResizeObserver = require('resize-observer-polyfill');
+
+describe('Layout', () => {
+  let component: Layout;
+  let fixture: ComponentFixture<Layout>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [TrailerVideo],
+      imports: [Layout, RouterModule.forRoot([])],
       providers: [provideRokuTranslatorTesting()],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(TrailerVideo);
+    fixture = TestBed.createComponent(Layout);
     component = fixture.componentInstance;
     await fixture.whenStable();
   });
