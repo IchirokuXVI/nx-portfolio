@@ -23,15 +23,10 @@ import {
 export class Landing {
   compReady = signal(false);
 
-  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   hiBubble = import(`../../../assets/hi_bubble.png`).then((m) => m.default);
-  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   mailIcon = import(`../../../assets/email.png`).then((m) => m.default);
-  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   githubIcon = import(`../../../assets/github.svg`).then((m) => m.default);
-  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   linkedinIcon = import(`../../../assets/linkedin.svg`).then((m) => m.default);
-  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   resumeIcon = import(`../../../assets/cv.png`).then((m) => m.default);
 
   // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup

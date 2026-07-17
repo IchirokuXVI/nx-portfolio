@@ -64,7 +64,7 @@ There are no top-level `package.json` scripts — run everything through Nx, eit
 `shell` is the only app with `serve-static`/`serve` acting as host; its `module-federation.config.ts` declares `remotes: ['landing', 'odontogram', 'damoclesSword']`. Each remote's own `module-federation.config.ts` exposes `./Routes` from `src/app/remote-entry/entry.routes.ts`. Path aliases like `damoclesSword/Routes` (defined in `tsconfig.base.json`) let the shell lazy-load a remote's routes as if they were a local module:
 
 ```ts
-loadChildren: () => import('damoclesSword/Routes').then((m) => m.remoteRoutes)
+loadChildren: () => import('damoclesSword/Routes').then((m) => m.remoteRoutes);
 ```
 
 Remotes can also run standalone (own `serve`/`serve-static` target, own `app.routes.ts` that imports its own `entry.routes.ts` directly) for isolated development.
@@ -76,6 +76,7 @@ The shell's top-level route is `:locale` (e.g. `/en/damoclesSword/...`), handled
 ### Localization: RokuTranslator
 
 `libs/shared/localization/rokutranslator` is a hand-rolled i18next wrapper (singleton instance exported as `RokuTranslator`) — not a generic i18n library pulled from npm. Key points:
+
 - Namespaces are registered per-locale via lazy `LoaderFunction`s (`addNamespace`/`addTranslations`), so each remote can contribute its own translation JSON (see `libs/damoclesSword/ui/assets/i18n/*.json`) without the shell knowing about it upfront.
 - `libs/shared/localization/rokutranslator-angular` wraps it for Angular (service, pipe, `provideRokuTranslator`).
 - In module federation config, `@portfolio/localization/rokutranslator` is forced `singleton: true, strictVersion: true` across shell and all remotes — every micro-frontend must share the exact same instance or locale state fragments across app boundaries. Keep this in mind if a dependency bump changes this package.

@@ -8,7 +8,6 @@ import { Component, input } from '@angular/core';
   styleUrl: './logoBrand.scss',
 })
 export class LogoBrand {
-  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   damoclesLogo = import(`../../../assets/damoclesSwordLogo.svg`).then(
     (m) => m.default
   );

@@ -9,7 +9,7 @@
     <div class="card-right-column">
       @if (topRightAddon(); as addon) {
         <div class="card-top-right-addon">
-          <img [src]="addon.src | async" [alt]="addon.alt ?? ''" />
+          <img [alt]="addon.alt ?? ''" [src]="addon.src | async" />
         </div>
       }
       @if (rightAddon(); as addon) {
@@ -24,7 +24,7 @@
               }
             }
             @case ('image') {
-              <img [src]="addon.src | async" [alt]="addon.alt ?? ''" />
+              <img [alt]="addon.alt ?? ''" [src]="addon.src | async" />
             }
           }
         </div>

@@ -9,7 +9,6 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
   styleUrl: './trailer-video.scss',
 })
 export class TrailerVideo {
-  // @ts-ignore
   starlitLogo = import('../../../assets/starlit-logo.png').then(
     (m) => m.default
   );
@@ -18,19 +17,16 @@ export class TrailerVideo {
     {
       label: 'Patreon',
       url: 'https://www.patreon.com/profile/creators?u=162538734',
-      // @ts-ignore
       icon: import('../../../assets/patreon-icon.svg').then((m) => m.default),
     },
     {
       label: 'Meta',
       url: 'https://www.meta.com',
-      // @ts-ignore
       icon: import('../../../assets/meta-icon.svg').then((m) => m.default),
     },
     {
       label: 'Steam',
       url: 'https://store.steampowered.com',
-      // @ts-ignore
       icon: import('../../../assets/steam-icon.svg').then((m) => m.default),
     },
   ]);
