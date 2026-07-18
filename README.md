@@ -3,7 +3,7 @@
 A personal portfolio built as an **Angular module-federation micro-frontend system** inside an [Nx](https://nx.dev) monorepo, shipped with a custom Nx Docker build/push toolchain and deployed to a **k3s** cluster via **Helm**.
 
 - **`shell`** — host application. Owns the router and lazy-loads the remotes at runtime.
-- **`landing`, `odontogram`, `damoclesSword`** — remote micro-frontends, each exposing its routes via `./Routes` (module federation) and also runnable standalone.
+- **`landing`, `odontogram`, `damoclesSword`** — remote micro-frontends, each exposing its routes via `./Routes` (module federation). They render **only through the shell**: a remote served on its own port shows a blank page (see note below).
 - **`apps/docker/*`** — non-Angular Nx "app" projects that wrap a Dockerfile (`builder`, `reverse-proxy`, `certbot`, `local-http-server`).
 - **`tools/docker`** — custom Nx plugin (`@portfolio/docker`) providing the `build`/`push` executors behind every `build:docker` target.
 - **`libs/<scope>/*`** — libraries grouped by scope (`shared`, `damoclesSword`, `landing`, `odontogram`).

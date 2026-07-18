@@ -67,7 +67,7 @@ There are no top-level `package.json` scripts — run everything through Nx, eit
 loadChildren: () => import('damoclesSword/Routes').then((m) => m.remoteRoutes);
 ```
 
-Remotes can also run standalone (own `serve`/`serve-static` target, own `app.routes.ts` that imports its own `entry.routes.ts` directly) for isolated development.
+**Remotes render only through the shell — a remote served on its own port shows a blank page.** Each remote's `bootstrap.ts` bootstraps its `RemoteEntry` / `RemoteEntryComponent` as the root, and that component has an **empty template with no `<router-outlet>`** (`apps/<remote>/src/app/remote-entry/entry.ts`). The router still matches routes, but there is no outlet to render them into, so hitting e.g. `http://localhost:4203` directly yields ~200 bytes of empty host element. This is intentional: it stops users (and tests) from reaching a remote through its own port, where the shell's global styles and singleton-`RokuTranslator` locale config are absent and the page renders differently from production. The shell supplies the outlet (and the locale/theme context) when it lazy-loads the remote, so **always develop and test remotes through the shell** (`npx nx serve <remote>` still boots the shell via `dependsOn`, so use the shell URL like `/<locale>/<remote>`, not the remote's own port). Consequently e2e projects point at the shell, not the remote's port.
 
 ### Locale-first routing
 

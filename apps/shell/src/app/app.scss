@@ -1,5 +1,8 @@
 :host {
   display: flex;
-  min-width: 100dvw;
+  // Use 100% (not 100dvw): dvw includes the vertical-scrollbar gutter, so when
+  // the page is tall enough to show a scrollbar it forces the host wider than
+  // the content area and produces a spurious horizontal scroll.
+  min-width: 100%;
   min-height: 100dvh;
 }
