@@ -51,7 +51,6 @@ const HeaderBreakpointClasses = {
   styleUrl: './main-header.scss',
 })
 export class MainHeader {
-  // @ts-expect-error TypeScript cannot resolve dynamic imports with relative paths in module federation setup
   damoclesLogo = import(`../../../assets/damoclesSwordLogo.svg`).then(
     (m) => m.default
   );

@@ -3,7 +3,7 @@
 A personal portfolio built as an **Angular module-federation micro-frontend system** inside an [Nx](https://nx.dev) monorepo, shipped with a custom Nx Docker build/push toolchain and deployed to a **k3s** cluster via **Helm**.
 
 - **`shell`** — host application. Owns the router and lazy-loads the remotes at runtime.
-- **`landing`, `odontogram`, `damoclesSword`** — remote micro-frontends, each exposing its routes via `./Routes` (module federation) and also runnable standalone.
+- **`landing`, `odontogram`, `damoclesSword`** — remote micro-frontends, each exposing its routes via `./Routes` (module federation). They render **only through the shell**: a remote served on its own port shows a blank page (see note below).
 - **`apps/docker/*`** — non-Angular Nx "app" projects that wrap a Dockerfile (`builder`, `reverse-proxy`, `certbot`, `local-http-server`).
 - **`tools/docker`** — custom Nx plugin (`@portfolio/docker`) providing the `build`/`push` executors behind every `build:docker` target.
 - **`libs/<scope>/*`** — libraries grouped by scope (`shared`, `damoclesSword`, `landing`, `odontogram`).
@@ -37,7 +37,7 @@ npx nx run shell:build:docker --configuration=production
 
 ## Deployment / CI/CD
 
-Deployment is fully automated by a single GitHub Actions workflow: **`.github/workflows/docker-ci.yml`** (`Nx Docker Build & Push (Runner Only)`). It runs on every **push to `main`** and does *build → test → push images → deploy* in one job.
+Deployment is fully automated by a single GitHub Actions workflow: **`.github/workflows/docker-ci.yml`** (`Nx Docker Build & Push (Runner Only)`). It runs on every **push to `main`** and does _build → test → push images → deploy_ in one job.
 
 ### Pipeline overview
 
@@ -66,18 +66,18 @@ gh run list --branch "$branch" --workflow "$workflow" --json headSha,conclusion 
 
 That SHA becomes `--base` (with `--head=${{ github.sha }}`) for three separate `nx show projects --affected` queries, so unrelated apps are never rebuilt:
 
-| Set | Query | Used for |
-| --- | --- | --- |
-| `affected_docker_apps` | apps tagged `type:static-docker` | plain Dockerfile apps built with `nx build` |
-| `affected_testable_apps` | projects with a `test` target | tests run inside the builder image |
-| `affected_apps_tobuild` | apps with a `build:docker` target | Angular apps built + pushed via the custom executor |
+| Set                      | Query                             | Used for                                            |
+| ------------------------ | --------------------------------- | --------------------------------------------------- |
+| `affected_docker_apps`   | apps tagged `type:static-docker`  | plain Dockerfile apps built with `nx build`         |
+| `affected_testable_apps` | projects with a `test` target     | tests run inside the builder image                  |
+| `affected_apps_tobuild`  | apps with a `build:docker` target | Angular apps built + pushed via the custom executor |
 
 ### Images & registry
 
 - Registry: **`ghcr.io/ichirokuxvi`** (env `PORTFOLIO_DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>` and tagged `latest` in the `production` configuration.
 - The workflow logs in with `docker/login-action` using the built-in `GITHUB_TOKEN`, so the executor is told to skip its own login via `PORTFOLIO_DOCKER_SKIP_LOGIN=true`.
 - `push` only happens for targets whose `production` configuration sets `pushToRegistry: true` (see each app's `project.json`).
-- Tests run *inside* `ghcr.io/<repo-lowercase>/builder:latest` — the builder image is rebuilt first so tests use the current toolchain.
+- Tests run _inside_ `ghcr.io/<repo-lowercase>/builder:latest` — the builder image is rebuilt first so tests use the current toolchain.
 
 ### Deploy step (SSH → Helm)
 
@@ -95,11 +95,11 @@ Because image tags are pinned to `latest`, `helm upgrade` alone wouldn't restart
 
 ### Required GitHub secrets
 
-| Secret | Purpose |
-| --- | --- |
-| `SSH_DEPLOY_KEY` | Private key loaded into `ssh-agent` for the deploy host |
-| `SSH_DEPLOY_USER` | SSH user on the cluster host (e.g. `root`) |
-| `SSH_DEPLOY_HOST` | Cluster host address |
+| Secret            | Purpose                                                 |
+| ----------------- | ------------------------------------------------------- |
+| `SSH_DEPLOY_KEY`  | Private key loaded into `ssh-agent` for the deploy host |
+| `SSH_DEPLOY_USER` | SSH user on the cluster host (e.g. `root`)              |
+| `SSH_DEPLOY_HOST` | Cluster host address                                    |
 
 `GITHUB_TOKEN` (provided automatically) is used for GHCR login and `gh run list`; the workflow needs `packages: write`.
 
@@ -129,18 +129,18 @@ The cluster is **k3s** (single node) with **MetalLB** for `LoadBalancer` service
 - **`reverse-proxy` service** — type `LoadBalancer`, ports `80`/`443`. MetalLB assigns it the fixed IP from `values.ipAddress` (`46.62.204.230`), pinned via an `IPAddressPool` + `L2Advertisement` (`templates/ipadd-pool.yaml.tpl`).
 - **nginx container** — config is generated from `values.apps` into a ConfigMap (`_nginx.conf.tpl`): one `server` block per unique `host`, and within it a `location <path>` per app that `proxy_pass`es to `http://<app>:80` (rewriting the path prefix away for non-`/` paths).
 - **certbot sidecar** — obtains/renews Let's Encrypt certificates for the unique set of `host`s (passed in via the `DOMAINS` env var). `shareProcessNamespace: true` lets it reload nginx after a renewal.
-- **`init-certs` init container** — generates self-signed *dummy* certs for every host on first boot so nginx can start (and serve the ACME HTTP-01 challenge) before real certificates exist.
+- **`init-certs` init container** — generates self-signed _dummy_ certs for every host on first boot so nginx can start (and serve the ACME HTTP-01 challenge) before real certificates exist.
 - **Volumes:** `certs-pvc` (shared cert dir, `ReadWriteOnce`, `local-path`), `letsencrypt-pvc` (Let's Encrypt state, so certs survive pod restarts), and an `emptyDir` webroot for the ACME challenge.
 
 ### Routing / hosts
 
 From `values.apps`:
 
-| App | Host | Path |
-| --- | --- | --- |
-| `shell` | `ichirokuxvi.com` | `/` |
-| `landing` | `mfe.ichirokuxvi.com` | `/landing` |
-| `odontogram` | `mfe.ichirokuxvi.com` | `/odontogram` |
+| App             | Host                  | Path             |
+| --------------- | --------------------- | ---------------- |
+| `shell`         | `ichirokuxvi.com`     | `/`              |
+| `landing`       | `mfe.ichirokuxvi.com` | `/landing`       |
+| `odontogram`    | `mfe.ichirokuxvi.com` | `/odontogram`    |
 | `damoclessword` | `mfe.ichirokuxvi.com` | `/damoclesSword` |
 
 DNS for both hosts must point at `46.62.204.230`.

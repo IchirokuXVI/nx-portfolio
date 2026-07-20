@@ -1,0 +1,26 @@
+<article class="news-card">
+  <div class="news-thumbnail">
+    @if (imageSrc() | async; as src) {
+      <img [alt]="news().title" [src]="src" />
+    }
+  </div>
+  <div class="news-body">
+    <header class="news-header">
+      @if (news().icon; as icon) {
+        <span class="news-icon" aria-hidden="true">
+          @switch (icon) {
+            @case ('calendar') {
+              <lib-calendar-icon />
+            }
+            @case ('home') {
+              <lib-home-icon />
+            }
+          }
+        </span>
+        <span class="news-header-divider"></span>
+      }
+      <h3 class="news-title">{{ news().title }}</h3>
+    </header>
+    <p class="news-description">{{ news().description }}</p>
+  </div>
+</article>

@@ -1,0 +1,20 @@
+<div class="section-news-container">
+  <div class="section-title">
+    <lib-damoclesSword-double-bordered-title
+      [borderAlignment]="BorderAlignment.LEFT"
+    >
+      {{ 'section-news.main-title' | rokuT }}
+    </lib-damoclesSword-double-bordered-title>
+  </div>
+  <div class="section-content">
+    @for (item of news(); track item.newsId) {
+      <lib-damoclesSword-news-card [news]="item" />
+    }
+  </div>
+  <lib-damoclesSword-call-to-action-button
+    class="see-more-button"
+    [link]="[]"
+  >
+    {{ 'section-news.see-more' | rokuT }}
+  </lib-damoclesSword-call-to-action-button>
+</div>

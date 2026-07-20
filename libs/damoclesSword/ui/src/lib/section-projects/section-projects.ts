@@ -23,7 +23,6 @@ export class SectionProjects {
         {
           kind: 'video',
           position: 'right',
-          // @ts-ignore
           src: import('../../../assets/vr-sickness-reducer-demo.mp4').then(
             (module) => module.default
           ),
@@ -39,7 +38,6 @@ export class SectionProjects {
         {
           kind: 'video',
           position: 'right',
-          // @ts-ignore
           src: import('../../../assets/realistic-interactor-demo.mp4').then(
             (module) => module.default
           ),
@@ -57,7 +55,6 @@ export class SectionProjects {
         {
           kind: 'video',
           position: 'right',
-          // @ts-ignore
           src: import('../../../assets/vr-sickness-reducer-demo.mp4').then(
             (module) => module.default
           ),
@@ -65,7 +62,6 @@ export class SectionProjects {
         {
           kind: 'image',
           position: 'top-right',
-          // @ts-ignore
           src: import('../../../assets/starlit-logo.png').then(
             (module) => module.default
           ),

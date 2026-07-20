@@ -47,7 +47,6 @@ export class FooterMain {
       key: 'patreon',
       label: 'Patreon',
       url: 'https://www.patreon.com/profile/creators?u=162538734',
-      // @ts-ignore
       icon: import('../../../assets/patreon-icon.svg').then((m) => m.default),
     },
     {
@@ -79,28 +78,24 @@ export class FooterMain {
       key: 'discord',
       label: 'Discord',
       url: 'https://discord.com/invite/tCfcs8ByCk',
-      // @ts-ignore
       icon: import('../../../assets/discord-icon.svg').then((m) => m.default),
     },
     {
       key: 'youtube',
       label: 'Youtube',
       url: 'https://www.youtube.com/@DamocleSwordTeam',
-      // @ts-ignore
       icon: import('../../../assets/youtube-icon.svg').then((m) => m.default),
     },
     {
       key: 'instagram',
       label: 'Instagram',
       url: 'https://www.instagram.com/damocle.sword',
-      // @ts-ignore
       icon: import('../../../assets/instagram-icon.svg').then((m) => m.default),
     },
     {
       key: 'linkedin',
       label: 'LinkedIn',
       url: 'https://www.linkedin.com/company/damocles-sword',
-      // @ts-ignore
       icon: import('../../../assets/linkedin-icon.svg').then((m) => m.default),
     },
   ]);

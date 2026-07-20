@@ -92,8 +92,7 @@
       "executor": "@nx/angular:module-federation-dev-server",
       "options": {
         "buildTarget": "shell:build",
-        "port": 4200,
-        "spa": true
+        "port": 4200
       }
     },
     "serve": {
@@ -109,7 +108,7 @@
         },
         "development": {
           "buildTarget": "shell:build:development",
-          "devRemotes": ["odontogram", "landing"],
+          "devRemotes": [],
           "poll": 1500,
           "host": "0.0.0.0"
         }
