@@ -18,7 +18,7 @@
             @case ('video') {
               @let videoSrc = addon.src | async;
               @if (videoSrc) {
-                <video autoplay loop muted>
+                <video autoplay loop playsinline [muted]="true">
                   <source [src]="videoSrc" type="video/mp4" />
                 </video>
               }
