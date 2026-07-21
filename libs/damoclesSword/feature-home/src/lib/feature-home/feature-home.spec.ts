@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { DamoclesSwordUiModule } from '@portfolio/damoclesSword/ui';
+import { MockModule } from 'ng-mocks';
 import { DamoclesSwordFeatureHome } from './feature-home';
 
 describe('DamoclesSwordFeatureHome', () => {
@@ -7,7 +9,7 @@ describe('DamoclesSwordFeatureHome', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [DamoclesSwordFeatureHome],
+      imports: [DamoclesSwordFeatureHome, MockModule(DamoclesSwordUiModule)],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DamoclesSwordFeatureHome);

@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { DamoclesSwordUiModule } from '../../../../ui/src/lib/damoclesSword-ui-module';
+import { DamoclesSwordUiModule } from '@portfolio/damoclesSword/ui';
 
 @Component({
   selector: 'lib-damocles-sword-feature-home',

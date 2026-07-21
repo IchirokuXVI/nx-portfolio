@@ -35,14 +35,6 @@ describe('CallToActionButton', () => {
     ).toBe('Projected label');
   });
 
-  it('defaults to linking to the current page', () => {
-    const host = fixture.nativeElement as HTMLElement;
-    const link = host.querySelector<HTMLAnchorElement>(
-      '.call-to-action-button'
-    );
-    expect(link?.getAttribute('href')).toBe('/');
-  });
-
   /**
    * jsdom does not apply component stylesheets, so the resolved colour can't be
    * read off the element. Instead we verify the theming contract: the

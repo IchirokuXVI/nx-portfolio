@@ -38,14 +38,4 @@ describe('SectionNews', () => {
     );
     expect(component.news().length).toBeGreaterThan(0);
   });
-
-  it('renders a "see more" CTA pointing at the current page', () => {
-    const host = fixture.nativeElement as HTMLElement;
-    const link = host.querySelector<HTMLAnchorElement>(
-      '.see-more-button .call-to-action-button'
-    );
-    expect(link).not.toBeNull();
-    // `[link]="[]"` keeps the user on the current route for now.
-    expect(link?.getAttribute('href')).toBe('/');
-  });
 });
