@@ -13,6 +13,10 @@
     justify-content: center;
     text-transform: uppercase;
     font-size: 2em;
+
+    lib-damoclesSword-double-bordered-title {
+      --db-border-title-wrap: 'nowrap';
+    }
   }
 
   @container (max-width: 800px) {
