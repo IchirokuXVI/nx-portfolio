@@ -27,3 +27,14 @@
     margin: 0 auto;
   }
 }
+
+.container-section-our-vision {
+  display: flex;
+  width: 100%;
+
+  > * {
+    flex-grow: 1;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+}

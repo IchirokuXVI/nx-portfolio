@@ -62,7 +62,7 @@ export class SectionProjects {
         {
           kind: 'image',
           position: 'top-right',
-          src: import('../../../assets/starlit-logo.png').then(
+          src: import('../../../assets/starlit-logo.avif').then(
             (module) => module.default
           ),
         },

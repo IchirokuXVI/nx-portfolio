@@ -5,10 +5,10 @@ import {
   NgModule,
 } from '@angular/core';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
+import { CallToActionButton } from './call-to-action-button/call-to-action-button';
 import { DoubleBorderedTitle } from './double-bordered-title/double-bordered-title';
 import { FooterLogo } from './footer-logo/footer-logo';
 import { FooterMain } from './footer-main/footer-main';
-import { CallToActionButton } from './call-to-action-button/call-to-action-button';
 import { LanguageSelector } from './language-selector/language-selector';
 import { Layout } from './layout/layout';
 import { LayoutContent } from './layout/layout-content';
@@ -16,6 +16,7 @@ import { LogoBrand } from './logoBrand/logoBrand';
 import { MainHeader } from './main-header/main-header';
 import { NewsCard } from './news-card/news-card';
 import { SectionNews } from './section-news/section-news';
+import { SectionOurVision } from './section-our-vision/section-our-vision';
 import { SectionProjects } from './section-projects/section-projects';
 import { LibFontLoaderComponent } from './services/font-loader/font-loader';
 import { TrailerVideo } from './trailer-video/trailer-video';
@@ -35,6 +36,7 @@ const components = [
   NewsCard,
   SectionNews,
   LibFontLoaderComponent,
+  SectionOurVision,
 ];
 
 @NgModule({

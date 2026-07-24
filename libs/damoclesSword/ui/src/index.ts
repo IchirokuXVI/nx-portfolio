@@ -9,5 +9,6 @@ export * from './lib/logoBrand/logoBrand';
 export * from './lib/main-header/main-header';
 export * from './lib/news-card/news-card';
 export * from './lib/section-news/section-news';
+export * from './lib/section-our-vision/section-our-vision';
 export * from './lib/section-projects/section-projects';
 export * from './lib/trailer-video/trailer-video';

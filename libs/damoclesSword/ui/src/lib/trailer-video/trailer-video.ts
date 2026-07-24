@@ -9,7 +9,7 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
   styleUrl: './trailer-video.scss',
 })
 export class TrailerVideo {
-  starlitLogo = import('../../../assets/starlit-logo.png').then(
+  starlitLogo = import('../../../assets/starlit-logo.avif').then(
     (m) => m.default
   );
 

@@ -1,0 +1,63 @@
+.section-vision-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  container-type: inline-size;
+  flex-grow: 1;
+  padding: 3em 2em 0em 2em;
+  gap: 2em;
+
+  .section-title {
+    display: flex;
+    font-size: 2em;
+    margin-left: auto;
+    text-transform: uppercase;
+  }
+
+  .section-content {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    gap: 2.5em;
+    container-type: inline-size;
+
+    .content-text {
+      display: flex;
+      flex-direction: column;
+
+      span {
+        font-size: 1.25em;
+        white-space: pre-line;
+      }
+
+      .know-more-button {
+        --call-to-action-bg: #1a1a1a;
+        --call-to-action-color: #fff;
+        --call-to-action-accent: #ffcb26;
+
+        margin: auto 0;
+      }
+    }
+
+    .content-img {
+      margin-left: auto;
+
+      img {
+        height: 100%;
+        width: auto;
+      }
+    }
+  }
+
+  @container (max-width: 800px) {
+    .section-title {
+      font-size: 1.5em;
+    }
+
+    .section-content {
+      .content-img {
+        display: hidden;
+      }
+    }
+  }
+}
