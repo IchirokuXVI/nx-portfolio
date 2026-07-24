@@ -1,3 +1,5 @@
+@import '../styles/colors';
+
 :host {
   display: flex;
   width: 100%;
@@ -18,7 +20,7 @@
     min-height: 11em;
     background-color: #141414;
     border: 1px solid #ffffff14;
-    border-bottom: 4px solid var(--news-accent, #ffcb26);
+    border-bottom: 4px solid var(--news-accent, $theme-yellow);
     overflow: hidden;
 
     img {
@@ -41,7 +43,7 @@
       align-items: center;
       gap: 0.85em;
       padding-bottom: 0.6em;
-      border-bottom: 3px solid var(--news-title-underline, #00b7f5);
+      border-bottom: 3px solid var(--news-title-underline, $theme-blue);
 
       .news-icon {
         display: inline-flex;

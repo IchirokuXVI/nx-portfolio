@@ -1,5 +1,4 @@
-$accent-yellow: #ffcb26;
-$accent-blue: #00b7f5;
+@import '../styles/colors';
 
 .section-contact-support {
   display: flex;
@@ -61,7 +60,7 @@ $accent-blue: #00b7f5;
   // Keep contact (yellow) panel.
   .keep-contact {
     .panel-bar {
-      background-color: $accent-yellow;
+      background-color: $theme-yellow;
     }
 
     .panel-body {
@@ -84,7 +83,7 @@ $accent-blue: #00b7f5;
         background: transparent;
         padding: 0.9em 1.2em;
         font-size: 1.15em;
-        color: #1a1a1a;
+        color: $theme-dark;
 
         &::placeholder {
           color: #8a8a8a;
@@ -99,7 +98,7 @@ $accent-blue: #00b7f5;
         background: transparent;
         cursor: pointer;
         padding: 0 1em;
-        color: #1a1a1a;
+        color: $theme-dark;
 
         svg {
           width: 1.9em;
@@ -116,7 +115,7 @@ $accent-blue: #00b7f5;
   // Help us (blue) panel.
   .help-us {
     .panel-bar {
-      background-color: $accent-blue;
+      background-color: $theme-blue;
     }
 
     .panel-body {
@@ -128,8 +127,8 @@ $accent-blue: #00b7f5;
       display: inline-flex;
       align-items: center;
       gap: 1em;
-      background-color: $accent-yellow;
-      color: #1a1a1a;
+      background-color: $theme-yellow;
+      color: $theme-dark;
       text-decoration: none;
       font-family: 'Audiowide', sans-serif;
       text-transform: uppercase;

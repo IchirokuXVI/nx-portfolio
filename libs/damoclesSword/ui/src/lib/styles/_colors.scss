@@ -1,0 +1,11 @@
+// Shared damoclesSword theme colours.
+// Import into a component stylesheet with:
+//   @import '../styles/colors';
+//
+// Note: inside a CSS custom-property declaration (`--foo: ...`) the value must
+// be interpolated (`--foo: #{$theme-blue};`); in normal declarations the
+// variable can be used directly (`color: $theme-blue;`).
+
+$theme-blue: #00b7f5;
+$theme-yellow: #ffcb26;
+$theme-dark: #1a1a1a;

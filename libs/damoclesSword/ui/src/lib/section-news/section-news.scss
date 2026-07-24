@@ -1,3 +1,5 @@
+@import '../styles/colors';
+
 .section-news-container {
   display: flex;
   flex-direction: column;
@@ -28,8 +30,8 @@
     align-self: flex-start;
     // Theme the call-to-action button for the dark news section.
     --call-to-action-bg: #fff;
-    --call-to-action-color: #1a1a1a;
-    --call-to-action-accent: #00b7f5;
+    --call-to-action-color: #{$theme-dark};
+    --call-to-action-accent: #{$theme-blue};
   }
 
   @container (max-width: 800px) {

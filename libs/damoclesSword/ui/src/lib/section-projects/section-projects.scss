@@ -1,3 +1,5 @@
+@import '../styles/colors';
+
 .section-projects-container {
   display: flex;
   flex-direction: column;
@@ -29,15 +31,15 @@
     display: flex;
     flex-direction: column;
     gap: 1.5em;
-    --accent-color: #00b7f5;
-    --accent-color-glow: #00b7f566;
+    --accent-color: #{$theme-blue};
+    --accent-color-glow: #{rgba($theme-blue, 0.4)};
     --card-bg: #fff;
-    --card-color: #1a1a1a;
+    --card-color: #{$theme-dark};
 
     &.subsection-games {
-      --accent-color: #ffcb26;
-      --accent-color-glow: #ffcb2666;
-      --card-bg: #1a1a1a;
+      --accent-color: #{$theme-yellow};
+      --accent-color-glow: #{rgba($theme-yellow, 0.4)};
+      --card-bg: #{$theme-dark};
       --card-color: #f5f5f0;
     }
 

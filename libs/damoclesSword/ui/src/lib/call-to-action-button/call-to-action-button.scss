@@ -1,3 +1,5 @@
+@import '../styles/colors';
+
 :host {
   display: flex;
 }
@@ -12,8 +14,8 @@
   padding: 0.85em 2.5em;
   // Themeable: consumers override these on the host element.
   background-color: var(--call-to-action-bg, #fff);
-  color: var(--call-to-action-color, #1a1a1a);
-  border-left: 5px solid var(--call-to-action-accent, #00b7f5);
+  color: var(--call-to-action-color, $theme-dark);
+  border-left: 5px solid var(--call-to-action-accent, $theme-blue);
   transition:
     transform 0.2s ease,
     filter 0.2s ease;
