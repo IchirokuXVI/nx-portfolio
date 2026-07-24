@@ -1,10 +1,11 @@
 import { Component, signal } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { UploadIcon } from '@portfolio/shared/ui';
 import patreonIcon from '../../../assets/patreon-icon.svg';
 
 @Component({
   selector: 'lib-damocles-sword-section-contact-support',
-  imports: [RokuTranslatorPipe],
+  imports: [RokuTranslatorPipe, UploadIcon],
   templateUrl: './section-contact-support.html',
   styleUrl: './section-contact-support.scss',
 })

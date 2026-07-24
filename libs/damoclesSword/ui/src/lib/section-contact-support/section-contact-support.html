@@ -1,5 +1,4 @@
 <div class="section-contact-support">
-  <!-- Keep contact: mocked email subscription. -->
   <section class="panel keep-contact">
     <div class="panel-header">
       <h2 class="panel-title">
@@ -13,31 +12,22 @@
       </p>
       <div class="email-form">
         <input
-          #emailInput
-          [value]="email()"
           (input)="email.set(emailInput.value)"
           (keyup.enter)="subscribe()"
           [attr.placeholder]="'section-contact.email-placeholder' | rokuT"
-          type="email"
-          name="email"
+          [value]="email()"
+          #emailInput
           autocomplete="email"
+          name="email"
+          type="email"
         />
         <button
           (click)="subscribe()"
           [attr.aria-label]="'section-contact.subscribe' | rokuT"
-          type="button"
           class="submit-button"
+          type="button"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M12 3v11m0 0l-4.5-4.5M12 14l4.5-4.5M4 20h16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
+          <lib-upload-icon aria-hidden="true" />
         </button>
       </div>
       @if (subscribed()) {
@@ -48,7 +38,6 @@
     </div>
   </section>
 
-  <!-- Help us: Patreon support link. -->
   <section class="panel help-us">
     <div class="panel-header">
       <h2 class="panel-title">
@@ -62,9 +51,9 @@
       </p>
       <a
         [href]="patreonUrl"
+        class="patreon-button"
         rel="noopener noreferrer"
         target="_blank"
-        class="patreon-button"
       >
         <img [src]="patreonIcon" alt="" />
         <span>{{ 'section-contact.go-to-patreon' | rokuT }}</span>

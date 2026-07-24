@@ -26,6 +26,8 @@
     .content-text {
       display: flex;
       flex-direction: column;
+      gap: 2em;
+      padding-bottom: 1em;
 
       span {
         font-size: 1.25em;
@@ -58,7 +60,7 @@
 
     .section-content {
       .content-img {
-        display: hidden;
+        display: none;
       }
     }
   }
