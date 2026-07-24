@@ -1,3 +1,11 @@
+// Theme colours.
+// Note: inside a CSS custom-property declaration (`--foo: ...`) the value must
+// be interpolated (`--foo: #{$theme-blue};`); in normal declarations the
+// variable can be used directly (`color: $theme-blue;`).
+$theme-blue: #00b7f5;
+$theme-yellow: #ffcb26;
+$theme-dark: #1a1a1a;
+
 $z-layers: (
   'logo': 5,
   'dropdown': 24,
