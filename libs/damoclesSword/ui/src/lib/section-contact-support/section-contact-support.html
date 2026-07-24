@@ -1,0 +1,77 @@
+<div class="section-contact-support">
+  <!-- Keep contact: mocked email subscription. -->
+  <section class="panel keep-contact">
+    <div class="panel-header">
+      <h2 class="panel-title">
+        {{ 'section-contact.keep-contact-title' | rokuT }}
+      </h2>
+      <div class="panel-bar"></div>
+    </div>
+    <div class="panel-body">
+      <p class="panel-description">
+        {{ 'section-contact.keep-contact-description' | rokuT }}
+      </p>
+      <div class="email-form">
+        <input
+          #emailInput
+          [value]="email()"
+          (input)="email.set(emailInput.value)"
+          (keyup.enter)="subscribe()"
+          [attr.placeholder]="'section-contact.email-placeholder' | rokuT"
+          type="email"
+          name="email"
+          autocomplete="email"
+        />
+        <button
+          (click)="subscribe()"
+          [attr.aria-label]="'section-contact.subscribe' | rokuT"
+          type="button"
+          class="submit-button"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 3v11m0 0l-4.5-4.5M12 14l4.5-4.5M4 20h16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
+      @if (subscribed()) {
+        <p class="confirmation">
+          {{ 'section-contact.subscription-completed' | rokuT }}
+        </p>
+      }
+    </div>
+  </section>
+
+  <!-- Help us: Patreon support link. -->
+  <section class="panel help-us">
+    <div class="panel-header">
+      <h2 class="panel-title">
+        {{ 'section-contact.help-us-title' | rokuT }}
+      </h2>
+      <div class="panel-bar"></div>
+    </div>
+    <div class="panel-body">
+      <p class="panel-description">
+        {{ 'section-contact.help-us-description' | rokuT }}
+      </p>
+      <a
+        [href]="patreonUrl"
+        rel="noopener noreferrer"
+        target="_blank"
+        class="patreon-button"
+      >
+        <img [src]="patreonIcon" alt="" />
+        <span>{{ 'section-contact.go-to-patreon' | rokuT }}</span>
+      </a>
+      <p class="confirmation">
+        {{ 'section-contact.thank-you-support' | rokuT }}
+      </p>
+    </div>
+  </section>
+</div>

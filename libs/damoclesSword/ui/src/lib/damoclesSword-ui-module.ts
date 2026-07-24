@@ -15,6 +15,7 @@ import { LayoutContent } from './layout/layout-content';
 import { LogoBrand } from './logoBrand/logoBrand';
 import { MainHeader } from './main-header/main-header';
 import { NewsCard } from './news-card/news-card';
+import { SectionContactSupport } from './section-contact-support/section-contact-support';
 import { SectionNews } from './section-news/section-news';
 import { SectionOurVision } from './section-our-vision/section-our-vision';
 import { SectionProjects } from './section-projects/section-projects';
@@ -37,6 +38,7 @@ const components = [
   SectionNews,
   LibFontLoaderComponent,
   SectionOurVision,
+  SectionContactSupport,
 ];
 
 @NgModule({

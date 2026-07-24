@@ -1,0 +1,168 @@
+$accent-yellow: #ffcb26;
+$accent-blue: #00b7f5;
+
+.section-contact-support {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  container-type: inline-size;
+  color: #fff;
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-width: 0;
+
+    .panel-header {
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+      padding: 4em 4em 2.5em 4em;
+
+      .panel-title {
+        font-family: 'Audiowide', sans-serif;
+        font-size: 2.75em;
+        font-weight: 400;
+        text-transform: uppercase;
+        margin: 0;
+      }
+
+      .panel-bar {
+        height: 10px;
+        width: 100%;
+      }
+    }
+
+    .panel-body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-grow: 1;
+      gap: 2em;
+      padding: 3em 4em 3.5em 4em;
+
+      .panel-description {
+        font-size: 1.25em;
+        line-height: 1.6;
+        text-align: center;
+        margin: 0;
+      }
+
+      .confirmation {
+        font-family: 'Audiowide', sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 0;
+      }
+    }
+  }
+
+  // Keep contact (yellow) panel.
+  .keep-contact {
+    .panel-bar {
+      background-color: $accent-yellow;
+    }
+
+    .panel-body {
+      // Semi-transparent overlay so the (later) background image shows through.
+      background-color: rgba(191, 148, 24, 0.85);
+    }
+
+    .email-form {
+      display: flex;
+      align-items: stretch;
+      width: 100%;
+      background-color: #fff;
+      border: 3px solid #fff;
+
+      input {
+        flex-grow: 1;
+        min-width: 0;
+        border: none;
+        outline: none;
+        background: transparent;
+        padding: 0.9em 1.2em;
+        font-size: 1.15em;
+        color: #1a1a1a;
+
+        &::placeholder {
+          color: #8a8a8a;
+        }
+      }
+
+      .submit-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        padding: 0 1em;
+        color: #1a1a1a;
+
+        svg {
+          width: 1.9em;
+          height: 1.9em;
+        }
+
+        &:hover {
+          color: #000;
+        }
+      }
+    }
+  }
+
+  // Help us (blue) panel.
+  .help-us {
+    .panel-bar {
+      background-color: $accent-blue;
+    }
+
+    .panel-body {
+      // Semi-transparent overlay so the (later) background image shows through.
+      background-color: rgba(20, 130, 170, 0.85);
+    }
+
+    .patreon-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 1em;
+      background-color: $accent-yellow;
+      color: #1a1a1a;
+      text-decoration: none;
+      font-family: 'Audiowide', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.85em 2em;
+      transition: transform 0.2s ease;
+
+      img {
+        height: 1.6em;
+        width: auto;
+      }
+
+      &:hover {
+        transform: translateY(-3px);
+      }
+    }
+  }
+
+  @container (max-width: 800px) {
+    flex-direction: column;
+
+    .panel {
+      .panel-header {
+        padding: 3em 2em 2em 2em;
+
+        .panel-title {
+          font-size: 2em;
+        }
+      }
+
+      .panel-body {
+        padding: 2.5em 2em 3em 2em;
+      }
+    }
+  }
+}

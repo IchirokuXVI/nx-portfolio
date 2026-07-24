@@ -14,5 +14,14 @@
   "section-projects.client-projects-realistic-interactor-description": "Un simulador que pone a prueba el realismo en entornos virtuales, tanto a nivel gráfico como en las interacciones con el entorno generado. \n\nEste proyecto es un experimento en curso que persigue el realismo puro. Sirve como muestra de nuestras capacidades de desarrollo y diseño dentro de la industria, permitiendo a nuestros clientes observar e imaginar el tipo de funcionalidades que podrían tener sus proyectos.",
   "section-projects.games-starlit-ascension-description": "Starlit: Ascension es un VR Shooter con una ambientación católico-futurista, donde serás el sujeto de pruebas de un experimento avanzado sobre la asociación de la conciencia. \n\nEn un mundo dominado por la religión y el avance tecnológico, serás un sujeto sin recuerdos que deberá reconstruir su pasado mientras se enfrenta a numerosas pruebas de combate en las que aniquilará bestias alienígenas liberadas por un misterioso compuesto... ¿Serás capaz de sobrevivir y recordar quién eres realmente?",
   "section-news.main-title": "Últimas Noticias",
-  "section-news.see-more": "Ver más noticias"
+  "section-news.see-more": "Ver más noticias",
+  "section-contact.keep-contact-title": "Mantén el Contacto",
+  "section-contact.keep-contact-description": "Danos tu correo electrónico y recibe información sobre nuestros desarrollos para participar en pruebas y mucho más.",
+  "section-contact.email-placeholder": "Escribe Aquí Tu Correo",
+  "section-contact.subscribe": "Suscribirse",
+  "section-contact.subscription-completed": "¡Suscripción Completada!",
+  "section-contact.help-us-title": "Ayúdanos",
+  "section-contact.help-us-description": "Hazte miembro de nuestro Patreon y apoya activamente el desarrollo de nuestros juegos de RV.",
+  "section-contact.go-to-patreon": "Ir a Patreon",
+  "section-contact.thank-you-support": "¡Gracias por tu apoyo!"
 }

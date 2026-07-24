@@ -17,5 +17,14 @@
   "section-news.see-more": "See more news",
   "section-vision.main-title": "Our vision",
   "section-vision.business-talk": "We envision ourselves as a company willing to do whatever it takes to create an excellent work environment that brings out the best in each of our members and reflects it in our VR games. \n\nWith our talent, effort, and love for video games, we will create a full range of the highest quality VR video games.",
-  "section-vision.know-more": "Know more about us"
+  "section-vision.know-more": "Know more about us",
+  "section-contact.keep-contact-title": "Keep Contact",
+  "section-contact.keep-contact-description": "Give us your email and receive information about our developments to participate in testing and more.",
+  "section-contact.email-placeholder": "Type Here Your E-Mail",
+  "section-contact.subscribe": "Subscribe",
+  "section-contact.subscription-completed": "Subscription Completed!",
+  "section-contact.help-us-title": "Help Us",
+  "section-contact.help-us-description": "Become a member of our Patreon and actively support the development of our VR games.",
+  "section-contact.go-to-patreon": "Go to Patreon",
+  "section-contact.thank-you-support": "Thank you for your support!"
 }
