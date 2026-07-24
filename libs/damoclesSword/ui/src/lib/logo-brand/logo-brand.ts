@@ -2,10 +2,10 @@ import { AsyncPipe } from '@angular/common';
 import { Component, input } from '@angular/core';
 
 @Component({
-  selector: 'lib-damoclesSword-logo-brand',
+  selector: 'lib-damocles-sword-logo-brand',
   imports: [AsyncPipe],
-  templateUrl: './logoBrand.html',
-  styleUrl: './logoBrand.scss',
+  templateUrl: './logo-brand.html',
+  styleUrl: './logo-brand.scss',
 })
 export class LogoBrand {
   damoclesLogo = import(`../../../assets/damoclesSwordLogo.svg`).then(

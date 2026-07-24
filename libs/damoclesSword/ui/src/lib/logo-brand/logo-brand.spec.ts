@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { LogoBrand } from './logoBrand';
+import { LogoBrand } from './logo-brand';
 
 describe('LogoBrand', () => {
   let component: LogoBrand;

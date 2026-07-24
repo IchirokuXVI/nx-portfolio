@@ -1,5 +1,5 @@
 import { Route } from '@angular/router';
-import { DamoclesSwordWrapper } from './damoclesSword-wrapper/damoclesSword-wrapper';
+import { DamoclesSwordWrapper } from './damocles-sword-wrapper/damocles-sword-wrapper';
 
 export const appRoutes: Route[] = [
   {

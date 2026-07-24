@@ -17,7 +17,7 @@ export interface ProjectData {
 }
 
 @Component({
-  selector: 'lib-damoclesSword-project-card',
+  selector: 'lib-damocles-sword-project-card',
   imports: [RokuTranslatorPipe, AsyncPipe],
   templateUrl: './project-card.html',
   styleUrl: './project-card.scss',

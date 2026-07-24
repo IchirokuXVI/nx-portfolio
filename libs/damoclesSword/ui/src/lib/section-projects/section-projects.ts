@@ -7,7 +7,7 @@ import {
 import { ProjectCard, ProjectData } from '../project-card/project-card';
 
 @Component({
-  selector: 'lib-damoclesSword-section-projects',
+  selector: 'lib-damocles-sword-section-projects',
   imports: [DoubleBorderedTitle, RokuTranslatorPipe, ProjectCard],
   templateUrl: './section-projects.html',
   styleUrl: './section-projects.scss',

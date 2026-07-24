@@ -13,7 +13,7 @@ const BorderAlignmentClass = {
 };
 
 @Component({
-  selector: 'lib-damoclesSword-double-bordered-title',
+  selector: 'lib-damocles-sword-double-bordered-title',
   imports: [],
   templateUrl: './double-bordered-title.html',
   styleUrl: './double-bordered-title.scss',

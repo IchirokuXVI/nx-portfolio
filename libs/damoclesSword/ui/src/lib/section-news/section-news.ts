@@ -10,7 +10,7 @@ import {
 import { NewsCard } from '../news-card/news-card';
 
 @Component({
-  selector: 'lib-damoclesSword-section-news',
+  selector: 'lib-damocles-sword-section-news',
   imports: [
     DoubleBorderedTitle,
     RokuTranslatorPipe,

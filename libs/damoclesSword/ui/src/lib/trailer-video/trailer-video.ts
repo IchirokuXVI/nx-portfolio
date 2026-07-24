@@ -3,7 +3,7 @@ import { Component, input } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 
 @Component({
-  selector: 'lib-damoclesSword-trailer-video',
+  selector: 'lib-damocles-sword-trailer-video',
   imports: [AsyncPipe, RokuTranslatorPipe],
   templateUrl: './trailer-video.html',
   styleUrl: './trailer-video.scss',

@@ -3,7 +3,7 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import patreonIcon from '../../../assets/patreon-icon.svg';
 
 @Component({
-  selector: 'lib-damoclesSword-section-contact-support',
+  selector: 'lib-damocles-sword-section-contact-support',
   imports: [RokuTranslatorPipe],
   templateUrl: './section-contact-support.html',
   styleUrl: './section-contact-support.scss',

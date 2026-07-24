@@ -1,12 +1,12 @@
 <div [class]="breakpointClass()" class="damoclesSword-header">
   <div class="first-header-section">
     <a [routerLink]="['./home']" class="logo-container">
-      <lib-damoclesSword-logo-brand
+      <lib-damocles-sword-logo-brand
         [centerLogo]="
           currentBreakpoint() === BREAKPOINT_KEYS.DESKTOP ||
           currentBreakpoint() === BREAKPOINT_KEYS.SMALL_DESKTOP
         "
-      ></lib-damoclesSword-logo-brand>
+      ></lib-damocles-sword-logo-brand>
     </a>
     <div class="dropdown-icon">
       <div (click)="toggleNavMenu()" class="icon-container">
@@ -46,11 +46,11 @@
         }
       </div>
       <div class="header-language-container">
-        <damoclesSword-language-selector
+        <lib-damocles-sword-language-selector
           (selectedLanguageChange)="languageChange.emit($event)"
           [languages]="languages()"
           [selectedLanguage]="selectedLanguage()"
-        ></damoclesSword-language-selector>
+        ></lib-damocles-sword-language-selector>
       </div>
     </div>
   </div>

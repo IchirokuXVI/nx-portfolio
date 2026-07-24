@@ -12,7 +12,7 @@ import { FooterMain } from './footer-main/footer-main';
 import { LanguageSelector } from './language-selector/language-selector';
 import { Layout } from './layout/layout';
 import { LayoutContent } from './layout/layout-content';
-import { LogoBrand } from './logoBrand/logoBrand';
+import { LogoBrand } from './logo-brand/logo-brand';
 import { MainHeader } from './main-header/main-header';
 import { NewsCard } from './news-card/news-card';
 import { SectionContactSupport } from './section-contact-support/section-contact-support';

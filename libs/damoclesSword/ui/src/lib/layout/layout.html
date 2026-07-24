@@ -1,19 +1,19 @@
 @if (compReady()) {
   <div class="damocles-sword-main-container">
     <div class="damocles-sword-header">
-      <lib-damoclesSword-main-header
+      <lib-damocles-sword-main-header
         (languageChange)="languageChange.emit($event)"
         [languages]="languages()"
         [navLinks]="navLinks()"
         [selectedLanguage]="selectedLanguage()"
-      ></lib-damoclesSword-main-header>
+      ></lib-damocles-sword-main-header>
     </div>
     <div class="damocles-sword-content">
       <ng-container *ngTemplateOutlet="content() ?? null"></ng-container>
     </div>
     <div class="damocles-sword-footer">
-      <lib-damoclesSword-footer-logo></lib-damoclesSword-footer-logo>
-      <lib-damoclesSword-footer-main></lib-damoclesSword-footer-main>
+      <lib-damocles-sword-footer-logo></lib-damocles-sword-footer-logo>
+      <lib-damocles-sword-footer-main></lib-damocles-sword-footer-main>
     </div>
   </div>
 }

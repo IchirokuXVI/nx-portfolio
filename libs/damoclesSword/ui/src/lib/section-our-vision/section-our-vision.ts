@@ -8,7 +8,7 @@ import {
 } from '../double-bordered-title/double-bordered-title';
 
 @Component({
-  selector: 'lib-damoclesSword-section-our-vision',
+  selector: 'lib-damocles-sword-section-our-vision',
   imports: [RokuTranslatorPipe, DoubleBorderedTitle, CallToActionButton],
   templateUrl: './section-our-vision.html',
   styleUrl: './section-our-vision.scss',

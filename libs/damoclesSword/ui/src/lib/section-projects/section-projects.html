@@ -1,10 +1,10 @@
 <div class="section-projects-container">
   <div class="section-title">
-    <lib-damoclesSword-double-bordered-title
+    <lib-damocles-sword-double-bordered-title
       [borderAlignment]="BorderAlignment.CENTER"
     >
       {{ 'section-projects.main-title' | rokuT }}
-    </lib-damoclesSword-double-bordered-title>
+    </lib-damocles-sword-double-bordered-title>
   </div>
   <div class="subsection subsection-client-projects">
     <div class="subsection-title">
@@ -15,7 +15,7 @@
     </div>
     <div class="subsection-content">
       @for (project of clientProjects(); track $index) {
-        <lib-damoclesSword-project-card [project]="project" />
+        <lib-damocles-sword-project-card [project]="project" />
       }
     </div>
   </div>
@@ -25,7 +25,7 @@
     </div>
     <div class="subsection-content">
       @for (project of games(); track $index) {
-        <lib-damoclesSword-project-card [project]="project" />
+        <lib-damocles-sword-project-card [project]="project" />
       }
     </div>
   </div>
