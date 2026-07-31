@@ -16,11 +16,11 @@ in two places:
 1. **`feature-home.scss`** repeats a full-width band + centered inner container
    block (`display:flex; width:100%; > * { flex-grow:1; max-width:1280px; margin:0 auto; }`)
    four times, and also carries **section theming** (background colors / the
-   `left-squared-white-bg.avif` background image). Theming does not belong in
+   `left-hite-bg.png` background image). Theming does not belong in
    `feature-home`.
 2. **Each `section-*.scss`** repeats the same base container
    (`display:flex; flex-direction:column; width:100%; container-type:inline-size;
-   flex-grow:1; padding:3em 2em; gap:2em;`), the same `.section-title` rules
+flex-grow:1; padding:3em 2em; gap:2em;`), the same `.section-title` rules
    (`font-size:2em; text-transform:uppercase`) and the same
    `@container (max-width:800px)` title breakpoint (`font-size:1.5em`).
 
@@ -46,7 +46,7 @@ title. Each section component sets its own theming through CSS custom properties
   centering only: `title` omitted, `--section-padding: 0`, background left
   transparent (its panels theme themselves).
 - The background image currently at
-  `libs/damoclesSword/feature-home/assets/left-squared-white-bg.avif` must move to
+  `libs/damoclesSword/feature-home/assets/left-squared-white-bg.png` must move to
   the UI lib assets so `section-projects` can reference it (theming lives with the
   section).
 
@@ -75,16 +75,12 @@ Create these files under
 ### `section-layout.html`
 
 ```html
-<div class="section-band" [class]="'title-' + borderAlignment()">
+<div [class]="'title-' + borderAlignment()" class="section-band">
   <div class="section-container">
     @if (title()) {
-      <div class="section-title">
-        <lib-damocles-sword-double-bordered-title
-          [borderAlignment]="borderAlignment()"
-        >
-          {{ title() | rokuT }}
-        </lib-damocles-sword-double-bordered-title>
-      </div>
+    <div class="section-title">
+      <lib-damocles-sword-double-bordered-title [borderAlignment]="borderAlignment()"> {{ title() | rokuT }} </lib-damocles-sword-double-bordered-title>
+    </div>
     }
     <ng-content />
   </div>
@@ -139,17 +135,24 @@ the single source of truth for the shared structure:
   }
 
   // Title horizontal alignment driven by borderAlignment.
-  &.title-center .section-title { justify-content: center; }
-  &.title-right .section-title { justify-content: flex-end; }
+  &.title-center .section-title {
+    justify-content: center;
+  }
+  &.title-right .section-title {
+    justify-content: flex-end;
+  }
   // title-left is the default (flex-start / no rule needed).
 
   @container (max-width: 800px) {
-    .section-title { --section-title-font-size: 1.5em; }
+    .section-title {
+      --section-title-font-size: 1.5em;
+    }
   }
 }
 ```
 
 Notes:
+
 - The `@container (max-width:800px)` breakpoint currently lives in each section and
   only shrinks the title to `1.5em`. Because `.section-container` sets
   `container-type: inline-size`, this `@container` query resolves against it — same
@@ -163,18 +166,18 @@ Notes:
 
 ### CSS custom property contract (document this at top of `section-layout.scss` as a comment)
 
-| Variable | Default | Set by | Purpose |
-|---|---|---|---|
-| `--section-max-width` | `1280px` | `feature-home` (per section host) | inner container width cap |
-| `--section-bg` | `transparent` | section component | band background color |
-| `--section-bg-image` | `none` | section component | band background image |
-| `--section-bg-size` | `cover` | section component | background-size |
-| `--section-bg-repeat` | `no-repeat` | section component | background-repeat |
-| `--section-bg-blend-mode` | `normal` | section component | background-blend-mode |
-| `--section-color` | `inherit` | section component | band text color |
-| `--section-title-color` | `inherit` | section component | title text color |
-| `--section-padding` | `3em 2em` | section component | container padding |
-| `--section-gap` | `2em` | section component | container gap |
+| Variable                  | Default       | Set by                            | Purpose                   |
+| ------------------------- | ------------- | --------------------------------- | ------------------------- |
+| `--section-max-width`     | `1280px`      | `feature-home` (per section host) | inner container width cap |
+| `--section-bg`            | `transparent` | section component                 | band background color     |
+| `--section-bg-image`      | `none`        | section component                 | band background image     |
+| `--section-bg-size`       | `cover`       | section component                 | background-size           |
+| `--section-bg-repeat`     | `no-repeat`   | section component                 | background-repeat         |
+| `--section-bg-blend-mode` | `normal`      | section component                 | background-blend-mode     |
+| `--section-color`         | `inherit`     | section component                 | band text color           |
+| `--section-title-color`   | `inherit`     | section component                 | title text color          |
+| `--section-padding`       | `3em 2em`     | section component                 | container padding         |
+| `--section-gap`           | `2em`         | section component                 | container gap             |
 
 ## Step 2 — Register `section-layout` in the UI lib
 
@@ -198,13 +201,8 @@ breakpoint SCSS. Move each section's theming into `--section-*` overrides set on
 - `.html`: replace the outer `.section-vision-container` + inner `.section-title`
   block with:
   ```html
-  <lib-damocles-sword-section-layout
-    [title]="'section-vision.main-title'"
-    [borderAlignment]="BorderAlignment.RIGHT"
-  >
-    <div class="section-content">
-      ... existing content-text / content-img markup unchanged ...
-    </div>
+  <lib-damocles-sword-section-layout [borderAlignment]="BorderAlignment.RIGHT" [title]="'section-vision.main-title'">
+    <div class="section-content">... existing content-text / content-img markup unchanged ...</div>
   </lib-damocles-sword-section-layout>
   ```
 - `.scss`: delete `.section-vision-container` base rules, `.section-title` rules,
@@ -224,14 +222,9 @@ breakpoint SCSS. Move each section's theming into `--section-*` overrides set on
 
 - `.html`: wrap in
   ```html
-  <lib-damocles-sword-section-layout
-    [title]="'section-news.main-title'"
-    [borderAlignment]="BorderAlignment.LEFT"
-  >
-    <div class="section-content"> ... @for news cards ... </div>
-    <lib-damocles-sword-call-to-action-button class="see-more-button" [link]="[]">
-      {{ 'section-news.see-more' | rokuT }}
-    </lib-damocles-sword-call-to-action-button>
+  <lib-damocles-sword-section-layout [borderAlignment]="BorderAlignment.LEFT" [title]="'section-news.main-title'">
+    <div class="section-content">... @for news cards ...</div>
+    <lib-damocles-sword-call-to-action-button [link]="[]" class="see-more-button"> {{ 'section-news.see-more' | rokuT }} </lib-damocles-sword-call-to-action-button>
   </lib-damocles-sword-section-layout>
   ```
 - `.scss`: delete `.section-news-container` base rules, `.section-title` rules, and
@@ -240,7 +233,7 @@ breakpoint SCSS. Move each section's theming into `--section-*` overrides set on
   the layout element):
   ```scss
   :host {
-    --section-bg: #0a0a0a;          // was feature-home .container-section-news bg
+    --section-bg: #0a0a0a; // was feature-home .container-section-news bg
     --section-color: #f5f5f0;
     --section-title-color: #fff;
   }
@@ -254,18 +247,15 @@ breakpoint SCSS. Move each section's theming into `--section-*` overrides set on
 ### 3c. `section-projects` (`libs/damoclesSword/ui/src/lib/section-projects/`)
 
 - **Asset move:** move
-  `libs/damoclesSword/feature-home/assets/left-squared-white-bg.avif` to
-  `libs/damoclesSword/ui/src/assets/left-squared-white-bg.avif` (that is where the
+  `libs/damoclesSword/feature-home/assets/left-squared-white-bg.png` to
+  `libs/damoclesSword/ui/src/assets/left-squared-white-bg.png` (that is where the
   UI lib's other section assets live, e.g. `section-vision-addon.avif`). Confirm no
   other reference exists (grep showed only `feature-home.scss` uses it).
 - `.html`: wrap in
   ```html
-  <lib-damocles-sword-section-layout
-    [title]="'section-projects.main-title'"
-    [borderAlignment]="BorderAlignment.CENTER"
-  >
-    <div class="subsection subsection-client-projects"> ... unchanged ... </div>
-    <div class="subsection subsection-games"> ... unchanged ... </div>
+  <lib-damocles-sword-section-layout [borderAlignment]="BorderAlignment.CENTER" [title]="'section-projects.main-title'">
+    <div class="subsection subsection-client-projects">... unchanged ...</div>
+    <div class="subsection subsection-games">... unchanged ...</div>
   </lib-damocles-sword-section-layout>
   ```
 - `.scss`: delete `.section-projects-container` base rules, `.section-title` rules,
@@ -275,18 +265,20 @@ breakpoint SCSS. Move each section's theming into `--section-*` overrides set on
   ```scss
   :host {
     --section-bg: rgba(255, 255, 255, 0.8);
-    --section-bg-image: url('../../../assets/left-squared-white-bg.avif');
+    --section-bg-image: url('../../../assets/left-squared-white-bg.png');
     --section-bg-blend-mode: lighten;
   }
   ```
   Verify the relative path resolves from
   `libs/damoclesSword/ui/src/lib/section-projects/section-projects.scss` to
-  `libs/damoclesSword/ui/src/assets/left-squared-white-bg.avif`
-  (`../../../assets/left-squared-white-bg.avif`). The old projects SCSS also set
+  `libs/damoclesSword/ui/src/assets/left-squared-white-bg.png`
+  (`../../../assets/left-squared-white-bg.png`). The old projects SCSS also set
   `--db-border-title-wrap: 'nowrap'` on the title element for CENTER alignment; move
   that onto the layout host too so it inherits into the nested double-bordered-title:
   ```scss
-  :host { --db-border-title-wrap: 'nowrap'; }
+  :host {
+    --db-border-title-wrap: 'nowrap';
+  }
   ```
 - `.ts`: add `SectionLayout` to `imports`; remove `DoubleBorderedTitle` from
   `imports` (keep `BorderAlignment` import + getter). `ProjectCard` stays.
@@ -300,19 +292,19 @@ for band + centering.
   sections) in `<lib-damocles-sword-section-layout>` with **no** `title`:
   ```html
   <lib-damocles-sword-section-layout>
-    <div class="section-contact-support"> ... unchanged panels ... </div>
+    <div class="section-contact-support">... unchanged panels ...</div>
   </lib-damocles-sword-section-layout>
   ```
 - `.scss`: keep all existing panel styling. The existing `:host { display:block;
-  container-type: inline-size; }` block and the `@container (max-width:800px)` panel
+container-type: inline-size; }` block and the `@container (max-width:800px)` panel
   rules can stay (the panels' container query now resolves against
   `.section-container` from the layout, which also sets `container-type` — behavior
   is equivalent; verify the mobile stacking still triggers, see Verification). Set
   layout overrides on `:host`:
   ```scss
   :host {
-    --section-padding: 0;   // panels own their own padding
-    --section-color: #fff;  // was `color:#fff` on .section-contact-support
+    --section-padding: 0; // panels own their own padding
+    --section-color: #fff; // was `color:#fff` on .section-contact-support
   }
   ```
   The dark background that `feature-home .container-section-contact-support` used
@@ -352,7 +344,7 @@ for band + centering.
   section wrappers are removable since the band now lives inside each section via
   `section-layout`.) Verify no remaining `feature-home.scss` selector targets those
   removed wrappers.
-- Remove the now-unused `left-squared-white-bg.avif` from
+- Remove the now-unused `left-squared-white-bg.png` from
   `libs/damoclesSword/feature-home/assets/` (moved in Step 3c). Check whether
   `libs/damoclesSword/feature-home/assets/white-hex-bg.png` is referenced anywhere
   (grep showed no current reference); if genuinely unused leave it as-is unless the
@@ -384,7 +376,7 @@ npx nx build damoclesSword --configuration=development
 ```
 
 All must pass. The build catches broken asset paths (the moved
-`left-squared-white-bg.avif`) and broken SCSS var references.
+`left-squared-white-bg.png`) and broken SCSS var references.
 
 Then visually verify through the shell (remotes render only through the shell — a
 remote served on its own port shows a blank page):
@@ -408,4 +400,7 @@ Open the damoclesSword home via the shell URL (`/<locale>/damoclesSword`, e.g.
 5. All sections share the same max-width cap and centering; changing
    `--section-max-width` in `feature-home.scss` visibly resizes every section.
 6. Confirm `feature-home.scss` contains no background/theming rules.
+
+```
+
 ```
