@@ -103,3 +103,7 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `landing`, `odontog
 
 - Prettier is the source of truth (`.prettierrc`): single quotes, 2-space indent, trailing commas (es5), `arrowParens: always`, plus `prettier-plugin-organize-imports` and `prettier-plugin-organize-attributes` (Angular template attributes are auto-sorted into groups: outputs, two-way bindings, inputs, structural directives, then everything else, then `data-*`).
 - `*.html` files are linted with `@angular-eslint/template/recommended` + `prettier/prettier` using the `angular` parser.
+
+## Git workflow
+
+- **Never push code.** Commit locally only, unless the user explicitly asks for a push. Even when a push is explicitly requested, confirm with the user before running it — a prior "yes" does not carry forward to later pushes.
