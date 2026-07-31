@@ -1,0 +1,59 @@
+@import '../styles/variables';
+
+// CSS custom property contract:
+// --section-max-width      (default 1280px)   set by feature-home (per section host)  — inner container width cap
+// --section-bg              (default transparent) set by section component            — band background color
+// --section-bg-image        (default none)        set by section component            — band background image
+// --section-bg-size         (default cover)        set by section component            — background-size
+// --section-bg-repeat       (default no-repeat)    set by section component            — background-repeat
+// --section-bg-blend-mode   (default normal)       set by section component            — background-blend-mode
+// --section-color           (default inherit)      set by section component            — band text color
+// --section-title-color     (default inherit)      set by section component            — title text color
+// --section-padding         (default 3em 2em)      set by section component            — container padding
+// --section-gap             (default 2em)          set by section component            — container gap
+
+.section-band {
+  display: flex;
+  width: 100%;
+  background-color: var(--section-bg, transparent);
+  background-image: var(--section-bg-image, none);
+  background-size: var(--section-bg-size, cover);
+  background-repeat: var(--section-bg-repeat, no-repeat);
+  background-blend-mode: var(--section-bg-blend-mode, normal);
+  color: var(--section-color, inherit);
+
+  .section-container {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    width: 100%;
+    max-width: var(--section-max-width, 1280px);
+    margin: 0 auto;
+    padding: var(--section-padding, 3em 2em);
+    gap: var(--section-gap, 2em);
+    container-type: inline-size;
+  }
+
+  .section-title {
+    display: flex;
+    width: 100%;
+    font-size: var(--section-title-font-size, 2em);
+    text-transform: uppercase;
+    color: var(--section-title-color, inherit);
+  }
+
+  // Title horizontal alignment driven by borderAlignment.
+  &.title-center .section-title {
+    justify-content: center;
+  }
+  &.title-right .section-title {
+    justify-content: flex-end;
+  }
+  // title-left is the default (flex-start / no rule needed).
+
+  @container (max-width: 800px) {
+    .section-title {
+      --section-title-font-size: 1.5em;
+    }
+  }
+}

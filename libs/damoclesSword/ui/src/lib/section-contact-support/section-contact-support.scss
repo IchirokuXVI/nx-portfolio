@@ -3,13 +3,15 @@
 :host {
   display: block;
   container-type: inline-size;
+  --section-padding: 0;
+  --section-bg: #0a0a0a;
+  --section-color: #fff;
 }
 
 .section-contact-support {
   display: flex;
   flex-direction: row;
   width: 100%;
-  color: #fff;
 
   .panel {
     display: flex;

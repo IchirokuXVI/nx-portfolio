@@ -1,11 +1,7 @@
-<div class="section-vision-container">
-  <div class="section-title">
-    <lib-damocles-sword-double-bordered-title
-      [borderAlignment]="BorderAlignment.RIGHT"
-    >
-      {{ 'section-vision.main-title' | rokuT }}
-    </lib-damocles-sword-double-bordered-title>
-  </div>
+<lib-damocles-sword-section-layout
+  [borderAlignment]="BorderAlignment.RIGHT"
+  [title]="'section-vision.main-title'"
+>
   <div class="section-content">
     <div class="content-text">
       <span>
@@ -22,4 +18,4 @@
       <img [src]="sectionVisionAddon" alt="Vision" />
     </div>
   </div>
-</div>
+</lib-damocles-sword-section-layout>

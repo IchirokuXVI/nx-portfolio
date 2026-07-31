@@ -1,11 +1,7 @@
-<div class="section-projects-container">
-  <div class="section-title">
-    <lib-damocles-sword-double-bordered-title
-      [borderAlignment]="BorderAlignment.CENTER"
-    >
-      {{ 'section-projects.main-title' | rokuT }}
-    </lib-damocles-sword-double-bordered-title>
-  </div>
+<lib-damocles-sword-section-layout
+  [borderAlignment]="BorderAlignment.CENTER"
+  [title]="'section-projects.main-title'"
+>
   <div class="subsection subsection-client-projects">
     <div class="subsection-title">
       {{ 'section-projects.client-projects-title' | rokuT }}
@@ -29,4 +25,4 @@
       }
     </div>
   </div>
-</div>
+</lib-damocles-sword-section-layout>

@@ -1,66 +1,68 @@
-<div class="section-contact-support">
-  <section class="panel keep-contact">
-    <div class="panel-header">
-      <h2 class="panel-title">
-        {{ 'section-contact.keep-contact-title' | rokuT }}
-      </h2>
-      <div class="panel-bar"></div>
-    </div>
-    <div class="panel-body">
-      <p class="panel-description">
-        {{ 'section-contact.keep-contact-description' | rokuT }}
-      </p>
-      <div class="email-form">
-        <input
-          (input)="email.set(emailInput.value)"
-          (keyup.enter)="subscribe()"
-          [attr.placeholder]="'section-contact.email-placeholder' | rokuT"
-          [value]="email()"
-          #emailInput
-          autocomplete="email"
-          name="email"
-          type="email"
-        />
-        <button
-          (click)="subscribe()"
-          [attr.aria-label]="'section-contact.subscribe' | rokuT"
-          class="submit-button"
-          type="button"
-        >
-          <lib-upload-icon aria-hidden="true" />
-        </button>
+<lib-damocles-sword-section-layout>
+  <div class="section-contact-support">
+    <section class="panel keep-contact">
+      <div class="panel-header">
+        <h2 class="panel-title">
+          {{ 'section-contact.keep-contact-title' | rokuT }}
+        </h2>
+        <div class="panel-bar"></div>
       </div>
-      @if (subscribed()) {
-        <p class="confirmation">
-          {{ 'section-contact.subscription-completed' | rokuT }}
+      <div class="panel-body">
+        <p class="panel-description">
+          {{ 'section-contact.keep-contact-description' | rokuT }}
         </p>
-      }
-    </div>
-  </section>
+        <div class="email-form">
+          <input
+            (input)="email.set(emailInput.value)"
+            (keyup.enter)="subscribe()"
+            [attr.placeholder]="'section-contact.email-placeholder' | rokuT"
+            [value]="email()"
+            #emailInput
+            autocomplete="email"
+            name="email"
+            type="email"
+          />
+          <button
+            (click)="subscribe()"
+            [attr.aria-label]="'section-contact.subscribe' | rokuT"
+            class="submit-button"
+            type="button"
+          >
+            <lib-upload-icon aria-hidden="true" />
+          </button>
+        </div>
+        @if (subscribed()) {
+          <p class="confirmation">
+            {{ 'section-contact.subscription-completed' | rokuT }}
+          </p>
+        }
+      </div>
+    </section>
 
-  <section class="panel help-us">
-    <div class="panel-header">
-      <h2 class="panel-title">
-        {{ 'section-contact.help-us-title' | rokuT }}
-      </h2>
-      <div class="panel-bar"></div>
-    </div>
-    <div class="panel-body">
-      <p class="panel-description">
-        {{ 'section-contact.help-us-description' | rokuT }}
-      </p>
-      <a
-        [href]="patreonUrl"
-        class="patreon-button"
-        rel="noopener noreferrer"
-        target="_blank"
-      >
-        <img [src]="patreonIcon" alt="" />
-        <span>{{ 'section-contact.go-to-patreon' | rokuT }}</span>
-      </a>
-      <p class="confirmation">
-        {{ 'section-contact.thank-you-support' | rokuT }}
-      </p>
-    </div>
-  </section>
-</div>
+    <section class="panel help-us">
+      <div class="panel-header">
+        <h2 class="panel-title">
+          {{ 'section-contact.help-us-title' | rokuT }}
+        </h2>
+        <div class="panel-bar"></div>
+      </div>
+      <div class="panel-body">
+        <p class="panel-description">
+          {{ 'section-contact.help-us-description' | rokuT }}
+        </p>
+        <a
+          [href]="patreonUrl"
+          class="patreon-button"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          <img [src]="patreonIcon" alt="" />
+          <span>{{ 'section-contact.go-to-patreon' | rokuT }}</span>
+        </a>
+        <p class="confirmation">
+          {{ 'section-contact.thank-you-support' | rokuT }}
+        </p>
+      </div>
+    </section>
+  </div>
+</lib-damocles-sword-section-layout>

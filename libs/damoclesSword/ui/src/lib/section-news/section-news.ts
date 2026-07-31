@@ -1,22 +1,18 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { NewsMemory, TranslatedNews } from '@portfolio/damoclesSword/data-access';
+import {
+  NewsMemory,
+  TranslatedNews,
+} from '@portfolio/damoclesSword/data-access';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { CallToActionButton } from '../call-to-action-button/call-to-action-button';
-import {
-  BorderAlignment,
-  DoubleBorderedTitle,
-} from '../double-bordered-title/double-bordered-title';
+import { BorderAlignment } from '../double-bordered-title/double-bordered-title';
 import { NewsCard } from '../news-card/news-card';
+import { SectionLayout } from '../section-layout/section-layout';
 
 @Component({
   selector: 'lib-damocles-sword-section-news',
-  imports: [
-    DoubleBorderedTitle,
-    RokuTranslatorPipe,
-    NewsCard,
-    CallToActionButton,
-  ],
+  imports: [RokuTranslatorPipe, NewsCard, CallToActionButton, SectionLayout],
   templateUrl: './section-news.html',
   styleUrl: './section-news.scss',
 })
