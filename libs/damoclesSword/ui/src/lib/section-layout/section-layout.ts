@@ -1,11 +1,7 @@
 import { Component, input } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import {
-  BorderAlignment,
-  DoubleBorderedTitle,
-} from '../double-bordered-title/double-bordered-title';
-
-export { BorderAlignment };
+import { BorderAlignment } from '../border-alignment/border-alignment';
+import { DoubleBorderedTitle } from '../double-bordered-title/double-bordered-title';
 
 @Component({
   selector: 'lib-damocles-sword-section-layout',

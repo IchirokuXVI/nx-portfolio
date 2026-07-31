@@ -1,6 +1,6 @@
 import { Component, input } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { BorderAlignment } from '../double-bordered-title/double-bordered-title';
+import { BorderAlignment } from '../border-alignment/border-alignment';
 import { ProjectCard, ProjectData } from '../project-card/project-card';
 import { SectionLayout } from '../section-layout/section-layout';
 
