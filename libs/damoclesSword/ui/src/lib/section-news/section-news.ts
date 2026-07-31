@@ -6,7 +6,7 @@ import {
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { CallToActionButton } from '../call-to-action-button/call-to-action-button';
-import { BorderAlignment } from '../double-bordered-title/double-bordered-title';
+import { BorderAlignment } from '../enums/border-alignment';
 import { NewsCard } from '../news-card/news-card';
 import { SectionLayout } from '../section-layout/section-layout';
 

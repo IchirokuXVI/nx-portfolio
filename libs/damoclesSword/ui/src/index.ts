@@ -1,6 +1,7 @@
 export * from './lib/call-to-action-button/call-to-action-button';
 export * from './lib/damocles-sword-ui-module';
 export * from './lib/double-bordered-title/double-bordered-title';
+export * from './lib/enums/border-alignment';
 export * from './lib/footer-logo/footer-logo';
 export * from './lib/footer-main/footer-main';
 export * from './lib/layout/layout';

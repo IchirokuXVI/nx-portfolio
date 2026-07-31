@@ -1,6 +1,6 @@
 <lib-damocles-sword-section-layout
   [borderAlignment]="BorderAlignment.LEFT"
-  [title]="'section-news.main-title'"
+  [title]="'section-news.main-title' | rokuT"
 >
   <div class="section-content">
     @for (item of news(); track item.newsId) {

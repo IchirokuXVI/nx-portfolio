@@ -1,10 +1,5 @@
 import { Component, input } from '@angular/core';
-
-export enum BorderAlignment {
-  CENTER = 'center',
-  LEFT = 'left',
-  RIGHT = 'right',
-}
+import { BorderAlignment } from '../enums/border-alignment';
 
 const BorderAlignmentClass = {
   [BorderAlignment.CENTER]: 'center-aligned',
