@@ -1,5 +1,9 @@
 @import '../styles/variables';
 
+:host {
+  --section-padding: 0;
+}
+
 .section-content {
   display: flex;
   flex-direction: row;

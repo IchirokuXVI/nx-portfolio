@@ -1,5 +1,5 @@
 import { Component, input } from '@angular/core';
-import { BorderAlignment } from '../border-alignment/border-alignment';
+import { BorderAlignment } from '../enums/border-alignment';
 
 const BorderAlignmentClass = {
   [BorderAlignment.CENTER]: 'center-aligned',

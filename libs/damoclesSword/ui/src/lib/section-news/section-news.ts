@@ -5,8 +5,8 @@ import {
 } from '@portfolio/damoclesSword/data-access';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { BorderAlignment } from '../border-alignment/border-alignment';
 import { CallToActionButton } from '../call-to-action-button/call-to-action-button';
+import { BorderAlignment } from '../enums/border-alignment';
 import { NewsCard } from '../news-card/news-card';
 import { SectionLayout } from '../section-layout/section-layout';
 

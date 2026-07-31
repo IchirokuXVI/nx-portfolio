@@ -1,5 +1,4 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { SectionLayout } from './section-layout';
 
 describe('SectionLayout', () => {
@@ -9,7 +8,6 @@ describe('SectionLayout', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [SectionLayout],
-      providers: [provideRokuTranslatorTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SectionLayout);
