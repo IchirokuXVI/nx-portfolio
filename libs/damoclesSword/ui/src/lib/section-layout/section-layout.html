@@ -1,0 +1,14 @@
+<div [class]="'title-' + borderAlignment()" class="section-band">
+  <div class="section-container">
+    @if (title(); as sectionTitle) {
+      <div class="section-title">
+        <lib-damocles-sword-double-bordered-title
+          [borderAlignment]="borderAlignment()"
+        >
+          {{ sectionTitle | rokuT }}
+        </lib-damocles-sword-double-bordered-title>
+      </div>
+    }
+    <ng-content />
+  </div>
+</div>
