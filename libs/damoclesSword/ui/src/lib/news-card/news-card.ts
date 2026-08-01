@@ -4,7 +4,7 @@ import { TranslatedNews } from '@portfolio/damoclesSword/data-access';
 import { CalendarIcon, HomeIcon } from '@portfolio/shared/ui';
 
 @Component({
-  selector: 'lib-damoclesSword-news-card',
+  selector: 'lib-damocles-sword-news-card',
   imports: [AsyncPipe, CalendarIcon, HomeIcon],
   templateUrl: './news-card.html',
   styleUrl: './news-card.scss',

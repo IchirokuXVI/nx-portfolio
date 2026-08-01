@@ -1,10 +1,5 @@
 import { Component, input } from '@angular/core';
-
-export enum BorderAlignment {
-  CENTER = 'center',
-  LEFT = 'left',
-  RIGHT = 'right',
-}
+import { BorderAlignment } from '../enums/border-alignment';
 
 const BorderAlignmentClass = {
   [BorderAlignment.CENTER]: 'center-aligned',
@@ -13,7 +8,7 @@ const BorderAlignmentClass = {
 };
 
 @Component({
-  selector: 'lib-damoclesSword-double-bordered-title',
+  selector: 'lib-damocles-sword-double-bordered-title',
   imports: [],
   templateUrl: './double-bordered-title.html',
   styleUrl: './double-bordered-title.scss',

@@ -33,7 +33,7 @@ describe('SectionNews', () => {
 
   it('renders a card per mocked news item', () => {
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelectorAll('lib-damoclesSword-news-card').length).toBe(
+    expect(host.querySelectorAll('lib-damocles-sword-news-card').length).toBe(
       component.news().length
     );
     expect(component.news().length).toBeGreaterThan(0);

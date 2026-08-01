@@ -1,3 +1,5 @@
+@import '../styles/variables';
+
 $offset-border-x: 6em;
 $offset-ratio: 1.75;
 $height-ratio: 2.5;
@@ -12,7 +14,7 @@ $borders-gap: 4px;
     font-family: 'Audiowide', sans-serif;
     display: flex;
     flex-direction: column;
-    white-space: wrap;
+    white-space: var(--db-border-title-wrap, normal);
     gap: $text-to-border-gap;
     padding-right: $offset-border-x;
     text-align: center;
@@ -31,7 +33,7 @@ $borders-gap: 4px;
         left: 0;
         min-width: calc(100% + $offset-border-x / $offset-ratio);
         height: calc($height-border / $height-ratio);
-        background-color: #00b7f5;
+        background-color: $theme-blue;
       }
 
       .second-border {
@@ -40,7 +42,7 @@ $borders-gap: 4px;
         left: 0;
         min-width: calc(100% + $offset-border-x);
         height: $height-border;
-        background-color: #ffcb26;
+        background-color: $theme-yellow;
       }
     }
   }

@@ -15,7 +15,7 @@ import { MainHeader } from '../main-header/main-header';
 import { LayoutContent } from './layout-content';
 
 @Component({
-  selector: 'lib-damoclesSword-layout',
+  selector: 'lib-damocles-sword-layout',
   imports: [MainHeader, FooterLogo, FooterMain, NgTemplateOutlet],
   templateUrl: './layout.html',
   styleUrl: './layout.scss',

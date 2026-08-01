@@ -13,6 +13,12 @@ module.exports = {
     ],
   },
   transformIgnorePatterns: ['node_modules/(?!.*\\.mjs$)'],
+  moduleNameMapper: {
+    // Static asset imports resolve to a URL string via the bundler at build
+    // time; in tests we map them to a stub so components can import them.
+    '\\.(avif|png|jpe?g|gif|webp|svg|ttf|woff2?|mp4|webm)$':
+      '<rootDir>/src/asset-file-mock.ts',
+  },
   snapshotSerializers: [
     'jest-preset-angular/build/serializers/no-ng-attributes',
     'jest-preset-angular/build/serializers/ng-snapshot',

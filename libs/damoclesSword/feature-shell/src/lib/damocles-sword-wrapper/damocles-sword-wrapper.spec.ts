@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { DamoclesSwordWrapper } from './damoclesSword-wrapper';
+import { DamoclesSwordWrapper } from './damocles-sword-wrapper';
 
 jest.mock('@portfolio/localization/rokutranslator', () => {
   return {

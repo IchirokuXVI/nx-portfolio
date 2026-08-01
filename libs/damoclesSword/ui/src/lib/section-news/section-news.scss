@@ -1,42 +1,23 @@
-.section-news-container {
+@import '../styles/variables';
+
+:host {
+  --section-bg: #0a0a0a;
+  --section-color: #f5f5f0;
+  --section-title-color: #fff;
+}
+
+.section-content {
   display: flex;
   flex-direction: column;
   width: 100%;
+  gap: 2.5em;
   container-type: inline-size;
-  flex-grow: 1;
-  padding: 3em 2em;
-  gap: 2em;
-  // Placeholder dark background; a themed background image is added later.
-  background-color: #0a0a0a;
-  color: #f5f5f0;
+}
 
-  .section-title {
-    display: flex;
-    width: 100%;
-    text-transform: uppercase;
-    font-size: 2em;
-    color: #fff;
-  }
-
-  .section-content {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    gap: 2.5em;
-    container-type: inline-size;
-  }
-
-  .see-more-button {
-    align-self: flex-start;
-    // Theme the call-to-action button for the dark news section.
-    --call-to-action-bg: #fff;
-    --call-to-action-color: #1a1a1a;
-    --call-to-action-accent: #00b7f5;
-  }
-
-  @container (max-width: 800px) {
-    .section-title {
-      font-size: 1.5em;
-    }
-  }
+.see-more-button {
+  align-self: flex-start;
+  // Theme the call-to-action button for the dark news section.
+  --call-to-action-bg: #fff;
+  --call-to-action-color: #{$theme-dark};
+  --call-to-action-accent: #{$theme-blue};
 }

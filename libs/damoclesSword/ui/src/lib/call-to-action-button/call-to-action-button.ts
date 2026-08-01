@@ -8,7 +8,7 @@ import { RouterLink } from '@angular/router';
  * properties, overridable by consumers.
  */
 @Component({
-  selector: 'lib-damoclesSword-call-to-action-button',
+  selector: 'lib-damocles-sword-call-to-action-button',
   imports: [RouterLink],
   templateUrl: './call-to-action-button.html',
   styleUrl: './call-to-action-button.scss',

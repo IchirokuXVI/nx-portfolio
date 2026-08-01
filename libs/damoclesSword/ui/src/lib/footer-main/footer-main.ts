@@ -21,7 +21,7 @@ type SectionsLinks = {
 };
 
 @Component({
-  selector: 'lib-damoclesSword-footer-main',
+  selector: 'lib-damocles-sword-footer-main',
   imports: [RouterLink, AsyncPipe, RokuTranslatorPipe],
   templateUrl: './footer-main.html',
   styleUrl: './footer-main.scss',

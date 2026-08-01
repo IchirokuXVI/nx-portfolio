@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 
 @Component({
-  selector: 'damoclesSword-language-selector',
+  selector: 'lib-damocles-sword-language-selector',
   imports: [AsyncPipe],
   templateUrl: './language-selector.html',
   styleUrl: './language-selector.scss',

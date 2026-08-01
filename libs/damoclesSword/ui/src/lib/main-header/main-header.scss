@@ -22,7 +22,7 @@ $header-border-bottom-size: 0.375em;
   min-width: 100%;
   height: min-content;
   align-items: center;
-  border-bottom: $header-border-bottom-size solid #00b7f5;
+  border-bottom: $header-border-bottom-size solid $theme-blue;
 
   .first-header-section {
     display: flex;
@@ -30,7 +30,7 @@ $header-border-bottom-size: 0.375em;
     height: 6em;
     width: 100%;
     max-width: 528px;
-    background-color: #1a1a1a;
+    background-color: $theme-dark;
     gap: 1.5em;
     padding: 1.25em 1.5em;
 
@@ -78,7 +78,7 @@ $header-border-bottom-size: 0.375em;
         cursor: pointer;
 
         &.active-link {
-          color: #00b7f5;
+          color: $theme-blue;
           text-decoration: underline;
         }
       }
@@ -152,7 +152,7 @@ $header-border-bottom-size: 0.375em;
     grid-template-rows: 0fr;
     overflow: hidden;
     transition: grid-template-rows 0.3s ease-in-out;
-    background-color: #1a1a1a;
+    background-color: $theme-dark;
     color: #fff;
     padding: 0em 2em;
 

@@ -11,7 +11,7 @@ import {
 import { RouterModule } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { LanguageSelector } from '../language-selector/language-selector';
-import { LogoBrand } from '../logoBrand/logoBrand';
+import { LogoBrand } from '../logo-brand/logo-brand';
 
 export type HeaderBreakpoints = {
   [key in HeaderBreakpointKeys]: number;
@@ -39,7 +39,7 @@ const HeaderBreakpointClasses = {
 };
 
 @Component({
-  selector: 'lib-damoclesSword-main-header',
+  selector: 'lib-damocles-sword-main-header',
   imports: [
     CommonModule,
     RouterModule,

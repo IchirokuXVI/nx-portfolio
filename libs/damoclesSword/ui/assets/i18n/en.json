@@ -14,5 +14,17 @@
   "section-projects.client-projects-realistic-interactor-description": "A simulator that tests realism in virtual environments, both in terms of graphics and interactions with the generated environment. \n\nThis project is an ongoing experiment that strives for pure realism. It serves as a showcase of our development and design capabilities within the industry, allowing our clients to observe and envision the types of features our projects could have.",
   "section-projects.games-starlit-ascension-description": "Starlit: Ascension is a VR Shooter with a Catholic-futuristic setting, where you will be the test subject for an advanced experiment on the association of consciousness. \n\nIn a world dominated by religion and technological advancement, you will be a subject with no memories who must piece together their past while facing numerous combat trials where you will annihilate alien beasts unleashed by a mysterious compound... Will you be able to survive and remember who you truly are?",
   "section-news.main-title": "Latest News",
-  "section-news.see-more": "See more news"
+  "section-news.see-more": "See more news",
+  "section-vision.main-title": "Our vision",
+  "section-vision.business-talk": "We envision ourselves as a company willing to do whatever it takes to create an excellent work environment that brings out the best in each of our members and reflects it in our VR games. \n\nWith our talent, effort, and love for video games, we will create a full range of the highest quality VR video games.",
+  "section-vision.know-more": "Know more about us",
+  "section-contact.keep-contact-title": "Keep Contact",
+  "section-contact.keep-contact-description": "Give us your email and receive information about our developments to participate in testing and more.",
+  "section-contact.email-placeholder": "Your E-Mail",
+  "section-contact.subscribe": "Subscribe",
+  "section-contact.subscription-completed": "Subscription Completed!",
+  "section-contact.help-us-title": "Help Us",
+  "section-contact.help-us-description": "Become a member of our Patreon and actively support the development of our VR games.",
+  "section-contact.go-to-patreon": "Go to Patreon",
+  "section-contact.thank-you-support": "Thank you for your support!"
 }

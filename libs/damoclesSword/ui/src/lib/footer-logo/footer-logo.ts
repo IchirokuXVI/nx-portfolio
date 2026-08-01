@@ -1,8 +1,8 @@
 import { Component } from '@angular/core';
-import { LogoBrand } from '../logoBrand/logoBrand';
+import { LogoBrand } from '../logo-brand/logo-brand';
 
 @Component({
-  selector: 'lib-damoclesSword-footer-logo',
+  selector: 'lib-damocles-sword-footer-logo',
   imports: [LogoBrand],
   templateUrl: './footer-logo.html',
   styleUrl: './footer-logo.scss',

@@ -4,10 +4,10 @@ import { DamoclesSwordUiModule } from '@portfolio/damoclesSword/ui';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 
 @Component({
-  selector: 'lib-damoclesSword-wrapper',
+  selector: 'lib-damocles-sword-wrapper',
   imports: [DamoclesSwordUiModule, RouterOutlet],
-  templateUrl: './damoclesSword-wrapper.html',
-  styleUrl: './damoclesSword-wrapper.scss',
+  templateUrl: './damocles-sword-wrapper.html',
+  styleUrl: './damocles-sword-wrapper.scss',
 })
 export class DamoclesSwordWrapper {
   router = inject(Router);

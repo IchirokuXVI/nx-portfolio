@@ -1,3 +1,5 @@
+@import '../styles/variables';
+
 :host {
   container-type: inline-size;
   display: block;
@@ -31,7 +33,7 @@
     font-size: 1.25em;
 
     .logo-text-blue {
-      color: #00b7f5;
+      color: $theme-blue;
     }
 
     .logo-text-dynamic {
@@ -39,7 +41,7 @@
     }
 
     .logo-text-yellow {
-      color: #ffcb26;
+      color: $theme-yellow;
     }
   }
 }

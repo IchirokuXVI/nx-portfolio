@@ -1,0 +1,21 @@
+<lib-damocles-sword-section-layout
+  [borderAlignment]="BorderAlignment.RIGHT"
+  [title]="'section-vision.main-title' | rokuT"
+>
+  <div class="section-content">
+    <div class="content-text">
+      <span>
+        {{ 'section-vision.business-talk' | rokuT }}
+      </span>
+      <lib-damocles-sword-call-to-action-button
+        [link]="[]"
+        class="know-more-button"
+      >
+        {{ 'section-vision.know-more' | rokuT }}
+      </lib-damocles-sword-call-to-action-button>
+    </div>
+    <div class="content-img">
+      <img [src]="sectionVisionAddon" alt="Vision" />
+    </div>
+  </div>
+</lib-damocles-sword-section-layout>

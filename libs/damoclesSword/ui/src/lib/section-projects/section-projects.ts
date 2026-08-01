@@ -1,14 +1,12 @@
 import { Component, input } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import {
-  BorderAlignment,
-  DoubleBorderedTitle,
-} from '../double-bordered-title/double-bordered-title';
+import { BorderAlignment } from '../enums/border-alignment';
 import { ProjectCard, ProjectData } from '../project-card/project-card';
+import { SectionLayout } from '../section-layout/section-layout';
 
 @Component({
-  selector: 'lib-damoclesSword-section-projects',
-  imports: [DoubleBorderedTitle, RokuTranslatorPipe, ProjectCard],
+  selector: 'lib-damocles-sword-section-projects',
+  imports: [RokuTranslatorPipe, ProjectCard, SectionLayout],
   templateUrl: './section-projects.html',
   styleUrl: './section-projects.scss',
 })
@@ -62,7 +60,7 @@ export class SectionProjects {
         {
           kind: 'image',
           position: 'top-right',
-          src: import('../../../assets/starlit-logo.png').then(
+          src: import('../../../assets/starlit-logo.avif').then(
             (module) => module.default
           ),
         },

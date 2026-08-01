@@ -1,3 +1,5 @@
+@import '../styles/variables';
+
 :host {
   container-type: inline-size;
   display: block;
@@ -105,7 +107,7 @@
       padding: 0.75em 3em;
       font-weight: 550;
       color: #333;
-      background-color: #ffcb26;
+      background-color: $theme-yellow;
       border: $border-size solid black;
       text-transform: uppercase;
       font-size: 1.25em;
@@ -118,15 +120,15 @@
         left: -($border-size);
         height: 4px;
         width: calc(100% + $border-size * 2);
-        background-color: #00b7f5;
+        background-color: $theme-blue;
       }
 
       &:hover {
-        background-color: #00b7f5;
+        background-color: $theme-blue;
         color: #fff;
 
         &::before {
-          background-color: #ffcb26;
+          background-color: $theme-yellow;
         }
       }
     }

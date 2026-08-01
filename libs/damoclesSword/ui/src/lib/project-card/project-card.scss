@@ -1,3 +1,5 @@
+@import '../styles/variables';
+
 :host {
   display: flex;
   width: 100%;
@@ -11,9 +13,9 @@
   width: 100%;
   gap: 1.25em;
   background-color: var(--card-bg, #fff);
-  color: var(--card-color, #1a1a1a);
+  color: var(--card-color, $theme-dark);
   border: 1px solid #3333331f;
-  border-left: 4px solid var(--accent-color, #00b7f5);
+  border-left: 4px solid var(--accent-color, $theme-blue);
   box-shadow:
     0 1px 2px #33333314,
     0 12px 28px -14px #33333373;
@@ -26,7 +28,7 @@
     transform: translateY(-4px);
     box-shadow:
       0 2px 4px #3333331a,
-      0 20px 40px -16px var(--accent-color-glow, #00b7f566);
+      0 20px 40px -16px var(--accent-color-glow, rgba($theme-blue, 0.4));
   }
 
   .card-content {
@@ -43,7 +45,7 @@
       text-wrap: wrap;
       font-family: 'Audiowide', sans-serif;
       font-size: 1.5em;
-      border-bottom: 4px solid var(--accent-color, #00b7f5);
+      border-bottom: 4px solid var(--accent-color, $theme-blue);
     }
 
     .card-main-content {

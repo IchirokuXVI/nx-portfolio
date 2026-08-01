@@ -1,0 +1,50 @@
+@import '../styles/variables';
+
+:host {
+  --section-padding: 3em 2em 0 2em;
+}
+
+.section-content {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  gap: 2.5em;
+  container-type: inline-size;
+
+  .content-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2em;
+    padding-bottom: 1em;
+
+    span {
+      font-size: 1.25em;
+      white-space: pre-line;
+    }
+
+    .know-more-button {
+      --call-to-action-bg: #{$theme-dark};
+      --call-to-action-color: #fff;
+      --call-to-action-accent: #{$theme-yellow};
+
+      margin: auto 0;
+    }
+  }
+
+  .content-img {
+    margin-left: auto;
+
+    img {
+      height: 100%;
+      width: auto;
+    }
+  }
+}
+
+@container (max-width: 800px) {
+  .section-content {
+    .content-img {
+      display: none;
+    }
+  }
+}

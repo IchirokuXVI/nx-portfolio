@@ -7,8 +7,8 @@ import { CallToActionButton } from './call-to-action-button';
 
 @Component({
   imports: [CallToActionButton],
-  template: `<lib-damoclesSword-call-to-action-button [link]="link"
-    >Projected label</lib-damoclesSword-call-to-action-button
+  template: `<lib-damocles-sword-call-to-action-button [link]="link"
+    >Projected label</lib-damocles-sword-call-to-action-button
   >`,
 })
 class HostComponent {
@@ -59,7 +59,7 @@ describe('CallToActionButton', () => {
 
     it('lets consumers override the background and accent on the host', () => {
       const el = (fixture.nativeElement as HTMLElement).querySelector(
-        'lib-damoclesSword-call-to-action-button'
+        'lib-damocles-sword-call-to-action-button'
       ) as HTMLElement;
 
       el.style.setProperty('--call-to-action-bg', 'rgb(1, 2, 3)');

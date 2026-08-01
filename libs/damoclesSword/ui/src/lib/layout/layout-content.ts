@@ -1,7 +1,7 @@
 import { Directive } from '@angular/core';
 
 /**
- * Marks the routed content projected into `<lib-damoclesSword-layout>`.
+ * Marks the routed content projected into `<lib-damocles-sword-layout>`.
  *
  * The layout renders this template only after translations have loaded, so
  * routed components — and their pure translate pipes — are never instantiated
@@ -9,11 +9,11 @@ import { Directive } from '@angular/core';
  *
  * Usage:
  * ```html
- * <lib-damoclesSword-layout>
+ * <lib-damocles-sword-layout>
  *   <ng-template libDamoclesSwordLayoutContent>
  *     <router-outlet></router-outlet>
  *   </ng-template>
- * </lib-damoclesSword-layout>
+ * </lib-damocles-sword-layout>
  * ```
  */
 @Directive({

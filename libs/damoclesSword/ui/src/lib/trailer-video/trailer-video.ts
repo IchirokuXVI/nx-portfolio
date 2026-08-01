@@ -3,13 +3,13 @@ import { Component, input } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 
 @Component({
-  selector: 'lib-damoclesSword-trailer-video',
+  selector: 'lib-damocles-sword-trailer-video',
   imports: [AsyncPipe, RokuTranslatorPipe],
   templateUrl: './trailer-video.html',
   styleUrl: './trailer-video.scss',
 })
 export class TrailerVideo {
-  starlitLogo = import('../../../assets/starlit-logo.png').then(
+  starlitLogo = import('../../../assets/starlit-logo.avif').then(
     (m) => m.default
   );
 

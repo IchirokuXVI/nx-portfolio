@@ -1,0 +1,174 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  container-type: inline-size;
+  --section-padding: 0;
+  --section-bg: #0a0a0a;
+  --section-color: #fff;
+}
+
+.section-contact-support {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-width: 0;
+
+    .panel-header {
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+      padding: 4em 0 2.5em 0;
+
+      .panel-title {
+        font-family: 'Audiowide', sans-serif;
+        font-size: 2.75em;
+        font-weight: 400;
+        text-transform: uppercase;
+        margin: 0;
+        text-align: center;
+      }
+
+      .panel-bar {
+        height: 10px;
+        width: 100%;
+      }
+    }
+
+    .panel-body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-grow: 1;
+      gap: 2em;
+      padding: 3em 4em 3.5em 4em;
+
+      .panel-description {
+        font-size: 1.25em;
+        line-height: 1.6;
+        text-align: center;
+        margin: 0;
+      }
+
+      .confirmation {
+        font-family: 'Audiowide', sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 0;
+      }
+    }
+  }
+
+  // Keep contact (yellow) panel.
+  .keep-contact {
+    .panel-bar {
+      background-color: $theme-yellow;
+    }
+
+    .panel-body {
+      background-color: rgba($theme-yellow, 0.65);
+    }
+
+    .email-form {
+      display: flex;
+      align-items: stretch;
+      width: 100%;
+      background-color: #fff;
+      border: 3px solid #fff;
+
+      input {
+        flex-grow: 1;
+        min-width: 0;
+        border: none;
+        outline: none;
+        background: transparent;
+        padding: 0.9em 1.2em;
+        font-size: 1.15em;
+        color: $theme-dark;
+
+        &::placeholder {
+          color: #8a8a8a;
+        }
+      }
+
+      .submit-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        padding: 0 1em;
+        color: $theme-dark;
+
+        lib-upload-icon {
+          width: 1.9em;
+          height: 1.9em;
+        }
+
+        &:hover {
+          color: #000;
+        }
+      }
+    }
+  }
+
+  // Help us (blue) panel.
+  .help-us {
+    .panel-bar {
+      background-color: $theme-blue;
+    }
+
+    .panel-body {
+      background-color: rgba($theme-blue, 0.65);
+    }
+
+    .patreon-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 1em;
+      background-color: $theme-yellow;
+      color: $theme-dark;
+      text-decoration: none;
+      font-family: 'Audiowide', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.85em 2em;
+      transition: transform 0.2s ease;
+
+      img {
+        height: 1.6em;
+        width: auto;
+      }
+
+      &:hover {
+        transform: translateY(-3px);
+      }
+    }
+  }
+}
+
+.section-contact-support {
+  @container (max-width: 800px) {
+    flex-direction: column;
+
+    .panel {
+      .panel-header {
+        padding: 3em 0 2em 0;
+
+        .panel-title {
+          font-size: 2em;
+        }
+      }
+
+      .panel-body {
+        padding: 2.5em 2em 3em 2em;
+      }
+    }
+  }
+}
