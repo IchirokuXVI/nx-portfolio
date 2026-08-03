@@ -1,6 +1,5 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, computed, input } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 
 export interface ProjectAddon {
   kind: 'video' | 'image';
@@ -12,13 +11,14 @@ export interface ProjectAddon {
 export interface ProjectData {
   kind: 'client-project' | 'game';
   label: string;
+  /** Already-translated copy for the active locale (rendered as-is). */
   description: string;
   addons?: ProjectAddon[];
 }
 
 @Component({
   selector: 'lib-damocles-sword-project-card',
-  imports: [RokuTranslatorPipe, AsyncPipe],
+  imports: [AsyncPipe],
   templateUrl: './project-card.html',
   styleUrl: './project-card.scss',
 })

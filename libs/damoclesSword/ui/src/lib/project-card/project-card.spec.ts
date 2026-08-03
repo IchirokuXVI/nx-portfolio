@@ -1,5 +1,4 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { ProjectCard, ProjectData } from './project-card';
@@ -41,7 +40,6 @@ describe('ProjectCard', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ProjectCard],
-      providers: [provideRokuTranslatorTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ProjectCard);
@@ -54,18 +52,20 @@ describe('ProjectCard', () => {
   });
 
   describe('content', () => {
-    it('renders the translated label and description', async () => {
+    it('renders the label and already-translated description as-is', async () => {
       await renderWith(
-        makeProject({ label: 'my.label', description: 'my.description' })
+        makeProject({
+          label: 'STARLIT: ASCENSION',
+          description: 'An already-translated description.',
+        })
       );
       const host = fixture.nativeElement as HTMLElement;
 
-      // The testing translator echoes the key, so we assert on the key itself.
       expect(host.querySelector('.card-title')?.textContent?.trim()).toBe(
-        'my.label'
+        'STARLIT: ASCENSION'
       );
       expect(host.querySelector('.card-main-content')?.textContent?.trim()).toBe(
-        'my.description'
+        'An already-translated description.'
       );
     });
 

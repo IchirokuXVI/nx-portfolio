@@ -1,8 +1,28 @@
-import { Component, input } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import {
+  ProjectMemory,
+  TranslatedProject,
+} from '@portfolio/damoclesSword/data-access';
+import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { BorderAlignment } from '../enums/border-alignment';
 import { ProjectCard, ProjectData } from '../project-card/project-card';
 import { SectionLayout } from '../section-layout/section-layout';
+
+/** Adapts a translated data-access project (assets resolved) to the card input. */
+function toProjectData(project: TranslatedProject): ProjectData {
+  return {
+    kind: project.kind,
+    label: project.label,
+    description: project.description,
+    addons: project.addons?.map((addon) => ({
+      kind: addon.kind,
+      position: addon.position,
+      src: addon.src,
+      alt: addon.alt,
+    })),
+  };
+}
 
 @Component({
   selector: 'lib-damocles-sword-section-projects',
@@ -10,63 +30,28 @@ import { SectionLayout } from '../section-layout/section-layout';
   templateUrl: './section-projects.html',
   styleUrl: './section-projects.scss',
 })
-export class SectionProjects {
-  clientProjects = input<ProjectData[]>([
-    {
-      kind: 'client-project',
-      label: 'VR Sickness Reducer',
-      description:
-        'section-projects.client-projects-vr-sickness-reducer-description',
-      addons: [
-        {
-          kind: 'video',
-          position: 'right',
-          src: import('../../../assets/vr-sickness-reducer-demo.mp4').then(
-            (module) => module.default
-          ),
-        },
-      ],
-    },
-    {
-      kind: 'client-project',
-      label: 'Realistic Interactor',
-      description:
-        'section-projects.client-projects-realistic-interactor-description',
-      addons: [
-        {
-          kind: 'video',
-          position: 'right',
-          src: import('../../../assets/realistic-interactor-demo.mp4').then(
-            (module) => module.default
-          ),
-        },
-      ],
-    },
-  ]);
+export class SectionProjects implements OnInit {
+  private readonly _projectServ = inject(ProjectMemory);
 
-  games = input<ProjectData[]>([
-    {
-      kind: 'game',
-      label: 'STARLIT: ASCENSION',
-      description: 'section-projects.games-starlit-ascension-description',
-      addons: [
-        {
-          kind: 'video',
-          position: 'right',
-          src: import('../../../assets/vr-sickness-reducer-demo.mp4').then(
-            (module) => module.default
-          ),
-        },
-        {
-          kind: 'image',
-          position: 'top-right',
-          src: import('../../../assets/starlit-logo.avif').then(
-            (module) => module.default
-          ),
-        },
-      ],
-    },
-  ]);
+  private readonly _projects = signal<TranslatedProject[]>([]);
+
+  readonly clientProjects = computed<ProjectData[]>(() =>
+    this._projects()
+      .filter((project) => project.kind === 'client-project')
+      .map(toProjectData)
+  );
+
+  readonly games = computed<ProjectData[]>(() =>
+    this._projects()
+      .filter((project) => project.kind === 'game')
+      .map(toProjectData)
+  );
+
+  ngOnInit() {
+    this._projectServ
+      .getList(RokuTranslator.getLocale())
+      .subscribe((projects) => this._projects.set(projects));
+  }
 
   get BorderAlignment() {
     return BorderAlignment;

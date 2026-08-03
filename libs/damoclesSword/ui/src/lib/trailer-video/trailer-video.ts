@@ -1,5 +1,6 @@
 import { AsyncPipe } from '@angular/common';
-import { Component, input } from '@angular/core';
+import { Component, inject, input } from '@angular/core';
+import { AssetMemory } from '@portfolio/damoclesSword/data-access';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 
 @Component({
@@ -9,9 +10,10 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
   styleUrl: './trailer-video.scss',
 })
 export class TrailerVideo {
-  starlitLogo = import('../../../assets/starlit-logo.avif').then(
-    (m) => m.default
-  );
+  private readonly _assets = inject(AssetMemory);
+
+  // The logo lives with projects data, so request with the service
+  starlitLogo = this._assets.get('starlit-logo');
 
   trailerLinks = input([
     {

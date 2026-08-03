@@ -1,5 +1,6 @@
-import { Injectable } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { of } from 'rxjs';
+import { AssetMemory } from '../asset/asset-memory';
 import { News, NewsTranslation, TranslatedNews } from './news';
 import { NEWS } from './static-news-data';
 import { NEWS_TRANSLATIONS } from './static-news-translation-data';
@@ -7,13 +8,15 @@ import { NEWS_TRANSLATIONS } from './static-news-translation-data';
 /**
  * In-memory news source backed by static mock data. Joins each news item with
  * its localized text (falling back to `en`), the same way the real endpoint
- * will return already-localized copy. Swap for an HTTP-backed implementation of
- * {@link NewsServiceI} once the server exists.
+ * will return already-localized copy, and resolves each item's image asset key
+ * to a URL. Swap for an HTTP-backed implementation of {@link ./news-service}'s
+ * `NewsServiceI` once the server exists.
  */
 @Injectable({
   providedIn: 'root',
 })
 export class NewsMemory {
+  private readonly _assets = inject(AssetMemory);
   private _news = NEWS;
   private _newsTranslations = NEWS_TRANSLATIONS;
 
@@ -38,7 +41,15 @@ export class NewsMemory {
         );
       }
 
-      return { ...news, ...translation } as News & NewsTranslation;
+      const resolved: News = {
+        id: news.id,
+        icon: news.icon,
+        image: news.imageAsset
+          ? this._assets.get(news.imageAsset)
+          : undefined,
+      };
+
+      return { ...resolved, ...translation } as News & NewsTranslation;
     });
 
     return of<TranslatedNews[]>(translatedNews);

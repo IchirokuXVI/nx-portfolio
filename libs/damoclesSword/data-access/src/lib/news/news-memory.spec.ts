@@ -40,4 +40,13 @@ describe('NewsMemory', () => {
       })
     );
   });
+
+  it('resolves each item image asset to a url', async () => {
+    const news = await firstValueFrom(service.getList('en'));
+
+    // The jest asset mock stands in for the bundler-provided URL.
+    await expect(Promise.resolve(news[0].image)).resolves.toBe(
+      'asset-file-stub'
+    );
+  });
 });
