@@ -6,9 +6,12 @@ import {
 } from '@angular/core';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
 import { CallToActionButton } from './call-to-action-button/call-to-action-button';
+import { ContactForm } from './contact-form/contact-form';
 import { DoubleBorderedTitle } from './double-bordered-title/double-bordered-title';
 import { FooterLogo } from './footer-logo/footer-logo';
 import { FooterMain } from './footer-main/footer-main';
+import { FormButton } from './form-button/form-button';
+import { InfoCard } from './info-card/info-card';
 import { LanguageSelector } from './language-selector/language-selector';
 import { Layout } from './layout/layout';
 import { LayoutContent } from './layout/layout-content';
@@ -41,6 +44,9 @@ const components = [
   SectionOurVision,
   SectionContactSupport,
   SectionLayout,
+  FormButton,
+  ContactForm,
+  InfoCard,
 ];
 
 @NgModule({

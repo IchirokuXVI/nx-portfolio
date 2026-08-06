@@ -20,5 +20,20 @@
   "section-contact.help-us-title": "Aidez-nous",
   "section-contact.help-us-description": "Devenez membre de notre Patreon et soutenez activement le développement de nos jeux VR.",
   "section-contact.go-to-patreon": "Aller sur Patreon",
-  "section-contact.thank-you-support": "Merci pour votre soutien !"
+  "section-contact.thank-you-support": "Merci pour votre soutien !",
+  "contact-form.default-title": "Contactez-nous",
+  "contact-form.email-label": "Email",
+  "contact-form.email-placeholder": "Nous répondrons à cette adresse email",
+  "contact-form.name-label": "Nom / Pseudo",
+  "contact-form.name-placeholder": "Nous nous adresserons à vous par ce nom",
+  "contact-form.affair-label": "Sujet",
+  "contact-form.affair-placeholder": "Dites-moi quel est le sujet du message",
+  "contact-form.message-label": "Message",
+  "contact-form.message-placeholder": "Écrivez ici tout ce que vous voulez nous dire",
+  "contact-form.links-label": "Liens",
+  "contact-form.links-placeholder": "Des liens vers des informations supplémentaires ?",
+  "contact-form.send": "Envoyer",
+  "contact-form.required": "Ce champ est obligatoire",
+  "contact-form.invalid-email": "Veuillez saisir une adresse email valide",
+  "contact-form.success": "Message envoyé ! Nous vous répondrons bientôt."
 }
