@@ -1,0 +1,25 @@
+<lib-damocles-sword-section-layout
+  [borderAlignment]="BorderAlignment.LEFT"
+  [title]="'section-what-we-do.main-title' | rokuT"
+>
+  <div class="section-content">
+    <p class="intro">{{ 'section-what-we-do.intro' | rokuT }}</p>
+
+    <h3 class="subheading">{{ 'section-what-we-do.approach-title' | rokuT }}</h3>
+
+    <div class="cards-row">
+      <lib-damocles-sword-info-card
+        [description]="'section-what-we-do.approach-1-description' | rokuT"
+        [title]="'section-what-we-do.approach-1-title' | rokuT"
+      />
+      <lib-damocles-sword-info-card
+        [description]="'section-what-we-do.approach-2-description' | rokuT"
+        [title]="'section-what-we-do.approach-2-title' | rokuT"
+      />
+      <lib-damocles-sword-info-card
+        [description]="'section-what-we-do.approach-3-description' | rokuT"
+        [title]="'section-what-we-do.approach-3-title' | rokuT"
+      />
+    </div>
+  </div>
+</lib-damocles-sword-section-layout>

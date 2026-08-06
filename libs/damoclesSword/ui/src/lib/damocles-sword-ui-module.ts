@@ -20,11 +20,16 @@ import { MainHeader } from './main-header/main-header';
 import { NewsCard } from './news-card/news-card';
 import { SectionContactSupport } from './section-contact-support/section-contact-support';
 import { SectionFuture } from './section-future/section-future';
+import { SectionHowWeWork } from './section-how-we-work/section-how-we-work';
 import { SectionLayout } from './section-layout/section-layout';
 import { SectionNews } from './section-news/section-news';
 import { SectionOurValues } from './section-our-values/section-our-values';
 import { SectionOurVision } from './section-our-vision/section-our-vision';
 import { SectionProjects } from './section-projects/section-projects';
+import { SectionProjectsDetailed } from './section-projects-detailed/section-projects-detailed';
+import { SectionServicesContact } from './section-services-contact/section-services-contact';
+import { SectionWhatWeDo } from './section-what-we-do/section-what-we-do';
+import { SectionWhereWeFit } from './section-where-we-fit/section-where-we-fit';
 import { SectionWhoWeAre } from './section-who-we-are/section-who-we-are';
 import { LibFontLoaderComponent } from './services/font-loader/font-loader';
 import { TrailerVideo } from './trailer-video/trailer-video';
@@ -53,6 +58,11 @@ const components = [
   SectionWhoWeAre,
   SectionOurValues,
   SectionFuture,
+  SectionWhatWeDo,
+  SectionHowWeWork,
+  SectionWhereWeFit,
+  SectionProjectsDetailed,
+  SectionServicesContact,
 ];
 
 @NgModule({

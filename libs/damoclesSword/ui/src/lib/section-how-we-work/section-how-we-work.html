@@ -1,0 +1,55 @@
+<lib-damocles-sword-section-layout
+  [borderAlignment]="BorderAlignment.CENTER"
+  [title]="'section-how-we-work.main-title' | rokuT"
+>
+  <div class="section-content">
+    <p class="intro">{{ 'section-how-we-work.intro' | rokuT }}</p>
+
+    <ol class="phases">
+      <li class="phase">
+        <span class="phase-number">1</span>
+        <p class="phase-text">{{ 'section-how-we-work.phase-1' | rokuT }}</p>
+      </li>
+      <li class="phase">
+        <span class="phase-number">2</span>
+        <div class="phase-text">
+          <p>{{ 'section-how-we-work.phase-2' | rokuT }}</p>
+          <ul class="phase-items">
+            <li>{{ 'section-how-we-work.phase-2-item-1' | rokuT }}</li>
+            <li>{{ 'section-how-we-work.phase-2-item-2' | rokuT }}</li>
+            <li>{{ 'section-how-we-work.phase-2-item-3' | rokuT }}</li>
+          </ul>
+        </div>
+      </li>
+      <li class="phase">
+        <span class="phase-number">3</span>
+        <p class="phase-text">{{ 'section-how-we-work.phase-3' | rokuT }}</p>
+      </li>
+    </ol>
+
+    <h3 class="subheading">
+      {{ 'section-how-we-work.characteristics-title' | rokuT }}
+    </h3>
+
+    <div class="features-row">
+      <article class="feature">
+        <h4 class="feature-title">
+          {{ 'section-how-we-work.feature-1-title' | rokuT }}
+        </h4>
+        <p class="feature-description">
+          {{ 'section-how-we-work.feature-1-description' | rokuT }}
+        </p>
+        <div class="feature-bar"></div>
+      </article>
+      <article class="feature">
+        <h4 class="feature-title">
+          {{ 'section-how-we-work.feature-2-title' | rokuT }}
+        </h4>
+        <p class="feature-description">
+          {{ 'section-how-we-work.feature-2-description' | rokuT }}
+        </p>
+        <div class="feature-bar"></div>
+      </article>
+    </div>
+  </div>
+</lib-damocles-sword-section-layout>

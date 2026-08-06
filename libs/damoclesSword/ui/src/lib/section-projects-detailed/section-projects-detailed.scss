@@ -1,0 +1,103 @@
+@import '../styles/variables';
+
+:host {
+  --section-bg: rgba(255, 255, 255, 0.9);
+  --section-color: #1a1a1a;
+  --section-title-color: #1a1a1a;
+}
+
+.section-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 2.5em;
+  container-type: inline-size;
+
+  .detailed-project-card {
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    border: 1px solid #3333331f;
+    border-left: 4px solid $theme-blue;
+    box-shadow:
+      0 1px 2px #33333314,
+      0 12px 28px -14px #33333373;
+
+    .card-title {
+      font-family: 'Audiowide', sans-serif;
+      font-size: 1.5em;
+      text-transform: uppercase;
+      padding: 0.75em 1em;
+      background-color: rgba($theme-blue, 0.1);
+      border-bottom: 4px solid $theme-blue;
+    }
+
+    .card-body {
+      display: flex;
+      flex-direction: row;
+      gap: 1.5em;
+      padding: 1.5em;
+
+      // Neutral placeholder box until real imagery is added later.
+      .card-media {
+        flex: 0 0 38%;
+        max-width: 38%;
+        aspect-ratio: 16 / 10;
+        background-color: rgba(0, 0, 0, 0.06);
+        border-bottom: 3px solid $theme-yellow;
+      }
+
+      .card-info {
+        display: flex;
+        flex: 1 1 0;
+        min-width: 0;
+        flex-direction: column;
+        gap: 1.25em;
+
+        .card-description {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        .card-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75em;
+
+          .tag-chip {
+            display: inline-flex;
+            flex-direction: column;
+            gap: 0.15em;
+            border-left: 3px solid $theme-yellow;
+            background-color: rgba($theme-yellow, 0.14);
+            padding: 0.4em 0.9em;
+
+            .tag-label {
+              font-family: 'Audiowide', sans-serif;
+              font-size: 0.7em;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              color: #555;
+            }
+
+            .tag-value {
+              font-size: 0.95em;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@container (max-width: 800px) {
+  .section-content .detailed-project-card .card-body {
+    flex-direction: column;
+
+    .card-media {
+      flex: 1 1 auto;
+      max-width: 100%;
+      width: 100%;
+    }
+  }
+}
