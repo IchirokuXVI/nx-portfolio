@@ -1,0 +1,29 @@
+<lib-damocles-sword-section-layout
+  [borderAlignment]="BorderAlignment.CENTER"
+  [title]="'section-hiring.main-title' | rokuT"
+>
+  <div class="section-hiring">
+    <p class="intro">{{ 'section-hiring.intro' | rokuT }}</p>
+
+    <div class="vacancies-table-wrap">
+      <table class="vacancies-table">
+        <thead>
+          <tr>
+            <th scope="col">{{ 'section-hiring.col-role' | rokuT }}</th>
+            <th scope="col">{{ 'section-hiring.col-department' | rokuT }}</th>
+            <th scope="col">{{ 'section-hiring.col-description' | rokuT }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (vacancy of vacancies; track vacancy.role) {
+            <tr>
+              <th scope="row">{{ vacancy.role | rokuT }}</th>
+              <td>{{ vacancy.department | rokuT }}</td>
+              <td>{{ vacancy.description | rokuT }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</lib-damocles-sword-section-layout>

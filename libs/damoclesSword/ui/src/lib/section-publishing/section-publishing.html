@@ -1,0 +1,45 @@
+<lib-damocles-sword-section-layout
+  [borderAlignment]="BorderAlignment.LEFT"
+  [title]="'section-publishing.main-title' | rokuT"
+>
+  <div class="section-publishing">
+    <p class="intro">{{ 'section-publishing.intro' | rokuT }}</p>
+
+    <div class="publishing-content">
+      <article class="game-card">
+        <div class="game-media" aria-hidden="true"></div>
+        <div class="game-body">
+          <div class="game-header">
+            <h3 class="game-title">
+              {{ 'section-publishing.game-title' | rokuT }}
+            </h3>
+            <span class="badge">{{ 'section-publishing.badge' | rokuT }}</span>
+          </div>
+          <p class="game-description">
+            {{ 'section-publishing.game-description' | rokuT }}
+          </p>
+          <div class="game-platforms">
+            <span class="platform">
+              <span class="platform-icon">
+                <lib-meta-icon aria-hidden="true" />
+              </span>
+              <span>{{ 'section-publishing.platform-meta' | rokuT }}</span>
+            </span>
+            <span class="platform">
+              <span class="platform-icon">
+                <lib-steam-icon aria-hidden="true" />
+              </span>
+              <span>{{ 'section-publishing.platform-steam' | rokuT }}</span>
+            </span>
+          </div>
+        </div>
+      </article>
+
+      <lib-damocles-sword-contact-form class="publishing-form">
+        <lib-damocles-sword-double-bordered-title contact-form-title>
+          {{ 'section-publishing.form-title' | rokuT }}
+        </lib-damocles-sword-double-bordered-title>
+      </lib-damocles-sword-contact-form>
+    </div>
+  </div>
+</lib-damocles-sword-section-layout>

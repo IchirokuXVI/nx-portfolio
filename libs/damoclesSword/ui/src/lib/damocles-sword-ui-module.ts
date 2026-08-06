@@ -21,6 +21,8 @@ import { NewsCard } from './news-card/news-card';
 import { SectionContactSupport } from './section-contact-support/section-contact-support';
 import { SectionFuture } from './section-future/section-future';
 import { SectionHowWeWork } from './section-how-we-work/section-how-we-work';
+import { SectionGeneralContact } from './section-general-contact/section-general-contact';
+import { SectionHiring } from './section-hiring/section-hiring';
 import { SectionLayout } from './section-layout/section-layout';
 import { SectionNews } from './section-news/section-news';
 import { SectionOurValues } from './section-our-values/section-our-values';
@@ -31,6 +33,7 @@ import { SectionServicesContact } from './section-services-contact/section-servi
 import { SectionWhatWeDo } from './section-what-we-do/section-what-we-do';
 import { SectionWhereWeFit } from './section-where-we-fit/section-where-we-fit';
 import { SectionWhoWeAre } from './section-who-we-are/section-who-we-are';
+import { SectionPublishing } from './section-publishing/section-publishing';
 import { LibFontLoaderComponent } from './services/font-loader/font-loader';
 import { TrailerVideo } from './trailer-video/trailer-video';
 
@@ -63,6 +66,9 @@ const components = [
   SectionWhereWeFit,
   SectionProjectsDetailed,
   SectionServicesContact,
+  SectionPublishing,
+  SectionHiring,
+  SectionGeneralContact,
 ];
 
 @NgModule({
