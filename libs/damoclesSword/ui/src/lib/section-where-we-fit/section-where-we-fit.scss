@@ -51,5 +51,12 @@
 @container (max-width: 640px) {
   .section-content .cards-row {
     flex-direction: column;
+    // Reset the wrap/basis from the 1000px rule: column + wrap would spill the
+    // cards into extra off-screen columns instead of a single stacked column.
+    flex-wrap: nowrap;
+
+    lib-damocles-sword-info-card {
+      flex: 1 1 auto;
+    }
   }
 }

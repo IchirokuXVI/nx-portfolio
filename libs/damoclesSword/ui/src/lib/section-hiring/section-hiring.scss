@@ -12,6 +12,9 @@
   flex-direction: column;
   gap: 2em;
   width: 100%;
+  // Let the column-flex children shrink below their content's min-content size
+  // so the wide vacancies table is clipped by its overflow-x wrapper.
+  min-width: 0;
 
   .intro {
     font-size: 1.15em;
@@ -26,6 +29,8 @@
 // table can never push the page itself past the viewport width.
 .vacancies-table-wrap {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
 }
 
