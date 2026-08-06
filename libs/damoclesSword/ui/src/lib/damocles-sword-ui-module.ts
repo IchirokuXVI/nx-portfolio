@@ -19,10 +19,13 @@ import { LogoBrand } from './logo-brand/logo-brand';
 import { MainHeader } from './main-header/main-header';
 import { NewsCard } from './news-card/news-card';
 import { SectionContactSupport } from './section-contact-support/section-contact-support';
+import { SectionFuture } from './section-future/section-future';
 import { SectionLayout } from './section-layout/section-layout';
 import { SectionNews } from './section-news/section-news';
+import { SectionOurValues } from './section-our-values/section-our-values';
 import { SectionOurVision } from './section-our-vision/section-our-vision';
 import { SectionProjects } from './section-projects/section-projects';
+import { SectionWhoWeAre } from './section-who-we-are/section-who-we-are';
 import { LibFontLoaderComponent } from './services/font-loader/font-loader';
 import { TrailerVideo } from './trailer-video/trailer-video';
 
@@ -47,6 +50,9 @@ const components = [
   FormButton,
   ContactForm,
   InfoCard,
+  SectionWhoWeAre,
+  SectionOurValues,
+  SectionFuture,
 ];
 
 @NgModule({

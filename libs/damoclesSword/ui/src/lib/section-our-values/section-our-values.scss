@@ -1,0 +1,56 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  --section-bg: rgba(255, 255, 255, 0.9);
+  --section-color: #1a1a1a;
+  --section-title-color: #1a1a1a;
+  --section-gap: 2.5em;
+}
+
+.values-intro {
+  max-width: 68ch;
+  margin: 0 auto;
+  font-size: 1.2em;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.values-grid {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  gap: 2em;
+  container-type: inline-size;
+
+  lib-damocles-sword-info-card {
+    --info-card-title-color: #{$theme-dark};
+    --info-card-color: #333;
+    --info-card-media-bg: rgba(0, 0, 0, 0.06);
+  }
+
+  lib-damocles-sword-info-card:nth-child(odd) {
+    --info-card-accent: #{$theme-blue};
+  }
+
+  lib-damocles-sword-info-card:nth-child(even) {
+    --info-card-accent: #{$theme-yellow};
+  }
+}
+
+@container (max-width: 800px) {
+  .values-grid {
+    flex-wrap: wrap;
+
+    lib-damocles-sword-info-card {
+      flex: 1 1 40%;
+    }
+  }
+}
+
+@container (max-width: 480px) {
+  .values-grid {
+    flex-direction: column;
+  }
+}

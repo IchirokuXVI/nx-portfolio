@@ -1,0 +1,52 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  --section-bg: #0a0a0a;
+  --section-color: #f5f5f0;
+  --section-title-color: #fff;
+  --section-padding: 3.5em 2em;
+}
+
+.section-content {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  gap: 2.5em;
+  container-type: inline-size;
+
+  .content-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    justify-content: center;
+    gap: 1.5em;
+
+    span {
+      font-family: 'Audiowide', sans-serif;
+      font-size: 1.15em;
+      line-height: 1.8;
+      white-space: pre-line;
+    }
+  }
+
+  .content-media {
+    flex: 0 0 38%;
+    align-self: stretch;
+    min-height: 320px;
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+}
+
+@container (max-width: 800px) {
+  .section-content {
+    flex-direction: column;
+
+    .content-media {
+      flex-basis: auto;
+      min-height: 200px;
+    }
+  }
+}

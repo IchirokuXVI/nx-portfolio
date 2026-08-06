@@ -35,5 +35,19 @@
   "contact-form.send": "Enviar",
   "contact-form.required": "Este campo es obligatorio",
   "contact-form.invalid-email": "Introduce una dirección de correo válida",
-  "contact-form.success": "¡Mensaje enviado! Te responderemos pronto."
+  "contact-form.success": "¡Mensaje enviado! Te responderemos pronto.",
+  "section-who-we-are.main-title": "Quiénes Somos",
+  "section-who-we-are.body": "Somos un estudio nacido de la pasión de un grupo de estudiantes universitarios que, en algún momento de su camino, decidieron adentrarse en el mundo de los videojuegos creando el suyo propio, concretamente usando una tecnología que aún no está estandarizada: la realidad virtual.\n\n¿Nuestro propósito? Lo tenemos claro: desarrollar juegos que nos motiven a la vez que ofrecemos a nuestra comunidad y al mundo nuevas experiencias que no se han visto antes.\n\n¿Soñadores? Puede ser. Pero con esfuerzo y amor por nuestros productos, estamos dispuestos a hacer todo lo posible para alcanzar esos sueños. Eso es Damocle'Sword.",
+  "section-our-values.main-title": "Nuestros Valores",
+  "section-our-values.intro": "En Damocle'Sword tenemos muy claro quiénes somos y cómo somos. Por eso creemos que es importante comunicar los valores que nos definen como estudio, siendo siempre fieles a ellos en todo momento.",
+  "section-our-values.quality-title": "Calidad Y Exigencia",
+  "section-our-values.quality-description": "Siempre damos lo mejor de nosotros, esforzándonos por aprender y mejorar con cada desarrollo. Queremos que incluso el público más crítico reconozca nuestro esfuerzo y dedicación.",
+  "section-our-values.responsibility-title": "Responsabilidad Social",
+  "section-our-values.responsibility-description": "Somos conscientes de que nuestros juegos pueden tener repercusiones sociales, y siempre lo tenemos en cuenta, siendo responsables de lo que hacemos.",
+  "section-our-values.respect-title": "Respeto Por Los Nuestros",
+  "section-our-values.respect-description": "Respetamos las necesidades de nuestro equipo y siempre nos esforzamos por hacer lo mejor para todos.",
+  "section-our-values.curiosity-title": "Curiosidad",
+  "section-our-values.curiosity-description": "Siempre buscamos experimentar con nuevos conceptos y tecnologías, nos encanta crear y aprender cosas nuevas.",
+  "section-future.main-title": "Damocle'Sword En El Futuro",
+  "section-future.body": "Somos un equipo con altas expectativas para nuestro camino futuro, esforzándonos cada día por alcanzar nuestro objetivo.\n\nEn el futuro (no muy lejano), Damocle'Sword será una gran empresa española capaz de desarrollar múltiples proyectos simultáneamente y con un gran equipo con el que aprender y desarrollar.\n\nTambién imaginamos un plan para apoyar otros proyectos a través de la publicación y ofreciendo servicios de desarrollo a otras empresas del sector, así como expandirnos hacia el desarrollo cultural, ofreciendo experiencias a museos, deportes, etc."
 }

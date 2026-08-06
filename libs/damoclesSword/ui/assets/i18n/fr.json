@@ -35,5 +35,19 @@
   "contact-form.send": "Envoyer",
   "contact-form.required": "Ce champ est obligatoire",
   "contact-form.invalid-email": "Veuillez saisir une adresse email valide",
-  "contact-form.success": "Message envoyé ! Nous vous répondrons bientôt."
+  "contact-form.success": "Message envoyé ! Nous vous répondrons bientôt.",
+  "section-who-we-are.main-title": "Qui Sommes-Nous",
+  "section-who-we-are.body": "Nous sommes un studio né de la passion d'un groupe d'étudiants universitaires qui, à un moment de leur parcours, ont décidé d'entrer dans le monde du jeu vidéo en créant le leur, en utilisant plus précisément une technologie qui n'est pas encore standardisée : la réalité virtuelle.\n\nNotre objectif ? Il est clair : développer des jeux qui nous motivent tout en offrant à notre communauté et au monde de nouvelles expériences jamais vues auparavant.\n\nRêveurs ? Peut-être. Mais avec des efforts et de l'amour pour nos produits, nous sommes prêts à tout faire pour atteindre ces rêves. C'est ça, Damocle'Sword.",
+  "section-our-values.main-title": "Nos Valeurs",
+  "section-our-values.intro": "Chez Damocle'Sword, nous savons très bien qui nous sommes et comment nous sommes. C'est pourquoi nous pensons qu'il est important de communiquer les valeurs qui nous définissent en tant que studio, en leur restant toujours fidèles à tout moment.",
+  "section-our-values.quality-title": "Qualité Et Exigence",
+  "section-our-values.quality-description": "Nous donnons toujours le meilleur de nous-mêmes, en nous efforçant d'apprendre et de nous améliorer à chaque développement. Nous voulons que même le public le plus critique reconnaisse nos efforts et notre soin.",
+  "section-our-values.responsibility-title": "Responsabilité Sociale",
+  "section-our-values.responsibility-description": "Nous sommes conscients que nos jeux peuvent avoir des répercussions sociales, et nous en tenons toujours compte, en étant responsables de ce que nous faisons.",
+  "section-our-values.respect-title": "Respect Des Nôtres",
+  "section-our-values.respect-description": "Nous respectons les besoins de notre équipe et nous nous efforçons toujours de faire ce qui est le mieux pour tous.",
+  "section-our-values.curiosity-title": "Curiosité",
+  "section-our-values.curiosity-description": "Nous cherchons toujours à expérimenter de nouveaux concepts et technologies, nous adorons créer et apprendre de nouvelles choses.",
+  "section-future.main-title": "Damocle'Sword Dans Le Futur",
+  "section-future.body": "Nous sommes une équipe avec de grandes attentes pour notre parcours futur, nous efforçant chaque jour d'atteindre notre objectif.\n\nDans le futur (pas si lointain), Damocle'Sword sera une grande entreprise espagnole capable de développer plusieurs projets simultanément et disposant d'une grande équipe avec laquelle apprendre et se développer.\n\nNous envisageons également un plan pour soutenir d'autres projets par le biais de l'édition et en offrant des services de développement à d'autres entreprises du secteur, ainsi que de nous étendre au développement culturel, en offrant des expériences aux musées, au sport, etc."
 }
