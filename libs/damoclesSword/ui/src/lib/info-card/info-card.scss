@@ -1,0 +1,57 @@
+@import '../styles/variables';
+
+:host {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.info-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+  width: 100%;
+
+  .info-card-title {
+    font-family: 'Audiowide', sans-serif;
+    font-size: 1.15em;
+    font-weight: 400;
+    text-transform: uppercase;
+    margin: 0;
+    color: var(--info-card-title-color, inherit);
+  }
+
+  // Neutral placeholder box until real imagery is added later.
+  .info-card-media {
+    aspect-ratio: 16 / 10;
+    width: 100%;
+    background-color: var(--info-card-media-bg, rgba(0, 0, 0, 0.08));
+    border-bottom: 3px solid var(--info-card-accent, #{$theme-blue});
+
+    // Collapse the placeholder if nothing is projected into it.
+    &:empty {
+      background-color: var(--info-card-media-bg, rgba(0, 0, 0, 0.06));
+    }
+
+    ::ng-deep img,
+    ::ng-deep video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+  }
+
+  .info-card-description {
+    margin: 0;
+    line-height: 1.6;
+    flex-grow: 1;
+    color: var(--info-card-color, inherit);
+  }
+
+  .info-card-bar {
+    height: 6px;
+    width: 100%;
+    background-color: var(--info-card-accent, #{$theme-yellow});
+  }
+}
