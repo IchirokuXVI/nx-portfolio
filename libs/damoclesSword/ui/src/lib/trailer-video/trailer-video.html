@@ -1,27 +1,50 @@
 <div class="damocles-trailer-video">
   <div class="limited-width-container">
     <div class="trailer-container">
-      <iframe
-        allow="
-          accelerometer;
-          autoplay;
-          clipboard-write;
-          encrypted-media;
-          gyroscope;
-          picture-in-picture;
-          web-share;
-        "
-        allowfullscreen
-        frameborder="0"
-        referrerpolicy="strict-origin-when-cross-origin"
-        src="https://www.youtube.com/embed/qkD7Emx3AoY"
+      <video
+        #trailerVideo
+        (pause)="playing.set(false)"
+        (play)="playing.set(true)"
+        (volumechange)="syncMuted()"
+        [muted]="true"
+        [src]="starlitTrailer | async"
+        autoplay
+        loop
+        muted
+        playsinline
         title="Starlit: Ascension Gameplay Trailer"
-      ></iframe>
+      ></video>
     </div>
+  </div>
+  <div class="trailer-controls">
+    <button
+      (click)="togglePlayback()"
+      [attr.aria-label]="playing() ? 'Pause trailer' : 'Play trailer'"
+      class="trailer-control"
+      type="button"
+    >
+      @if (playing()) {
+        <lib-pause-icon></lib-pause-icon>
+      } @else {
+        <lib-play-icon></lib-play-icon>
+      }
+    </button>
+    <button
+      (click)="toggleMute()"
+      [attr.aria-label]="muted() ? 'Unmute trailer' : 'Mute trailer'"
+      class="trailer-control"
+      type="button"
+    >
+      @if (muted()) {
+        <lib-mute-icon></lib-mute-icon>
+      } @else {
+        <lib-volume-icon></lib-volume-icon>
+      }
+    </button>
   </div>
   <div class="game-logo-container">
     <div class="starlit-logo-container">
-      <img [src]="starlitLogo | async" />
+      <img [src]="starlitLogo | async" alt="Starlit: Ascension" />
     </div>
     <!-- <div class="trailer-button-container">
       <a href="https://www.youtube.com/watch?v=qkD7Emx3AoY">
@@ -33,7 +56,7 @@
     @for (trailerLink of trailerLinks(); track $index) {
       <a [href]="trailerLink.url" class="social-button" target="_blank">
         <span class="button-icon">
-          <img [src]="trailerLink.icon | async" />
+          <img [src]="trailerLink.icon | async" [alt]="trailerLink.label" />
         </span>
         <span class="button-label">
           {{ trailerLink.label }}
@@ -41,7 +64,7 @@
       </a>
     }
   </div>
-  <div class="see-more-container">
+  <!-- <div class="see-more-container">
     <a class="see-more-button">{{ 'trailer-video.see_more' | rokuT }}</a>
-  </div>
+  </div> -->
 </div>

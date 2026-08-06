@@ -18,7 +18,7 @@
   .limited-width-container {
     width: 100%;
     flex-grow: 1;
-    max-width: 1536px;
+    max-width: 1920px;
     display: flex;
 
     .trailer-container {
@@ -26,9 +26,19 @@
       flex-grow: 1;
       width: 100%;
 
-      iframe {
-        aspect-ratio: 16/9;
+      video {
         width: 100%;
+        // Full width, but deliberately shorter than a 16:9 frame so the header +
+        // trailer sit around 70% of the viewport height on a 1080p screen and
+        // the trailer is never pushed below the fold. `object-fit: cover` crops
+        // the excess equally from the top and bottom.
+        //
+        // `56.25vw` is the natural 16:9 height at full width: capping the height
+        // there keeps it responsive on smaller/narrower screens (the video
+        // shrinks with the width instead of staying a tall, over-cropped strip),
+        // while `60vh` caps it on tall viewports so it never reaches the fold.
+        height: min(60vh, 56.25vw);
+        object-fit: cover;
       }
     }
   }
@@ -57,6 +67,44 @@
     }
   }
 
+  .trailer-controls {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    padding: 1.25em 1.5em;
+    display: flex;
+    gap: 0.75em;
+
+    .trailer-control {
+      width: 2.75em;
+      height: 2.75em;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background-color: rgba(0, 0, 0, 0.55);
+      border: 2px solid #fff;
+      border-radius: 0.25em;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+
+      &:hover,
+      &:focus-visible {
+        background-color: rgba(0, 0, 0, 0.85);
+      }
+
+      lib-play-icon,
+      lib-pause-icon,
+      lib-mute-icon,
+      lib-volume-icon {
+        display: inline-flex;
+        width: 1.4em;
+        height: 1.4em;
+      }
+    }
+  }
+
   .socials-container {
     position: absolute;
     right: 0;
@@ -65,6 +113,7 @@
     display: flex;
     flex-direction: column;
     gap: 1.5em;
+    pointer-events: none;
 
     .social-button {
       background-color: black;
@@ -76,6 +125,7 @@
       align-items: center;
       padding: 1em 2em;
       text-decoration: none;
+      pointer-events: auto;
       cursor: pointer;
 
       .button-icon {
@@ -166,6 +216,23 @@
       .see-more-button {
         padding: 0.5em 2em;
         font-size: 0.9em;
+      }
+    }
+
+    .trailer-controls {
+      padding: 0.75rem 1rem;
+
+      .trailer-control {
+        width: 2.25em;
+        height: 2.25em;
+
+        lib-play-icon,
+        lib-pause-icon,
+        lib-mute-icon,
+        lib-volume-icon {
+          width: 1em;
+          height: 1em;
+        }
       }
     }
   }
