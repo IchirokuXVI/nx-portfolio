@@ -13,7 +13,15 @@
 }
 
 .contact-form-heading {
+  font-size: 1.75em; // match the real section-title size
+  text-transform: uppercase; // match section titles
   margin-bottom: 0.5em;
+}
+
+@container (max-width: 640px) {
+  .contact-form-heading {
+    font-size: 1.5em;
+  }
 }
 
 .field {
@@ -24,9 +32,10 @@
   min-width: 0;
 
   label {
-    font-family: 'Audiowide', sans-serif;
+    font-family: inherit; // system sans stack — labels are UI content, not titles
     font-size: 0.9em;
-    letter-spacing: 0.03em;
+    font-weight: 600; // emphasis in place of the display face
+    letter-spacing: 0.02em; // wide tracking was tuned for Audiowide
     color: var(--contact-label-color, inherit);
   }
 
@@ -39,7 +48,9 @@
     background-color: var(--contact-input-bg, #fff);
     color: var(--contact-input-color, #{$theme-dark});
     padding: 0.85em 1em;
+    font-family: inherit; // controls don't inherit font by default (textarea → monospace)
     font-size: 1em;
+    line-height: 1.4;
     outline: none;
     transition: border-color 0.2s ease;
 
@@ -58,8 +69,11 @@
   }
 }
 
+// Stack grouped fields (Name / Affair) like every other field so all three
+// form instances read identically regardless of their container width.
 .field-row {
   display: flex;
+  flex-direction: column;
   gap: 1.5em;
 }
 
@@ -76,14 +90,8 @@
 
 .contact-form-success {
   margin: 0;
-  font-family: 'Audiowide', sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-family: inherit; // status message — not a title
+  font-weight: 600;
+  letter-spacing: 0.03em;
   color: var(--contact-accent-focus, #{$theme-blue});
-}
-
-@container (max-width: 640px) {
-  .field-row {
-    flex-direction: column;
-  }
 }

@@ -16,8 +16,15 @@
     font-family: 'Audiowide', sans-serif;
     font-size: 1.15em;
     font-weight: 400;
+    line-height: 1.2;
     text-transform: uppercase;
     margin: 0;
+    // Reserve two lines so every card's media shares a top edge even when a
+    // neighbour's title wraps. Bottom-align so 1- and 2-line titles both sit
+    // against the media.
+    min-height: 2.4em; // 1.2 line-height * 2 lines
+    display: flex;
+    align-items: flex-end;
     color: var(--info-card-title-color, inherit);
   }
 

@@ -22,7 +22,7 @@
 
     .contact-subtitle {
       margin: 0;
-      font-family: 'Audiowide', sans-serif;
+      font-family: inherit; // sub-title/caption — body font, not a title
       text-transform: uppercase;
       letter-spacing: 0.05em;
       font-size: 1em;

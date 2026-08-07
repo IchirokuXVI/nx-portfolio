@@ -69,7 +69,7 @@
             background-color: rgba($theme-blue, 0.12);
             border-left: 3px solid $theme-blue;
             padding: 0.4em 0.9em;
-            font-family: 'Audiowide', sans-serif;
+            font-family: inherit; // system sans stack — not a title
             font-size: 0.85em;
           }
         }

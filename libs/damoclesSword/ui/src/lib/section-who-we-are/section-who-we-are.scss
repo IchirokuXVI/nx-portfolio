@@ -24,10 +24,10 @@
     gap: 1.5em;
 
     span {
-      font-family: 'Audiowide', sans-serif;
-      font-size: 1.15em;
-      line-height: 1.8;
-      white-space: pre-line;
+      font-family: inherit; // -apple-system system sans stack
+      font-size: 1.0625em; // ~17px; matches Home body copy
+      line-height: 1.7;
+      white-space: pre-line; // keep — the copy relies on line breaks
     }
   }
 
