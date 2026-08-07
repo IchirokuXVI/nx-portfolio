@@ -1,4 +1,4 @@
-# Plan 05 — Align card images regardless of title height
+# Plan 0010 — Align card images regardless of title height
 
 **Point:** R2 (your finding #2). Affects Services "WHAT DO WE DO?" → OUR APPROACH and About → OUR VALUES.
 

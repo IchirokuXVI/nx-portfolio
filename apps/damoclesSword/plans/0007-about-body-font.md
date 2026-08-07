@@ -1,9 +1,9 @@
-# Plan 02 — About: body copy should not use the display font
+# Plan 0007 — About: body copy should not use the display font
 
-**Point:** R6 (was C1). Depends on the rule in Plan 01.
+**Point:** R6 (was C1). Depends on the rule in Plan 0006.
 
 ## Problem
-The two dark About sections render multi‑line **body paragraphs in `Audiowide` at 1.15em (~18.4px)**, while every other body paragraph on the site (including "OUR VALUES" on the same page) uses the `-apple-system` sans stack. It is hard to read and visually inconsistent.
+The two dark About sections render multi‑line **body paragraphs in `Audiowide`** — a display font meant for titles — while every other body paragraph on the site (including "OUR VALUES" on the same page) uses the `-apple-system` sans stack. Per Plan 0006, body copy is content, not a title, so it must use the body font.
 
 ## Root cause (exact)
 - `libs/damoclesSword/ui/src/lib/section-who-we-are/section-who-we-are.scss` lines ~26–31:
@@ -30,9 +30,6 @@ Switch these paragraphs to the body font; keep the reading rhythm.
 ```
 - Keep `white-space: pre-line` (the translated body strings contain intentional paragraph breaks).
 - Match the size/line‑height to Home's body copy (`.subsection-description`, ~19.2px / `.card-main-content`) so About reads like the rest of the site.
-
-### Alternative (if the brand insists on Audiowide here)
-Per Plan 01 you *could* instead bump to `font-size: 1.5em`, but for **long‑form paragraphs** that is large and still a display face — **not recommended**. Switching to the body font is the right call for body copy.
 
 ## Files to change
 - `libs/damoclesSword/ui/src/lib/section-who-we-are/section-who-we-are.scss`

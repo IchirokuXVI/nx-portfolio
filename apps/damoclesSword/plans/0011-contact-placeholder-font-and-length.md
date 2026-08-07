@@ -1,4 +1,4 @@
-# Plan 06 — Contact form: unify placeholder font & fix placeholder length
+# Plan 0011 — Contact form: unify placeholder font & fix placeholder length
 
 **Point:** R4 (your finding #4). Two bugs, one plan.
 

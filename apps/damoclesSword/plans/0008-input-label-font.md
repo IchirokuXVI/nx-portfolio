@@ -1,9 +1,9 @@
-# Plan 03 — Contact form: input labels should not use Audiowide
+# Plan 0008 — Contact form: input labels should not use Audiowide
 
-**Point:** R3 (your finding #3). Depends on the rule in Plan 01.
+**Point:** R3 (your finding #3). Depends on the rule in Plan 0006.
 
 ## Problem
-Every contact‑form field label (Email, Name / Nickname, Affair, Message, Links) is rendered in `Audiowide` at `0.9em` (~14.4px). A 400‑weight display font at 14px is exactly the "looks bad" case from Plan 01, and form labels should be plain, legible UI text.
+Every contact‑form field label (Email, Name / Nickname, Affair, Message, Links) is rendered in `Audiowide`. Per Plan 0006, `Audiowide` is a display font reserved for titles; form labels are UI content, so they should be plain, legible body‑font text.
 
 ## Root cause (exact)
 `libs/damoclesSword/ui/src/lib/contact-form/contact-form.scss` lines ~26–31:
@@ -29,8 +29,8 @@ label {
   color: var(--contact-label-color, inherit);
 }
 ```
-- Keep labels small (they *should* be); the point is they must not be Audiowide at this size.
-- Optional: also drop Audiowide from `.contact-form-success` (line ~79, same file) which is `text-transform: uppercase` at default size — either size it up per Plan 01 or switch it too. Decide while here.
+- Keep labels small (they *should* be); the point is they must not be Audiowide — that font is for titles only.
+- Optional: also drop Audiowide from `.contact-form-success` (line ~79, same file) — it is a status message, not a title, so switch it to the body font too. Decide while here.
 
 ## Files to change
 - `libs/damoclesSword/ui/src/lib/contact-form/contact-form.scss`

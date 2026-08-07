@@ -1,6 +1,6 @@
-# Plan 04 — Form/sub‑section titles: fix casing and size
+# Plan 0009 — Form/sub‑section titles: fix casing and size
 
-**Points:** R5 (your finding #5) + R7 (was C4). Depends on the rule in Plan 01.
+**Points:** R5 (your finding #5) + R7 (was C4). Related to Plan 0006 (these headings are genuine titles, so they *keep* Audiowide — the issue here is casing and size, not the font choice).
 
 ## Problem
 Two related inconsistencies on the same titles:
@@ -25,7 +25,7 @@ Give the form‑title slot the same "title" treatment as `.section-title`. Prefe
 1. In `contact-form.scss`, style the heading wrapper that hosts the projected/default title:
    ```scss
    .contact-form-heading {
-     font-size: 1.75em;          // >= 1.5em so Audiowide is legible (Plan 01)
+     font-size: 1.75em;          // match the real section-title size
      text-transform: uppercase;  // match section titles
      margin-bottom: 0.5em;
    }
@@ -37,7 +37,7 @@ Give the form‑title slot the same "title" treatment as `.section-title`. Prefe
 
 2. **Proper‑noun exception:** "Starlit: Ascension" is a game name. If uppercasing it is undesirable, opt that one instance out (e.g. a `data-keep-case` / modifier class on the publishing `double-bordered-title` that sets `text-transform: none`) while still getting the larger size. Decide with design; default is to uppercase everything for consistency.
 
-3. `section-services-contact.scss` `.contact-subtitle` ("TELL US YOUR NEEDS") is `Audiowide 1em` — bring it into the rule too: either size to ≥1.5em or switch to the body font as a small caption. Co‑located here since it sits directly under the same title.
+3. `section-services-contact.scss` `.contact-subtitle` ("TELL US YOUR NEEDS") uses `Audiowide` — but it is a sub‑title/caption, not a title, so per Plan 0006 switch it to the body font. Co‑located here since it sits directly under the same title.
 
 ## Files to change
 - `libs/damoclesSword/ui/src/lib/contact-form/contact-form.scss` (`.contact-form-heading`)
