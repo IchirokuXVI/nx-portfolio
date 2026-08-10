@@ -1,0 +1,129 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  // Dark band.
+  --section-bg: #0a0a0a;
+  --section-color: #f5f5f0;
+  --section-title-color: #fff;
+  // Keep the projected form legible on the dark band.
+  --contact-label-color: #fff;
+}
+
+.section-publishing {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5em;
+  width: 100%;
+  container-type: inline-size;
+
+  .intro {
+    font-size: 1.15em;
+    line-height: 1.6;
+    white-space: pre-line;
+    margin: 0;
+  }
+}
+
+.publishing-content {
+  display: flex;
+  flex-direction: row;
+  gap: 2.5em;
+  align-items: flex-start;
+
+  .game-card {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 4px solid $theme-yellow;
+
+    .game-media {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .game-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25em;
+      padding: 1.75em;
+
+      .game-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1em;
+        flex-wrap: wrap;
+
+        .game-title {
+          font-family: 'Audiowide', sans-serif;
+          font-size: 1.5em;
+          font-weight: 400;
+          margin: 0;
+        }
+
+        .badge {
+          font-family: 'Audiowide', sans-serif;
+          font-size: 0.75em;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          white-space: nowrap;
+          padding: 0.4em 0.9em;
+          color: $theme-dark;
+          background-color: $theme-yellow;
+        }
+      }
+
+      .game-description {
+        font-size: 1em;
+        line-height: 1.6;
+        white-space: pre-line;
+        margin: 0;
+      }
+
+      .game-platforms {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5em;
+
+        .platform {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.6em;
+          font-family: 'Audiowide', sans-serif;
+          font-size: 0.9em;
+          letter-spacing: 0.03em;
+
+          .platform-icon {
+            display: inline-flex;
+            width: 1.6em;
+            height: 1.6em;
+            color: $theme-blue;
+          }
+        }
+      }
+    }
+  }
+
+  .publishing-form {
+    flex: 1 1 0;
+    min-width: 0;
+    --contact-input-bg: #fff;
+    --contact-input-color: #{$theme-dark};
+  }
+}
+
+@container (max-width: 800px) {
+  .publishing-content {
+    flex-direction: column;
+
+    .game-card,
+    .publishing-form {
+      width: 100%;
+    }
+  }
+}

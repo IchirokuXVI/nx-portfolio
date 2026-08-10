@@ -1,0 +1,97 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  container-type: inline-size;
+}
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5em;
+  width: 100%;
+}
+
+.contact-form-heading {
+  font-size: 1.75em; // match the real section-title size
+  text-transform: uppercase; // match section titles
+  margin-bottom: 0.5em;
+}
+
+@container (max-width: 640px) {
+  .contact-form-heading {
+    font-size: 1.5em;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  flex: 1 1 0;
+  min-width: 0;
+
+  label {
+    font-family: inherit; // system sans stack — labels are UI content, not titles
+    font-size: 0.9em;
+    font-weight: 600; // emphasis in place of the display face
+    letter-spacing: 0.02em; // wide tracking was tuned for Audiowide
+    color: var(--contact-label-color, inherit);
+  }
+
+  input,
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--contact-input-border, rgba(0, 0, 0, 0.15));
+    border-bottom: 3px solid var(--contact-accent, #{$theme-yellow});
+    background-color: var(--contact-input-bg, #fff);
+    color: var(--contact-input-color, #{$theme-dark});
+    padding: 0.85em 1em;
+    font-family: inherit; // controls don't inherit font by default (textarea → monospace)
+    font-size: 1em;
+    line-height: 1.4;
+    outline: none;
+    transition: border-color 0.2s ease;
+
+    &::placeholder {
+      color: #8a8a8a;
+    }
+
+    &:focus {
+      border-bottom-color: var(--contact-accent-focus, #{$theme-blue});
+    }
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 6em;
+  }
+}
+
+// Stack grouped fields (Name / Affair) like every other field so all three
+// form instances read identically regardless of their container width.
+.field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5em;
+}
+
+.field-error {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--contact-error-color, #ff6b6b);
+}
+
+.contact-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.contact-form-success {
+  margin: 0;
+  font-family: inherit; // status message — not a title
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--contact-accent-focus, #{$theme-blue});
+}

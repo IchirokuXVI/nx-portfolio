@@ -1,0 +1,90 @@
+<form class="contact-form" [formGroup]="form" (ngSubmit)="submit()">
+  <div class="contact-form-heading">
+    <ng-content select="[contact-form-title]">
+      <lib-damocles-sword-double-bordered-title>
+        {{ 'contact-form.default-title' | rokuT }}
+      </lib-damocles-sword-double-bordered-title>
+    </ng-content>
+  </div>
+
+  <div class="field">
+    <label for="contact-email">{{ 'contact-form.email-label' | rokuT }} *</label>
+    <input
+      [attr.placeholder]="'contact-form.email-placeholder' | rokuT"
+      id="contact-email"
+      autocomplete="email"
+      formControlName="email"
+      type="email"
+    />
+    @if (form.controls.email.touched && form.controls.email.invalid) {
+      <p class="field-error">
+        @if (form.controls.email.hasError('required')) {
+          {{ 'contact-form.required' | rokuT }}
+        } @else {
+          {{ 'contact-form.invalid-email' | rokuT }}
+        }
+      </p>
+    }
+  </div>
+
+  <div class="field-row">
+    <div class="field">
+      <label for="contact-name">{{ 'contact-form.name-label' | rokuT }}</label>
+      <input
+        [attr.placeholder]="'contact-form.name-placeholder' | rokuT"
+        id="contact-name"
+        autocomplete="name"
+        formControlName="name"
+        type="text"
+      />
+    </div>
+    <div class="field">
+      <label for="contact-affair">
+        {{ 'contact-form.affair-label' | rokuT }}
+      </label>
+      <input
+        [attr.placeholder]="'contact-form.affair-placeholder' | rokuT"
+        id="contact-affair"
+        formControlName="affair"
+        type="text"
+      />
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="contact-message">
+      {{ 'contact-form.message-label' | rokuT }} *
+    </label>
+    <textarea
+      [attr.placeholder]="'contact-form.message-placeholder' | rokuT"
+      id="contact-message"
+      formControlName="message"
+      rows="5"
+    ></textarea>
+    @if (form.controls.message.touched && form.controls.message.invalid) {
+      <p class="field-error">{{ 'contact-form.required' | rokuT }}</p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="contact-links">{{ 'contact-form.links-label' | rokuT }}</label>
+    <input
+      [attr.placeholder]="'contact-form.links-placeholder' | rokuT"
+      id="contact-links"
+      formControlName="links"
+      type="text"
+    />
+  </div>
+
+  <div class="contact-form-actions">
+    <ng-content select="[contact-form-submit]">
+      <lib-damocles-sword-form-button [disabled]="sending()">
+        {{ 'contact-form.send' | rokuT }}
+      </lib-damocles-sword-form-button>
+    </ng-content>
+  </div>
+
+  @if (sent()) {
+    <p class="contact-form-success">{{ 'contact-form.success' | rokuT }}</p>
+  }
+</form>

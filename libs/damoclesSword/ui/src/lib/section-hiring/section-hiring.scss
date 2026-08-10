@@ -1,0 +1,80 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  // Light band.
+  --section-bg: rgba(255, 255, 255, 0.9);
+  --section-color: #1a1a1a;
+}
+
+.section-hiring {
+  display: flex;
+  flex-direction: column;
+  gap: 2em;
+  width: 100%;
+  // Let the column-flex children shrink below their content's min-content size
+  // so the wide vacancies table is clipped by its overflow-x wrapper.
+  min-width: 0;
+
+  .intro {
+    font-size: 1.15em;
+    line-height: 1.6;
+    white-space: pre-line;
+    text-align: center;
+    margin: 0;
+  }
+}
+
+// The wrapper is the only element allowed to scroll horizontally, so a wide
+// table can never push the page itself past the viewport width.
+.vacancies-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.vacancies-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1em;
+
+  th,
+  td {
+    text-align: left;
+    padding: 1em 1.25em;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  }
+
+  thead th {
+    font-family: 'Audiowide', sans-serif;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 3px solid $theme-yellow;
+    white-space: nowrap;
+  }
+
+  tbody th {
+    font-family: 'Audiowide', sans-serif;
+    font-weight: 400;
+    white-space: nowrap;
+    color: $theme-dark;
+  }
+
+  tbody td {
+    line-height: 1.5;
+
+    &:nth-child(2) {
+      white-space: nowrap;
+      color: $theme-blue;
+      font-weight: 600;
+    }
+  }
+
+  tbody tr:last-child th,
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+}

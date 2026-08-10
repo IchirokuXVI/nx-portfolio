@@ -1,0 +1,26 @@
+<lib-damocles-sword-section-layout
+  [borderAlignment]="BorderAlignment.LEFT"
+  [title]="'section-projects-detailed.main-title' | rokuT"
+>
+  <div class="section-content">
+    @for (project of projects; track project.titleKey) {
+      <article class="detailed-project-card">
+        <div class="card-title">{{ project.titleKey | rokuT }}</div>
+        <div class="card-body">
+          <div class="card-media"></div>
+          <div class="card-info">
+            <p class="card-description">{{ project.descriptionKey | rokuT }}</p>
+            <div class="card-tags">
+              @for (tag of project.tags; track tag.labelKey) {
+                <span class="tag-chip">
+                  <span class="tag-label">{{ tag.labelKey | rokuT }}</span>
+                  <span class="tag-value">{{ tag.valueKey | rokuT }}</span>
+                </span>
+              }
+            </div>
+          </div>
+        </div>
+      </article>
+    }
+  </div>
+</lib-damocles-sword-section-layout>

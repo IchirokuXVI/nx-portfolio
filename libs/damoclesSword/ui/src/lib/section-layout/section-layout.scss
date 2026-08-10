@@ -27,6 +27,15 @@
     flex-direction: column;
     flex-grow: 1;
     width: 100%;
+    // Allow shrinking below the content's min-content size so an overly wide
+    // child (e.g. a nowrap table) is clipped by its own overflow-x wrapper
+    // instead of forcing this flex item — and the page — past the viewport.
+    min-width: 0;
+    // Clip decorative horizontal overhang (e.g. the double-bordered title's
+    // offset underline) at narrow widths so it never triggers page-wide
+    // horizontal scroll. No effect at desktop widths, and it does not disable
+    // any descendant's own overflow-x scroller.
+    overflow-x: clip;
     max-width: var(--section-max-width, 1280px);
     margin: 0 auto;
     padding: var(--section-padding, 3em 2em);

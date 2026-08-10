@@ -1,0 +1,32 @@
+@import '../styles/variables';
+
+:host {
+  --section-bg: #0a0a0a;
+  --section-color: #f5f5f0;
+  // Contact-form labels must read on the dark band.
+  --contact-label-color: #fff;
+  --contact-accent: #{$theme-yellow};
+  --contact-accent-focus: #{$theme-blue};
+}
+
+.section-services-contact {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  container-type: inline-size;
+
+  .contact-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75em;
+
+    .contact-subtitle {
+      margin: 0;
+      font-family: inherit; // sub-title/caption — body font, not a title
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 1em;
+      color: $theme-yellow;
+    }
+  }
+}

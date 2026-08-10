@@ -1,0 +1,14 @@
+<lib-damocles-sword-section-layout
+  [borderAlignment]="BorderAlignment.CENTER"
+  [title]="'section-our-values.main-title' | rokuT"
+>
+  <p class="values-intro">{{ 'section-our-values.intro' | rokuT }}</p>
+  <div class="values-grid">
+    @for (value of values; track value.title) {
+      <lib-damocles-sword-info-card
+        [description]="value.description | rokuT"
+        [title]="value.title | rokuT"
+      />
+    }
+  </div>
+</lib-damocles-sword-section-layout>

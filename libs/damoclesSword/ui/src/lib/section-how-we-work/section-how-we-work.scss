@@ -1,0 +1,129 @@
+@import '../styles/variables';
+
+:host {
+  --section-bg: rgba(255, 255, 255, 0.9);
+  --section-color: #1a1a1a;
+  --section-title-color: #1a1a1a;
+}
+
+.section-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 2em;
+  container-type: inline-size;
+
+  .intro {
+    font-size: 1.25em;
+    line-height: 1.6;
+    white-space: pre-line;
+    margin: 0;
+  }
+
+  .phases {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    .phase {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 1.25em;
+
+      .phase-number {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 2.5em;
+        height: 2.5em;
+        border-radius: 50%;
+        background-color: $theme-blue;
+        color: #fff;
+        font-family: 'Audiowide', sans-serif;
+        font-size: 1.25em;
+      }
+
+      .phase-text {
+        margin: 0;
+        line-height: 1.6;
+        font-size: 1.1em;
+
+        p {
+          margin: 0;
+        }
+
+        .phase-items {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5em 1em;
+          margin: 0.75em 0 0 0;
+          padding: 0;
+          list-style: none;
+
+          li {
+            background-color: rgba($theme-blue, 0.12);
+            border-left: 3px solid $theme-blue;
+            padding: 0.4em 0.9em;
+            font-family: inherit; // system sans stack — not a title
+            font-size: 0.85em;
+          }
+        }
+      }
+    }
+  }
+
+  .subheading {
+    font-family: 'Audiowide', sans-serif;
+    font-size: 1.5em;
+    font-weight: 400;
+    text-transform: uppercase;
+    margin: 0.5em 0 0 0;
+    text-align: center;
+  }
+
+  .features-row {
+    display: flex;
+    flex-direction: row;
+    gap: 2em;
+    width: 100%;
+
+    .feature {
+      display: flex;
+      flex: 1 1 0;
+      min-width: 0;
+      flex-direction: column;
+      gap: 1em;
+
+      .feature-title {
+        font-family: 'Audiowide', sans-serif;
+        font-size: 1.15em;
+        font-weight: 400;
+        text-transform: uppercase;
+        margin: 0;
+      }
+
+      .feature-description {
+        margin: 0;
+        line-height: 1.6;
+        flex-grow: 1;
+      }
+
+      .feature-bar {
+        height: 6px;
+        width: 100%;
+        background-color: $theme-yellow;
+      }
+    }
+  }
+}
+
+@container (max-width: 800px) {
+  .section-content .features-row {
+    flex-direction: column;
+  }
+}

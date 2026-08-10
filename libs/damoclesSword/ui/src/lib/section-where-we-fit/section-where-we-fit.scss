@@ -1,0 +1,62 @@
+@import '../styles/variables';
+
+:host {
+  --section-bg: #0a0a0a;
+  --section-color: #f5f5f0;
+  --section-title-color: #fff;
+  // Info cards read on the dark band.
+  --info-card-title-color: #fff;
+  --info-card-color: #f5f5f0;
+  --info-card-accent: #{$theme-yellow};
+  --info-card-media-bg: rgba(255, 255, 255, 0.06);
+}
+
+.section-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 2em;
+  container-type: inline-size;
+
+  .intro {
+    font-size: 1.25em;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .cards-row {
+    display: flex;
+    flex-direction: row;
+    gap: 2em;
+    width: 100%;
+  }
+
+  .closing {
+    font-size: 1.1em;
+    line-height: 1.6;
+    margin: 0;
+  }
+}
+
+@container (max-width: 1000px) {
+  .section-content .cards-row {
+    flex-wrap: wrap;
+
+    lib-damocles-sword-info-card {
+      flex: 1 1 45%;
+    }
+  }
+}
+
+@container (max-width: 640px) {
+  .section-content .cards-row {
+    flex-direction: column;
+    // Reset the wrap/basis from the 1000px rule: column + wrap would spill the
+    // cards into extra off-screen columns instead of a single stacked column.
+    flex-wrap: nowrap;
+
+    lib-damocles-sword-info-card {
+      flex: 1 1 auto;
+    }
+  }
+}
