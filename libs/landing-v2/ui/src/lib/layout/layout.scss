@@ -15,7 +15,8 @@
   // are sized in viewport units so they stay compact near the top instead of
   // being stretched thin down the full (very tall) page height.
   background-color: $ground;
-  background-image: radial-gradient(
+  background-image:
+    radial-gradient(
       120vw 90vh at 100% -8vh,
       rgba(242, 212, 91, 0.16),
       transparent 60%

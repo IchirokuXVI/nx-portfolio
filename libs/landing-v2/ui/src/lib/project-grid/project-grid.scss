@@ -7,13 +7,11 @@
 
 .project-grid {
   width: 100%;
-  background-color: $ground;
 
   &__inner {
     max-width: $container-max;
     margin: 0 auto;
-    padding:
-      clamp(2rem, 5vw, 3.5rem) clamp(1rem, 4vw, 2.5rem)
+    padding: clamp(2rem, 5vw, 3.5rem) clamp(1rem, 4vw, 2.5rem)
       clamp(3rem, 6vw, 5rem);
   }
 
