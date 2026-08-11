@@ -5,8 +5,8 @@
 
 ## Goal
 Stand up the empty-but-wired structure so `0002`–`0005` have real projects to fill:
-the `libs/landing-v2/*` scope, the shell route moved under `:locale`, and the
-remote-entry left blank (renders only through the shell).
+the `libs/landing-v2/*` scope, the shell's empty-path `:locale` child repointed to
+landingV2 (cutover), and the remote-entry left blank (renders only through the shell).
 
 ## 1. Generate the libraries
 Use the Angular library generator (jest + eslint + scss per `nx.json` generator
@@ -83,27 +83,30 @@ Mirror `libs/landing/feature-shell` (`landing-wrapper` + `routes.ts`). Create:
   `libs/landing/feature-shell/src/lib/landing-wrapper/landing-wrapper.ts`.
 - Export the routes + wrapper from `libs/landing-v2/feature-shell/src/index.ts`.
 
-## 5. Move the shell route under `:locale`
+## 5. Replace landing with landingV2 at the locale root (decided cutover — D2)
 `apps/shell/src/app/app.routes.ts` — the generator inserted a **root-level**
-`landingV2` route. Remove that top-level entry and add it as a child of the existing
-`:locale` `LocaleWrapperComponent`, alongside the other remotes:
+`landingV2` route. Remove that top-level entry, and point the existing **empty-path**
+`:locale` child at `landingV2/Routes` (replacing `landing/Routes`). landingV2 mounts at
+the locale root, so its detail pages must be namespaced under `projects/` (`0004`) to
+avoid colliding with the `odontogram` / `damoclesSword` sibling routes:
 
 ```ts
 {
   path: ':locale',
   component: LocaleWrapperComponent,
   children: [
-    { path: 'odontogram',      loadChildren: () => import('odontogram/Routes').then((m) => m.remoteRoutes) },
-    { path: 'damoclesSword',   loadChildren: () => import('damoclesSword/Routes').then((m) => m.remoteRoutes) },
-    { path: 'landingV2',       loadChildren: () => import('landingV2/Routes').then((m) => m.remoteRoutes) }, // <-- add
-    { path: '',                loadChildren: () => import('landing/Routes').then((m) => m.remoteRoutes) },
+    { path: 'odontogram',    loadChildren: () => import('odontogram/Routes').then((m) => m.remoteRoutes) },
+    { path: 'damoclesSword', loadChildren: () => import('damoclesSword/Routes').then((m) => m.remoteRoutes) },
+    { path: '',              loadChildren: () => import('landingV2/Routes').then((m) => m.remoteRoutes) }, // was landing/Routes
     { path: '**', component: NotFoundComponent },
   ],
 }
 ```
 
-Leave the existing empty-path `landing` child in place (both remotes coexist during
-review — see OQ1). Preview URL becomes `/<locale>/landingV2`.
+The old `landing` remote route is now gone (v1 retired from routing). Leave the
+`'landing'` entry in `apps/shell/module-federation.config.ts` `remotes` and the
+`libs/landing/*` code in place for now — an unrouted remote is harmless; deleting the
+app/libs is a separate later cleanup. Landing page URL is now `/<locale>` (e.g. `/en`).
 
 ## 6. Verify
 1. `npx nx lint landingV2 landing-v2/models landing-v2/data-access landing-v2/ui landing-v2/feature-shell`
@@ -111,12 +114,13 @@ review — see OQ1). Preview URL becomes `/<locale>/landingV2`.
    `passWithNoTests` is on).
 2. `npx nx build landingV2 --configuration=development` — compiles (empty page OK).
 3. Live: `npx nx serve shell` (boots the shell + dev remotes). Open
-   `http://localhost:<shellport>/en/landingV2` — an empty shell-hosted page renders
-   (no errors in console; the real UI arrives in `0003`). Confirm port **4204**
-   direct (`http://localhost:4204`) shows the intentional empty remote root.
-4. Commit locally: `chore(landing-v2): scaffold libs + wire shell under :locale`.
+   `http://localhost:<shellport>/en` — an empty shell-hosted page renders (no errors in
+   console; the real UI arrives in `0003`). Confirm port **4204** direct
+   (`http://localhost:4204`) shows the intentional empty remote root.
+4. Commit locally: `chore(landing-v2): scaffold libs + route landingV2 at locale root`.
 
 ## Conflict discipline
 Shared files touched here are additive or generator-owned: `tsconfig.base.json`,
-`apps/shell/src/app/app.routes.ts` (move the one route), `apps/shell/module-federation.config.ts`
-(already has `landingV2`). Do not touch `libs/landing/*` or other remotes.
+`apps/shell/src/app/app.routes.ts` (repoint the empty-path child), and
+`apps/shell/module-federation.config.ts` (already has `landingV2`). Do not modify
+`libs/landing/*` (retired but left in place) or other remotes.

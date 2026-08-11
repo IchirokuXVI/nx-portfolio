@@ -31,10 +31,19 @@ fixes). **Copy it** to `apps/landing-v2-e2e/src/no-horizontal-scroll.spec.ts` an
      { name: 'uhd-4k',    width: 3840, height: 2160 },
    ];
    ```
-2. **Scope** — the crawler already seeds from `baseURL`'s path and only follows in-app
-   links within that subtree. Point `baseURL` at `/<locale>/landingV2` so it crawls the
-   landing page **and** the detail pages (`portfolio`, `odontogram`, `damoclesSword`)
-   automatically, while excluding links out to the other remotes/live apps.
+2. **Scope (important — landingV2 is at the locale root).** Point `baseURL` at
+   `/<locale>` (e.g. `/en`). The damocles spec's `inScope` (`p === scope ||
+   p.startsWith(scope + '/')`) is **too broad here**: from the root it would follow the
+   project cards' `appLink`s into the *other* remotes/live apps (`/en/odontogram`,
+   `/en/damoclesSword`, `/en/point-of-sale`), which have their own e2e. Narrow it so the
+   crawl covers only landingV2's own routes — the landing page and the `projects/`
+   subtree:
+   ```ts
+   const inScope = (p: string) =>
+     p === scope /* /en */ || p.startsWith(scope + '/projects');
+   ```
+   That discovers `/en/projects/portfolio|odontogram|damoclesSword` (reachable from the
+   landing "View project" links) and excludes everything else.
 3. Keep the two assertions unchanged: behavioural (`scrolledX === 0`) and geometric
    (`scrollWidth <= clientWidth + TOLERANCE_PX`), plus the offender list
    (`getBoundingClientRect().right > clientWidth`) so failures name the overflowing
@@ -47,11 +56,11 @@ Model `apps/landing-v2-e2e/playwright.config.ts` on
 - `webServer` boots the shell with the `landingV2` dev remote (so the page renders
   through the shell, per CLAUDE.md — never port 4204 directly) and sets
   `reuseExistingServer` for local runs.
-- `use.baseURL = 'http://localhost:<shellport>/en/landingV2'` (allow override via
+- `use.baseURL = 'http://localhost:<shellport>/en'` (allow override via
   `process.env.BASE_URL`, as damocles does).
-- Consider a second project/run for `/es/landingV2` (Spanish text is longer and is a
-  common source of overflow) — either a second `baseURL` run or a locale loop in the
-  spec. Recommended: cover both `en` and `es`.
+- Consider a second project/run for `/es` (Spanish text is longer and is a common
+  source of overflow) — either a second `baseURL` run or a locale loop in the spec.
+  Recommended: cover both `en` and `es`.
 
 ## Optional second spec — smoke
 Add `apps/landing-v2-e2e/src/landing.spec.ts` asserting the core of the page is present

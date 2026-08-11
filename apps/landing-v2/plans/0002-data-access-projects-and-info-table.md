@@ -12,16 +12,11 @@ Extend the current landing `Project` shape with **visual config** so the grid ca
 give some projects more columns than others (brief requirement #4).
 
 ```ts
-/** How the project renders as a hero image on the landing grid. */
-export type ProjectMediaKind = 'screenshot' | 'brand-panel';
-
 export interface ProjectVisual {
   /** Columns the card spans in the 2-col desktop grid. 1 or 2. */
   columnSpan: 1 | 2;
   /** Featured cards use the wide split layout (image beside text). */
   featured: boolean;
-  /** 'screenshot' → render `image`; 'brand-panel' → render the generated panel. */
-  mediaKind: ProjectMediaKind;
 }
 
 export interface Project {
@@ -29,10 +24,14 @@ export interface Project {
   /** Proper noun — same in every locale. */
   name: string;
   repoLink: string;
-  /** Route to the in-portfolio detail page, e.g. '/en/landingV2/odontogram'. */
+  /** Route to the in-portfolio detail page, e.g. '/en/projects/odontogram'. */
   detailLink?: string;
   /** Route to the live app, e.g. '/en/odontogram'. */
   appLink?: string;
+  /**
+   * Project screenshot. Optional: when absent, the card renders a generic
+   * placeholder (0003) — there is no media-kind discriminator.
+   */
   image?: string | Promise<string>;
   visual: ProjectVisual;
 }
@@ -56,14 +55,20 @@ list on `Project` (`tags: string[]`) rather than in translations.
 ### A.2 Structural data — `static-projects-data.ts`
 Four projects. `name` and `tags` are locale-independent. Set `visual` per the
 approved layout (Portfolio featured full-width; damoclesSword a wide highlight;
-Odontogram + POS standard).
+Odontogram + POS standard). Every project supplies an `image` screenshot; any project
+missing one renders the generic placeholder (0003).
 
-| id | name | mediaKind | columnSpan | featured | detailLink | appLink | repoLink |
-|----|------|-----------|-----------|----------|-----------|---------|----------|
-| 1 | Portfolio | brand-panel | 2 | true | `/{loc}/landingV2/portfolio` | `/{loc}` | this repo |
-| 2 | Damocle'Sword | screenshot | 2 | true | `/{loc}/landingV2/damoclesSword` | `/{loc}/damoclesSword` | this repo |
-| 3 | Odontogram | screenshot | 1 | false | `/{loc}/landingV2/odontogram` | `/{loc}/odontogram` | this repo |
-| 4 | Restaurant Point Of Sale | screenshot | 1 | false | — (deferred) | `/{loc}/point-of-sale` | this repo |
+| id | name | columnSpan | featured | detailLink | appLink | repoLink |
+|----|------|-----------|----------|-----------|---------|----------|
+| 1 | Portfolio | 2 | true | `/{loc}/projects/portfolio` | `/{loc}` | this repo |
+| 2 | Damocle'Sword | 2 | true | `/{loc}/projects/damoclesSword` | `/{loc}/damoclesSword` | this repo |
+| 3 | Odontogram | 1 | false | `/{loc}/projects/odontogram` | `/{loc}/odontogram` | this repo |
+| 4 | Restaurant Point Of Sale | 1 | false | — (deferred) | `/{loc}/point-of-sale` | this repo |
+
+> `detailLink` paths are namespaced under `projects/` because landingV2 mounts at the
+> locale root; `/{loc}/odontogram` and `/{loc}/damoclesSword` belong to the real
+> remotes (that's what `appLink` targets). Portfolio's `appLink` is the site root
+> `/{loc}` (the landing page itself).
 
 - Locale is injected when the service builds links (the `*Memory` gets `locale` in
   `getList(locale)`); store link **templates** or build them in the service like
@@ -78,34 +83,27 @@ Odontogram + POS standard).
   `libs/landing/data-access/assets/{odontogram,pos}_screenshot.png`. Copy them into
   `libs/landing-v2/data-access/src/assets/` and `import(...)` them the same lazy way
   (`import('../../assets/odontogram_screenshot.png').then((m) => m.default)`).
-- Damocle'Sword `image`: it has no landing screenshot yet. Options: (a) capture a
+- Damocle'Sword `image`: it has no landing screenshot yet. **Recommended:** capture a
   screenshot of the served damoclesSword home hero and add it as
-  `assets/damocles_screenshot.*`; (b) reuse an existing damocles asset — the studio
-  logo `libs/damoclesSword/data-access/src/assets/starlit-logo.avif` or a still from
-  its trailer. **Recommended:** capture a home-page screenshot for consistency with
-  the other cards; until then, fall back to `mediaKind: 'brand-panel'` for id 2 so the
-  grid never shows a broken image.
+  `assets/damocles_screenshot.*`. Until captured, leave `image` unset so the card
+  shows the generic placeholder (0003) rather than a broken image. (Alternative: reuse
+  an existing damocles asset such as `starlit-logo.avif`.)
 
-### A.3 Portfolio visual — proposal (brief requirement #7)
-The Portfolio card must not use a screenshot: a screenshot of this very site inside
-this very site is self-referential and would create an image loop. Proposal, in
-priority order:
+### A.3 Portfolio visual — decided: Nx module-federation graph image (brief req #7)
+A screenshot of this very site inside this very site would be self-referential and
+create an image loop, so Portfolio does **not** use a home-page screenshot. Decision
+(D-portfolio-image): Portfolio's `image` is a **dedicated "module-federation graph"
+image** — gold nodes (`shell`, `landing`, `odontogram`, `damoclesSword`) joined by thin
+lines on the dark ground, echoing `nx graph`. It's meaningful (this portfolio *is* an
+Nx module-federation monorepo) and on-brand.
 
-1. **(Recommended) An on-brand "module-federation graph" panel.** A small generated
-   graphic: gold nodes (`shell`, `landing`, `odontogram`, `damoclesSword`) joined by
-   thin lines on the dark ground, echoing `nx graph`. It's meaningful (this portfolio
-   *is* an Nx module-federation monorepo), unique, needs no screenshot, and reuses the
-   gold accent. Implement as a `brand-panel` variant in the UI (`0003`) — CSS/inline
-   `<canvas>` or a single small decorative SVG component in `libs/shared/ui`
-   (never raw inline SVG in the card).
-2. **Monogram panel** — the gold `</>` / `D` glyph on the gradient panel from the
-   approved mockup. Simplest; already designed.
-3. **Screenshot mosaic** — a tiled collage of the other three apps' screenshots
-   ("the portfolio contains these"). Conceptually nice but busy and still pulls app
-   screenshots; lower priority.
-
-Default to #1; if the executor can't produce a clean graph panel quickly, ship #2 and
-leave a TODO. Either way `mediaKind: 'brand-panel'`, no `image`.
+- Ship it as a **real image asset** in `libs/landing-v2/data-access/src/assets/`
+  (e.g. `portfolio_graph.png`/`.svg`), so it flows through the normal `image` path —
+  **no special-casing** in the card, and it participates in the placeholder-when-absent
+  rule like any other project.
+- Generate it once during implementation (match the dark ground + gold `#f2d45b`
+  accent). If it isn't ready when the card is first built, leave `image` unset so the
+  generic placeholder shows, and drop the asset in later — no code change needed.
 
 ### A.4 Translations — `static-projects-translation-data.ts`
 `en` + `es` rows per project (English is default/fallback). Reuse the v1 copy for
@@ -174,8 +172,8 @@ export type TranslatedInfoFact = InfoFact & InfoFactTranslation;
 ```
 
 ### B.2 Data — `static-info-facts-data.ts` + `static-info-facts-translation-data.ts`
-Structural rows (id/order/icon) and EN/ES translations. Proposed content (confirm per
-OQ2):
+Structural rows (id/order/icon) and EN/ES translations. Content (approved —
+D-hero-copy):
 
 | id | order | label EN / ES | value EN / ES | note EN / ES |
 |----|-------|---------------|---------------|--------------|

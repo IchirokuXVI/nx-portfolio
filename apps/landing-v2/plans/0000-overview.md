@@ -61,13 +61,22 @@ different Portfolio image).
 > Decision point for the user: if you'd rather **evolve `libs/landing/*` in place**
 > and retire v1, say so and `0001`/`0002` collapse onto the existing libs instead.
 
-### D2 — Route under the shell `:locale` wrapper (fix generator default)
-The generator added `landingV2` as a **root-level** route
-(`apps/shell/src/app/app.routes.ts`), but this app is locale-first like every other
-remote (`/:locale/...`, per CLAUDE.md "Locale-first routing"). `0001` moves it under
-the `:locale` `LocaleWrapperComponent` children. For preview it will sit at
-`/:locale/landingV2` (e.g. `/en/landingV2`); the eventual cutover (replacing the
-empty-path `landing` child) is out of scope here and tracked as an open question.
+### D2 — landingV2 replaces landing at the locale root (decided: cut over now)
+This app is locale-first like every other remote (`/:locale/...`, per CLAUDE.md
+"Locale-first routing"). The generator added `landingV2` as a **root-level** route;
+`0001` instead points the **empty-path `:locale` child** at `landingV2/Routes` (where
+`landing/Routes` used to be), removes the generator's root-level `landingV2` route, and
+removes the old `landing` route. So the landing page lives at **`/<locale>`** and v1 is
+retired from routing.
+
+**Routing consequence — detail pages are namespaced under `projects/`.** Because
+landingV2 now mounts at the locale root, its internal routes resolve relative to
+`/<locale>`. Paths like `odontogram` / `damoclesSword` would collide with the real
+odontogram/damoclesSword remotes (siblings under `:locale`), so the detail pages
+(`0004`) live at **`/<locale>/projects/{portfolio,odontogram,damoclesSword}`**.
+Fully deleting the old `landing` app + `libs/landing/*` and dropping `'landing'` from
+the shell `remotes` array is a **separate later cleanup** (leave them in place for now;
+an unrouted remote is harmless).
 
 ### D3 — Localization via RokuTranslator (unchanged pattern)
 The UI lib registers its own namespace exactly like `libs/landing/ui`:
@@ -129,7 +138,7 @@ Reference mockup (approved): the artifact published from `0000`-era —
 ## Plan sequence
 | Plan | Title | Depends on |
 |------|-------|-----------|
-| `0001` | Scaffold libs + wire shell under `:locale` + empty remote-entry | app (done) |
+| `0001` | Scaffold libs + route landingV2 at the locale root + empty remote-entry | app (done) |
 | `0002` | data-access: projects (+damocles, visual config) & hero info-table | 0001 |
 | `0003` | Landing page UI (header no-nav, dynamic hero/table/grid, footer year) | 0001, 0002 |
 | `0004` | Detail pages: Portfolio, Odontogram, damoclesSword | 0001, 0002 |
@@ -138,20 +147,20 @@ Reference mockup (approved): the artifact published from `0000`-era —
 ## Cross-cutting conventions (apply in every plan)
 - Remote renders **only through the shell** — the remote-entry component keeps an
   **empty template, no `<router-outlet>`** (CLAUDE.md). Develop/test via the shell URL
-  `/<locale>/landingV2`, never port 4204 directly.
+  `/<locale>` (e.g. `/en`), never port 4204 directly.
 - Every leaf `tsconfig` that imports assets needs `types/**/*.d.ts` in `include` (see
   memory: "Asset import types") — verify when generating new libs.
 - Run `npx nx lint <project>` + `npx nx test <project>` for every project you touch;
   they must pass on your new files.
 - Commit locally after each plan; do not push.
 
-## Open questions for the user (non-blocking; sensible defaults chosen)
-- **OQ1 — v1 cutover:** keep both `landing` and `landingV2` remotes during review
-  (default), or have v2 take the empty-path `:locale` child now and retire v1?
-- **OQ2 — new hero copy:** the mockup added strings not in today's i18n
-  ("Available for work" badge, role line `Full-stack developer · Angular · Nx`, the
-  info-table facts). Defaults proposed in `0002`/`0003`; confirm or edit the wording.
-- **OQ3 — Portfolio image:** `0002` recommends a generated on-brand panel (Nx
-  module-federation graph motif) over a screenshot. Approve or pick an alternative.
-- **OQ4 — data format:** `.ts` static-data tables (convention) vs literal `.json`
-  (your wording). Default: `.ts`.
+## Decisions (resolved with the user 2026-08-11)
+- **D-cutover:** landingV2 **replaces** landing at the locale root now (see D2). v1 is
+  removed from routing; deleting its app/libs is a later cleanup.
+- **D-portfolio-image:** Portfolio uses a generated **Nx module-federation graph**
+  image (gold nodes shell/landing/odontogram/damoclesSword on the dark ground),
+  shipped as a normal `image` asset (`0002` A.3). No self-referential screenshot.
+- **D-hero-copy:** include **all** of: the "Available for work" badge, the mono role
+  line (`Full-stack developer · Angular · Nx`), and the proposed info-table facts
+  (Focus / Stack / Also / Based) — see `0002` B.2 and `0003`.
+- **D-data-format:** `.ts` static-data tables (repo convention), not literal `.json`.

@@ -58,9 +58,10 @@ renders a `project-card`, applying visual config:
   translated `projects` title, nothing on the right.
 
 `project-card` renders from `TranslatedProject`:
-- Media: `@if (p.visual.mediaKind === 'screenshot')` → `<img>` (lazy, `object-fit:
-  cover`); `@else` → the **brand-panel** (§Portfolio visual from `0002`; for Portfolio
-  use the module-federation-graph motif, else the monogram panel).
+- Media: `@if (p.image)` → `<img>` (lazy, `object-fit: cover`); `@else` → a **generic
+  placeholder** (a small shared presentational block: dark panel + muted project-name
+  initial or a neutral image glyph, using the gold accent sparingly). One placeholder
+  for every image-less project — no per-project media discriminator.
 - Body: `name` (+ repo icon-link to `repoLink`), `tagline`, `description`, a
   "View project" link → `p.detailLink` (falls back to `appLink` when no detail page,
   e.g. POS), and the `tags` chips.
@@ -86,7 +87,7 @@ renders a `project-card`, applying visual config:
 
 ## 7. Icons (from `@portfolio/shared/ui` — CLAUDE.md, do not inline raw SVG)
 Needed: download/CV, GitHub, LinkedIn, email, arrow-right (view project), and (optional)
-the brand-panel graph motif. **First check `libs/shared/ui`** for existing icon
+the module-federation graph image (0002 A.3). **First check `libs/shared/ui`** for existing icon
 components (there are several — `home-icon`, `save-icon`, etc.). For each missing one,
 add a standalone `*-icon` component following the existing pattern
 (`import('./x.svg?raw')` + `DomSanitizer`) and export it from
@@ -107,14 +108,15 @@ add a standalone `*-icon` component following the existing pattern
 `welcome_subtitle` (reuse v1), `available` ("Available for work" / "Disponible para
 trabajar"), `resume` ("Download CV" / "Descargar CV"), `projects` ("Projects" /
 "Proyectos"), `project_view` ("View project" / "Ver proyecto"), `built` ("Built with
-Angular & Nx" / "Hecho con Angular y Nx"). Confirm new-copy wording per OQ2.
+Angular & Nx" / "Hecho con Angular y Nx"). New copy approved (D-hero-copy): the
+availability badge, role line, and info-table facts are all included.
 
 ## Verify
 1. `npx nx lint landing-v2/ui shared/ui` + `npx nx test landing-v2/ui` — pass; add a
    spec asserting: no `<nav>` links in the header; project cards render from an input
    array; a `columnSpan: 2` project gets the full-width class; the footer year equals
    `new Date().getFullYear()`; the info-table renders one row per fact.
-2. Live via shell: `npx nx serve shell`, open `/en/landingV2` and `/es/landingV2`.
+2. Live via shell: `npx nx serve shell`, open `/en` and `/es` (landingV2 is the root).
    Check: header has no nav; hero info-table populated from data; projects grid with
    Portfolio + Damocle'Sword full-width and Odontogram/POS half-width; CV downloads;
    socials open; footer shows the current year; language toggle swaps all copy.

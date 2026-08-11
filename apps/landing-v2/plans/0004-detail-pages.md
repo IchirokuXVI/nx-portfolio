@@ -6,25 +6,23 @@
 > the portfolio yet; its card's "View project" falls back to `appLink` (`0002`/`0003`).
 
 ## Routing
-Add a `<router-outlet>` to the shell-side wrapper so the index (landing page) and the
-detail pages share the `landingV2` remote. In
-`libs/landing-v2/feature-shell/src/lib/routes.ts` (`LandingV2Routes`):
+landingV2 mounts at the **locale root** (D2), so detail pages are namespaced under
+`projects/` to avoid colliding with the `odontogram` / `damoclesSword` sibling remotes.
+In `libs/landing-v2/feature-shell/src/lib/routes.ts` (`LandingV2Routes`):
 
 ```ts
 export const LandingV2Routes: Route[] = [
-  { path: '', component: LandingV2Wrapper },                 // landing page (0003)
-  { path: 'portfolio',     loadComponent: () => import('@portfolio/landing-v2/feature-portfolio').then((m) => m.PortfolioPage) },
-  { path: 'odontogram',    loadComponent: () => import('@portfolio/landing-v2/feature-odontogram').then((m) => m.OdontogramPage) },
-  { path: 'damoclesSword', loadComponent: () => import('@portfolio/landing-v2/feature-damocles').then((m) => m.DamoclesPage) },
+  { path: '', component: LandingV2Wrapper },                          // landing page (0003) → /<locale>
+  { path: 'projects/portfolio',     loadComponent: () => import('@portfolio/landing-v2/feature-portfolio').then((m) => m.PortfolioPage) },
+  { path: 'projects/odontogram',    loadComponent: () => import('@portfolio/landing-v2/feature-odontogram').then((m) => m.OdontogramPage) },
+  { path: 'projects/damoclesSword', loadComponent: () => import('@portfolio/landing-v2/feature-damocles').then((m) => m.DamoclesPage) },
 ];
 ```
 
-Landing lives at `''` and detail pages at their own paths, so the wrapper's own
-template does not need a permanent outlet — but if `LandingV2Wrapper` renders the
-landing UI directly, host these as **sibling** routes (as above) rather than children,
-so the detail page replaces the landing page. Preview URLs:
-`/en/landingV2/portfolio`, `/es/landingV2/odontogram`, etc. `detailLink` values in
-`0002` must match these exactly.
+Landing lives at `''` and each detail page at its own `projects/<slug>` path (siblings,
+so the detail page replaces the landing page — the wrapper needs no permanent outlet).
+Preview URLs: `/en/projects/portfolio`, `/es/projects/odontogram`, etc. The `detailLink`
+values in `0002` must match these exactly.
 
 ## Feature libs (generate now)
 ```sh
@@ -43,7 +41,7 @@ Build one small reusable presentational component in `@portfolio/landing-v2/ui`
 consistent and thin:
 - Inputs: `title`, `tagline`, and projected slots for the body sections and a
   side/meta panel.
-- A **back link** to the landing page (`routerLink` to `/{locale}/landingV2`) using the
+- A **back link** to the landing page (`routerLink` to `/{locale}`) using the
   arrow icon; a header with the project title; a repo link + live-app link (when
   present). Same dark tokens + gold accent as the landing page.
 - Detail pages compose `detail-page-shell` + section blocks (heading + prose + optional
@@ -69,7 +67,7 @@ Theme: "this site, and how it's built." Sections:
   Actions CI computing affected projects; Jest + Playwright/Cypress testing.
 - **Meta panel** — tech chips (Angular, Nx, TypeScript, Module Federation, Docker, k8s,
   Helm, GitHub Actions) + repo link. No screenshot (same self-reference reasoning as
-  the card; reuse the brand-panel/graph motif as the hero visual).
+  the card; reuse the module-federation graph image as the hero visual).
 
 ### Odontogram — `feature-odontogram`
 Theme: "a dental chart that models real treatments." Sections:
@@ -98,10 +96,10 @@ and the `damoclesSword/data-access` project domain. Sections:
 ## Verify
 1. `npx nx lint` + `npx nx test` for the three feature libs and `landing-v2/ui` — pass.
    Add a spec per page asserting the title renders and the back link points to
-   `/{locale}/landingV2`.
-2. Live via shell: from `/en/landingV2`, click each project's "View project" → lands on
-   the detail page; back link returns; POS "View project" goes to `/en/point-of-sale`
-   (live app, no detail page). Repeat `/es`.
+   `/{locale}`.
+2. Live via shell: from `/en`, click each project's "View project" → lands on the
+   detail page (`/en/projects/<slug>`); back link returns; POS "View project" goes to
+   `/en/point-of-sale` (live app, no detail page). Repeat `/es`.
 3. No horizontal scroll on any detail page at 320–3840 (formalized in `0005`).
 4. Commit: `feat(landing-v2): Portfolio, Odontogram & Damocle'Sword detail pages`.
 
