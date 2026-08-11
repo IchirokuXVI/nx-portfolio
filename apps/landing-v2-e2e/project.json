@@ -5,5 +5,18 @@
   "sourceRoot": "apps/landing-v2-e2e/src",
   "implicitDependencies": ["landingV2"],
   "// targets": "to see all targets run: nx show project landingV2-e2e --web",
-  "targets": {}
+  "// e2e": "The @nx/playwright plugin infers a dependsOn shell:serve from the webServer.command in playwright.config.ts. That makes Nx start the shell AND Playwright start it again, racing on port 4200. Overriding dependsOn to [] lets Playwright's webServer own the single instance (it waits on `url` and reuses an existing serve). Mirrors apps/damoclesSword-e2e/project.json.",
+  "// ui": "Playwright UI mode. Plain `--ui` opens a bundled-Chromium app window that doesn't surface on this machine; passing `--ui-host` takes Playwright's openTraceInBrowser path instead, opening UI mode as a tab in the default browser on an auto-assigned port (no port to type).",
+  "targets": {
+    "e2e": {
+      "dependsOn": []
+    },
+    "ui": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/landing-v2-e2e",
+        "command": "playwright test --ui-host=localhost"
+      }
+    }
+  }
 }
