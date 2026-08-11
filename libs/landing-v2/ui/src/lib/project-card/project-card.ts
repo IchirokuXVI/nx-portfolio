@@ -32,11 +32,15 @@ export class ProjectCard {
     return typeof image === 'string' ? Promise.resolve(image) : image;
   });
 
-  /** "View project" target: the in-portfolio detail page, falling back to
-   * the live app link when there is no detail page yet (e.g. POS). */
-  readonly viewLink = computed(
-    () => this.project().detailLink ?? this.project().appLink ?? null
-  );
+  /** "View project" / title target: the live app. */
+  readonly appLink = computed(() => this.project().appLink ?? null);
+
+  /** "More details" target: the in-portfolio detail page. Absent for
+   * projects with no detail page yet (e.g. POS). */
+  readonly detailLink = computed(() => this.project().detailLink ?? null);
+
+  /** Media target: the detail page when it exists, otherwise the live app. */
+  readonly mediaLink = computed(() => this.detailLink() ?? this.appLink());
 
   /** Generic placeholder initial for image-less projects. */
   readonly initial = computed(() =>

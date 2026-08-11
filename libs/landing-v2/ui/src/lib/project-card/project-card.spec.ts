@@ -82,11 +82,47 @@ describe('ProjectCard', () => {
     );
   });
 
-  it('falls back to appLink when there is no detailLink (e.g. Point Of Sale)', async () => {
+  it('links the title and "View project" to the live app', async () => {
+    await renderWith(makeProject({ appLink: '/en' }));
+    const host = fixture.nativeElement as HTMLElement;
+
+    const titleLink = host.querySelector<HTMLAnchorElement>(
+      '.project-card__title a:first-child'
+    );
+    expect(titleLink?.getAttribute('href')).toBe('/en');
+
+    const views = host.querySelectorAll<HTMLAnchorElement>(
+      '.project-card__actions .project-card__view'
+    );
+    // Last action is "View project" → app link.
+    expect(views[views.length - 1]?.getAttribute('href')).toBe('/en');
+  });
+
+  it('links "More details" to the detail page when present', async () => {
+    await renderWith(
+      makeProject({ detailLink: '/en/projects/portfolio', appLink: '/en' })
+    );
+    const host = fixture.nativeElement as HTMLElement;
+
+    const views = host.querySelectorAll<HTMLAnchorElement>(
+      '.project-card__actions .project-card__view'
+    );
+    expect(views.length).toBe(2);
+    // First action is "More details" → detail link.
+    expect(views[0]?.getAttribute('href')).toBe('/en/projects/portfolio');
+  });
+
+  it('omits "More details" when there is no detailLink (e.g. Point Of Sale)', async () => {
     await renderWith(
       makeProject({ detailLink: undefined, appLink: '/en/point-of-sale' })
     );
+    const host = fixture.nativeElement as HTMLElement;
 
-    expect(fixture.componentInstance.viewLink()).toBe('/en/point-of-sale');
+    const views = host.querySelectorAll<HTMLAnchorElement>(
+      '.project-card__actions .project-card__view'
+    );
+    expect(views.length).toBe(1);
+    expect(views[0]?.getAttribute('href')).toBe('/en/point-of-sale');
+    expect(fixture.componentInstance.mediaLink()).toBe('/en/point-of-sale');
   });
 });

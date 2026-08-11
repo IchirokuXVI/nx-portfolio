@@ -5,7 +5,7 @@
   <a
     class="project-card__media"
     [class.project-card__media--placeholder]="!project().image"
-    [routerLink]="[viewLink()]"
+    [routerLink]="[mediaLink()]"
   >
     @if (project().image) {
       <img [src]="imagePromise() | async" [alt]="project().name" loading="lazy" />
@@ -15,7 +15,7 @@
   </a>
   <div class="project-card__body">
     <h3 class="project-card__title">
-      <a [routerLink]="[viewLink()]">{{ project().name }}</a>
+      <a [routerLink]="[appLink()]">{{ project().name }}</a>
       <a
         class="project-card__repo"
         [attr.aria-label]="project().name + ' on GitHub'"
@@ -33,9 +33,19 @@
         <li>{{ tag }}</li>
       }
     </ul>
-    <a class="project-card__view" [routerLink]="[viewLink()]">
-      {{ 'landingV2.project_view' | rokuT }}
-      <lib-arrow-icon class="project-card__view-icon" />
-    </a>
+    <div class="project-card__actions">
+      @if (detailLink()) {
+        <a class="project-card__view" [routerLink]="[detailLink()]">
+          {{ 'landingV2.project_details' | rokuT }}
+          <lib-arrow-icon class="project-card__view-icon" />
+        </a>
+      }
+      @if (appLink()) {
+        <a class="project-card__view" [routerLink]="[appLink()]">
+          {{ 'landingV2.project_view' | rokuT }}
+          <lib-arrow-icon class="project-card__view-icon" />
+        </a>
+      }
+    </div>
   </div>
 </article>
