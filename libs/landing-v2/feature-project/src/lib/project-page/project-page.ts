@@ -20,10 +20,11 @@ import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 
 /**
- * Maps a project id to the presentational content component that renders
- * its detail page. A single routed page (see routes.ts, one entry per
- * project id in route `data`) serves every project — adding a project only
- * means adding a content component here, not a whole new feature lib.
+ * Maps a project's `detailSlug` (the `projects/:slug` route param, see
+ * static-projects-data) to the presentational content component that
+ * renders its detail page. A single routed page serves every project —
+ * adding a project only means adding a content component here plus a
+ * `detailSlug` in the data, not a whole new feature lib or route entry.
  *
  * Typed as `Type<unknown>` rather than a shared "content component" input
  * interface: each resolved component's own `project`/`backLink` are
@@ -31,18 +32,22 @@ import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-an
  * there's no useful structural type to check the map's values against —
  * `NgComponentOutlet`'s `inputs` binding matches them by name at runtime.
  */
-const CONTENT_BY_PROJECT_ID: Record<string, Type<unknown>> = {
-  '1': PortfolioContent,
-  '2': DamoclesContent,
-  '3': OdontogramContent,
+const CONTENT_BY_SLUG: Record<string, Type<unknown>> = {
+  portfolio: PortfolioContent,
+  damoclesSword: DamoclesContent,
+  odontogram: OdontogramContent,
 };
 
 /**
- * Generic project detail page, routed at `/{locale}/projects/<slug>`
- * (landing-v2/feature-shell's routes.ts, one entry per project via route
- * `data: { projectId }`). Resolves the project's data via ProjectMemory and
- * dynamically builds the matching presentational content component from
- * `@portfolio/landing-v2/ui` at execution time (see CONTENT_BY_PROJECT_ID).
+ * Generic project detail page, routed at `/{locale}/projects/:slug`
+ * (landing-v2/feature-shell's routes.ts — a single parameterized route, not
+ * one entry per project). Resolves `:slug` reactively from `ActivatedRoute`
+ * (not just its initial snapshot: the router reuses this component across
+ * navigations between two `projects/:slug` matches, so a slug change alone
+ * — no destroy/recreate — must still refresh the page), looks up the
+ * project via `ProjectMemory.getByDetailSlug`, and dynamically builds the
+ * matching presentational content component from `@portfolio/landing-v2/ui`
+ * at execution time (see CONTENT_BY_SLUG).
  *
  * Imports LandingV2UiModule itself (mirroring LandingV2Wrapper) — its
  * RokuTranslatorModule.withConfig() providers land in *this* component's
@@ -83,18 +88,20 @@ export class ProjectPage implements OnInit {
   }
 
   ngOnInit() {
-    const projectId = this._route.snapshot.data['projectId'] as string;
-    const content = CONTENT_BY_PROJECT_ID[projectId];
+    this._route.paramMap.subscribe((params) => {
+      const slug = params.get('slug') ?? '';
+      const content = CONTENT_BY_SLUG[slug];
 
-    if (!content) {
-      throw new Error(
-        `No detail-page content registered for project id "${projectId}"`
-      );
-    }
+      if (!content) {
+        throw new Error(
+          `No detail-page content registered for slug "${slug}"`
+        );
+      }
 
-    this.content.set(content);
-    this._projectServ
-      .getById(projectId, this.locale)
-      .subscribe((project) => this.project.set(project));
+      this.content.set(content);
+      this._projectServ
+        .getByDetailSlug(slug, this.locale)
+        .subscribe((project) => this.project.set(project));
+    });
   }
 }

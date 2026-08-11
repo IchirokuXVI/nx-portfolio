@@ -79,4 +79,16 @@ export class ProjectMemory implements ProjectServiceI {
 
     return of(this.resolve(project, locale));
   }
+
+  getByDetailSlug(slug: string, locale: string) {
+    const project = this._projects.find((p) => p.detailSlug === slug);
+
+    if (!project) {
+      throw new NotFoundResourceError(
+        `Project with detailSlug "${slug}" not found in locale ${locale}`
+      );
+    }
+
+    return of(this.resolve(project, locale));
+  }
 }

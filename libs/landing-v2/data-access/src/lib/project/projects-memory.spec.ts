@@ -104,4 +104,29 @@ describe('ProjectMemory', () => {
       );
     });
   });
+
+  describe('getByDetailSlug', () => {
+    it('returns a single project joined with the requested locale copy', async () => {
+      const damocles = await firstValueFrom(
+        service.getByDetailSlug('damoclesSword', 'es')
+      );
+
+      expect(damocles.id).toBe('2');
+      expect(damocles.locale).toBe('es');
+      expect(damocles.name).toBe("Damocle'Sword");
+      expect(damocles.detailLink).toBe('/es/projects/damoclesSword');
+    });
+
+    it('throws NotFoundResourceError for a slug with no detail page (e.g. Point Of Sale)', () => {
+      expect(() =>
+        service.getByDetailSlug('point-of-sale', 'en')
+      ).toThrow(NotFoundResourceError);
+    });
+
+    it('throws NotFoundResourceError for an unknown slug', () => {
+      expect(() => service.getByDetailSlug('does-not-exist', 'en')).toThrow(
+        NotFoundResourceError
+      );
+    });
+  });
 });
