@@ -1,0 +1,48 @@
+<section class="hero">
+  <div class="hero__inner">
+    <div class="hero__content">
+      <span class="hero__badge">
+        <span class="hero__badge-dot"></span>
+        {{ 'landingV2.available' | rokuT }}
+      </span>
+      <h1 class="hero__title">{{ 'landingV2.welcome_title' | rokuT }}</h1>
+      <p class="hero__role">{{ 'landingV2.role' | rokuT }}</p>
+      <p class="hero__subtitle">{{ 'landingV2.welcome_subtitle' | rokuT }}</p>
+      <div class="hero__actions">
+        <a
+          class="hero__cv"
+          [href]="resumeLink() | async"
+          download
+          target="_blank"
+        >
+          <lib-download-icon class="hero__action-icon" />
+          <span>{{ 'landingV2.resume' | rokuT }}</span>
+        </a>
+        <div class="hero__socials">
+          <a
+            [href]="githubUrl"
+            aria-label="GitHub"
+            rel="noopener"
+            target="_blank"
+          >
+            <lib-github-icon class="hero__action-icon" />
+          </a>
+          <a
+            [href]="linkedinUrl"
+            aria-label="LinkedIn"
+            rel="noopener"
+            target="_blank"
+          >
+            <lib-linkedin-icon class="hero__action-icon" />
+          </a>
+          <a [href]="emailUrl" aria-label="Email">
+            <lib-email-icon class="hero__action-icon" />
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="hero__facts">
+      <lib-landing-v2-info-table [facts]="facts()" />
+    </div>
+  </div>
+</section>

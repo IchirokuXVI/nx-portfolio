@@ -47,7 +47,7 @@ describe('ProjectMemory', () => {
 
     expect(portfolio?.locale).toBe('es');
     expect(portfolio?.tagline).toBe(
-      'Este sitio — un monorepo Nx con module federation'
+      'Este sitio: un monorepo Nx con module federation'
     );
     expect(portfolio?.appLink).toBe('/es');
     expect(portfolio?.detailLink).toBe('/es/projects/portfolio');

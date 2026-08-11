@@ -1,7 +1,7 @@
 import { ProjectTranslation } from '@portfolio/landing-v2/models';
 
 /**
- * Per-locale project copy — already translated, mirroring
+ * Per-locale project copy, already translated, mirroring
  * {@link ../../../../damoclesSword/data-access/src/lib/project/static-project-translation-data}.
  * `en` is the default/fallback locale (see {@link ./project-memory}).
  */
@@ -11,7 +11,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     id: '1',
     projectId: '1',
     locale: 'en',
-    tagline: 'This site — an Nx module-federation monorepo',
+    tagline: 'This site: an Nx module-federation monorepo',
     description:
       'My personal portfolio website built with NX and different technologies, primarily Angular 20. It is a very complete project with module federation, translation, testing and CI/CD. I tried to follow best practices for everything to improve my overall skills and learn new things.',
   },
@@ -19,7 +19,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     id: '2',
     projectId: '1',
     locale: 'es',
-    tagline: 'Este sitio — un monorepo Nx con module federation',
+    tagline: 'Este sitio: un monorepo Nx con module federation',
     description:
       'Mi sitio portafolio web construido con NX y diferentes tecnologías, principalmente Angular 20. Es un proyecto muy completo con federación de módulos, traducción, pruebas y CI/CD. Intenté seguir las mejores prácticas en todo lo posible para aprender y mejorar durante el desarrollo.',
   },
@@ -31,7 +31,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     locale: 'en',
     tagline: 'VR game studio site, ported into the portfolio',
     description:
-      "A marketing site for Damocle'Sword, a VR game studio, built as an Angular micro-frontend. Home, About, Services and Contact pages share a translated (EN/ES/FR) component system with a reactive contact form and a data-access layer for news and projects — including their VR titles such as STARLIT: ASCENSION.",
+      "A marketing site for Damocle'Sword, a VR game studio, built as an Angular micro-frontend. Home, About, Services and Contact pages share a translated (EN/ES/FR) component system with a reactive contact form and a data-access layer for news and projects, including their VR titles such as STARLIT: ASCENSION.",
   },
   {
     id: '4',

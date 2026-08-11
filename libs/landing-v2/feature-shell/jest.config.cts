@@ -13,6 +13,13 @@ module.exports = {
     ],
   },
   transformIgnorePatterns: ['node_modules/(?!.*\\.mjs$)'],
+  moduleNameMapper: {
+    // landing-v2/ui (rendered here via LandingV2UiModule) imports static
+    // assets directly; map them to a stub so this project's own test run
+    // doesn't try to resolve them as literal files.
+    '\\.(avif|png|jpe?g|gif|webp|svg|ttf|woff2?|mp4|webm|pdf)(\\?.*)?$':
+      '<rootDir>/src/asset-file-mock.ts',
+  },
   snapshotSerializers: [
     'jest-preset-angular/build/serializers/no-ng-attributes',
     'jest-preset-angular/build/serializers/ng-snapshot',

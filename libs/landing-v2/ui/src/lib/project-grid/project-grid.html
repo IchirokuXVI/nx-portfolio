@@ -1,0 +1,17 @@
+<section class="project-grid">
+  <div class="project-grid__inner">
+    <h2 class="project-grid__title">{{ 'landingV2.projects' | rokuT }}</h2>
+    <div class="project-grid__grid">
+      @for (project of projects(); track project.id) {
+        <div
+          class="project-grid__item"
+          [style.grid-column]="
+            project.visual.columnSpan === 2 ? '1 / -1' : null
+          "
+        >
+          <lib-landing-v2-project-card [project]="project" />
+        </div>
+      }
+    </div>
+  </div>
+</section>

@@ -1,11 +1,42 @@
-import { Component } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
+import {
+  InfoFactMemory,
+  ProjectMemory,
+} from '@portfolio/landing-v2/data-access';
+import {
+  TranslatedInfoFact,
+  TranslatedProject,
+} from '@portfolio/landing-v2/models';
+import { LandingV2UiModule } from '@portfolio/landing-v2/ui';
+import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 
-// TODO(0002/0003): inject the projects + info-table data-access services, resolve
-// the current locale via RokuTranslator.getLocale(), and pass the data to
-// <lib-landing-v2-ui>. Left as a stub for now — see apps/landing-v2/plans.
+/**
+ * Thin routed wrapper: resolves the current locale, subscribes to the
+ * projects + info-table data-access services, and hands the already-
+ * translated data down to the presentational `<lib-landing-v2-ui>` (0003).
+ * Mirrors `libs/landing/feature-shell/src/lib/landing-wrapper/landing-wrapper.ts`.
+ */
 @Component({
   selector: 'lib-landing-v2-wrapper',
   standalone: true,
-  template: ``,
+  imports: [LandingV2UiModule],
+  template: `<lib-landing-v2-ui [facts]="facts" [projects]="projects" />`,
 })
-export class LandingV2Wrapper {}
+export class LandingV2Wrapper implements OnInit {
+  private _projectServ = inject(ProjectMemory);
+  private _factServ = inject(InfoFactMemory);
+
+  projects: TranslatedProject[] = [];
+  facts: TranslatedInfoFact[] = [];
+
+  ngOnInit() {
+    const locale = RokuTranslator.getLocale();
+
+    this._projectServ.getList(locale).subscribe((projects) => {
+      this.projects = projects;
+    });
+    this._factServ.getList(locale).subscribe((facts) => {
+      this.facts = facts;
+    });
+  }
+}

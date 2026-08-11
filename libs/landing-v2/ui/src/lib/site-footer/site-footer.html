@@ -1,0 +1,29 @@
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <span class="site-footer__brand">D</span>
+    <div class="site-footer__socials">
+      <a
+        [href]="githubUrl"
+        aria-label="GitHub"
+        rel="noopener"
+        target="_blank"
+      >
+        <lib-github-icon class="site-footer__icon" />
+      </a>
+      <a
+        [href]="linkedinUrl"
+        aria-label="LinkedIn"
+        rel="noopener"
+        target="_blank"
+      >
+        <lib-linkedin-icon class="site-footer__icon" />
+      </a>
+      <a [href]="emailUrl" aria-label="Email">
+        <lib-email-icon class="site-footer__icon" />
+      </a>
+    </div>
+    <p class="site-footer__note">
+      © {{ year }} Daniel · {{ 'landingV2.built' | rokuT }}
+    </p>
+  </div>
+</footer>
