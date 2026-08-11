@@ -2,6 +2,18 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { SiteHeader } from './site-header';
 
+// SiteHeader now renders the LanguageSwitch (EN/ES toggle), which reads
+// RokuTranslator.getLocale() statically at construction, mirroring
+// project-page.spec.ts's mock for the same reason.
+jest.mock('@portfolio/localization/rokutranslator', () => {
+  return {
+    RokuTranslator: {
+      getLocale: jest.fn().mockReturnValue('en'),
+      changeLocale: jest.fn(),
+    },
+  };
+});
+
 describe('SiteHeader', () => {
   let component: SiteHeader;
   let fixture: ComponentFixture<SiteHeader>;

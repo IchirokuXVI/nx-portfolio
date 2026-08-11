@@ -4,14 +4,18 @@
       <span class="site-header__mark">D</span>
       <span class="site-header__name">Daniel</span>
     </div>
-    <a
-      class="site-header__cv"
-      [href]="resumeLink() | async"
-      download
-      target="_blank"
-    >
-      <lib-download-icon class="site-header__cv-icon" />
-      <span>{{ 'landingV2.resume' | rokuT }}</span>
-    </a>
+    <div class="site-header__actions">
+      <lib-landing-v2-language-switch />
+      <a
+        class="site-header__cv"
+        [attr.aria-label]="'landingV2.resume' | rokuT"
+        [href]="resumeLink() | async"
+        download
+        target="_blank"
+      >
+        <lib-download-icon class="site-header__cv-icon" />
+        <span>{{ 'landingV2.resume' | rokuT }}</span>
+      </a>
+    </div>
   </div>
 </header>

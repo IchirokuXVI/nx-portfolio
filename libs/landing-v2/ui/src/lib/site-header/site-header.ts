@@ -2,15 +2,16 @@ import { AsyncPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { DownloadIcon } from '@portfolio/shared/ui';
+import { LanguageSwitch } from '../language-switch/language-switch';
 
 /**
  * The header keeps the brand mark and the Download CV action, but drops
  * navigation links entirely (brief #1) — the page is a single scroll, so a
- * nav added nothing.
+ * nav added nothing. The EN/ES `LanguageSwitch` sits next to the CV action.
  */
 @Component({
   selector: 'lib-landing-v2-site-header',
-  imports: [AsyncPipe, RokuTranslatorPipe, DownloadIcon],
+  imports: [AsyncPipe, RokuTranslatorPipe, DownloadIcon, LanguageSwitch],
   templateUrl: './site-header.html',
   styleUrl: './site-header.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -52,6 +52,13 @@
     white-space: nowrap;
   }
 
+  &__actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
   &__cv {
     display: inline-flex;
     flex: 0 0 auto;
@@ -83,5 +90,20 @@
   &__cv-icon {
     width: 16px;
     height: 16px;
+  }
+
+  // Adding the language switch tightens the header row; below ~360px (the
+  // "mobile-sm" bucket landingV2's no-horizontal-scroll e2e suite checks)
+  // drop the CV label to an icon-only button so the row keeps fitting.
+  // `aria-label` above keeps it announced correctly either way.
+  @media (max-width: 360px) {
+    &__cv span {
+      display: none;
+    }
+
+    &__cv {
+      gap: 0;
+      padding: 0.5rem;
+    }
   }
 }
