@@ -4,10 +4,6 @@ import { LocaleWrapperComponent } from './locale-wrapper-component';
 
 export const appRoutes: Route[] = [
   {
-    path: 'landingV2',
-    loadChildren: () => import('landingV2/Routes').then((m) => m!.remoteRoutes),
-  },
-  {
     path: ':locale',
     component: LocaleWrapperComponent,
     children: [
@@ -24,7 +20,7 @@ export const appRoutes: Route[] = [
       {
         path: '',
         loadChildren: () =>
-          import('landing/Routes').then((m) => m.remoteRoutes),
+          import('landingV2/Routes').then((m) => m.remoteRoutes),
       },
       { path: '**', component: NotFoundComponent },
     ],

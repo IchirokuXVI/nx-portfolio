@@ -1,4 +1,11 @@
 import { Route } from '@angular/router';
-import { RemoteEntry } from './entry';
 
-export const remoteRoutes: Route[] = [{ path: '', component: RemoteEntry }];
+export const remoteRoutes: Route[] = [
+  {
+    path: '',
+    loadChildren: () =>
+      import('@portfolio/landing-v2/feature-shell').then(
+        (m) => m.LandingV2Routes
+      ),
+  },
+];
