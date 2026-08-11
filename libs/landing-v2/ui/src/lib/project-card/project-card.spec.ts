@@ -96,6 +96,11 @@ describe('ProjectCard', () => {
     );
     // Last action is "View project" → app link.
     expect(views[views.length - 1]?.getAttribute('href')).toBe('/en');
+
+    // The image also links to the live app.
+    expect(
+      host.querySelector('.project-card__media')?.getAttribute('href')
+    ).toBe('/en');
   });
 
   it('links "More details" to the detail page when present', async () => {
@@ -112,9 +117,9 @@ describe('ProjectCard', () => {
     expect(views[0]?.getAttribute('href')).toBe('/en/projects/portfolio');
   });
 
-  it('omits "More details" when there is no detailLink (e.g. Point Of Sale)', async () => {
+  it('omits "More details" when there is no detailLink', async () => {
     await renderWith(
-      makeProject({ detailLink: undefined, appLink: '/en/point-of-sale' })
+      makeProject({ detailLink: undefined, appLink: '/en/odontogram' })
     );
     const host = fixture.nativeElement as HTMLElement;
 
@@ -122,7 +127,33 @@ describe('ProjectCard', () => {
       '.project-card__actions .project-card__view'
     );
     expect(views.length).toBe(1);
-    expect(views[0]?.getAttribute('href')).toBe('/en/point-of-sale');
-    expect(fixture.componentInstance.mediaLink()).toBe('/en/point-of-sale');
+    expect(views[0]?.getAttribute('href')).toBe('/en/odontogram');
+  });
+
+  it('disables the app links and shows the unavailable tooltip when there is no appLink (e.g. Point Of Sale)', async () => {
+    await renderWith(
+      makeProject({ detailLink: undefined, appLink: undefined })
+    );
+    const host = fixture.nativeElement as HTMLElement;
+
+    // Image and title are rendered but not clickable (no href).
+    expect(
+      host.querySelector('.project-card__media')?.getAttribute('href')
+    ).toBeNull();
+    expect(
+      host.querySelector('.project-card__name')?.getAttribute('href')
+    ).toBeNull();
+
+    // "View project" is a disabled, non-anchor control carrying the tooltip.
+    const disabled = host.querySelector('.project-card__view--disabled');
+    expect(disabled).not.toBeNull();
+    expect(disabled?.tagName).toBe('SPAN');
+    expect(disabled?.getAttribute('data-tooltip')).toBe(
+      'landingV2.project_unavailable'
+    );
+    expect(
+      host.querySelectorAll('.project-card__actions a.project-card__view')
+        .length
+    ).toBe(0);
   });
 });

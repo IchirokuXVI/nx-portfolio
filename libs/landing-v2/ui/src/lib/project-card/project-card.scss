@@ -50,6 +50,10 @@
     justify-content: center;
   }
 
+  &__media--disabled {
+    cursor: default;
+  }
+
   &__placeholder-initial {
     font-family: $font-display;
     font-weight: 800;
@@ -75,11 +79,17 @@
     font-size: 1.15rem;
     font-weight: 700;
     color: $text;
+  }
 
-    a:first-child {
-      text-decoration: none;
-      overflow-wrap: break-word;
-      min-width: 0;
+  &__name {
+    text-decoration: none;
+    overflow-wrap: break-word;
+    min-width: 0;
+    color: inherit;
+
+    &--disabled {
+      cursor: default;
+      pointer-events: none;
     }
   }
 
@@ -161,6 +171,39 @@
     &:hover,
     &:focus-visible {
       color: $accent;
+    }
+  }
+
+  &__view--disabled {
+    position: relative;
+    color: $muted;
+    cursor: not-allowed;
+    opacity: 0.6;
+
+    &:hover,
+    &:focus-visible {
+      color: $muted;
+    }
+
+    // "Project not available" bubble — shown only when hovering/focusing
+    // this disabled button.
+    &:hover::after,
+    &:focus-visible::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 0.5rem);
+      left: 0;
+      z-index: 1;
+      padding: 0.35rem 0.55rem;
+      border: 1px solid $hairline;
+      border-radius: $radius;
+      background-color: $surface-raised;
+      color: $text;
+      font-family: $font-mono;
+      font-size: 0.68rem;
+      font-weight: 400;
+      white-space: nowrap;
+      pointer-events: none;
     }
   }
 

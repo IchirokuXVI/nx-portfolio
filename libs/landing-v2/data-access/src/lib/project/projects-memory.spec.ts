@@ -62,12 +62,12 @@ describe('ProjectMemory', () => {
     expect(damocles?.tagline).toBe('VR game studio business site');
   });
 
-  it('omits detailLink for the deferred Point Of Sale detail page', async () => {
+  it('omits both detailLink and appLink for the deferred Point Of Sale project', async () => {
     const projects = await firstValueFrom(service.getList('en'));
     const pos = projects.find((p) => p.id === '4');
 
     expect(pos?.detailLink).toBeUndefined();
-    expect(pos?.appLink).toBe('/en/point-of-sale');
+    expect(pos?.appLink).toBeUndefined();
   });
 
   it('resolves the Odontogram screenshot import', async () => {
