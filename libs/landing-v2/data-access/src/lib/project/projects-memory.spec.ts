@@ -88,6 +88,30 @@ describe('ProjectMemory', () => {
     expect(damocles?.image).toBeUndefined();
   });
 
+  describe('getList filtering', () => {
+    it('filters by ids', async () => {
+      const projects = await firstValueFrom(
+        service.getList('en', { ids: ['2'] })
+      );
+
+      expect(projects.map((p) => p.id)).toEqual(['2']);
+    });
+
+    it('filters by searchTerm against the project name', async () => {
+      const projects = await firstValueFrom(
+        service.getList('en', { searchTerm: /odonto/i })
+      );
+
+      expect(projects.map((p) => p.id)).toEqual(['3']);
+    });
+
+    it('returns every project when no filter is passed', async () => {
+      const projects = await firstValueFrom(service.getList('en'));
+
+      expect(projects).toHaveLength(PROJECTS.length);
+    });
+  });
+
   describe('getById', () => {
     it('returns a single project joined with the requested locale copy', async () => {
       const odontogram = await firstValueFrom(service.getById('3', 'es'));

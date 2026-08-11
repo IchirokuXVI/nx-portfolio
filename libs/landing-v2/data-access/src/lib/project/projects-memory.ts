@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { Project, TranslatedProject } from '@portfolio/landing-v2/models';
 import { NotFoundResourceError } from '@portfolio/shared/data-access';
+import { InMemoryFilter } from '@portfolio/shared/util';
 import { of } from 'rxjs';
-import { ProjectServiceI } from './projects-service';
+import { ProjectGetListFilter, ProjectServiceI } from './projects-service';
 import { PROJECTS, StaticProject } from './static-projects-data';
 import { PROJECTS_TRANSLATIONS } from './static-projects-translation-data';
 
@@ -18,6 +19,23 @@ import { PROJECTS_TRANSLATIONS } from './static-projects-translation-data';
 export class ProjectMemory implements ProjectServiceI {
   private _projects = PROJECTS;
   private _projectsTranslations = PROJECTS_TRANSLATIONS;
+  private _inMemoryFilter = new InMemoryFilter<
+    StaticProject,
+    ProjectGetListFilter
+  >();
+
+  constructor() {
+    this._inMemoryFilter.setFilterConfig({
+      ids: {
+        check: this._inMemoryFilter.checks.filterIncludesAny,
+        dataField: 'id',
+      },
+      searchTerm: {
+        check: this._inMemoryFilter.checks.textSearch,
+        dataField: 'name',
+      },
+    });
+  }
 
   private getTranslation(projectId: string, locale: string) {
     return (
@@ -62,9 +80,14 @@ export class ProjectMemory implements ProjectServiceI {
     return { ...translation, ...resolved } as TranslatedProject;
   }
 
-  getList(locale: string) {
+  getList(locale: string, filter?: ProjectGetListFilter) {
+    const projects = this._inMemoryFilter.applyFilter(
+      [...this._projects],
+      filter
+    );
+
     return of<TranslatedProject[]>(
-      this._projects.map((project) => this.resolve(project, locale))
+      projects.map((project) => this.resolve(project, locale))
     );
   }
 
