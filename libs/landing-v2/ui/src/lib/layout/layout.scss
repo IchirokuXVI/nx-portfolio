@@ -13,7 +13,8 @@
   // Dark-golden ground: warm off-black base with two soft gold glows in the
   // top corners (mirrors the approved mockup's `.site` background).
   background-color: $ground;
-  background-image: radial-gradient(
+  background-image:
+    radial-gradient(
       120% 80% at 100% -10%,
       rgba(242, 212, 91, 0.1),
       transparent 55%
