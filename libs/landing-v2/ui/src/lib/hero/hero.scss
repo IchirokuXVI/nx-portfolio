@@ -12,8 +12,7 @@
   &__inner {
     max-width: $container-max;
     margin: 0 auto;
-    padding:
-      clamp(2.5rem, 8vw, 5rem) clamp(1rem, 4vw, 2.5rem)
+    padding: clamp(2.5rem, 8vw, 5rem) clamp(1rem, 4vw, 2.5rem)
       clamp(3rem, 6vw, 4rem);
     display: grid;
     grid-template-columns: 1fr;
@@ -100,6 +99,7 @@
     border-radius: $radius;
     background-color: $accent;
     color: $ground;
+    text-decoration: none;
     font-weight: 700;
     font-size: 0.9rem;
     white-space: nowrap;

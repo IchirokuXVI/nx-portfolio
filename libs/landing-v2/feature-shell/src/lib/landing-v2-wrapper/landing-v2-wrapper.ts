@@ -21,6 +21,7 @@ import { RokuTranslator } from '@portfolio/localization/rokutranslator';
   standalone: true,
   imports: [LandingV2UiModule],
   template: `<lib-landing-v2-ui [facts]="facts" [projects]="projects" />`,
+  styles: [':host { width: 100%; }'],
 })
 export class LandingV2Wrapper implements OnInit {
   private _projectServ = inject(ProjectMemory);
