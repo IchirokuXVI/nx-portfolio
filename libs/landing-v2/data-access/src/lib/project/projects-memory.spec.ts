@@ -30,9 +30,20 @@ describe('ProjectMemory', () => {
     });
   });
 
+  it('keeps the project id (not the translation row id) after the merge', async () => {
+    const projects = await firstValueFrom(service.getList('en'));
+    const portfolio = projects.find((p) => p.projectId === '1');
+
+    // The 'en' translation row for Portfolio has its own id ('1'), but so
+    // does the 'es' row further down the table ('2') — either way, the
+    // merged record must expose the *project's* id, not the translation's.
+    expect(portfolio?.id).toBe('1');
+    expect(portfolio?.projectId).toBe('1');
+  });
+
   it('joins the requested locale copy and builds locale-prefixed links', async () => {
     const projects = await firstValueFrom(service.getList('es'));
-    const portfolio = projects.find((p) => p.projectId === '1');
+    const portfolio = projects.find((p) => p.id === '1');
 
     expect(portfolio?.locale).toBe('es');
     expect(portfolio?.tagline).toBe(
@@ -44,7 +55,7 @@ describe('ProjectMemory', () => {
 
   it('falls back to the English copy for an unknown locale', async () => {
     const projects = await firstValueFrom(service.getList('de'));
-    const damocles = projects.find((p) => p.projectId === '2');
+    const damocles = projects.find((p) => p.id === '2');
 
     expect(damocles?.locale).toBe('en');
     expect(damocles?.tagline).toBe(
@@ -54,7 +65,7 @@ describe('ProjectMemory', () => {
 
   it('omits detailLink for the deferred Point Of Sale detail page', async () => {
     const projects = await firstValueFrom(service.getList('en'));
-    const pos = projects.find((p) => p.projectId === '4');
+    const pos = projects.find((p) => p.id === '4');
 
     expect(pos?.detailLink).toBeUndefined();
     expect(pos?.appLink).toBe('/en/point-of-sale');
@@ -62,15 +73,15 @@ describe('ProjectMemory', () => {
 
   it('resolves the Odontogram screenshot import', async () => {
     const projects = await firstValueFrom(service.getList('en'));
-    const odontogram = projects.find((p) => p.projectId === '3');
+    const odontogram = projects.find((p) => p.id === '3');
 
     await expect(odontogram?.image).resolves.toBe('asset-file-stub');
   });
 
   it('leaves Portfolio and Damocle\'Sword without a screenshot (generic placeholder)', async () => {
     const projects = await firstValueFrom(service.getList('en'));
-    const portfolio = projects.find((p) => p.projectId === '1');
-    const damocles = projects.find((p) => p.projectId === '2');
+    const portfolio = projects.find((p) => p.id === '1');
+    const damocles = projects.find((p) => p.id === '2');
 
     expect(portfolio?.image).toBeUndefined();
     expect(damocles?.image).toBeUndefined();

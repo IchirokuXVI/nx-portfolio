@@ -59,7 +59,10 @@ export class ProjectMemory implements ProjectServiceI {
         image: project.image?.(),
       };
 
-      return { ...resolved, ...translation } as TranslatedProject;
+      // Spread translation first so `resolved.id` (the project's own id)
+      // wins over the translation row's own `id` — only `projectId` should
+      // ever identify the source record on the translation side.
+      return { ...translation, ...resolved } as TranslatedProject;
     });
 
     return of<TranslatedProject[]>(translatedProjects);
