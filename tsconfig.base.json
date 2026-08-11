@@ -83,6 +83,9 @@
       ],
       "@portfolio/damoclesSword/feature-services": [
         "./libs/damoclesSword/feature-services/src/index.ts"
+      ],
+      "landingV2/Routes": [
+        "./apps/landing-v2/src/app/remote-entry/entry.routes.ts"
       ]
     }
   },
