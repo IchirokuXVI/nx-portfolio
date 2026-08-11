@@ -40,10 +40,7 @@ export class InfoFactMemory implements InfoFactServiceI {
           );
         }
 
-        // Spread translation first so `fact.id` (the structural row's own
-        // id) wins over the translation row's own `id` — only `factId`
-        // should ever identify the source record on the translation side.
-        return { ...translation, ...fact } as TranslatedInfoFact;
+        return { ...fact, ...translation, id: fact.id } as TranslatedInfoFact;
       })
       .sort((a, b) => a.order - b.order);
 
