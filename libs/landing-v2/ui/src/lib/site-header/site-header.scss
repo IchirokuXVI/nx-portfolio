@@ -1,0 +1,119 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+.site-header {
+  width: 100%;
+  border-bottom: 1px solid $hairline;
+  background-color: $ground;
+
+  &__inner {
+    max-width: $container-max;
+    margin: 0 auto;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0 clamp(1rem, 4vw, 2.5rem);
+  }
+
+  &__brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: $font-display;
+    color: $text;
+    min-width: 0;
+  }
+
+  &__mark {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background-color: $accent;
+    color: $ground;
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  &__name {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  &__cv {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.9rem;
+    border-radius: $radius;
+    border: 1px solid $hairline;
+    color: $text;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition:
+      border-color 0.2s ease,
+      color 0.2s ease;
+
+    &:hover,
+    &:focus-visible {
+      border-color: $accent;
+      color: $accent;
+    }
+
+    &:active {
+      transform: translateY(1px);
+    }
+  }
+
+  &__cv-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  &__cv-label-short {
+    display: none;
+  }
+
+  // Adding the language switch tightens the header row; below ~360px (the
+  // "mobile-sm" bucket landingV2's no-horizontal-scroll e2e suite checks)
+  // swap the full "Download CV"/"Descargar CV" label for a plain "CV" (the
+  // one word both translations already share) so the button keeps a label
+  // instead of shrinking to an icon-only control. `aria-label` above still
+  // carries the full text to assistive tech either way.
+  @media (max-width: 360px) {
+    &__cv-label {
+      display: none;
+    }
+
+    &__cv-label-short {
+      display: inline;
+    }
+
+    &__cv {
+      gap: 0.3rem;
+      padding: 0.5rem 0.7rem;
+    }
+  }
+}

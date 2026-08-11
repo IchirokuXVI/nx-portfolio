@@ -1,0 +1,5 @@
+@if (compReady() && project(); as p) {
+  <ng-container
+    *ngComponentOutlet="content(); inputs: { project: p, backLink: backLink }"
+  />
+}

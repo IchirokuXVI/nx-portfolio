@@ -32,10 +32,10 @@
   min-width: 0;
 
   label {
-    font-family: inherit; // system sans stack — labels are UI content, not titles
+    font-family: inherit;
     font-size: 0.9em;
-    font-weight: 600; // emphasis in place of the display face
-    letter-spacing: 0.02em; // wide tracking was tuned for Audiowide
+    font-weight: 600;
+    letter-spacing: 0.02em;
     color: var(--contact-label-color, inherit);
   }
 
@@ -90,7 +90,7 @@
 
 .contact-form-success {
   margin: 0;
-  font-family: inherit; // status message — not a title
+  font-family: inherit;
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--contact-accent-focus, #{$theme-blue});

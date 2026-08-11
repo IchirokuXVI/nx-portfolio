@@ -7,7 +7,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     locale: 'en',
     name: 'Portfolio',
     description:
-      'My personal portfolio website built with NX and different technologies, primarily Angular 20. It is a very complete project with module federation, translation, testing and CI/CD. I tried to follow best practices for everything to improve my overall skills and learn new things.',
+      'My personal portfolio website built with NX and different technologies, primarily Angular 21. It is a very complete project with module federation, translation, testing and CI/CD. I tried to follow best practices for everything to improve my overall skills and learn new things.',
     appLink: '/en',
     image: '',
   },
@@ -17,7 +17,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     locale: 'es',
     name: 'Portafolio',
     description:
-      'Mi sitio portafolio web construido con NX y diferentes tecnologías, principalmente Angular 20. Es un proyecto muy completo con federación de módulos, traducción, pruebas y CI/CD. Intenté seguir las mejores prácticas en todo lo posible para aprender y mejorar durante el desarrollo.',
+      'Mi sitio portafolio web construido con NX y diferentes tecnologías, principalmente Angular 21. Es un proyecto muy completo con federación de módulos, traducción, pruebas y CI/CD. Intenté seguir las mejores prácticas en todo lo posible para aprender y mejorar durante el desarrollo.',
     appLink: '/es',
     image: '',
   },

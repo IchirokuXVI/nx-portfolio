@@ -1,9 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
-import {
-  FormBuilder,
-  ReactiveFormsModule,
-  Validators,
-} from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import {
   ContactMessage,
   ContactMock,
@@ -19,9 +15,8 @@ import { FormButton } from '../form-button/form-button';
  * `[contact-form-submit]` to override them; when omitted, a default double
  * bordered title and a default {@link ../form-button}'s `FormButton` are shown.
  *
- * Submission is mocked through `ContactMock` (returns the payload after a short
- * delay); nothing leaves the browser yet. The host section owns the background —
- * this component keeps its inputs light so it reads on both light and dark bands.
+ * The host section owns the background — this component keeps its inputs light
+ * so it reads on both light and dark bands.
  */
 @Component({
   selector: 'lib-damocles-sword-contact-form',
@@ -38,7 +33,7 @@ export class ContactForm {
   private readonly _contact: ContactServiceI = inject(ContactMock);
   private readonly _fb = inject(FormBuilder);
 
-  /** Toggles to `true` while a mocked submission is in flight. */
+  /** Toggles to `true` while a submission is in flight. */
   readonly sending = signal(false);
   /** Set to `true` once a submission has succeeded, revealing the confirmation. */
   readonly sent = signal(false);

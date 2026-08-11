@@ -1,0 +1,171 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+.hero {
+  width: 100%;
+  background-color: $ground;
+
+  &__inner {
+    max-width: $container-max;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 8vw, 5rem) clamp(1rem, 4vw, 2.5rem)
+      clamp(3rem, 6vw, 4rem);
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+    align-items: center;
+
+    @media (min-width: $breakpoint-desktop) {
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+      gap: 3rem;
+    }
+  }
+
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  &__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    align-self: flex-start;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid $hairline;
+    color: $muted;
+    font-family: $font-mono;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+  }
+
+  &__badge-dot {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: $accent;
+    animation: landing-v2-hero-pulse 2s ease-in-out infinite;
+  }
+
+  &__title {
+    margin: 0;
+    font-family: $font-display;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    color: $text;
+    font-size: clamp(2.5rem, 6vw, 4rem);
+    text-wrap: balance;
+  }
+
+  &__role {
+    margin: 0;
+    font-family: $font-mono;
+    color: $accent;
+    font-size: clamp(0.85rem, 1.4vw, 1rem);
+    overflow-wrap: break-word;
+  }
+
+  &__subtitle {
+    margin: 0;
+    max-width: 52ch;
+    color: $muted;
+    line-height: 1.6;
+    font-size: clamp(0.95rem, 1.6vw, 1.05rem);
+    overflow-wrap: break-word;
+  }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.5rem;
+  }
+
+  &__cv {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.1rem;
+    border-radius: $radius;
+    background-color: $accent;
+    color: $ground;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    transition:
+      background-color 0.2s ease,
+      transform 0.2s ease;
+
+    &:hover,
+    &:focus-visible {
+      background-color: $accent-dim;
+    }
+
+    &:active {
+      transform: translateY(1px);
+    }
+  }
+
+  &__socials {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid $hairline;
+      color: $muted;
+      transition:
+        border-color 0.2s ease,
+        color 0.2s ease;
+
+      &:hover,
+      &:focus-visible {
+        border-color: $accent;
+        color: $accent;
+      }
+    }
+  }
+
+  &__action-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  &__facts {
+    min-width: 0;
+  }
+}
+
+@keyframes landing-v2-hero-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__badge-dot {
+    animation: none;
+  }
+}

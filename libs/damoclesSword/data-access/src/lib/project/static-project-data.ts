@@ -22,9 +22,8 @@ export interface StaticProject {
 /**
  * Structural project data. The localized descriptions live in
  * {@link ./static-project-translation-data} and are joined in by
- * {@link ./project-memory}, the same way {@link ../news/static-news-data} is
- * joined with its translations. Projects will never be served from the backend,
- * so this is the permanent source rather than a mock.
+ * {@link ./project-memory}. Projects will never be served from the
+ * backend, so this is the permanent source rather than a mock.
  */
 export const PROJECTS: readonly StaticProject[] = [
   {

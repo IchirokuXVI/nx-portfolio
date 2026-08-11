@@ -1,0 +1,22 @@
+<header class="site-header">
+  <div class="site-header__inner">
+    <div class="site-header__brand">
+      <span class="site-header__mark">D</span>
+      <span class="site-header__name">Daniel</span>
+    </div>
+    <div class="site-header__actions">
+      <lib-landing-v2-language-switch />
+      <a
+        class="site-header__cv"
+        [attr.aria-label]="'landingV2.resume' | rokuT"
+        [href]="resumeLink() | async"
+        download
+        target="_blank"
+      >
+        <lib-download-icon class="site-header__cv-icon" />
+        <span class="site-header__cv-label">{{ 'landingV2.resume' | rokuT }}</span>
+        <span class="site-header__cv-label-short" aria-hidden="true">CV</span>
+      </a>
+    </div>
+  </div>
+</header>

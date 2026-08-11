@@ -1,0 +1,10 @@
+@if (compReady()) {
+  <div class="landing">
+    <lib-landing-v2-site-header [resumeLink]="resumeLink" />
+    <main>
+      <lib-landing-v2-hero [facts]="facts()" [resumeLink]="resumeLink" />
+      <lib-landing-v2-project-grid [projects]="projects()" />
+    </main>
+    <lib-landing-v2-site-footer />
+  </div>
+}

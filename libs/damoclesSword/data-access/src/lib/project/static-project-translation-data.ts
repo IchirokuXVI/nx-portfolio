@@ -2,8 +2,7 @@ import { ProjectTranslation } from './project';
 
 /**
  * Per-locale project descriptions. Kept here — already translated — rather than
- * as i18n keys resolved by the UI, mirroring {@link ./news}'s translation
- * table: the UI renders the copy directly for the active locale.
+ * as i18n keys resolved by the UI: the UI renders the copy directly for the active locale.
  */
 export const PROJECT_TRANSLATIONS: readonly ProjectTranslation[] = [
   // VR Sickness Reducer

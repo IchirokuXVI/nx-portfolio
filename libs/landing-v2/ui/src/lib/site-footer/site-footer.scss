@@ -1,0 +1,77 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+.site-footer {
+  width: 100%;
+  border-top: 1px solid $hairline;
+  background-color: $ground;
+
+  &__inner {
+    max-width: $container-max;
+    margin: 0 auto;
+    padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1rem, 4vw, 2.5rem);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  &__brand {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background-color: $accent;
+    color: $ground;
+    font-family: $font-display;
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+
+  &__socials {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid $hairline;
+      color: $muted;
+      transition:
+        border-color 0.2s ease,
+        color 0.2s ease;
+
+      &:hover,
+      &:focus-visible {
+        border-color: $accent;
+        color: $accent;
+      }
+    }
+  }
+
+  &__icon {
+    width: 15px;
+    height: 15px;
+  }
+
+  &__note {
+    margin: 0;
+    color: $muted;
+    font-family: $font-mono;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+}

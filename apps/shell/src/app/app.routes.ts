@@ -20,7 +20,7 @@ export const appRoutes: Route[] = [
       {
         path: '',
         loadChildren: () =>
-          import('landing/Routes').then((m) => m.remoteRoutes),
+          import('landingV2/Routes').then((m) => m.remoteRoutes),
       },
       { path: '**', component: NotFoundComponent },
     ],

@@ -8,9 +8,8 @@ import { PROJECT_TRANSLATIONS } from './static-project-translation-data';
 /**
  * In-memory project source backed by static data. Joins each project with its
  * localized description (falling back to `en`) and resolves each addon's asset
- * key to a URL, so consumers get ready-to-render, already-translated projects —
- * the same shape {@link ../news/news-memory} produces for news. Projects never
- * leave the client, so this is the permanent source; a server-backed
+ * key to a URL, so consumers get ready-to-render, already-translated projects.
+ * Projects never leave the client, so this is the permanent source; a server-backed
  * {@link ./project-service#ProjectServiceI} is only needed if that changes.
  */
 @Injectable({
