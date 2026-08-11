@@ -4,7 +4,7 @@ import { ContactMessage } from './contact-message';
 import { ContactServiceI } from './contact-service';
 
 /**
- * Mocked contact sender: no request leaves the browser yet. It echoes the
+ * Mocked contact sender: no request leaves the browser. It echoes the
  * submitted message back after a short delay so the UI can show a realistic
  * "sending…" → "sent" transition. Swap for an `ApiConsumer`-based implementation
  * of {@link ./contact-service}'s `ContactServiceI` (mirroring
