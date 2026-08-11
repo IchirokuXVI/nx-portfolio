@@ -7,7 +7,8 @@
 
 .hero {
   width: 100%;
-  background-color: $ground;
+  // No background here — the Layout owns the dark-golden ground so its gold
+  // corner glows show through behind the hero.
 
   &__inner {
     max-width: $container-max;
