@@ -95,14 +95,8 @@
       "@portfolio/landing-v2/feature-shell": [
         "./libs/landing-v2/feature-shell/src/index.ts"
       ],
-      "@portfolio/landing-v2/feature-portfolio": [
-        "./libs/landing-v2/feature-portfolio/src/index.ts"
-      ],
-      "@portfolio/landing-v2/feature-odontogram": [
-        "./libs/landing-v2/feature-odontogram/src/index.ts"
-      ],
-      "@portfolio/landing-v2/feature-damocles": [
-        "./libs/landing-v2/feature-damocles/src/index.ts"
+      "@portfolio/landing-v2/feature-project": [
+        "./libs/landing-v2/feature-project/src/index.ts"
       ]
     }
   },

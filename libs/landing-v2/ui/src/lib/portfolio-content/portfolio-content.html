@@ -1,0 +1,30 @@
+<lib-landing-v2-detail-page-shell
+  [appLink]="project().appLink"
+  [backLink]="backLink()"
+  [heroImage]="project().image"
+  [repoLink]="project().repoLink"
+  [tagline]="project().tagline"
+  [title]="project().name"
+>
+  <div body>
+    <section class="detail-section">
+      <h2>{{ 'landingV2.detail.portfolio.overview_title' | rokuT }}</h2>
+      <p>{{ 'landingV2.detail.portfolio.overview_body' | rokuT }}</p>
+    </section>
+    <section class="detail-section">
+      <h2>{{ 'landingV2.detail.portfolio.architecture_title' | rokuT }}</h2>
+      <p>{{ 'landingV2.detail.portfolio.architecture_body' | rokuT }}</p>
+    </section>
+    <section class="detail-section">
+      <h2>{{ 'landingV2.detail.portfolio.engineering_title' | rokuT }}</h2>
+      <p>{{ 'landingV2.detail.portfolio.engineering_body' | rokuT }}</p>
+    </section>
+  </div>
+  <div meta>
+    <ul class="detail-chips">
+      @for (chip of techChips; track chip) {
+        <li>{{ chip }}</li>
+      }
+    </ul>
+  </div>
+</lib-landing-v2-detail-page-shell>

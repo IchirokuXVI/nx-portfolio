@@ -1,9 +1,12 @@
 import { NgModule } from '@angular/core';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
+import { DamoclesContent } from './damocles-content/damocles-content';
 import { DetailPageShell } from './detail-page-shell/detail-page-shell';
 import { Hero } from './hero/hero';
 import { InfoTable } from './info-table/info-table';
 import { Landing } from './landing/landing';
+import { OdontogramContent } from './odontogram-content/odontogram-content';
+import { PortfolioContent } from './portfolio-content/portfolio-content';
 import { ProjectCard } from './project-card/project-card';
 import { ProjectGrid } from './project-grid/project-grid';
 import { SiteFooter } from './site-footer/site-footer';
@@ -18,6 +21,9 @@ const components = [
   ProjectGrid,
   SiteFooter,
   DetailPageShell,
+  PortfolioContent,
+  OdontogramContent,
+  DamoclesContent,
 ];
 
 @NgModule({
