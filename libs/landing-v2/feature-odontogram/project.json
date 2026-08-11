@@ -1,0 +1,21 @@
+{
+  "name": "landing-v2/feature-odontogram",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/landing-v2/feature-odontogram/src",
+  "prefix": "lib",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/landing-v2/feature-odontogram/jest.config.cts",
+        "tsConfig": "libs/landing-v2/feature-odontogram/tsconfig.spec.json"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

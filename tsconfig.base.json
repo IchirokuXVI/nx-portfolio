@@ -86,6 +86,23 @@
       ],
       "landingV2/Routes": [
         "./apps/landing-v2/src/app/remote-entry/entry.routes.ts"
+      ],
+      "@portfolio/landing-v2/models": ["./libs/landing-v2/models/src/index.ts"],
+      "@portfolio/landing-v2/data-access": [
+        "./libs/landing-v2/data-access/src/index.ts"
+      ],
+      "@portfolio/landing-v2/ui": ["./libs/landing-v2/ui/src/index.ts"],
+      "@portfolio/landing-v2/feature-shell": [
+        "./libs/landing-v2/feature-shell/src/index.ts"
+      ],
+      "@portfolio/landing-v2/feature-portfolio": [
+        "./libs/landing-v2/feature-portfolio/src/index.ts"
+      ],
+      "@portfolio/landing-v2/feature-odontogram": [
+        "./libs/landing-v2/feature-odontogram/src/index.ts"
+      ],
+      "@portfolio/landing-v2/feature-damocles": [
+        "./libs/landing-v2/feature-damocles/src/index.ts"
       ]
     }
   },

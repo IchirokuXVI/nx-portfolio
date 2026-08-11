@@ -1,0 +1,15 @@
+@if (facts().length) {
+  <dl class="info-table">
+    @for (fact of facts(); track fact.id) {
+      <div class="info-table__row">
+        <dt class="info-table__label">{{ fact.label }}</dt>
+        <dd class="info-table__value">
+          {{ fact.value }}
+          @if (fact.note) {
+            <span class="info-table__note">{{ fact.note }}</span>
+          }
+        </dd>
+      </div>
+    }
+  </dl>
+}

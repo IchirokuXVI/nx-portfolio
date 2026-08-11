@@ -1,0 +1,23 @@
+// Locked design system (see apps/landing-v2/plans/0000-overview.md). Dark
+// only — single gold accent, used identically everywhere it appears.
+$ground: #0d0d0f;
+$surface: #151517;
+$surface-raised: #1b1b1e;
+$hairline: rgba(255, 255, 255, 0.09);
+$text: #ededf0;
+$muted: #9a9aa2;
+$accent: #f2d45b;
+$accent-dim: #b89a3e;
+
+// Tight system grotesk for display/body; ui-monospace for labels/utility
+// text. No webfont required.
+$font-display:
+  -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial,
+  sans-serif;
+$font-mono:
+  ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+$container-max: 1160px;
+$breakpoint-desktop: 720px;
+
+$radius: 10px;

@@ -1,0 +1,41 @@
+<article
+  class="project-card"
+  [class.project-card--featured]="project().visual.featured"
+>
+  <a
+    class="project-card__media"
+    [class.project-card__media--placeholder]="!project().image"
+    [routerLink]="[viewLink()]"
+  >
+    @if (project().image) {
+      <img [src]="imagePromise() | async" [alt]="project().name" loading="lazy" />
+    } @else {
+      <span class="project-card__placeholder-initial">{{ initial() }}</span>
+    }
+  </a>
+  <div class="project-card__body">
+    <h3 class="project-card__title">
+      <a [routerLink]="[viewLink()]">{{ project().name }}</a>
+      <a
+        class="project-card__repo"
+        [attr.aria-label]="project().name + ' on GitHub'"
+        [href]="project().repoLink"
+        rel="noopener"
+        target="_blank"
+      >
+        <lib-github-icon class="project-card__repo-icon" />
+      </a>
+    </h3>
+    <p class="project-card__tagline">{{ project().tagline }}</p>
+    <p class="project-card__description">{{ project().description }}</p>
+    <ul class="project-card__tags">
+      @for (tag of project().tags; track tag) {
+        <li>{{ tag }}</li>
+      }
+    </ul>
+    <a class="project-card__view" [routerLink]="[viewLink()]">
+      {{ 'landingV2.project_view' | rokuT }}
+      <lib-arrow-icon class="project-card__view-icon" />
+    </a>
+  </div>
+</article>

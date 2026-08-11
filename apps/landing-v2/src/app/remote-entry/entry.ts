@@ -1,9 +1,9 @@
 import { Component } from '@angular/core';
-import { NxWelcome } from './nx-welcome';
 
+// Renders only through the shell — hitting this remote's own port (4204) directly
+// must show ~nothing; the shell supplies the outlet, locale, and theme context.
 @Component({
-  imports: [NxWelcome],
   selector: 'app-landing-v2-entry',
-  template: `<app-nx-welcome></app-nx-welcome>`,
+  template: ``,
 })
 export class RemoteEntry {}

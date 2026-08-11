@@ -10,7 +10,7 @@
       "executor": "@nx/angular:webpack-browser",
       "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "dist/apps/landing-v2",
+        "outputPath": "dist/apps/landingV2",
         "index": "apps/landing-v2/src/index.html",
         "main": "apps/landing-v2/src/main.ts",
         "tsConfig": "apps/landing-v2/tsconfig.app.json",

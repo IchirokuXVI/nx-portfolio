@@ -1,0 +1,17 @@
+<header class="site-header">
+  <div class="site-header__inner">
+    <div class="site-header__brand">
+      <span class="site-header__mark">D</span>
+      <span class="site-header__name">Daniel</span>
+    </div>
+    <a
+      class="site-header__cv"
+      [href]="resumeLink() | async"
+      download
+      target="_blank"
+    >
+      <lib-download-icon class="site-header__cv-icon" />
+      <span>{{ 'landingV2.resume' | rokuT }}</span>
+    </a>
+  </div>
+</header>
