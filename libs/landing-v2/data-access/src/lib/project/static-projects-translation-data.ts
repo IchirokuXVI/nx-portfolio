@@ -29,7 +29,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     id: '3',
     projectId: '2',
     locale: 'en',
-    tagline: 'VR game studio site, ported into the portfolio',
+    tagline: 'VR game studio business site',
     description:
       "A marketing site for Damocle'Sword, a VR game studio, built as an Angular micro-frontend. Home, About, Services and Contact pages share a translated (EN/ES/FR) component system with a reactive contact form and a data-access layer for news and projects, including their VR titles such as STARLIT: ASCENSION.",
   },
@@ -37,7 +37,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     id: '4',
     projectId: '2',
     locale: 'es',
-    tagline: 'Web del estudio de videojuegos VR, integrada en el portafolio',
+    tagline: 'Web empresarial para un estudio de videojuegos VR',
     description:
       "Un sitio de marketing para Damocle'Sword, un estudio de videojuegos VR, construido como micro-frontend de Angular. Las páginas de Inicio, Nosotros, Servicios y Contacto comparten un sistema de componentes traducido (EN/ES/FR) con un formulario de contacto reactivo y una capa de datos para noticias y proyectos, incluidos sus títulos VR como STARLIT: ASCENSION.",
   },

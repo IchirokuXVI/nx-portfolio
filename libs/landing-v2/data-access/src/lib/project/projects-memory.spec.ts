@@ -59,9 +59,7 @@ describe('ProjectMemory', () => {
     const damocles = projects.find((p) => p.id === '2');
 
     expect(damocles?.locale).toBe('en');
-    expect(damocles?.tagline).toBe(
-      "VR game studio site, ported into the portfolio"
-    );
+    expect(damocles?.tagline).toBe('VR game studio business site');
   });
 
   it('omits detailLink for the deferred Point Of Sale detail page', async () => {
@@ -79,7 +77,7 @@ describe('ProjectMemory', () => {
     await expect(odontogram?.image).resolves.toBe('asset-file-stub');
   });
 
-  it('leaves Portfolio and Damocle\'Sword without a screenshot (generic placeholder)', async () => {
+  it("leaves Portfolio and Damocle'Sword without a screenshot (generic placeholder)", async () => {
     const projects = await firstValueFrom(service.getList('en'));
     const portfolio = projects.find((p) => p.id === '1');
     const damocles = projects.find((p) => p.id === '2');
@@ -142,9 +140,9 @@ describe('ProjectMemory', () => {
     });
 
     it('throws NotFoundResourceError for a slug with no detail page (e.g. Point Of Sale)', () => {
-      expect(() =>
-        service.getByDetailSlug('point-of-sale', 'en')
-      ).toThrow(NotFoundResourceError);
+      expect(() => service.getByDetailSlug('point-of-sale', 'en')).toThrow(
+        NotFoundResourceError
+      );
     });
 
     it('throws NotFoundResourceError for an unknown slug', () => {
