@@ -92,18 +92,28 @@
     height: 16px;
   }
 
+  &__cv-label-short {
+    display: none;
+  }
+
   // Adding the language switch tightens the header row; below ~360px (the
   // "mobile-sm" bucket landingV2's no-horizontal-scroll e2e suite checks)
-  // drop the CV label to an icon-only button so the row keeps fitting.
-  // `aria-label` above keeps it announced correctly either way.
+  // swap the full "Download CV"/"Descargar CV" label for a plain "CV" (the
+  // one word both translations already share) so the button keeps a label
+  // instead of shrinking to an icon-only control. `aria-label` above still
+  // carries the full text to assistive tech either way.
   @media (max-width: 360px) {
-    &__cv span {
+    &__cv-label {
       display: none;
     }
 
+    &__cv-label-short {
+      display: inline;
+    }
+
     &__cv {
-      gap: 0;
-      padding: 0.5rem;
+      gap: 0.3rem;
+      padding: 0.5rem 0.7rem;
     }
   }
 }
