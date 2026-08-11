@@ -3,6 +3,18 @@ import { provideRouter } from '@angular/router';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { DetailPageShell } from './detail-page-shell';
 
+// DetailPageShell now renders the LanguageSwitch (EN/ES toggle), which reads
+// RokuTranslator.getLocale() statically at construction, mirroring
+// project-page.spec.ts's mock for the same reason.
+jest.mock('@portfolio/localization/rokutranslator', () => {
+  return {
+    RokuTranslator: {
+      getLocale: jest.fn().mockReturnValue('en'),
+      changeLocale: jest.fn(),
+    },
+  };
+});
+
 describe('DetailPageShell', () => {
   let fixture: ComponentFixture<DetailPageShell>;
 

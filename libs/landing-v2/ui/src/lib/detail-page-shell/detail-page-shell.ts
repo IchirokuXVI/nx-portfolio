@@ -8,6 +8,7 @@ import {
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { ArrowIcon, GithubIcon } from '@portfolio/shared/ui';
+import { LanguageSwitch } from '../language-switch/language-switch';
 
 /**
  * Reusable shell for the three project detail pages (0004): a back link to
@@ -18,7 +19,14 @@ import { ArrowIcon, GithubIcon } from '@portfolio/shared/ui';
  */
 @Component({
   selector: 'lib-landing-v2-detail-page-shell',
-  imports: [AsyncPipe, RouterLink, RokuTranslatorPipe, ArrowIcon, GithubIcon],
+  imports: [
+    AsyncPipe,
+    RouterLink,
+    RokuTranslatorPipe,
+    ArrowIcon,
+    GithubIcon,
+    LanguageSwitch,
+  ],
   templateUrl: './detail-page-shell.html',
   styleUrl: './detail-page-shell.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

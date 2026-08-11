@@ -4,6 +4,7 @@ import { DamoclesContent } from './damocles-content/damocles-content';
 import { DetailPageShell } from './detail-page-shell/detail-page-shell';
 import { Hero } from './hero/hero';
 import { InfoTable } from './info-table/info-table';
+import { LanguageSwitch } from './language-switch/language-switch';
 import { Landing } from './landing/landing';
 import { OdontogramContent } from './odontogram-content/odontogram-content';
 import { PortfolioContent } from './portfolio-content/portfolio-content';
@@ -17,6 +18,7 @@ const components = [
   SiteHeader,
   Hero,
   InfoTable,
+  LanguageSwitch,
   ProjectCard,
   ProjectGrid,
   SiteFooter,

@@ -1,0 +1,13 @@
+<div class="language-switch" role="group" aria-label="Language">
+  @for (locale of locales; track locale) {
+    <button
+      type="button"
+      class="language-switch__option"
+      [class.language-switch__option--active]="locale === selectedLocale()"
+      [attr.aria-pressed]="locale === selectedLocale()"
+      (click)="select(locale)"
+    >
+      {{ locale }}
+    </button>
+  }
+</div>

@@ -4,6 +4,19 @@ import { TranslatedProject } from '@portfolio/landing-v2/models';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { DamoclesContent } from './damocles-content';
 
+// DamoclesContent renders DetailPageShell, which renders the LanguageSwitch
+// (EN/ES toggle); LanguageSwitch reads RokuTranslator.getLocale() statically
+// at construction, mirroring project-page.spec.ts's mock for the same
+// reason.
+jest.mock('@portfolio/localization/rokutranslator', () => {
+  return {
+    RokuTranslator: {
+      getLocale: jest.fn().mockReturnValue('en'),
+      changeLocale: jest.fn(),
+    },
+  };
+});
+
 function makeProject(
   overrides: Partial<TranslatedProject> = {}
 ): TranslatedProject {

@@ -3,6 +3,7 @@ export * from './lib/detail-page-shell/detail-page-shell';
 export * from './lib/hero/hero';
 export * from './lib/info-table/info-table';
 export * from './lib/landing-v2-ui-module';
+export * from './lib/language-switch/language-switch';
 export * from './lib/landing/landing';
 export * from './lib/odontogram-content/odontogram-content';
 export * from './lib/portfolio-content/portfolio-content';

@@ -1,9 +1,12 @@
 <article class="detail-page">
   <div class="detail-page__inner">
-    <a class="detail-page__back" [routerLink]="[backLink()]">
-      <lib-arrow-icon class="detail-page__back-icon" />
-      {{ 'landingV2.detail.back' | rokuT }}
-    </a>
+    <div class="detail-page__topbar">
+      <a class="detail-page__back" [routerLink]="[backLink()]">
+        <lib-arrow-icon class="detail-page__back-icon" />
+        {{ 'landingV2.detail.back' | rokuT }}
+      </a>
+      <lib-landing-v2-language-switch />
+    </div>
 
     <header class="detail-page__header">
       <h1 class="detail-page__title">{{ title() }}</h1>
