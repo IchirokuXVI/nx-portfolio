@@ -1,5 +1,6 @@
 import { NgModule } from '@angular/core';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
+import { DetailPageShell } from './detail-page-shell/detail-page-shell';
 import { Hero } from './hero/hero';
 import { InfoTable } from './info-table/info-table';
 import { Landing } from './landing/landing';
@@ -16,6 +17,7 @@ const components = [
   ProjectCard,
   ProjectGrid,
   SiteFooter,
+  DetailPageShell,
 ];
 
 @NgModule({

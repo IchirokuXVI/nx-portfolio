@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { NotFoundResourceError } from '@portfolio/shared/data-access';
 import { firstValueFrom } from 'rxjs';
 import { ProjectMemory } from './projects-memory';
 import { PROJECTS } from './static-projects-data';
@@ -85,5 +86,22 @@ describe('ProjectMemory', () => {
 
     expect(portfolio?.image).toBeUndefined();
     expect(damocles?.image).toBeUndefined();
+  });
+
+  describe('getById', () => {
+    it('returns a single project joined with the requested locale copy', async () => {
+      const odontogram = await firstValueFrom(service.getById('3', 'es'));
+
+      expect(odontogram.id).toBe('3');
+      expect(odontogram.locale).toBe('es');
+      expect(odontogram.name).toBe('Odontogram');
+      expect(odontogram.appLink).toBe('/es/odontogram');
+    });
+
+    it('throws NotFoundResourceError for an unknown id', () => {
+      expect(() => service.getById('does-not-exist', 'en')).toThrow(
+        NotFoundResourceError
+      );
+    });
   });
 });

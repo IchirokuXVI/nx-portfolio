@@ -1,11 +1,9 @@
 import { Injectable } from '@angular/core';
-import {
-  Project,
-  TranslatedProject,
-} from '@portfolio/landing-v2/models';
+import { Project, TranslatedProject } from '@portfolio/landing-v2/models';
+import { NotFoundResourceError } from '@portfolio/shared/data-access';
 import { of } from 'rxjs';
 import { ProjectServiceI } from './projects-service';
-import { PROJECTS } from './static-projects-data';
+import { PROJECTS, StaticProject } from './static-projects-data';
 import { PROJECTS_TRANSLATIONS } from './static-projects-translation-data';
 
 /**
@@ -32,39 +30,53 @@ export class ProjectMemory implements ProjectServiceI {
     );
   }
 
+  private resolve(project: StaticProject, locale: string): TranslatedProject {
+    const translation = this.getTranslation(project.id, locale);
+
+    if (!translation) {
+      throw new Error(
+        `Inconsistent data: no translation found for project ${project.id}`
+      );
+    }
+
+    const resolved: Project = {
+      id: project.id,
+      name: project.name,
+      tags: project.tags,
+      repoLink: project.repoLink,
+      visual: project.visual,
+      detailLink:
+        project.detailSlug !== undefined
+          ? `/${locale}/projects/${project.detailSlug}`
+          : undefined,
+      appLink:
+        project.appSlug !== undefined
+          ? `/${locale}${project.appSlug ? `/${project.appSlug}` : ''}`
+          : undefined,
+      image: project.image?.(),
+    };
+
+    // Spread translation first so `resolved.id` (the project's own id) wins
+    // over the translation row's own `id` — only `projectId` should ever
+    // identify the source record on the translation side.
+    return { ...translation, ...resolved } as TranslatedProject;
+  }
+
   getList(locale: string) {
-    const translatedProjects = this._projects.map((project) => {
-      const translation = this.getTranslation(project.id, locale);
+    return of<TranslatedProject[]>(
+      this._projects.map((project) => this.resolve(project, locale))
+    );
+  }
 
-      if (!translation) {
-        throw new Error(
-          `Inconsistent data: no translation found for project ${project.id}`
-        );
-      }
+  getById(id: string, locale: string) {
+    const project = this._projects.find((p) => p.id === id);
 
-      const resolved: Project = {
-        id: project.id,
-        name: project.name,
-        tags: project.tags,
-        repoLink: project.repoLink,
-        visual: project.visual,
-        detailLink:
-          project.detailSlug !== undefined
-            ? `/${locale}/projects/${project.detailSlug}`
-            : undefined,
-        appLink:
-          project.appSlug !== undefined
-            ? `/${locale}${project.appSlug ? `/${project.appSlug}` : ''}`
-            : undefined,
-        image: project.image?.(),
-      };
+    if (!project) {
+      throw new NotFoundResourceError(
+        `Project with id ${id} not found in locale ${locale}`
+      );
+    }
 
-      // Spread translation first so `resolved.id` (the project's own id)
-      // wins over the translation row's own `id` — only `projectId` should
-      // ever identify the source record on the translation side.
-      return { ...translation, ...resolved } as TranslatedProject;
-    });
-
-    return of<TranslatedProject[]>(translatedProjects);
+    return of(this.resolve(project, locale));
   }
 }

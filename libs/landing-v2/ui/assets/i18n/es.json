@@ -6,5 +6,28 @@
   "landingV2.resume": "Descargar CV",
   "landingV2.projects": "Proyectos",
   "landingV2.project_view": "Ver proyecto",
-  "landingV2.built": "Hecho con Angular y Nx"
+  "landingV2.built": "Hecho con Angular y Nx",
+
+  "landingV2.detail.back": "Volver",
+  "landingV2.detail.view_repo": "Ver repositorio",
+  "landingV2.detail.visit_live": "Ver app en vivo",
+
+  "landingV2.detail.portfolio.overview_title": "Resumen",
+  "landingV2.detail.portfolio.overview_body": "Mi portafolio personal, construido como un sistema de micro-frontends con Angular module federation dentro de un monorepo Nx. Una app shell aloja el router y monta en tiempo de ejecución los remotes landing, odontogram y damoclesSword.",
+  "landingV2.detail.portfolio.architecture_title": "Arquitectura",
+  "landingV2.detail.portfolio.architecture_body": "El enrutado es locale-first (/:locale/...), las rutas de cada remote se cargan de forma perezosa mediante alias <remote>/Routes, y un singleton de i18n hecho a medida (RokuTranslator) se comparte como singleton estricto entre todos los micro-frontends, para mantener el idioma activo sincronizado en todas partes.",
+  "landingV2.detail.portfolio.engineering_title": "Ingeniería",
+  "landingV2.detail.portfolio.engineering_body": "Un plugin de Nx a medida (@portfolio/docker) envuelve docker buildx con executors de build y push, Kubernetes y Helm despliegan el workspace en un clúster k3s, GitHub Actions calcula los proyectos afectados para la CI, y la suite de pruebas corre sobre Jest junto con Playwright y Cypress.",
+
+  "landingV2.detail.odontogram.what_title": "Qué es",
+  "landingV2.detail.odontogram.what_body": "Un odontograma completo para registrar tratamientos dentales y mantener el historial de cada paciente a lo largo del tiempo.",
+  "landingV2.detail.odontogram.hard_part_title": "La parte difícil",
+  "landingV2.detail.odontogram.hard_part_body": "Un diente tiene hasta seis zonas, y un mismo tratamiento puede afectar a varias zonas y a más de un diente. El gráfico SVG traduce cada clic a la zona y diente correctos, y persiste el estado resultante.",
+
+  "landingV2.detail.damocles.studio_title": "El estudio",
+  "landingV2.detail.damocles.studio_body": "Un estudio de videojuegos VR fundado por un grupo de estudiantes universitarios que decidieron construir sus propios juegos usando una tecnología aún no estandarizada: la realidad virtual. Además de sus propios títulos, el estudio también ofrece servicios de VR y gamificación a otras empresas.",
+  "landingV2.detail.damocles.work_title": "Su trabajo",
+  "landingV2.detail.damocles.work_body": "STARLIT: ASCENSION, un VR shooter actualmente en desarrollo, convive con proyectos de I+D para clientes como Realistic Interactor y el VR Sickness Reducer, una prueba de exposición gradual creada para reducir el mareo provocado por la realidad virtual.",
+  "landingV2.detail.damocles.built_title": "Cómo está construido el sitio",
+  "landingV2.detail.damocles.built_body": "Un micro-frontend de Angular con páginas de Inicio, Nosotros, Servicios y Contacto que comparten un sistema de componentes traducido a inglés, español y francés, un formulario de contacto reactivo, y una capa de datos para noticias y proyectos."
 }

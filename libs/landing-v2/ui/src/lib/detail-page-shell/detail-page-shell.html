@@ -1,0 +1,52 @@
+<article class="detail-page">
+  <div class="detail-page__inner">
+    <a class="detail-page__back" [routerLink]="[backLink()]">
+      <lib-arrow-icon class="detail-page__back-icon" />
+      {{ 'landingV2.detail.back' | rokuT }}
+    </a>
+
+    <header class="detail-page__header">
+      <h1 class="detail-page__title">{{ title() }}</h1>
+      @if (tagline()) {
+        <p class="detail-page__tagline">{{ tagline() }}</p>
+      }
+      <div class="detail-page__links">
+        @if (repoLink()) {
+          <a
+            class="detail-page__link"
+            [href]="repoLink()"
+            rel="noopener"
+            target="_blank"
+          >
+            <lib-github-icon class="detail-page__link-icon" />
+            {{ 'landingV2.detail.view_repo' | rokuT }}
+          </a>
+        }
+        @if (appLink()) {
+          <a
+            class="detail-page__link detail-page__link--primary"
+            [routerLink]="[appLink()]"
+          >
+            {{ 'landingV2.detail.visit_live' | rokuT }}
+            <lib-arrow-icon class="detail-page__link-icon" />
+          </a>
+        }
+      </div>
+    </header>
+
+    @if (heroImage()) {
+      <div class="detail-page__hero-media">
+        <img [src]="resolvedHeroImage() | async" [alt]="title()" />
+      </div>
+    }
+
+    <div class="detail-page__layout">
+      <div class="detail-page__body">
+        <ng-content select="[body]" />
+      </div>
+      <aside class="detail-page__meta">
+        <ng-content select="[meta]" />
+      </aside>
+    </div>
+  </div>
+</article>

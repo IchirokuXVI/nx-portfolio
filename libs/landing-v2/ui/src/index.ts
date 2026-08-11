@@ -1,3 +1,4 @@
+export * from './lib/detail-page-shell/detail-page-shell';
 export * from './lib/hero/hero';
 export * from './lib/info-table/info-table';
 export * from './lib/landing-v2-ui-module';
