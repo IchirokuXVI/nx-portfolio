@@ -74,21 +74,11 @@ export class ProjectMemory implements ProjectServiceI {
       image: project.image?.(),
     };
 
-    // Spread translation first so `resolved.id` (the project's own id) wins
-    // over the translation row's own `id` — only `projectId` should ever
-    // identify the source record on the translation side.
-    return { ...translation, ...resolved } as TranslatedProject;
-  }
-
-  getList(locale: string, filter?: ProjectGetListFilter) {
-    const projects = this._inMemoryFilter.applyFilter(
-      [...this._projects],
-      filter
-    );
-
-    return of<TranslatedProject[]>(
-      projects.map((project) => this.resolve(project, locale))
-    );
+    return {
+      ...resolved,
+      ...translation,
+      id: resolved.id,
+    } as TranslatedProject;
   }
 
   getById(id: string, locale: string) {
@@ -113,5 +103,16 @@ export class ProjectMemory implements ProjectServiceI {
     }
 
     return of(this.resolve(project, locale));
+  }
+
+  getList(locale: string, filter?: ProjectGetListFilter) {
+    const projects = this._inMemoryFilter.applyFilter(
+      [...this._projects],
+      filter
+    );
+
+    return of<TranslatedProject[]>(
+      projects.map((project) => this.resolve(project, locale))
+    );
   }
 }
