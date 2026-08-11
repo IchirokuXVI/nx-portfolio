@@ -5,6 +5,7 @@ export * from './lib/info-table/info-table';
 export * from './lib/landing-v2-ui-module';
 export * from './lib/language-switch/language-switch';
 export * from './lib/landing/landing';
+export * from './lib/layout/layout';
 export * from './lib/odontogram-content/odontogram-content';
 export * from './lib/portfolio-content/portfolio-content';
 export * from './lib/project-card/project-card';

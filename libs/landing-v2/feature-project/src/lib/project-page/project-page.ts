@@ -27,10 +27,10 @@ import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-an
  * `detailSlug` in the data, not a whole new feature lib or route entry.
  *
  * Typed as `Type<unknown>` rather than a shared "content component" input
- * interface: each resolved component's own `project`/`backLink` are
- * `InputSignal`s (via `input.required<T>()`), not plain properties, so
- * there's no useful structural type to check the map's values against —
- * `NgComponentOutlet`'s `inputs` binding matches them by name at runtime.
+ * interface: each resolved component's own `project` is an `InputSignal`
+ * (via `input.required<T>()`), not a plain property, so there's no useful
+ * structural type to check the map's values against — `NgComponentOutlet`'s
+ * `inputs` binding matches it by name at runtime.
  */
 const CONTENT_BY_SLUG: Record<string, Type<unknown>> = {
   portfolio: PortfolioContent,
@@ -69,7 +69,6 @@ export class ProjectPage implements OnInit {
   private _rokuTranslatorServ = inject(RokuTranslatorService);
 
   readonly locale = RokuTranslator.getLocale();
-  readonly backLink = `/${this.locale}`;
 
   // Gates the whole render on the i18n namespace being loaded (mirrors
   // Landing's `compReady`) — RokuTranslatorPipe is a *pure* pipe, evaluated

@@ -1,0 +1,11 @@
+<div class="layout">
+  @if (compReady()) {
+    <lib-landing-v2-site-header [resumeLink]="resumeLink" />
+  }
+  <main class="layout__main">
+    <router-outlet />
+  </main>
+  @if (compReady()) {
+    <lib-landing-v2-site-footer />
+  }
+</div>

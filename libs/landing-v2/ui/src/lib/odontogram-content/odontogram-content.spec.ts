@@ -4,10 +4,9 @@ import { TranslatedProject } from '@portfolio/landing-v2/models';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { OdontogramContent } from './odontogram-content';
 
-// OdontogramContent renders DetailPageShell, which renders the LanguageSwitch
-// (EN/ES toggle); LanguageSwitch reads RokuTranslator.getLocale() statically
-// at construction, mirroring project-page.spec.ts's mock for the same
-// reason.
+// OdontogramContent renders DetailPageShell, whose `| rokuT` pipes read the
+// translator singleton; mock it so it resolves in isolation, mirroring
+// project-page.spec.ts's mock.
 jest.mock('@portfolio/localization/rokutranslator', () => {
   return {
     RokuTranslator: {
@@ -47,7 +46,6 @@ describe('OdontogramContent', () => {
 
     fixture = TestBed.createComponent(OdontogramContent);
     fixture.componentRef.setInput('project', makeProject());
-    fixture.componentRef.setInput('backLink', '/en');
     fixture.detectChanges();
   });
 

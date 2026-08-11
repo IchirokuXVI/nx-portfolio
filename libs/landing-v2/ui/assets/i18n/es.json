@@ -6,9 +6,10 @@
   "landingV2.resume": "Descargar CV",
   "landingV2.projects": "Proyectos",
   "landingV2.project_view": "Ver proyecto",
+  "landingV2.project_details": "Más detalles",
+  "landingV2.project_unavailable": "Proyecto no disponible",
   "landingV2.built": "Hecho con Angular y Nx",
 
-  "landingV2.detail.back": "Volver",
   "landingV2.detail.view_repo": "Ver repositorio",
   "landingV2.detail.visit_live": "Ver app en vivo",
 

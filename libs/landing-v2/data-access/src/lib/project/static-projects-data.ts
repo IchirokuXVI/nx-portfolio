@@ -63,9 +63,7 @@ export const PROJECTS: readonly StaticProject[] = [
     detailSlug: 'odontogram',
     appSlug: 'odontogram',
     image: () =>
-      import('../../assets/odontogram_screenshot.png').then(
-        (m) => m.default
-      ),
+      import('../../assets/odontogram_screenshot.png').then((m) => m.default),
   },
   {
     id: '4',
@@ -74,7 +72,8 @@ export const PROJECTS: readonly StaticProject[] = [
     repoLink: 'https://github.com/ichirokuxvi/nx-portfolio',
     visual: { columnSpan: 1, featured: false },
     // detailSlug omitted — detail page deferred.
-    appSlug: 'point-of-sale',
+    // appSlug omitted — no live app deployed yet, so the card shows the
+    // "Project not available" disabled state.
     image: () =>
       import('../../assets/pos_screenshot.png').then((m) => m.default),
   },

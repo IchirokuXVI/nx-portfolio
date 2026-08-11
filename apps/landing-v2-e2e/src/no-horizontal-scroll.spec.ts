@@ -14,7 +14,7 @@ import { expect, Page, test } from '@playwright/test';
  * `/<locale>/damoclesSword`), so the crawl scope is narrowed to the landing
  * page plus its own `projects/` subtree — otherwise a root-scoped crawl would
  * follow the project cards' `appLink`s into the sibling odontogram/
- * damoclesSword/point-of-sale remotes, which have their own e2e coverage.
+ * damoclesSword remotes, which have their own e2e coverage.
  */
 
 const viewports = [
@@ -125,7 +125,7 @@ async function probeHorizontalScroll(page: Page): Promise<ScrollProbe> {
  *
  * Scoped to the landing page itself plus its own `projects/` detail-page
  * subtree — narrower than "starts with scope" so the crawl doesn't follow the
- * project cards' `appLink`s out into the odontogram/damoclesSword/point-of-sale
+ * project cards' `appLink`s out into the odontogram/damoclesSword
  * remotes (each of those has its own e2e coverage).
  */
 async function inScopeLinks(page: Page, scope: string): Promise<string[]> {

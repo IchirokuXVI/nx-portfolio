@@ -19,37 +19,6 @@
       clamp(3rem, 6vw, 5rem);
   }
 
-  &__topbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 2rem;
-  }
-
-  &__back {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: $muted;
-    font-family: $font-mono;
-    font-size: 0.8rem;
-    text-decoration: none;
-    transition: color 0.2s ease;
-
-    &:hover,
-    &:focus-visible {
-      color: $accent;
-    }
-  }
-
-  &__back-icon {
-    width: 14px;
-    height: 14px;
-    transform: scaleX(-1);
-  }
-
   &__header {
     display: flex;
     flex-direction: column;

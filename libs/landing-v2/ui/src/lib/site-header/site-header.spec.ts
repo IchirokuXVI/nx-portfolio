@@ -1,10 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { SiteHeader } from './site-header';
 
-// SiteHeader now renders the LanguageSwitch (EN/ES toggle), which reads
-// RokuTranslator.getLocale() statically at construction, mirroring
-// project-page.spec.ts's mock for the same reason.
+// SiteHeader renders the LanguageSwitch (EN/ES toggle) and the brand home
+// link, both of which read RokuTranslator.getLocale() statically at
+// construction, mirroring project-page.spec.ts's mock for the same reason.
 jest.mock('@portfolio/localization/rokutranslator', () => {
   return {
     RokuTranslator: {
@@ -21,7 +22,7 @@ describe('SiteHeader', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [SiteHeader],
-      providers: [provideRokuTranslatorTesting()],
+      providers: [provideRokuTranslatorTesting(), provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SiteHeader);
@@ -33,11 +34,18 @@ describe('SiteHeader', () => {
     expect(component).toBeTruthy();
   });
 
-  it('renders no navigation links (brief #1: header has no nav)', () => {
+  it('renders no navigation menu, only the brand home link and CV action (brief #1)', () => {
     const host = fixture.nativeElement as HTMLElement;
 
     expect(host.querySelector('nav')).toBeNull();
-    // Only the Download CV action should be an anchor in the header.
-    expect(host.querySelectorAll('a').length).toBe(1);
+    // Two anchors: the brand (links home) and the Download CV action.
+    expect(host.querySelectorAll('a').length).toBe(2);
+  });
+
+  it('points the brand link at the active locale root', () => {
+    const host = fixture.nativeElement as HTMLElement;
+    expect(
+      host.querySelector('.site-header__brand')?.getAttribute('href')
+    ).toBe('/en');
   });
 });

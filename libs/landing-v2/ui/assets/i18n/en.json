@@ -6,9 +6,10 @@
   "landingV2.resume": "Download CV",
   "landingV2.projects": "Projects",
   "landingV2.project_view": "View project",
+  "landingV2.project_details": "More details",
+  "landingV2.project_unavailable": "Project not available",
   "landingV2.built": "Built with Angular & Nx",
 
-  "landingV2.detail.back": "Back",
   "landingV2.detail.view_repo": "View repository",
   "landingV2.detail.visit_live": "Visit live app",
 

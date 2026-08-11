@@ -22,7 +22,6 @@ const TECH_CHIPS = ['Angular', 'SVG'];
 })
 export class OdontogramContent {
   project = input.required<TranslatedProject>();
-  backLink = input.required<string>();
 
   readonly techChips = TECH_CHIPS;
 }

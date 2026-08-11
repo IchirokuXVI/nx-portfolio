@@ -1,25 +1,35 @@
 <article
-  class="project-card"
   [class.project-card--featured]="project().visual.featured"
+  class="project-card"
 >
   <a
-    class="project-card__media"
+    [class.project-card__media--disabled]="!appLink()"
     [class.project-card__media--placeholder]="!project().image"
-    [routerLink]="[viewLink()]"
+    [routerLink]="appLink() ? [appLink()] : null"
+    class="project-card__media"
   >
     @if (project().image) {
-      <img [src]="imagePromise() | async" [alt]="project().name" loading="lazy" />
+      <img
+        [alt]="project().name"
+        [src]="imagePromise() | async"
+        loading="lazy"
+      />
     } @else {
       <span class="project-card__placeholder-initial">{{ initial() }}</span>
     }
   </a>
   <div class="project-card__body">
     <h3 class="project-card__title">
-      <a [routerLink]="[viewLink()]">{{ project().name }}</a>
       <a
-        class="project-card__repo"
+        [class.project-card__name--disabled]="!appLink()"
+        [routerLink]="appLink() ? [appLink()] : null"
+        class="project-card__name"
+        >{{ project().name }}</a
+      >
+      <a
         [attr.aria-label]="project().name + ' on GitHub'"
         [href]="project().repoLink"
+        class="project-card__repo"
         rel="noopener"
         target="_blank"
       >
@@ -33,9 +43,29 @@
         <li>{{ tag }}</li>
       }
     </ul>
-    <a class="project-card__view" [routerLink]="[viewLink()]">
-      {{ 'landingV2.project_view' | rokuT }}
-      <lib-arrow-icon class="project-card__view-icon" />
-    </a>
+    <div class="project-card__actions">
+      @if (detailLink()) {
+        <a [routerLink]="[detailLink()]" class="project-card__view">
+          {{ 'landingV2.project_details' | rokuT }}
+          <lib-arrow-icon class="project-card__view-icon" />
+        </a>
+      }
+      @if (appLink()) {
+        <a [routerLink]="[appLink()]" class="project-card__view">
+          {{ 'landingV2.project_view' | rokuT }}
+          <lib-arrow-icon class="project-card__view-icon" />
+        </a>
+      } @else {
+        <span
+          [attr.data-tooltip]="'landingV2.project_unavailable' | rokuT"
+          aria-disabled="true"
+          class="project-card__view project-card__view--disabled"
+          tabindex="0"
+        >
+          {{ 'landingV2.project_view' | rokuT }}
+          <lib-arrow-icon class="project-card__view-icon" />
+        </span>
+      }
+    </div>
   </div>
 </article>

@@ -4,10 +4,9 @@ import { TranslatedProject } from '@portfolio/landing-v2/models';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { PortfolioContent } from './portfolio-content';
 
-// PortfolioContent renders DetailPageShell, which renders the LanguageSwitch
-// (EN/ES toggle); LanguageSwitch reads RokuTranslator.getLocale() statically
-// at construction, mirroring project-page.spec.ts's mock for the same
-// reason.
+// PortfolioContent renders DetailPageShell, whose `| rokuT` pipes read the
+// translator singleton; mock it so it resolves in isolation, mirroring
+// project-page.spec.ts's mock.
 jest.mock('@portfolio/localization/rokutranslator', () => {
   return {
     RokuTranslator: {
@@ -47,7 +46,6 @@ describe('PortfolioContent', () => {
 
     fixture = TestBed.createComponent(PortfolioContent);
     fixture.componentRef.setInput('project', makeProject());
-    fixture.componentRef.setInput('backLink', '/en');
     fixture.detectChanges();
   });
 
@@ -55,14 +53,11 @@ describe('PortfolioContent', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it('renders the project title and back link via the detail-page-shell', () => {
+  it('renders the project title via the detail-page-shell', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('.detail-page__title')?.textContent).toBe(
       'Portfolio'
     );
-    expect(
-      host.querySelector('.detail-page__back')?.getAttribute('href')
-    ).toBe('/en');
   });
 
   it('renders all three portfolio sections and the tech chips', () => {
