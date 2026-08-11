@@ -22,7 +22,6 @@ const TECH_CHIPS = ['Angular', 'Micro-frontend', 'VR', 'i18n EN/ES/FR'];
 })
 export class DamoclesContent {
   project = input.required<TranslatedProject>();
-  backLink = input.required<string>();
 
   readonly techChips = TECH_CHIPS;
 }

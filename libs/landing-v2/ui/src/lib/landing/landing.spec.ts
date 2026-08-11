@@ -3,9 +3,8 @@ import { provideRouter } from '@angular/router';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { Landing } from './landing';
 
-// Landing renders SiteHeader, which renders the LanguageSwitch (EN/ES
-// toggle); LanguageSwitch reads RokuTranslator.getLocale() statically at
-// construction, mirroring project-page.spec.ts's mock for the same reason.
+// Landing renders the Hero, whose `| rokuT` pipes read the translator; mock
+// the singleton so it resolves in isolation, mirroring project-page.spec.ts.
 jest.mock('@portfolio/localization/rokutranslator', () => {
   return {
     RokuTranslator: {

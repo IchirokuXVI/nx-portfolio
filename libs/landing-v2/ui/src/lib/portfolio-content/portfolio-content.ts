@@ -31,7 +31,6 @@ const TECH_CHIPS = [
 })
 export class PortfolioContent {
   project = input.required<TranslatedProject>();
-  backLink = input.required<string>();
 
   readonly techChips = TECH_CHIPS;
 }

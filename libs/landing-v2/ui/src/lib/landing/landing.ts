@@ -12,12 +12,15 @@ import {
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import { Hero } from '../hero/hero';
 import { ProjectGrid } from '../project-grid/project-grid';
-import { SiteFooter } from '../site-footer/site-footer';
-import { SiteHeader } from '../site-header/site-header';
 
+/**
+ * The landing page *body* — hero + project grid. The shared site header and
+ * footer live in the routed `Layout` (this component renders inside its
+ * <main>), so it no longer carries them itself.
+ */
 @Component({
   selector: 'lib-landing-v2-ui',
-  imports: [SiteHeader, Hero, ProjectGrid, SiteFooter],
+  imports: [Hero, ProjectGrid],
   templateUrl: './landing.html',
   styleUrl: './landing.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

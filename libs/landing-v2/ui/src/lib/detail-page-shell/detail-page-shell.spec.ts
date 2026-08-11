@@ -3,18 +3,6 @@ import { provideRouter } from '@angular/router';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { DetailPageShell } from './detail-page-shell';
 
-// DetailPageShell now renders the LanguageSwitch (EN/ES toggle), which reads
-// RokuTranslator.getLocale() statically at construction, mirroring
-// project-page.spec.ts's mock for the same reason.
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      changeLocale: jest.fn(),
-    },
-  };
-});
-
 describe('DetailPageShell', () => {
   let fixture: ComponentFixture<DetailPageShell>;
 
@@ -26,7 +14,6 @@ describe('DetailPageShell', () => {
 
     fixture = TestBed.createComponent(DetailPageShell);
     fixture.componentRef.setInput('title', 'Portfolio');
-    fixture.componentRef.setInput('backLink', '/en');
   });
 
   it('should create', () => {
@@ -34,16 +21,19 @@ describe('DetailPageShell', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it('renders the title and back link pointing to the given locale root', () => {
+  it('renders the title', () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
     expect(host.querySelector('.detail-page__title')?.textContent).toBe(
       'Portfolio'
     );
-    expect(
-      host.querySelector('.detail-page__back')?.getAttribute('href')
-    ).toBe('/en');
+  });
+
+  it('no longer renders a back link (the Layout header owns navigation home)', () => {
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.detail-page__back')).toBeNull();
   });
 
   it('renders the tagline only when provided', () => {
