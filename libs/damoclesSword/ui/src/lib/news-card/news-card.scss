@@ -17,7 +17,10 @@
     display: flex;
     flex: 0 0 30%;
     max-width: 30%;
-    min-height: 11em;
+    // Fixed ratio + no stretch, so every card's thumbnail is the same size
+    // regardless of how long its description makes the card.
+    aspect-ratio: 16 / 10;
+    align-self: flex-start;
     background-color: #141414;
     border: 1px solid #ffffff14;
     border-bottom: 4px solid var(--news-accent, $theme-yellow);
@@ -87,7 +90,8 @@
     .news-thumbnail {
       flex: 1 1 auto;
       max-width: 100%;
-      min-height: 12em;
+      // Full width again; keep the fixed 16/10 ratio so all thumbnails match.
+      align-self: stretch;
     }
   }
 }
