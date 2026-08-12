@@ -17,14 +17,14 @@
   background-color: $ground;
   background-image:
     radial-gradient(
-      138vw 104vh at 100% -8vh,
+      140vw 105vh at 100% -8vh,
       rgba(242, 212, 91, 0.16),
       transparent 60%
     ),
     radial-gradient(
-      109vw 86vh at -8vw 4vh,
-      rgba(242, 212, 91, 0.08),
-      transparent 55%
+      110vw 85vh at -8vw 4vh,
+      rgba(242, 212, 91, 0.1),
+      transparent 60%
     );
   background-repeat: no-repeat;
   color: $text;
