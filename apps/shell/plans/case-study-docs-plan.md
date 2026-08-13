@@ -55,11 +55,17 @@ standard term for this kind of write-up. Format inside each file:
 Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code reveals more.
 
 ### shell (foundation / general)
-- [ ] Why Nx monorepo? What did it give you vs a plain workspace / polyrepo?
-- [ ] Why micro-frontends + Module Federation for a *portfolio*? Real motivation.
+- [x] Why Nx monorepo? What did it give you vs a plain workspace / polyrepo?
+      (Answered: learning + independent deploys + easier reuse via small libs.)
+- [~] Why micro-frontends + Module Federation for a *portfolio*? Real motivation.
+      (Partial: "deploy each separately". Still want a line on runtime MF vs one
+      bundled app specifically.)
 - [ ] Shell as host: how remotes are declared/lazy-loaded via `X/Routes` aliases.
-- [ ] Locale-first routing: `:locale` top route + `LocaleWrapperComponent`. Why
-      rewrite the URL with a full `window.location.href` nav instead of router nav?
+- [x] Locale-first routing: full `window.location.href` reload on locale change.
+      (Answered: locale is sent to the backend, so a soft nav would require
+      re-fetching all data with the new locale; full reload does it cleanly.
+      Follow-up left: clarify the trigger is the programmatic switcher, not URL edits.)
+- [ ] Locale-first routing: why route `:locale` first at all (still unasked).
 - [ ] The "remote renders blank on its own port" design — why intentional, how it works.
 - [ ] RokuTranslator: why hand-roll an i18next wrapper instead of ngx-translate/transloco?
 - [ ] RokuTranslator: per-locale lazy namespace loaders — how remotes contribute i18n.
@@ -120,3 +126,31 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
   transcribe into `apps/shell/CASE_STUDY.md` and run gap-checks against code.
 - Open decision: confirm `CASE_STUDY.md` name with Daniel; confirm whether he
   wants to answer in-chat (Claude transcribes) or edit files directly.
+
+### Session 2 — 2026-08-14
+- Workflow settled: Daniel answers one question at a time in chat; Claude confirms
+  the answer is fine (or flags gaps vs code), transcribes into the app file, then
+  moves on. `CASE_STUDY.md` name confirmed and kept.
+- New standing preference (saved to memory `no-dashes-in-file-output`): do NOT use
+  dashes as punctuation in authored prose (comments, docs, these files). Rephrase.
+  Apply this to every file written from now on.
+- Answered & transcribed into `apps/shell/CASE_STUDY.md`:
+  - Q1 Nx monorepo motivation (reworded per Daniel; he dropped the "apps must
+    overlap to justify a monorepo" point on reflection, since these apps could be
+    separate packages).
+  - Q2 locale full-reload (locale goes to backend, reload re-fetches cleanly).
+- Gap flagged in-file for later: the reload only fires for the programmatic
+  language switcher, not URL-segment edits (separate `paramMap` path). Optional
+  elaboration for Daniel.
+- **Next session:** continue the shell/foundation batch. Next unanswered "why"
+  questions to ask Daniel:
+  1. RokuTranslator: why hand-roll an i18next wrapper vs ngx-translate/transloco?
+  2. The MF singleton (`strictVersion`) for roku-translator: what actually broke
+     without it (fragmented locale state)?
+  3. Why route `:locale` first; how is the active locale detected/persisted;
+     why en/es/fr.
+  Then move to testing strategy + shared-libs questions, then pick the next app
+  (suggest damoclesSword or odontogram). Remember: analyze code first, compare to
+  the answer, ask again on gaps.
+- Still working in worktree `worktree-case-study-docs`.
+

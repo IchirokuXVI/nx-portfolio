@@ -7,10 +7,17 @@
 ## Why this stack
 
 **Q: Why an Nx monorepo? What did it give you over a plain workspace or polyrepo?**
-A:
+A: Mostly to learn, but also because I have multiple independent apps and wanted to
+be able to deploy each one separately if needed. I would definitely do it again. I
+have learnt a lot, especially about Nx and building small libraries, and now that the
+project is bigger (though still not huge) everything is easier to understand and
+reuse this way. I still have plenty to learn about microfrontends and monorepos, but
+the methodology that Nx follows seems great, so I will keep learning as much as
+possible.
 
 **Q: Why build a portfolio as micro-frontends with Module Federation instead of one Angular app?**
-A:
+A: _(Partially covered above — the "deploy each app separately" motivation. TODO:
+a sentence specifically on choosing runtime Module Federation over one bundled app.)_
 
 ## Module federation topology
 
@@ -26,7 +33,17 @@ A:
 A:
 
 **Q: On a locale change you rewrite the URL with a full `window.location.href` navigation instead of an Angular router nav. Why the full reload?**
-A:
+A: Because I add the locale to the backend requests, so an in app navigation would
+mean re-requesting all of the data again with the correct locale. That seemed like
+too much work and something that could easily create problems, so instead I do a
+full page reload, which re-fetches everything for the new locale cleanly.
+
+> Note (Claude): For the write up, worth clarifying the trigger. In the code this
+> full reload only fires when the locale is changed programmatically (for example an
+> in app language switcher) while the URL still shows the old locale. When the user
+> edits the locale segment in the URL directly, a separate `paramMap` subscription
+> calls `RokuTranslator.changeLocale` and Angular routing handles it without a
+> reload, so there is no reload loop.
 
 **Q: Supported locales are en/es/fr. Why these, and how is the active locale detected / persisted?**
 A:
