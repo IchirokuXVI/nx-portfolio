@@ -23,11 +23,19 @@ export interface Project {
   addons?: ProjectAddon[];
 }
 
+/** A single metadata chip (e.g. Platform / Virtual Reality). Both are localized. */
+export interface ProjectTag {
+  label: string;
+  value: string;
+}
+
 export interface ProjectTranslation {
   id: string;
   projectId: string;
   locale: string;
   description: string;
+  /** Extra metadata surfaced by detailed views; absent when a project has none. */
+  tags?: ProjectTag[];
 }
 
 export type TranslatedProject = Project & ProjectTranslation;

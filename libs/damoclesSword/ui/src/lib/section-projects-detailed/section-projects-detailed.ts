@@ -1,79 +1,59 @@
-import { Component } from '@angular/core';
+import { AsyncPipe } from '@angular/common';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import {
+  ProjectMemory,
+  ProjectTag,
+  TranslatedProject,
+} from '@portfolio/damoclesSword/data-access';
+import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { BorderAlignment } from '../enums/border-alignment';
 import { SectionLayout } from '../section-layout/section-layout';
 
-/** A single tag chip: both keys are translated in the template. */
-interface DetailedProjectTag {
-  labelKey: string;
-  valueKey: string;
+/** View model for a detailed project card (all copy already translated). */
+interface DetailedProject {
+  label: string;
+  description: string;
+  /** Resolved trailer URL, if the project has a video addon. */
+  trailer?: Promise<string>;
+  tags: ProjectTag[];
 }
 
-/** Static shape for a detailed project card (all copy via i18n keys). */
-interface DetailedProject {
-  titleKey: string;
-  descriptionKey: string;
-  tags: DetailedProjectTag[];
+/** Adapts a translated data-access project to the detailed card's view model. */
+function toDetailedProject(project: TranslatedProject): DetailedProject {
+  return {
+    label: project.label,
+    description: project.description,
+    trailer: project.addons?.find((addon) => addon.kind === 'video')?.src,
+    tags: project.tags ?? [],
+  };
 }
 
 @Component({
   selector: 'lib-damocles-sword-section-projects-detailed',
-  imports: [RokuTranslatorPipe, SectionLayout],
+  imports: [AsyncPipe, RokuTranslatorPipe, SectionLayout],
   templateUrl: './section-projects-detailed.html',
   styleUrl: './section-projects-detailed.scss',
 })
-export class SectionProjectsDetailed {
+export class SectionProjectsDetailed implements OnInit {
+  private readonly _projectServ = inject(ProjectMemory);
+
+  private readonly _projects = signal<TranslatedProject[]>([]);
+
+  /** Same source as section-projects (client projects), rendered in detail. */
+  readonly projects = computed<DetailedProject[]>(() =>
+    this._projects()
+      .filter((project) => project.kind === 'client-project')
+      .map(toDetailedProject)
+  );
+
+  ngOnInit() {
+    this._projectServ
+      .getList(RokuTranslator.getLocale())
+      .subscribe((projects) => this._projects.set(projects));
+  }
+
   get BorderAlignment() {
     return BorderAlignment;
   }
-
-  /** Kept as static component data (no data-access domain needed yet). */
-  readonly projects: DetailedProject[] = [
-    {
-      titleKey: 'section-projects-detailed.realistic-interactor-title',
-      descriptionKey:
-        'section-projects-detailed.realistic-interactor-description',
-      tags: [
-        {
-          labelKey: 'section-projects-detailed.tag-platform-label',
-          valueKey: 'section-projects-detailed.realistic-interactor-platform',
-        },
-        {
-          labelKey: 'section-projects-detailed.tag-engine-label',
-          valueKey: 'section-projects-detailed.realistic-interactor-engine',
-        },
-        {
-          labelKey: 'section-projects-detailed.tag-sector-label',
-          valueKey: 'section-projects-detailed.realistic-interactor-sector',
-        },
-        {
-          labelKey: 'section-projects-detailed.tag-experience-label',
-          valueKey: 'section-projects-detailed.realistic-interactor-experience',
-        },
-      ],
-    },
-    {
-      titleKey: 'section-projects-detailed.vr-sickness-reducer-title',
-      descriptionKey:
-        'section-projects-detailed.vr-sickness-reducer-description',
-      tags: [
-        {
-          labelKey: 'section-projects-detailed.tag-platform-label',
-          valueKey: 'section-projects-detailed.vr-sickness-reducer-platform',
-        },
-        {
-          labelKey: 'section-projects-detailed.tag-engine-label',
-          valueKey: 'section-projects-detailed.vr-sickness-reducer-engine',
-        },
-        {
-          labelKey: 'section-projects-detailed.tag-sector-label',
-          valueKey: 'section-projects-detailed.vr-sickness-reducer-sector',
-        },
-        {
-          labelKey: 'section-projects-detailed.tag-experience-label',
-          valueKey: 'section-projects-detailed.vr-sickness-reducer-experience',
-        },
-      ],
-    },
-  ];
 }

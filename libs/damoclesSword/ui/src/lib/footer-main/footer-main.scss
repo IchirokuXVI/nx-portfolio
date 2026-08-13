@@ -3,6 +3,12 @@
 .footer-main {
   gap: 1.5em;
   background-color: $theme-dark;
+  // Dark overlay over the artwork keeps the white links legible.
+  background-image: linear-gradient(rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.72)),
+    url('../../../assets/footer-background.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   height: 256px;
   display: flex;
   justify-content: center;

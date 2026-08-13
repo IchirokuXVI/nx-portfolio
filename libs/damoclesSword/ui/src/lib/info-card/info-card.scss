@@ -28,10 +28,12 @@
     color: var(--info-card-title-color, inherit);
   }
 
-  // Neutral placeholder box until real imagery is added later.
+  // Fixed-ratio media box: every card's image renders at the same size and any
+  // overflow from the cover-fit is clipped rather than pushing the box around.
   .info-card-media {
     aspect-ratio: 16 / 10;
     width: 100%;
+    overflow: hidden;
     background-color: var(--info-card-media-bg, rgba(0, 0, 0, 0.08));
     border-bottom: 3px solid var(--info-card-accent, #{$theme-blue});
 
