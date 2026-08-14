@@ -5,6 +5,11 @@
 > (2) globally hardcoded supported locales. Problem 1 is the priority and is fully
 > specified. Problem 2 has a recommended design plus open questions for Daniel.
 > Deliver/land Problem 1 first; Problem 2 can follow as a second commit.
+>
+> **Status:** Part B (namespace scoping via `{ ns }`) is **implemented and committed**.
+> Part C (supported locales) has been **superseded by [[0002-locale-routing-refactor]]**,
+> which reframes it as per-app locales with locale-less entry and pre-render correction.
+> Read 0002 for the current supported-locales design; Part C below is kept for context.
 
 ## Key decision from Daniel
 
@@ -158,6 +163,10 @@ compile. It can ignore `ns` and echo the key as today.
 ---
 
 ## Part C: Problem 2 design (per-app supported locales)
+
+> **Superseded by [[0002-locale-routing-refactor]].** Daniel chose per-app locales
+> (not a global union) tied to locale-first routing with locale-less entry and
+> pre-render correction. The design below is retained only for context; implement 0002.
 
 Init stays in the shell (constraint). Two options:
 
