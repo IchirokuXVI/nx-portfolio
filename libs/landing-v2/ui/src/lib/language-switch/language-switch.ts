@@ -1,22 +1,23 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
+import { switchAppLocale } from '@portfolio/localization/rokutranslator-angular';
+import {
+  LANDING_V2_APP_KEY,
+  LANDING_V2_LOCALES,
+} from '../landing-v2-locales';
 
 /**
- * Compact EN/ES toggle shown in `SiteHeader` and `DetailPageShell`, the two
- * places every landingV2 page routes through (0000-0004).
+ * Compact locale toggle shown in `SiteHeader` and `DetailPageShell`, the two
+ * places every landingV2 page routes through.
  *
- * Deliberately hardcodes `['en', 'es']` rather than reading
- * `RokuTranslator.getSupportedLocales()`: that list is global (`['en', 'es',
- * 'fr']`, see apps/shell/src/app/app.config.ts), and `landingV2`'s i18n
- * namespace only ships English and Spanish translations (see
- * `RokuTranslatorModule.withConfig` in landing-v2-ui-module.ts) - offering
- * 'fr' here would fall back to raw translation keys.
+ * The options come from `LANDING_V2_LOCALES` (the same const landingV2 declares
+ * to `RokuTranslatorModule.withConfig` and its route data), so the switcher only
+ * ever offers locales this app actually ships.
  *
- * Selecting a locale calls the shared `RokuTranslator` singleton directly,
- * the same pattern `LandingV2Wrapper`/`ProjectPage` already use to read
- * `RokuTranslator.getLocale()`. The shell's `LocaleWrapperComponent` reacts
- * to `onLocaleChange` with a full navigation to the new locale URL, so this
- * component only needs to track the pressed state for immediate feedback.
+ * Selecting a locale delegates to `switchAppLocale`, which persists the choice
+ * for this app and reloads to the new locale URL so localized data is
+ * re-fetched (see 0002). The pressed state is tracked only for immediate
+ * feedback before the reload.
  */
 @Component({
   selector: 'lib-landing-v2-language-switch',
@@ -25,7 +26,7 @@ import { RokuTranslator } from '@portfolio/localization/rokutranslator';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class LanguageSwitch {
-  readonly locales = ['en', 'es'];
+  readonly locales = LANDING_V2_LOCALES;
   readonly selectedLocale = signal(RokuTranslator.getLocale());
 
   select(locale: string) {
@@ -34,6 +35,6 @@ export class LanguageSwitch {
     }
 
     this.selectedLocale.set(locale);
-    RokuTranslator.changeLocale(locale);
+    switchAppLocale(LANDING_V2_APP_KEY, locale);
   }
 }

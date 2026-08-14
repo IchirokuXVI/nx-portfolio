@@ -18,3 +18,4 @@ export {
   resolveDesiredLocale,
   resolveGuessLocale,
 } from './lib/locale-routing/resolve-locale';
+export { switchAppLocale } from './lib/locale-routing/switch-app-locale';

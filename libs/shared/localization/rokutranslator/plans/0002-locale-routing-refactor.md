@@ -5,6 +5,17 @@
 > this plan does not touch it. Deliver the detailed design; implement only after Daniel
 > approves.
 
+## Implementation status
+
+Core mechanism implemented (matcher, redirect, per-app correction guard, per-app
+storage, per-app switch with reload, shell/core rewiring, all routed remotes migrated:
+damoclesSword, odontogram, landingV2). Builds and unit tests pass. Not yet done:
+runtime/e2e verification through the shell, and making cross-app links locale-less so an
+app switch always adopts the target app's stored locale even when the source URL carries
+a locale both apps support (today a commonly-supported carried locale wins over the
+stored one; unsupported locales are still corrected per app). landing v1 is left as-is
+(no longer routed).
+
 ## Goal
 
 Make supported locales per app, sourced from each app's `provideRokuTranslator` /

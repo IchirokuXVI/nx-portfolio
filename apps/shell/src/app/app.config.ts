@@ -7,17 +7,12 @@ import { provideRouter } from '@angular/router';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { appRoutes } from './app.routes';
 
-const SUPPORTED_LOCALES = ['en', 'es', 'fr'];
-
 export const appConfig: ApplicationConfig = {
   providers: [
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(appRoutes),
-    provideAppInitializer(() =>
-      RokuTranslator.init({
-        lowercaseLocale: true,
-        supportedLocales: SUPPORTED_LOCALES,
-      })
-    ),
+    // Supported locales are no longer global; each app declares its own via
+    // provideRokuTranslator, and the locale routing layer validates per app.
+    provideAppInitializer(() => RokuTranslator.init({ lowercaseLocale: true })),
   ],
 };

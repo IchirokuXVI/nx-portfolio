@@ -6,6 +6,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
 import { CallToActionButton } from './call-to-action-button/call-to-action-button';
+import { DAMOCLES_LOCALES } from './damocles-locales';
 import { ContactForm } from './contact-form/contact-form';
 import { DoubleBorderedTitle } from './double-bordered-title/double-bordered-title';
 import { FooterLogo } from './footer-logo/footer-logo';
@@ -74,7 +75,7 @@ const components = [
 @NgModule({
   imports: [
     RokuTranslatorModule.withConfig({
-      locales: ['en', 'es', 'fr'],
+      locales: DAMOCLES_LOCALES,
       defaultNamespace: 'damoclesSword',
       loader: (locale) => import(`../../assets/i18n/${locale}.json`),
     }),

@@ -1,5 +1,11 @@
 import { Route } from '@angular/router';
-import { Layout } from '@portfolio/landing-v2/ui';
+import { localeCorrectionGuard } from '@portfolio/localization/rokutranslator-angular';
+import {
+  LANDING_V2_APP_KEY,
+  LANDING_V2_DEFAULT_LOCALE,
+  LANDING_V2_LOCALES,
+  Layout,
+} from '@portfolio/landing-v2/ui';
 import { LandingV2Wrapper } from './landing-v2-wrapper/landing-v2-wrapper';
 
 // landingV2 mounts at the locale root (D2), so detail pages are namespaced
@@ -21,6 +27,12 @@ export const LandingV2Routes: Route[] = [
   {
     path: '',
     component: Layout,
+    canActivate: [localeCorrectionGuard],
+    data: {
+      appKey: LANDING_V2_APP_KEY,
+      supportedLocales: LANDING_V2_LOCALES,
+      defaultLocale: LANDING_V2_DEFAULT_LOCALE,
+    },
     children: [
       {
         path: '',

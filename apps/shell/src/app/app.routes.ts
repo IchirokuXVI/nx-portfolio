@@ -1,10 +1,17 @@
+import {
+  addLocaleRedirect,
+  localeSegmentMatcher,
+} from '@portfolio/localization/rokutranslator-angular';
 import { Route } from '@angular/router';
 import { NotFoundComponent } from '@portfolio/shared/ui';
 import { LocaleWrapperComponent } from './locale-wrapper-component';
 
 export const appRoutes: Route[] = [
   {
-    path: ':locale',
+    // Matches only when the first segment is a well-formed locale, exposing it
+    // as the `locale` param. App paths (odontogram, damoclesSword, the empty
+    // landing path) are not locales, so they fall through to addLocaleRedirect.
+    matcher: localeSegmentMatcher,
     component: LocaleWrapperComponent,
     children: [
       {
@@ -29,8 +36,10 @@ export const appRoutes: Route[] = [
     ],
   },
   {
+    // No locale in the URL (including the bare root): redirect to
+    // /{guess}/{path}; the target app then validates and corrects the guess.
     path: '**',
-    title: 'Portfolio',
+    canActivate: [addLocaleRedirect],
     component: LocaleWrapperComponent,
   },
 ];

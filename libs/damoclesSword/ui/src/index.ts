@@ -1,4 +1,5 @@
 export * from './lib/call-to-action-button/call-to-action-button';
+export * from './lib/damocles-locales';
 export * from './lib/contact-form/contact-form';
 export * from './lib/damocles-sword-ui-module';
 export * from './lib/double-bordered-title/double-bordered-title';

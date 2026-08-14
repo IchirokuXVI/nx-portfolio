@@ -1,10 +1,22 @@
 import { Route } from '@angular/router';
+import { localeCorrectionGuard } from '@portfolio/localization/rokutranslator-angular';
+import {
+  DAMOCLES_APP_KEY,
+  DAMOCLES_DEFAULT_LOCALE,
+  DAMOCLES_LOCALES,
+} from '@portfolio/damoclesSword/ui';
 import { DamoclesSwordWrapper } from './damocles-sword-wrapper/damocles-sword-wrapper';
 
 export const appRoutes: Route[] = [
   {
     path: '',
     component: DamoclesSwordWrapper,
+    canActivate: [localeCorrectionGuard],
+    data: {
+      appKey: DAMOCLES_APP_KEY,
+      supportedLocales: DAMOCLES_LOCALES,
+      defaultLocale: DAMOCLES_DEFAULT_LOCALE,
+    },
     children: [
       {
         path: '',
