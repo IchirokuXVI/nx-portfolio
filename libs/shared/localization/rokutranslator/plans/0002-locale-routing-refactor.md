@@ -144,11 +144,11 @@ Replace the single `roku-locale` key (`rokutranslator.ts:47,190`) usage with per
 keys, owned by the Angular routing layer (not the framework-agnostic core):
 
 - Key scheme: `roku-locale:{appKey}` where `appKey` is the app's route path
-  (`damoclesSword`, `odontogram`, `landingV2`), with the empty landing path mapped to a
-  stable key such as `landing`.
+  (`damoclesSword`, `odontogram`, `landingV2`), with the empty landing path mapped to the
+  key `landing` (follow the app name; O1).
 - Helpers `readAppLocale(appKey)` / `writeAppLocale(appKey, locale)` in the shared lib.
-- Keep the core's generic `roku-locale` as a global last-used fallback if desired, or
-  drop it. Decide in O3.
+- Drop the core's generic `roku-locale` global key (O3): per-app keys plus the browser
+  and default steps cover every case.
 
 ### D6: decouple navigation from the core
 
@@ -189,8 +189,7 @@ Core (`libs/shared/localization/rokutranslator/src/lib/rokutranslator.ts`):
 - `onLocaleChange`: reduce to a notification hook or remove.
 - `getSupportedLocales` / `supportedLocales` config: deprecate global usage.
 
-Shared (new, likely in `libs/shared/localization/rokutranslator-angular` or a sibling
-routing lib):
+Shared (new, in `libs/shared/localization/rokutranslator-angular`; O7):
 - `localeSegmentMatcher` (UrlMatcher), `addLocaleRedirect`, `localeCorrectionGuard`,
   `readAppLocale` / `writeAppLocale`, `resolveGuessLocale`.
 
@@ -202,19 +201,31 @@ Each remote (damoclesSword, odontogram, landing, landing-v2):
   `language-switch`): list the app's own locales; on change, persist per-app and trigger
   the explicit reload.
 
-## Edge cases and open questions
+## Decisions resolved
 
-- **O1** App key for the root landing app (empty path): use `landing`? `root`? Confirm.
-- **O2** Default locale source: `defaultLocale` explicit vs `supportedLocales[0]`?
-- **O3** Keep a global `roku-locale` last-used fallback in addition to per-app keys, or
-  drop it entirely?
-- **O4** `/de/damoclesSword` (well-formed, unsupported) corrects to the app default. Is a
-  single silent correction fine, or should the previously-used locale win?
-- **O5** Two-letter app path collision guard: only the app-path list disambiguates. Fine
-  to rely on "no app is a 2-letter code" plus the known-path list?
-- **O6** Preserve query params + fragment through both redirects (must, via `UrlTree`).
-- **O7** Where should the shared guard/matcher live: extend `rokutranslator-angular`, or a
-  new `libs/shared/localization/routing` lib?
+- **O1 (resolved):** the root landing app's storage key is `landing` (follow the app
+  name), so `roku-locale:landing`.
+- **O2 (resolved):** `defaultLocale` is an **optional** field on the app's locales
+  config / route data; when omitted it falls back to `supportedLocales[0]`. This keeps
+  simple apps terse while allowing an explicit default where the first-declared locale
+  is not the intended default.
+- **O3 (resolved):** drop the global `roku-locale` key. Resolution relies on the per-app
+  key plus browser plus default (the browser step already covers a brand-new app with no
+  stored locale), so a cross-app global fallback adds nothing.
+- **O4 (resolved):** when the URL locale is unsupported, prefer the **last-used (stored)
+  locale** for that app; if it is also unsupported or absent, fall back to the browser
+  locale (if supported), then to the default. This is exactly the D3 resolution order
+  (url-valid, then stored, then browser, then default), so a valid URL locale always
+  wins but any correction respects the user's prior choice before the default.
+- **O7 (resolved):** the shared `localeSegmentMatcher`, `addLocaleRedirect`,
+  `localeCorrectionGuard`, and per-app storage helpers live in
+  `libs/shared/localization/rokutranslator-angular`.
+
+## Remaining edge cases (not blocking)
+
+- **E1** Two-letter app path collision: only the app-path list disambiguates. Acceptable
+  to rely on "no app is a 2-letter code" plus the shell's known-path list.
+- **E2** Preserve query params + fragment through both redirects (required, via `UrlTree`).
 
 ## Test plan
 
