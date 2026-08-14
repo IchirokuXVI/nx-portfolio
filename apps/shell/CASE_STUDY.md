@@ -200,6 +200,30 @@ room for improvement.
 
 **Q: How are shared libs organized (`libs/shared/*`: environments, data-access, ui/icons) and what rules do you follow for using them?**
 A:
+**When something earns its own library.** I create a new library for things that are
+either a new feature of a specific app, or something that could be heavily reused, not
+just in this project but in general. Small components or services go into an existing
+library instead, either the app specific one or the shared one if I am going to use it
+in multiple apps. The clearest candidates for their own library are things that have
+nothing to do with the interface and do not depend on Angular. My best example is
+RokuTranslator: I use it across all the apps and gave it two dedicated libraries,
+because I know I will revise it often and I do not want to destabilize the shared
+library with something big that changes constantly.
+
+**How something reaches the shared library.** I usually build a component first inside
+the app specific library, and only move it to the shared one once I actually need to
+reuse it. The rule I follow is that everything in the shared library must be truly
+shareable without much configuration. If it is not, I would rather keep two similar
+components in different libraries than one big component with a lot of configuration.
+In that case I extract the common part into a smaller component in the shared library,
+and each app specific component uses that reusable piece.
+
+> Note (Claude): Matches the codebase. RokuTranslator has its two dedicated libs (the
+> framework agnostic `rokutranslator` core plus `rokutranslator-angular`), and
+> `libs/shared/ui` holds small standalone icon components rather than one configurable
+> mega component, exactly the pattern described. One rule worth stating explicitly in
+> the write-up: libraries are always imported through their `@portfolio/<scope>/<lib>`
+> path alias, never via relative paths across library boundaries.
 
 **Q: Any deliberate performance / change-detection choices (e.g. `provideZoneChangeDetection({ eventCoalescing: true }))`?**
 A:

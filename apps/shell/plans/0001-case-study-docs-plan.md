@@ -101,7 +101,10 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
       (Answered: shared contract spec run by each impl spec first, plus impl-specific
       tests; e2e all point at the shell url, organized per remote; e2e approach still
       evolving. Claude note suggests pushing more behavior into the shared suite.)
-- [ ] Shared libs layout (`libs/shared/*`): environments, data-access helpers, ui/icons.
+- [x] Shared libs layout (`libs/shared/*`): environments, data-access helpers, ui/icons.
+      (Answered: own lib for reusable/framework-agnostic non-UI things e.g. RokuTranslator;
+      build in app lib first then promote to shared only when truly shareable with little
+      config; prefer small extracted shared pieces over big configurable components.)
 - [ ] Zone change detection config / any perf choices in `app.config.ts`.
 - [ ] SUPPORTED_LOCALES en/es/fr — why these, how locale is detected/persisted.
 
