@@ -50,6 +50,14 @@ standard term for this kind of write-up. Format inside each file:
 6. Write the confirmed Q&A into the app's `CASE_STUDY.md`; mark status in the bank.
 7. End session: append a summary (≤50 lines) below and commit.
 
+**Standing style rules for transcribed answers (Daniel's request):**
+- Organize each answer so topics flow in a sensible order; add short bold
+  subheadings for longer answers. Correct grammar and make it readable and
+  consistent. Keep Daniel's voice and facts; do not invent claims he did not make.
+- No dashes as punctuation anywhere in these files (see memory `no-dashes-in-file-output`).
+- Put anything the code reveals that Daniel did not say into a `> Note (Claude):`
+  block, not into his answer text.
+
 ## Question banks
 
 Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code reveals more.
@@ -66,10 +74,18 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
       re-fetching all data with the new locale; full reload does it cleanly.
       Follow-up left: clarify the trigger is the programmatic switcher, not URL edits.)
 - [ ] Locale-first routing: why route `:locale` first at all (still unasked).
+- [ ] Locale detection + why en/es/fr (ASKED as Q4, NOT yet answered; Daniel's next
+      message was about Q3 instead, so Q4 is still open). Note: the global supported
+      locales are changing in the localization refactor, so revisit en/es/fr after.
 - [ ] The "remote renders blank on its own port" design — why intentional, how it works.
-- [ ] RokuTranslator: why hand-roll an i18next wrapper instead of ngx-translate/transloco?
-- [ ] RokuTranslator: per-locale lazy namespace loaders — how remotes contribute i18n.
-- [ ] Why force `roku-translator` as a MF singleton (`strictVersion`)? What broke without it?
+- [~] RokuTranslator: why hand-roll an i18next wrapper instead of ngx-translate/transloco?
+      (ANSWERED then put ON HOLD by Daniel. A full organized answer is in-file with his
+      clarifications folded in, but he will REWRITE it from scratch after the localization
+      refactor lands. DO NOT edit that answer further; the previous text must be preserved.)
+- [~] RokuTranslator: per-locale lazy namespace loaders, how remotes contribute i18n.
+      (Mechanism covered via the hand-roll answer + Claude note; could get its own tidy answer.)
+- [~] Why force `roku-translator` as a MF singleton (`strictVersion`)? What broke without it?
+      (Why-singleton answered; sharper "locale state fragments across remotes" confirm pending.)
 - [ ] Testing strategy across the workspace (Jest + Cypress/Playwright e2e, shared-spec pattern).
 - [ ] Shared libs layout (`libs/shared/*`): environments, data-access helpers, ui/icons.
 - [ ] Zone change detection config / any perf choices in `app.config.ts`.
@@ -153,4 +169,35 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
   (suggest damoclesSword or odontogram). Remember: analyze code first, compare to
   the answer, ask again on gaps.
 - Still working in worktree `worktree-case-study-docs`.
+
+### Session 3 — 2026-08-14 (paused / on hold by Daniel)
+- Q3 (why hand-roll RokuTranslator): Daniel gave a deep answer covering isolation per
+  library, the two-level design (RokuTranslator singleton + per-lib
+  RokuTranslatorService), namespace priority overriding, known gaps, and the learning
+  goal. Transcribed and organized into `apps/shell/CASE_STUDY.md`.
+- Verified against code (read `rokutranslator.ts`, `rokutranslator-service.ts`,
+  `provide-rokutranslator.ts`). Confirmed the namespace scoping is NOT enforced:
+  `RokuTranslator.t` resolves against all namespaces by priority, so keys leak between
+  libraries. Daniel agrees it is a bug.
+- Daniel surfaced the real reason for the singleton: only the shell can use
+  `provideAppInitializer` in a micro-frontend setup, so init must live in the shell.
+  Folded into the Q3 answer.
+- **Q3 is now ON HOLD.** Daniel will rewrite that answer from scratch after a
+  localization refactor. Previous answer preserved; DO NOT edit it further.
+- Created a refactor brief at
+  `libs/shared/localization/rokutranslator/plans/localization-refactor-plan.md`
+  telling a future agent to inspect the localization architecture and produce a
+  detailed fix plan for TWO problems:
+  1. Namespace leaking. Fix direction: optional `namespace` arg on the pipe and
+     service `t()`, defaulting to the lib's namespace; service builds `namespace:key`.
+  2. Global supported locales should be per app, resolved dynamically from each
+     service instance / namespace, while respecting the app-initializer constraint.
+- Standing style rule added to this plan (organize/format/grammar-correct all
+  transcribed answers; no dashes; code-only observations go in Claude notes).
+- **Next session:** the shell/foundation batch continues. Q4 (locale detection +
+  why en/es/fr) was asked but NOT answered yet, so start there (or wherever Daniel
+  points). Q3 stays untouched until Daniel rewrites it. Also still open: MF singleton
+  sharper confirm, how remotes contribute i18n (tidy answer), why `:locale` first,
+  testing strategy, shared libs. Then move to the next app.
+- Worktree `worktree-case-study-docs`.
 
