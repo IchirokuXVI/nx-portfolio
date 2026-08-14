@@ -170,6 +170,31 @@ is the failure `strictVersion` is guarding against.)_
 
 **Q: What's the testing strategy across the workspace (unit vs e2e, the `*.shared-spec.ts` pattern, why e2e points at the shell)?**
 A:
+**Shared specs for data access.** The shared specs came out of testing the data
+access layer. I know the types each service is supposed to return, so I thought: why
+not write one shared spec that every implementation of that service must pass? It
+covers the basic functionality that all implementations have in common. On top of
+that, each implementation has its own specific spec, and the first thing that
+specific spec does is run the shared one. So every implementation gets the shared
+contract tests plus its own detailed tests. I am not sure there is a better way to do
+this, but it seems to work great.
+
+**e2e through the shell.** All the e2e tests point at the shell rather than each
+remote's own url, because the end user is meant to use the shell, not a remote on its
+own. The tests are still organized per remote; they simply use the shell url instead
+of the remote's url. I am still learning e2e testing, especially with micro
+frontends, so I will probably change how this works at some point. There is always
+room for improvement.
+
+> Note (Claude): Confirmed against `odontogram-service.shared-spec.ts` and
+> `odontogram-memory.spec.ts`: the implementation spec calls
+> `runSharedOdontogramServiceTests(factory)` before its own `describe`, as described.
+> One idea for later: the shared suite currently asserts mostly the method contract
+> (each call returns an Observable, the service is created), while the real CRUD
+> behavior (correct results, `NotFoundResourceError`) lives in the per-implementation
+> spec. If you want the memory and API implementations guaranteed to behave
+> identically, you could push more of those behavioral assertions into the shared
+> suite so both are held to the same contract.
 
 ## Shared foundation
 

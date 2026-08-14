@@ -97,7 +97,10 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
       remotes contribute i18n. (Mechanism covered via the hand-roll answer + Claude note.)
 - [~] DEFERRED (localization). Why force `roku-translator` as a MF singleton
       (`strictVersion`)? (Why-singleton answered; sharper fragmentation confirm pending.)
-- [ ] Testing strategy across the workspace (Jest + Cypress/Playwright e2e, shared-spec pattern).
+- [x] Testing strategy across the workspace (Jest + Cypress/Playwright e2e, shared-spec pattern).
+      (Answered: shared contract spec run by each impl spec first, plus impl-specific
+      tests; e2e all point at the shell url, organized per remote; e2e approach still
+      evolving. Claude note suggests pushing more behavior into the shared suite.)
 - [ ] Shared libs layout (`libs/shared/*`): environments, data-access helpers, ui/icons.
 - [ ] Zone change detection config / any perf choices in `app.config.ts`.
 - [ ] SUPPORTED_LOCALES en/es/fr — why these, how locale is detected/persisted.
