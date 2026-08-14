@@ -66,7 +66,10 @@ export class ToothTreatmentDetailedForm {
   toothTreatmentStatusArr = Object.values(ToothTreatmentStatus).map(
     (status) => ({
       value: status,
-      label: this._translateServ.t(ToothTreatmentStatusTranslationKey[status]),
+      label: this._translateServ.t(
+        ToothTreatmentStatusTranslationKey[status],
+        'odontogram/models'
+      ),
     })
   );
 

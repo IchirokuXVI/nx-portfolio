@@ -75,7 +75,19 @@ export class RokuTranslatorService implements OnDestroy {
     RokuTranslator.removeNamespace(this._defaultNamespace);
   }
 
-  t(s: string) {
-    return RokuTranslator.t(s);
+  /**
+   * Translate a key, scoped to this library's namespace so keys cannot leak
+   * between libraries that happen to share a key name.
+   *
+   * @param key The translation key.
+   * @param ns Optional namespace override. Defaults to the library's
+   *   `defaultNamespace` (or its first declared namespace). Pass an explicit
+   *   namespace to read a key that lives in one of the library's other
+   *   namespaces (for example odontogram reading its `odontogram/models` keys).
+   */
+  t(key: string, ns?: string) {
+    return RokuTranslator.t(key, {
+      ns: ns || this._defaultNamespace || this._namespaces[0],
+    });
   }
 }

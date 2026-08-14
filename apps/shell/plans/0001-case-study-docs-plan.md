@@ -235,7 +235,11 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - **Q3 is now ON HOLD.** Daniel will rewrite that answer from scratch after a
   localization refactor. Previous answer preserved; DO NOT edit it further.
 - Created a refactor brief at
+<<<<<<<< HEAD:apps/shell/plans/0001-case-study-docs-plan.md
   `libs/shared/localization/rokutranslator/plans/0001-localization-refactor-plan.md`
+========
+  `libs/shared/localization/rokutranslator/plans/0001-localization-refactor.md`
+>>>>>>>> worktree-localization-refactor-plan:apps/shell/plans/0001-case-study-docs.md
   telling a future agent to inspect the localization architecture and produce a
   detailed fix plan for TWO problems:
   1. Namespace leaking. Fix direction: optional `namespace` arg on the pipe and

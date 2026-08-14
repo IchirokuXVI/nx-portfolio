@@ -7,7 +7,7 @@ import { RokuTranslatorService } from './rokutranslator-service';
 export class RokuTranslatorPipe implements PipeTransform {
   private _serv = inject(RokuTranslatorService);
 
-  transform(key: string): string {
-    return this._serv.t(key);
+  transform(key: string, ns?: string): string {
+    return this._serv.t(key, ns);
   }
 }
