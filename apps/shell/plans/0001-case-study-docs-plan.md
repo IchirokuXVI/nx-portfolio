@@ -76,6 +76,8 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
       (Partial: "deploy each separately". Still want a line on runtime MF vs one
       bundled app specifically.)
 - [ ] Shell as host: how remotes are declared/lazy-loaded via `X/Routes` aliases.
+      (Touched in the blank-page answer; the alias/tsconfig-path mechanism itself not
+      yet asked of Daniel.)
 - [x] Locale-first routing: full `window.location.href` reload on locale change.
       (Answered: locale is sent to the backend, so a soft nav would require
       re-fetching all data with the new locale; full reload does it cleanly.
@@ -83,7 +85,10 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [ ] DEFERRED (localization). Locale-first routing: why route `:locale` first at all.
 - [ ] DEFERRED (localization). Locale detection + why en/es/fr (was asked as Q4, never
       answered). Supported locales change in the refactor, so revisit after it lands.
-- [ ] The "remote renders blank on its own port" design — why intentional, how it works.
+- [x] The "remote renders blank on its own port" design (why intentional, how it works).
+      (Answered: remotes are built for the shell, standalone styles/context would differ;
+      empty RemoteEntry template + no outlet on own port. Claude note captures the open
+      "should remotes run standalone" decision + my recommendation.)
 - [~] RokuTranslator: why hand-roll an i18next wrapper instead of ngx-translate/transloco?
       (ANSWERED then put ON HOLD by Daniel. A full organized answer is in-file with his
       clarifications folded in, but he will REWRITE it from scratch after the localization
@@ -191,7 +196,7 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - **Q3 is now ON HOLD.** Daniel will rewrite that answer from scratch after a
   localization refactor. Previous answer preserved; DO NOT edit it further.
 - Created a refactor brief at
-  `libs/shared/localization/rokutranslator/plans/localization-refactor-plan.md`
+  `libs/shared/localization/rokutranslator/plans/0001-localization-refactor-plan.md`
   telling a future agent to inspect the localization architecture and produce a
   detailed fix plan for TWO problems:
   1. Namespace leaking. Fix direction: optional `namespace` arg on the pipe and

@@ -25,7 +25,27 @@ a sentence specifically on choosing runtime Module Federation over one bundled a
 A:
 
 **Q: Remotes render a blank page on their own port by design. Why did you make that choice and how does it work?**
-A:
+A: Each remote is built specifically to work inside the shell, so I do not think it
+makes much sense to run or test one on its own, since the styles and the rest of the
+context the shell provides could differ from how the remote actually renders in
+production. I am not certain this is the best approach. Micro frontends and module
+federation are still relatively new and not many projects use them, so I could not
+find much guidance either way.
+
+How it works: each remote bootstraps a `RemoteEntry` component whose template is
+completely empty, and its `remoteRoutes` load the real `feature-shell`. When you open
+a remote on its own port the router still matches the routes, but there is no
+`router-outlet` to render them into, so the page comes back blank. The shell is what
+provides the outlet (and the global styles and locale context) when it lazy loads the
+remote.
+
+> Note (Claude): Open decision Daniel raised, worth revisiting. Whether a remote
+> "should" be runnable standalone is a real fork. My take: keep production behavior as
+> is (remotes only through the shell), because the remotes genuinely depend on shell
+> provided globals. If standalone dev/test becomes painful, the clean fix is a thin
+> dev-only host harness per remote that supplies the same global styles and
+> `RokuTranslator` init, rather than making each remote a full independent app. Low
+> priority for a portfolio; not worth investing until the dev loop actually hurts.
 
 ## Locale-first routing
 
