@@ -104,6 +104,15 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `landing`, `odontog
 - Prettier is the source of truth (`.prettierrc`): single quotes, 2-space indent, trailing commas (es5), `arrowParens: always`, plus `prettier-plugin-organize-imports` and `prettier-plugin-organize-attributes` (Angular template attributes are auto-sorted into groups: outputs, two-way bindings, inputs, structural directives, then everything else, then `data-*`).
 - `*.html` files are linted with `@angular-eslint/template/recommended` + `prettier/prettier` using the `angular` parser.
 
+## Plan files
+
+- Planning and design docs live in a `plans/` directory next to the app or lib they
+  describe (for example `apps/landing-v2/plans/`, `libs/shared/localization/rokutranslator/plans/`).
+- **Every plan file is named `NNNN-kebab-title.md`**: a four digit zero padded number,
+  then a kebab-case title. Numbering is per `plans/` directory, sequential, and
+  **always starts at `0001`** (no `0000`, no unnumbered files). The next plan in a
+  directory takes the next free number.
+
 ## Git workflow
 
 - **Never push code.** Commit locally only, unless the user explicitly asks for a push. Even when a push is explicitly requested, confirm with the user before running it — a prior "yes" does not carry forward to later pushes.
