@@ -95,6 +95,11 @@ class RokuTranslator {
             fallbackLng: 'en-US',
             ns: [],
             defaultNS: this.config.namespaces,
+            // The `ns` option passed to t() is authoritative for scoping a lookup to
+            // a single namespace. Disabling nsSeparator stops i18next from treating a
+            // ':' inside a key as a namespace override, so a key can never leak into
+            // another namespace. Keys in this workspace use '.' as their separator.
+            nsSeparator: false,
             load: 'languageOnly',
             // From the docs:
             // Please make sure to at least pass in an empty resources object on init.
