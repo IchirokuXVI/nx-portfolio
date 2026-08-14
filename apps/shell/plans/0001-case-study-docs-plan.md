@@ -56,6 +56,13 @@ standard term for this kind of write-up. Format inside each file:
   `libs/shared/localization/rokutranslator/plans`). Skip them and keep asking the rest.
 - When a question is parked, tag it in the bank (`DEFERRED (localization)` or a reason)
   so it is not lost. Come back to the whole deferred set once unblocked.
+- Two pending refactors currently block some questions; both have their own fix plans:
+  1. `DEFERRED (localization)` — the RokuTranslator refactor
+     (`libs/shared/localization/rokutranslator/plans/0001-localization-refactor-plan.md`).
+  2. `DEFERRED (di-wiring)` — components inject concrete `*Memory` / `*Mock` impls
+     directly instead of via DI tokens; 11 sites flagged in code with `TODO(di-wiring)`
+     (`libs/shared/data-access/plans/0001-data-access-di-token-wiring.md`). Questions
+     about how services are swapped / backend vs demo wait for this.
 
 **Standing style rules for transcribed answers (Daniel's request):**
 - Organize each answer so topics flow in a sensible order; add short bold
@@ -138,12 +145,17 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [~] Image preloading: images loaded via JS, chart shown only once all load.
       (Covered via rendering answer: dynamic import() + forkJoin + LoadingNotifier;
       could expand the "show only when all loaded" coordination.)
-- [ ] memory vs api service (`odontogram-api.ts` vs `odontogram-memory.ts`) + shared-spec tests.
+- [~] DEFERRED (di-wiring). memory vs api service + shared-spec tests. (Daniel will
+      answer after fixing the wiring. Bug found: components inject OdontogramMemory
+      directly, no token switch, though OdontogramApi is complete. 11 sites flagged
+      workspace-wide, see libs/shared/data-access/plans/0001-data-access-di-token-wiring.md.)
 - [~] full CRUD feature: state management, how edits persist.
       (Partial: click-tooth form uses squares not the image, 5 in a circle + front row,
       plus per-tooth history. STILL OPEN: edit-state handling, save/persistence flow,
       hardest UX. Revisit after data-access questions.)
-- [ ] Any backend integration (BACK_API_* env) vs in-memory demo mode.
+- [~] DEFERRED (di-wiring). Backend integration (BACK_API_* env) vs in-memory demo mode.
+      (Currently runs fully in memory because OdontogramMemory is injected; OdontogramApi
+      ready but unwired. Revisit after the DI token fix.)
 
 ### landing (to be merged later)
 - [ ] Original purpose vs landingV2. What's being kept/merged.

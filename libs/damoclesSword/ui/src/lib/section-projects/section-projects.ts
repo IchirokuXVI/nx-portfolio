@@ -31,6 +31,7 @@ function toProjectData(project: TranslatedProject): ProjectData {
   styleUrl: './section-projects.scss',
 })
 export class SectionProjects implements OnInit {
+  // TODO(di-wiring): injected as a concrete implementation instead of via a DI token bound to the service interface, so the real/API impl cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private readonly _projectServ = inject(ProjectMemory);
 
   private readonly _projects = signal<TranslatedProject[]>([]);

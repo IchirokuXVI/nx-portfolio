@@ -115,10 +115,25 @@ implant or an extraction is drawn with bars over the root rather than as a fill.
 ## Data access
 
 **Q: There's both an in-memory service and an API service (`odontogram-memory.ts` vs `odontogram-api.ts`) behind a shared interface, tested with `*.shared-spec.ts`. Why build both, and how do you switch?**
-A:
+A: _(Deferred. Daniel will answer this after fixing the wiring.)_
+
+> Note (Claude): Skipped for now because the wiring is currently a bug. The components
+> inject the concrete `OdontogramMemory` directly (`feature-full-odontogram-crud.ts`
+> and `tooth-treatments-modal.ts`), so there is no token-based switch even though a
+> complete `OdontogramApi` exists behind the same `OdontogramServiceI`. This is one of
+> several sites tracked in
+> `libs/shared/data-access/plans/0001-data-access-di-token-wiring.md`. Revisit this
+> answer once the token wiring is in place.
 
 **Q: Does the deployed app talk to a real backend (`BACK_API_*` env) or run fully in-memory as a demo? Why?**
-A:
+A: _(Deferred, tied to the wiring fix above.)_
+
+> Note (Claude): In its current state the deployed odontogram runs fully in memory
+> (seeded from `ODONTOGRAMS` static data), because the memory implementation is the one
+> being injected. The `OdontogramApi` (HttpClient + `OwnApiUrlResolver` + the
+> `/odontograms` endpoint) is written and ready but not connected. Confirm with Daniel,
+> once the DI wiring is fixed, whether a real backend is actually intended for the
+> portfolio version or whether the demo is meant to stay in memory on purpose.
 
 ## CRUD feature
 

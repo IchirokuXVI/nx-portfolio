@@ -17,6 +17,7 @@ import { SectionLayout } from '../section-layout/section-layout';
   styleUrl: './section-news.scss',
 })
 export class SectionNews implements OnInit {
+  // TODO(di-wiring): injected as a concrete implementation instead of via a DI token bound to the service interface, so the real/API impl cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private readonly _newsServ = inject(NewsMemory);
 
   readonly news = signal<TranslatedNews[]>([]);

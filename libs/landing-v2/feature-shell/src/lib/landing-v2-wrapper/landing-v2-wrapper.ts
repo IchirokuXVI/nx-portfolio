@@ -24,6 +24,7 @@ import { RokuTranslator } from '@portfolio/localization/rokutranslator';
   styles: [':host { width: 100%; }'],
 })
 export class LandingV2Wrapper implements OnInit {
+  // TODO(di-wiring): the services below are injected as concrete implementations instead of via DI tokens bound to their interfaces, so the real/API impls cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private _projectServ = inject(ProjectMemory);
   private _factServ = inject(InfoFactMemory);
 
