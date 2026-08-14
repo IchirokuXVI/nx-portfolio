@@ -7,14 +7,30 @@
 
 ## Implementation status
 
-Core mechanism implemented (matcher, redirect, per-app correction guard, per-app
-storage, per-app switch with reload, shell/core rewiring, all routed remotes migrated:
-damoclesSword, odontogram, landingV2). Builds and unit tests pass. Not yet done:
-runtime/e2e verification through the shell, and making cross-app links locale-less so an
-app switch always adopts the target app's stored locale even when the source URL carries
-a locale both apps support (today a commonly-supported carried locale wins over the
-stored one; unsupported locales are still corrected per app). landing v1 is left as-is
-(no longer routed).
+Core mechanism implemented and refined:
+
+- **No `UrlMatcher`.** The shell uses a plain `path: ':locale'` route with a single
+  `localeGuard` on it. The guard checks whether the first segment is a well-formed
+  locale (the regex lives in the guard, not in route matching); if not, it guesses a
+  locale and redirects to `/{guess}/{path}`. This replaced both `localeSegmentMatcher`
+  and `addLocaleRedirect`.
+- **No `LocaleWrapperComponent`.** The `:locale` route is componentless, so remotes
+  render straight into the shell's root outlet.
+- Per-app correction guard, per-app storage, per-app switch with reload, shell/core
+  rewiring, all routed remotes migrated (damoclesSword, odontogram, landingV2).
+- **Localized document titles** via a `RokuTitleStrategy` (see D8).
+
+Builds and unit tests pass. Not yet done: runtime/e2e verification through the shell,
+and making cross-app links locale-less so an app switch always adopts the target app's
+stored locale even when the source URL carries a locale both apps support (today a
+commonly-supported carried locale wins over the stored one; unsupported locales are
+still corrected per app). landing v1 is left as-is (no longer routed).
+
+> Trade-off accepted with the no-matcher approach: for a locale-less URL like
+> `/damoclesSword`, Angular recognizes `:locale='damoclesSword'` with the empty child
+> (landingV2) and may lazily fetch that chunk during route recognition before
+> `localeGuard` redirects. The redirect still lands on damoclesSword; the landingV2
+> prefetch is wasted but harmless.
 
 ## Goal
 
@@ -183,6 +199,30 @@ runs with no `supportedLocales` (the field becomes optional / unused globally).
 it returns the formatted browser locale as a raw guess, and the per-app guard validates.
 `getSupportedLocales()` global (`rokutranslator.ts:135-137`) is deprecated; the switcher
 reads the app's locales const / route data instead.
+
+### D8: localized document titles
+
+Route titles are localized through a custom `TitleStrategy` (`RokuTitleStrategy` in the
+shell, provided as `{ provide: TitleStrategy, useClass: RokuTitleStrategy }`). A route
+sets `title` to a translation key and carries in `data`:
+
+- `titleNs`: the namespace the key lives in (an app's own namespace, e.g.
+  `damoclesSword`, `odontogram/ui`, `landingV2`);
+- `titleFallback`: a plain string used when that namespace's translations are not loaded
+  yet (i18next returns the key on a miss).
+
+`updateTitle` resolves `RokuTranslator.t(key, { ns })` and falls back to `titleFallback`
+when the lookup returns the key unchanged. This uses the singleton with an explicit `ns`,
+which is exactly what `RokuTranslatorService.t` does internally; the service itself is
+per-lib (namespace-scoped) and cannot be injected into an app-global `TitleStrategy`, so
+the singleton plus route-data namespace is the clean fit.
+
+Caveat: `updateTitle` is synchronous and runs at navigation end, when a just-loaded
+remote's translations may not have arrived, so the first paint can show the fallback. A
+locale switch is a full reload, so the localized title is correct after load. For a
+guaranteed-localized title without the fallback window, either preload a small titles
+namespace at init, or set the title from the remote's wrapper once its `loaded$` fires
+(which can use `RokuTranslatorService` directly).
 
 ## Migration list (call sites)
 
