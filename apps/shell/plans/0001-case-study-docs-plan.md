@@ -108,7 +108,7 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [x] Zone change detection config / any perf choices in `app.config.ts`.
       (Answered: eventCoalescing always on; lazy/async everything; signals for
       everything to minimize change detection. Confirmed signals used widely.)
-- [ ] SUPPORTED_LOCALES en/es/fr — why these, how locale is detected/persisted.
+- [ ] DEFERRED (localization). SUPPORTED_LOCALES en/es/fr, why these, detection/persistence.
 
 ### damoclesSword
 - [ ] What is Damocle'Sword? The real project this showcases (Starlit Ascension, VR).
@@ -119,14 +119,29 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [ ] Contact form: is it wired to a backend? contact-mock vs real service.
 
 ### odontogram
-- [ ] What the odontogram is (dental chart) and why you built it.
-- [ ] Domain model: teeth numbering, zones, tooth-treatment status, treatment types.
-- [ ] The interactive chart rendering: SVG? how tooth zones are drawn/clicked.
-- [ ] Image preloading: odontogram images are loaded via JS and the chart is only
-      shown once all images finish loading (Daniel mentioned this under shell perf;
-      capture the details here).
+- [x] What the odontogram is (dental chart) and why you built it.
+      (Answered: built for Clinica Dental Gallardo, Cordoba/Malaga, ~2024 at Umitel,
+      still in use; his first real frontend challenge.)
+- [~] Domain model: teeth numbering, zones, tooth-treatment status, treatment types.
+      (Answered: teeth not persisted, treatments carry teeth[] and link to odontogram
+      for history; crown 5 zones + front 2; status pending/completed. FOLLOW-UPS
+      PENDING: primary/deciduous teeth support (51-85), `generalTreatments`,
+      `groupTeeth` flag, whether `Treatment` is a reusable catalog.)
+- [x] The interactive chart rendering: SVG? how tooth zones are drawn/clicked.
+      (Answered + verified: not SVG; 2 images + 2 masks per tooth; rotated sqrt(2)*50%
+      diamond clipped to triangles + center circle; `:has()` adjacency borders. Bug
+      noted: ToothImageLoader Map cache is never populated.)
+- [x] Treatment visualization (colors/states per zone).
+      (Answered: two colors pending/completed; extraction = X cross, implant = bars;
+      zone-status precedence any-pending-wins.)
+- [~] Image preloading: images loaded via JS, chart shown only once all load.
+      (Covered via rendering answer: dynamic import() + forkJoin + LoadingNotifier;
+      could expand the "show only when all loaded" coordination.)
 - [ ] memory vs api service (`odontogram-api.ts` vs `odontogram-memory.ts`) + shared-spec tests.
-- [ ] full CRUD feature — state management, how edits persist.
+- [~] full CRUD feature: state management, how edits persist.
+      (Partial: click-tooth form uses squares not the image, 5 in a circle + front row,
+      plus per-tooth history. STILL OPEN: edit-state handling, save/persistence flow,
+      hardest UX. Revisit after data-access questions.)
 - [ ] Any backend integration (BACK_API_* env) vs in-memory demo mode.
 
 ### landing (to be merged later)
