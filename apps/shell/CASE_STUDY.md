@@ -227,3 +227,20 @@ and each app specific component uses that reusable piece.
 
 **Q: Any deliberate performance / change-detection choices (e.g. `provideZoneChangeDetection({ eventCoalescing: true }))`?**
 A:
+**Event coalescing.** Nx already sets `eventCoalescing` to true, but in my opinion it
+should always be on. There is no reason to keep it false unless your logic depends on
+DOM manipulation, which I do not think is good practice these days. I have never had
+any problems with it.
+
+**Lazy and async by default.** Beyond that, I try to load everything lazily and
+asynchronously. For example, the odontogram images are loaded through JavaScript and
+the odontogram is only shown once all of the images have finished loading.
+
+**Signals everywhere.** I use signals for everything, to keep change detection to a
+minimum. Instead of relying on Angular to notice changes to plain variables in the
+template, I update the signals myself when needed.
+
+> Note (Claude): Confirmed, signals are used throughout the component libraries
+> (dozens of `signal` / `computed` usages). The odontogram image preloading detail is
+> a good concrete example and belongs in `apps/odontogram/CASE_STUDY.md`; recorded
+> here at the foundation level, to be expanded when covering odontogram.

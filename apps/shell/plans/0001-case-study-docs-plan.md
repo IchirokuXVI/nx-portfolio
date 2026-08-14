@@ -105,7 +105,9 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
       (Answered: own lib for reusable/framework-agnostic non-UI things e.g. RokuTranslator;
       build in app lib first then promote to shared only when truly shareable with little
       config; prefer small extracted shared pieces over big configurable components.)
-- [ ] Zone change detection config / any perf choices in `app.config.ts`.
+- [x] Zone change detection config / any perf choices in `app.config.ts`.
+      (Answered: eventCoalescing always on; lazy/async everything; signals for
+      everything to minimize change detection. Confirmed signals used widely.)
 - [ ] SUPPORTED_LOCALES en/es/fr — why these, how locale is detected/persisted.
 
 ### damoclesSword
@@ -119,7 +121,10 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 ### odontogram
 - [ ] What the odontogram is (dental chart) and why you built it.
 - [ ] Domain model: teeth numbering, zones, tooth-treatment status, treatment types.
-- [ ] The interactive chart rendering — SVG? how tooth zones are drawn/clicked.
+- [ ] The interactive chart rendering: SVG? how tooth zones are drawn/clicked.
+- [ ] Image preloading: odontogram images are loaded via JS and the chart is only
+      shown once all images finish loading (Daniel mentioned this under shell perf;
+      capture the details here).
 - [ ] memory vs api service (`odontogram-api.ts` vs `odontogram-memory.ts`) + shared-spec tests.
 - [ ] full CRUD feature — state management, how edits persist.
 - [ ] Any backend integration (BACK_API_* env) vs in-memory demo mode.
