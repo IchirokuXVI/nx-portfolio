@@ -122,11 +122,12 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [x] What the odontogram is (dental chart) and why you built it.
       (Answered: built for Clinica Dental Gallardo, Cordoba/Malaga, ~2024 at Umitel,
       still in use; his first real frontend challenge.)
-- [~] Domain model: teeth numbering, zones, tooth-treatment status, treatment types.
-      (Answered: teeth not persisted, treatments carry teeth[] and link to odontogram
-      for history; crown 5 zones + front 2; status pending/completed. FOLLOW-UPS
-      PENDING: primary/deciduous teeth support (51-85), `generalTreatments`,
-      `groupTeeth` flag, whether `Treatment` is a reusable catalog.)
+- [x] Domain model: teeth numbering, zones, tooth-treatment status, treatment types.
+      (Answered + follow-ups resolved: teeth not persisted; treatments carry teeth[]
+      and link to odontogram for history; crown 5 zones + front 2; status
+      pending/completed. Deciduous teeth + generalTreatments modeled but not yet in this
+      UI (planned). groupTeeth = grouped (shared, edit-once-affects-all) vs individual
+      (separate treatment per tooth). Treatment = optional catalog/template.)
 - [x] The interactive chart rendering: SVG? how tooth zones are drawn/clicked.
       (Answered + verified: not SVG; 2 images + 2 masks per tooth; rotated sqrt(2)*50%
       diamond clipped to triangles + center circle; `:has()` adjacency borders. Bug

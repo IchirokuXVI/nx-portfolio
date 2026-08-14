@@ -31,20 +31,33 @@ root). The only treatments possible on a root are an implant or an extraction. E
 treatment also carries a status, either pending or completed, and that status is what
 drives the two colors shown on the chart.
 
-> Note (Claude): Verified against the models, with a few things to confirm or add.
-> (1) Teeth numbering uses FDI two-digit notation and the list includes primary
-> (deciduous) teeth (51 to 85) as well as permanent teeth (11 to 48), so the model
-> already supports children. Worth saying explicitly.
-> (2) The treatment model is actually three layers: `Treatment` looks like a reusable
-> catalog entry (name, description, `treatmentType`, default `zones`);
-> `OdontogramTreatment` is an applied instance tied to an odontogram with a status;
-> `ToothTreatment` extends it with the specific `teeth`, `zones`, `type` and a
-> `groupTeeth` flag. Confirm whether `Treatment` is a shared catalog.
-> (3) `Odontogram` has a `generalTreatments` field (not tied to any tooth) that your
-> answer did not mention.
-> (4) `groupTeeth` (boolean) on a tooth treatment is unexplained; likely for a single
-> treatment that spans a group of teeth (for example a bridge). Confirm.
-> (5) The front-crown zone is named `LATERAL` in the `ToothZones` enum.
+**More on the data model.**
+
+- Primary teeth: the model supports children. The original odontogram (the one I built
+  at work, which is not exactly the same as this one) has a checkbox to toggle showing
+  the deciduous teeth. That toggle is not ported to this version yet, but most of the
+  work is done and it should be quick to add.
+- General treatments: these are treatments that affect everything, or simply notes.
+  They are not really supported here. They existed in the original, but I removed them
+  from the UI because I could not find a good place to put a form for a general
+  treatment. Like the deciduous teeth, they will be added later.
+- Grouped vs individual teeth (`groupTeeth`): this one is tricky, and the client asked
+  for it because it makes their work easier. By default a treatment is grouped. If a
+  grouped treatment covers more than one tooth, the same treatment is shown on every
+  affected tooth, and editing it on one tooth updates it on all of them, because it is a
+  single shared treatment. If instead you mark it as individual, one separate treatment
+  is created per tooth, so editing one no longer affects the others, even though they
+  all started with the same information.
+- The treatment catalog (`Treatment`): yes, it is a catalog where treatments are saved,
+  but it is not required to use the odontogram. You can just type whatever you want as
+  the treatment name and it will be saved. Think of `Treatment` as a template that
+  prefills the name, description and affected zones when a treatment is added to a tooth.
+
+> Note (Claude): The four points above resolve the earlier open questions. Two of them
+> (the deciduous-teeth toggle and general treatments) are modeled but not yet exposed
+> in this version's UI, so the write-up should present them as planned or partial. One
+> minor naming detail worth stating: the front-crown zone is named `LATERAL` in the
+> `ToothZones` enum. Teeth numbering uses FDI two-digit notation.
 
 ## The interactive chart
 
