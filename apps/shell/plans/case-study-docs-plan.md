@@ -50,6 +50,13 @@ standard term for this kind of write-up. Format inside each file:
 6. Write the confirmed Q&A into the app's `CASE_STUDY.md`; mark status in the bank.
 7. End session: append a summary (≤50 lines) below and commit.
 
+**Standing rule — skipping/deferring questions (Daniel's request):**
+- Some questions get parked and answered later. **All localization / RokuTranslator
+  questions are DEFERRED** until the localization refactor lands (see
+  `libs/shared/localization/rokutranslator/plans`). Skip them and keep asking the rest.
+- When a question is parked, tag it in the bank (`DEFERRED (localization)` or a reason)
+  so it is not lost. Come back to the whole deferred set once unblocked.
+
 **Standing style rules for transcribed answers (Daniel's request):**
 - Organize each answer so topics flow in a sensible order; add short bold
   subheadings for longer answers. Correct grammar and make it readable and
@@ -73,19 +80,18 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
       (Answered: locale is sent to the backend, so a soft nav would require
       re-fetching all data with the new locale; full reload does it cleanly.
       Follow-up left: clarify the trigger is the programmatic switcher, not URL edits.)
-- [ ] Locale-first routing: why route `:locale` first at all (still unasked).
-- [ ] Locale detection + why en/es/fr (ASKED as Q4, NOT yet answered; Daniel's next
-      message was about Q3 instead, so Q4 is still open). Note: the global supported
-      locales are changing in the localization refactor, so revisit en/es/fr after.
+- [ ] DEFERRED (localization). Locale-first routing: why route `:locale` first at all.
+- [ ] DEFERRED (localization). Locale detection + why en/es/fr (was asked as Q4, never
+      answered). Supported locales change in the refactor, so revisit after it lands.
 - [ ] The "remote renders blank on its own port" design — why intentional, how it works.
 - [~] RokuTranslator: why hand-roll an i18next wrapper instead of ngx-translate/transloco?
       (ANSWERED then put ON HOLD by Daniel. A full organized answer is in-file with his
       clarifications folded in, but he will REWRITE it from scratch after the localization
       refactor lands. DO NOT edit that answer further; the previous text must be preserved.)
-- [~] RokuTranslator: per-locale lazy namespace loaders, how remotes contribute i18n.
-      (Mechanism covered via the hand-roll answer + Claude note; could get its own tidy answer.)
-- [~] Why force `roku-translator` as a MF singleton (`strictVersion`)? What broke without it?
-      (Why-singleton answered; sharper "locale state fragments across remotes" confirm pending.)
+- [~] DEFERRED (localization). RokuTranslator: per-locale lazy namespace loaders, how
+      remotes contribute i18n. (Mechanism covered via the hand-roll answer + Claude note.)
+- [~] DEFERRED (localization). Why force `roku-translator` as a MF singleton
+      (`strictVersion`)? (Why-singleton answered; sharper fragmentation confirm pending.)
 - [ ] Testing strategy across the workspace (Jest + Cypress/Playwright e2e, shared-spec pattern).
 - [ ] Shared libs layout (`libs/shared/*`): environments, data-access helpers, ui/icons.
 - [ ] Zone change detection config / any perf choices in `app.config.ts`.
