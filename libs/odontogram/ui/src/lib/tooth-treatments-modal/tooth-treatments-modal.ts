@@ -116,6 +116,7 @@ export class ToothTreatmentsModal {
   @ViewChild('treatmentsContainer', { read: ViewContainerRef })
   readonly treatmentsContainer?: ViewContainerRef;
 
+  // TODO(di-wiring): the services below are injected as concrete implementations instead of via DI tokens bound to their interfaces, so the real/API impls cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private readonly _toothTreatmentServ = inject(ToothTreatmentMemory);
   private readonly _odontogramServ = inject(OdontogramMemory);
 

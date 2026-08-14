@@ -26,6 +26,7 @@ import { forkJoin, ReplaySubject, tap } from 'rxjs';
   styleUrl: './feature-full-odontogram-crud.scss',
 })
 export class OdontogramFeatureFullOdontogramCrud implements OnInit {
+  // TODO(di-wiring): the services below are injected as concrete implementations instead of via DI tokens bound to their interfaces, so the real/API impls cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private _treatmentServ = inject(TreatmentMemory);
   private _toothTreatmentServ = inject(ToothTreatmentMemory);
   private _odontogramServ = inject(OdontogramMemory);

@@ -25,7 +25,27 @@ a sentence specifically on choosing runtime Module Federation over one bundled a
 A:
 
 **Q: Remotes render a blank page on their own port by design. Why did you make that choice and how does it work?**
-A:
+A: Each remote is built specifically to work inside the shell, so I do not think it
+makes much sense to run or test one on its own, since the styles and the rest of the
+context the shell provides could differ from how the remote actually renders in
+production. I am not certain this is the best approach. Micro frontends and module
+federation are still relatively new and not many projects use them, so I could not
+find much guidance either way.
+
+How it works: each remote bootstraps a `RemoteEntry` component whose template is
+completely empty, and its `remoteRoutes` load the real `feature-shell`. When you open
+a remote on its own port the router still matches the routes, but there is no
+`router-outlet` to render them into, so the page comes back blank. The shell is what
+provides the outlet (and the global styles and locale context) when it lazy loads the
+remote.
+
+> Note (Claude): Open decision Daniel raised, worth revisiting. Whether a remote
+> "should" be runnable standalone is a real fork. My take: keep production behavior as
+> is (remotes only through the shell), because the remotes genuinely depend on shell
+> provided globals. If standalone dev/test becomes painful, the clean fix is a thin
+> dev-only host harness per remote that supplies the same global styles and
+> `RokuTranslator` init, rather than making each remote a full independent app. Low
+> priority for a portfolio; not worth investing until the dev loop actually hurts.
 
 ## Locale-first routing
 
@@ -150,11 +170,77 @@ is the failure `strictVersion` is guarding against.)_
 
 **Q: What's the testing strategy across the workspace (unit vs e2e, the `*.shared-spec.ts` pattern, why e2e points at the shell)?**
 A:
+**Shared specs for data access.** The shared specs came out of testing the data
+access layer. I know the types each service is supposed to return, so I thought: why
+not write one shared spec that every implementation of that service must pass? It
+covers the basic functionality that all implementations have in common. On top of
+that, each implementation has its own specific spec, and the first thing that
+specific spec does is run the shared one. So every implementation gets the shared
+contract tests plus its own detailed tests. I am not sure there is a better way to do
+this, but it seems to work great.
+
+**e2e through the shell.** All the e2e tests point at the shell rather than each
+remote's own url, because the end user is meant to use the shell, not a remote on its
+own. The tests are still organized per remote; they simply use the shell url instead
+of the remote's url. I am still learning e2e testing, especially with micro
+frontends, so I will probably change how this works at some point. There is always
+room for improvement.
+
+> Note (Claude): Confirmed against `odontogram-service.shared-spec.ts` and
+> `odontogram-memory.spec.ts`: the implementation spec calls
+> `runSharedOdontogramServiceTests(factory)` before its own `describe`, as described.
+> One idea for later: the shared suite currently asserts mostly the method contract
+> (each call returns an Observable, the service is created), while the real CRUD
+> behavior (correct results, `NotFoundResourceError`) lives in the per-implementation
+> spec. If you want the memory and API implementations guaranteed to behave
+> identically, you could push more of those behavioral assertions into the shared
+> suite so both are held to the same contract.
 
 ## Shared foundation
 
 **Q: How are shared libs organized (`libs/shared/*`: environments, data-access, ui/icons) and what rules do you follow for using them?**
 A:
+**When something earns its own library.** I create a new library for things that are
+either a new feature of a specific app, or something that could be heavily reused, not
+just in this project but in general. Small components or services go into an existing
+library instead, either the app specific one or the shared one if I am going to use it
+in multiple apps. The clearest candidates for their own library are things that have
+nothing to do with the interface and do not depend on Angular. My best example is
+RokuTranslator: I use it across all the apps and gave it two dedicated libraries,
+because I know I will revise it often and I do not want to destabilize the shared
+library with something big that changes constantly.
+
+**How something reaches the shared library.** I usually build a component first inside
+the app specific library, and only move it to the shared one once I actually need to
+reuse it. The rule I follow is that everything in the shared library must be truly
+shareable without much configuration. If it is not, I would rather keep two similar
+components in different libraries than one big component with a lot of configuration.
+In that case I extract the common part into a smaller component in the shared library,
+and each app specific component uses that reusable piece.
+
+> Note (Claude): Matches the codebase. RokuTranslator has its two dedicated libs (the
+> framework agnostic `rokutranslator` core plus `rokutranslator-angular`), and
+> `libs/shared/ui` holds small standalone icon components rather than one configurable
+> mega component, exactly the pattern described. One rule worth stating explicitly in
+> the write-up: libraries are always imported through their `@portfolio/<scope>/<lib>`
+> path alias, never via relative paths across library boundaries.
 
 **Q: Any deliberate performance / change-detection choices (e.g. `provideZoneChangeDetection({ eventCoalescing: true }))`?**
 A:
+**Event coalescing.** Nx already sets `eventCoalescing` to true, but in my opinion it
+should always be on. There is no reason to keep it false unless your logic depends on
+DOM manipulation, which I do not think is good practice these days. I have never had
+any problems with it.
+
+**Lazy and async by default.** Beyond that, I try to load everything lazily and
+asynchronously. For example, the odontogram images are loaded through JavaScript and
+the odontogram is only shown once all of the images have finished loading.
+
+**Signals everywhere.** I use signals for everything, to keep change detection to a
+minimum. Instead of relying on Angular to notice changes to plain variables in the
+template, I update the signals myself when needed.
+
+> Note (Claude): Confirmed, signals are used throughout the component libraries
+> (dozens of `signal` / `computed` usages). The odontogram image preloading detail is
+> a good concrete example and belongs in `apps/odontogram/CASE_STUDY.md`; recorded
+> here at the foundation level, to be expanded when covering odontogram.

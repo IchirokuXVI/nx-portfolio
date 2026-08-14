@@ -30,6 +30,7 @@ import { FormButton } from '../form-button/form-button';
   styleUrl: './contact-form.scss',
 })
 export class ContactForm {
+  // TODO(di-wiring): injected as a concrete implementation (ContactMock) instead of via a DI token bound to ContactServiceI, so a real implementation cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private readonly _contact: ContactServiceI = inject(ContactMock);
   private readonly _fb = inject(FormBuilder);
 

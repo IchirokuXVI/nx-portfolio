@@ -16,6 +16,7 @@ import { PROJECT_TRANSLATIONS } from './static-project-translation-data';
   providedIn: 'root',
 })
 export class ProjectMemory {
+  // TODO(di-wiring): depends on the concrete AssetMemory instead of an asset service token; fix alongside the consumer sites. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private readonly _assets = inject(AssetMemory);
   private _projects = PROJECTS;
   private _projectTranslations = PROJECT_TRANSLATIONS;

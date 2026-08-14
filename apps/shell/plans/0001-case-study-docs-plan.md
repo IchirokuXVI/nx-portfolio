@@ -50,6 +50,20 @@ standard term for this kind of write-up. Format inside each file:
 6. Write the confirmed Q&A into the app's `CASE_STUDY.md`; mark status in the bank.
 7. End session: append a summary (≤50 lines) below and commit.
 
+**Standing rule — skipping/deferring questions (Daniel's request):**
+- Some questions get parked and answered later. **All localization / RokuTranslator
+  questions are DEFERRED** until the localization refactor lands (see
+  `libs/shared/localization/rokutranslator/plans`). Skip them and keep asking the rest.
+- When a question is parked, tag it in the bank (`DEFERRED (localization)` or a reason)
+  so it is not lost. Come back to the whole deferred set once unblocked.
+- Two pending refactors currently block some questions; both have their own fix plans:
+  1. `DEFERRED (localization)` — the RokuTranslator refactor
+     (`libs/shared/localization/rokutranslator/plans/0001-localization-refactor-plan.md`).
+  2. `DEFERRED (di-wiring)` — components inject concrete `*Memory` / `*Mock` impls
+     directly instead of via DI tokens; 11 sites flagged in code with `TODO(di-wiring)`
+     (`libs/shared/data-access/plans/0001-data-access-di-token-wiring.md`). Questions
+     about how services are swapped / backend vs demo wait for this.
+
 **Standing style rules for transcribed answers (Daniel's request):**
 - Organize each answer so topics flow in a sensible order; add short bold
   subheadings for longer answers. Correct grammar and make it readable and
@@ -69,27 +83,39 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
       (Partial: "deploy each separately". Still want a line on runtime MF vs one
       bundled app specifically.)
 - [ ] Shell as host: how remotes are declared/lazy-loaded via `X/Routes` aliases.
+      (Touched in the blank-page answer; the alias/tsconfig-path mechanism itself not
+      yet asked of Daniel.)
 - [x] Locale-first routing: full `window.location.href` reload on locale change.
       (Answered: locale is sent to the backend, so a soft nav would require
       re-fetching all data with the new locale; full reload does it cleanly.
       Follow-up left: clarify the trigger is the programmatic switcher, not URL edits.)
-- [ ] Locale-first routing: why route `:locale` first at all (still unasked).
-- [ ] Locale detection + why en/es/fr (ASKED as Q4, NOT yet answered; Daniel's next
-      message was about Q3 instead, so Q4 is still open). Note: the global supported
-      locales are changing in the localization refactor, so revisit en/es/fr after.
-- [ ] The "remote renders blank on its own port" design — why intentional, how it works.
+- [ ] DEFERRED (localization). Locale-first routing: why route `:locale` first at all.
+- [ ] DEFERRED (localization). Locale detection + why en/es/fr (was asked as Q4, never
+      answered). Supported locales change in the refactor, so revisit after it lands.
+- [x] The "remote renders blank on its own port" design (why intentional, how it works).
+      (Answered: remotes are built for the shell, standalone styles/context would differ;
+      empty RemoteEntry template + no outlet on own port. Claude note captures the open
+      "should remotes run standalone" decision + my recommendation.)
 - [~] RokuTranslator: why hand-roll an i18next wrapper instead of ngx-translate/transloco?
       (ANSWERED then put ON HOLD by Daniel. A full organized answer is in-file with his
       clarifications folded in, but he will REWRITE it from scratch after the localization
       refactor lands. DO NOT edit that answer further; the previous text must be preserved.)
-- [~] RokuTranslator: per-locale lazy namespace loaders, how remotes contribute i18n.
-      (Mechanism covered via the hand-roll answer + Claude note; could get its own tidy answer.)
-- [~] Why force `roku-translator` as a MF singleton (`strictVersion`)? What broke without it?
-      (Why-singleton answered; sharper "locale state fragments across remotes" confirm pending.)
-- [ ] Testing strategy across the workspace (Jest + Cypress/Playwright e2e, shared-spec pattern).
-- [ ] Shared libs layout (`libs/shared/*`): environments, data-access helpers, ui/icons.
-- [ ] Zone change detection config / any perf choices in `app.config.ts`.
-- [ ] SUPPORTED_LOCALES en/es/fr — why these, how locale is detected/persisted.
+- [~] DEFERRED (localization). RokuTranslator: per-locale lazy namespace loaders, how
+      remotes contribute i18n. (Mechanism covered via the hand-roll answer + Claude note.)
+- [~] DEFERRED (localization). Why force `roku-translator` as a MF singleton
+      (`strictVersion`)? (Why-singleton answered; sharper fragmentation confirm pending.)
+- [x] Testing strategy across the workspace (Jest + Cypress/Playwright e2e, shared-spec pattern).
+      (Answered: shared contract spec run by each impl spec first, plus impl-specific
+      tests; e2e all point at the shell url, organized per remote; e2e approach still
+      evolving. Claude note suggests pushing more behavior into the shared suite.)
+- [x] Shared libs layout (`libs/shared/*`): environments, data-access helpers, ui/icons.
+      (Answered: own lib for reusable/framework-agnostic non-UI things e.g. RokuTranslator;
+      build in app lib first then promote to shared only when truly shareable with little
+      config; prefer small extracted shared pieces over big configurable components.)
+- [x] Zone change detection config / any perf choices in `app.config.ts`.
+      (Answered: eventCoalescing always on; lazy/async everything; signals for
+      everything to minimize change detection. Confirmed signals used widely.)
+- [ ] DEFERRED (localization). SUPPORTED_LOCALES en/es/fr, why these, detection/persistence.
 
 ### damoclesSword
 - [ ] What is Damocle'Sword? The real project this showcases (Starlit Ascension, VR).
@@ -100,12 +126,36 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [ ] Contact form: is it wired to a backend? contact-mock vs real service.
 
 ### odontogram
-- [ ] What the odontogram is (dental chart) and why you built it.
-- [ ] Domain model: teeth numbering, zones, tooth-treatment status, treatment types.
-- [ ] The interactive chart rendering — SVG? how tooth zones are drawn/clicked.
-- [ ] memory vs api service (`odontogram-api.ts` vs `odontogram-memory.ts`) + shared-spec tests.
-- [ ] full CRUD feature — state management, how edits persist.
-- [ ] Any backend integration (BACK_API_* env) vs in-memory demo mode.
+- [x] What the odontogram is (dental chart) and why you built it.
+      (Answered: built for Clinica Dental Gallardo, Cordoba/Malaga, ~2024 at Umitel,
+      still in use; his first real frontend challenge.)
+- [x] Domain model: teeth numbering, zones, tooth-treatment status, treatment types.
+      (Answered + follow-ups resolved: teeth not persisted; treatments carry teeth[]
+      and link to odontogram for history; crown 5 zones + front 2; status
+      pending/completed. Deciduous teeth + generalTreatments modeled but not yet in this
+      UI (planned). groupTeeth = grouped (shared, edit-once-affects-all) vs individual
+      (separate treatment per tooth). Treatment = optional catalog/template.)
+- [x] The interactive chart rendering: SVG? how tooth zones are drawn/clicked.
+      (Answered + verified: not SVG; 2 images + 2 masks per tooth; rotated sqrt(2)*50%
+      diamond clipped to triangles + center circle; `:has()` adjacency borders. Bug
+      noted: ToothImageLoader Map cache is never populated.)
+- [x] Treatment visualization (colors/states per zone).
+      (Answered: two colors pending/completed; extraction = X cross, implant = bars;
+      zone-status precedence any-pending-wins.)
+- [~] Image preloading: images loaded via JS, chart shown only once all load.
+      (Covered via rendering answer: dynamic import() + forkJoin + LoadingNotifier;
+      could expand the "show only when all loaded" coordination.)
+- [~] DEFERRED (di-wiring). memory vs api service + shared-spec tests. (Daniel will
+      answer after fixing the wiring. Bug found: components inject OdontogramMemory
+      directly, no token switch, though OdontogramApi is complete. 11 sites flagged
+      workspace-wide, see libs/shared/data-access/plans/0001-data-access-di-token-wiring.md.)
+- [~] full CRUD feature: state management, how edits persist.
+      (Partial: click-tooth form uses squares not the image, 5 in a circle + front row,
+      plus per-tooth history. STILL OPEN: edit-state handling, save/persistence flow,
+      hardest UX. Revisit after data-access questions.)
+- [~] DEFERRED (di-wiring). Backend integration (BACK_API_* env) vs in-memory demo mode.
+      (Currently runs fully in memory because OdontogramMemory is injected; OdontogramApi
+      ready but unwired. Revisit after the DI token fix.)
 
 ### landing (to be merged later)
 - [ ] Original purpose vs landingV2. What's being kept/merged.
@@ -185,7 +235,7 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - **Q3 is now ON HOLD.** Daniel will rewrite that answer from scratch after a
   localization refactor. Previous answer preserved; DO NOT edit it further.
 - Created a refactor brief at
-  `libs/shared/localization/rokutranslator/plans/localization-refactor-plan.md`
+  `libs/shared/localization/rokutranslator/plans/0001-localization-refactor-plan.md`
   telling a future agent to inspect the localization architecture and produce a
   detailed fix plan for TWO problems:
   1. Namespace leaking. Fix direction: optional `namespace` arg on the pipe and
