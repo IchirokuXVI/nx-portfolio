@@ -65,6 +65,7 @@ const CONTENT_BY_SLUG: Record<string, Type<unknown>> = {
 })
 export class ProjectPage implements OnInit {
   private _route = inject(ActivatedRoute);
+  // TODO(di-wiring): injected as a concrete implementation instead of via a DI token bound to the service interface, so the real/API impl cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private _projectServ = inject(ProjectMemory);
   private _rokuTranslatorServ = inject(RokuTranslatorService);
 

@@ -1,4 +1,5 @@
 export * from './lib/damocles-content/damocles-content';
+export * from './lib/landing-v2-locales';
 export * from './lib/detail-page-shell/detail-page-shell';
 export * from './lib/hero/hero';
 export * from './lib/info-table/info-table';

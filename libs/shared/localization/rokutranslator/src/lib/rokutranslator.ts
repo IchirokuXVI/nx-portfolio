@@ -35,7 +35,9 @@ class RokuTranslator {
 
   private i18nextInstance?: i18n;
 
-  public onLocaleChange: (locale: string) => void = () => {};
+  public onLocaleChange: (locale: string) => void = () => {
+    // Notification hook; overridden by consumers that want to react to a change.
+  };
 
   async init(config: Partial<RokuTranslatorConfig> = {}): Promise<void> {
     this.config = {
@@ -44,13 +46,11 @@ class RokuTranslator {
     };
 
     if (!this.config.locale || !this.isLocaleValid(this.config.locale)) {
-      const savedLocale = localStorage.getItem('roku-locale');
-
-      if (savedLocale && this.isLocaleValid(savedLocale)) {
-        this.config.locale = savedLocale;
-      } else {
-        this.config.locale = this.getBrowserLocale();
-      }
+      // The locale is normally settled by the Angular routing layer (the URL
+      // locale plus per-app persistence, see the locale routing refactor). Here
+      // we only need a reasonable starting value for i18next before the shell's
+      // guards correct it, so fall back to the browser locale.
+      this.config.locale = this.getBrowserLocale();
     }
 
     await new Promise<void>((res, rej) => {
@@ -95,6 +95,11 @@ class RokuTranslator {
             fallbackLng: 'en-US',
             ns: [],
             defaultNS: this.config.namespaces,
+            // The `ns` option passed to t() is authoritative for scoping a lookup to
+            // a single namespace. Disabling nsSeparator stops i18next from treating a
+            // ':' inside a key as a namespace override, so a key can never leak into
+            // another namespace. Keys in this workspace use '.' as their separator.
+            nsSeparator: false,
             load: 'languageOnly',
             // From the docs:
             // Please make sure to at least pass in an empty resources object on init.
@@ -103,7 +108,7 @@ class RokuTranslator {
             resources: {},
             // debug: true,
           },
-          (err, t) => {
+          (err) => {
             if (err) {
               return rej(err);
             }
@@ -148,7 +153,7 @@ class RokuTranslator {
     return locale;
   }
 
-  isLocaleSupported(locale: string, strict: boolean = false) {
+  isLocaleSupported(locale: string, strict = false) {
     if (!this.config.supportedLocales.length) {
       return true;
     }
@@ -187,8 +192,8 @@ class RokuTranslator {
       await this.i18nextInstance.changeLanguage(locale);
     }
 
-    localStorage.setItem('roku-locale', locale);
-
+    // Persistence is per app and owned by the Angular routing layer
+    // (roku-locale:{appKey}); the core no longer keeps a single global key.
     this.onLocaleChange(locale);
   }
 

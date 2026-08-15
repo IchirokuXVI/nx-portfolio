@@ -1,13 +1,20 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
+import { switchAppLocale } from '@portfolio/localization/rokutranslator-angular';
+import { LANDING_V2_APP_KEY } from '../landing-v2-locales';
 import { LanguageSwitch } from './language-switch';
 
 jest.mock('@portfolio/localization/rokutranslator', () => {
   return {
     RokuTranslator: {
       getLocale: jest.fn().mockReturnValue('en'),
-      changeLocale: jest.fn(),
     },
+  };
+});
+
+jest.mock('@portfolio/localization/rokutranslator-angular', () => {
+  return {
+    switchAppLocale: jest.fn(),
   };
 });
 
@@ -44,7 +51,7 @@ describe('LanguageSwitch', () => {
     expect(buttons[1].getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('changes the locale through RokuTranslator when a different option is clicked', () => {
+  it('switches the app locale when a different option is clicked', () => {
     const host = fixture.nativeElement as HTMLElement;
     const [, esButton] = Array.from(
       host.querySelectorAll<HTMLButtonElement>('.language-switch__option')
@@ -52,10 +59,10 @@ describe('LanguageSwitch', () => {
 
     esButton.click();
 
-    expect(RokuTranslator.changeLocale).toHaveBeenCalledWith('es');
+    expect(switchAppLocale).toHaveBeenCalledWith(LANDING_V2_APP_KEY, 'es');
   });
 
-  it('does not call changeLocale when clicking the already-active locale', () => {
+  it('does not switch when clicking the already-active locale', () => {
     const host = fixture.nativeElement as HTMLElement;
     const [enButton] = Array.from(
       host.querySelectorAll<HTMLButtonElement>('.language-switch__option')
@@ -63,6 +70,6 @@ describe('LanguageSwitch', () => {
 
     enButton.click();
 
-    expect(RokuTranslator.changeLocale).not.toHaveBeenCalled();
+    expect(switchAppLocale).not.toHaveBeenCalled();
   });
 });

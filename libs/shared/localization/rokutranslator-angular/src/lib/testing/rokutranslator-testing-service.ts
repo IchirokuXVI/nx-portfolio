@@ -5,7 +5,7 @@ import { of } from 'rxjs';
 export class RokuTranslatorTestingService {
   loaded$ = of(true);
 
-  t(s: string) {
-    return s;
+  t(key: string, _ns?: string) {
+    return key;
   }
 }

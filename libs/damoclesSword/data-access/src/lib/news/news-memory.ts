@@ -16,6 +16,7 @@ import { NEWS_TRANSLATIONS } from './static-news-translation-data';
   providedIn: 'root',
 })
 export class NewsMemory {
+  // TODO(di-wiring): depends on the concrete AssetMemory instead of an asset service token; fix alongside the consumer sites. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private readonly _assets = inject(AssetMemory);
   private _news = NEWS;
   private _newsTranslations = NEWS_TRANSLATIONS;
