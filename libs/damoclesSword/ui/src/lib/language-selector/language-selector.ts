@@ -95,6 +95,7 @@ export class LanguageSelector {
 
   onLanguageChange(selectedOption: string) {
     this.selectedLanguage.set(selectedOption);
+    this.toggleShowOptions();
   }
 
   loadFlag(languageCode: string): Promise<string> {
