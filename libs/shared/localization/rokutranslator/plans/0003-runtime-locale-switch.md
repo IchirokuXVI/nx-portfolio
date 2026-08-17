@@ -164,11 +164,43 @@ ticks CD; the signal makes it explicit and keeps the door open for zoneless late
 is awkward from a service, back the store with a `BehaviorSubject` and derive the signal
 via `toSignal`; pick one direction in implementation.)
 
-**B2. `RokuTranslatorService` registers and tears down all namespaces.** In the
-constructor, `addNamespace` every namespace it is configured with (default plus
-`_namespaces`), not just the default; in `ngOnDestroy`, `removeNamespace` all of them.
-This removes the need for `OdontogramUiModule`'s manual
-`RokuTranslator.addNamespace('odontogram/models')`, which is deleted.
+> **Design principle: locale is read, not passed.** No translation getter and no
+> refetch helper takes the locale (or a locale stream) as a required argument. They all
+> read the active locale from `RokuTranslatorService`, which delegates to
+> `RokuLocaleStore`. A `locale` argument appears only as an **optional override** for the
+> "give me this in another language" case, and only on `t()` (a one-off lookup), never on
+> the reactive refetch stream, whose whole job is to follow the current locale.
+>
+> `RokuTranslatorService` is instantiated per module (each remote configures its own
+> namespaces), so it cannot be the single global holder by itself. The single source of
+> truth is the root `RokuLocaleStore`; the service just re-exposes it, so from a
+> consumer's point of view "the service holds the current locale" holds true.
+
+**B2. `RokuTranslatorService` re-exposes the locale and owns its namespaces.**
+
+The service injects `RokuLocaleStore` and re-exposes the locale so callers read it off
+the service they already inject:
+
+```ts
+private _store = inject(RokuLocaleStore);
+getLocale() { return this._store.getLocale(); }
+get locale()  { return this._store.locale; }   // Signal<string>
+get locale$() { return this._store.locale$; }   // Observable<string>
+
+// optional `locale` overrides the current one for a different language (i18next `lng`)
+t(key: string, ns?: string, locale?: string): string {
+  return RokuTranslator.t(key, {
+    ns: ns ?? this._defaultNamespace ?? this._namespaces[0],
+    lng: locale,
+  });
+}
+```
+
+It also fixes the namespace asymmetry: in the constructor `addNamespace` **every**
+namespace it is configured with (default plus `_namespaces`), not just the default; in
+`ngOnDestroy`, `removeNamespace` all of them. This removes the need for
+`OdontogramUiModule`'s manual `RokuTranslator.addNamespace('odontogram/models')`, which
+is deleted.
 
 **B3. Eager-load all supported locales at init.** Today the service loads only
 `this._locales` for the current run and relies on reload for the other locale. For a
@@ -183,8 +215,10 @@ future large locale sets where eager loading all is undesirable.)
 @Pipe({ name: 'rokuT', pure: false })
 export class RokuTranslatorPipe implements PipeTransform {
   private _serv = inject(RokuTranslatorService);
-  transform(key: string, ns?: string): string {
-    return this._serv.t(key, ns);
+  // `locale` stays optional (defaults to the service's current locale); pass it only
+  // to force a key into a specific language.
+  transform(key: string, ns?: string, locale?: string): string {
+    return this._serv.t(key, ns, locale);
   }
 }
 ```
@@ -242,119 +276,114 @@ the rest of this plan is really about. See the options section.
 
 ## Reusable refetch on locale change: options
 
-All options assume `store.locale$` (Observable) and/or `store.locale()` (Signal) from
-B1, and that the actual request carries the locale via the C1 interceptor (so the query
-functions below do not each thread a `locale` argument by hand).
+Following the "locale is read, not passed" principle: the caller never passes a locale
+or a locale stream. The helpers read `locale$` from `RokuTranslatorService` (which
+delegates to `RokuLocaleStore`), and the outgoing request carries the locale via the C1
+interceptor, so the query functions below never thread a `locale` argument by hand.
 
-### Option A: a `withLocale` source factory (recommended default)
+A and B are the **same mechanism**: A is the primitive, B is a pipeable wrapper that
+calls A. C is **not** a third mechanism; it is A with more than one trigger, so it is
+folded into A as optional trigger streams rather than shipped as a separate helper.
 
-A tiny factory that builds a stream keyed on locale. The query is expressed as a
-function of locale; `switchMap` cancels the in-flight previous-locale request when the
-locale changes.
+### Option A: `withLocale(project)` primitive on the service (recommended default)
+
+Builds a stream keyed on the current locale. `switchMap` cancels the in-flight
+previous-locale request when the locale changes. The caller passes only the query.
 
 ```ts
-// libs/shared/data-access (or a new shared/util-rxjs)
-export function withLocale<T>(
-  locale$: Observable<string>,
-  project: (locale: string) => Observable<T>
+// method on RokuTranslatorService
+withLocale<T>(
+  project: () => Observable<T>,
+  ...triggers$: Observable<unknown>[]     // optional: other reactive inputs (see C)
 ): Observable<T> {
-  return locale$.pipe(switchMap(project));
+  const sources$ = [this._store.locale$, ...triggers$];
+  return combineLatest(sources$).pipe(switchMap(() => project()));
 }
 
-// usage in a component/store
-treatments$ = withLocale(this.localeStore.locale$, () =>
-  this.treatmentService.getList(this.filter)
-);
+// usage — locale only: refetches whenever the language changes
+treatments$ = this.i18n.withLocale(() => this.treatmentService.getList(this.filter));
 ```
 
-- Pros: dead simple, explicit that the stream depends on locale, `switchMap` gives
-  free cancellation, no manual trigger management, works with today's `of(...)` memory
-  services and tomorrow's HTTP unchanged.
-- Cons: only keys on locale; if the query also depends on other reactive inputs
-  (filter, route id) you compose with Option C instead.
+- Pros: caller passes neither locale nor locale$; `switchMap` gives free cancellation;
+  works unchanged with today's `of(...)` memory services and tomorrow's HttpClient; the
+  optional `triggers$` subsumes Option C so there is one tool, not three.
+- Cons: must be called in an injection context (a field initializer or the constructor)
+  because the helper lives on an injected service; that is the normal component idiom.
 
-### Option B: a pipeable operator `refetchOnLocaleChange()`
+### Option B: `refetchOnLocaleChange()` pipeable operator (sugar over A)
 
-Same idea expressed as an operator so it reads left to right off an existing cold
-source. The locale acts purely as a re-trigger; the source is re-subscribed.
+The same idea as a left-to-right operator dropped onto an existing cold source. It
+**delegates to A**; the source is re-subscribed on each locale change.
 
 ```ts
-export function refetchOnLocaleChange<T>(locale$: Observable<string>) {
-  return (source$: Observable<T>): Observable<T> =>
-    locale$.pipe(switchMap(() => source$));
+export function refetchOnLocaleChange<T>(i18n: RokuTranslatorService) {
+  return (source$: Observable<T>): Observable<T> => i18n.withLocale(() => source$);
 }
 
 // usage
 treatments$ = this.treatmentService
   .getList(this.filter)
-  .pipe(refetchOnLocaleChange(this.localeStore.locale$));
+  .pipe(refetchOnLocaleChange(this.i18n));
 ```
 
-- Pros: ergonomic pipeable syntax; drop it onto any existing query stream.
-- Cons: the `source$` is captured once with a fixed filter, so it only re-fetches on
-  locale, not on filter change (fine when the filter is static for that view). `source$`
-  must be cold/re-subscribable (HttpClient and `of(...)` are). Slightly less obvious
-  that the emitted value ignores locale's actual value.
+- Pros: ergonomic pipeable syntax; nothing new to learn since it is A underneath.
+- Cons: the operator takes `i18n` because operators run outside injection context; the
+  `source$` is captured once (fixed filter), so it refetches on locale only. `source$`
+  must be cold/re-subscribable (HttpClient and `of(...)` are). Use A directly (not
+  A+B stacked) on any single query; B is a stylistic alias, never combined with A on the
+  same stream.
 
-### Option C: `combineLatest([locale$, params$]) → switchMap` (most general)
+### Option C (folded into A): multiple triggers, not just locale
 
-When the query depends on locale and other reactive params (filter, selected id),
-combine them and switchMap. This is the robust general form; A and B are special cases.
+A and B refetch on **locale change only**. When a query must also refetch on a changing
+**parameter** (a search box, a filter dropdown, a route id), pass that parameter's
+stream as an extra trigger to A. No separate helper:
 
 ```ts
-data$ = combineLatest([this.localeStore.locale$, this.filter$]).pipe(
-  switchMap(([, filter]) => this.treatmentService.getList(filter))
+// refetches when locale OR the filter changes
+treatments$ = this.i18n.withLocale(
+  () => this.treatmentService.getList(this.filter),
+  this.filter$
 );
 ```
 
-- Pros: correct for multi-input queries; composes cleanly; one obvious pattern for all
-  "reactive query" cases in the app.
-- Cons: more ceremony; needs params as streams (`filter$`), which pushes components
-  toward a reactive style. Consider `debounceTime`/`distinctUntilChanged` on params.
+If you prefer it explicit at the call site, the equivalent inline idiom is
+`combineLatest([this.i18n.locale$, this.filter$]).pipe(switchMap(...))`. Either way,
+**you only need this when a query depends on more than locale.** If every query in a
+view has static parameters (fetch once, refetch only on language change), A/B alone are
+enough and this shape never appears. Consider `distinctUntilChanged` / `debounceTime` on
+noisy parameter streams.
 
 ### Option D: Signal-first with `rxResource` / `resource` (future-facing)
 
-Since B introduces a locale signal, components that are already signal based can use
-Angular's `rxResource` (Angular 19+) keyed on the locale (and other) signals. Auto
+Because B1 introduces a locale signal, signal-based components can use Angular's
+`rxResource` (Angular 19+) keyed on `this.i18n.locale()` (and other signals). Auto
 refetches when the request signal changes and gives `value` / `isLoading` / `error`.
 
 ```ts
 treatments = rxResource({
-  request: () => ({ locale: this.localeStore.locale(), filter: this.filter() }),
+  request: () => ({ locale: this.i18n.locale(), filter: this.filter() }),
   loader: ({ request }) => this.treatmentService.getList(request.filter),
 });
 ```
 
 - Pros: no manual subscription/teardown, built-in loading+error state, matches the
-  signal direction B opens; the cleanest long-term.
+  signal direction B1 opens; the cleanest long-term.
 - Cons: depends on Angular version (`rxResource` is newer/experimental in some
-  releases); mixing with `pure:false` pipes is fine but two reactivity styles coexist.
-  Verify the workspace's Angular version before committing to this (see O4).
-
-### Option E: explicit refetch `Subject` merged with locale (escape hatch)
-
-For imperative "reload now" buttons plus locale, merge a manual trigger with the
-locale stream. Most boilerplate; list it only as the escape hatch when a view needs a
-user-driven refresh in addition to locale.
-
-```ts
-private _refetch$ = new BehaviorSubject<void>(undefined);
-data$ = merge(this.localeStore.locale$, this._refetch$).pipe(
-  switchMap(() => this.treatmentService.getList(this.filter))
-);
-```
+  releases); two reactivity styles then coexist with the pure:false pipe. Verify the
+  workspace's Angular version before committing (see O4).
 
 ### Recommendation
 
-Adopt **Option A (`withLocale`)** as the documented default for the common
-"fetch keyed on locale" case, and **Option C** (`combineLatest`) as the sanctioned
-pattern when the query also depends on other reactive inputs. Ship both as small,
-tested helpers in a shared location (either `shared/data-access` or a new
-`shared/util-rxjs`), document them in the library README with the odontogram treatment
-list as the worked example, and keep **Option D** noted as the future signal-first path
-once the Angular version is confirmed. Option B is a nice-to-have alias over A; Option E
-is an escape hatch. The C1 interceptor is adopted unconditionally so the transport is
-uniform no matter which trigger a given screen uses.
+Adopt **Option A (`withLocale`)** as the single documented default: the no-argument form
+for locale-only queries, and the extra-triggers form (Option C folded in) for queries
+that also depend on reactive parameters. Ship **Option B** as the thin pipeable alias
+over A for call sites that read better left-to-right. Keep **Option D** noted as the
+future signal-first path once the Angular version is confirmed. Put `withLocale` on
+`RokuTranslatorService` (so locale stays "read, not passed") and the `refetchOnLocaleChange`
+operator alongside it in `rokutranslator-angular`; document both in the library README
+with the odontogram treatment list as the worked example. The C1 interceptor is adopted
+unconditionally so the transport is uniform no matter which trigger a screen uses.
 
 ## Rollout / implementation order
 
@@ -362,8 +391,8 @@ uniform no matter which trigger a given screen uses.
 2. Angular B1 (`RokuLocaleStore`), B2/B3 (namespace ownership, eager load), B4 (pipe
    `pure:false`). Delete `OdontogramUiModule`'s manual `addNamespace`.
 3. C1 interceptor wired in shell `app.config.ts`.
-4. C2 helpers (`withLocale`, `combineLatest` guidance) in the shared lib with tests and
-   README.
+4. C2 helpers: `withLocale` on `RokuTranslatorService` (with the optional-triggers form)
+   plus the `refetchOnLocaleChange` operator, with tests and README.
 5. Migrate one data-access consumer (odontogram treatment list) to the pattern as the
    reference, verify a runtime switch updates both static UI copy and fetched data.
 6. B5: flip `switchAppLocale` to in-place. Remove the reload.
@@ -380,9 +409,11 @@ is always shippable.
   re-renders after a runtime `changeLocale` without a reload (component test); service
   registers and tears down all namespaces (odontogram `odontogram/models` present after
   init, absent after destroy) with no manual module `addNamespace`.
-- Data: interceptor sets `Accept-Language` on outgoing requests; `withLocale` /
-  `combineLatest` helpers re-emit on locale change and cancel the previous request
-  (`switchMap` marble test).
+- Data: interceptor sets `Accept-Language` on outgoing requests; `withLocale` re-emits
+  on locale change (and on an extra trigger stream when one is passed) and cancels the
+  previous request (`switchMap` marble test); `refetchOnLocaleChange` delegates to it.
+  `t(key, ns, locale)` returns the overridden language when `locale` is passed and the
+  current one otherwise.
 - e2e (through the shell, per repo convention): switch language from the switcher, URL
   locale segment updates, page content and fetched data update, no full reload, and a
   piece of in-app state (an open modal or form value) survives the switch.
