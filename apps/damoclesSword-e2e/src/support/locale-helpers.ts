@@ -47,9 +47,15 @@ export async function usableLocales(page: Page): Promise<string[]> {
     )
     .allInnerTexts();
 
+  // Lowercase the codes: the options can render uppercase via CSS text-transform
+  // (which `innerText` reflects when they are visible), but locale codes are
+  // canonically lowercase (as is the URL segment), so callers can compare them
+  // directly against the URL locale.
   return [
     ...new Set(
-      texts.map((t) => t.trim()).filter((t) => LOCALE_SEGMENT.test(t))
+      texts
+        .map((t) => t.trim().toLowerCase())
+        .filter((t) => LOCALE_SEGMENT.test(t))
     ),
   ];
 }

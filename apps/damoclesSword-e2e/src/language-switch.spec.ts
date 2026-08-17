@@ -20,6 +20,11 @@ test.describe('damoclesSword language switcher', () => {
   }) => {
     expect(baseURL, 'baseURL must be configured').toBeTruthy();
 
+    // Use a wide viewport so the header shows its inline layout and the switcher
+    // dropdown is directly interactive. The locale switch itself is
+    // viewport-independent, so this keeps the test deterministic across engines
+    // without depending on the mobile hamburger nav's open/close animation.
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/en/damoclesSword');
     await settle(page);
 
@@ -36,15 +41,21 @@ test.describe('damoclesSword language switcher', () => {
       (window as unknown as { __noReload?: string }).__noReload = 'kept';
     });
 
-    // Open the (visible) dropdown and pick the target locale. The header renders
-    // breakpoint variants, so target the visible one via the `:visible` pseudo.
+    // Open the dropdown, then pick the target locale from the now-open option
+    // list (the `.shown` class marks the open one, and waiting for it to be
+    // visible ensures the buttons are laid out before we click).
     await page.locator('.selected-language-container:visible').first().click();
 
-    await page
-      .locator('.selectable-languages:visible button')
-      .filter({ hasText: new RegExp(`^${to}$`) })
-      .first()
-      .click();
+    const openOptions = page.locator(
+      'lib-damocles-sword-language-selector .selectable-languages.shown'
+    );
+    await expect(openOptions).toBeVisible();
+
+    // Match by accessible name rather than an anchored text regex: each option's
+    // raw textContent carries the template's surrounding whitespace, so `^es$`
+    // never matches. The locale code is unique across the options, so a
+    // (whitespace-normalized) name match is unambiguous.
+    await openOptions.getByRole('button', { name: to }).first().click();
 
     // URL locale segment updates without a reload.
     await page.waitForURL(new RegExp(`/${to}/damoclesSword`));

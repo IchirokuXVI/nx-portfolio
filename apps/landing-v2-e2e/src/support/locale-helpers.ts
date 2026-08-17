@@ -43,9 +43,14 @@ export async function usableLocales(page: Page): Promise<string[]> {
     .locator('lib-landing-v2-language-switch .language-switch__option')
     .allInnerTexts();
 
+  // Lowercase the codes: the options render uppercase via CSS text-transform, and
+  // `innerText` reflects that, but locale codes are canonically lowercase (and the
+  // URL segment is), so callers can compare them directly against the URL locale.
   return [
     ...new Set(
-      texts.map((t) => t.trim()).filter((t) => LOCALE_SEGMENT.test(t))
+      texts
+        .map((t) => t.trim().toLowerCase())
+        .filter((t) => LOCALE_SEGMENT.test(t))
     ),
   ];
 }

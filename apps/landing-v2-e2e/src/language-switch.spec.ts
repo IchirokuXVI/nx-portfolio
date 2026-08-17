@@ -36,9 +36,12 @@ test.describe('landingV2 language switcher', () => {
       (window as unknown as { __noReload?: string }).__noReload = 'kept';
     });
 
+    // Match by accessible name rather than an anchored text regex: the option's
+    // raw textContent carries the template's surrounding whitespace, so `^es$`
+    // never matches. The locale code is unique across the options.
     await page
-      .locator('lib-landing-v2-language-switch .language-switch__option')
-      .filter({ hasText: new RegExp(`^${to}$`) })
+      .locator('lib-landing-v2-language-switch')
+      .getByRole('button', { name: to })
       .first()
       .click();
 
@@ -54,8 +57,8 @@ test.describe('landingV2 language switcher', () => {
     // The switched-to option is now the active/pressed one.
     await expect(
       page
-        .locator('lib-landing-v2-language-switch .language-switch__option')
-        .filter({ hasText: new RegExp(`^${to}$`) })
+        .locator('lib-landing-v2-language-switch')
+        .getByRole('button', { name: to })
         .first()
     ).toHaveAttribute('aria-pressed', 'true');
 

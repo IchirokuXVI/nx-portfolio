@@ -48,12 +48,16 @@ $header-border-bottom-size: 0.375em;
 
   .header-navigation-container {
     flex-grow: 1;
+    // Let this flex child shrink below its content width so a long nav (e.g. the
+    // Spanish labels) can never push the header wider than the viewport.
+    min-width: 0;
     display: flex;
     flex-direction: row;
     padding: 0 2.5%;
 
     .position-helper {
       flex-grow: 1;
+      min-width: 0;
       display: flex;
       flex-direction: row;
       gap: 2.5em;
@@ -63,10 +67,14 @@ $header-border-bottom-size: 0.375em;
 
     .navigation-links {
       flex-grow: 1;
+      min-width: 0;
       display: flex;
       flex-direction: row;
+      // Wrap as a last resort instead of overflowing the page horizontally.
+      flex-wrap: wrap;
+      justify-content: center;
       gap: 1.5em;
-      font-size: 1.75em;
+      font-size: 1.5em;
       font-family: 'Audiowide';
       text-transform: uppercase;
       text-align: center;
@@ -86,6 +94,7 @@ $header-border-bottom-size: 0.375em;
 
     .header-language-container {
       display: flex;
+      flex-shrink: 0;
       z-index: get-z('dropdown');
     }
   }
