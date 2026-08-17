@@ -16,7 +16,7 @@ export class RokuTranslatorTestingService {
     return key;
   }
 
-  withLocale<T>(project: () => Observable<T>): Observable<T> {
-    return project();
+  withLocale<T>(project: (locale: string) => Observable<T>): Observable<T> {
+    return project(this.locale());
   }
 }

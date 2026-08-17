@@ -2,11 +2,13 @@ import { NgComponentOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   inject,
   OnInit,
   signal,
   Type,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { ProjectMemory } from '@portfolio/landing-v2/data-access';
 import { TranslatedProject } from '@portfolio/landing-v2/models';
@@ -16,8 +18,8 @@ import {
   OdontogramContent,
   PortfolioContent,
 } from '@portfolio/landing-v2/ui';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
+import { combineLatest, map, switchMap } from 'rxjs';
 
 /**
  * Maps a project's `detailSlug` (the `projects/:slug` route param, see
@@ -68,14 +70,12 @@ export class ProjectPage implements OnInit {
   // TODO(di-wiring): injected as a concrete implementation instead of via a DI token bound to the service interface, so the real/API impl cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private _projectServ = inject(ProjectMemory);
   private _rokuTranslatorServ = inject(RokuTranslatorService);
+  private _destroyRef = inject(DestroyRef);
 
-  readonly locale = RokuTranslator.getLocale();
-
-  // Gates the whole render on the i18n namespace being loaded (mirrors
-  // Landing's `compReady`) — RokuTranslatorPipe is a *pure* pipe, evaluated
-  // once from a static key; rendering before `loaded$` fires would freeze
-  // every `| rokuT` output on its untranslated fallback (the raw key)
-  // forever, since a pure pipe never re-evaluates on its own.
+  // Gates the whole render on the i18n namespace being loaded (mirrors Landing's
+  // `compReady`), so the first paint never flashes raw `| rokuT` keys before the
+  // namespace resolves. The pipe is now impure and self-heals once loaded, but
+  // gating still avoids that flash on the initial render.
   compReady = signal(false);
 
   project = signal<TranslatedProject | null>(null);
@@ -88,20 +88,28 @@ export class ProjectPage implements OnInit {
   }
 
   ngOnInit() {
-    this._route.paramMap.subscribe((params) => {
-      const slug = params.get('slug') ?? '';
-      const content = CONTENT_BY_SLUG[slug];
+    // Refetch when the route slug OR the locale changes (Option C, multi-input):
+    // the router reuses this component across `projects/:slug` navigations, and a
+    // runtime language switch must reload the localized project too.
+    combineLatest([
+      this._route.paramMap.pipe(map((params) => params.get('slug') ?? '')),
+      this._rokuTranslatorServ.locale$,
+    ])
+      .pipe(
+        switchMap(([slug, locale]) => {
+          const content = CONTENT_BY_SLUG[slug];
 
-      if (!content) {
-        throw new Error(
-          `No detail-page content registered for slug "${slug}"`
-        );
-      }
+          if (!content) {
+            throw new Error(
+              `No detail-page content registered for slug "${slug}"`
+            );
+          }
 
-      this.content.set(content);
-      this._projectServ
-        .getByDetailSlug(slug, this.locale)
-        .subscribe((project) => this.project.set(project));
-    });
+          this.content.set(content);
+          return this._projectServ.getByDetailSlug(slug, locale);
+        }),
+        takeUntilDestroyed(this._destroyRef)
+      )
+      .subscribe((project) => this.project.set(project));
   }
 }

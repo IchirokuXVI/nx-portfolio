@@ -249,37 +249,57 @@ whether `switchAppLocale` stays a free function taking injected deps or becomes 
 method on `RokuLocaleStore` (recommended, so it can inject `Router` and the store
 itself). Ordering (change locale first vs navigate first) is an open question, see O2.
 
-### C. Data: sending the locale and refetching on change
+### C. Data: refetching on change (and how the locale reaches the server)
 
-Two orthogonal concerns. Keep them separate.
+> **Revision (as implemented).** Two decisions here changed once the data layer was
+> surveyed:
+>
+> 1. **The data-access services take `locale` as an explicit method argument**
+>    (`getList(locale, filter)`, `getByDetailSlug(slug, locale)`). So there is no
+>    header to send today; the "transport" question only arises for a future HTTP
+>    backend that localizes by `Accept-Language`. The blanket `localeHeaderInterceptor`
+>    was therefore removed (it was dead: every real service reads the locale as an
+>    argument). When the HTTP backend lands, attach the header at request-build time,
+>    ideally via an **opt-in `HttpContext` interceptor** so only requests you mark carry
+>    it, not blanket. See C1 below.
+> 2. **A pipe/operator cannot add a header to the request it is piped onto.** By the
+>    time any operator runs, HttpClient has already built and dispatched the request;
+>    the operator only sees the response stream. So "the `withLocale` pipe adds the
+>    header" is not achievable, and coupling the generic refetch to HTTP would break its
+>    reuse for non-request work (restart an animation, reload an asset). Refetch and
+>    transport stay separate.
+> 3. **`withLocale` provides the current locale to the projection** (`(locale) => ...`),
+>    because the services need it as an argument. The call site still never reads the
+>    locale by hand; projects that do not need it ignore the parameter.
 
-**C1. Transport: attach the locale to every request (do this regardless of the reload
-decision).** An `HttpInterceptor` reads `RokuTranslator.getLocale()` (or
-`store.locale()`) and sets it on each outgoing request:
+**C1. Transport (only when the server localizes by header).** Not needed today. When a
+real HTTP backend exists, attach the locale at request-build time via an opt-in
+interceptor gated on an `HttpContext` token, so it is explicit per call:
 
 ```ts
+// future: only requests that opt in carry the header
 export const localeHeaderInterceptor: HttpInterceptorFn = (req, next) => {
-  const locale = inject(RokuLocaleStore).locale();
+  if (!req.context.get(LOCALE_AWARE)) return next(req);
+  const locale = inject(RokuLocaleStore).getLocale();
   return next(req.clone({ setHeaders: { 'Accept-Language': locale } }));
 };
+// usage: this.http.get(url, { context: localeAware() })
 ```
 
-Preferred transport is the `Accept-Language` header: standard, requires no change to
-any service method signature, and the in-memory services can read it later when they
-become HTTP. Alternative transports (a `?locale=` query param, or an explicit method
-argument) are discussed under O3. Register once in the shell's `app.config.ts`
-(`provideHttpClient(withInterceptors([localeHeaderInterceptor]))`); it applies across
-remotes since HttpClient is shared.
+Because `withLocale` re-subscribes the source on a locale change, a re-issued request
+is a fresh request, and the interceptor stamps the current locale at dispatch, so the
+two compose without either knowing about the other. Alternative transports (a `?locale=`
+query param, an explicit argument as the in-memory services already use) are under O3.
 
 **C2. Trigger: re-run the query when the locale changes.** This is the reusable piece
 the rest of this plan is really about. See the options section.
 
 ## Reusable refetch on locale change: options
 
-Following the "locale is read, not passed" principle: the caller never passes a locale
-or a locale stream. The helpers read `locale$` from `RokuTranslatorService` (which
-delegates to `RokuLocaleStore`), and the outgoing request carries the locale via the C1
-interceptor, so the query functions below never thread a `locale` argument by hand.
+The caller never passes a locale stream. `withLocale` reads `locale$` from
+`RokuTranslatorService` (delegating to `RokuLocaleStore`) and hands the current locale
+to the projection, because the data-access services take it as an argument. Projects
+that do not need it (an animation, an asset reload) ignore the parameter.
 
 A and B are the **same mechanism**: A is the primitive, B is a pipeable wrapper that
 calls A. C is a **separate**, more general shape for the rarer case where a query
@@ -289,16 +309,17 @@ so A stays as small as possible.
 ### Option A: `withLocale(project)` primitive on the service (recommended default)
 
 Builds a stream keyed on the current locale. `switchMap` cancels the in-flight
-previous-locale request when the locale changes. The caller passes only the query.
+previous-locale subscription when the locale changes. The current locale is passed to
+the projection; the caller passes only the query.
 
 ```ts
 // method on RokuTranslatorService
-withLocale<T>(project: () => Observable<T>): Observable<T> {
-  return this._store.locale$.pipe(switchMap(project));
+withLocale<T>(project: (locale: string) => Observable<T>): Observable<T> {
+  return this._store.locale$.pipe(switchMap((locale) => project(locale)));
 }
 
 // usage — refetches whenever the language changes
-treatments$ = this.i18n.withLocale(() => this.treatmentService.getList(this.filter));
+projects$ = this.i18n.withLocale((locale) => this.projectService.getList(locale));
 ```
 
 - Pros: as small as it gets; caller passes neither locale nor locale$; `switchMap` gives

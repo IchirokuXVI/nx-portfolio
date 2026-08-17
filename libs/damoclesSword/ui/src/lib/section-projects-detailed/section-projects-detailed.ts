@@ -1,12 +1,22 @@
 import { AsyncPipe } from '@angular/common';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  OnInit,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   ProjectMemory,
   ProjectTag,
   TranslatedProject,
 } from '@portfolio/damoclesSword/data-access';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import { BorderAlignment } from '../enums/border-alignment';
 import { SectionLayout } from '../section-layout/section-layout';
 
@@ -37,6 +47,8 @@ function toDetailedProject(project: TranslatedProject): DetailedProject {
 })
 export class SectionProjectsDetailed implements OnInit {
   private readonly _projectServ = inject(ProjectMemory);
+  private readonly _i18n = inject(RokuTranslatorService);
+  private readonly _destroyRef = inject(DestroyRef);
 
   private readonly _projects = signal<TranslatedProject[]>([]);
 
@@ -48,8 +60,10 @@ export class SectionProjectsDetailed implements OnInit {
   );
 
   ngOnInit() {
-    this._projectServ
-      .getList(RokuTranslator.getLocale())
+    // Re-fetch the localized projects whenever the language changes at runtime.
+    this._i18n
+      .withLocale((locale) => this._projectServ.getList(locale))
+      .pipe(takeUntilDestroyed(this._destroyRef))
       .subscribe((projects) => this._projects.set(projects));
   }
 

@@ -126,12 +126,14 @@ export class RokuTranslatorService implements OnDestroy {
 
   /**
    * Build a stream keyed on the active locale: `project` runs on subscribe and
-   * again on every locale change, with `switchMap` cancelling the in-flight
-   * previous-locale request. The caller passes only the query; the locale is read
-   * from the store, never threaded by hand. When a query also depends on other
-   * reactive inputs, combine those with `locale$` at the call site instead.
+   * again on every locale change, with `switchMap` cancelling the previous
+   * subscription. The current locale is passed to `project` (the data-access
+   * services take it as an argument), so the call site never reads it by hand;
+   * projects that do not need it (an animation to restart, an asset to reload)
+   * can ignore the parameter. When a query also depends on other reactive inputs,
+   * combine those with `locale$` at the call site instead.
    */
-  withLocale<T>(project: () => Observable<T>): Observable<T> {
-    return this._store.locale$.pipe(switchMap(project));
+  withLocale<T>(project: (locale: string) => Observable<T>): Observable<T> {
+    return this._store.locale$.pipe(switchMap((locale) => project(locale)));
   }
 }

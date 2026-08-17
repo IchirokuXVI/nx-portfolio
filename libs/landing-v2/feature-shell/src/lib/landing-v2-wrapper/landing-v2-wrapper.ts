@@ -1,4 +1,5 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   InfoFactMemory,
   ProjectMemory,
@@ -8,7 +9,7 @@ import {
   TranslatedProject,
 } from '@portfolio/landing-v2/models';
 import { LandingV2UiModule } from '@portfolio/landing-v2/ui';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
+import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 
 /**
  * Thin routed wrapper: resolves the current locale, subscribes to the
@@ -27,18 +28,25 @@ export class LandingV2Wrapper implements OnInit {
   // TODO(di-wiring): the services below are injected as concrete implementations instead of via DI tokens bound to their interfaces, so the real/API impls cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
   private _projectServ = inject(ProjectMemory);
   private _factServ = inject(InfoFactMemory);
+  private _i18n = inject(RokuTranslatorService);
+  private _destroyRef = inject(DestroyRef);
 
   projects: TranslatedProject[] = [];
   facts: TranslatedInfoFact[] = [];
 
   ngOnInit() {
-    const locale = RokuTranslator.getLocale();
-
-    this._projectServ.getList(locale).subscribe((projects) => {
-      this.projects = projects;
-    });
-    this._factServ.getList(locale).subscribe((facts) => {
-      this.facts = facts;
-    });
+    // Re-fetch both localized lists whenever the language changes at runtime.
+    this._i18n
+      .withLocale((locale) => this._projectServ.getList(locale))
+      .pipe(takeUntilDestroyed(this._destroyRef))
+      .subscribe((projects) => {
+        this.projects = projects;
+      });
+    this._i18n
+      .withLocale((locale) => this._factServ.getList(locale))
+      .pipe(takeUntilDestroyed(this._destroyRef))
+      .subscribe((facts) => {
+        this.facts = facts;
+      });
   }
 }

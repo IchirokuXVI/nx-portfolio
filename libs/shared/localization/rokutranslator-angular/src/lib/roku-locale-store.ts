@@ -1,8 +1,8 @@
-import { inject, Injectable, signal } from '@angular/core';
-import { toObservable } from '@angular/core/rxjs-interop';
+import { inject, Injectable, Signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
-import { Observable } from 'rxjs';
+import { BehaviorSubject, Observable } from 'rxjs';
 import { writeAppLocale } from './locale-routing/app-locale-storage';
 
 /**
@@ -11,23 +11,32 @@ import { writeAppLocale } from './locale-routing/app-locale-storage';
  * `RokuTranslatorService` is instantiated per module (each remote configures its
  * own namespaces), so it cannot hold the global locale by itself. This store is
  * `providedIn: 'root'`, subscribes once to the `RokuTranslator` singleton, and
- * exposes the current locale as both a signal (for templates / the pipe) and an
- * observable (for data pipelines). The per-module service just re-exposes it.
+ * exposes the current locale as both an observable (for data pipelines) and a
+ * signal (for templates / the pipe). The per-module service just re-exposes it.
+ *
+ * The canonical holder is a `BehaviorSubject`, so `locale$` replays the current
+ * value synchronously on subscribe — a locale-keyed fetch resolves in the same
+ * tick as a plain call would, which keeps synchronous consumers (and their tests)
+ * working. The signal is derived from it for change-detection.
  */
 @Injectable({ providedIn: 'root' })
 export class RokuLocaleStore {
   private _router = inject(Router);
 
-  private readonly _locale = signal(RokuLocaleStore.readInitialLocale());
-
-  /** Current locale as a signal. Reading it in a view wakes OnPush components. */
-  readonly locale = this._locale.asReadonly();
+  private readonly _locale$ = new BehaviorSubject<string>(
+    RokuLocaleStore.readInitialLocale()
+  );
 
   /** Current locale as an observable. Data pipelines key their refetch off this. */
-  readonly locale$: Observable<string> = toObservable(this._locale);
+  readonly locale$: Observable<string> = this._locale$.asObservable();
+
+  /** Current locale as a signal. Reading it in a view wakes OnPush components. */
+  readonly locale: Signal<string> = toSignal(this._locale$, {
+    requireSync: true,
+  });
 
   constructor() {
-    RokuTranslator.onLocaleChange((locale) => this._locale.set(locale));
+    RokuTranslator.onLocaleChange((locale) => this._locale$.next(locale));
   }
 
   /**
@@ -44,7 +53,7 @@ export class RokuLocaleStore {
   }
 
   getLocale(): string {
-    return this._locale();
+    return this._locale$.value;
   }
 
   /**
