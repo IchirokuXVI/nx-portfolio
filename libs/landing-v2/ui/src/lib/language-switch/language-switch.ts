@@ -1,17 +1,21 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
+import {
+  injectSupportedLocales,
+  RokuLocaleStore,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   LANDING_V2_APP_KEY,
-  LANDING_V2_LOCALES,
+  LANDING_V2_AVAILABLE_LOCALES,
 } from '../landing-v2-locales';
 
 /**
  * Compact locale toggle shown in `SiteHeader` and `DetailPageShell`, the two
  * places every landingV2 page routes through.
  *
- * The options come from `LANDING_V2_LOCALES` (the same const landingV2 declares
- * to `RokuTranslatorModule.withConfig` and its route data), so the switcher only
- * ever offers locales this app actually ships.
+ * The options come from the app's enabled locales, read off the route `data`
+ * (`supportedLocales`, set by the feature-shell) so the switcher always matches
+ * whatever the app turned on — not a hardcoded UI constant. Outside a route (bare
+ * component tests) it falls back to every available locale.
  *
  * Selecting a locale delegates to `RokuLocaleStore.switchAppLocale`, which
  * persists the choice for this app and switches the language in place (no reload,
@@ -27,7 +31,7 @@ import {
 export class LanguageSwitch {
   private _localeStore = inject(RokuLocaleStore);
 
-  readonly locales = LANDING_V2_LOCALES;
+  readonly locales = injectSupportedLocales() ?? LANDING_V2_AVAILABLE_LOCALES;
   readonly selectedLocale = this._localeStore.locale;
 
   select(locale: string) {

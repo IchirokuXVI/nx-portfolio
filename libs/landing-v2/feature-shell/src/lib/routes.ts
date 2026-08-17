@@ -3,10 +3,10 @@ import { localeCorrectionGuard } from '@portfolio/localization/rokutranslator-an
 import {
   LANDING_V2_APP_KEY,
   LANDING_V2_DEFAULT_LOCALE,
-  LANDING_V2_LOCALES,
   Layout,
 } from '@portfolio/landing-v2/ui';
 import { LandingV2Wrapper } from './landing-v2-wrapper/landing-v2-wrapper';
+import { LANDING_V2_USABLE_LOCALES } from './usable-locales';
 
 // landingV2 mounts at the locale root (D2), so detail pages are namespaced
 // under `projects/` to avoid colliding with the odontogram/damoclesSword
@@ -30,7 +30,7 @@ export const LandingV2Routes: Route[] = [
     canActivate: [localeCorrectionGuard],
     data: {
       appKey: LANDING_V2_APP_KEY,
-      supportedLocales: LANDING_V2_LOCALES,
+      supportedLocales: LANDING_V2_USABLE_LOCALES,
       defaultLocale: LANDING_V2_DEFAULT_LOCALE,
     },
     children: [

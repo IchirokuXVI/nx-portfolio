@@ -9,6 +9,7 @@ export { RokuTranslatorTestingModule } from './lib/testing/rokutranslator-testin
 
 // Locale-first routing helpers (see 0002 locale routing refactor).
 export { readAppLocale, writeAppLocale } from './lib/locale-routing/app-locale-storage';
+export { injectSupportedLocales } from './lib/locale-routing/inject-supported-locales';
 export { isLocaleSegment } from './lib/locale-routing/is-locale-segment';
 export { localeCorrectionGuard } from './lib/locale-routing/locale-correction-guard';
 export { localeGuard } from './lib/locale-routing/locale-guard';

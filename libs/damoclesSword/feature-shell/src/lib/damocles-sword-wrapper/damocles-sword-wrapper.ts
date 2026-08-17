@@ -2,10 +2,10 @@ import { Component, inject } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   DAMOCLES_APP_KEY,
-  DAMOCLES_LOCALES,
   DamoclesSwordUiModule,
 } from '@portfolio/damoclesSword/ui';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
+import { DAMOCLES_USABLE_LOCALES } from '../usable-locales';
 
 @Component({
   selector: 'lib-damocles-sword-wrapper',
@@ -38,7 +38,7 @@ export class DamoclesSwordWrapper {
 
   private _localeStore = inject(RokuLocaleStore);
 
-  locales = DAMOCLES_LOCALES;
+  locales = DAMOCLES_USABLE_LOCALES;
 
   /** Reads the store signal, so it stays in sync after an in-place switch. */
   selectedLocale = this._localeStore.locale;

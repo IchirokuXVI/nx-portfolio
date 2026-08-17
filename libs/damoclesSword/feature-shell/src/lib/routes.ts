@@ -3,9 +3,9 @@ import { localeCorrectionGuard } from '@portfolio/localization/rokutranslator-an
 import {
   DAMOCLES_APP_KEY,
   DAMOCLES_DEFAULT_LOCALE,
-  DAMOCLES_LOCALES,
 } from '@portfolio/damoclesSword/ui';
 import { DamoclesSwordWrapper } from './damocles-sword-wrapper/damocles-sword-wrapper';
+import { DAMOCLES_USABLE_LOCALES } from './usable-locales';
 
 export const appRoutes: Route[] = [
   {
@@ -14,7 +14,7 @@ export const appRoutes: Route[] = [
     canActivate: [localeCorrectionGuard],
     data: {
       appKey: DAMOCLES_APP_KEY,
-      supportedLocales: DAMOCLES_LOCALES,
+      supportedLocales: DAMOCLES_USABLE_LOCALES,
       defaultLocale: DAMOCLES_DEFAULT_LOCALE,
     },
     children: [
