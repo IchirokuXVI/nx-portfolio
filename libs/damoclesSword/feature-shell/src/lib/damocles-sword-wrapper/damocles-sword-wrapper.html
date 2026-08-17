@@ -2,7 +2,7 @@
   (languageChange)="changeLocale($event)"
   [languages]="locales"
   [navLinks]="headerNavLinks"
-  [selectedLanguage]="selectedLocale"
+  [selectedLanguage]="selectedLocale()"
 >
   <ng-template libDamoclesSwordLayoutContent>
     <router-outlet></router-outlet>

@@ -4,7 +4,7 @@ import { DamoclesContent } from './damocles-content/damocles-content';
 import { DetailPageShell } from './detail-page-shell/detail-page-shell';
 import { Hero } from './hero/hero';
 import { InfoTable } from './info-table/info-table';
-import { LANDING_V2_LOCALES } from './landing-v2-locales';
+import { LANDING_V2_AVAILABLE_LOCALES } from './landing-v2-locales';
 import { LanguageSwitch } from './language-switch/language-switch';
 import { Landing } from './landing/landing';
 import { OdontogramContent } from './odontogram-content/odontogram-content';
@@ -32,7 +32,7 @@ const components = [
 @NgModule({
   imports: [
     RokuTranslatorModule.withConfig({
-      locales: LANDING_V2_LOCALES,
+      locales: LANDING_V2_AVAILABLE_LOCALES,
       defaultNamespace: 'landingV2',
       loader: (locale) => import(`../../assets/i18n/${locale}.json`),
     }),

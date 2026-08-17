@@ -1,6 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, Injector, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  inject,
+  Injector,
+  OnInit,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
+import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import {
   OdontogramMemory,
   ToothTreatmentMemory,
@@ -32,6 +41,8 @@ export class OdontogramFeatureFullOdontogramCrud implements OnInit {
   private _odontogramServ = inject(OdontogramMemory);
   private _dialog = inject(MatDialog);
   private _injector = inject(Injector);
+  private _i18n = inject(RokuTranslatorService);
+  private _destroyRef = inject(DestroyRef);
 
   odontograms = signal<Odontogram[] | undefined>(undefined);
   treatments = signal<ToothTreatment[] | undefined>(undefined);
@@ -41,17 +52,24 @@ export class OdontogramFeatureFullOdontogramCrud implements OnInit {
   selectedOdontogram?: Odontogram;
 
   ngOnInit() {
-    this._odontogramServ.getList().subscribe((odontograms) => {
-      this.odontograms.set(odontograms);
+    // Reference for the locale-aware data pattern (0003): key the initial load on
+    // the active locale via `withLocale`, so it re-fetches when the language is
+    // switched at runtime (the request carries Accept-Language via the shell's
+    // interceptor). `takeUntilDestroyed` closes the locale-driven stream.
+    this._i18n
+      .withLocale(() => this._odontogramServ.getList())
+      .pipe(takeUntilDestroyed(this._destroyRef))
+      .subscribe((odontograms) => {
+        this.odontograms.set(odontograms);
 
-      this.selectedOdontogram = odontograms[2];
+        this.selectedOdontogram = odontograms[2];
 
-      this._toothTreatmentServ
-        .getList({ odontogram: this.selectedOdontogram?.id })
-        .subscribe((treatments) => {
-          this.treatments.set(treatments);
-        });
-    });
+        this._toothTreatmentServ
+          .getList({ odontogram: this.selectedOdontogram?.id })
+          .subscribe((treatments) => {
+            this.treatments.set(treatments);
+          });
+      });
   }
 
   onToothSelected(tooth: Tooth) {

@@ -2,11 +2,10 @@ import { Component, inject } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   DAMOCLES_APP_KEY,
-  DAMOCLES_LOCALES,
   DamoclesSwordUiModule,
 } from '@portfolio/damoclesSword/ui';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
-import { switchAppLocale } from '@portfolio/localization/rokutranslator-angular';
+import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
+import { DAMOCLES_USABLE_LOCALES } from '../usable-locales';
 
 @Component({
   selector: 'lib-damocles-sword-wrapper',
@@ -37,18 +36,16 @@ export class DamoclesSwordWrapper {
     },
   ];
 
-  locales: string[];
+  private _localeStore = inject(RokuLocaleStore);
 
-  selectedLocale: string;
+  locales = DAMOCLES_USABLE_LOCALES;
 
-  constructor() {
-    this.locales = DAMOCLES_LOCALES;
-    this.selectedLocale = RokuTranslator.getLocale();
-  }
+  /** Reads the store signal, so it stays in sync after an in-place switch. */
+  selectedLocale = this._localeStore.locale;
 
   changeLocale(language: string) {
-    // Post-render user switch: persist for this app and reload to the new
-    // locale URL so localized data is re-fetched (see 0002).
-    switchAppLocale(DAMOCLES_APP_KEY, language);
+    // Post-render user switch: persist for this app and switch the language in
+    // place, no reload (see 0003).
+    void this._localeStore.switchAppLocale(DAMOCLES_APP_KEY, language);
   }
 }

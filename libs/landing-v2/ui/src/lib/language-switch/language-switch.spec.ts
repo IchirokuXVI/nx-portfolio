@@ -1,32 +1,22 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
-import { switchAppLocale } from '@portfolio/localization/rokutranslator-angular';
+import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import { LANDING_V2_APP_KEY } from '../landing-v2-locales';
 import { LanguageSwitch } from './language-switch';
 
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-    },
-  };
-});
-
-jest.mock('@portfolio/localization/rokutranslator-angular', () => {
-  return {
-    switchAppLocale: jest.fn(),
-  };
-});
-
 describe('LanguageSwitch', () => {
   let fixture: ComponentFixture<LanguageSwitch>;
+  let localeStore: { locale: ReturnType<typeof signal<string>>; switchAppLocale: jest.Mock };
 
   beforeEach(async () => {
-    jest.clearAllMocks();
-    (RokuTranslator.getLocale as jest.Mock).mockReturnValue('en');
+    localeStore = {
+      locale: signal('en'),
+      switchAppLocale: jest.fn(),
+    };
 
     await TestBed.configureTestingModule({
       imports: [LanguageSwitch],
+      providers: [{ provide: RokuLocaleStore, useValue: localeStore }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LanguageSwitch);
@@ -59,7 +49,10 @@ describe('LanguageSwitch', () => {
 
     esButton.click();
 
-    expect(switchAppLocale).toHaveBeenCalledWith(LANDING_V2_APP_KEY, 'es');
+    expect(localeStore.switchAppLocale).toHaveBeenCalledWith(
+      LANDING_V2_APP_KEY,
+      'es'
+    );
   });
 
   it('does not switch when clicking the already-active locale', () => {
@@ -70,6 +63,6 @@ describe('LanguageSwitch', () => {
 
     enButton.click();
 
-    expect(switchAppLocale).not.toHaveBeenCalled();
+    expect(localeStore.switchAppLocale).not.toHaveBeenCalled();
   });
 });

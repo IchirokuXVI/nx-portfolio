@@ -8,6 +8,7 @@ import { SectionNews } from './section-news';
 jest.mock('@portfolio/localization/rokutranslator', () => ({
   RokuTranslator: {
     getLocale: jest.fn().mockReturnValue('en'),
+    onLocaleChange: jest.fn().mockReturnValue(() => undefined),
   },
 }));
 

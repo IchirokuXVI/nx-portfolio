@@ -4,8 +4,8 @@ import { OdontogramFeatureFullOdontogramCrud } from '@portfolio/odontogram/featu
 import {
   ODONTOGRAM_APP_KEY,
   ODONTOGRAM_DEFAULT_LOCALE,
-  ODONTOGRAM_LOCALES,
 } from '@portfolio/odontogram/ui';
+import { ODONTOGRAM_USABLE_LOCALES } from './usable-locales';
 
 export const appRoutes: Route[] = [
   {
@@ -14,7 +14,7 @@ export const appRoutes: Route[] = [
     canActivate: [localeCorrectionGuard],
     data: {
       appKey: ODONTOGRAM_APP_KEY,
-      supportedLocales: ODONTOGRAM_LOCALES,
+      supportedLocales: ODONTOGRAM_USABLE_LOCALES,
       defaultLocale: ODONTOGRAM_DEFAULT_LOCALE,
     },
   },
