@@ -1,5 +1,4 @@
 import { NgModule } from '@angular/core';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
 import { ODONTOGRAM_LOCALES } from './odontogram-locales';
 import { OdontogramSectorsView } from './odontogram-sectors-view/odontogram-sectors-view';
@@ -32,7 +31,6 @@ import { ToothTreatmentsModal } from './tooth-treatments-modal/tooth-treatments-
   exports: [OdontogramSectorsView],
 })
 export class OdontogramUiModule {
-  constructor() {
-    RokuTranslator.addNamespace('odontogram/models');
-  }
+  // The `odontogram/models` namespace is registered by RokuTranslatorService from
+  // the `namespaces` config above; no manual RokuTranslator.addNamespace needed.
 }

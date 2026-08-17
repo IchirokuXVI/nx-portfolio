@@ -1,4 +1,7 @@
+export { localeHeaderInterceptor } from './lib/locale-header-interceptor';
 export { provideRokuTranslator } from './lib/provide-rokutranslator';
+export { refetchOnLocaleChange } from './lib/refetch-on-locale-change';
+export { RokuLocaleStore } from './lib/roku-locale-store';
 export { RokuTranslatorModule } from './lib/rokutranslator-module';
 export { RokuTranslatorPipe } from './lib/rokutranslator-pipe';
 export { RokuTranslatorService } from './lib/rokutranslator-service';
@@ -15,4 +18,3 @@ export {
   resolveDesiredLocale,
   resolveGuessLocale,
 } from './lib/locale-routing/resolve-locale';
-export { switchAppLocale } from './lib/locale-routing/switch-app-locale';

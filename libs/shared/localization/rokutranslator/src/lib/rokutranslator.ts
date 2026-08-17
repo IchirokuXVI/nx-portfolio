@@ -35,9 +35,24 @@ class RokuTranslator {
 
   private i18nextInstance?: i18n;
 
-  public onLocaleChange: (locale: string) => void = () => {
-    // Notification hook; overridden by consumers that want to react to a change.
-  };
+  private localeListeners = new Set<(locale: string) => void>();
+
+  /**
+   * Register a listener notified after every locale change. Returns an
+   * unsubscribe function. Multicast on purpose: shell and every remote can
+   * observe the same singleton without clobbering each other (the old single
+   * mutable callback let the last assignor win).
+   */
+  public onLocaleChange(listener: (locale: string) => void): () => void {
+    this.localeListeners.add(listener);
+    return () => this.localeListeners.delete(listener);
+  }
+
+  private emitLocaleChange(locale: string): void {
+    for (const listener of this.localeListeners) {
+      listener(locale);
+    }
+  }
 
   async init(config: Partial<RokuTranslatorConfig> = {}): Promise<void> {
     this.config = {
@@ -189,12 +204,15 @@ class RokuTranslator {
     this.config.locale = locale;
 
     if (this.i18nextInstance) {
+      // changeLanguage resolves once i18next has loaded the active namespaces for
+      // the new locale (via the backend `read` loader), so listeners never see a
+      // locale whose strings are not ready yet.
       await this.i18nextInstance.changeLanguage(locale);
     }
 
     // Persistence is per app and owned by the Angular routing layer
     // (roku-locale:{appKey}); the core no longer keeps a single global key.
-    this.onLocaleChange(locale);
+    this.emitLocaleChange(locale);
   }
 
   isLocaleValid(locale: string) {
@@ -247,9 +265,18 @@ class RokuTranslator {
     namespace: string,
     loader: LoaderFunction
   ): void {
-    this.loadersByLocaleAndNamespace
-      .get(this.formatLocale(this.formatLocale(locale)))
-      ?.set(namespace, loader);
+    const key = this.formatLocale(locale);
+    let namespaceLoaders = this.loadersByLocaleAndNamespace.get(key);
+
+    if (!namespaceLoaders) {
+      // The per-locale map has to be created here; without it the optional chain
+      // silently dropped every loader, leaving the i18next backend unable to load
+      // any namespace on a locale switch.
+      namespaceLoaders = new Map();
+      this.loadersByLocaleAndNamespace.set(key, namespaceLoaders);
+    }
+
+    namespaceLoaders.set(namespace, loader);
   }
 
   async addTranslations({
@@ -274,10 +301,11 @@ class RokuTranslator {
         this.loadersByLocaleAndNamespace.keys()
       );
 
-      if (
-        this.config.locale === locale &&
-        this.config.namespaces.includes(namespace)
-      ) {
+      // Eager-load every registered locale (not just the current one) as long as
+      // the namespace is active, so a runtime locale switch is instant and never
+      // flashes missing keys. The lazy backend `read` path still covers anything
+      // registered after init.
+      if (this.config.namespaces.includes(namespace)) {
         await this.loadTranslations(locale, namespace, translations);
       }
     }

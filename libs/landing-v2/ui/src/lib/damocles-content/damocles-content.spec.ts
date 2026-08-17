@@ -11,6 +11,7 @@ jest.mock('@portfolio/localization/rokutranslator', () => {
   return {
     RokuTranslator: {
       getLocale: jest.fn().mockReturnValue('en'),
+      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
       changeLocale: jest.fn(),
     },
   };
