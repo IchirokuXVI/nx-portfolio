@@ -1,21 +1,26 @@
 import { expect, Page, test } from '@playwright/test';
+import { settle, usableLocales } from './support/locale-helpers';
 
 /**
  * Regression guard against horizontal scroll on the damoclesSword pages.
  *
  * A page should never be wider than its viewport: if it is, the user gets an
  * unwanted horizontal scrollbar. We check every viewport across a range of
- * sizes, since overflow bugs are almost always viewport-specific.
+ * sizes, since overflow bugs are almost always viewport-specific, and every
+ * usable locale, since a longer translation (Spanish runs longer than English)
+ * is a common source of overflow.
  *
- * Routes are not hardcoded: each viewport test crawls starting from `baseURL`
- * (the damoclesSword page, from the Playwright config, which also spins up the
- * dev server) and follows only in-app links that stay within that route
- * subtree, so newly added damoclesSword routes are covered automatically while
- * the shared shell navigation into other micro-frontends (landing/odontogram)
- * is excluded. Crawling and measuring happen together at the viewport under
- * test — the layout that hides or reveals links is the same one being probed
- * for overflow, so a route is only discovered (and only checked) at sizes where
- * it is actually reachable.
+ * Routes are not hardcoded: each viewport test discovers the locale set once (in
+ * the default language) and then crawls starting from `baseURL` (the
+ * damoclesSword page, from the Playwright config, which also spins up the dev
+ * server), following only in-app links that stay within that route subtree, so
+ * newly added damoclesSword routes are covered automatically while the shared
+ * shell navigation into other micro-frontends (landing/odontogram) is excluded.
+ * Crawling happens in the default locale at the viewport under test — the layout
+ * that hides or reveals links is the same one being probed for overflow, so a
+ * route is only discovered (and only checked) at sizes where it is actually
+ * reachable — and each discovered route is then measured for overflow in every
+ * locale.
  */
 
 const viewports = [
@@ -24,6 +29,14 @@ const viewports = [
   { name: 'tablet', width: 768, height: 1024 },
   { name: 'laptop', width: 1280, height: 800 },
   { name: 'desktop', width: 1920, height: 1080 },
+
+  // High-DPI panels at a reduced browser zoom. A page's layout responds to the
+  // *effective* CSS viewport (physical resolution x zoom), so e.g. a 3840x2160
+  // screen at 25% zoom lays out as if it were 960x540. 3840x2160 @ 50% zoom
+  // resolves to 1920x1080, which the 'desktop' entry above already covers.
+  { name: '1080p@25%', width: 480, height: 270 },
+  { name: 'qhd@25%', width: 640, height: 360 },
+  { name: '4k@25%', width: 960, height: 540 },
 ];
 
 // Sub-pixel rounding can nudge scrollWidth a hair past clientWidth without a
@@ -38,34 +51,12 @@ function normalizePath(pathname: string): string {
   return clean === '' ? '/' : clean;
 }
 
-/**
- * Wait for a navigated page to finish rendering before we read links or measure
- * layout.
- *
- * We wait for web fonts (so text-width measurements are final) and
- * for the DOM to go quiet: the lazy-loaded remote mounting into the
- * shell is a burst of DOM mutations, so "no structural mutations for
- * a short window" is a reliable render-idle signal. A hard cap guarantees
- * we never wait forever if something animates the DOM indefinitely.
- */
-async function settle(page: Page): Promise<void> {
-  await page
-    .evaluate(async () => {
-      await document.fonts.ready;
-      await new Promise<void>((resolve) => {
-        let quiet = setTimeout(resolve, 400);
-        const observer = new MutationObserver(() => {
-          clearTimeout(quiet);
-          quiet = setTimeout(resolve, 400);
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        setTimeout(() => {
-          observer.disconnect();
-          resolve();
-        }, 8000);
-      });
-    })
-    .catch(() => undefined);
+/** Swap the leading locale segment of a route path for another locale. */
+function withLocale(path: string, locale: string): string {
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length === 0) return `/${locale}`;
+  segments[0] = locale;
+  return '/' + segments.join('/');
 }
 
 interface ScrollProbe {
@@ -157,15 +148,29 @@ for (const viewport of viewports) {
       'baseURL must be configured in playwright.config.ts'
     ).toBeTruthy();
 
+    const scope = normalizePath(new URL(baseURL as string).pathname);
+    const defaultLocale = scope.split('/').filter(Boolean)[0];
+
+    // The usable-locale set is app config (viewport-independent), so discover it
+    // once, up front, at a wide viewport where the switcher's options are laid
+    // out and readable.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(scope);
+    await settle(page);
+    const locales = await usableLocales(page);
+    expect(
+      locales.length,
+      'expected at least one usable locale'
+    ).toBeGreaterThan(0);
+
+    // Breadth-first crawl seeded from `baseURL`'s path, at the viewport under
+    // test: routes are discovered in the default locale, and each is then
+    // measured for horizontal scroll in every locale.
     await page.setViewportSize({
       width: viewport.width,
       height: viewport.height,
     });
 
-    // Breadth-first crawl seeded from `baseURL`'s path, at the viewport under
-    // test: every route is measured for horizontal scroll the moment it's
-    // visited, and its in-app links feed the queue.
-    const scope = normalizePath(new URL(baseURL as string).pathname);
     const seen = new Set<string>();
     const queue: string[] = [scope];
     const visited: string[] = [];
@@ -175,39 +180,55 @@ for (const viewport of viewports) {
       if (seen.has(route)) continue;
       seen.add(route);
 
+      // Discover this route's in-app links once, in the default locale, at the
+      // viewport under test (the links a narrow layout hides feed nothing to the
+      // queue, so unreachable routes aren't crawled). A late-loading webfont can
+      // widen nowrap text, so settle before reading anything.
       await page.goto(route);
-      // Let the lazy-loaded remote and web fonts settle before measuring — a
-      // late-loading webfont can widen nowrap text and change the outcome.
       await settle(page);
       visited.push(route);
-
-      const probe = await probeHorizontalScroll(page);
-
-      const detail =
-        `\nRoute "${route}" @ ${viewport.name} (${viewport.width}px):` +
-        `\n  scrolledX=${probe.scrolledX}px (expected 0)` +
-        `\n  scrollWidth=${probe.scrollWidth} clientWidth=${probe.clientWidth}` +
-        (probe.offenders.length
-          ? `\n  overflowing elements:\n    ${probe.offenders.join('\n    ')}`
-          : '');
-
-      // Soft assertions so every route is reported in a single run, rather than
-      // stopping at the first failure.
-      expect
-        .soft(probe.scrolledX, `Page scrolled horizontally.${detail}`)
-        .toBe(0);
-      expect
-        .soft(probe.scrollWidth, `Content is wider than the viewport.${detail}`)
-        .toBeLessThanOrEqual(probe.clientWidth + TOLERANCE_PX);
-
       for (const next of await inScopeLinks(page, scope)) {
         if (!seen.has(next) && !queue.includes(next)) queue.push(next);
+      }
+
+      // Measure the same route in every locale. The default locale is already
+      // loaded from the link-discovery navigation above, so probe it in place.
+      for (const locale of locales) {
+        const localeRoute = withLocale(route, locale);
+        if (locale !== defaultLocale) {
+          await page.goto(localeRoute);
+          await settle(page);
+        }
+
+        const probe = await probeHorizontalScroll(page);
+
+        const detail =
+          `\nRoute "${localeRoute}" @ ${viewport.name} (${viewport.width}px):` +
+          `\n  scrolledX=${probe.scrolledX}px (expected 0)` +
+          `\n  scrollWidth=${probe.scrollWidth} clientWidth=${probe.clientWidth}` +
+          (probe.offenders.length
+            ? `\n  overflowing elements:\n    ${probe.offenders.join('\n    ')}`
+            : '');
+
+        // Soft assertions so every route/locale is reported in a single run,
+        // rather than stopping at the first failure.
+        expect
+          .soft(probe.scrolledX, `Page scrolled horizontally.${detail}`)
+          .toBe(0);
+        expect
+          .soft(
+            probe.scrollWidth,
+            `Content is wider than the viewport.${detail}`
+          )
+          .toBeLessThanOrEqual(probe.clientWidth + TOLERANCE_PX);
       }
     }
 
     console.log(
       `[crawl] ${viewport.name} visited routes:`,
-      JSON.stringify(visited)
+      JSON.stringify(visited),
+      `x ${locales.length} locale(s):`,
+      JSON.stringify(locales)
     );
   });
 }

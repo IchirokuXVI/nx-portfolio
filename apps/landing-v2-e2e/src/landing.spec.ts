@@ -1,35 +1,11 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { settle } from './support/locale-helpers';
 
 /**
  * Smoke test for the landingV2 landing page. It renders through the shell
  * (remotes render blank on their own port), so `baseURL` points at the
  * shell's locale root (see playwright.config.ts).
  */
-
-/**
- * Wait for the lazy-loaded remote and web fonts to settle before asserting.
- * Mirrors the render-idle signal used by the horizontal-scroll spec: web
- * fonts ready plus a quiet window with no structural DOM mutations.
- */
-async function settle(page: Page): Promise<void> {
-  await page
-    .evaluate(async () => {
-      await document.fonts.ready;
-      await new Promise<void>((resolve) => {
-        let quiet = setTimeout(resolve, 400);
-        const observer = new MutationObserver(() => {
-          clearTimeout(quiet);
-          quiet = setTimeout(resolve, 400);
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        setTimeout(() => {
-          observer.disconnect();
-          resolve();
-        }, 8000);
-      });
-    })
-    .catch(() => undefined);
-}
 
 test.describe('landingV2 landing page', () => {
   test.beforeEach(async ({ page, baseURL }) => {

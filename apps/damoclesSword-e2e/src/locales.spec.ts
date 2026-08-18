@@ -1,22 +1,16 @@
 import { expect, test } from '@playwright/test';
-import {
-  documentWidths,
-  findRawKeys,
-  settle,
-  usableLocales,
-} from './support/locale-helpers';
+import { findRawKeys, settle, usableLocales } from './support/locale-helpers';
 
 /**
  * Cross-language coverage for damoclesSword. These checks are locale-affected, so
  * they run for every usable locale (discovered live from the switcher). Checks
  * that are not language-specific live in the other specs and run once.
+ *
+ * Horizontal overflow per locale is not checked here: no-horizontal-scroll.spec
+ * already crawls every route, at every viewport, in every locale.
  */
 
 const PATH = '/damoclesSword';
-
-// Sub-pixel rounding can nudge scrollWidth a hair past clientWidth without a real
-// scrollbar; anything beyond this is genuine horizontal overflow.
-const OVERFLOW_TOLERANCE_PX = 1;
 
 async function discoverLocales(page: import('@playwright/test').Page) {
   await page.goto(`/en${PATH}`);
@@ -64,35 +58,6 @@ test.describe('damoclesSword localization', () => {
         .soft(clash, `"${locale}" renders identical content to "${clash?.[0]}"`)
         .toBeUndefined();
       seen.set(locale, text);
-    }
-  });
-
-  test('no horizontal overflow in any locale (mobile + desktop)', async ({
-    page,
-  }) => {
-    const locales = await discoverLocales(page);
-    const viewports = [
-      { name: 'mobile', width: 360, height: 780 },
-      { name: 'desktop', width: 1440, height: 900 },
-    ];
-
-    for (const locale of locales) {
-      for (const vp of viewports) {
-        await test.step(`"${locale}" @ ${vp.name}`, async () => {
-          await page.setViewportSize({ width: vp.width, height: vp.height });
-          await page.goto(`/${locale}${PATH}`);
-          await settle(page);
-
-          const { scrollWidth, clientWidth } = await documentWidths(page);
-          expect
-            .soft(
-              scrollWidth,
-              `Content wider than viewport in "${locale}" @ ${vp.name} ` +
-                `(scrollWidth=${scrollWidth} clientWidth=${clientWidth})`
-            )
-            .toBeLessThanOrEqual(clientWidth + OVERFLOW_TOLERANCE_PX);
-        });
-      }
     }
   });
 });

@@ -93,13 +93,3 @@ export async function findRawKeys(page: Page): Promise<string[]> {
     return Array.from(offenders);
   });
 }
-
-/** scrollWidth vs clientWidth of the document, for a horizontal-overflow check. */
-export function documentWidths(
-  page: Page
-): Promise<{ scrollWidth: number; clientWidth: number }> {
-  return page.evaluate(() => {
-    const doc = document.documentElement;
-    return { scrollWidth: doc.scrollWidth, clientWidth: doc.clientWidth };
-  });
-}
