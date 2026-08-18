@@ -1,4 +1,5 @@
 import { expect, Locator, Page, test } from '@playwright/test';
+import { settle } from './support/locale-helpers';
 
 /**
  * Guards that every image/trailer inside a given section renders at the same
@@ -16,27 +17,6 @@ import { expect, Locator, Page, test } from '@playwright/test';
 const TOLERANCE_PX = 1.5;
 
 test.use({ viewport: { width: 1440, height: 900 } });
-
-/** Web-fonts ready + a quiet window with no DOM mutations (mirrors about.spec). */
-async function settle(page: Page): Promise<void> {
-  await page
-    .evaluate(async () => {
-      await document.fonts.ready;
-      await new Promise<void>((resolve) => {
-        let quiet = setTimeout(resolve, 400);
-        const observer = new MutationObserver(() => {
-          clearTimeout(quiet);
-          quiet = setTimeout(resolve, 400);
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        setTimeout(() => {
-          observer.disconnect();
-          resolve();
-        }, 8000);
-      });
-    })
-    .catch(() => undefined);
-}
 
 /**
  * Asserts every element matched by `selector` shares one bounding-box size.

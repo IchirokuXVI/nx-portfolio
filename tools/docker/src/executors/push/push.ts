@@ -2,6 +2,7 @@ import { PromiseExecutor } from '@nx/devkit';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import build from '../build/build';
+import { resolveVersionTags } from '../version-tags';
 import { PushExecutorSchema } from './schema';
 
 const execAsync = promisify(exec);
@@ -25,7 +26,8 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
     throw new Error(`Project ${context.projectName} not found.`);
   }
 
-  const { imageName, versionTags } = options;
+  const { imageName } = options;
+  const versionTags = resolveVersionTags(options.versionTags);
   const registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY;
 
   const skipLogin =

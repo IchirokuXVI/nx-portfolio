@@ -4,13 +4,21 @@ import merge from 'webpack-merge';
 import mfeConfig from './module-federation.config';
 
 export default composePlugins(async (config, { options, context }) => {
+  // The remotes live on a per-environment micro-frontend host. The base URL is
+  // baked into the shell bundle at build time, so it is supplied via MFE_BASE_URL
+  // (production by default; staging builds set it to the staging host). Every
+  // remote is loaded from this base, which keeps the remote images environment
+  // agnostic and lets a release promote the exact tested artifacts.
+  const mfeBaseUrl = process.env.MFE_BASE_URL || 'https://mfe.ichirokuxvi.com';
+
   const federatedModules = await withModuleFederation(
     {
       ...mfeConfig,
       remotes: [
-        ['landing', 'https://mfe.ichirokuxvi.com/landing'],
-        ['odontogram', 'https://mfe.ichirokuxvi.com/odontogram'],
-        ['damoclesSword', 'https://mfe.ichirokuxvi.com/damoclesSword'],
+        ['landing', `${mfeBaseUrl}/landing`],
+        ['odontogram', `${mfeBaseUrl}/odontogram`],
+        ['damoclesSword', `${mfeBaseUrl}/damoclesSword`],
+        ['landingV2', `${mfeBaseUrl}/landingV2`],
       ],
     },
     { dts: false }

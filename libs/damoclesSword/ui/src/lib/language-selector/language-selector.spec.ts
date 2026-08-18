@@ -46,7 +46,7 @@ describe('LanguageSelector', () => {
     fixture.nativeElement.remove();
   });
 
-  it('keeps the dropdown open when the click lands inside it', () => {
+  it('document click keeps the dropdown open when the click lands on the component', () => {
     component.showLanguageOptions.set(true);
 
     const inside: HTMLElement = fixture.nativeElement.querySelector(
@@ -58,7 +58,7 @@ describe('LanguageSelector', () => {
     expect(component.showLanguageOptions()).toBe(true);
   });
 
-  it('does nothing when the dropdown is already closed', () => {
+  it('document click does nothing when the dropdown is already closed', () => {
     component.showLanguageOptions.set(false);
 
     const outside = document.createElement('div');
@@ -67,5 +67,20 @@ describe('LanguageSelector', () => {
 
     expect(component.showLanguageOptions()).toBe(false);
     outside.remove();
+  });
+
+  it('closes the dropdown when changing language', async () => {
+    component.showLanguageOptions.set(true);
+
+    const unselectedLanguageOption: HTMLElement =
+      fixture.nativeElement.querySelector(
+        '.selectable-languages .language-label:not(.selected-language)'
+      );
+    expect(unselectedLanguageOption).toBeTruthy();
+    unselectedLanguageOption.dispatchEvent(
+      new MouseEvent('click', { bubbles: true })
+    );
+
+    expect(component.showLanguageOptions()).toBe(false);
   });
 });

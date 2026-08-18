@@ -1,6 +1,23 @@
 namespace: nx-portfolio
 replicaCount: 1
 
+# Image tags.
+#
+# Production apps are pinned to an immutable release version. The live value is
+# kept on the deploy host (helm-live/prod-tag.yaml, outside the rsynced path) and
+# passed with `-f`, so it survives staging deploys and can be hand-edited. A
+# rollback is just re-pinning a previous version whose images still exist.
+#
+# Staging apps track a mutable tag that CI overwrites on every push to main; the
+# staging deploy triggers a rollout restart of the changed apps to re-pull it.
+productionImageTag: latest
+stagingImageTag: staging
+
+# Staging runs alongside production in the same release/namespace, routed by the
+# reverse proxy on its own hostnames. Turn it off to deploy production only.
+staging:
+  enabled: true
+
 proxyImage:
   image: nginx
   pullPolicy: Always
@@ -16,20 +33,59 @@ certsVolume:
 
 ipAddress: 46.62.204.230
 
+# Each app is one deployment/service. `env` selects which image tag it uses
+# (production -> productionImageTag, staging -> stagingImageTag) and the reverse
+# proxy routes it on `host` under `path`. Image names are the tag-less repo path.
 apps:
+  # Production - ichirokuxvi.com
   - name: shell
-    image: ghcr.io/ichirokuxvi/nx-portfolio/shell:latest
+    env: production
+    image: ghcr.io/ichirokuxvi/nx-portfolio/shell
     host: ichirokuxvi.com
     path: /
   - name: landing
-    image: ghcr.io/ichirokuxvi/nx-portfolio/landing:latest
+    env: production
+    image: ghcr.io/ichirokuxvi/nx-portfolio/landing
     host: mfe.ichirokuxvi.com
     path: /landing
   - name: odontogram
-    image: ghcr.io/ichirokuxvi/nx-portfolio/odontogram:latest
+    env: production
+    image: ghcr.io/ichirokuxvi/nx-portfolio/odontogram
     host: mfe.ichirokuxvi.com
     path: /odontogram
   - name: damoclessword
-    image: ghcr.io/ichirokuxvi/nx-portfolio/damoclessword:latest
+    env: production
+    image: ghcr.io/ichirokuxvi/nx-portfolio/damoclessword
     host: mfe.ichirokuxvi.com
     path: /damoclesSword
+  - name: landingv2
+    env: production
+    image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
+    host: mfe.ichirokuxvi.com
+    path: /landingV2
+  # Staging - staging.ichirokuxvi.com
+  - name: shell-staging
+    env: staging
+    image: ghcr.io/ichirokuxvi/nx-portfolio/shell
+    host: staging.ichirokuxvi.com
+    path: /
+  - name: landing-staging
+    env: staging
+    image: ghcr.io/ichirokuxvi/nx-portfolio/landing
+    host: mfe.staging.ichirokuxvi.com
+    path: /landing
+  - name: odontogram-staging
+    env: staging
+    image: ghcr.io/ichirokuxvi/nx-portfolio/odontogram
+    host: mfe.staging.ichirokuxvi.com
+    path: /odontogram
+  - name: damoclessword-staging
+    env: staging
+    image: ghcr.io/ichirokuxvi/nx-portfolio/damoclessword
+    host: mfe.staging.ichirokuxvi.com
+    path: /damoclesSword
+  - name: landingv2-staging
+    env: staging
+    image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
+    host: mfe.staging.ichirokuxvi.com
+    path: /landingV2

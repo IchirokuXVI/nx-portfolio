@@ -19,6 +19,7 @@
       mkdir -p "$CERTS_DIR"
 
       {{- range .Values.apps }}
+      {{- if or (ne .env "staging") $.Values.staging.enabled }}
       DOMAIN="{{ .host }}"
       KEY_FILE="$CERTS_DIR/$DOMAIN.key"
       CRT_FILE="$CERTS_DIR/$DOMAIN.crt"
@@ -32,6 +33,7 @@
       else
         echo "Certificate for $DOMAIN already exists."
       fi
+      {{- end }}
       {{- end }}
 
       echo "All dummy certs ready."

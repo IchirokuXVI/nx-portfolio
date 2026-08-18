@@ -12,11 +12,13 @@ http {
 
   {{- $appsByHost := dict }}
   {{- range .Values.apps }}
+    {{- if or (ne .env "staging") $.Values.staging.enabled }}
     {{- $host := .host }}
     {{- if not (hasKey $appsByHost $host) }}
       {{- $_ := set $appsByHost $host (list .) }}
     {{- else }}
       {{- $_ := set $appsByHost $host (append (get $appsByHost $host) .) }}
+    {{- end }}
     {{- end }}
   {{- end }}
 
