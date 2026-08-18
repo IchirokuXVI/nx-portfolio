@@ -8,6 +8,15 @@ on:
   push:
     branches:
       - main
+  # Manual trigger. Use it to build and deploy every staging app at once, e.g.
+  # to bootstrap images that `affected` never rebuilt. Leave build_all on (the
+  # default) for that; turn it off to run the normal affected path manually.
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: 'Build & deploy all staging apps (ignore affected)'
+        type: boolean
+        default: true
 
 jobs:
   staging-deploy:
@@ -115,10 +124,11 @@ jobs:
           apps_tobuild=$(npx nx show projects --type "app" --with-target build:docker | paste -sd, -)
           echo "apps_tobuild=$apps_tobuild" >> "$GITHUB_OUTPUT"
 
-          # On the very first run there is no previous successful commit to diff
-          # against; treat everything as affected so all staging images exist.
-          if [ -z "$base_sha" ]; then
-            echo "No previous successful commit: building all apps."
+          # Build everything when there is no previous successful commit to diff
+          # against (first run), or when manually dispatched with build_all. This
+          # is how missing staging images get bootstrapped.
+          if [ -z "$base_sha" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.build_all }}" = "true" ]; }; then
+            echo "Building all apps (first run or manual build_all)."
             affected_docker_apps="$docker_apps"
             affected_testable_apps="$testable_apps"
             affected_apps_tobuild="$apps_tobuild"
