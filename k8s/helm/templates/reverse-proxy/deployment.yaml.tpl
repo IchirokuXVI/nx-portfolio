@@ -13,7 +13,9 @@ spec:
       labels:
         app: reverse-proxy
       annotations:
-        rollme: {{ randAlphaNum 8 | quote }}
+        # Restart the proxy only when its rendered nginx config actually changes
+        # (e.g. a host/route added), instead of on every deploy.
+        checksum/config: {{ include (print $.Template.BasePath "/reverse-proxy/_nginx.conf.tpl") . | sha256sum }}
     spec:
     # Needed in order to restart nginx from the certbot container
       shareProcessNamespace: true
@@ -49,9 +51,11 @@ spec:
               value: |-
                 {{- $hosts := dict }}
                 {{- range .Values.apps }}
+                  {{- if or (ne .env "staging") $.Values.staging.enabled }}
                   {{- if not (hasKey $hosts .host) }}
                     {{- $_ := set $hosts .host true }}
                     {{ .host }}
+                  {{- end }}
                   {{- end }}
                 {{- end }}
           volumeMounts:

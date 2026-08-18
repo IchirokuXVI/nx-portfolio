@@ -56,6 +56,25 @@
       },
       "defaultConfiguration": "production"
     },
+    "build:docker": {
+      "executor": "@portfolio/docker:build",
+      "options": {
+        "imageName": "nx-portfolio/landingV2"
+      },
+      "configurations": {
+        "development": {
+          "versionTags": ["dev"],
+          "buildArgs": {
+            "BUILDER_TAG": "dev"
+          }
+        },
+        "production": {
+          "pushToRegistry": true,
+          "versionTags": ["latest"]
+        }
+      },
+      "defaultConfiguration": "development"
+    },
     "serve": {
       "continuous": true,
       "executor": "@nx/angular:dev-server",
