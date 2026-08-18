@@ -1,4 +1,8 @@
-name: Nx Docker Build & Push (Runner Only)
+name: Staging deploy (main)
+
+# Every push to main builds the affected micro-frontends, pushes them under the
+# mutable `staging` image tag, and rolls the changed staging deployments so they
+# re-pull. Production is untouched here; it is deployed only by release.yml.
 
 on:
   push:
@@ -6,7 +10,7 @@ on:
       - main
 
 jobs:
-  docker-build:
+  staging-deploy:
     runs-on: ubuntu-latest
 
     permissions:
@@ -17,6 +21,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PORTFOLIO_DOCKER_REGISTRY: ghcr.io/ichirokuxvi
       PORTFOLIO_DOCKER_SKIP_LOGIN: true
+      # Where the shell loads its remotes from on staging. Baked into the shell
+      # bundle at build time (ignored by the other, environment-agnostic apps).
+      STAGING_MFE_BASE_URL: https://mfe.staging.ichirokuxvi.com
 
     steps:
       # Checkout full history so Nx can detect changes
@@ -97,6 +104,8 @@ jobs:
       - name: Get affected apps
         id: get-affected-apps
         run: |
+          base_sha="${{ steps.last_success.outputs.sha }}"
+
           docker_apps=$(npx nx show projects --type "app" --projects tag:type:static-docker | paste -sd, -)
           echo "docker_apps=$docker_apps" >> "$GITHUB_OUTPUT"
 
@@ -106,31 +115,54 @@ jobs:
           apps_tobuild=$(npx nx show projects --type "app" --with-target build:docker | paste -sd, -)
           echo "apps_tobuild=$apps_tobuild" >> "$GITHUB_OUTPUT"
 
-          affected_docker_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$docker_apps" | paste -sd, -)
-          echo $affected_docker_apps
+          # On the very first run there is no previous successful commit to diff
+          # against; treat everything as affected so all staging images exist.
+          if [ -z "$base_sha" ]; then
+            echo "No previous successful commit: building all apps."
+            affected_docker_apps="$docker_apps"
+            affected_testable_apps="$testable_apps"
+            affected_apps_tobuild="$apps_tobuild"
+          else
+            affected_docker_apps=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$docker_apps" | paste -sd, -)
+            affected_testable_apps=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$testable_apps" | paste -sd, -)
+            affected_apps_tobuild=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$apps_tobuild" | paste -sd, -)
+          fi
+
           echo "affected_docker_apps=$affected_docker_apps" >> "$GITHUB_OUTPUT"
-
-          affected_testable_apps=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$testable_apps" | paste -sd, -)
-          echo $affected_testable_apps
           echo "affected_testable_apps=$affected_testable_apps" >> "$GITHUB_OUTPUT"
-
-          affected_apps_tobuild=$(npx nx show projects --affected --base "${{ steps.last_success.outputs.sha }}" --head="${{ github.sha }}" --projects "$apps_tobuild" | paste -sd, -)
-          echo $affected_apps_tobuild
           echo "affected_apps_tobuild=$affected_apps_tobuild" >> "$GITHUB_OUTPUT"
 
-      # Build affected docker apps
+          # Staging kubernetes deployment names are the lowercased app names with a
+          # `-staging` suffix (see k8s/helm/values.yaml). Used to roll them below.
+          affected_staging=$(echo "$affected_apps_tobuild" | tr ',' '\n' | sed '/^$/d' | tr '[:upper:]' '[:lower:]' | sed 's/$/-staging/' | paste -sd' ' -)
+          echo "affected_staging=$affected_staging" >> "$GITHUB_OUTPUT"
+
+          echo "Affected apps to build: $affected_apps_tobuild"
+          echo "Affected staging deployments: $affected_staging"
+
+      # Build affected static docker apps (builder base, local http server, proxy, certbot)
       - name: Build affected docker apps
+        if: ${{ steps.get-affected-apps.outputs.affected_docker_apps != '' }}
         run: |
           npx nx run-many -t build --configuration production --projects name:${{ steps.get-affected-apps.outputs.affected_docker_apps }}
 
-      # Test and build remaining affected apps
-      - name: Test and build remaining affected apps
+      # Test affected apps inside the builder image
+      - name: Test affected apps
+        if: ${{ steps.get-affected-apps.outputs.affected_testable_apps != '' }}
         run: |
           docker run \
-            --rm "ghcr.io/${{ env.REPO_LOWERCASE}}/builder:latest" \
+            --rm "ghcr.io/${{ env.REPO_LOWERCASE }}/builder:latest" \
             npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_testable_apps }}
+
+      # Build & push affected micro-frontends under the mutable `staging` tag.
+      # The shell reads MFE_BASE_URL; the other apps ignore it.
+      - name: Build & push staging images
+        if: ${{ steps.get-affected-apps.outputs.affected_apps_tobuild != '' }}
+        env:
+          PORTFOLIO_IMAGE_TAG: staging
+          MFE_BASE_URL: ${{ env.STAGING_MFE_BASE_URL }}
+        run: |
           npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}
-        # npx nx run-many -t e2e --projects ${{ steps.get-remaining-apps.outputs.affected_apps_tobuild }}
 
       - name: Save Docker cache
         uses: actions/cache@v4
@@ -143,16 +175,39 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
 
-      - name: Sync files and redeploy via Helm
+      - name: Sync chart and deploy staging via Helm
         run: |
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
             ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} << 'EOF'
-            echo "Upgrading helm release..."
 
-            # Point Helm to the remote server's kubeconfig
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
+            "bash -s -- '${{ steps.get-affected-apps.outputs.affected_staging }}'" << 'EOF'
+            set -e
+            AFFECTED_STAGING="$1"
+
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            PROD_TAG_FILE=/root/helm-live/prod-tag.yaml
 
-            helm upgrade nx-portfolio ./k8s/helm -n nx-portfolio
-            echo "Deployment complete."
+            # Preserve the live production version across staging deploys.
+            EXTRA_VALUES=""
+            if [ -f "$PROD_TAG_FILE" ]; then
+              EXTRA_VALUES="--values $PROD_TAG_FILE"
+            fi
+
+            echo "Applying chart (staging enabled, production version preserved)..."
+            helm upgrade nx-portfolio /root/k8s/helm \
+              --namespace nx-portfolio \
+              --create-namespace \
+              --values /root/k8s/helm/values.yaml \
+              $EXTRA_VALUES
+
+            # The staging tag is mutable, so a plain upgrade will not restart the
+            # staging pods; roll the affected ones so they re-pull the new image.
+            for dep in $AFFECTED_STAGING; do
+              echo "Restarting deployment/$dep ..."
+              kubectl rollout restart "deployment/$dep" -n nx-portfolio || true
+            done
+
+            echo "Staging deployment complete."
           EOF

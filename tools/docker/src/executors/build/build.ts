@@ -5,6 +5,7 @@ import os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import push from '../push/push';
+import { resolveVersionTags } from '../version-tags';
 import { BuildExecutorSchema } from './schema';
 import { simpleHash } from './simple-hash';
 
@@ -38,7 +39,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     registry += '/';
   }
 
-  const versionTags = options.versionTags || [];
+  const versionTags = resolveVersionTags(options.versionTags);
 
   const dockerfile = options.dockerfile
     ? path.join(projectRoot, options.dockerfile)
@@ -60,6 +61,22 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   options.buildArgs.NX_APP = context.projectName;
   options.buildArgs.TARGET_REGISTRY = registry;
+
+  // Which builder / local-http-server base image tag to build FROM. An explicit
+  // per-configuration buildArg wins; otherwise fall back to the PORTFOLIO_BUILDER_TAG
+  // environment variable, otherwise the Dockerfile default (latest). This lets a
+  // build pick the dev tag, a release tag, or a specific commit without editing
+  // project.json (e.g. PORTFOLIO_BUILDER_TAG=dev nx run landing:build:docker).
+  if (!options.buildArgs.BUILDER_TAG && process.env.PORTFOLIO_BUILDER_TAG) {
+    options.buildArgs.BUILDER_TAG = process.env.PORTFOLIO_BUILDER_TAG;
+  }
+
+  // The shell embeds the micro-frontend base URL at build time, so it differs per
+  // environment (staging vs production). Pass it through from the environment when
+  // set; non-shell Dockerfiles simply do not declare the arg.
+  if (!options.buildArgs.MFE_BASE_URL && process.env.MFE_BASE_URL) {
+    options.buildArgs.MFE_BASE_URL = process.env.MFE_BASE_URL;
+  }
 
   for (const [key, value] of Object.entries(options.buildArgs || {})) {
     if (value) {
