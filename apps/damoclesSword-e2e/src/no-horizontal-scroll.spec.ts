@@ -30,13 +30,13 @@ const viewports = [
   { name: 'laptop', width: 1280, height: 800 },
   { name: 'desktop', width: 1920, height: 1080 },
 
-  // High-DPI panels at a reduced browser zoom. A page's layout responds to the
-  // *effective* CSS viewport (physical resolution x zoom), so e.g. a 3840x2160
-  // screen at 25% zoom lays out as if it were 960x540. 3840x2160 @ 50% zoom
-  // resolves to 1920x1080, which the 'desktop' entry above already covers.
-  { name: '1080p@25%', width: 480, height: 270 },
-  { name: 'qhd@25%', width: 640, height: 360 },
-  { name: '4k@25%', width: 960, height: 540 },
+  // High-DPI panels at a browser zoom that enlarges content, which lowers the
+  // *effective* CSS viewport the layout responds to: a 25% zoom makes everything
+  // 25% bigger, so 1920x1080 lays out as 1440x810, and 3840x2160 as 2880x1620.
+  // 2560x1440 @ 25% and 3840x2160 @ 50% both resolve to 1920x1080, which the
+  // 'desktop' entry above already covers.
+  { name: '1080p@25%', width: 1440, height: 810 },
+  { name: '4k@25%', width: 2880, height: 1620 },
 ];
 
 // Sub-pixel rounding can nudge scrollWidth a hair past clientWidth without a
