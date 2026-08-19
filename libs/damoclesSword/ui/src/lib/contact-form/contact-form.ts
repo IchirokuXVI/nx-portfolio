@@ -1,8 +1,8 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import {
+  CONTACT_SERVICE,
   ContactMessage,
-  ContactMock,
   ContactServiceI,
 } from '@portfolio/damoclesSword/data-access';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
@@ -30,8 +30,7 @@ import { FormButton } from '../form-button/form-button';
   styleUrl: './contact-form.scss',
 })
 export class ContactForm {
-  // TODO(di-wiring): injected as a concrete implementation (ContactMock) instead of via a DI token bound to ContactServiceI, so a real implementation cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
-  private readonly _contact: ContactServiceI = inject(ContactMock);
+  private readonly _contact: ContactServiceI = inject(CONTACT_SERVICE);
   private readonly _fb = inject(FormBuilder);
 
   /** Toggles to `true` while a submission is in flight. */

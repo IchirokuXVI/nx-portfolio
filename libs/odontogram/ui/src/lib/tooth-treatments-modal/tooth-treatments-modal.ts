@@ -32,8 +32,10 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  OdontogramMemory,
-  ToothTreatmentMemory,
+  ODONTOGRAM_SERVICE,
+  OdontogramServiceI,
+  TOOTH_TREATMENT_SERVICE,
+  ToothTreatmentServiceI,
 } from '@portfolio/odontogram/data-access';
 import {
   Odontogram,
@@ -116,9 +118,10 @@ export class ToothTreatmentsModal {
   @ViewChild('treatmentsContainer', { read: ViewContainerRef })
   readonly treatmentsContainer?: ViewContainerRef;
 
-  // TODO(di-wiring): the services below are injected as concrete implementations instead of via DI tokens bound to their interfaces, so the real/API impls cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
-  private readonly _toothTreatmentServ = inject(ToothTreatmentMemory);
-  private readonly _odontogramServ = inject(OdontogramMemory);
+  private readonly _toothTreatmentServ: ToothTreatmentServiceI =
+    inject(TOOTH_TREATMENT_SERVICE);
+  private readonly _odontogramServ: OdontogramServiceI =
+    inject(ODONTOGRAM_SERVICE);
 
   private readonly _injector = inject(Injector);
 
