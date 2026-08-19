@@ -1,8 +1,15 @@
 <div class="language-selector">
-  <div (click)="toggleShowOptions()" class="selected-language-container">
+  <div
+    (click)="toggleShowOptions()"
+    (keydown.enter)="toggleShowOptions()"
+    (keydown.space)="toggleShowOptions()"
+    class="selected-language-container"
+    role="button"
+    tabindex="0"
+  >
     <span class="language-label">
       @let selectedLanguage = this.selectedLanguage();
-      @if (selectedLanguage != null) {
+      @if (selectedLanguage !== null) {
         <img
           [alt]="selectedLanguage"
           [src]="languageFlags()[selectedLanguage] | async"

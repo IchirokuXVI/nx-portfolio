@@ -9,7 +9,14 @@
       ></lib-damocles-sword-logo-brand>
     </a>
     <div class="dropdown-icon">
-      <div (click)="toggleNavMenu()" class="icon-container">
+      <div
+        (click)="toggleNavMenu()"
+        (keydown.enter)="toggleNavMenu()"
+        (keydown.space)="toggleNavMenu()"
+        class="icon-container"
+        role="button"
+        tabindex="0"
+      >
         <svg
           class="three-parallel-lines-icon"
           fill="none"

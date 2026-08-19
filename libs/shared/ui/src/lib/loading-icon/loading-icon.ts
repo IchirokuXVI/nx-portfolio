@@ -11,5 +11,5 @@ export class LoadingIcon {
   @Input() size: 'sm' | 'md' | 'lg' | 'xl' = 'md';
   @Input() sizeMultiplier: 1 | 2 | 3 = 1;
   @Input() thickness: 'thin' | 'normal' | 'thick' | 'extra-thick' = 'normal';
-  @Input() color: string = '#999999';
+  @Input() color = '#999999';
 }

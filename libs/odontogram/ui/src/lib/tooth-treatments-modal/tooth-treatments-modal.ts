@@ -118,8 +118,9 @@ export class ToothTreatmentsModal {
   @ViewChild('treatmentsContainer', { read: ViewContainerRef })
   readonly treatmentsContainer?: ViewContainerRef;
 
-  private readonly _toothTreatmentServ: ToothTreatmentServiceI =
-    inject(TOOTH_TREATMENT_SERVICE);
+  private readonly _toothTreatmentServ: ToothTreatmentServiceI = inject(
+    TOOTH_TREATMENT_SERVICE
+  );
   private readonly _odontogramServ: OdontogramServiceI =
     inject(ODONTOGRAM_SERVICE);
 
@@ -194,7 +195,7 @@ export class ToothTreatmentsModal {
             );
           })
         )
-        .subscribe((treatments) => {
+        .subscribe((_treatments) => {
           // Request a save for the changed treatments...
         });
     }

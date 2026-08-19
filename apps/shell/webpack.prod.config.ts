@@ -3,7 +3,7 @@ import { composePlugins } from '@nx/webpack';
 import merge from 'webpack-merge';
 import mfeConfig from './module-federation.config';
 
-export default composePlugins(async (config, { options, context }) => {
+export default composePlugins(async (config) => {
   // The remotes live on a per-environment micro-frontend host. The base URL is
   // baked into the shell bundle at build time, so it is supplied via MFE_BASE_URL
   // (production by default; staging builds set it to the staging host). Every
