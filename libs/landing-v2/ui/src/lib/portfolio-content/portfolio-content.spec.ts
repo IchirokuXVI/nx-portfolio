@@ -61,9 +61,35 @@ describe('PortfolioContent', () => {
     );
   });
 
-  it('renders all three portfolio sections and the tech chips', () => {
+  it('renders every portfolio section and the grouped tech chips', () => {
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelectorAll('.detail-section').length).toBe(3);
-    expect(host.querySelectorAll('.detail-chips li').length).toBe(8);
+    expect(host.querySelectorAll('.detail-section').length).toBe(5);
+    // 3 groups of 4 chips each.
+    expect(host.querySelectorAll('.tech-chip-group__chip').length).toBe(12);
+  });
+
+  it('shows only the highlights until the reveal button is clicked', () => {
+    let host = fixture.nativeElement as HTMLElement;
+    const button = host.querySelector<HTMLButtonElement>(
+      '.portfolio-reveal__button'
+    );
+
+    // Highlights only: no deep blocks, button collapsed.
+    expect(host.querySelectorAll('.detail-section__deep').length).toBe(0);
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+
+    button?.click();
+    fixture.detectChanges();
+    host = fixture.nativeElement as HTMLElement;
+
+    // Every section reveals its deep block, button expanded.
+    expect(host.querySelectorAll('.detail-section__deep').length).toBe(5);
+    expect(button?.getAttribute('aria-expanded')).toBe('true');
+
+    // Clicking again collapses back to highlights only.
+    button?.click();
+    fixture.detectChanges();
+    host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelectorAll('.detail-section__deep').length).toBe(0);
   });
 });

@@ -1,0 +1,54 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+.detail-toc {
+  &__title {
+    margin: 0 0 0.75rem;
+    font-family: $font-mono;
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: $muted;
+  }
+
+  &__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    // A hairline rail the active marker rides against.
+    border-left: 1px solid $hairline;
+  }
+
+  &__link {
+    display: block;
+    margin-left: -1px;
+    padding: 0.4rem 0 0.4rem 0.9rem;
+    border-left: 2px solid transparent;
+    color: $muted;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    text-decoration: none;
+    overflow-wrap: break-word;
+    transition:
+      color 0.2s ease,
+      border-color 0.2s ease;
+
+    &:hover,
+    &:focus-visible {
+      color: $text;
+      border-left-color: rgba($accent, 0.5);
+    }
+
+    &--active {
+      color: $accent;
+      border-left-color: $accent;
+      font-weight: 600;
+    }
+  }
+}

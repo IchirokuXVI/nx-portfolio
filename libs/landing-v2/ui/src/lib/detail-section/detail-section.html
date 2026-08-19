@@ -1,0 +1,13 @@
+<section class="detail-section" [id]="sectionId()">
+  <h2 class="detail-section__heading">{{ heading() }}</h2>
+
+  <div class="detail-section__lead">
+    <ng-content select="[lead]" />
+  </div>
+
+  @if (open()) {
+    <div class="detail-section__deep">
+      <ng-content select="[deep]" />
+    </div>
+  }
+</section>
