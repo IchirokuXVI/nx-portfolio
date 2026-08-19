@@ -6,24 +6,58 @@
   [title]="project().name"
 >
   <div body>
-    <section class="detail-section">
-      <h2>{{ 'landingV2.detail.portfolio.overview_title' | rokuT }}</h2>
-      <p>{{ 'landingV2.detail.portfolio.overview_body' | rokuT }}</p>
-    </section>
-    <section class="detail-section">
-      <h2>{{ 'landingV2.detail.portfolio.architecture_title' | rokuT }}</h2>
-      <p>{{ 'landingV2.detail.portfolio.architecture_body' | rokuT }}</p>
-    </section>
-    <section class="detail-section">
-      <h2>{{ 'landingV2.detail.portfolio.engineering_title' | rokuT }}</h2>
-      <p>{{ 'landingV2.detail.portfolio.engineering_body' | rokuT }}</p>
-    </section>
-  </div>
-  <div meta>
-    <ul class="detail-chips">
-      @for (chip of techChips; track chip) {
-        <li>{{ chip }}</li>
+    <div class="portfolio-sections" id="portfolio-sections">
+      @for (id of sectionIds; track id) {
+        <lib-landing-v2-detail-section
+          [heading]="key + '.sections.' + id + '.title' | rokuT"
+          [open]="deepDive()"
+          [sectionId]="id"
+        >
+          <p lead>{{ key + '.sections.' + id + '.lead' | rokuT }}</p>
+          <p deep>{{ key + '.sections.' + id + '.detail' | rokuT }}</p>
+        </lib-landing-v2-detail-section>
       }
-    </ul>
+    </div>
+
+    <div class="portfolio-reveal">
+      <button
+        class="portfolio-reveal__button"
+        [attr.aria-expanded]="deepDive()"
+        (click)="toggleDeepDive()"
+        aria-controls="portfolio-sections"
+        type="button"
+      >
+        <span>
+          {{
+            (deepDive()
+              ? key + '.reveal_less'
+              : key + '.reveal_more'
+            ) | rokuT
+          }}
+        </span>
+        <span
+          class="portfolio-reveal__caret"
+          [class.portfolio-reveal__caret--up]="deepDive()"
+          aria-hidden="true"
+        ></span>
+      </button>
+    </div>
+  </div>
+
+  <div meta>
+    <div class="portfolio-meta">
+      <lib-landing-v2-detail-toc class="portfolio-meta__toc" [items]="tocItems" />
+
+      <div class="portfolio-meta__chips">
+        @for (group of chipGroups; track group.headingKey) {
+          <lib-landing-v2-tech-chip-group
+            [chips]="group.chips"
+            [heading]="group.headingKey | rokuT"
+          />
+        }
+      </div>
+
+      <lib-landing-v2-facts-table [facts]="facts" />
+    </div>
   </div>
 </lib-landing-v2-detail-page-shell>

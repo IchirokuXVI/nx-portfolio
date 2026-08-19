@@ -1,0 +1,18 @@
+<nav class="detail-toc" [attr.aria-label]="'landingV2.detail.on_this_page' | rokuT">
+  <p class="detail-toc__title">{{ 'landingV2.detail.on_this_page' | rokuT }}</p>
+  <ul class="detail-toc__list">
+    @for (item of items(); track item.id) {
+      <li>
+        <a
+          class="detail-toc__link"
+          [class.detail-toc__link--active]="activeId() === item.id"
+          [attr.aria-current]="activeId() === item.id ? 'true' : null"
+          [href]="'#' + item.id"
+          (click)="onNavigate($event, item.id)"
+        >
+          {{ item.labelKey | rokuT }}
+        </a>
+      </li>
+    }
+  </ul>
+</nav>

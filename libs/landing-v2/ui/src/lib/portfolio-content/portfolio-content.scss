@@ -5,42 +5,97 @@
   width: 100%;
 }
 
-.detail-section {
-  h2 {
-    margin: 0 0 0.6rem;
-    font-size: 1.25rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    color: $text;
+.portfolio-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2.25rem;
+}
+
+.portfolio-reveal {
+  margin-top: 2.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid $hairline;
+  display: flex;
+  justify-content: center;
+
+  &__button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 1.3rem;
+    border-radius: 999px;
+    border: 1px solid rgba($accent, 0.55);
+    background-color: transparent;
+    color: $accent;
+    font-family: $font-display;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease,
+      transform 0.15s ease;
+
+    &:hover,
+    &:focus-visible {
+      background-color: rgba($accent, 0.12);
+      border-color: $accent;
+    }
+
+    &:active {
+      transform: translateY(1px);
+    }
   }
 
-  p {
-    margin: 0;
-    color: $muted;
-    line-height: 1.7;
-    font-size: 0.95rem;
-    overflow-wrap: break-word;
-    white-space: pre-line;
+  // A plain geometric caret (not an illustration): two borders on a rotated
+  // square. Flips to point up when the deep dive is open.
+  &__caret {
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid currentcolor;
+    border-bottom: 2px solid currentcolor;
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 0.25s ease;
+
+    &--up {
+      transform: translateY(1px) rotate(-135deg);
+    }
   }
 }
 
-.detail-chips {
+.portfolio-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 0;
-  padding: 1rem;
-  list-style: none;
-  border: 1px solid $hairline;
-  border-radius: $radius;
+  flex-direction: column;
+  gap: 1.75rem;
 
-  li {
-    padding: 0.3rem 0.7rem;
-    border-radius: 999px;
-    border: 1px solid $hairline;
-    color: $muted;
-    font-family: $font-mono;
-    font-size: 0.7rem;
-    white-space: nowrap;
+  // On desktop the meta rail follows the reader down the long body.
+  @media (min-width: $breakpoint-desktop) {
+    position: sticky;
+    top: 1.5rem;
+  }
+
+  &__toc {
+    // The TOC is navigation for a long page; on a single-column phone layout
+    // the sections are already right there, so it only earns its place beside
+    // the body.
+    display: none;
+
+    @media (min-width: $breakpoint-desktop) {
+      display: block;
+    }
+  }
+
+  &__chips {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portfolio-reveal__caret,
+  .portfolio-reveal__button {
+    transition: none;
   }
 }

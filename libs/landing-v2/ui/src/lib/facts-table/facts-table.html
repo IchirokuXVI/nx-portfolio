@@ -1,0 +1,10 @@
+@if (facts().length) {
+  <dl class="facts-table">
+    @for (fact of facts(); track fact.labelKey) {
+      <div class="facts-table__row">
+        <dt class="facts-table__label">{{ fact.labelKey | rokuT }}</dt>
+        <dd class="facts-table__value">{{ fact.valueKey | rokuT }}</dd>
+      </div>
+    }
+  </dl>
+}

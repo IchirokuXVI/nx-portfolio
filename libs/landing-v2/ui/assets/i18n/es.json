@@ -13,13 +13,43 @@
 
   "landingV2.detail.view_repo": "Ver repositorio",
   "landingV2.detail.visit_live": "Ver app en vivo",
+  "landingV2.detail.on_this_page": "En esta página",
 
-  "landingV2.detail.portfolio.overview_title": "Resumen",
-  "landingV2.detail.portfolio.overview_body": "Mi portafolio personal, construido como un sistema de micro-frontends con Angular module federation dentro de un monorepo Nx. Una app shell aloja el router y monta en tiempo de ejecución los remotes landing, odontogram y damoclesSword.",
-  "landingV2.detail.portfolio.architecture_title": "Arquitectura",
-  "landingV2.detail.portfolio.architecture_body": "El enrutado es locale-first (/:locale/...), las rutas de cada remote se cargan de forma perezosa mediante alias <remote>/Routes, y un singleton de i18n hecho a medida (RokuTranslator) se comparte como singleton estricto entre todos los micro-frontends, para mantener el idioma activo sincronizado en todas partes.",
-  "landingV2.detail.portfolio.engineering_title": "Ingeniería",
-  "landingV2.detail.portfolio.engineering_body": "Un plugin de Nx a medida (@portfolio/docker) envuelve docker buildx con executors de build y push, Kubernetes y Helm despliegan el workspace en un clúster k3s, GitHub Actions calcula los proyectos afectados para la CI, y la suite de pruebas corre sobre Jest junto con Playwright y Cypress.",
+  "landingV2.detail.portfolio.reveal_more": "¿Quieres saber aún más?",
+  "landingV2.detail.portfolio.reveal_less": "Ver menos",
+
+  "landingV2.detail.portfolio.sections.overview.title": "Resumen",
+  "landingV2.detail.portfolio.sections.overview.lead": "Mi portafolio personal, construido como un sistema de micro-frontends con Angular dentro de un monorepo Nx. Una app shell controla el router y monta en tiempo de ejecución los remotes landing, odontogram y damoclesSword, de modo que cada app se despliega por su cuenta.",
+  "landingV2.detail.portfolio.sections.overview.detail": "Nx fue el punto de partida. Quería varias apps independientes que pudieran construirse, probarse y desplegarse por separado, y también un lugar donde practicar la creación de librerías pequeñas y reutilizables. A medida que el proyecto creció, esa estructura mantuvo todo fácil de entender y reutilizar. El shell es el único host; cada una de las demás apps es un remote que compone en tiempo de ejecución mediante Module Federation.",
+
+  "landingV2.detail.portfolio.sections.micro-frontends.title": "Por qué micro-frontends",
+  "landingV2.detail.portfolio.sections.micro-frontends.lead": "La razón honesta es aprender. Quería entender bien los micro-frontends, y construir uno me enseñó mucho más de lo que nunca habría aprendido leyendo sobre ellos.",
+  "landingV2.detail.portfolio.sections.micro-frontends.detail": "Más allá de eso, la composición en tiempo de ejecución vale la pena. Moverse entre apps nunca recarga Angular ni las librerías compartidas, la configuración común vive en un solo lugar, y el enrutado locale-first funciona en todas las apps de una forma que los despliegues separados por app no podrían ofrecer. Para un portafolio está deliberadamente sobredimensionado, y esa es justo la idea: el propio sitio es una muestra de cómo encajan las piezas.",
+
+  "landingV2.detail.portfolio.sections.localization.title": "Enrutado locale-first",
+  "landingV2.detail.portfolio.sections.localization.lead": "El primer segmento de la URL es el idioma, como /es/projects/portfolio. Eso hace que cada página sea compartible y cacheable por idioma, y un par de guards de ruta mantienen la URL y el idioma activo sincronizados.",
+  "landingV2.detail.portfolio.sections.localization.detail": "Un guard de idioma resuelve el idioma deseado al entrar y un guard de corrección reescribe la URL cuando se desvía, para que un segmento obsoleto nunca choque con el idioma activo. Las traducciones pasan por RokuTranslator, un pequeño wrapper de i18next que construí a mano en lugar de recurrir a una librería general. Es un singleton independiente del framework compartido por toda la federación, cada librería registra su propio namespace con loaders perezosos por idioma, y cambiar de idioma en tiempo de ejecución no requiere recompilar. Forzarlo a singleton estricto en la configuración de Module Federation es lo que evita que el idioma se fragmente entre apps.",
+
+  "landingV2.detail.portfolio.sections.libraries.title": "Librerías compartidas",
+  "landingV2.detail.portfolio.sections.libraries.lead": "El código se agrupa por scope dentro de libs, y algo se gana su propia librería solo cuando es una función real o realmente reutilizable. Todo lo que cruza un límite lo hace por su path alias, nunca por una ruta relativa.",
+  "landingV2.detail.portfolio.sections.libraries.detail": "Un componente suele empezar dentro de la app que lo necesita y pasa a la librería compartida solo cuando una segunda app lo reutiliza de verdad. La regla del código compartido es que debe poder usarse sin mucha configuración; cuando no es así, prefiero mantener dos componentes enfocados y extraer la parte común antes que enviar un componente lleno de opciones. RokuTranslator es el caso más claro de librería propia: independiente del framework, usado en todas partes y revisado con la frecuencia suficiente como para no querer desestabilizar la UI compartida. Los iconos siguen el mismo espíritu, componentes pequeños y autónomos en lugar de SVG en línea.",
+
+  "landingV2.detail.portfolio.sections.engineering.title": "Ingeniería y despliegue",
+  "landingV2.detail.portfolio.sections.engineering.lead": "Las señales gobiernan la detección de cambios en todas partes, el trabajo se carga de forma perezosa por defecto, y todo el workspace se despliega mediante una cadena de Docker a medida sobre un pequeño clúster de Kubernetes.",
+  "landingV2.detail.portfolio.sections.engineering.detail": "El estado funciona con señales y con event coalescing activado, para que Angular haga el menor trabajo de detección de cambios posible. Un plugin de Nx a medida, @portfolio/docker, envuelve docker buildx con executors de build y push, y Helm despliega el workspace en un clúster k3s. GitHub Actions calcula los proyectos afectados en cada push y ejecuta la cadena a través de staging antes de una release de producción etiquetada. Las pruebas son Jest para unidades y Cypress o Playwright para end to end, todas apuntando al shell, porque el shell es como se usan realmente las apps.",
+
+  "landingV2.detail.portfolio.chips.frontend": "Frontend",
+  "landingV2.detail.portfolio.chips.tooling": "Herramientas",
+  "landingV2.detail.portfolio.chips.delivery": "Despliegue",
+
+  "landingV2.detail.portfolio.facts.stack.label": "Stack",
+  "landingV2.detail.portfolio.facts.stack.value": "Angular, Nx, TypeScript",
+  "landingV2.detail.portfolio.facts.apps.label": "Apps",
+  "landingV2.detail.portfolio.facts.apps.value": "1 shell, 3 remotes",
+  "landingV2.detail.portfolio.facts.testing.label": "Pruebas",
+  "landingV2.detail.portfolio.facts.testing.value": "Jest, Cypress, Playwright",
+  "landingV2.detail.portfolio.facts.deploy.label": "Despliegue",
+  "landingV2.detail.portfolio.facts.deploy.value": "Docker, k3s, Helm",
 
   "landingV2.detail.odontogram.what_title": "Qué es",
   "landingV2.detail.odontogram.what_body": "Un odontograma completo para registrar tratamientos dentales y mantener el historial de cada paciente a lo largo del tiempo.",

@@ -1,0 +1,67 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  width: 100%;
+  // Clears the sticky-free header so an anchor jump lands below the top edge
+  // rather than flush against it.
+  scroll-margin-top: 1.5rem;
+}
+
+.detail-section {
+  &__heading {
+    margin: 0 0 0.85rem;
+    font-family: $font-display;
+    font-size: clamp(1.15rem, 2.4vw, 1.4rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: $text;
+    text-wrap: balance;
+  }
+
+  &__lead {
+    :where(p) {
+      margin: 0;
+      color: $text;
+      line-height: 1.7;
+      font-size: 1rem;
+      overflow-wrap: break-word;
+    }
+  }
+
+  &__deep {
+    margin-top: 1.1rem;
+    padding-left: 1.1rem;
+    border-left: 2px solid rgba($accent, 0.4);
+
+    :where(p) {
+      margin: 0;
+      color: $muted;
+      line-height: 1.75;
+      font-size: 0.95rem;
+      overflow-wrap: break-word;
+
+      & + p {
+        margin-top: 0.85rem;
+      }
+    }
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .detail-section__deep {
+    animation: landing-v2-detail-reveal 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes landing-v2-detail-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

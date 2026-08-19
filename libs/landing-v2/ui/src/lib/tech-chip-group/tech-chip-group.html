@@ -1,0 +1,10 @@
+@if (chips().length) {
+  <div class="tech-chip-group">
+    <p class="tech-chip-group__title">{{ heading() }}</p>
+    <ul class="tech-chip-group__chips">
+      @for (chip of chips(); track chip) {
+        <li class="tech-chip-group__chip">{{ chip }}</li>
+      }
+    </ul>
+  </div>
+}

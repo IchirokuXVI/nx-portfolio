@@ -13,13 +13,43 @@
 
   "landingV2.detail.view_repo": "View repository",
   "landingV2.detail.visit_live": "Visit live app",
+  "landingV2.detail.on_this_page": "On this page",
 
-  "landingV2.detail.portfolio.overview_title": "Overview",
-  "landingV2.detail.portfolio.overview_body": "My personal portfolio, built as an Angular module-federation micro-frontend system inside an Nx monorepo. A shell app hosts the router and mounts the landing, odontogram and damoclesSword remotes at runtime.",
-  "landingV2.detail.portfolio.architecture_title": "Architecture",
-  "landingV2.detail.portfolio.architecture_body": "Routing is locale-first (/:locale/...), each remote's routes are lazy-loaded through <remote>/Routes aliases, and a hand-rolled i18n singleton (RokuTranslator) is shared as a strict singleton across every micro-frontend, so the active locale stays in sync everywhere.",
-  "landingV2.detail.portfolio.engineering_title": "Engineering",
-  "landingV2.detail.portfolio.engineering_body": "A custom Nx plugin (@portfolio/docker) wraps docker buildx with build and push executors, Kubernetes and Helm deploy the workspace to a k3s cluster, GitHub Actions computes affected projects for CI, and the test suite runs on Jest plus Playwright and Cypress.",
+  "landingV2.detail.portfolio.reveal_more": "Want to know even more?",
+  "landingV2.detail.portfolio.reveal_less": "Show less",
+
+  "landingV2.detail.portfolio.sections.overview.title": "Overview",
+  "landingV2.detail.portfolio.sections.overview.lead": "My personal portfolio, built as an Angular micro-frontend system inside an Nx monorepo. A shell app owns the router and mounts the landing, odontogram and damoclesSword remotes at runtime, so each app ships on its own.",
+  "landingV2.detail.portfolio.sections.overview.detail": "Nx was the starting point. I wanted several independent apps that could be built, tested and deployed separately, plus a place to practise building small, reusable libraries. As the project grew, that structure kept everything easy to understand and reuse. The shell is the only host; every other app is a remote it composes at runtime through Module Federation.",
+
+  "landingV2.detail.portfolio.sections.micro-frontends.title": "Why micro-frontends",
+  "landingV2.detail.portfolio.sections.micro-frontends.lead": "The honest reason is learning. I wanted to understand micro-frontends properly, and building one taught me far more than reading about them ever could.",
+  "landingV2.detail.portfolio.sections.micro-frontends.detail": "Beyond that, the runtime composition earns its keep. Moving between apps never reloads Angular or the shared libraries, shared configuration lives in one place, and locale-first routing works across every app in a way separate per-app deployments could not offer. For a portfolio it is deliberately over-engineered, and that is the point: the site is itself a showcase of how the pieces fit together.",
+
+  "landingV2.detail.portfolio.sections.localization.title": "Locale-first routing",
+  "landingV2.detail.portfolio.sections.localization.lead": "The first URL segment is the language, like /en/projects/portfolio. That makes every page shareable and cacheable per locale, and a pair of route guards keep the URL and the active language in sync.",
+  "landingV2.detail.portfolio.sections.localization.detail": "A locale guard resolves the desired language on entry and a correction guard rewrites the URL when it drifts, so a stale segment never fights the active locale. Translations run through RokuTranslator, a small i18next wrapper I built by hand instead of reaching for a general library. It is a framework agnostic singleton shared across the whole federation, each library registers its own namespace with per-locale lazy loaders, and switching language at runtime needs no rebuild. Forcing it to a strict singleton in the Module Federation config is what stops the locale from fragmenting between apps.",
+
+  "landingV2.detail.portfolio.sections.libraries.title": "Shared libraries",
+  "landingV2.detail.portfolio.sections.libraries.lead": "Code is grouped by scope under libs, and something earns its own library only when it is a real feature or genuinely reusable. Everything crosses a boundary through its path alias, never a relative path.",
+  "landingV2.detail.portfolio.sections.libraries.detail": "A component usually starts inside the app that needs it and moves to the shared library only once a second app actually reuses it. The rule for shared code is that it must be usable without much configuration; when it is not, I keep two focused components and extract the common piece rather than ship one component buried in options. RokuTranslator is the clearest case for its own library: framework agnostic, used everywhere, and revised often enough that I did not want it destabilising the shared UI. Icons follow the same spirit, small standalone components rather than inline SVG.",
+
+  "landingV2.detail.portfolio.sections.engineering.title": "Engineering and delivery",
+  "landingV2.detail.portfolio.sections.engineering.lead": "Signals drive change detection everywhere, work loads lazily by default, and the whole workspace ships through a custom Docker toolchain onto a small Kubernetes cluster.",
+  "landingV2.detail.portfolio.sections.engineering.detail": "State runs on signals with event coalescing on, so Angular does the least change-detection work it can. A custom Nx plugin, @portfolio/docker, wraps docker buildx with build and push executors, and Helm deploys the workspace to a k3s cluster. GitHub Actions computes the affected projects on every push and runs the pipeline through staging before a tagged production release. Tests are Jest for units and Cypress or Playwright for end to end, all pointed at the shell, because the shell is how the apps are actually used.",
+
+  "landingV2.detail.portfolio.chips.frontend": "Frontend",
+  "landingV2.detail.portfolio.chips.tooling": "Tooling",
+  "landingV2.detail.portfolio.chips.delivery": "Delivery",
+
+  "landingV2.detail.portfolio.facts.stack.label": "Stack",
+  "landingV2.detail.portfolio.facts.stack.value": "Angular, Nx, TypeScript",
+  "landingV2.detail.portfolio.facts.apps.label": "Apps",
+  "landingV2.detail.portfolio.facts.apps.value": "1 shell, 3 remotes",
+  "landingV2.detail.portfolio.facts.testing.label": "Testing",
+  "landingV2.detail.portfolio.facts.testing.value": "Jest, Cypress, Playwright",
+  "landingV2.detail.portfolio.facts.deploy.label": "Deploy",
+  "landingV2.detail.portfolio.facts.deploy.value": "Docker, k3s, Helm",
 
   "landingV2.detail.odontogram.what_title": "What it is",
   "landingV2.detail.odontogram.what_body": "A full odontogram for recording dental treatments and keeping each patient's history over time.",
