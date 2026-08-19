@@ -103,10 +103,11 @@ updates between the two views automatically (more entries in the deep view).
 - The meta info (the chips) moves to the **top** on mobile, above the section body (today
   it sits at the bottom). The TOC stays desktop-only (it is the sticky rail); on mobile
   the chips lead.
-- **Mechanism:** add an optional input to `DetailPageShell` (e.g. `metaFirstOnMobile`,
-  default `false`) that flips the body/meta order under the mobile breakpoint via CSS
-  `order`, leaving the odontogram / damocles detail pages unaffected. `PortfolioContent`
-  opts in.
+- **Mechanism:** change `DetailPageShell` directly so the `[meta]` slot renders **before**
+  `[body]` on mobile (the single-column layout), for **every** detail page. **No input /
+  opt-in flag** (`metaFirstOnMobile` is explicitly rejected). This applies to all detail
+  pages (portfolio, odontogram, damocles) by design: the meta belongs on top on mobile
+  everywhere. On desktop the order is unchanged (body left, sticky meta rail right).
 - Preserve the no-horizontal-scroll guarantee (320 to 3840), both locales, both
   disclosure states.
 
@@ -138,8 +139,8 @@ updates between the two views automatically (more entries in the deep view).
    the closing note.
 4. Meta panel: drop `facts-table`, revise the chip groups, ensure the desktop rail is
    sticky.
-5. `DetailPageShell`: add `metaFirstOnMobile` and the mobile order flip; `PortfolioContent`
-   opts in. Leave odontogram / damocles untouched.
+5. `DetailPageShell`: make the `[meta]` slot render before `[body]` on mobile for every
+   detail page (no input). Desktop order unchanged.
 6. Add and replace i18n keys in `en.json` and `es.json`; remove the obsolete ones.
 7. Update specs: `detail-section`, `portfolio-content` (highlight vs deep swap, button
    relocation, deep-only sections present only when expanded, closing note in deep only).
@@ -162,6 +163,8 @@ updates between the two views automatically (more entries in the deep view).
 
 Edit `libs/landing-v2/ui/src/lib/portfolio-content/*`, `detail-section/*`, the
 `tech-chip-group` group data, the two i18n JSON files, and the `ui` `index.ts` plus
-module barrel. Add `metaFirstOnMobile` to `detail-page-shell` (shared, additive, default
-off). Remove `facts-table`. Do not touch `feature-project` routing or the
-`OdontogramContent` / `DamoclesContent` components.
+module barrel. Change `detail-page-shell`'s mobile ordering so the meta slot leads on
+mobile for **all** detail pages (a shared change, intended to affect every detail page,
+no input). Remove `facts-table`. Do not touch `feature-project` routing or the
+`OdontogramContent` / `DamoclesContent` components: their detail pages inherit the shell's
+mobile-order change automatically.
