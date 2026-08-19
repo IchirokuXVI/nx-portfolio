@@ -72,99 +72,89 @@ A:
 
 **Q: Why hand-roll an i18next wrapper (`RokuTranslator`) instead of ngx-translate / transloco / Angular i18n?**
 A:
-> STATUS: On hold. Daniel will rewrite this answer from scratch after the
-> localization refactor lands (see `libs/shared/localization/rokutranslator/plans`).
-> Do not edit this answer further. The previous answer is preserved below, with the
-> clarifications from the session where it was put on hold already folded in.
 
-**The motivation.** I wanted each app to be able to have its own locales, since the
-apps are different and some of them might not need localization at all. I tried
-Transloco, a few other libraries, and even i18next on its own, but none of them felt
-right, so I spent several days thinking about a different approach. What I landed on
-was a wrapper around i18next, reusing its key resolution and namespacing, that lets
-me isolate the translations of each library. It still has rough edges, such as a
-namespace being overridden without any notice and no real way to share translations
-between libraries, but for now I like the implementation.
+**Avoiding Angular specific libraries.** The main reason is that I try not to depend
+on Angular specific libraries unless it is strictly necessary. Those libraries tend to
+drop support quite early and need constant updates just to keep up with each Angular
+version. i18next is framework agnostic, which feels cleaner to me and means far fewer
+version headaches over time.
 
-**The two levels.** The design has two layers:
+**Sharing config across micro frontends.** The other big reason is that I could not
+find a way to share an ngx-translate or Transloco configuration across micro frontends.
+I am sure it is possible, but it seemed easier to switch to a plain JavaScript library
+that is not tied to Angular and then write my own wrapper around it, which is not that
+much work. I started with a simple wrapper, and over time it has grown a bit. In my
+opinion it is still relatively simple, small enough to be called a wrapper around
+i18next rather than a library of its own that merely depends on i18next.
 
-1. `RokuTranslator`, a framework agnostic wrapper around i18next. It is a singleton
-   that holds the current locale and the registered namespaces. I made it a singleton
-   because I could not find a clean way to configure localization once in the shell
-   and then share that configuration across all of the apps.
-2. `RokuTranslatorService`, the Angular adapter. This one is not a singleton; an
-   instance is provided for each library that needs localization. It exposes a
-   `provide` method (`provideRokuTranslator`) that makes configuration easy,
-   registers everything it needs inside `RokuTranslator`, and is meant to keep each
-   library scoped to its own namespace. This gives me the benefit of the singleton
-   being shared across the whole app without configuring it multiple times, plus the
-   benefit of a per library instance whenever one is needed.
+**Per library namespaces.** In a micro frontend I think each app and remote should own
+its localization, even down to supporting different languages. The same applies to
+libraries, so I made a provide function for `RokuTranslatorService` that ships all the
+configuration it needs to `RokuTranslator`. Part of that configuration is a namespace,
+whose main job is to isolate translations between libraries. Libraries can still read
+translations from other namespaces, although I may remove that ability later.
 
-I am not sure this is the correct architecture, but it is the one I reached after a
-lot of thinking and trying different things.
+**Per app locales.** DamoclesSword is a good example of why locales must be per app. It
+is the business site of a game studio, so it needs several languages. Right now it has
+three, but it could easily grow to many more, and I do not want to carry all of those
+languages in landing, odontogram, or any other app or library that does not need them.
 
-**Why the singleton, the real constraint.** The deeper reason for the singleton is
-initialization. `RokuTranslator` has to be initialized when the app starts, and in a
-micro-frontend setup only the shell (the host) can use `provideAppInitializer`. I
-cannot run an app initializer inside a remote or inside a library, so the only place
-to configure localization once is the shell. Making `RokuTranslator` a singleton
-configured in the shell was my way around that constraint. This same constraint is
-why the supported locales are currently global rather than per app, which is
-something I want to change (see Known issues below).
-
-**Namespace priority overriding.** The priority based override, where a later
-registered namespace can override an earlier one, exists mainly because it was the
-easiest thing to implement. I could allow multiple loaders per namespace instead,
-but I have not built that yet and it is not planned for now.
-
-**Known gaps.** I am sure I am missing features that mature localization libraries
-offer, but I have not needed any of them so far. The one I can think of is a report
-of missing translations, meaning a key that is present in one language file but
-absent in others, and that should be trivial to add.
-
-**Known issues I plan to fix.** Two things are not right today, and a refactor is
-planned:
-1. Namespace leaking. `RokuTranslator.t` (and `RokuTranslatorService.t`) only take a
-   string; they do not scope the lookup to the calling library's namespace. So if two
-   libraries use the same key, the translation is shared between them, which I think
-   is wrong and should not happen. Separately, the translation loader for a namespace
-   is overwritten if a second `RokuTranslatorService` is created with a namespace that
-   is already in use. The planned fix is to give the pipe and the service `t()` method
-   a second, optional namespace argument (defaulting to the library's default
-   namespace) and have the service concatenate `namespace + ':' + key` so it uses the
-   i18next namespace explicitly and cannot leak into other libraries.
-2. Global supported locales. Right now the supported locales are configured once in
-   the shell, but each app might support a different set. I would like this resolved
-   dynamically from the locales each service instance (or namespace) declares, rather
-   than one hardcoded global list.
-
-**Why build it at all.** Honestly, I probably did not need my own library. I mainly
-wanted to learn how to build a proper, robust library, not a feature library but an
-actual standalone one, and then integrate it into a real project. `RokuTranslator`
-has no dependencies I can recall other than i18next, and it can be used without
-Angular; the Angular adapter is optional on top. I chose to build on i18next to save
-myself some work, and I might remove that dependency eventually, though that is far off.
-
-> Note (Claude): Confirmed with Daniel. The namespace scoping is not enforced today
-> (`RokuTranslator.t` resolves against the full namespace array in priority order,
-> `defaultNS` being every namespace), so a `RokuTranslatorService.t()` call can pick
-> up a key from another library's namespace. Daniel considers this a bug; a refactor
-> is planned (see `libs/shared/localization/rokutranslator/plans`). Two other accurate
-> details to fold into the final write-up: (1) the boot fallback chain in `init()`
-> (config locale, then `localStorage` 'roku-locale', then browser locale, then the
-> supported list); (2) the per locale, per namespace lazy loaders (a custom i18next
-> `backend`) are what let a remote register its own translations at runtime.
+> Note (Claude): Verified against the current (post refactor) code and accurate.
+> (1) `RokuTranslator` wraps i18next and is Angular free; the Angular surface lives in
+> a separate `rokutranslator-angular` adapter, so the "small wrapper, not a library
+> with an i18next dependency" framing holds.
+> (2) The provide function is `provideRokuTranslator`, which supplies the
+> `ROKU_TRANSLATOR_LOCALES` / `_NAMESPACES` / `_DEFAULT_NAMESPACE` / `_LOADER` tokens to
+> a per module `RokuTranslatorService`.
+> (3) Namespace isolation is now enforced: `RokuTranslatorService.t(key, ns?)` scopes
+> the lookup to the library's own namespace via i18next's `{ ns }`, and `init` sets
+> `nsSeparator: false` so a `:` inside a key cannot leak into another namespace. Cross
+> namespace reads still work by passing an explicit `ns`, which is the ability Daniel
+> may remove.
+> (4) Per app locales are real: a UI lib exposes `*_AVAILABLE_LOCALES` (what it can
+> load) and each feature-shell declares `*_USABLE_LOCALES` (what the app turns on),
+> placed on the top route `data` and validated by the locale correction guard.
+> Not covered here and captured in the next question: the reason `RokuTranslator` must
+> be a shared singleton at all (only the shell can run `provideAppInitializer`, so init
+> lives in one place). See `apps/shell/src/app/app.config.ts`.
 
 **Q: How do remotes contribute their own translations (per-locale lazy namespace loaders)?**
 A:
 
 **Q: In MF config `roku-translator` is forced `singleton: true, strictVersion: true`. What broke, or would break, without it?**
-A: _(The "why a singleton" reasoning is covered under the RokuTranslator answer
-above: one shared instance so the shell configures localization once and every
-remote reads the same locale and namespaces. Still open, a sharper version to
-confirm next time: concretely, if each remote loaded its own copy, the locale state
-would fragment so remotes could display different languages at the same time, which
-is the failure `strictVersion` is guarding against.)_
+A:
+
+**Early initialization for locale first routing.** `RokuTranslator` has to be
+initialized very early, before routing runs, because the app uses locale first
+routing and the router needs the translator already available. The only place that
+can happen is the shell. The remotes do not initialize on their own; they are loaded
+through the shell. `provideAppInitializer` runs exactly once, when the page loads, and
+that load is owned by the shell, so the shell is the natural and only home for the
+initialization.
+
+**One shared, already configured instance.** Because the library is configured in the
+shell, that configuration has to be shared with every consumer. Once the translator is
+initialized there is little reason to create more instances of the core library. I
+would rather reuse the instance that already exists and put all the utility on top of
+it in a wrapper, which can have multiple instances that all call into the same
+underlying library.
+
+**What breaks without it.** With the code as it is today, removing the singleton would
+cause two problems. First, the language would no longer stay in sync between apps and
+libraries, since each copy would hold its own locale. Second, translations could no
+longer be shared between apps and libraries, though that sharing is more of a quirk
+than something I intend to rely on right now.
+
+> Note (Claude): Verified against `apps/shell/module-federation.config.ts`
+> (`singleton: true, strictVersion: true, requiredVersion: 'auto'`) and the listener
+> wiring. Two details for the write-up. (1) The locale sync claim is exactly what the
+> code does: the root `RokuLocaleStore` subscribes once to the singleton's
+> `onLocaleChange`, and `switchAppLocale` calls `RokuTranslator.changeLocale`, so a
+> single shared instance is what lets a switch in the shell reach every remote. Two
+> copies would each keep their own locale and the switch would not propagate. (2)
+> `strictVersion: true` is the guard that makes this fail loudly: on a version mismatch
+> module federation errors instead of silently loading a second copy, which is what
+> would reintroduce the desync.
 
 ## Testing
 
