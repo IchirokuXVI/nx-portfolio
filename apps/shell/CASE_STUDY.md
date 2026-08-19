@@ -4,6 +4,32 @@
 > `> Note (Claude):` blocks flag things the code shows that an answer may have missed.
 > Docker / CI/CD / Kubernetes are documented in `apps/docker/CASE_STUDY.md`.
 
+## Overview
+
+_(Reference summary compiled from the codebase, for the top of a portfolio detail page.)_
+
+A personal portfolio built as an Angular micro-frontend system. A host application (the
+**shell**) owns the router, the locale, and the shared singletons, and lazy-loads
+independently built remotes at runtime through Module Federation:
+
+- **shell** — the host. Owns `/:locale/...` routing and mounts the remotes.
+- **landingV2** — the root landing / portfolio app (served at `/`), the newest redesign.
+- **odontogram** — an interactive dental chart (a real client project, rebuilt here).
+- **damoclesSword** — a game studio showcase site.
+- **landing** — the original landing app, kept around and being folded into landingV2.
+
+Each remote is its own deployable bundle, loaded only when its route is visited, so the
+shell stays small and the browser does not reload Angular and the shared libraries when
+moving between projects. It runs on a single k3s cluster behind a reverse proxy, with a
+staging and a production environment (see `apps/docker/CASE_STUDY.md`).
+
+**Tech stack.** Angular 21 (standalone components, signals everywhere), Nx 22 monorepo,
+webpack Module Federation (`@nx/module-federation`), TypeScript 5.9, RxJS 7.8. Localization
+is a hand-rolled i18next wrapper (`RokuTranslator`) rather than an Angular-specific i18n
+library. Styling is SCSS. Testing is Jest for unit and contract specs plus Cypress and
+Playwright for e2e (all pointed at the shell). Deployment is Docker images built by a
+custom Nx plugin, deployed to k3s via Helm and GitHub Actions.
+
 ## Why this stack
 
 **Q: Why an Nx monorepo? What did it give you over a plain workspace or polyrepo?**
@@ -15,14 +41,64 @@ reuse this way. I still have plenty to learn about microfrontends and monorepos,
 the methodology that Nx follows seems great, so I will keep learning as much as
 possible.
 
-**Q: Why build a portfolio as micro-frontends with Module Federation instead of one Angular app?**
-A: _(Partially covered above — the "deploy each app separately" motivation. TODO:
-a sentence specifically on choosing runtime Module Federation over one bundled app.)_
+**Q: Why build a portfolio as runtime Module Federation micro-frontends instead of one bundled Angular app?**
+A:
+
+**Mainly a building goal.** First of all, this was primarily a goal in itself: I wanted
+to build a real micro-frontend system. I have multiple apps, so it was not completely
+arbitrary, though I am genuinely not sure micro-frontends are the right call for a case
+like this. In the end I think it worked out fine.
+
+**Not reloading Angular between apps.** I could have deployed several separate apps
+without micro-frontends, but then the browser would have to load Angular and all of the
+shared libraries again every time you navigate from one project to another. With module
+federation the shell and the shared libraries stay loaded, and only the remote for the
+route you visit is pulled in.
+
+**Global config for shared libraries.** Module federation also lets me set some library
+configuration once, globally, for everything. Today that is mostly localization, but
+more could be added if needed. With fully separate apps I would have to configure the
+language for each one on its own, or at least find a way to carry the correct locale
+across them.
+
+**It enables locale-first routing.** That last point connects to the routing. With
+separate deployments I do not think locale-first navigation would even be possible,
+because each app path (for example `/odontogram`) would have to be defined in nginx, so
+`/en/odontogram` would not work out of the box. I am sure it could be solved, but with
+micro-frontends it is easier and it is configured at the Angular level instead of split
+between nginx and Angular.
+
+**Honest tradeoff.** I would not use micro-frontends for a project of this size. This
+project is already over engineered in many areas, not only the micro-frontends. That is
+deliberate: the point is to demonstrate what I can do.
+
+> Note (Claude): This is the honest "why runtime MF" the write-up needed, and it is
+> consistent with the code: `loadChildren: () => import('odontogram/Routes')` pulls each
+> remote as a separately built bundle at runtime, the shell only fetches a remote when
+> its route is hit, and the shared singletons (notably `RokuTranslator`) are configured
+> once in the shell. The locale-first point is the strongest concrete technical argument
+> here: the shell owns `/:locale/...` in Angular, which a per-app nginx deployment could
+> not express as cleanly.
 
 ## Module federation topology
 
 **Q: The shell is the only host. How does it declare and lazy-load remotes (the `damoclesSword/Routes` alias trick)?**
-A:
+A: _(Compiled from the code rather than a spoken answer.)_ The shell is the only app
+whose `module-federation.config.ts` lists `remotes: ['landing', 'odontogram',
+'damoclesSword', 'landingV2']`. Each remote exposes a single entry, `./Routes`, pointing
+at its `entry.routes.ts`. A TypeScript path alias in `tsconfig.base.json` (for example
+`odontogram/Routes`) lets the shell import that exposed module as if it were local:
+
+```ts
+loadChildren: () => import('odontogram/Routes').then((m) => m.remoteRoutes)
+```
+
+Because the import lives inside `loadChildren`, the remote's bundle is only fetched when
+its route is actually visited. The remotes are declared as children of the shell's
+`:locale` route, so a remote renders into the shell's root outlet under the active
+locale, and the shell keeps ownership of the router, the locale context, and the shared
+singletons. The one non-obvious entry is the root path (`''`), which loads `landingV2`
+rather than the older `landing` remote.
 
 **Q: Remotes render a blank page on their own port by design. Why did you make that choice and how does it work?**
 A: Each remote is built specifically to work inside the shell, so I do not think it

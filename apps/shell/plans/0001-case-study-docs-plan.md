@@ -82,12 +82,16 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 ### shell (foundation / general)
 - [x] Why Nx monorepo? What did it give you vs a plain workspace / polyrepo?
       (Answered: learning + independent deploys + easier reuse via small libs.)
-- [~] Why micro-frontends + Module Federation for a *portfolio*? Real motivation.
-      (Partial: "deploy each separately". Still want a line on runtime MF vs one
-      bundled app specifically.)
-- [ ] Shell as host: how remotes are declared/lazy-loaded via `X/Routes` aliases.
-      (Touched in the blank-page answer; the alias/tsconfig-path mechanism itself not
-      yet asked of Daniel.)
+- [x] Why micro-frontends + Module Federation for a *portfolio*? Real motivation.
+      (Answered: building/learning goal; avoids reloading Angular+libs between apps;
+      global shared-lib config (localization); enables locale-first routing that
+      per-app nginx deploys could not; honestly over-engineered on purpose to showcase.)
+- [x] Shell as host: how remotes are declared/lazy-loaded via `X/Routes` aliases.
+      (Compiled from code: shell lists remotes, each exposes ./Routes, tsconfig path
+      alias + import() in loadChildren; remotes are children of the :locale route; root
+      '' loads landingV2.)
+- [x] Portfolio overview + tech-stack summary section for a general detail page.
+      (Added: apps list, runtime MF, k3s/staging+prod, Angular 21 / Nx 22 / TS 5.9 / i18next.)
 - [x] Locale change mechanism (was full reload; now soft in-place switch).
       (REWRITTEN in Session 4 against dev: switcher -> RokuLocaleStore.switchAppLocale,
       no reload; refetchOnLocaleChange re-runs locale-keyed queries. Daniel built the
