@@ -10,7 +10,10 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { ProjectMemory } from '@portfolio/landing-v2/data-access';
+import {
+  PROJECT_SERVICE,
+  ProjectServiceI,
+} from '@portfolio/landing-v2/data-access';
 import { TranslatedProject } from '@portfolio/landing-v2/models';
 import {
   DamoclesContent,
@@ -67,8 +70,7 @@ const CONTENT_BY_SLUG: Record<string, Type<unknown>> = {
 })
 export class ProjectPage implements OnInit {
   private _route = inject(ActivatedRoute);
-  // TODO(di-wiring): injected as a concrete implementation instead of via a DI token bound to the service interface, so the real/API impl cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
-  private _projectServ = inject(ProjectMemory);
+  private _projectServ: ProjectServiceI = inject(PROJECT_SERVICE);
   private _rokuTranslatorServ = inject(RokuTranslatorService);
   private _destroyRef = inject(DestroyRef);
 

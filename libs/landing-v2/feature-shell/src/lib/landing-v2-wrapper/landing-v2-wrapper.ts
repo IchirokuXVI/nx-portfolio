@@ -1,8 +1,10 @@
 import { Component, DestroyRef, inject, OnInit } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
-  InfoFactMemory,
-  ProjectMemory,
+  INFO_FACT_SERVICE,
+  InfoFactServiceI,
+  PROJECT_SERVICE,
+  ProjectServiceI,
 } from '@portfolio/landing-v2/data-access';
 import {
   TranslatedInfoFact,
@@ -25,9 +27,8 @@ import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-an
   styles: [':host { width: 100%; }'],
 })
 export class LandingV2Wrapper implements OnInit {
-  // TODO(di-wiring): the services below are injected as concrete implementations instead of via DI tokens bound to their interfaces, so the real/API impls cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
-  private _projectServ = inject(ProjectMemory);
-  private _factServ = inject(InfoFactMemory);
+  private _projectServ: ProjectServiceI = inject(PROJECT_SERVICE);
+  private _factServ: InfoFactServiceI = inject(INFO_FACT_SERVICE);
   private _i18n = inject(RokuTranslatorService);
   private _destroyRef = inject(DestroyRef);
 

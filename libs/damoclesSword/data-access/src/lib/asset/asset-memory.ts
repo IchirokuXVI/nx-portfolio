@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { AssetKey } from './asset';
+import { AssetServiceI } from './asset-service';
 
 /**
  * Lazy loaders for every bundled data asset. Each `import()` is its own
@@ -30,7 +31,7 @@ const ASSET_LOADERS: Record<AssetKey, () => Promise<string>> = {
 @Injectable({
   providedIn: 'root',
 })
-export class AssetMemory {
+export class AssetMemory implements AssetServiceI {
   get(key: AssetKey) {
     return ASSET_LOADERS[key]();
   }

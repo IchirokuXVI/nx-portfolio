@@ -1,7 +1,8 @@
 import { inject, Injectable } from '@angular/core';
 import { of } from 'rxjs';
-import { AssetMemory } from '../asset/asset-memory';
+import { ASSET_SERVICE } from '../asset/asset-service';
 import { Project, TranslatedProject } from './project';
+import { ProjectServiceI } from './project-service';
 import { PROJECTS } from './static-project-data';
 import { PROJECT_TRANSLATIONS } from './static-project-translation-data';
 
@@ -15,9 +16,8 @@ import { PROJECT_TRANSLATIONS } from './static-project-translation-data';
 @Injectable({
   providedIn: 'root',
 })
-export class ProjectMemory {
-  // TODO(di-wiring): depends on the concrete AssetMemory instead of an asset service token; fix alongside the consumer sites. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
-  private readonly _assets = inject(AssetMemory);
+export class ProjectMemory implements ProjectServiceI {
+  private readonly _assets = inject(ASSET_SERVICE);
   private _projects = PROJECTS;
   private _projectTranslations = PROJECT_TRANSLATIONS;
 

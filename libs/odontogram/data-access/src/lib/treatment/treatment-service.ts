@@ -1,6 +1,9 @@
+import { inject } from '@angular/core';
 import { Treatment, TreatmentType } from '@portfolio/odontogram/models';
+import { serviceToken } from '@portfolio/shared/data-access';
 import { Optional, WithRequired } from '@portfolio/shared/util';
 import { Observable } from 'rxjs';
+import { TreatmentMemory } from './treatment-memory';
 
 export interface TreatmentGetListFilter {
   ids?: string[];
@@ -23,3 +26,12 @@ export interface TreatmentServiceI {
 
   delete(id: string): Observable<void>;
 }
+
+/**
+ * DI token for the treatment catalog service, defaulting to the in-memory
+ * implementation. Inject this instead of a concrete class.
+ */
+export const TREATMENT_SERVICE = serviceToken<TreatmentServiceI>(
+  'TREATMENT_SERVICE',
+  () => inject(TreatmentMemory)
+);

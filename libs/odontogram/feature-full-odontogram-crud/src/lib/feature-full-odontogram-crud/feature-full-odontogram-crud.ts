@@ -11,9 +11,12 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import {
-  OdontogramMemory,
-  ToothTreatmentMemory,
-  TreatmentMemory,
+  ODONTOGRAM_SERVICE,
+  OdontogramServiceI,
+  TOOTH_TREATMENT_SERVICE,
+  ToothTreatmentServiceI,
+  TREATMENT_SERVICE,
+  TreatmentServiceI,
 } from '@portfolio/odontogram/data-access';
 import {
   Odontogram,
@@ -35,10 +38,10 @@ import { forkJoin, ReplaySubject, tap } from 'rxjs';
   styleUrl: './feature-full-odontogram-crud.scss',
 })
 export class OdontogramFeatureFullOdontogramCrud implements OnInit {
-  // TODO(di-wiring): the services below are injected as concrete implementations instead of via DI tokens bound to their interfaces, so the real/API impls cannot be swapped without editing here. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
-  private _treatmentServ = inject(TreatmentMemory);
-  private _toothTreatmentServ = inject(ToothTreatmentMemory);
-  private _odontogramServ = inject(OdontogramMemory);
+  private _treatmentServ: TreatmentServiceI = inject(TREATMENT_SERVICE);
+  private _toothTreatmentServ: ToothTreatmentServiceI =
+    inject(TOOTH_TREATMENT_SERVICE);
+  private _odontogramServ: OdontogramServiceI = inject(ODONTOGRAM_SERVICE);
   private _dialog = inject(MatDialog);
   private _injector = inject(Injector);
   private _i18n = inject(RokuTranslatorService);
