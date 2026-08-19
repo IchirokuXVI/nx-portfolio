@@ -6,47 +6,34 @@
   [title]="project().name"
 >
   <div body>
+    @if (deepDive()) {
+      <div class="portfolio-reveal portfolio-reveal--top">
+        <ng-container [ngTemplateOutlet]="revealButton" />
+      </div>
+    }
+
     <div class="portfolio-sections" id="portfolio-sections">
-      @for (id of sectionIds; track id) {
+      @for (section of visibleSections(); track section.id) {
         <lib-landing-v2-detail-section
-          [heading]="key + '.sections.' + id + '.title' | rokuT"
-          [open]="deepDive()"
-          [sectionId]="id"
-        >
-          <p lead>{{ key + '.sections.' + id + '.lead' | rokuT }}</p>
-          <p deep>{{ key + '.sections.' + id + '.detail' | rokuT }}</p>
-        </lib-landing-v2-detail-section>
+          [heading]="headingKey(section) | rokuT"
+          [paragraphKeys]="paragraphKeys(section)"
+          [sectionId]="section.id"
+        />
       }
     </div>
 
-    <div class="portfolio-reveal">
-      <button
-        class="portfolio-reveal__button"
-        [attr.aria-expanded]="deepDive()"
-        (click)="toggleDeepDive()"
-        aria-controls="portfolio-sections"
-        type="button"
-      >
-        <span>
-          {{
-            (deepDive()
-              ? key + '.reveal_less'
-              : key + '.reveal_more'
-            ) | rokuT
-          }}
-        </span>
-        <span
-          class="portfolio-reveal__caret"
-          [class.portfolio-reveal__caret--up]="deepDive()"
-          aria-hidden="true"
-        ></span>
-      </button>
-    </div>
+    @if (deepDive()) {
+      <p class="portfolio-closing">{{ key + '.closing_note' | rokuT }}</p>
+    } @else {
+      <div class="portfolio-reveal portfolio-reveal--bottom">
+        <ng-container [ngTemplateOutlet]="revealButton" />
+      </div>
+    }
   </div>
 
   <div meta>
     <div class="portfolio-meta">
-      <lib-landing-v2-detail-toc class="portfolio-meta__toc" [items]="tocItems" />
+      <lib-landing-v2-detail-toc class="portfolio-meta__toc" [items]="tocItems()" />
 
       <div class="portfolio-meta__chips">
         @for (group of chipGroups; track group.headingKey) {
@@ -56,8 +43,25 @@
           />
         }
       </div>
-
-      <lib-landing-v2-facts-table [facts]="facts" />
     </div>
   </div>
 </lib-landing-v2-detail-page-shell>
+
+<ng-template #revealButton>
+  <button
+    class="portfolio-reveal__button"
+    [attr.aria-expanded]="deepDive()"
+    (click)="toggleDeepDive()"
+    aria-controls="portfolio-sections"
+    type="button"
+  >
+    <span>
+      {{ (deepDive() ? key + '.reveal_less' : key + '.reveal_more') | rokuT }}
+    </span>
+    <span
+      class="portfolio-reveal__caret"
+      [class.portfolio-reveal__caret--up]="deepDive()"
+      aria-hidden="true"
+    ></span>
+  </button>
+</ng-template>

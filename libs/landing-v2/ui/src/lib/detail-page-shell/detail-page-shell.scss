@@ -125,9 +125,21 @@
     flex-direction: column;
     gap: 2rem;
     min-width: 0;
+    // On mobile (single column) the meta panel leads, so the body sits second.
+    // Desktop restores the natural body-left / meta-right order below.
+    order: 2;
+
+    @media (min-width: $breakpoint-desktop) {
+      order: 1;
+    }
   }
 
   &__meta {
     min-width: 0;
+    order: 1;
+
+    @media (min-width: $breakpoint-desktop) {
+      order: 2;
+    }
   }
 }
