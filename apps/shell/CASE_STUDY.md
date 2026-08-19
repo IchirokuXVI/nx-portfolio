@@ -49,21 +49,72 @@ remote.
 
 ## Locale-first routing
 
-**Q: The top-level route is `:locale` handled by `LocaleWrapperComponent`. Why route locale first?**
+**Q: The top-level route is `:locale` (a componentless route guarded by `localeGuard`). Why route locale first?**
 A:
 
-**Q: On a locale change you rewrite the URL with a full `window.location.href` navigation instead of an Angular router nav. Why the full reload?**
-A: Because I add the locale to the backend requests, so an in app navigation would
-mean re-requesting all of the data again with the correct locale. That seemed like
-too much work and something that could easily create problems, so instead I do a
-full page reload, which re-fetches everything for the new locale cleanly.
+**Shareable links that keep their language.** Locale first routing lets me share a
+piece of content without changing the language it is shown in. The language travels
+with the URL, so whoever opens the link sees the same locale I did.
 
-> Note (Claude): For the write up, worth clarifying the trigger. In the code this
-> full reload only fires when the locale is changed programmatically (for example an
-> in app language switcher) while the URL still shows the old locale. When the user
-> edits the locale segment in the URL directly, a separate `paramMap` subscription
-> calls `RokuTranslator.changeLocale` and Angular routing handles it without a
-> reload, so there is no reload loop.
+**Cacheable per language URLs.** Having the locale in the URL also means each language
+is a distinct URL, so the pages can be cached per language. That would not be possible
+if the language lived only in storage or a header, because every language would share
+the same URL.
+
+**Locale less links still work.** Just in case, I also added a redirect for URLs that
+arrive without a locale. Entering `domain.tld/damoclesSword` redirects to
+`domain.tld/<locale>/damoclesSword`, so content can also be shared without a locale and
+the language is then determined when the user loads the page.
+
+> Note (Claude): Verified against `localeGuard` and `localeCorrectionGuard`. The
+> locale less redirect happens in two phases. (1) `localeGuard` runs first on the
+> `:locale` route (and on the catch-all): if the first segment is not a valid locale it
+> redirects to `/{guess}/{path}`, preserving query and fragment. The guess prefers the
+> target app's last used locale (persisted as `roku-locale:{appKey}`), then the browser
+> locale, then a default, so a returning visitor lands back in their previous language.
+> (2) Once the target app loads, its `localeCorrectionGuard` validates that guessed
+> locale against the app's own supported set (from route `data`) and, if it is not
+> supported there, corrects the URL with a router navigation (no reload). This is also
+> why a locale that is valid for one app but not another gets fixed on entry.
+
+**Q: What happens when a user changes the language, and why? (Originally a full page reload; now a soft in-place switch.)**
+A:
+
+**What happens now.** Changing the language is a soft switch, with no page reload. The
+switcher tells the store to change the locale, which loads the new language and
+refetches whatever depends on it, and the UI updates in place. In practice I did not
+have to change much to get there: I made the translation pipe impure so an already
+rendered binding re-translates on a locale change, and I added a function on
+`RokuTranslatorService` that lets code react to the locale change. Anything that should
+update when the locale changes goes through that `withLocale` function, so the data
+that needs the new locale is refetched and everything else stays put.
+
+**Why I built it this way.** I moved to the soft switch mainly to see how it works and
+as a learning exercise. For now I am keeping it.
+
+**Why I still lean toward a hard reload.** Even so, I think a hard reload is usually the
+better choice. With a hard reload you only need the current language loaded, not all of
+them, and the browser can serve the page from cache instead of rebuilding the whole
+language from scratch and rerunning the key lookups and requests. Reloading everything
+live can leave missing strings and inconsistencies in the UI while it loads. On top of
+that, I have yet to find a popular website that changes language without a hard reload;
+every one I checked reloads to switch.
+
+> Note (Claude): Verified against the code, and the tradeoff Daniel raises is real in
+> this implementation. (1) The soft switch is what the deployed apps do today: both
+> `DamoclesSwordWrapper.changeLocale` and landingV2's `LanguageSwitch.select` call
+> `RokuLocaleStore.switchAppLocale`, which persists the per app choice, calls
+> `RokuTranslator.changeLocale` (awaiting i18next `changeLanguage` so strings are ready
+> before re-render), emits to the locale listeners, and rewrites only the leading locale
+> segment of the URL via a router navigation, no reload. (2) The data refetch is the
+> `withLocale` / `refetchOnLocaleChange` operator: it re-runs a locale keyed query with
+> `switchMap` on each change, cancelling the previous request. (3) Daniel's "you need all
+> languages loaded" concern is accurate for the current design: `addTranslations`
+> eager loads every registered locale for the active namespaces, precisely so the switch
+> is instant and does not flash missing keys, which is the memory/load cost a hard reload
+> would avoid. So the two approaches trade an instant no reload switch against loading
+> only one language and reusing the browser cache. This supersedes the previous answer,
+> which described a full `window.location.href` reload.
 
 **Q: Supported locales are en/es/fr. Why these, and how is the active locale detected / persisted?**
 A:
