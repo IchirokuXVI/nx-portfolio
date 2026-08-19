@@ -116,8 +116,30 @@ every one I checked reloads to switch.
 > only one language and reusing the browser cache. This supersedes the previous answer,
 > which described a full `window.location.href` reload.
 
-**Q: Supported locales are en/es/fr. Why these, and how is the active locale detected / persisted?**
+**Q: Which languages does each app enable, why those, and how is the active locale detected and persisted?**
 A:
+
+**Why these languages.** I am a native Spanish speaker, but for anything computer
+related, from work to video games, I mainly use English. I am only interested in jobs
+that need Spanish or English, so those are the two languages the portfolio itself
+carries. DamoclesSword is different: its three languages were a requirement from the
+client.
+
+**How detection and persistence work.** The resolution order is: if you open a URL that
+already has a locale, you get that locale; otherwise you get your stored locale; if you
+do not have one, you get your browser locale; and if that is not supported, you get the
+default. Preferring the stored choice over the browser language is deliberate. Once a
+user has changed the language at some point, it does not make sense to keep using the
+browser language, so their previous choice should win. That order felt natural to me.
+
+> Note (Claude): Verified against the per app locale constants. odontogram and landingV2
+> ship `['en', 'es']` and damoclesSword ships `['en', 'es', 'fr']`, each defaulting to
+> `en`; landingV2 is the root landing app and stores under the `landing` key. Each UI lib
+> exposes `*_AVAILABLE_LOCALES` (what it can load) and the feature-shell picks the enabled
+> `*_USABLE_LOCALES` subset. The detection order Daniel describes is exactly
+> `resolveDesiredLocale`: valid URL locale, then stored `roku-locale:{appKey}`, then
+> browser locale, then default. A returning visitor keeps their prior language even if the
+> browser prefers another.
 
 ## Localization: RokuTranslator
 
