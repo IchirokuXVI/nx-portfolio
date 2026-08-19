@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { TeethNumbers } from '@portfolio/odontogram/models';
-import { forkJoin, Observable } from 'rxjs';
+import { forkJoin, Observable, shareReplay } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class ToothImageLoader {
@@ -21,12 +21,11 @@ export class ToothImageLoader {
       return loadedImage;
     }
 
-    // FIXME: the loadedImages cache is never populated, so this Map is currently dead
-    // code. The forkJoin result should be stored back into loadedImages (for example
-    // wrapped in shareReplay(1) and saved with this.loadedImages.set(toothNumber, ...))
-    // so repeated loads reuse the same observable. It works today only because the
-    // dynamic import() is already deduped by the bundler.
-    return forkJoin({
+    // shareReplay(1) so late subscribers replay the resolved value instead of
+    // re-running the dynamic import()s; storing it back into loadedImages makes the
+    // Map an actual per-tooth cache that lives for the app session (the service is
+    // providedIn root), correct for immutable tooth assets.
+    const image$ = forkJoin({
       lateral: import(`../../../assets/teeth/${toothNumber}_root.png`).then(
         (m) => m.default
       ),
@@ -39,6 +38,10 @@ export class ToothImageLoader {
       crown_mask: import(
         `../../../assets/teeth/${toothNumber}_crown_mask.png`
       ).then((m) => m.default),
-    });
+    }).pipe(shareReplay(1));
+
+    this.loadedImages.set(toothNumber, image$);
+
+    return image$;
   }
 }
