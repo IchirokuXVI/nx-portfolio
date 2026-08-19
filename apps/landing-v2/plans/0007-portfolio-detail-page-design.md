@@ -20,6 +20,19 @@ copy is ready. The same pattern (richer content components + more i18n copy) ext
 `OdontogramContent` and `DamoclesContent` later, once their case studies are finished, so
 keep every new shared piece project-agnostic.
 
+## Decisions (confirmed 2026-08-19)
+
+- **Scope:** Portfolio page only. Odontogram and Damocle'Sword are later passes.
+- **Depth: progressive disclosure.** The page shows the **highlights by default** (tight,
+  scannable). At the bottom, a button ("Want to know even more?" or similar) reveals the
+  **in-depth** content. So both depths ship: highlights first, deep dive on demand. See
+  Design below for the mechanism.
+- **Hero diagram:** out of scope for this pass; a later polish pass adds the
+  module-federation topology diagram. Use a simple hero (or none) for now.
+- **Implementation:** done from a **fresh session on its own worktree** (this planning
+  session is pinned to the `case-study-docs` worktree). Start the fresh session, read this
+  plan, and build. Branch off `dev` (the current base) or `main` per the repo default.
+
 ## Current state (what already exists, do not rebuild)
 
 - Routing: one parameterized route `/{locale}/projects/:slug` -> `ProjectPage`
@@ -76,26 +89,39 @@ direction so the page does not read as a templated doc dump.
 Design intent:
 - A quiet **section navigation / table of contents** down the side (or a sticky top strip
   on mobile) so a long page stays scannable. Anchored to the section ids.
-- Each section is a **heading + short lead paragraph + optional supporting detail**
-  (a compact stat row, an inline code token, or a small callout). Avoid walls of text.
-- A **hero visual**: reuse or produce the module-federation topology diagram (shell to
-  remotes) rather than a screenshot, since the page is self-referential. If a diagram
-  asset does not already exist, build it as inline themable SVG in a small `ui` component,
-  not a raster image.
+- Each section is a **heading + short lead paragraph** (the highlight), plus a **deeper
+  detail block that is hidden by default**. Avoid walls of text at the highlight level.
+- **Progressive disclosure (the confirmed depth mechanism).** By default the page renders
+  only the highlight leads. A single button at the bottom ("Want to know even more?")
+  toggles a `deepDive` signal that reveals the in-depth content across the sections (the
+  hidden detail blocks). Implementation notes:
+  - Prefer one page-level toggle that expands every section's deep block at once, over a
+    per-section accordion, so the reading flow stays linear. (A per-section accordion is an
+    acceptable alternative if it reads better; decide during build.)
+  - Accessibility: the button is a real `<button>` with `aria-expanded`; revealed content
+    is not `display:none`-only if it must be reachable by anchor, but for this page a
+    signal-driven `@if` is fine. Label text is i18n.
+  - The button label and both content depths are i18n keys, so es ships too.
+- **Hero visual:** deferred this pass (see Decisions). Use the project's existing image
+  (`project().image`) if present, or no hero. The module-federation topology diagram is a
+  later polish pass, built then as inline themable SVG in a `ui` component, not a raster.
 - The **meta panel** becomes a proper aside: tech chips grouped, a short facts table, and
   the repo/live links (the site itself is the live demo, so "visit live" points at `/`).
 - Respect the no-horizontal-scroll rule at 320 to 3840 (see `0006`), light and dark, en
   and es (Spanish copy is longer, so test wrapping).
 
 New shared UI pieces (all in `libs/landing-v2/ui`, project agnostic, standalone, OnPush):
-- `detail-section` — a titled content section with an `id` for TOC anchoring and slots for
-  lead prose plus optional aside/stat content. Replaces the ad-hoc `.detail-section` divs
-  so odontogram/damocles reuse it.
+- `detail-section` — a titled content section with an `id` for TOC anchoring, a **lead**
+  slot (always shown) and a **deep** slot (shown only when the page's `deepDive` is on).
+  Replaces the ad-hoc `.detail-section` divs so odontogram/damocles reuse it. The
+  reveal state can be passed in as an input or read from a small shared signal/service.
 - `detail-toc` — the section navigation, driven by a list of `{ id, label }`.
 - `tech-chip-group` / `facts-table` — small presentational helpers for the meta panel
   (reuse the existing `info-table` pattern if it fits rather than adding a new one).
-- `mfe-topology-diagram` (optional, if the hero diagram is in scope) — inline SVG,
-  the-aware.
+- A **"want to know more" reveal button** (can live in `PortfolioContent` or a tiny
+  reusable `ui` control) that toggles the `deepDive` signal. Keep the toggle state at the
+  content-component level and pass it down to the sections.
+- (Deferred) `mfe-topology-diagram` — later polish pass only; not built now.
 
 Keep `PortfolioContent` thin: it composes `DetailPageShell` + the new section components
 and only supplies the section list and i18n keys. All heavy layout/logic lives in the
@@ -105,8 +131,10 @@ reusable `ui` pieces.
 
 - Add the new keys under `landingV2.detail.portfolio.*` in
   `libs/landing-v2/ui/assets/i18n/{en,es}.json`. Suggested shape:
-  `sections.<sectionId>.{title,lead,detail}`, plus any chip/fact labels. Keep the existing
-  `overview_*` keys or migrate them; if migrating, update `portfolio-content.html`.
+  `sections.<sectionId>.{title,lead,detail}` where `lead` is the always-visible highlight
+  and `detail` is the deep-dive text revealed by the button; plus `reveal_more` /
+  `reveal_less` button labels and any chip/fact labels. Keep the existing `overview_*` keys
+  or migrate them; if migrating, update `portfolio-content.html`.
 - Write English first (default), then Spanish. Prose should be adapted from the case study,
   not copied verbatim from the Q&A; tighten to showcase length. No dashes as punctuation
   (house style).
@@ -114,24 +142,30 @@ reusable `ui` pieces.
 
 ## Implementation steps (ordered)
 
-1. Read `apps/shell/CASE_STUDY.md` end to end and draft the six sections' English copy
-   (showcase length) before touching components.
-2. Build the reusable `ui` pieces (`detail-section`, `detail-toc`, meta-panel helpers),
-   each with a spec asserting it renders its inputs. Export from `libs/landing-v2/ui`.
-3. Rebuild `portfolio-content.html` to compose `DetailPageShell` + the section list + TOC
-   + meta panel. Update `portfolio-content.ts` with the section metadata (`{ id, label }`).
-4. Add the hero diagram component if in scope; wire it as the `heroImage`/hero slot.
-5. Add all new i18n keys to `en.json` and `es.json`.
-6. Style with the existing tokens; verify responsive behavior and both themes.
-7. Update the `PortfolioContent` spec (and add specs for the new components).
+1. Read `apps/shell/CASE_STUDY.md` end to end and draft, per section, a short **lead**
+   (highlight) and a longer **detail** (deep dive) in English, before touching components.
+2. Build the reusable `ui` pieces (`detail-section` with lead + deep slots, `detail-toc`,
+   meta-panel helpers), each with a spec asserting it renders its inputs and that the deep
+   slot is hidden until revealed. Export from `libs/landing-v2/ui`.
+3. Rebuild `portfolio-content.html` to compose `DetailPageShell` + the section list + TOC +
+   meta panel. Update `portfolio-content.ts` with the section metadata (`{ id, label }`) and
+   the `deepDive` signal.
+4. Add the "want to know even more?" reveal button at the bottom, wired to toggle
+   `deepDive` (with `aria-expanded` and an i18n label). No hero diagram this pass.
+5. Add all new i18n keys to `en.json` and `es.json` (lead, detail, reveal labels).
+6. Style with the existing tokens; verify responsive behavior and both themes, and that the
+   reveal transition reads well.
+7. Update the `PortfolioContent` spec (and add specs for the new components), including a
+   test that the deep content appears only after the button is clicked.
 
 ## Verify
 
 1. `npx nx lint landing-v2-ui landing-v2-feature-project` and
    `npx nx test landing-v2-ui landing-v2-feature-project` pass.
-2. Live via the shell: `/en/projects/portfolio` and `/es/projects/portfolio` render every
-   section, the TOC anchors jump correctly, the back/brand link returns to `/{locale}`, and
-   repo/live links work.
+2. Live via the shell: `/en/projects/portfolio` and `/es/projects/portfolio` render the
+   highlights, the reveal button expands the deep content (and collapses it), the TOC
+   anchors jump correctly, the back/brand link returns to `/{locale}`, and repo/live links
+   work.
 3. No horizontal scroll at 320 to 3840 in both locales and both themes (`0006` crawl).
 4. Commit: `feat(landing-v2): build out the Portfolio project detail page`.
 
@@ -143,10 +177,8 @@ export barrel. Do not modify `feature-project` routing or other scopes unless a 
 component genuinely needs it. Leave `OdontogramContent` / `DamoclesContent` untouched (a
 later plan handles them with the same components).
 
-## Open questions (confirm with Daniel before building)
+## Resolved (was open)
 
-- Is "the portfolio details page" the **Portfolio** project page specifically (assumed
-  here), or all three project detail pages in one pass?
-- Is the MF topology hero diagram in scope now, or a later polish pass?
-- How deep should the page go: a tight highlights page, or a long-form deep dive with
-  every section from the case study?
+All settled in the Decisions block above: Portfolio page only; highlights by default with a
+bottom reveal button for the deep dive; hero diagram deferred; implementation in a fresh
+session on its own worktree. Nothing blocks the build.
