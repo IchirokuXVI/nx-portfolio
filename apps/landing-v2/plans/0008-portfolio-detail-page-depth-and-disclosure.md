@@ -37,7 +37,18 @@ New section set. Titles and intent (every section is i18n copy, not hardcoded):
    `models`, utils. The **apps stay almost untouched**. Most of the time something moves
    into its **own** library because it has outgrown the shared `ui`/utils library and is a
    **real feature in its own right**, with value in being independent from the other libs.
-5. **Infrastructure and deployment** (renamed from "Engineering and delivery") — **drop
+5. **Assets handling** — how static assets are handled across the federation.
+   **Copy source is not written yet** (see "Copy source" below): there is no answered
+   assets Q&A in `apps/shell/CASE_STUDY.md`. Candidate points, code-derived, pending
+   Daniel's confirmation or a written answer:
+   - each lib owns its own `assets/` (i18n JSON, icons), loaded by the lib that owns them;
+   - SVG icons imported as raw strings (`?raw`) and inlined via `DomSanitizer` as standalone
+     components, never inline `<svg>` markup;
+   - the module-federation gotcha that a remote's CSS `url()` assets resolve against the
+     **shell's** origin, not the remote's;
+   - each leaf `tsconfig` needs `types/**/*.d.ts` in `include` so `*.svg?raw` / asset
+     imports typecheck.
+6. **Infrastructure and deployment** (renamed from "Engineering and delivery") — **drop
    signals / state / change-detection entirely**. Cover **GitHub** and **GitHub Actions**
    (affected-project CI), **Docker** (the custom `@portfolio/docker` plugin over
    `docker buildx`), **Helm**, **Kubernetes** (**k3s**), the staging then production
@@ -62,6 +73,17 @@ project-agnostic. Confirm or adjust during build:
   port by design (they only render through the shell).
 - **Testing** — the shared-spec contract pattern for the data-access layer, and why e2e
   points at the shell rather than each remote.
+
+Both deep-only sections are **confirmed** (2026-08-20).
+
+### Copy source
+
+Every section's prose is adapted from `apps/shell/CASE_STUDY.md` (foundation) and
+`apps/docker/CASE_STUDY.md` (infrastructure), tightened to showcase length, no dashes as
+punctuation. **Exception: Assets handling has no answered source.** Before writing it,
+either (a) Daniel adds an assets Q&A to `apps/shell/CASE_STUDY.md` and I adapt it, or
+(b) I draft it from the code-derived candidate points above and Daniel reviews the draft.
+Decide at implementation start; do not invent unverified claims in the meantime.
 
 ## Progressive disclosure: a view swap, not an append
 
