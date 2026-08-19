@@ -5,6 +5,8 @@ import {
   ElementRef,
   inject,
   input,
+  OnDestroy,
+  OnInit,
   output,
   signal,
 } from '@angular/core';
@@ -50,7 +52,7 @@ const HeaderBreakpointClasses = {
   templateUrl: './main-header.html',
   styleUrl: './main-header.scss',
 })
-export class MainHeader {
+export class MainHeader implements OnInit, OnDestroy {
   damoclesLogo = import(`../../../assets/damoclesSwordLogo.svg`).then(
     (m) => m.default
   );

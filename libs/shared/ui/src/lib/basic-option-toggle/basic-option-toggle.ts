@@ -34,8 +34,12 @@ export class BasicOptionToggle implements ControlValueAccessor {
   valueField = input('value');
   disabledField = input('disabled');
 
-  private onChange: (value: any) => void = () => {};
-  private onTouched: () => void = () => {};
+  private onChange: (value: any) => void = () => {
+    /* replaced by registerOnChange */
+  };
+  private onTouched: () => void = () => {
+    /* replaced by registerOnTouched */
+  };
   disabled = signal(false);
 
   @ContentChild('icon') iconTemplate?: TemplateRef<any>;
@@ -67,10 +71,7 @@ export class BasicOptionToggle implements ControlValueAccessor {
   }
 
   findField(option: any, field: string) {
-    return typeof option === 'string'
-      ? option
-      : // @ts-ignore
-        findField(option, field);
+    return typeof option === 'string' ? option : findField(option, field);
   }
 
   findFieldAndJoin(value: any, field: string) {

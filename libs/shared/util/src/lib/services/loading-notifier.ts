@@ -10,9 +10,9 @@ import {
 } from 'rxjs/operators';
 
 @Injectable()
-export class LoadingNotifier<Loadable extends readonly string[]>
-  implements OnDestroy
-{
+export class LoadingNotifier<
+  Loadable extends readonly string[],
+> implements OnDestroy {
   // static readonly LOADABLE_ENTRIES = new InjectionToken<string[]>(
   //   'Loadable entries for LoadingNotifier'
   // );
@@ -23,18 +23,14 @@ export class LoadingNotifier<Loadable extends readonly string[]>
   private _loadings$: { [key in Loadable[number]]?: Observable<boolean> } = {};
 
   get loadings$() {
-    const that = this;
-
     return new Proxy(this._loadings$, {
-      get(target, key) {
-        return that.getLoadable(key.toString(), true);
+      get: (target, key) => {
+        return this.getLoadable(key.toString(), true);
       },
     });
   }
 
   private _onDestroy = new Subject<void>();
-
-  constructor() {}
 
   ngOnDestroy() {
     this._onDestroy.next();
@@ -80,7 +76,7 @@ export class LoadingNotifier<Loadable extends readonly string[]>
     loadable: Loadable[number],
     obs?: false
   ): (typeof this._loadings)[string];
-  private getLoadable(loadable: Loadable[number], obs: boolean = false) {
+  private getLoadable(loadable: Loadable[number], obs = false) {
     if (!this._loadings[loadable]) this.addLoadable(loadable);
 
     return obs ? this._loadings$[loadable] : this._loadings[loadable];

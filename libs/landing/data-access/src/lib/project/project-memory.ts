@@ -58,7 +58,10 @@ export class ProjectMemory implements ProjectServiceI {
       );
     }
 
-    const project = this._projects.find((p) => p.id === translation!.projectId);
+    const foundTranslation = translation;
+    const project = this._projects.find(
+      (p) => p.id === foundTranslation.projectId
+    );
 
     if (!project) {
       throw new Error(

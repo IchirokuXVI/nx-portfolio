@@ -75,8 +75,6 @@ export class InMemoryFilter<DataType, FilterType> {
       ),
   } satisfies Record<string, CheckFunction<DataType, FilterType>>;
 
-  constructor() {}
-
   setFilterConfig(filterConfig: {
     [key in keyof FilterType]: FilterConfig<DataType, FilterType>;
   }) {

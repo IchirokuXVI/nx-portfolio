@@ -16,8 +16,12 @@
       @if (!isLoadingSave) {
         <span
           (click)="onConfirmedChange()"
+          (keydown.enter)="onConfirmedChange()"
+          (keydown.space)="onConfirmedChange()"
           class="save-icon"
           container="body"
+          role="button"
+          tabindex="0"
           tooltip="Guardar"
         >
           @if (saveIconTemplate) {
@@ -49,7 +53,14 @@
         </span>
       }
 
-      <span (click)="onCancelChange()" class="cancel-icon">
+      <span
+        (click)="onCancelChange()"
+        (keydown.enter)="onCancelChange()"
+        (keydown.space)="onCancelChange()"
+        class="cancel-icon"
+        role="button"
+        tabindex="0"
+      >
         @if (cancelIconTemplate) {
           <ng-template
             *ngTemplateOutlet="
@@ -64,8 +75,12 @@
     } @else {
       <span
         (click)="onEditIconClick()"
+        (keydown.enter)="onEditIconClick()"
+        (keydown.space)="onEditIconClick()"
         [class.disabled]="loadingNotifier.loadings$.save | async"
         class="edit-icon"
+        role="button"
+        tabindex="0"
       >
         @if (editIconTemplate) {
           <ng-template
@@ -82,8 +97,12 @@
       </span>
       <span
         (click)="onDeleteIconClick()"
+        (keydown.enter)="onDeleteIconClick()"
+        (keydown.space)="onDeleteIconClick()"
         [class.disabled]="isLoadingDelete"
         class="delete-icon"
+        role="button"
+        tabindex="0"
       >
         @if (!isLoadingDelete) {
           @if (deleteIconTemplate) {

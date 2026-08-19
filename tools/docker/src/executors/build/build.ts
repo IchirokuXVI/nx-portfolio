@@ -121,7 +121,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   console.log(`Running command: ${buildCommand}`);
 
   try {
-    const result = await execAsync(buildCommand);
+    await execAsync(buildCommand);
   } catch (err: any) {
     throw new Error(`Error during Docker build: ${err.message}`);
   }

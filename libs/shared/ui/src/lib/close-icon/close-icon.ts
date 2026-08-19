@@ -1,5 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, Input, signal, ViewChild } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  inject,
+  Input,
+  signal,
+  ViewChild,
+} from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 @Component({
@@ -16,7 +23,8 @@ export class CloseIcon {
 
   private _sanitizer = inject(DomSanitizer);
 
-  @ViewChild('iconContainer', { static: true }) iconContainer: any;
+  @ViewChild('iconContainer', { static: true })
+  iconContainer!: ElementRef<HTMLElement>;
 
   constructor() {
     // @ts-expect-error I guess at some point I have to fix this...
