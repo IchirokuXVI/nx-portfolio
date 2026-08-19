@@ -191,8 +191,31 @@ languages in landing, odontogram, or any other app or library that does not need
 > be a shared singleton at all (only the shell can run `provideAppInitializer`, so init
 > lives in one place). See `apps/shell/src/app/app.config.ts`.
 
-**Q: How do remotes contribute their own translations (per-locale lazy namespace loaders)?**
+**Q: How do remotes and libraries contribute their own translations, given the shell does not know about them upfront?**
 A:
+
+**Translations belong to the library.** A library should work on its own, so I think its
+translations should be assets of that library rather than something the shell owns.
+Following that principle, each library defines the languages it has. Declaring a language
+does not mean the library must use it; it only means the library CAN load that language.
+
+**Portability.** Doing it this way keeps the libraries portable. If I install one of them
+in a different project, I only need to set the correct language in `RokuTranslator` and
+every library picks it up. If I end up using these libraries outside this project, I also
+plan to add an option to set the language directly and to override any text by key, so a
+consumer has more freedom configuring the library.
+
+> Note (Claude): Matches the code. Each UI lib registers through `provideRokuTranslator`
+> (`RokuTranslatorModule.withConfig`) and hands over a loader that dynamically `import()`s
+> its per locale JSON asset (for example `libs/damoclesSword/ui/assets/i18n/es.json`). The
+> "can load vs actually uses" split is the `*_AVAILABLE_LOCALES` (declared by the UI lib)
+> vs `*_USABLE_LOCALES` (enabled by the feature-shell) pair. Mechanics worth stating in the
+> write-up: loaders are stored per locale and per namespace in `RokuTranslator`; a custom
+> i18next `backend.read` pulls a namespace's loader lazily the first time it is needed
+> (returning a `No loader found` error if none is registered), while `addTranslations`
+> eager loads the registered locales of active namespaces so a runtime switch is instant.
+> Namespace order gives priority (a later `addNamespace` is unshifted to the front); this
+> is the cross namespace read that the per lib `t(key, ns?)` scoping now contains.
 
 **Q: In MF config `roku-translator` is forced `singleton: true, strictVersion: true`. What broke, or would break, without it?**
 A:
