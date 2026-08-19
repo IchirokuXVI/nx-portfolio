@@ -3,7 +3,6 @@ export * from './lib/landing-v2-locales';
 export * from './lib/detail-page-shell/detail-page-shell';
 export * from './lib/detail-section/detail-section';
 export * from './lib/detail-toc/detail-toc';
-export * from './lib/facts-table/facts-table';
 export * from './lib/hero/hero';
 export * from './lib/info-table/info-table';
 export * from './lib/tech-chip-group/tech-chip-group';

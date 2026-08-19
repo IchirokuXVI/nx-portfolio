@@ -12,11 +12,20 @@
 }
 
 .portfolio-reveal {
-  margin-top: 2.5rem;
-  padding-top: 2rem;
-  border-top: 1px solid $hairline;
   display: flex;
   justify-content: center;
+
+  &--bottom {
+    margin-top: 2.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid $hairline;
+  }
+
+  &--top {
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid $hairline;
+  }
 
   &__button {
     display: inline-flex;
@@ -64,6 +73,18 @@
   }
 }
 
+// A short sign-off to the reader, closing the deep read. Quieter than the body.
+.portfolio-closing {
+  margin: 3rem 0 0;
+  padding-top: 2rem;
+  border-top: 1px solid $hairline;
+  color: $muted;
+  font-style: italic;
+  line-height: 1.75;
+  font-size: 0.95rem;
+  overflow-wrap: break-word;
+}
+
 .portfolio-meta {
   display: flex;
   flex-direction: column;
@@ -76,9 +97,9 @@
   }
 
   &__toc {
-    // The TOC is navigation for a long page; on a single-column phone layout
+    // The TOC is navigation for a long page; on the single-column mobile layout
     // the sections are already right there, so it only earns its place beside
-    // the body.
+    // the body. The chips still lead on mobile (the shell puts meta first).
     display: none;
 
     @media (min-width: $breakpoint-desktop) {

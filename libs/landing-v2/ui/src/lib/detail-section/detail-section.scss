@@ -3,8 +3,8 @@
 :host {
   display: block;
   width: 100%;
-  // Clears the sticky-free header so an anchor jump lands below the top edge
-  // rather than flush against it.
+  // Clears the top edge so an anchor jump from the TOC lands below it rather
+  // than flush against it.
   scroll-margin-top: 1.5rem;
 }
 
@@ -19,49 +19,20 @@
     text-wrap: balance;
   }
 
-  &__lead {
-    :where(p) {
-      margin: 0;
+  &__paragraph {
+    margin: 0;
+    color: $muted;
+    line-height: 1.75;
+    font-size: 1rem;
+    overflow-wrap: break-word;
+
+    // The first paragraph reads as the lead, a touch brighter than the rest.
+    &:first-of-type {
       color: $text;
-      line-height: 1.7;
-      font-size: 1rem;
-      overflow-wrap: break-word;
     }
-  }
 
-  &__deep {
-    margin-top: 1.1rem;
-    padding-left: 1.1rem;
-    border-left: 2px solid rgba($accent, 0.4);
-
-    :where(p) {
-      margin: 0;
-      color: $muted;
-      line-height: 1.75;
-      font-size: 0.95rem;
-      overflow-wrap: break-word;
-
-      & + p {
-        margin-top: 0.85rem;
-      }
+    & + & {
+      margin-top: 0.9rem;
     }
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .detail-section__deep {
-    animation: landing-v2-detail-reveal 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-}
-
-@keyframes landing-v2-detail-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }

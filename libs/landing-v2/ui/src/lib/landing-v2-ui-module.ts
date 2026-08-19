@@ -4,7 +4,6 @@ import { DamoclesContent } from './damocles-content/damocles-content';
 import { DetailPageShell } from './detail-page-shell/detail-page-shell';
 import { DetailSection } from './detail-section/detail-section';
 import { DetailToc } from './detail-toc/detail-toc';
-import { FactsTable } from './facts-table/facts-table';
 import { Hero } from './hero/hero';
 import { InfoTable } from './info-table/info-table';
 import { LANDING_V2_AVAILABLE_LOCALES } from './landing-v2-locales';
@@ -30,7 +29,6 @@ const components = [
   DetailPageShell,
   DetailSection,
   DetailToc,
-  FactsTable,
   TechChipGroup,
   PortfolioContent,
   OdontogramContent,

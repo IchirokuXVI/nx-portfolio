@@ -1,33 +1,23 @@
-import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { DetailSection } from './detail-section';
 
-@Component({
-  imports: [DetailSection],
-  template: `
-    <lib-landing-v2-detail-section
-      [heading]="'Overview'"
-      [open]="open"
-      [sectionId]="'overview'"
-    >
-      <p lead>LEAD COPY</p>
-      <p deep>DEEP COPY</p>
-    </lib-landing-v2-detail-section>
-  `,
-})
-class Host {
-  open = false;
-}
-
 describe('DetailSection', () => {
-  let fixture: ComponentFixture<Host>;
+  let fixture: ComponentFixture<DetailSection>;
 
   beforeEach(async () => {
-    await TestBed.configureTestingModule({ imports: [Host] }).compileComponents();
-    fixture = TestBed.createComponent(Host);
+    await TestBed.configureTestingModule({
+      imports: [DetailSection],
+      providers: [provideRokuTranslatorTesting()],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(DetailSection);
+    fixture.componentRef.setInput('sectionId', 'overview');
+    fixture.componentRef.setInput('heading', 'Overview');
   });
 
   it('renders the heading and exposes the section id as an anchor', () => {
+    fixture.componentRef.setInput('paragraphKeys', ['p.a']);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
@@ -37,25 +27,22 @@ describe('DetailSection', () => {
     expect(host.querySelector('#overview')).not.toBeNull();
   });
 
-  it('always renders the lead', () => {
+  it('renders one paragraph per key (the testing translator echoes the key)', () => {
+    fixture.componentRef.setInput('paragraphKeys', ['p.a', 'p.b', 'p.c']);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
-    expect(host.querySelector('.detail-section__lead')?.textContent).toContain(
-      'LEAD COPY'
-    );
+    const paragraphs = host.querySelectorAll('.detail-section__paragraph');
+    expect(paragraphs.length).toBe(3);
+    expect(paragraphs[0].textContent).toBe('p.a');
+    expect(paragraphs[2].textContent).toBe('p.c');
   });
 
-  it('hides the deep block until open is set', () => {
+  it('renders no paragraphs when the key list is empty', () => {
+    fixture.componentRef.setInput('paragraphKeys', []);
     fixture.detectChanges();
-    let host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('.detail-section__deep')).toBeNull();
+    const host = fixture.nativeElement as HTMLElement;
 
-    fixture.componentInstance.open = true;
-    fixture.detectChanges();
-    host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('.detail-section__deep')?.textContent).toContain(
-      'DEEP COPY'
-    );
+    expect(host.querySelectorAll('.detail-section__paragraph').length).toBe(0);
   });
 });
