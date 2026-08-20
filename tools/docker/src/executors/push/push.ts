@@ -49,34 +49,18 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
     (tag) => `${registry}/${imageName}:${tag}`
   );
 
-  for (const fullImage of fullImages) {
-    // Commented the code about checking local image existence to always build before push
-    // Docker should already have caching mechanisms to avoid rebuilding unchanged layers
-    // console.log(`Checking for local image: ${fullImage}`);
-
-    // Check if image exists locally
-    // let imageExists = false;
-    // try {
-    //   await execAsync(`docker image inspect ${fullImage}`);
-    //   imageExists = true;
-    //   console.log(`Image ${fullImage} already built locally`);
-    // } catch {
-    //   console.log(`Image ${fullImage} not found locally, building...`);
-    // }
-
-    // Build if missing
-    // if (!imageExists) {
+  // Build the image unless the caller already did. When the build executor invokes
+  // push it passes skipBuild:true (the image was just built and loaded), so we don't
+  // rebuild it here — that used to build every image a second time (once per tag).
+  // A standalone `nx run <app>:push` leaves skipBuild falsy and still builds first.
+  if (!options.skipBuild) {
     try {
-      const result = await build(
-        { ...options, pushToRegistry: false },
-        context
-      );
+      const result = await build({ ...options, pushToRegistry: false }, context);
 
       if (!result.success) throw new Error("Build executor didn't succeed.");
     } catch (err) {
-      throw new Error(`Failed to build image ${fullImage} before push: ${err}`);
+      throw new Error(`Failed to build images before push: ${err}`);
     }
-    // }
   }
 
   // Login

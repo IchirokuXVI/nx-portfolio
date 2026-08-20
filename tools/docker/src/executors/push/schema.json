@@ -43,6 +43,11 @@
       "description": "Skip login to the Docker registry. Useful for CI/CD or development environments since the user should already be authenticated.",
       "default": false
     },
+    "skipBuild": {
+      "type": "boolean",
+      "description": "Skip (re)building the image before pushing; assumes it was already built and loaded. Set automatically when the build executor calls push, to avoid building twice.",
+      "default": false
+    },
     "noCache": {
       "type": "boolean",
       "description": "Build without cache",

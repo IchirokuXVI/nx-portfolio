@@ -37,23 +37,47 @@ npx nx run shell:build:docker --configuration=production
 
 ## Deployment / CI/CD
 
-Deployment is fully automated by a single GitHub Actions workflow: **`.github/workflows/docker-ci.yml`** (`Nx Docker Build & Push (Runner Only)`). It runs on every **push to `main`** and does _build → test → push images → deploy_ in one job.
+Three GitHub Actions workflows, one per boundary:
 
-### Pipeline overview
+| Workflow | Trigger | Does |
+| --- | --- | --- |
+| **`pr.yml`** | PR into `main` or `dev` | lint + unit-test the affected projects (against the PR's target branch). Fast pre-merge feedback. |
+| **`docker-ci.yml`** | push to `main` | unit-test affected, build + push affected staging images, e2e them (`k8s/e2e/compose.yml`), deploy staging. |
+| **`release.yml`** | GitHub Release published | test all apps, build + push all production images, deploy production. |
+
+**Testing model.** Tests run at every stage rather than once. The PR runs unit tests
+for quick feedback before merge; the merge to `main` re-runs the unit tests on the
+actual merged commit **and** e2e-tests the built staging images; a release re-tests on
+the release commit. Because each stage tests the exact code it is about to deploy, no
+merge queue is needed (a merge queue would serialize and slow every merge; here two
+PRs can merge back-to-back and each resulting push to `main` is tested on its own).
+
+> Requiring the `pr.yml` check on `main` and `dev` is still recommended so obviously
+> broken code never merges, but it is no longer a correctness requirement, since the
+> merge and release workflows test the code they deploy regardless.
+
+### Staging pipeline (`docker-ci.yml`)
 
 ```
 push to main
   │
-  ├─ Log in to GHCR (ghcr.io) + set up Docker Buildx
-  ├─ Setup Node 22, restore/install pinned Nx, expose the GitHub Actions (gha) buildx cache
-  ├─ Build the `docker/builder` image (the CI test/build image)
-  ├─ Resolve the "affected" base = SHA of the last successful run of this workflow on this branch
-  ├─ Compute three affected sets (see below)
+  ├─ Log in to GHCR (ghcr.io) + set up Docker Buildx + expose the gha buildx cache
+  ├─ Setup Node 22, install pinned Nx
+  ├─ Build the `docker/builder` image (the CI build image)
+  ├─ Resolve the "affected" base = SHA of the last successful run of this workflow
   ├─ Build affected static-docker apps            (nx run-many -t build)
-  ├─ Run affected tests inside the builder image  (docker run … nx run-many -t test)
+  ├─ Test affected apps inside the builder image  (nx run-many -t test)
   ├─ Build & push affected Angular apps           (nx run-many -t build:docker)
+  ├─ e2e the staging images                       (k8s/e2e/compose.yml — gates the deploy)
   └─ Deploy: rsync k8s/ to the host + `helm upgrade`
 ```
+
+Both deploy workflows use a `concurrency` group (`staging-deploy` / `production-release`)
+with `cancel-in-progress: false`, so runs never overlap: a second staging deploy (two
+PRs merged in quick succession) or a second release (two releases published close
+together) waits for the first to finish instead of racing the build/push and the
+`helm upgrade`. Note GitHub keeps only one run *pending* per group, so if a third run
+is queued while one is pending, the older pending run is superseded.
 
 ### How "affected" is computed
 

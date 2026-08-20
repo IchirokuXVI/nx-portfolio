@@ -9,6 +9,14 @@ on:
   release:
     types: [published]
 
+# Serialize releases: only one production release runs at a time. If two releases are
+# published close together, the second waits for the first to finish rather than
+# running two builds/pushes and two `helm upgrade`s at once. cancel-in-progress is
+# false so a release in flight is never killed mid-deploy.
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
 jobs:
   production-release:
     runs-on: ubuntu-latest
@@ -23,6 +31,8 @@ jobs:
       PORTFOLIO_DOCKER_SKIP_LOGIN: true
       # Use the GitHub Actions cache backend (type=gha) for every docker build.
       PORTFOLIO_DOCKER_CACHE: gha
+      # Export only the final image layers to the cache (see docker-ci.yml).
+      PORTFOLIO_DOCKER_CACHE_MODE: min
       # Where the shell loads its remotes from in production.
       PROD_MFE_BASE_URL: https://mfe.ichirokuxvi.com
 
@@ -97,6 +107,8 @@ jobs:
           static_apps=$(npx nx show projects --type "app" --projects tag:type:static-docker | paste -sd, -)
           npx nx run-many -t build --configuration production --projects name:$static_apps
 
+      # A release re-runs the full test suite on the release commit, so production is
+      # gated independently of what ran on the PR or the staging deploy.
       - name: Test all apps
         run: |
           testable_apps=$(npx nx show projects --with-target test | paste -sd, -)

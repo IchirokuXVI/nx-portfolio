@@ -80,6 +80,9 @@ describe('Push Executor', () => {
 
     expect(output.success).toBe(true);
 
+    // Builds once (handles all tags), not once per tag.
+    expect(mockedBuildExecutor).toHaveBeenCalledTimes(1);
+
     // One for login and an additional one for each version tag that is pushed
     expect(mockedExec).toHaveBeenCalledTimes(3);
 
@@ -97,6 +100,22 @@ describe('Push Executor', () => {
       `docker push my-test-registry/my-test-image:latest`,
       expect.any(Function)
     );
+  });
+
+  it('does not build when skipBuild is true', async () => {
+    mockedExec.mockImplementation(
+      (
+        command: any,
+        callback: (error: any, stdout: any, stderr: any) => void
+      ) => {
+        callback(null, 'stdout', null);
+      }
+    );
+
+    const output = await executor({ ...options, skipBuild: true }, context);
+
+    expect(output.success).toBe(true);
+    expect(mockedBuildExecutor).not.toHaveBeenCalled();
   });
 
   it('throws error if required env vars are missing', async () => {

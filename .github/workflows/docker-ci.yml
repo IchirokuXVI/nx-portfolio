@@ -18,6 +18,14 @@ on:
         type: boolean
         default: true
 
+# Serialize staging deploys: only one runs at a time. A run triggered while another
+# is in progress waits for it to finish instead of racing the build/push and the
+# helm upgrade. cancel-in-progress is false so an in-flight deploy is never killed
+# mid-way.
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false
+
 jobs:
   staging-deploy:
     runs-on: ubuntu-latest
@@ -35,6 +43,10 @@ jobs:
       # docker-container buildx driver (set up below) and the Actions runtime env
       # (exposed below).
       PORTFOLIO_DOCKER_CACHE: gha
+      # Export only the final image layers to the cache. The app images' builder
+      # stage (the `nx build`) re-runs every commit regardless, so caching it buys
+      # little; `min` writes less. Flip back to `max` to compare.
+      PORTFOLIO_DOCKER_CACHE_MODE: min
       # Where the shell loads its remotes from on staging. Baked into the shell
       # bundle at build time (ignored by the other, environment-agnostic apps).
       STAGING_MFE_BASE_URL: https://mfe.staging.ichirokuxvi.com
@@ -165,7 +177,9 @@ jobs:
         run: |
           npx nx run-many -t build --configuration production --projects name:${{ steps.get-affected-apps.outputs.affected_docker_apps }}
 
-      # Test affected apps inside the builder image
+      # Unit tests also run on the PR (pr.yml) for fast feedback, but they run again
+      # here on the actual merged commit — together with the e2e below, this makes
+      # the merge to main the thorough gate, independent of what the PR tested.
       - name: Test affected apps
         if: ${{ steps.get-affected-apps.outputs.affected_testable_apps != '' }}
         run: |
