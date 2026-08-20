@@ -55,7 +55,10 @@ export const PROJECTS: readonly StaticProject[] = [
     visual: { columnSpan: 2, featured: true },
     detailSlug: 'damoclesSword',
     appSlug: 'damoclesSword',
-    // image: pending a captured screenshot of the damoclesSword home hero.
+    image: () =>
+      import('../../assets/damoclesSword_screenshot.png').then(
+        (m) => m.default
+      ),
   },
   {
     id: '3',
