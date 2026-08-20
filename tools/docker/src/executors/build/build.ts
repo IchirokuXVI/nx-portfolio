@@ -181,7 +181,9 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   if (options.pushToRegistry) {
     try {
-      await push(options, context);
+      // The image was just built and loaded above, so tell push not to build it
+      // again (it otherwise rebuilds once per tag).
+      await push({ ...options, skipBuild: true }, context);
     } catch (err: any) {
       throw new Error(`Error during Docker push: ${err.message}`);
     }
