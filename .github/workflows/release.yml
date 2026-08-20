@@ -23,6 +23,8 @@ jobs:
       PORTFOLIO_DOCKER_SKIP_LOGIN: true
       # Use the GitHub Actions cache backend (type=gha) for every docker build.
       PORTFOLIO_DOCKER_CACHE: gha
+      # Export only the final image layers to the cache (see docker-ci.yml).
+      PORTFOLIO_DOCKER_CACHE_MODE: min
       # Where the shell loads its remotes from in production.
       PROD_MFE_BASE_URL: https://mfe.ichirokuxvi.com
 

@@ -35,6 +35,10 @@ jobs:
       # docker-container buildx driver (set up below) and the Actions runtime env
       # (exposed below).
       PORTFOLIO_DOCKER_CACHE: gha
+      # Export only the final image layers to the cache. The app images' builder
+      # stage (the `nx build`) re-runs every commit regardless, so caching it buys
+      # little; `min` writes less. Flip back to `max` to compare.
+      PORTFOLIO_DOCKER_CACHE_MODE: min
       # Where the shell loads its remotes from on staging. Baked into the shell
       # bundle at build time (ignored by the other, environment-agnostic apps).
       STAGING_MFE_BASE_URL: https://mfe.staging.ichirokuxvi.com

@@ -117,11 +117,18 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   //                        env (ACTIONS_CACHE_URL / ACTIONS_RUNTIME_TOKEN).
   //   registry           — a `<image>:buildcache` image in the registry.
   //   none / off         — no cache (same as noCache).
-  // Point 3 (mode=min vs mode=max) is intentionally left at mode=max for now; it
-  // can be measured/tuned later. See MEMORY docker-build-cache-mode-min.
   const cacheType = (process.env.PORTFOLIO_DOCKER_CACHE || 'local').toLowerCase();
   const cacheEnabled =
     !options.noCache && cacheType !== 'none' && cacheType !== 'off';
+
+  // Cache export mode, via PORTFOLIO_DOCKER_CACHE_MODE (max default, or min). `max`
+  // exports every intermediate layer; `min` exports only the final image's layers.
+  // For the multi-stage app images the builder stage (the `nx build`) re-runs every
+  // commit anyway, so caching it buys little — `min` exports less and can be faster.
+  const cacheMode =
+    (process.env.PORTFOLIO_DOCKER_CACHE_MODE || 'max').toLowerCase() === 'min'
+      ? 'min'
+      : 'max';
 
   const { cacheCurrent, cacheNew } = getCachePaths(options.imageName);
 
@@ -133,7 +140,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
       process.env.PORTFOLIO_DOCKER_CACHE_SCOPE ||
       options.imageName.replace(/[^a-zA-Z0-9_.-]/g, '-');
     buildCommandArr.push(`--cache-from=type=gha,scope=${scope}`);
-    buildCommandArr.push(`--cache-to=type=gha,mode=max,scope=${scope}`);
+    buildCommandArr.push(`--cache-to=type=gha,mode=${cacheMode},scope=${scope}`);
   } else if (cacheEnabled && cacheType === 'registry') {
     if (!registry) {
       console.warn(
@@ -142,11 +149,15 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     } else {
       const ref = `${registry}${options.imageName}:buildcache`.toLowerCase();
       buildCommandArr.push(`--cache-from=type=registry,ref=${ref}`);
-      buildCommandArr.push(`--cache-to=type=registry,mode=max,ref=${ref}`);
+      buildCommandArr.push(
+        `--cache-to=type=registry,mode=${cacheMode},ref=${ref}`
+      );
     }
   } else if (cacheEnabled) {
     buildCommandArr.push(`--cache-from=type=local,src="${cacheCurrent}"`);
-    buildCommandArr.push(`--cache-to=type=local,dest="${cacheNew}",mode=max`);
+    buildCommandArr.push(
+      `--cache-to=type=local,dest="${cacheNew}",mode=${cacheMode}`
+    );
   }
 
   buildCommandArr.push(contextDir);
