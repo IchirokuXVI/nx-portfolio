@@ -9,8 +9,8 @@
         <div class="detail-page__links">
           @if (repoLink()) {
             <a
-              class="detail-page__link"
               [href]="repoLink()"
+              class="detail-page__link"
               rel="noopener"
               target="_blank"
             >
@@ -20,8 +20,8 @@
           }
           @if (appLink()) {
             <a
-              class="detail-page__link detail-page__link--primary"
               [routerLink]="[appLink()]"
+              class="detail-page__link detail-page__link--primary"
             >
               {{ 'landingV2.detail.visit_live' | rokuT }}
               <lib-arrow-icon class="detail-page__link-icon" />
@@ -39,7 +39,7 @@
 
     @if (heroImage()) {
       <div class="detail-page__hero-media">
-        <img [src]="resolvedHeroImage() | async" [alt]="title()" />
+        <img [alt]="title()" [src]="resolvedHeroImage() | async" />
       </div>
     }
 
@@ -47,8 +47,8 @@
       <div class="detail-page__body">
         <ng-content select="[body]" />
       </div>
-      <aside class="detail-page__meta">
-        <ng-content select="[meta]" />
+      <aside class="detail-page__side">
+        <ng-content select="[side]" />
       </aside>
     </div>
   </div>

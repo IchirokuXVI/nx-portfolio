@@ -24,7 +24,7 @@
       </div>
     }
 
-    <div class="portfolio-swap" [class.portfolio-swap--collapsed]="collapsed()">
+    <div [class.portfolio-swap--collapsed]="collapsed()" class="portfolio-swap">
       <div class="portfolio-swap__inner">
         <div class="portfolio-sections" id="portfolio-sections">
           @for (section of visibleSections(); track section.id) {
@@ -49,26 +49,26 @@
     }
   </div>
 
-  <nav class="portfolio-meta" meta>
+  <nav class="portfolio-side" side>
     <lib-landing-v2-detail-toc [items]="tocItems()" />
   </nav>
 </lib-landing-v2-detail-page-shell>
 
 <ng-template #revealButton>
   <button
-    class="portfolio-reveal__button"
-    [attr.aria-expanded]="deepDive()"
     (click)="toggleDeepDive()"
+    [attr.aria-expanded]="deepDive()"
     aria-controls="portfolio-sections"
+    class="portfolio-reveal__button"
     type="button"
   >
     <span>
       {{ (deepDive() ? key + '.reveal_less' : key + '.reveal_more') | rokuT }}
     </span>
     <span
-      class="portfolio-reveal__caret"
       [class.portfolio-reveal__caret--up]="deepDive()"
       aria-hidden="true"
+      class="portfolio-reveal__caret"
     ></span>
   </button>
 </ng-template>
