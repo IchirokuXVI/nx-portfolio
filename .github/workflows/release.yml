@@ -97,12 +97,11 @@ jobs:
           static_apps=$(npx nx show projects --type "app" --projects tag:type:static-docker | paste -sd, -)
           npx nx run-many -t build --configuration production --projects name:$static_apps
 
-      - name: Test all apps
-        run: |
-          testable_apps=$(npx nx show projects --with-target test | paste -sd, -)
-          docker run \
-            --rm "ghcr.io/${{ env.REPO_LOWERCASE }}/builder:latest" \
-            npx nx run-many -t test --projects $testable_apps
+      # No tests here: a release is cut from a commit on main, which is gated by the
+      # PR checks (lint + unit tests) and validated as staging images by docker-ci.yml
+      # before it ever lands. Re-running them would only re-test the same code. This
+      # is only safe while main cannot receive untested code — keep the branch
+      # protection / required checks in place.
 
       # Build & push every micro-frontend under the immutable version tag, with the
       # production MFE base URL baked into the shell.

@@ -37,21 +37,37 @@ npx nx run shell:build:docker --configuration=production
 
 ## Deployment / CI/CD
 
-Deployment is fully automated by a single GitHub Actions workflow: **`.github/workflows/docker-ci.yml`** (`Nx Docker Build & Push (Runner Only)`). It runs on every **push to `main`** and does _build → test → push images → deploy_ in one job.
+Three GitHub Actions workflows, one per boundary:
 
-### Pipeline overview
+| Workflow | Trigger | Does |
+| --- | --- | --- |
+| **`pr.yml`** | PR into `main` or `dev` | lint + unit-test the affected projects (against the PR's target branch). The gate. |
+| **`docker-ci.yml`** | push to `main` | build + push affected staging images, e2e them (`k8s/e2e/compose.yml`), deploy staging. |
+| **`release.yml`** | GitHub Release published | build + push all production images, deploy production. |
+
+**Testing model.** Code is tested once, on the PR. The deploy workflows do not re-run
+unit tests: `docker-ci.yml` only e2e-tests the built *artifacts* (which the PR can't
+cheaply do), and `release.yml` runs no tests at all, because a release is cut from a
+`main` commit that was already PR-tested and validated as staging images.
+
+> **This is only safe if `main` (and `dev`) cannot receive untested code.** Protect
+> both branches with a ruleset that **requires the `pr.yml` check** and **disallows
+> bypass** (no bypass actors, admins included). Enable "require branches to be up to
+> date before merging" or a **merge queue** so the tested tree equals the merged tree.
+> Without this, skipping tests downstream is unsafe.
+
+### Staging pipeline (`docker-ci.yml`)
 
 ```
 push to main
   │
-  ├─ Log in to GHCR (ghcr.io) + set up Docker Buildx
-  ├─ Setup Node 22, restore/install pinned Nx, expose the GitHub Actions (gha) buildx cache
-  ├─ Build the `docker/builder` image (the CI test/build image)
-  ├─ Resolve the "affected" base = SHA of the last successful run of this workflow on this branch
-  ├─ Compute three affected sets (see below)
+  ├─ Log in to GHCR (ghcr.io) + set up Docker Buildx + expose the gha buildx cache
+  ├─ Setup Node 22, install pinned Nx
+  ├─ Build the `docker/builder` image (the CI build image)
+  ├─ Resolve the "affected" base = SHA of the last successful run of this workflow
   ├─ Build affected static-docker apps            (nx run-many -t build)
-  ├─ Run affected tests inside the builder image  (docker run … nx run-many -t test)
   ├─ Build & push affected Angular apps           (nx run-many -t build:docker)
+  ├─ e2e the staging images                       (k8s/e2e/compose.yml — gates the deploy)
   └─ Deploy: rsync k8s/ to the host + `helm upgrade`
 ```
 
