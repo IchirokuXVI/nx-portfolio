@@ -1,3 +1,4 @@
+{{- if .Values.metallb.enabled }}
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -18,3 +19,4 @@ metadata:
 spec:
   ipAddressPools:
     - main-pool
+{{- end }}

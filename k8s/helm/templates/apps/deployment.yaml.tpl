@@ -21,7 +21,7 @@ spec:
       containers:
         - name: {{ .name }}
           image: {{ .image }}:{{ $tag }}
-          imagePullPolicy: Always
+          imagePullPolicy: {{ $.Values.appImagePullPolicy }}
           ports:
             - containerPort: 80
           resources:

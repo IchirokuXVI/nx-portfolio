@@ -1,0 +1,67 @@
+# Local override for Docker Desktop Kubernetes — "mfe-path" variant.
+#
+# Alternative to values.localhost.yaml (the default "port" variant). Here every app
+# is served through the reverse proxy on a single `localhost` host, and the remotes
+# sit under an /mfe/<remote> path prefix instead of on their own ports. That prefix
+# stands in for production's dedicated `mfe.` subdomain: it keeps the remote bundles
+# from shadowing the shell's own routes, so a locale-less deep link like /odontogram
+# still reaches the shell (which redirects to /en/odontogram) instead of hitting the
+# remote's blank entry page.
+#
+#   # shell built with MFE_BASE_URL=http://localhost/mfe
+#   helm upgrade --install nx-portfolio k8s/helm \
+#     --namespace nx-portfolio --create-namespace \
+#     --values k8s/helm/values.yaml --values k8s/helm/values.localhost-mfe.yaml
+#   # -> open http://localhost
+#
+# The reverse-proxy Service is a LoadBalancer, which Docker Desktop publishes on
+# localhost:80/443 directly. If port 80 is taken, fall back to
+# `kubectl port-forward -n nx-portfolio svc/reverse-proxy 8080:80` and rebuild the
+# shell with MFE_BASE_URL=http://localhost:8080/mfe to match.
+#
+# See values.local.yaml for the local-hostnames setup (portfolio.localhost /
+# mfe.localhost), which mirrors production most literally but needs hosts entries.
+
+# Use the locally built dev images without reaching for a registry.
+productionImageTag: dev
+appImagePullPolicy: IfNotPresent
+
+# Docker Desktop ships a `hostpath` default StorageClass, not k3s's `local-path`.
+certsVolume:
+  storageClassName: hostpath
+
+# No public DNS / no MetalLB routing needed locally; keep the reverse proxy.
+certbot:
+  enabled: false
+metallb:
+  enabled: false
+
+staging:
+  enabled: false
+
+apps:
+  - name: shell
+    env: production
+    image: nx-portfolio/shell
+    host: localhost
+    path: /
+  - name: landing
+    env: production
+    image: nx-portfolio/landing
+    host: localhost
+    path: /mfe/landing
+  - name: odontogram
+    env: production
+    image: nx-portfolio/odontogram
+    host: localhost
+    path: /mfe/odontogram
+  - name: damoclessword
+    env: production
+    image: nx-portfolio/damoclessword
+    host: localhost
+    path: /mfe/damoclesSword
+  - name: landingv2
+    env: production
+    image: nx-portfolio/landingv2
+    host: localhost
+    path: /mfe/landingV2

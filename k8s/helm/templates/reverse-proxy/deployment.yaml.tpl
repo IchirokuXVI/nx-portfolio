@@ -1,3 +1,4 @@
+{{- if .Values.reverseProxy.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -43,6 +44,7 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+        {{- if .Values.certbot.enabled }}
         - name: certbot
           image: "{{ .Values.certbotImage.image }}:{{ .Values.certbotImage.tag }}"
           imagePullPolicy: {{ .Values.certbotImage.pullPolicy }}
@@ -68,6 +70,7 @@ spec:
           # To share the certs with other containers
             - name: certs
               mountPath: /certs
+        {{- end }}
       volumes:
         - name: nginx-config
           configMap:
@@ -80,3 +83,4 @@ spec:
         - name: letsencrypt-data
           persistentVolumeClaim:
             claimName: letsencrypt-pvc
+{{- end }}

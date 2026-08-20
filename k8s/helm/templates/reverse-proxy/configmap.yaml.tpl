@@ -1,3 +1,4 @@
+{{- if .Values.reverseProxy.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,3 +7,4 @@ metadata:
 data:
   nginx.conf: |-
 {{ include (print $.Template.BasePath "/reverse-proxy/_nginx.conf.tpl") . | indent 4 }}
+{{- end }}

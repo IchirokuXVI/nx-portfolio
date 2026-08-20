@@ -21,6 +21,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PORTFOLIO_DOCKER_REGISTRY: ghcr.io/ichirokuxvi
       PORTFOLIO_DOCKER_SKIP_LOGIN: true
+      # Use the GitHub Actions cache backend (type=gha) for every docker build.
+      PORTFOLIO_DOCKER_CACHE: gha
       # Where the shell loads its remotes from in production.
       PROD_MFE_BASE_URL: https://mfe.ichirokuxvi.com
 
@@ -53,6 +55,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Exposes the Actions runtime env so `docker buildx --cache-to=type=gha` works.
+      - name: Expose GitHub Actions runtime for the gha cache
+        uses: crazy-max/ghaction-github-runtime@v3
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -78,15 +84,11 @@ jobs:
           REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "REPO_LOWERCASE=$REPO_LC" >> $GITHUB_ENV
 
-      - name: Restore Docker cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/docker-cache
-          key: ${{ runner.os }}-buildx-release-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
+      # The builder's gha cache scope is keyed by the lockfile hash so its npm ci
+      # layer is reused until dependencies change.
       - name: Build docker builder
+        env:
+          PORTFOLIO_DOCKER_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
         run: npx nx build docker/builder --configuration=production
 
       # Infrastructure images (local http server base, reverse proxy, certbot).
@@ -113,12 +115,6 @@ jobs:
         run: |
           apps_tobuild=$(npx nx show projects --type "app" --with-target build:docker | paste -sd, -)
           npx nx run-many -t build:docker --configuration production --projects $apps_tobuild
-
-      - name: Save Docker cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/docker-cache
-          key: ${{ runner.os }}-buildx-release-${{ github.sha }}
 
       - name: Set up SSH for deployment
         uses: webfactory/ssh-agent@v0.9.0

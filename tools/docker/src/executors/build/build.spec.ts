@@ -6,6 +6,9 @@ import { BuildExecutorSchema } from './schema';
 import { simpleHash } from './simple-hash';
 
 jest.mock('child_process', () => ({
+  spawn: jest.fn(),
+  // exec is unused by the build executor (it streams via spawn) but the push
+  // executor it imports promisifies exec at module load, so it must be a function.
   exec: jest.fn(),
 }));
 
@@ -13,7 +16,23 @@ jest.mock('os', () => ({
   tmpdir: jest.fn(() => '/tmp'),
 }));
 
-const { exec: mockedExec } = jest.requireMock('child_process');
+const { spawn: mockedSpawn } = jest.requireMock('child_process');
+
+// A fake ChildProcess that fires `close` with the given exit code on the next
+// tick, mirroring how the executor's streaming runner listens for it.
+function mockSpawnExit(code: number) {
+  return () => {
+    const handlers: Record<string, (arg?: unknown) => void> = {};
+    const child = {
+      on: (event: string, cb: (arg?: unknown) => void) => {
+        handlers[event] = cb;
+        return child;
+      },
+    };
+    setImmediate(() => handlers['close']?.(code));
+    return child;
+  };
+}
 
 const options: BuildExecutorSchema = {
   imageName: 'my-test-image',
@@ -55,7 +74,7 @@ const expectedBuildCommand =
   `docker buildx build ` +
   `-f ${path.join('apps/my-test-project/Dockerfile')} ` +
   `-t my-test-registry/my-test-image:latest -t my-test-registry/my-test-image:0.0.1 ` +
-  `--build-arg testArg=testValue --build-arg NODE_ENV=test --build-arg NX_APP=my-test-project --build-arg TARGET_REGISTRY=my-test-registry/ ` +
+  `--build-arg testArg="testValue" --build-arg NODE_ENV="test" --build-arg NX_APP="my-test-project" --build-arg TARGET_REGISTRY="my-test-registry/" ` +
   `--cache-from=type=local,src="${path.join(`/tmp/docker-cache/.buildx-${simpleHash(options.imageName)}`)}" --cache-to=type=local,dest="${path.join(`/tmp/docker-cache-new/.buildx-${simpleHash(options.imageName)}`)}",mode=max ` +
   `${path.join('apps/my-test-project')} ` +
   `--load`;
@@ -66,38 +85,29 @@ beforeEach(() => {
 
 describe('Build Executor', () => {
   it('can run', async () => {
-    mockedExec.mockImplementation(
-      (
-        command: any,
-        callback: (error: any, stdout: any, stderr: any) => void
-      ) => {
-        callback(null, 'stdout', null);
-      }
-    );
+    mockedSpawn.mockImplementation(mockSpawnExit(0));
 
     const output = await executor(options, context);
 
     expect(output.success).toBe(true);
 
-    expect(mockedExec).toHaveBeenCalledWith(
-      expectedBuildCommand,
-      expect.any(Function)
-    );
+    expect(mockedSpawn).toHaveBeenCalledWith(expectedBuildCommand, {
+      shell: true,
+      stdio: 'inherit',
+    });
   });
 
-  it('handles exec errors', async () => {
-    (mockedExec as jest.Mock).mockImplementation((command, callback) => {
-      callback(new Error('exec error'), null, null);
-    });
+  it('handles build errors', async () => {
+    mockedSpawn.mockImplementation(mockSpawnExit(1));
 
     await expect(executor(options, context)).rejects.toThrow(
-      'Error during Docker build: exec error'
+      'Error during Docker build: exited with code 1'
     );
 
-    expect(mockedExec).toHaveBeenCalledWith(
-      expectedBuildCommand,
-      expect.any(Function)
-    );
+    expect(mockedSpawn).toHaveBeenCalledWith(expectedBuildCommand, {
+      shell: true,
+      stdio: 'inherit',
+    });
   });
 
   it('handles missing project name', async () => {

@@ -1,6 +1,12 @@
 namespace: nx-portfolio
 replicaCount: 1
 
+# Pull policy for the micro-frontend app images. Production/staging pull the
+# freshly pushed images from the registry (Always). A local dev deploy builds the
+# images straight into the Docker Desktop image store and overrides this to
+# IfNotPresent (or Never) so Kubernetes uses them without a registry.
+appImagePullPolicy: Always
+
 # Image tags.
 #
 # Production apps are pinned to an immutable release version. The live value is
@@ -28,8 +34,34 @@ certbotImage:
   pullPolicy: Always
   tag: 'latest'
 
+# Certbot sidecar (Let's Encrypt). Enabled for the public environments. A local
+# deploy turns this off: the hosts have no public DNS/A record, so ACME would only
+# fail and burn rate limits. The init container's self-signed dummy certs are
+# enough for nginx to start and serve TLS locally.
+certbot:
+  enabled: true
+
+# MetalLB IPAddressPool. The public cluster needs it to expose the reverse proxy
+# on the bare-metal IP below. Docker Desktop already surfaces LoadBalancer
+# services on localhost, so a local deploy disables the pool (its public IP is not
+# routable there and would leave the service pending).
+metallb:
+  enabled: true
+
+# Reverse proxy. The public cluster fronts every app with it (TLS + host/path
+# routing). The local "port" mode instead exposes each app on its own LoadBalancer
+# port (see values.localhost.yaml) and turns the proxy off; the local "mfe-path"
+# mode keeps it (see values.localhost-mfe.yaml).
+reverseProxy:
+  enabled: true
+
 certsVolume:
   claimName: certs-pvc
+  # StorageClass for the shared certs PVC. Defaults to the k3s dynamic provisioner
+  # used in the public cluster; a local deploy overrides it to the cluster's own
+  # default class (e.g. Docker Desktop's `hostpath`). Empty string uses the
+  # cluster default.
+  storageClassName: local-path
 
 ipAddress: 46.62.204.230
 

@@ -45,7 +45,7 @@ Deployment is fully automated by a single GitHub Actions workflow: **`.github/wo
 push to main
   │
   ├─ Log in to GHCR (ghcr.io) + set up Docker Buildx
-  ├─ Setup Node 22, restore/install pinned Nx, restore buildx cache
+  ├─ Setup Node 22, restore/install pinned Nx, expose the GitHub Actions (gha) buildx cache
   ├─ Build the `docker/builder` image (the CI test/build image)
   ├─ Resolve the "affected" base = SHA of the last successful run of this workflow on this branch
   ├─ Compute three affected sets (see below)
@@ -111,6 +111,11 @@ Because image tags are pinned to `latest`, `helm upgrade` alone wouldn't restart
 ---
 
 ## Kubernetes / Helm
+
+> **Running the whole stack locally** (build every image from scratch on Docker
+> Desktop Kubernetes and run e2e against the real containers) is documented in
+> [`k8s/README.md`](./k8s/README.md), including the port / mfe-path / hostnames local
+> modes and common pitfalls. The rest of this section covers the production chart.
 
 The cluster is **k3s** (single node) with **MetalLB** for `LoadBalancer` services and the built-in **`local-path`** storage class for volumes. Everything lives in the **`nx-portfolio`** namespace.
 

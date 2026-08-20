@@ -1,0 +1,72 @@
+# Zero-setup local override for Docker Desktop Kubernetes — "port" variant (default).
+#
+# Each app is exposed on its own LoadBalancer port: shell on 80, remotes on
+# 8081-8084. Docker Desktop publishes each LoadBalancer on localhost:<port>, so no
+# hosts-file entries, no admin, and no reverse proxy are needed.
+#
+# Because the remote ports do NOT match the remotes' dev-serve ports (4201-4204),
+# the shell image must be told where its remotes live, via MFE_REMOTE_URLS (a
+# per-remote map). Build the shell with:
+#
+#   MFE_REMOTE_URLS="landing=http://localhost:8081,odontogram=http://localhost:8082,damoclesSword=http://localhost:8083,landingV2=http://localhost:8084" \
+#     npx nx run shell:build:docker --configuration=development
+#
+#   helm upgrade --install nx-portfolio k8s/helm \
+#     --namespace nx-portfolio --create-namespace \
+#     --values k8s/helm/values.yaml --values k8s/helm/values.localhost.yaml
+#   # -> open http://localhost
+#
+# Each remote sits on a distinct origin (port), just like production's separate
+# `mfe.` host, so a locale-less deep link such as http://localhost/odontogram reaches
+# the shell (which redirects to /en/odontogram) rather than the remote.
+#
+# (To skip MFE_REMOTE_URLS entirely, use ports that match the dev-serve ports —
+# shell 4200, remotes 4201-4204 — and build the shell with no env at all.)
+#
+# Alternatives:
+#   - values.localhost-mfe.yaml : single localhost host, remotes under /mfe/<remote>,
+#     behind the reverse proxy (shell built with MFE_BASE_URL=http://localhost/mfe).
+#   - values.local.yaml         : portfolio.localhost / mfe.localhost hostnames,
+#     closest to production, but needs hosts-file entries (admin).
+
+# Use the locally built dev images without reaching for a registry.
+productionImageTag: dev
+appImagePullPolicy: IfNotPresent
+
+# Port mode exposes each app directly, so the reverse proxy (and its certs / MetalLB
+# pool) is not needed.
+reverseProxy:
+  enabled: false
+certbot:
+  enabled: false
+metallb:
+  enabled: false
+
+staging:
+  enabled: false
+
+# `lbPort` turns each app's Service into a LoadBalancer on that port (see
+# templates/apps/service.yaml.tpl). The remote ports must match the MFE_REMOTE_URLS
+# baked into the shell (see the header). The shell's own port is free to change — it
+# does not bake its own URL.
+apps:
+  - name: shell
+    env: production
+    image: nx-portfolio/shell
+    lbPort: 80
+  - name: landing
+    env: production
+    image: nx-portfolio/landing
+    lbPort: 8081
+  - name: odontogram
+    env: production
+    image: nx-portfolio/odontogram
+    lbPort: 8082
+  - name: damoclessword
+    env: production
+    image: nx-portfolio/damoclessword
+    lbPort: 8083
+  - name: landingv2
+    env: production
+    image: nx-portfolio/landingv2
+    lbPort: 8084
