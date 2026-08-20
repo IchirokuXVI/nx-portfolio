@@ -42,7 +42,10 @@ export const PROJECTS: readonly StaticProject[] = [
     visual: { columnSpan: 2, featured: true },
     detailSlug: 'portfolio',
     appSlug: '',
-    // image: pending D-portfolio-image (Nx module-federation graph asset).
+    // Card-only asset (a themed module-federation topology). The detail page
+    // deliberately does not reuse it (see portfolio-content).
+    image: () =>
+      import('../../assets/portfolio_card.png').then((m) => m.default),
   },
   {
     id: '2',
@@ -52,7 +55,10 @@ export const PROJECTS: readonly StaticProject[] = [
     visual: { columnSpan: 2, featured: true },
     detailSlug: 'damoclesSword',
     appSlug: 'damoclesSword',
-    // image: pending a captured screenshot of the damoclesSword home hero.
+    image: () =>
+      import('../../assets/damoclesSword_screenshot.png').then(
+        (m) => m.default
+      ),
   },
   {
     id: '3',

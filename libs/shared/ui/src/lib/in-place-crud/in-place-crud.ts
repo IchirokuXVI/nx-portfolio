@@ -59,8 +59,12 @@ export class InPlaceCrud implements ControlValueAccessor {
 
   delete = output<void>();
 
-  private onChange: (value: any) => void = () => {};
-  private onTouched: () => void = () => {};
+  private onChange: (value: any) => void = () => {
+    /* replaced by registerOnChange */
+  };
+  private onTouched: () => void = () => {
+    /* replaced by registerOnTouched */
+  };
   disabled = signal(false);
 
   @ContentChild('edit-icon') editIconTemplate?: TemplateRef<any>;

@@ -23,8 +23,6 @@ import { LoadingNotifier, NgLetDirective } from '@portfolio/shared/util';
 import { Subject } from 'rxjs';
 import { ToothImageLoader } from '../services/tooth-image-loader';
 
-const loadable = ['image'] as const;
-
 @Component({
   selector: 'lib-odontogram-single-tooth-image',
   standalone: true,
@@ -41,7 +39,7 @@ export class SingleToothImage implements AfterViewInit, OnDestroy {
     [ToothTreatmentStatus.COMPLETED, 'status-finished'],
   ]);
 
-  loadingNotf = inject(LoadingNotifier<typeof loadable>, { self: true });
+  loadingNotf = inject(LoadingNotifier<['image']>, { self: true });
 
   tooth = input.required<Tooth>();
   toothImages = { crown: '', lateral: '', root_mask: '', crown_mask: '' };

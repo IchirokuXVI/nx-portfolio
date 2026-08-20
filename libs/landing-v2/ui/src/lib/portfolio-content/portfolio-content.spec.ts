@@ -1,4 +1,9 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  fakeAsync,
+  TestBed,
+  tick,
+} from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslatedProject } from '@portfolio/landing-v2/models';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
@@ -50,6 +55,16 @@ describe('PortfolioContent', () => {
     fixture.detectChanges();
   });
 
+  beforeAll(() => {
+    // jsdom lacks these; the reveal toggle scrolls the host into view on expand.
+    window.HTMLElement.prototype.scrollIntoView = jest.fn();
+    if (!window.requestAnimationFrame) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).requestAnimationFrame = (cb: FrameRequestCallback) =>
+        setTimeout(() => cb(0), 0);
+    }
+  });
+
   it('should create', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
@@ -61,9 +76,61 @@ describe('PortfolioContent', () => {
     );
   });
 
-  it('renders all three portfolio sections and the tech chips', () => {
+  it('shows the five highlight sections and grouped chips, no facts table', () => {
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelectorAll('.detail-section').length).toBe(3);
-    expect(host.querySelectorAll('.detail-chips li').length).toBe(8);
+    // Highlight view: deep-only sections (mf-topology, assets, testing) hidden.
+    expect(host.querySelectorAll('.detail-section').length).toBe(5);
+    expect(host.querySelector('#mf-topology')).toBeNull();
+    // 3 chip groups of 4.
+    expect(host.querySelectorAll('.tech-chip-group__chip').length).toBe(12);
+    // The facts table was removed (deduped against the chips).
+    expect(host.querySelector('.facts-table')).toBeNull();
   });
+
+  it('swaps to the deep view, relocates the button, and shows the closing note', fakeAsync(() => {
+    let host = fixture.nativeElement as HTMLElement;
+
+    // Collapsed: button at the bottom, no closing note, no deep-only sections.
+    expect(
+      host.querySelector('.portfolio-reveal--bottom .portfolio-reveal__button')
+    ).not.toBeNull();
+    expect(host.querySelector('.portfolio-reveal--top')).toBeNull();
+    expect(host.querySelector('.portfolio-closing')).toBeNull();
+
+    // The swap collapses, changes content while collapsed, then grows: flush
+    // the collapse timer and the grow's animation frame.
+    host
+      .querySelector<HTMLButtonElement>('.portfolio-reveal__button')
+      ?.click();
+    tick(500);
+    fixture.detectChanges();
+    host = fixture.nativeElement as HTMLElement;
+
+    // Expanded: all eight sections (five + three deep-only), button now at the
+    // top, closing note present, aria-expanded true.
+    expect(host.querySelectorAll('.detail-section').length).toBe(8);
+    expect(host.querySelector('#mf-topology')).not.toBeNull();
+    expect(host.querySelector('#assets')).not.toBeNull();
+    expect(host.querySelector('#testing')).not.toBeNull();
+    expect(
+      host.querySelector('.portfolio-reveal--top .portfolio-reveal__button')
+    ).not.toBeNull();
+    expect(host.querySelector('.portfolio-reveal--bottom')).toBeNull();
+    expect(host.querySelector('.portfolio-closing')).not.toBeNull();
+    expect(
+      host
+        .querySelector('.portfolio-reveal__button')
+        ?.getAttribute('aria-expanded')
+    ).toBe('true');
+
+    // Collapsing restores the highlight view.
+    host
+      .querySelector<HTMLButtonElement>('.portfolio-reveal__button')
+      ?.click();
+    tick(500);
+    fixture.detectChanges();
+    host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelectorAll('.detail-section').length).toBe(5);
+    expect(host.querySelector('.portfolio-closing')).toBeNull();
+  }));
 });

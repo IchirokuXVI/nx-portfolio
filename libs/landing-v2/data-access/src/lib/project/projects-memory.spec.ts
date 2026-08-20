@@ -77,13 +77,26 @@ describe('ProjectMemory', () => {
     await expect(odontogram?.image).resolves.toBe('asset-file-stub');
   });
 
-  it("leaves Portfolio and Damocle'Sword without a screenshot (generic placeholder)", async () => {
+  it('resolves the Portfolio card image import', async () => {
     const projects = await firstValueFrom(service.getList('en'));
     const portfolio = projects.find((p) => p.id === '1');
+
+    await expect(portfolio?.image).resolves.toBe('asset-file-stub');
+  });
+
+  it("resolves the Damocle'Sword screenshot import", async () => {
+    const projects = await firstValueFrom(service.getList('en'));
     const damocles = projects.find((p) => p.id === '2');
 
-    expect(portfolio?.image).toBeUndefined();
-    expect(damocles?.image).toBeUndefined();
+    await expect(damocles?.image).resolves.toBe('asset-file-stub');
+  });
+
+  it('flags only Portfolio (live app is the site root) as the current site', async () => {
+    const projects = await firstValueFrom(service.getList('en'));
+
+    expect(projects.find((p) => p.id === '1')?.isCurrentSite).toBe(true);
+    expect(projects.find((p) => p.id === '3')?.isCurrentSite).toBe(false);
+    expect(projects.find((p) => p.id === '4')?.isCurrentSite).toBe(false);
   });
 
   describe('getList filtering', () => {

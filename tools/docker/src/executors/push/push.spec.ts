@@ -89,7 +89,7 @@ describe('Push Executor', () => {
     // );
 
     expect(mockedExec).toHaveBeenCalledWith(
-      `echo \"testpass\" | docker login my-test-registry -u testuser --password-stdin`,
+      `echo "testpass" | docker login my-test-registry -u testuser --password-stdin`,
       expect.any(Function)
     );
 

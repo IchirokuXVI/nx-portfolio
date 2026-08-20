@@ -51,18 +51,21 @@ standard term for this kind of write-up. Format inside each file:
 7. End session: append a summary (≤50 lines) below and commit.
 
 **Standing rule — skipping/deferring questions (Daniel's request):**
-- Some questions get parked and answered later. **All localization / RokuTranslator
-  questions are DEFERRED** until the localization refactor lands (see
-  `libs/shared/localization/rokutranslator/plans`). Skip them and keep asking the rest.
-- When a question is parked, tag it in the bank (`DEFERRED (localization)` or a reason)
-  so it is not lost. Come back to the whole deferred set once unblocked.
-- Two pending refactors currently block some questions; both have their own fix plans:
-  1. `DEFERRED (localization)` — the RokuTranslator refactor
-     (`libs/shared/localization/rokutranslator/plans/0001-localization-refactor-plan.md`).
-  2. `DEFERRED (di-wiring)` — components inject concrete `*Memory` / `*Mock` impls
-     directly instead of via DI tokens; 11 sites flagged in code with `TODO(di-wiring)`
-     (`libs/shared/data-access/plans/0001-data-access-di-token-wiring.md`). Questions
-     about how services are swapped / backend vs demo wait for this.
+- Some questions get parked and answered later. When a question is parked, tag it in the
+  bank (with a reason) so it is not lost, and come back to it once unblocked.
+- **Both refactors that were blocking questions have now LANDED on `dev`** (the worktree
+  was fast-forwarded to `dev` `240a841` in Session 4), so the previously deferred sets are
+  unblocked and being answered:
+  1. ~~`DEFERRED (localization)`~~ — the RokuTranslator refactor is done (namespace
+     scoping via i18next `{ ns }` + `nsSeparator: false`, per-app locales via
+     `*_AVAILABLE`/`*_USABLE_LOCALES`, runtime no-reload locale switch, locale-first
+     routing guards). All shell localization questions answered in Session 4.
+  2. ~~`DEFERRED (di-wiring)`~~ — services now inject via interface tokens
+     (`f3a7fc0`); the `ToothImageLoader` cache bug is fixed (`5b84a32`). The odontogram
+     data-access / backend-vs-demo questions can now be answered.
+- Note: several earlier answers were written against pre-refactor code and have been (or
+  must be) revised to match `dev`: shell Q2 (was full reload, now soft switch) rewritten;
+  odontogram data-access + cache notes need revisiting against the fixes.
 
 **Standing style rules for transcribed answers (Daniel's request):**
 - Organize each answer so topics flow in a sensible order; add short bold
@@ -79,31 +82,43 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 ### shell (foundation / general)
 - [x] Why Nx monorepo? What did it give you vs a plain workspace / polyrepo?
       (Answered: learning + independent deploys + easier reuse via small libs.)
-- [~] Why micro-frontends + Module Federation for a *portfolio*? Real motivation.
-      (Partial: "deploy each separately". Still want a line on runtime MF vs one
-      bundled app specifically.)
-- [ ] Shell as host: how remotes are declared/lazy-loaded via `X/Routes` aliases.
-      (Touched in the blank-page answer; the alias/tsconfig-path mechanism itself not
-      yet asked of Daniel.)
-- [x] Locale-first routing: full `window.location.href` reload on locale change.
-      (Answered: locale is sent to the backend, so a soft nav would require
-      re-fetching all data with the new locale; full reload does it cleanly.
-      Follow-up left: clarify the trigger is the programmatic switcher, not URL edits.)
-- [ ] DEFERRED (localization). Locale-first routing: why route `:locale` first at all.
-- [ ] DEFERRED (localization). Locale detection + why en/es/fr (was asked as Q4, never
-      answered). Supported locales change in the refactor, so revisit after it lands.
+- [x] Why micro-frontends + Module Federation for a *portfolio*? Real motivation.
+      (Answered: building/learning goal; avoids reloading Angular+libs between apps;
+      global shared-lib config (localization); enables locale-first routing that
+      per-app nginx deploys could not; honestly over-engineered on purpose to showcase.)
+- [x] Shell as host: how remotes are declared/lazy-loaded via `X/Routes` aliases.
+      (Compiled from code: shell lists remotes, each exposes ./Routes, tsconfig path
+      alias + import() in loadChildren; remotes are children of the :locale route; root
+      '' loads landingV2.)
+- [x] Portfolio overview + tech-stack summary section for a general detail page.
+      (Added: apps list, runtime MF, k3s/staging+prod, Angular 21 / Nx 22 / TS 5.9 / i18next.)
+- [x] Locale change mechanism (was full reload; now soft in-place switch).
+      (REWRITTEN in Session 4 against dev: switcher -> RokuLocaleStore.switchAppLocale,
+      no reload; refetchOnLocaleChange re-runs locale-keyed queries. Daniel built the
+      soft switch to learn but still leans toward a hard reload; both tradeoffs recorded.)
+- [x] Locale-first routing: why route `:locale` first at all.
+      (Answered: shareable links that keep their language, cacheable per-language URLs;
+      locale-less URLs redirect via localeGuard guess + per-app localeCorrectionGuard.)
+- [x] Locale detection + why en/es/fr, persistence.
+      (Answered: en/es for the portfolio, es native + en for computing/jobs; damocles
+      en/es/fr per client. Order URL > stored > browser > default, stored beats browser
+      deliberately. Per-app *_AVAILABLE vs *_USABLE_LOCALES.)
 - [x] The "remote renders blank on its own port" design (why intentional, how it works).
       (Answered: remotes are built for the shell, standalone styles/context would differ;
       empty RemoteEntry template + no outlet on own port. Claude note captures the open
       "should remotes run standalone" decision + my recommendation.)
-- [~] RokuTranslator: why hand-roll an i18next wrapper instead of ngx-translate/transloco?
-      (ANSWERED then put ON HOLD by Daniel. A full organized answer is in-file with his
-      clarifications folded in, but he will REWRITE it from scratch after the localization
-      refactor lands. DO NOT edit that answer further; the previous text must be preserved.)
-- [~] DEFERRED (localization). RokuTranslator: per-locale lazy namespace loaders, how
-      remotes contribute i18n. (Mechanism covered via the hand-roll answer + Claude note.)
-- [~] DEFERRED (localization). Why force `roku-translator` as a MF singleton
-      (`strictVersion`)? (Why-singleton answered; sharper fragmentation confirm pending.)
+- [x] RokuTranslator: why hand-roll an i18next wrapper instead of ngx-translate/transloco?
+      (REWRITTEN from scratch in Session 4 post-refactor: avoid Angular-specific libs
+      (support churn), couldn't share ngx/transloco config across MFEs, per-lib namespaces,
+      per-app locales. Old on-hold answer replaced; preserved in git history.)
+- [x] RokuTranslator: per-locale lazy namespace loaders, how remotes contribute i18n.
+      (Answered: translations are lib assets; libs declare what they CAN load
+      (*_AVAILABLE_LOCALES) for portability; custom i18next backend.read pulls per
+      locale/namespace loaders lazily; addTranslations eager-loads active namespaces.)
+- [x] Why force `roku-translator` as a MF singleton (`strictVersion`)?
+      (Answered: only shell can run provideAppInitializer + locale-first routing needs it
+      early; one shared config; without it locale desyncs across apps and cross-namespace
+      sharing breaks. Verified singleton/strictVersion/requiredVersion:auto in MF config.)
 - [x] Testing strategy across the workspace (Jest + Cypress/Playwright e2e, shared-spec pattern).
       (Answered: shared contract spec run by each impl spec first, plus impl-specific
       tests; e2e all point at the shell url, organized per remote; e2e approach still
@@ -115,7 +130,8 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [x] Zone change detection config / any perf choices in `app.config.ts`.
       (Answered: eventCoalescing always on; lazy/async everything; signals for
       everything to minimize change detection. Confirmed signals used widely.)
-- [ ] DEFERRED (localization). SUPPORTED_LOCALES en/es/fr, why these, detection/persistence.
+- [x] Per-app locales, why these, detection/persistence. (Answered in Session 4 together
+      with the locale-detection question above; no longer a global SUPPORTED_LOCALES set.)
 
 ### damoclesSword
 - [ ] What is Damocle'Sword? The real project this showcases (Starlit Ascension, VR).
@@ -137,25 +153,24 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
       (separate treatment per tooth). Treatment = optional catalog/template.)
 - [x] The interactive chart rendering: SVG? how tooth zones are drawn/clicked.
       (Answered + verified: not SVG; 2 images + 2 masks per tooth; rotated sqrt(2)*50%
-      diamond clipped to triangles + center circle; `:has()` adjacency borders. Bug
-      noted: ToothImageLoader Map cache is never populated.)
+      diamond clipped to triangles + center circle; `:has()` adjacency borders. The
+      ToothImageLoader cache bug noted here is now FIXED on dev `5b84a32`; the odontogram
+      CASE_STUDY note about it needs updating to say the cache is now populated.)
 - [x] Treatment visualization (colors/states per zone).
       (Answered: two colors pending/completed; extraction = X cross, implant = bars;
       zone-status precedence any-pending-wins.)
 - [~] Image preloading: images loaded via JS, chart shown only once all load.
       (Covered via rendering answer: dynamic import() + forkJoin + LoadingNotifier;
       could expand the "show only when all loaded" coordination.)
-- [~] DEFERRED (di-wiring). memory vs api service + shared-spec tests. (Daniel will
-      answer after fixing the wiring. Bug found: components inject OdontogramMemory
-      directly, no token switch, though OdontogramApi is complete. 11 sites flagged
-      workspace-wide, see libs/shared/data-access/plans/0001-data-access-di-token-wiring.md.)
+- [~] memory vs api service + shared-spec tests. (UNBLOCKED: di-token wiring landed on
+      dev `f3a7fc0` — services now inject via interface tokens, `service-token.ts`.
+      Ready to ask Daniel why both impls and how the token chooses. Not yet asked.)
 - [~] full CRUD feature: state management, how edits persist.
       (Partial: click-tooth form uses squares not the image, 5 in a circle + front row,
       plus per-tooth history. STILL OPEN: edit-state handling, save/persistence flow,
-      hardest UX. Revisit after data-access questions.)
-- [~] DEFERRED (di-wiring). Backend integration (BACK_API_* env) vs in-memory demo mode.
-      (Currently runs fully in memory because OdontogramMemory is injected; OdontogramApi
-      ready but unwired. Revisit after the DI token fix.)
+      hardest UX.)
+- [~] Backend integration (BACK_API_* env) vs in-memory demo mode. (UNBLOCKED by the
+      token wiring; re-read which impl is bound before asking. Not yet asked.)
 
 ### landing (to be merged later)
 - [ ] Original purpose vs landingV2. What's being kept/merged.
@@ -235,11 +250,7 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - **Q3 is now ON HOLD.** Daniel will rewrite that answer from scratch after a
   localization refactor. Previous answer preserved; DO NOT edit it further.
 - Created a refactor brief at
-<<<<<<<< HEAD:apps/shell/plans/0001-case-study-docs-plan.md
-  `libs/shared/localization/rokutranslator/plans/0001-localization-refactor-plan.md`
-========
   `libs/shared/localization/rokutranslator/plans/0001-localization-refactor.md`
->>>>>>>> worktree-localization-refactor-plan:apps/shell/plans/0001-case-study-docs.md
   telling a future agent to inspect the localization architecture and produce a
   detailed fix plan for TWO problems:
   1. Namespace leaking. Fix direction: optional `namespace` arg on the pipe and
@@ -254,4 +265,31 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
   sharper confirm, how remotes contribute i18n (tidy answer), why `:locale` first,
   testing strategy, shared libs. Then move to the next app.
 - Worktree `worktree-case-study-docs`.
+
+### Session 4 — 2026-08-19
+- Daniel had fixed things on the `dev` branch. The worktree was fast-forwarded from
+  `e1f3c70` to `dev` `240a841` (my case-study commits are ancestors of dev, so it was a
+  clean ff). Now analyzing the REAL current code, not the pre-refactor state.
+- Big landed refactors on dev that supersede earlier answers:
+  - Localization: namespace scoping via i18next `{ ns }` + `nsSeparator:false`; per-app
+    locales (`*_AVAILABLE_LOCALES` in UI lib vs `*_USABLE_LOCALES` in feature-shell,
+    on route `data`); runtime no-reload locale switch (`RokuLocaleStore.switchAppLocale`,
+    `withLocale`/`refetchOnLocaleChange`); locale-first routing guards (`localeGuard`
+    guess + `localeCorrectionGuard` per-app validate); `LocaleWrapperComponent` deleted;
+    `RokuTitleStrategy` localizes titles. Plans 0001/0002/0003 under rokutranslator/plans.
+  - DI wiring (`f3a7fc0`, `service-token.ts`) and ToothImageLoader cache (`5b84a32`) fixed.
+- Answered & transcribed into `apps/shell/CASE_STUDY.md` (the whole localization set, all
+  verified against dev code): Q3 hand-roll (rewritten from scratch), MF singleton, why
+  `:locale` first, Q2 rewritten as the soft in-place switch (Daniel still prefers hard
+  reload; both tradeoffs recorded), Q4 per-app locales + detection/persistence, remote
+  i18n contribution. Commits f728a4b, b06036d, b5fbe6c, 771d9a5.
+- Fixed a committed merge-conflict marker left in this plan (Session 3 refactor-brief path).
+- **Next session:** localization is done. Remaining shell: micro-frontend motivation
+  (partial) + the `X/Routes` alias/lazy-load mechanics (fillable from code, ask Daniel the
+  "why runtime MF" angle). Then the newly-UNBLOCKED odontogram data-access questions
+  (memory vs api token switch, backend vs demo) — re-read `service-token.ts` and which
+  impl is bound first — plus the odontogram cache note needs updating to "cache now
+  populated". Then damoclesSword / landing / docker+k8s (note: docker now has a
+  staging+production release pipeline per CLAUDE.md; `release.yml`, `deploy-release.sh`).
+- Worktree `worktree-case-study-docs` (now sitting on top of dev `240a841`).
 

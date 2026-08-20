@@ -1,5 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, Input, signal, ViewChild } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  inject,
+  Input,
+  signal,
+  ViewChild,
+} from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 @Component({
@@ -13,11 +20,12 @@ export class SaveIcon {
 
   @Input() size: 'sm' | 'md' | 'lg' | 'xl' = 'md';
   @Input() sizeMultiplier: 1 | 2 | 3 = 1;
-  @Input() color: string = '#66aa33';
+  @Input() color = '#66aa33';
 
   private _sanitizer = inject(DomSanitizer);
 
-  @ViewChild('iconContainer', { static: true }) iconContainer: any;
+  @ViewChild('iconContainer', { static: true })
+  iconContainer!: ElementRef<HTMLElement>;
 
   constructor() {
     // @ts-expect-error I guess at some point I have to fix this...

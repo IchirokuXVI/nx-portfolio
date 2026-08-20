@@ -1,7 +1,8 @@
 import { inject, Injectable } from '@angular/core';
 import { of } from 'rxjs';
-import { AssetMemory } from '../asset/asset-memory';
+import { ASSET_SERVICE } from '../asset/asset-service';
 import { News, NewsTranslation, TranslatedNews } from './news';
+import { NewsServiceI } from './news-service';
 import { NEWS } from './static-news-data';
 import { NEWS_TRANSLATIONS } from './static-news-translation-data';
 
@@ -15,9 +16,8 @@ import { NEWS_TRANSLATIONS } from './static-news-translation-data';
 @Injectable({
   providedIn: 'root',
 })
-export class NewsMemory {
-  // TODO(di-wiring): depends on the concrete AssetMemory instead of an asset service token; fix alongside the consumer sites. Tracked in libs/shared/data-access/plans/0001-data-access-di-token-wiring.md
-  private readonly _assets = inject(AssetMemory);
+export class NewsMemory implements NewsServiceI {
+  private readonly _assets = inject(ASSET_SERVICE);
   private _news = NEWS;
   private _newsTranslations = NEWS_TRANSLATIONS;
 

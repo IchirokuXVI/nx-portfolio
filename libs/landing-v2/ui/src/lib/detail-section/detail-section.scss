@@ -1,0 +1,38 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  width: 100%;
+  // Clears the top edge so an anchor jump from the TOC lands below it rather
+  // than flush against it.
+  scroll-margin-top: 1.5rem;
+}
+
+.detail-section {
+  &__heading {
+    margin: 0 0 0.85rem;
+    font-family: $font-display;
+    font-size: clamp(1.15rem, 2.4vw, 1.4rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: $text;
+    text-wrap: balance;
+  }
+
+  &__paragraph {
+    margin: 0;
+    color: $muted;
+    line-height: 1.75;
+    font-size: 1rem;
+    overflow-wrap: break-word;
+
+    // The first paragraph reads as the lead, a touch brighter than the rest.
+    &:first-of-type {
+      color: $text;
+    }
+
+    & + & {
+      margin-top: 0.9rem;
+    }
+  }
+}

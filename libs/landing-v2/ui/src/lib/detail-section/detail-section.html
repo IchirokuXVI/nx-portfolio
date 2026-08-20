@@ -1,0 +1,7 @@
+<section class="detail-section" [id]="sectionId()">
+  <h2 class="detail-section__heading">{{ heading() }}</h2>
+
+  @for (key of paragraphKeys(); track $index) {
+    <p class="detail-section__paragraph">{{ key | rokuT }}</p>
+  }
+</section>
