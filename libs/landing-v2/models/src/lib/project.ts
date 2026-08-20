@@ -17,6 +17,11 @@ export interface Project {
   /** Route to the live app, e.g. '/en/odontogram'. */
   appLink?: string;
   /**
+   * The live app is this very site (the portfolio itself). When true the card
+   * disables "View project" — you are already here.
+   */
+  isCurrentSite?: boolean;
+  /**
    * Project screenshot. Optional: when absent, the card renders a generic
    * placeholder (0003) — there is no media-kind discriminator.
    */

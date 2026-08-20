@@ -9,6 +9,7 @@
   "landingV2.project_view": "View project",
   "landingV2.project_details": "More details",
   "landingV2.project_unavailable": "Project not available",
+  "landingV2.project_current": "Already on the project",
   "landingV2.built": "Built with Angular & Nx",
 
   "landingV2.detail.view_repo": "View repository",

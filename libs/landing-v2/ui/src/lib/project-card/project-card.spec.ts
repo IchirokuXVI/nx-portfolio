@@ -82,25 +82,50 @@ describe('ProjectCard', () => {
     );
   });
 
-  it('links the title and "View project" to the live app', async () => {
-    await renderWith(makeProject({ appLink: '/en' }));
+  it('links the title and image to the detail page, and "View project" to the live app', async () => {
+    await renderWith(
+      makeProject({ detailLink: '/en/projects/portfolio', appLink: '/en' })
+    );
     const host = fixture.nativeElement as HTMLElement;
 
+    // Title and image lead into the detail page.
     const titleLink = host.querySelector<HTMLAnchorElement>(
       '.project-card__title a:first-child'
     );
-    expect(titleLink?.getAttribute('href')).toBe('/en');
-
-    const views = host.querySelectorAll<HTMLAnchorElement>(
-      '.project-card__actions .project-card__view'
-    );
-    // Last action is "View project" → app link.
-    expect(views[views.length - 1]?.getAttribute('href')).toBe('/en');
-
-    // The image also links to the live app.
+    expect(titleLink?.getAttribute('href')).toBe('/en/projects/portfolio');
     expect(
       host.querySelector('.project-card__media')?.getAttribute('href')
-    ).toBe('/en');
+    ).toBe('/en/projects/portfolio');
+
+    // "View project" (an anchor) → the live app.
+    const views = host.querySelectorAll<HTMLAnchorElement>(
+      '.project-card__actions a.project-card__view'
+    );
+    expect(views[views.length - 1]?.getAttribute('href')).toBe('/en');
+  });
+
+  it('disables "View project" with the "already here" tooltip when the app is this very site', async () => {
+    await renderWith(
+      makeProject({
+        detailLink: '/en/projects/portfolio',
+        appLink: '/en',
+        isCurrentSite: true,
+      })
+    );
+    const host = fixture.nativeElement as HTMLElement;
+
+    const disabled = host.querySelector('.project-card__view--disabled');
+    expect(disabled?.tagName).toBe('SPAN');
+    expect(disabled?.getAttribute('data-tooltip')).toBe(
+      'landingV2.project_current'
+    );
+
+    // "More details" stays a link; "View project" is not an anchor.
+    const anchors = host.querySelectorAll<HTMLAnchorElement>(
+      '.project-card__actions a.project-card__view'
+    );
+    expect(anchors.length).toBe(1);
+    expect(anchors[0].getAttribute('href')).toBe('/en/projects/portfolio');
   });
 
   it('links "More details" to the detail page when present', async () => {
