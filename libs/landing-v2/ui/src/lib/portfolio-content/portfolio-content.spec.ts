@@ -97,11 +97,12 @@ describe('PortfolioContent', () => {
     expect(host.querySelector('.portfolio-reveal--top')).toBeNull();
     expect(host.querySelector('.portfolio-closing')).toBeNull();
 
-    // The swap is a fade-out, hidden content change, fade-in: flush the timer.
+    // The swap collapses, changes content while collapsed, then grows: flush
+    // the collapse timer and the grow's animation frame.
     host
       .querySelector<HTMLButtonElement>('.portfolio-reveal__button')
       ?.click();
-    tick(200);
+    tick(300);
     fixture.detectChanges();
     host = fixture.nativeElement as HTMLElement;
 
@@ -126,7 +127,7 @@ describe('PortfolioContent', () => {
     host
       .querySelector<HTMLButtonElement>('.portfolio-reveal__button')
       ?.click();
-    tick(200);
+    tick(300);
     fixture.detectChanges();
     host = fixture.nativeElement as HTMLElement;
     expect(host.querySelectorAll('.detail-section').length).toBe(5);

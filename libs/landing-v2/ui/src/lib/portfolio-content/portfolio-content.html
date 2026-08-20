@@ -6,42 +6,39 @@
   [title]="project().name"
 >
   <div class="portfolio-chips" header-aside>
-    @for (group of chipGroups; track group.headingKey) {
-      <lib-landing-v2-tech-chip-group
-        [chips]="group.chips"
-        [heading]="group.headingKey | rokuT"
-      />
-    }
+    <lib-landing-v2-tech-chip-group [chips]="chips" />
   </div>
 
   <div
-    class="portfolio-body"
-    [class.portfolio-body--hidden]="!contentVisible()"
+    class="portfolio-swap"
+    [class.portfolio-swap--collapsed]="collapsed()"
     body
   >
-    @if (deepDive()) {
-      <div class="portfolio-reveal portfolio-reveal--top">
-        <ng-container [ngTemplateOutlet]="revealButton" />
-      </div>
-    }
+    <div class="portfolio-swap__inner">
+      @if (deepDive()) {
+        <div class="portfolio-reveal portfolio-reveal--top">
+          <ng-container [ngTemplateOutlet]="revealButton" />
+        </div>
+      }
 
-    <div class="portfolio-sections" id="portfolio-sections">
-      @for (section of visibleSections(); track section.id) {
-        <lib-landing-v2-detail-section
-          [heading]="headingKey(section) | rokuT"
-          [paragraphKeys]="paragraphKeys(section)"
-          [sectionId]="section.id"
-        />
+      <div class="portfolio-sections" id="portfolio-sections">
+        @for (section of visibleSections(); track section.id) {
+          <lib-landing-v2-detail-section
+            [heading]="headingKey(section) | rokuT"
+            [paragraphKeys]="paragraphKeys(section)"
+            [sectionId]="section.id"
+          />
+        }
+      </div>
+
+      @if (deepDive()) {
+        <p class="portfolio-closing">{{ key + '.closing_note' | rokuT }}</p>
+      } @else {
+        <div class="portfolio-reveal portfolio-reveal--bottom">
+          <ng-container [ngTemplateOutlet]="revealButton" />
+        </div>
       }
     </div>
-
-    @if (deepDive()) {
-      <p class="portfolio-closing">{{ key + '.closing_note' | rokuT }}</p>
-    } @else {
-      <div class="portfolio-reveal portfolio-reveal--bottom">
-        <ng-container [ngTemplateOutlet]="revealButton" />
-      </div>
-    }
   </div>
 
   <nav class="portfolio-meta" meta>

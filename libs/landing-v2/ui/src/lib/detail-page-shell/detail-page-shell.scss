@@ -49,8 +49,8 @@
     min-width: 0;
 
     @media (min-width: $breakpoint-desktop) {
-      flex: 0 0 auto;
-      max-width: 320px;
+      flex: 0 1 auto;
+      max-width: 460px;
     }
   }
 

@@ -5,20 +5,29 @@
   width: 100%;
 }
 
-// Tech chips: stacked groups. On mobile they sit under the title (the shell
-// header stacks); on desktop the shell floats this block to the header's right.
+// Tech chips: one inline-wrapping set (no group labels), so they stay compact.
+// On mobile they sit under the title (the shell header stacks); on desktop the
+// shell floats this block to the header's right.
 .portfolio-chips {
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
+  display: block;
 }
 
-// The swapping body: fades out, the view changes while hidden, then fades in.
-.portfolio-body {
-  transition: opacity 0.18s ease;
+// The swapping body. Animating grid-template-rows between 1fr and 0fr gives a
+// real height transition to auto-sized content: the current view collapses to
+// the top, and (after the content swaps while collapsed) the new view grows to
+// the bottom. Because the height changes smoothly there is no reflow bump.
+.portfolio-swap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.3s ease;
 
-  &--hidden {
-    opacity: 0;
+  &--collapsed {
+    grid-template-rows: 0fr;
+  }
+
+  &__inner {
+    min-height: 0;
+    overflow: hidden;
   }
 }
 
@@ -115,7 +124,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .portfolio-body,
+  .portfolio-swap,
   .portfolio-reveal__caret,
   .portfolio-reveal__button {
     transition: none;

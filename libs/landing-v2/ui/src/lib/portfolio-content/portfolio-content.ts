@@ -3,8 +3,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  ElementRef,
-  inject,
   input,
   signal,
 } from '@angular/core';
@@ -42,21 +40,20 @@ const SECTIONS: SectionDef[] = [
   { id: 'testing', deepOnly: true, highlightCount: 0, deepCount: 2 },
 ];
 
-/** Tech chips grouped by role. Chip text is literal (product names, not
- * translated); only the group heading localizes. */
-const CHIP_GROUPS: { headingKey: string; chips: string[] }[] = [
-  {
-    headingKey: `${KEY}.chips.frontend`,
-    chips: ['Angular 21', 'TypeScript', 'Module Federation', 'Localization'],
-  },
-  {
-    headingKey: `${KEY}.chips.tooling`,
-    chips: ['Nx 22', 'Jest', 'Cypress', 'Playwright'],
-  },
-  {
-    headingKey: `${KEY}.chips.deployment`,
-    chips: ['Docker', 'Kubernetes', 'Helm', 'GitHub Actions'],
-  },
+/** Tech chips, one inline-wrapping set (literal product names, not localized). */
+const CHIPS = [
+  'Angular 21',
+  'TypeScript',
+  'Module Federation',
+  'Localization',
+  'Nx 22',
+  'Jest',
+  'Cypress',
+  'Playwright',
+  'Docker',
+  'Kubernetes',
+  'Helm',
+  'GitHub Actions',
 ];
 
 /**
@@ -88,21 +85,20 @@ const CHIP_GROUPS: { headingKey: string; chips: string[] }[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PortfolioContent {
-  private _host = inject<ElementRef<HTMLElement>>(ElementRef);
-
   project = input.required<TranslatedProject>();
 
   /** Highlights-only by default; flips to reveal the deep view. */
   readonly deepDive = signal(false);
 
-  /** Drives the crossfade: the body fades out, the view swaps while it is
-   * hidden, then it fades back in, so highlights and deep never overlap. */
-  readonly contentVisible = signal(true);
+  /** Drives the height animation: the current view collapses to the top, the
+   * content swaps while collapsed, then the new view grows to the bottom. A
+   * smooth height change (not an instant reflow) keeps the scroll from bumping. */
+  readonly collapsed = signal(false);
 
   private _swapTimer?: ReturnType<typeof setTimeout>;
 
   readonly key = KEY;
-  readonly chipGroups = CHIP_GROUPS;
+  readonly chips = CHIPS;
 
   /** Highlight view hides the deep-only sections; deep view shows them all. */
   readonly visibleSections = computed<SectionDef[]>(() =>
@@ -136,23 +132,22 @@ export class PortfolioContent {
     const prefersReduced = window.matchMedia?.(
       '(prefers-reduced-motion: reduce)'
     ).matches;
-    const fadeMs = prefersReduced ? 0 : 180;
 
-    // Phase 1: fade the current view out.
-    this.contentVisible.set(false);
+    if (prefersReduced) {
+      this.deepDive.set(opening);
+      return;
+    }
+
+    // Phase 1: collapse the current view to the top (height animates to 0).
+    this.collapsed.set(true);
 
     clearTimeout(this._swapTimer);
     this._swapTimer = setTimeout(() => {
-      // Phase 2 (hidden): swap the content, and on expanding jump back to the
-      // top so the relocated button and the fresh content start in view.
+      // Phase 2 (collapsed, invisible): swap the content and relocate the
+      // button, then let the browser paint the collapsed state for one frame
+      // before growing so the height transition actually runs.
       this.deepDive.set(opening);
-
-      if (opening) {
-        this._host.nativeElement.scrollIntoView({ block: 'start' });
-      }
-
-      // Phase 3: fade the new view in.
-      this.contentVisible.set(true);
-    }, fadeMs);
+      requestAnimationFrame(() => this.collapsed.set(false));
+    }, 260);
   }
 }
