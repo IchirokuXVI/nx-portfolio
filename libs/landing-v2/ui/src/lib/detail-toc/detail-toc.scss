@@ -18,6 +18,8 @@
   &__list {
     margin: 0;
     padding: 0;
+    padding-right: 0.5rem;
+    width: fit-content;
     list-style: none;
     display: flex;
     flex-direction: column;

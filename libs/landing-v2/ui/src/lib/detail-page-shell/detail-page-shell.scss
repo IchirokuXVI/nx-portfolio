@@ -169,9 +169,17 @@
     }
   }
 
-  &__meta {
+  &__side {
     min-width: 0;
     order: 1;
+
+    // When nothing is projected into the [side] slot the aside is empty. Drop it
+    // out of the grid entirely: a placed-but-zero-height column still gets the
+    // layout gap next to it, leaving a phantom gap between it and the body.
+    // Removing the box means no track, so no gap.
+    &:empty {
+      display: none;
+    }
 
     @media (min-width: $breakpoint-desktop) {
       order: 2;
