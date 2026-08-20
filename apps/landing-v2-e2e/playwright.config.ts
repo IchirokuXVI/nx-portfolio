@@ -5,7 +5,14 @@ import { defineConfig, devices } from '@playwright/test';
 // For CI, you may want to set BASE_URL to the deployed application.
 // landingV2 renders only through the shell (CLAUDE.md) and mounts at the
 // locale root, so baseURL points at the shell's /en, never port 4204 directly.
-const baseURL = process.env['BASE_URL'] || 'http://localhost:4200/en';
+//
+// E2E_BASE_URL points the suite at an already-running deployment origin (e.g. the
+// local Docker/Kubernetes reverse proxy at http://portfolio.localhost); the shell
+// locale root is appended. When set, the dev-server webServer below is skipped.
+const dockerOrigin = process.env['E2E_BASE_URL'];
+const baseURL =
+  process.env['BASE_URL'] ||
+  (dockerOrigin ? `${dockerOrigin}/en` : 'http://localhost:4200/en');
 
 /**
  * Read environment variables from file.
@@ -21,6 +28,9 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     baseURL,
+    // The local reverse proxy serves self-signed TLS; accept it so an https
+    // E2E_BASE_URL still works. Harmless for the http/dev-server defaults.
+    ignoreHTTPSErrors: true,
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
   },
@@ -34,12 +44,14 @@ export default defineConfig({
    * The dev server's SPA fallback returns 404 to the probe's non-`text/html`
    * request for deep routes, so probe the root. Tests still navigate to
    * `baseURL` in a browser. */
-  webServer: {
-    command: 'npx nx serve shell',
-    url: 'http://localhost:4200',
-    reuseExistingServer: true,
-    cwd: workspaceRoot,
-  },
+  webServer: dockerOrigin
+    ? undefined
+    : {
+        command: 'npx nx serve shell',
+        url: 'http://localhost:4200',
+        reuseExistingServer: true,
+        cwd: workspaceRoot,
+      },
   projects: [
     {
       name: 'chromium',

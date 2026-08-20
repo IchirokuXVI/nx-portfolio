@@ -9,4 +9,6 @@ spec:
   resources:
     requests:
       storage: 1Gi
-  storageClassName: local-path
+  {{- if .Values.certsVolume.storageClassName }}
+  storageClassName: {{ .Values.certsVolume.storageClassName }}
+  {{- end }}

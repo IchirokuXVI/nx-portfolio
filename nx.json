@@ -27,6 +27,12 @@
   },
   "neverConnectToCloud": true,
   "targetDefaults": {
+    "@portfolio/docker:build": {
+      "cache": false
+    },
+    "@portfolio/docker:push": {
+      "cache": false
+    },
     "@angular-devkit/build-angular:application": {
       "cache": true,
       "dependsOn": ["^build"],
