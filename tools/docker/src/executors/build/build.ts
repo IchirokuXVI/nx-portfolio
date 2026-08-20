@@ -78,9 +78,18 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     options.buildArgs.MFE_BASE_URL = process.env.MFE_BASE_URL;
   }
 
+  // Alternative to MFE_BASE_URL: an explicit per-remote URL map (name=url,...) for
+  // when each remote lives on its own origin/port (the local "port" mode). Also
+  // baked into the shell only; other Dockerfiles do not declare the arg.
+  if (!options.buildArgs.MFE_REMOTE_URLS && process.env.MFE_REMOTE_URLS) {
+    options.buildArgs.MFE_REMOTE_URLS = process.env.MFE_REMOTE_URLS;
+  }
+
   for (const [key, value] of Object.entries(options.buildArgs || {})) {
     if (value) {
-      buildArgs.push(`--build-arg ${key}=${value}`);
+      // Quote the value so build args containing shell/cmd delimiters survive — e.g.
+      // MFE_REMOTE_URLS, whose commas would otherwise be split by cmd.exe on Windows.
+      buildArgs.push(`--build-arg ${key}="${value}"`);
     }
   }
 

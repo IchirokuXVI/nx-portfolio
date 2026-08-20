@@ -5,6 +5,9 @@ ARG NX_APP
 # Base URL where the shell loads its remotes from. Baked into the bundle at build
 # time, so staging and production builds differ only by this value.
 ARG MFE_BASE_URL
+# Alternative to MFE_BASE_URL: an explicit per-remote URL map (name=url,...), used
+# when each remote lives on its own origin/port (the local "port" mode).
+ARG MFE_REMOTE_URLS
 
 # Use the builder image to build the microfrontend app. BUILDER_TAG selects which
 # base image tag to build FROM (latest by default; overridable via the docker
@@ -15,6 +18,8 @@ ENV NODE_ENV=$NODE_ENV
 ARG NX_APP
 ARG MFE_BASE_URL
 ENV MFE_BASE_URL=$MFE_BASE_URL
+ARG MFE_REMOTE_URLS
+ENV MFE_REMOTE_URLS=$MFE_REMOTE_URLS
 RUN npx nx build ${NX_APP} --configuration=${NODE_ENV}
 
 # Use the local-http-server image as the base for serving the app
