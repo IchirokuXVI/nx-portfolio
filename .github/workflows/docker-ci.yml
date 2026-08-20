@@ -242,11 +242,14 @@ jobs:
           rc=0
           IFS=',' read -ra PROJECTS <<< "${{ steps.get-affected-e2e.outputs.projects }}"
           for p in "${PROJECTS[@]}"; do
-            echo "::group::e2e $p"
-            if [ -f "apps/$p/playwright.config.ts" ]; then
-              npx playwright test -c "apps/$p/playwright.config.ts" --project=chromium || rc=1
+            # The nx project name can differ from its directory (e.g. landingV2-e2e
+            # lives in apps/landing-v2-e2e), so resolve the real root.
+            root=$(npx nx show project "$p" --json | jq -r .root)
+            echo "::group::e2e $p ($root)"
+            if [ -f "$root/playwright.config.ts" ]; then
+              npx playwright test -c "$root/playwright.config.ts" --project=chromium || rc=1
             else
-              npx cypress run --project "apps/$p" --browser electron || rc=1
+              npx cypress run --project "$root" --browser electron || rc=1
             fi
             echo "::endgroup::"
           done
