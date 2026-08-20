@@ -67,6 +67,10 @@
   "landingV2.detail.portfolio.sections.testing.deep.p1": "La capa de data-access usa un patrón de spec compartido. Sé los tipos que cada servicio debe devolver, así que escribí una suite de contrato que toda implementación de ese servicio tiene que pasar. Cada implementación concreta corre primero la suite compartida y luego añade sus propias pruebas, así que cada versión responde al mismo comportamiento además de sus casos específicos.",
   "landingV2.detail.portfolio.sections.testing.deep.p2": "Las pruebas end to end se organizan por app pero siempre apuntan al shell en lugar de al puerto propio de un remote, porque el shell es como un usuario real llega a cada app. Es un área que sigo puliendo, sobre todo para micro-frontends, pero apuntar el e2e al shell mantiene las pruebas fieles a cómo funciona el sitio de verdad.",
 
+  "landingV2.detail.portfolio.chips.frontend": "Frontend",
+  "landingV2.detail.portfolio.chips.tooling": "Herramientas",
+  "landingV2.detail.portfolio.chips.deployment": "Despliegue",
+
   "landingV2.detail.odontogram.what_title": "Qué es",
   "landingV2.detail.odontogram.what_body": "Un odontograma completo para registrar tratamientos dentales y mantener el historial de cada paciente a lo largo del tiempo.",
   "landingV2.detail.odontogram.hard_part_title": "La parte difícil",

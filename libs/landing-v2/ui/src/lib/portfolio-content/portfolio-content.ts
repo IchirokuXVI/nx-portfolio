@@ -40,20 +40,21 @@ const SECTIONS: SectionDef[] = [
   { id: 'testing', deepOnly: true, highlightCount: 0, deepCount: 2 },
 ];
 
-/** Tech chips, one inline-wrapping set (literal product names, not localized). */
-const CHIPS = [
-  'Angular 21',
-  'TypeScript',
-  'Module Federation',
-  'Localization',
-  'Nx 22',
-  'Jest',
-  'Cypress',
-  'Playwright',
-  'Docker',
-  'Kubernetes',
-  'Helm',
-  'GitHub Actions',
+/** Tech chips grouped by role. Chip text is literal (product names, not
+ * translated); only the group heading localizes. */
+const CHIP_GROUPS: { headingKey: string; chips: string[] }[] = [
+  {
+    headingKey: `${KEY}.chips.frontend`,
+    chips: ['Angular 21', 'TypeScript', 'Module Federation', 'Localization'],
+  },
+  {
+    headingKey: `${KEY}.chips.tooling`,
+    chips: ['Nx 22', 'Jest', 'Cypress', 'Playwright'],
+  },
+  {
+    headingKey: `${KEY}.chips.deployment`,
+    chips: ['Docker', 'Kubernetes', 'Helm', 'GitHub Actions'],
+  },
 ];
 
 /**
@@ -98,7 +99,7 @@ export class PortfolioContent {
   private _swapTimer?: ReturnType<typeof setTimeout>;
 
   readonly key = KEY;
-  readonly chips = CHIPS;
+  readonly chipGroups = CHIP_GROUPS;
 
   /** Highlight view hides the deep-only sections; deep view shows them all. */
   readonly visibleSections = computed<SectionDef[]>(() =>
@@ -148,6 +149,6 @@ export class PortfolioContent {
       // before growing so the height transition actually runs.
       this.deepDive.set(opening);
       requestAnimationFrame(() => this.collapsed.set(false));
-    }, 260);
+    }, 450);
   }
 }

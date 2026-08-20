@@ -5,11 +5,14 @@
   width: 100%;
 }
 
-// Tech chips: one inline-wrapping set (no group labels), so they stay compact.
-// On mobile they sit under the title (the shell header stacks); on desktop the
-// shell floats this block to the header's right.
+// Tech chips: labelled groups, stacked and centered. On mobile they sit under
+// the title (the shell header stacks); on desktop the shell floats this block
+// to the header's right.
 .portfolio-chips {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.1rem;
 }
 
 // The swapping body. Animating grid-template-rows between 1fr and 0fr gives a
@@ -19,7 +22,7 @@
 .portfolio-swap {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 0.3s ease;
+  transition: grid-template-rows 0.45s ease;
 
   &--collapsed {
     grid-template-rows: 0fr;

@@ -6,7 +6,12 @@
   [title]="project().name"
 >
   <div class="portfolio-chips" header-aside>
-    <lib-landing-v2-tech-chip-group [chips]="chips" />
+    @for (group of chipGroups; track group.headingKey) {
+      <lib-landing-v2-tech-chip-group
+        [chips]="group.chips"
+        [heading]="group.headingKey | rokuT"
+      />
+    }
   </div>
 
   <div

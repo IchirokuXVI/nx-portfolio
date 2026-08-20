@@ -67,6 +67,10 @@
   "landingV2.detail.portfolio.sections.testing.deep.p1": "The data-access layer uses a shared-spec pattern. I know the types each service must return, so I wrote one contract suite that every implementation of that service has to pass. Each concrete implementation runs the shared suite first and then adds its own tests, so every version is held to the same behavior on top of its specific cases.",
   "landingV2.detail.portfolio.sections.testing.deep.p2": "End-to-end tests are organized per app but always point at the shell rather than a remote's own port, because the shell is how a real user reaches each app. It is an area I am still refining, especially for micro-frontends, but pointing e2e at the shell keeps the tests honest about how the site actually runs.",
 
+  "landingV2.detail.portfolio.chips.frontend": "Frontend",
+  "landingV2.detail.portfolio.chips.tooling": "Tooling",
+  "landingV2.detail.portfolio.chips.deployment": "Deployment",
+
   "landingV2.detail.odontogram.what_title": "What it is",
   "landingV2.detail.odontogram.what_body": "A full odontogram for recording dental treatments and keeping each patient's history over time.",
   "landingV2.detail.odontogram.hard_part_title": "The hard part",
