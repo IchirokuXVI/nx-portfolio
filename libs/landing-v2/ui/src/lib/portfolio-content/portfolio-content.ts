@@ -95,6 +95,12 @@ export class PortfolioContent {
   /** Highlights-only by default; flips to reveal the deep view. */
   readonly deepDive = signal(false);
 
+  /** Drives the crossfade: the body fades out, the view swaps while it is
+   * hidden, then it fades back in, so highlights and deep never overlap. */
+  readonly contentVisible = signal(true);
+
+  private _swapTimer?: ReturnType<typeof setTimeout>;
+
   readonly key = KEY;
   readonly chipGroups = CHIP_GROUPS;
 
@@ -127,21 +133,26 @@ export class PortfolioContent {
 
   toggleDeepDive(): void {
     const opening = !this.deepDive();
-    this.deepDive.set(opening);
+    const prefersReduced = window.matchMedia?.(
+      '(prefers-reduced-motion: reduce)'
+    ).matches;
+    const fadeMs = prefersReduced ? 0 : 180;
 
-    // On expanding, bring the (now top) button and the fresh, longer content
-    // back into view; the reader clicked the button from the bottom.
-    if (opening) {
-      const prefersReduced = window.matchMedia?.(
-        '(prefers-reduced-motion: reduce)'
-      ).matches;
+    // Phase 1: fade the current view out.
+    this.contentVisible.set(false);
 
-      requestAnimationFrame(() =>
-        this._host.nativeElement.scrollIntoView({
-          behavior: prefersReduced ? 'auto' : 'smooth',
-          block: 'start',
-        })
-      );
-    }
+    clearTimeout(this._swapTimer);
+    this._swapTimer = setTimeout(() => {
+      // Phase 2 (hidden): swap the content, and on expanding jump back to the
+      // top so the relocated button and the fresh content start in view.
+      this.deepDive.set(opening);
+
+      if (opening) {
+        this._host.nativeElement.scrollIntoView({ block: 'start' });
+      }
+
+      // Phase 3: fade the new view in.
+      this.contentVisible.set(true);
+    }, fadeMs);
   }
 }

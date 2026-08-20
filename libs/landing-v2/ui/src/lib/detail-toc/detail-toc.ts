@@ -1,8 +1,8 @@
 import {
-  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  effect,
   inject,
   input,
   signal,
@@ -30,13 +30,62 @@ export interface TocItem {
   styleUrl: './detail-toc.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class DetailToc implements AfterViewInit {
+export class DetailToc {
   items = input.required<TocItem[]>();
 
   /** Id of the section currently nearest the top of the viewport. */
   readonly activeId = signal<string | null>(null);
 
   private _destroyRef = inject(DestroyRef);
+  private _observer?: IntersectionObserver;
+
+  constructor() {
+    // Re-observe whenever the section list changes (the deep view swaps in more
+    // sections), so the active-section highlight tracks the current list.
+    effect(() => {
+      const ids = this.items().map((item) => item.id);
+      this._observe(ids);
+    });
+
+    this._destroyRef.onDestroy(() => this._observer?.disconnect());
+  }
+
+  private _observe(ids: string[]): void {
+    if (typeof IntersectionObserver === 'undefined') {
+      return;
+    }
+
+    // The section elements are rendered by the parent; wait a frame so a freshly
+    // swapped-in list is in the DOM before we look the ids up.
+    requestAnimationFrame(() => {
+      this._observer?.disconnect();
+
+      const targets = ids
+        .map((id) => document.getElementById(id))
+        .filter((element): element is HTMLElement => element !== null);
+
+      if (!targets.length) {
+        return;
+      }
+
+      // The band sits in the upper third of the viewport, so the active entry is
+      // the section whose top has just scrolled past the header, not whatever
+      // happens to be centered.
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              this.activeId.set(entry.target.id);
+            }
+          }
+        },
+        { rootMargin: '-20% 0px -70% 0px', threshold: 0 }
+      );
+
+      targets.forEach((target) => observer.observe(target));
+      this._observer = observer;
+    });
+  }
 
   /** Smooth-scrolls to the target section while keeping the anchor's real
    * `href` (and updating the hash) so keyboard and middle-click still work.
@@ -60,36 +109,5 @@ export class DetailToc implements AfterViewInit {
     });
     history.replaceState(null, '', `#${id}`);
     this.activeId.set(id);
-  }
-
-  ngAfterViewInit(): void {
-    if (typeof IntersectionObserver === 'undefined') {
-      return;
-    }
-
-    const targets = this.items()
-      .map((item) => document.getElementById(item.id))
-      .filter((element): element is HTMLElement => element !== null);
-
-    if (!targets.length) {
-      return;
-    }
-
-    // The band sits in the upper third of the viewport, so the active entry is
-    // the section whose top has just scrolled past the header, not whatever
-    // happens to be centered.
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            this.activeId.set(entry.target.id);
-          }
-        }
-      },
-      { rootMargin: '-20% 0px -70% 0px', threshold: 0 }
-    );
-
-    targets.forEach((target) => observer.observe(target));
-    this._destroyRef.onDestroy(() => observer.disconnect());
   }
 }

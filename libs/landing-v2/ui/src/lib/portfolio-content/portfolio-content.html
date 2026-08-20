@@ -5,7 +5,20 @@
   [tagline]="project().tagline"
   [title]="project().name"
 >
-  <div body>
+  <div class="portfolio-chips" header-aside>
+    @for (group of chipGroups; track group.headingKey) {
+      <lib-landing-v2-tech-chip-group
+        [chips]="group.chips"
+        [heading]="group.headingKey | rokuT"
+      />
+    }
+  </div>
+
+  <div
+    class="portfolio-body"
+    [class.portfolio-body--hidden]="!contentVisible()"
+    body
+  >
     @if (deepDive()) {
       <div class="portfolio-reveal portfolio-reveal--top">
         <ng-container [ngTemplateOutlet]="revealButton" />
@@ -31,20 +44,9 @@
     }
   </div>
 
-  <div meta>
-    <div class="portfolio-meta">
-      <lib-landing-v2-detail-toc class="portfolio-meta__toc" [items]="tocItems()" />
-
-      <div class="portfolio-meta__chips">
-        @for (group of chipGroups; track group.headingKey) {
-          <lib-landing-v2-tech-chip-group
-            [chips]="group.chips"
-            [heading]="group.headingKey | rokuT"
-          />
-        }
-      </div>
-    </div>
-  </div>
+  <nav class="portfolio-meta" meta>
+    <lib-landing-v2-detail-toc [items]="tocItems()" />
+  </nav>
 </lib-landing-v2-detail-page-shell>
 
 <ng-template #revealButton>

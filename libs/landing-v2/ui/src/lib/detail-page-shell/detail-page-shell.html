@@ -1,31 +1,39 @@
 <article class="detail-page">
   <div class="detail-page__inner">
     <header class="detail-page__header">
-      <h1 class="detail-page__title">{{ title() }}</h1>
-      @if (tagline()) {
-        <p class="detail-page__tagline">{{ tagline() }}</p>
-      }
-      <div class="detail-page__links">
-        @if (repoLink()) {
-          <a
-            class="detail-page__link"
-            [href]="repoLink()"
-            rel="noopener"
-            target="_blank"
-          >
-            <lib-github-icon class="detail-page__link-icon" />
-            {{ 'landingV2.detail.view_repo' | rokuT }}
-          </a>
+      <div class="detail-page__header-main">
+        <h1 class="detail-page__title">{{ title() }}</h1>
+        @if (tagline()) {
+          <p class="detail-page__tagline">{{ tagline() }}</p>
         }
-        @if (appLink()) {
-          <a
-            class="detail-page__link detail-page__link--primary"
-            [routerLink]="[appLink()]"
-          >
-            {{ 'landingV2.detail.visit_live' | rokuT }}
-            <lib-arrow-icon class="detail-page__link-icon" />
-          </a>
-        }
+        <div class="detail-page__links">
+          @if (repoLink()) {
+            <a
+              class="detail-page__link"
+              [href]="repoLink()"
+              rel="noopener"
+              target="_blank"
+            >
+              <lib-github-icon class="detail-page__link-icon" />
+              {{ 'landingV2.detail.view_repo' | rokuT }}
+            </a>
+          }
+          @if (appLink()) {
+            <a
+              class="detail-page__link detail-page__link--primary"
+              [routerLink]="[appLink()]"
+            >
+              {{ 'landingV2.detail.visit_live' | rokuT }}
+              <lib-arrow-icon class="detail-page__link-icon" />
+            </a>
+          }
+        </div>
+      </div>
+
+      <!-- Optional header-side content (the portfolio puts its tech chips here
+           on desktop; empty and inert on pages that do not project it). -->
+      <div class="detail-page__header-aside">
+        <ng-content select="[header-aside]" />
       </div>
     </header>
 

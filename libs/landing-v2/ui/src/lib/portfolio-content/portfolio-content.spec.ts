@@ -1,4 +1,9 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  fakeAsync,
+  TestBed,
+  tick,
+} from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslatedProject } from '@portfolio/landing-v2/models';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
@@ -82,7 +87,7 @@ describe('PortfolioContent', () => {
     expect(host.querySelector('.facts-table')).toBeNull();
   });
 
-  it('swaps to the deep view, relocates the button, and shows the closing note', () => {
+  it('swaps to the deep view, relocates the button, and shows the closing note', fakeAsync(() => {
     let host = fixture.nativeElement as HTMLElement;
 
     // Collapsed: button at the bottom, no closing note, no deep-only sections.
@@ -92,9 +97,11 @@ describe('PortfolioContent', () => {
     expect(host.querySelector('.portfolio-reveal--top')).toBeNull();
     expect(host.querySelector('.portfolio-closing')).toBeNull();
 
+    // The swap is a fade-out, hidden content change, fade-in: flush the timer.
     host
       .querySelector<HTMLButtonElement>('.portfolio-reveal__button')
       ?.click();
+    tick(200);
     fixture.detectChanges();
     host = fixture.nativeElement as HTMLElement;
 
@@ -119,9 +126,10 @@ describe('PortfolioContent', () => {
     host
       .querySelector<HTMLButtonElement>('.portfolio-reveal__button')
       ?.click();
+    tick(200);
     fixture.detectChanges();
     host = fixture.nativeElement as HTMLElement;
     expect(host.querySelectorAll('.detail-section').length).toBe(5);
     expect(host.querySelector('.portfolio-closing')).toBeNull();
-  });
+  }));
 });
