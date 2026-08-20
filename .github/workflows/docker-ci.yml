@@ -173,16 +173,23 @@ jobs:
             --rm "ghcr.io/${{ env.REPO_LOWERCASE }}/builder:latest" \
             npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_testable_apps }}
 
+      # Build & push affected micro-frontends under the mutable `staging` tag.
+      # The shell reads MFE_BASE_URL; the other apps ignore it.
+      - name: Build & push staging images
+        if: ${{ steps.get-affected-apps.outputs.affected_apps_tobuild != '' }}
+        env:
+          PORTFOLIO_IMAGE_TAG: staging
+          MFE_BASE_URL: ${{ env.STAGING_MFE_BASE_URL }}
+        run: |
+          npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}
+
       # ---------------------------------------------------------------------------
-      # e2e against the actual Docker images (not the dev server).
-      #
-      # The stack is brought up in "port" mode: every app image runs as its own
-      # container on the remote's dev-serve port (shell 4200, remotes 4201-4204).
-      # A development shell build's string remotes already resolve to
-      # http://localhost:4201..4204, so no reverse proxy and no MFE_BASE_URL are
-      # needed - the same setup documented in k8s/README.md, minus Kubernetes.
-      #
-      # This runs before the staging build/push so a failure gates the deploy.
+      # e2e against the exact staging images that were just pushed. k8s/e2e/compose.yml
+      # stands up the shell + remotes behind a reverse proxy on the staging hostnames
+      # (mirroring the Kubernetes topology), so the real staging shell — which bakes
+      # the staging MFE host — is tested unchanged. Runs after the push and before the
+      # deploy: a failure gates the deploy (the mutable staging tag is simply not
+      # rolled out).
       # ---------------------------------------------------------------------------
       - name: Get affected e2e projects
         id: get-affected-e2e
@@ -197,50 +204,38 @@ jobs:
             affected_e2e=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$all_e2e" | paste -sd, -)
           fi
 
-          # landing-e2e and odontogram-e2e are excluded: pre-existing breakage
-          # (their tsconfig sets module=commonjs under the workspace's
-          # moduleResolution=bundler, TS5095, and their specs predate the
-          # through-shell routing). See k8s/README.md.
+          # landing-e2e / odontogram-e2e are excluded (pre-existing tsconfig/spec
+          # breakage; see k8s/README.md).
           affected_e2e=$(echo "$affected_e2e" | tr ',' '\n' | sed '/^$/d' | grep -vE '^(landing-e2e|odontogram-e2e)$' | paste -sd, -)
 
           echo "projects=$affected_e2e" >> "$GITHUB_OUTPUT"
           echo "Affected e2e projects: $affected_e2e"
 
-      # Build the five app images in development configuration (port mode) and run
-      # them as plain containers. The builder/local-http-server bases are reused
-      # from the production build above by retagging them to the `dev` tag the
-      # development Dockerfiles expect (BUILDER_TAG=dev).
-      - name: Build & start the e2e docker stack
-        if: ${{ steps.get-affected-e2e.outputs.projects != '' }}
-        run: |
-          REG="ghcr.io/${{ env.REPO_LOWERCASE }}"
-          docker tag "$REG/builder:latest" "$REG/builder:dev"
-
-          npx nx run docker/local-http-server:build --configuration=development
-          # No MFE_BASE_URL: port mode relies on the default localhost:<port> remotes.
-          npx nx run-many -t build:docker --configuration=development \
-            --projects shell,landing,odontogram,damoclesSword,landingV2
-
-          docker run -d --name shell         -p 4200:80 "$REG/shell:dev"
-          docker run -d --name landing       -p 4201:80 "$REG/landing:dev"
-          docker run -d --name odontogram    -p 4202:80 "$REG/odontogram:dev"
-          docker run -d --name damoclessword -p 4203:80 "$REG/damoclessword:dev"
-          docker run -d --name landingv2     -p 4204:80 "$REG/landingv2:dev"
-
-          # Wait for the shell to answer.
-          for i in $(seq 1 30); do
-            if curl -fsS http://localhost:4200/en >/dev/null 2>&1; then
-              echo "shell is up"; break
-            fi
-            echo "waiting for shell ($i)..."; sleep 2
-          done
-
-      - name: Run affected e2e against the docker stack
+      - name: Start the staging e2e stack
         if: ${{ steps.get-affected-e2e.outputs.projects != '' }}
         env:
-          E2E_BASE_URL: http://localhost:4200
+          E2E_IMAGE_PREFIX: ghcr.io/${{ env.REPO_LOWERCASE }}
+          E2E_IMAGE_TAG: staging
         run: |
-          # Ensure the runners' browsers are present.
+          # The staging shell bakes https://mfe.staging.ichirokuxvi.com, so make the
+          # staging hostnames resolve to the local reverse proxy.
+          echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
+
+          docker compose -f k8s/e2e/compose.yml up -d --pull always
+
+          # Wait for the shell to answer through the proxy.
+          for i in $(seq 1 45); do
+            if curl -kfsS https://staging.ichirokuxvi.com/en >/dev/null 2>&1; then
+              echo "staging e2e stack is up"; break
+            fi
+            echo "waiting for the staging e2e stack ($i)..."; sleep 2
+          done
+
+      - name: Run affected e2e against the staging stack
+        if: ${{ steps.get-affected-e2e.outputs.projects != '' }}
+        env:
+          E2E_BASE_URL: https://staging.ichirokuxvi.com
+        run: |
           npx playwright install --with-deps chromium
           npx cypress install
 
@@ -257,19 +252,9 @@ jobs:
           done
           exit $rc
 
-      - name: Tear down the e2e docker stack
+      - name: Tear down the staging e2e stack
         if: ${{ always() && steps.get-affected-e2e.outputs.projects != '' }}
-        run: docker rm -f shell landing odontogram damoclessword landingv2 || true
-
-      # Build & push affected micro-frontends under the mutable `staging` tag.
-      # The shell reads MFE_BASE_URL; the other apps ignore it.
-      - name: Build & push staging images
-        if: ${{ steps.get-affected-apps.outputs.affected_apps_tobuild != '' }}
-        env:
-          PORTFOLIO_IMAGE_TAG: staging
-          MFE_BASE_URL: ${{ env.STAGING_MFE_BASE_URL }}
-        run: |
-          npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}
+        run: docker compose -f k8s/e2e/compose.yml down -v || true
 
       - name: Set up SSH for deployment
         uses: webfactory/ssh-agent@v0.9.0

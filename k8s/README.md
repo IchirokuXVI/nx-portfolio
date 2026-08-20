@@ -149,6 +149,26 @@ npx cypress run --project apps/shell-e2e --browser electron
 > and their specs predate the through-shell routing. That is a pre-existing issue,
 > unrelated to the deployment.
 
+### e2e against the published images (what CI runs)
+
+`e2e/compose.yml` stands up the **published** images (default: the `staging` tag)
+behind a reverse proxy on the staging hostnames, mirroring the Kubernetes topology,
+so the exact shell image, which bakes the staging MFE host, is tested unchanged.
+CI runs this after pushing the staging images and before deploying, so a failure
+gates the deploy. To run it yourself:
+
+```sh
+echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
+docker login ghcr.io                                   # the images are private
+docker compose -f e2e/compose.yml up -d --pull always
+E2E_BASE_URL=https://staging.ichirokuxvi.com \
+  npx playwright test -c apps/damoclesSword-e2e/playwright.config.ts --project=chromium
+docker compose -f e2e/compose.yml down -v
+```
+
+Override `E2E_IMAGE_PREFIX` / `E2E_IMAGE_TAG` to point at other images (e.g. a
+release version instead of `staging`).
+
 ---
 
 ## Possible problems
