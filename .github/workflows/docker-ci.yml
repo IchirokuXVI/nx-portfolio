@@ -30,6 +30,11 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PORTFOLIO_DOCKER_REGISTRY: ghcr.io/ichirokuxvi
       PORTFOLIO_DOCKER_SKIP_LOGIN: true
+      # Use the GitHub Actions cache backend (type=gha) for every docker build,
+      # instead of the local-dir cache + actions/cache tarball round-trip. Needs the
+      # docker-container buildx driver (set up below) and the Actions runtime env
+      # (exposed below).
+      PORTFOLIO_DOCKER_CACHE: gha
       # Where the shell loads its remotes from on staging. Baked into the shell
       # bundle at build time (ignored by the other, environment-agnostic apps).
       STAGING_MFE_BASE_URL: https://mfe.staging.ichirokuxvi.com
@@ -50,6 +55,12 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      # Exposes ACTIONS_CACHE_URL / ACTIONS_RUNTIME_TOKEN so `docker buildx build
+      # --cache-to=type=gha` works when called directly (the docker executor shells
+      # out to buildx itself rather than using build-push-action).
+      - name: Expose GitHub Actions runtime for the gha cache
+        uses: crazy-max/ghaction-github-runtime@v3
 
       # Setup Node.js & Nx
       - name: Setup Node.js
@@ -80,15 +91,13 @@ jobs:
           REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "REPO_LOWERCASE=$REPO_LC" >> $GITHUB_ENV
 
-      - name: Restore Docker cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/docker-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
+      # The builder image gets its own gha cache scope keyed by the lockfile hash,
+      # so its expensive `npm ci` layer is reused across runs until dependencies
+      # actually change, and it is isolated from the (larger, churnier) app-image
+      # caches. Other images use the default per-image scope.
       - name: Build main docker builder
+        env:
+          PORTFOLIO_DOCKER_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
         run: npx nx build docker/builder --configuration=production
 
       - name: Get last successful commit on current branch
@@ -261,12 +270,6 @@ jobs:
           MFE_BASE_URL: ${{ env.STAGING_MFE_BASE_URL }}
         run: |
           npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}
-
-      - name: Save Docker cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/docker-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
 
       - name: Set up SSH for deployment
         uses: webfactory/ssh-agent@v0.9.0

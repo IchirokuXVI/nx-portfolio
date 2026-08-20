@@ -45,7 +45,7 @@ Deployment is fully automated by a single GitHub Actions workflow: **`.github/wo
 push to main
   │
   ├─ Log in to GHCR (ghcr.io) + set up Docker Buildx
-  ├─ Setup Node 22, restore/install pinned Nx, restore buildx cache
+  ├─ Setup Node 22, restore/install pinned Nx, expose the GitHub Actions (gha) buildx cache
   ├─ Build the `docker/builder` image (the CI test/build image)
   ├─ Resolve the "affected" base = SHA of the last successful run of this workflow on this branch
   ├─ Compute three affected sets (see below)

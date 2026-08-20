@@ -1,15 +1,12 @@
 import { PromiseExecutor } from '@nx/devkit';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import os from 'os';
 import * as path from 'path';
-import { promisify } from 'util';
 import push from '../push/push';
 import { resolveVersionTags } from '../version-tags';
 import { BuildExecutorSchema } from './schema';
 import { simpleHash } from './simple-hash';
-
-const execAsync = promisify(exec);
 
 const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   options,
@@ -113,11 +110,42 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   buildCommandArr.push(buildArgs.join(' '));
 
+  // Which buildx cache backend to use, via PORTFOLIO_DOCKER_CACHE:
+  //   local    (default) — a local dir cache, swapped into place after the build.
+  //   gha                — GitHub Actions cache backend (type=gha). Needs the
+  //                        docker-container buildx driver and the Actions runtime
+  //                        env (ACTIONS_CACHE_URL / ACTIONS_RUNTIME_TOKEN).
+  //   registry           — a `<image>:buildcache` image in the registry.
+  //   none / off         — no cache (same as noCache).
+  // Point 3 (mode=min vs mode=max) is intentionally left at mode=max for now; it
+  // can be measured/tuned later. See MEMORY docker-build-cache-mode-min.
+  const cacheType = (process.env.PORTFOLIO_DOCKER_CACHE || 'local').toLowerCase();
+  const cacheEnabled =
+    !options.noCache && cacheType !== 'none' && cacheType !== 'off';
+
   const { cacheCurrent, cacheNew } = getCachePaths(options.imageName);
 
-  if (!options.noCache) {
+  if (cacheEnabled && cacheType === 'gha') {
+    // Scope keeps each image's cache separate. The scope can be overridden per
+    // build (e.g. the builder keys its scope by the lockfile hash so its deps
+    // cache is reused until dependencies actually change).
+    const scope =
+      process.env.PORTFOLIO_DOCKER_CACHE_SCOPE ||
+      options.imageName.replace(/[^a-zA-Z0-9_.-]/g, '-');
+    buildCommandArr.push(`--cache-from=type=gha,scope=${scope}`);
+    buildCommandArr.push(`--cache-to=type=gha,mode=max,scope=${scope}`);
+  } else if (cacheEnabled && cacheType === 'registry') {
+    if (!registry) {
+      console.warn(
+        'PORTFOLIO_DOCKER_CACHE=registry but no registry is configured; skipping build cache.'
+      );
+    } else {
+      const ref = `${registry}${options.imageName}:buildcache`.toLowerCase();
+      buildCommandArr.push(`--cache-from=type=registry,ref=${ref}`);
+      buildCommandArr.push(`--cache-to=type=registry,mode=max,ref=${ref}`);
+    }
+  } else if (cacheEnabled) {
     buildCommandArr.push(`--cache-from=type=local,src="${cacheCurrent}"`);
-
     buildCommandArr.push(`--cache-to=type=local,dest="${cacheNew}",mode=max`);
   }
 
@@ -130,14 +158,18 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   console.log(`Running command: ${buildCommand}`);
 
   try {
-    await execAsync(buildCommand);
+    // Stream buildx output straight through so its progress — including which
+    // layers are CACHED — is visible in the (CI) logs.
+    await runCommandStreaming(buildCommand);
   } catch (err: any) {
     throw new Error(`Error during Docker build: ${err.message}`);
   }
 
   console.log(`Built images: ${imagesToCreate.join(', ')}`);
 
-  if (!options.noCache) {
+  // Only the local cache backend uses the on-disk swap dance; gha/registry manage
+  // their own storage.
+  if (cacheEnabled && cacheType === 'local') {
     try {
       await fs.rm(cacheCurrent, { recursive: true, force: true });
       await fs.mkdir(path.dirname(cacheCurrent), { recursive: true });
@@ -159,6 +191,24 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     success: true,
   };
 };
+
+/**
+ * Run a shell command, streaming its stdout/stderr to this process so buildx
+ * progress is visible live. Resolves on exit code 0, rejects otherwise.
+ */
+function runCommandStreaming(command: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, { shell: true, stdio: 'inherit' });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`exited with code ${code}`));
+      }
+    });
+  });
+}
 
 function getCachePaths(imageName: string) {
   const baseTmp = path.join(os.tmpdir(), 'docker-cache');
