@@ -102,7 +102,7 @@ describe('PortfolioContent', () => {
     host
       .querySelector<HTMLButtonElement>('.portfolio-reveal__button')
       ?.click();
-    tick(300);
+    tick(500);
     fixture.detectChanges();
     host = fixture.nativeElement as HTMLElement;
 
@@ -127,7 +127,7 @@ describe('PortfolioContent', () => {
     host
       .querySelector<HTMLButtonElement>('.portfolio-reveal__button')
       ?.click();
-    tick(300);
+    tick(500);
     fixture.detectChanges();
     host = fixture.nativeElement as HTMLElement;
     expect(host.querySelectorAll('.detail-section').length).toBe(5);

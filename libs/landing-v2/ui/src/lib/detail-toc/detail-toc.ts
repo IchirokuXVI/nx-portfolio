@@ -107,7 +107,13 @@ export class DetailToc {
       behavior: prefersReduced ? 'auto' : 'smooth',
       block: 'start',
     });
-    history.replaceState(null, '', `#${id}`);
+    // Keep the full path and query; a bare `#id` would be resolved against the
+    // app's <base href> and drop the current route.
+    history.replaceState(
+      null,
+      '',
+      `${location.pathname}${location.search}#${id}`
+    );
     this.activeId.set(id);
   }
 }

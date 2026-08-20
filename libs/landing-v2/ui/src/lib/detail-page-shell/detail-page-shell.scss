@@ -29,7 +29,8 @@
     @media (min-width: $breakpoint-desktop) {
       flex-direction: row;
       justify-content: space-between;
-      align-items: flex-start;
+      // Vertically centre the header-aside (the chips) against the title block.
+      align-items: center;
       gap: 2.5rem;
     }
   }

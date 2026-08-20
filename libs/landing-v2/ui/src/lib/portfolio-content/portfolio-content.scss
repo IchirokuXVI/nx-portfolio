@@ -5,13 +5,12 @@
   width: 100%;
 }
 
-// Tech chips: labelled groups, stacked and centered. On mobile they sit under
-// the title (the shell header stacks); on desktop the shell floats this block
-// to the header's right.
+// Tech chips: labelled groups, stacked. On mobile they sit under the title (the
+// shell header stacks); on desktop the shell floats this block to the header's
+// right and centres it vertically against the title.
 .portfolio-chips {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 1.1rem;
 }
 
