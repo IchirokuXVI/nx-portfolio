@@ -9,6 +9,14 @@ on:
   release:
     types: [published]
 
+# Serialize releases: only one production release runs at a time. If two releases are
+# published close together, the second waits for the first to finish rather than
+# running two builds/pushes and two `helm upgrade`s at once. cancel-in-progress is
+# false so a release in flight is never killed mid-deploy.
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
 jobs:
   production-release:
     runs-on: ubuntu-latest
@@ -99,11 +107,14 @@ jobs:
           static_apps=$(npx nx show projects --type "app" --projects tag:type:static-docker | paste -sd, -)
           npx nx run-many -t build --configuration production --projects name:$static_apps
 
-      # No tests here: a release is cut from a commit on main, which is gated by the
-      # PR checks (lint + unit tests) and validated as staging images by docker-ci.yml
-      # before it ever lands. Re-running them would only re-test the same code. This
-      # is only safe while main cannot receive untested code — keep the branch
-      # protection / required checks in place.
+      # A release re-runs the full test suite on the release commit, so production is
+      # gated independently of what ran on the PR or the staging deploy.
+      - name: Test all apps
+        run: |
+          testable_apps=$(npx nx show projects --with-target test | paste -sd, -)
+          docker run \
+            --rm "ghcr.io/${{ env.REPO_LOWERCASE }}/builder:latest" \
+            npx nx run-many -t test --projects $testable_apps
 
       # Build & push every micro-frontend under the immutable version tag, with the
       # production MFE base URL baked into the shell.

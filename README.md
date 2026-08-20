@@ -41,20 +41,20 @@ Three GitHub Actions workflows, one per boundary:
 
 | Workflow | Trigger | Does |
 | --- | --- | --- |
-| **`pr.yml`** | PR into `main` or `dev` | lint + unit-test the affected projects (against the PR's target branch). The gate. |
-| **`docker-ci.yml`** | push to `main` | build + push affected staging images, e2e them (`k8s/e2e/compose.yml`), deploy staging. |
-| **`release.yml`** | GitHub Release published | build + push all production images, deploy production. |
+| **`pr.yml`** | PR into `main` or `dev` | lint + unit-test the affected projects (against the PR's target branch). Fast pre-merge feedback. |
+| **`docker-ci.yml`** | push to `main` | unit-test affected, build + push affected staging images, e2e them (`k8s/e2e/compose.yml`), deploy staging. |
+| **`release.yml`** | GitHub Release published | test all apps, build + push all production images, deploy production. |
 
-**Testing model.** Code is tested once, on the PR. The deploy workflows do not re-run
-unit tests: `docker-ci.yml` only e2e-tests the built *artifacts* (which the PR can't
-cheaply do), and `release.yml` runs no tests at all, because a release is cut from a
-`main` commit that was already PR-tested and validated as staging images.
+**Testing model.** Tests run at every stage rather than once. The PR runs unit tests
+for quick feedback before merge; the merge to `main` re-runs the unit tests on the
+actual merged commit **and** e2e-tests the built staging images; a release re-tests on
+the release commit. Because each stage tests the exact code it is about to deploy, no
+merge queue is needed (a merge queue would serialize and slow every merge; here two
+PRs can merge back-to-back and each resulting push to `main` is tested on its own).
 
-> **This is only safe if `main` (and `dev`) cannot receive untested code.** Protect
-> both branches with a ruleset that **requires the `pr.yml` check** and **disallows
-> bypass** (no bypass actors, admins included). Enable "require branches to be up to
-> date before merging" or a **merge queue** so the tested tree equals the merged tree.
-> Without this, skipping tests downstream is unsafe.
+> Requiring the `pr.yml` check on `main` and `dev` is still recommended so obviously
+> broken code never merges, but it is no longer a correctness requirement, since the
+> merge and release workflows test the code they deploy regardless.
 
 ### Staging pipeline (`docker-ci.yml`)
 
@@ -66,10 +66,18 @@ push to main
   ├─ Build the `docker/builder` image (the CI build image)
   ├─ Resolve the "affected" base = SHA of the last successful run of this workflow
   ├─ Build affected static-docker apps            (nx run-many -t build)
+  ├─ Test affected apps inside the builder image  (nx run-many -t test)
   ├─ Build & push affected Angular apps           (nx run-many -t build:docker)
   ├─ e2e the staging images                       (k8s/e2e/compose.yml — gates the deploy)
   └─ Deploy: rsync k8s/ to the host + `helm upgrade`
 ```
+
+Both deploy workflows use a `concurrency` group (`staging-deploy` / `production-release`)
+with `cancel-in-progress: false`, so runs never overlap: a second staging deploy (two
+PRs merged in quick succession) or a second release (two releases published close
+together) waits for the first to finish instead of racing the build/push and the
+`helm upgrade`. Note GitHub keeps only one run *pending* per group, so if a third run
+is queued while one is pending, the older pending run is superseded.
 
 ### How "affected" is computed
 

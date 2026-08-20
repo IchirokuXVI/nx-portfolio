@@ -18,6 +18,14 @@ on:
         type: boolean
         default: true
 
+# Serialize staging deploys: only one runs at a time. A run triggered while another
+# is in progress waits for it to finish instead of racing the build/push and the
+# helm upgrade. cancel-in-progress is false so an in-flight deploy is never killed
+# mid-way.
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false
+
 jobs:
   staging-deploy:
     runs-on: ubuntu-latest
@@ -169,10 +177,15 @@ jobs:
         run: |
           npx nx run-many -t build --configuration production --projects name:${{ steps.get-affected-apps.outputs.affected_docker_apps }}
 
-      # No unit tests here: they run on the PR (see pr.yml) before the code can land
-      # on main. What this workflow still validates is the built *artifacts* (the
-      # staging images) via the e2e stage below, which is the one check the PR cannot
-      # cheaply do.
+      # Unit tests also run on the PR (pr.yml) for fast feedback, but they run again
+      # here on the actual merged commit — together with the e2e below, this makes
+      # the merge to main the thorough gate, independent of what the PR tested.
+      - name: Test affected apps
+        if: ${{ steps.get-affected-apps.outputs.affected_testable_apps != '' }}
+        run: |
+          docker run \
+            --rm "ghcr.io/${{ env.REPO_LOWERCASE }}/builder:latest" \
+            npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_testable_apps }}
 
       # Build & push affected micro-frontends under the mutable `staging` tag.
       # The shell reads MFE_BASE_URL; the other apps ignore it.
