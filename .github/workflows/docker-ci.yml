@@ -164,6 +164,94 @@ jobs:
             --rm "ghcr.io/${{ env.REPO_LOWERCASE }}/builder:latest" \
             npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_testable_apps }}
 
+      # ---------------------------------------------------------------------------
+      # e2e against the actual Docker images (not the dev server).
+      #
+      # The stack is brought up in "port" mode: every app image runs as its own
+      # container on the remote's dev-serve port (shell 4200, remotes 4201-4204).
+      # A development shell build's string remotes already resolve to
+      # http://localhost:4201..4204, so no reverse proxy and no MFE_BASE_URL are
+      # needed - the same setup documented in k8s/README.md, minus Kubernetes.
+      #
+      # This runs before the staging build/push so a failure gates the deploy.
+      # ---------------------------------------------------------------------------
+      - name: Get affected e2e projects
+        id: get-affected-e2e
+        run: |
+          base_sha="${{ steps.last_success.outputs.sha }}"
+
+          all_e2e=$(npx nx show projects --with-target e2e | paste -sd, -)
+
+          if [ -z "$base_sha" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.build_all }}" = "true" ]; }; then
+            affected_e2e="$all_e2e"
+          else
+            affected_e2e=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$all_e2e" | paste -sd, -)
+          fi
+
+          # landing-e2e and odontogram-e2e are excluded: pre-existing breakage
+          # (their tsconfig sets module=commonjs under the workspace's
+          # moduleResolution=bundler, TS5095, and their specs predate the
+          # through-shell routing). See k8s/README.md.
+          affected_e2e=$(echo "$affected_e2e" | tr ',' '\n' | sed '/^$/d' | grep -vE '^(landing-e2e|odontogram-e2e)$' | paste -sd, -)
+
+          echo "projects=$affected_e2e" >> "$GITHUB_OUTPUT"
+          echo "Affected e2e projects: $affected_e2e"
+
+      # Build the five app images in development configuration (port mode) and run
+      # them as plain containers. The builder/local-http-server bases are reused
+      # from the production build above by retagging them to the `dev` tag the
+      # development Dockerfiles expect (BUILDER_TAG=dev).
+      - name: Build & start the e2e docker stack
+        if: ${{ steps.get-affected-e2e.outputs.projects != '' }}
+        run: |
+          REG="ghcr.io/${{ env.REPO_LOWERCASE }}"
+          docker tag "$REG/builder:latest" "$REG/builder:dev"
+
+          npx nx run docker/local-http-server:build --configuration=development
+          # No MFE_BASE_URL: port mode relies on the default localhost:<port> remotes.
+          npx nx run-many -t build:docker --configuration=development \
+            --projects shell,landing,odontogram,damoclesSword,landingV2
+
+          docker run -d --name shell         -p 4200:80 "$REG/shell:dev"
+          docker run -d --name landing       -p 4201:80 "$REG/landing:dev"
+          docker run -d --name odontogram    -p 4202:80 "$REG/odontogram:dev"
+          docker run -d --name damoclessword -p 4203:80 "$REG/damoclessword:dev"
+          docker run -d --name landingv2     -p 4204:80 "$REG/landingv2:dev"
+
+          # Wait for the shell to answer.
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4200/en >/dev/null 2>&1; then
+              echo "shell is up"; break
+            fi
+            echo "waiting for shell ($i)..."; sleep 2
+          done
+
+      - name: Run affected e2e against the docker stack
+        if: ${{ steps.get-affected-e2e.outputs.projects != '' }}
+        env:
+          E2E_BASE_URL: http://localhost:4200
+        run: |
+          # Ensure the runners' browsers are present.
+          npx playwright install --with-deps chromium
+          npx cypress install
+
+          rc=0
+          IFS=',' read -ra PROJECTS <<< "${{ steps.get-affected-e2e.outputs.projects }}"
+          for p in "${PROJECTS[@]}"; do
+            echo "::group::e2e $p"
+            if [ -f "apps/$p/playwright.config.ts" ]; then
+              npx playwright test -c "apps/$p/playwright.config.ts" --project=chromium || rc=1
+            else
+              npx cypress run --project "apps/$p" --browser electron || rc=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $rc
+
+      - name: Tear down the e2e docker stack
+        if: ${{ always() && steps.get-affected-e2e.outputs.projects != '' }}
+        run: docker rm -f shell landing odontogram damoclessword landingv2 || true
+
       # Build & push affected micro-frontends under the mutable `staging` tag.
       # The shell reads MFE_BASE_URL; the other apps ignore it.
       - name: Build & push staging images

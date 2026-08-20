@@ -1,3 +1,4 @@
+{{- if .Values.reverseProxy.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -82,3 +83,4 @@ spec:
         - name: letsencrypt-data
           persistentVolumeClaim:
             claimName: letsencrypt-pvc
+{{- end }}

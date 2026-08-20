@@ -1,3 +1,4 @@
+{{- if .Values.reverseProxy.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -14,3 +15,4 @@ spec:
     - name: https
       port: 443
       targetPort: 443
+{{- end }}

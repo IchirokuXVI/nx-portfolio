@@ -112,6 +112,11 @@ Because image tags are pinned to `latest`, `helm upgrade` alone wouldn't restart
 
 ## Kubernetes / Helm
 
+> **Running the whole stack locally** (build every image from scratch on Docker
+> Desktop Kubernetes and run e2e against the real containers) is documented in
+> [`k8s/README.md`](./k8s/README.md), including the port / mfe-path / hostnames local
+> modes and common pitfalls. The rest of this section covers the production chart.
+
 The cluster is **k3s** (single node) with **MetalLB** for `LoadBalancer` services and the built-in **`local-path`** storage class for volumes. Everything lives in the **`nx-portfolio`** namespace.
 
 - `k8s/namespace.yaml` — the namespace (applied out of band; not part of the chart).

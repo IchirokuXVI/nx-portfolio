@@ -48,6 +48,13 @@ certbot:
 metallb:
   enabled: true
 
+# Reverse proxy. The public cluster fronts every app with it (TLS + host/path
+# routing). The local "port" mode instead exposes each app on its own LoadBalancer
+# port (see values.localhost.yaml) and turns the proxy off; the local "mfe-path"
+# mode keeps it (see values.localhost-mfe.yaml).
+reverseProxy:
+  enabled: true
+
 certsVolume:
   claimName: certs-pvc
   # StorageClass for the shared certs PVC. Defaults to the k3s dynamic provisioner

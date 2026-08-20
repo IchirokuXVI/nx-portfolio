@@ -1,39 +1,36 @@
-# Zero-setup local override for Docker Desktop Kubernetes.
+# Zero-setup local override for Docker Desktop Kubernetes — "port" variant (default).
 #
-# Everything is served through the reverse proxy on a single `localhost` host, so
-# no hosts-file entries (and no admin) are needed:
+# Each app is exposed on its own LoadBalancer port, mirroring `nx serve` exactly:
+# shell on 4200, remotes on 4201-4204. Docker Desktop publishes each LoadBalancer on
+# localhost:<port>, so no hosts-file entries, no admin, and no reverse proxy are
+# needed. Because the ports match the remotes' dev-serve ports, the shell image is
+# built WITHOUT MFE_BASE_URL: a development build's string remotes already resolve to
+# http://localhost:4201..4204, so it finds them with no extra configuration.
 #
+#   # shell built with no MFE_BASE_URL (plain `nx run shell:build:docker`)
 #   helm upgrade --install nx-portfolio k8s/helm \
 #     --namespace nx-portfolio --create-namespace \
 #     --values k8s/helm/values.yaml --values k8s/helm/values.localhost.yaml
-#   # -> open http://localhost
+#   # -> open http://localhost:4200
 #
-# The reverse-proxy Service is a LoadBalancer, which Docker Desktop publishes on
-# localhost:80/443 directly (no port forward needed, and far more robust than
-# `kubectl port-forward` under the load of the unbundled dev remotes). If port 80
-# is taken, or on a cluster that does not surface the LB on localhost, fall back to
-# `kubectl port-forward -n nx-portfolio svc/reverse-proxy 8080:80` and rebuild the
-# shell with MFE_BASE_URL=http://localhost:8080/mfe to match.
+# Each remote sits on a distinct origin (port), just like production's separate
+# `mfe.` host, so a locale-less deep link such as http://localhost:4200/odontogram
+# reaches the shell (which redirects to /en/odontogram) rather than the remote.
 #
-# The shell lives at / and the remotes sit under an /mfe/<remote> path prefix. That
-# prefix stands in for production's dedicated `mfe.` subdomain: it keeps the remote
-# bundles from shadowing the shell's own routes, so a locale-less deep link like
-# /odontogram still reaches the shell (which redirects to /en/odontogram) instead
-# of hitting the remote's blank entry page. Because of this, the shell image must
-# be built with MFE_BASE_URL=http://localhost/mfe so it loads its remotes from that
-# prefix. See k8s/helm/values.local.yaml for the alternative local-hostnames setup
-# (portfolio.localhost / mfe.localhost), which mirrors production more literally but
-# needs hosts-file entries.
+# Alternatives:
+#   - values.localhost-mfe.yaml : single localhost host, remotes under /mfe/<remote>,
+#     behind the reverse proxy (shell built with MFE_BASE_URL=http://localhost/mfe).
+#   - values.local.yaml         : portfolio.localhost / mfe.localhost hostnames,
+#     closest to production, but needs hosts-file entries (admin).
 
 # Use the locally built dev images without reaching for a registry.
 productionImageTag: dev
 appImagePullPolicy: IfNotPresent
 
-# Docker Desktop ships a `hostpath` default StorageClass, not k3s's `local-path`.
-certsVolume:
-  storageClassName: hostpath
-
-# No public DNS / no MetalLB routing needed locally.
+# Port mode exposes each app directly, so the reverse proxy (and its certs / MetalLB
+# pool) is not needed.
+reverseProxy:
+  enabled: false
 certbot:
   enabled: false
 metallb:
@@ -42,29 +39,27 @@ metallb:
 staging:
   enabled: false
 
+# `lbPort` turns each app's Service into a LoadBalancer on that port (see
+# templates/apps/service.yaml.tpl). The ports match each remote's dev-serve port so
+# the shell's default development remotes line up.
 apps:
   - name: shell
     env: production
     image: nx-portfolio/shell
-    host: localhost
-    path: /
+    lbPort: 4200
   - name: landing
     env: production
     image: nx-portfolio/landing
-    host: localhost
-    path: /mfe/landing
+    lbPort: 4201
   - name: odontogram
     env: production
     image: nx-portfolio/odontogram
-    host: localhost
-    path: /mfe/odontogram
+    lbPort: 4202
   - name: damoclessword
     env: production
     image: nx-portfolio/damoclessword
-    host: localhost
-    path: /mfe/damoclesSword
+    lbPort: 4203
   - name: landingv2
     env: production
     image: nx-portfolio/landingv2
-    host: localhost
-    path: /mfe/landingV2
+    lbPort: 4204
