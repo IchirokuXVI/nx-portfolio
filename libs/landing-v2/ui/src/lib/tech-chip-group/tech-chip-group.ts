@@ -14,6 +14,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TechChipGroup {
-  heading = input.required<string>();
+  /** Optional group label. Omit it to render a bare, inline-wrapping chip set. */
+  heading = input<string>('');
   chips = input<string[]>([]);
 }

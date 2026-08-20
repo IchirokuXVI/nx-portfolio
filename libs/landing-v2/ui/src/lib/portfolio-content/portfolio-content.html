@@ -1,50 +1,57 @@
+<!-- No heroImage: the Portfolio's card art (project().image) is intentionally
+     not reused on the detail page. -->
 <lib-landing-v2-detail-page-shell
   [appLink]="project().appLink"
-  [heroImage]="project().image"
   [repoLink]="project().repoLink"
   [tagline]="project().tagline"
   [title]="project().name"
 >
+  <div class="portfolio-chips" header-aside>
+    @for (group of chipGroups; track group.headingKey) {
+      <lib-landing-v2-tech-chip-group
+        [chips]="group.chips"
+        [heading]="group.headingKey | rokuT"
+      />
+    }
+  </div>
+
   <div body>
+    <!-- The toggle button lives outside .portfolio-swap so it is never clipped
+         or scaled by the collapse/grow animation. -->
     @if (deepDive()) {
       <div class="portfolio-reveal portfolio-reveal--top">
         <ng-container [ngTemplateOutlet]="revealButton" />
       </div>
     }
 
-    <div class="portfolio-sections" id="portfolio-sections">
-      @for (section of visibleSections(); track section.id) {
-        <lib-landing-v2-detail-section
-          [heading]="headingKey(section) | rokuT"
-          [paragraphKeys]="paragraphKeys(section)"
-          [sectionId]="section.id"
-        />
-      }
+    <div class="portfolio-swap" [class.portfolio-swap--collapsed]="collapsed()">
+      <div class="portfolio-swap__inner">
+        <div class="portfolio-sections" id="portfolio-sections">
+          @for (section of visibleSections(); track section.id) {
+            <lib-landing-v2-detail-section
+              [heading]="headingKey(section) | rokuT"
+              [paragraphKeys]="paragraphKeys(section)"
+              [sectionId]="section.id"
+            />
+          }
+        </div>
+
+        @if (deepDive()) {
+          <p class="portfolio-closing">{{ key + '.closing_note' | rokuT }}</p>
+        }
+      </div>
     </div>
 
-    @if (deepDive()) {
-      <p class="portfolio-closing">{{ key + '.closing_note' | rokuT }}</p>
-    } @else {
+    @if (!deepDive()) {
       <div class="portfolio-reveal portfolio-reveal--bottom">
         <ng-container [ngTemplateOutlet]="revealButton" />
       </div>
     }
   </div>
 
-  <div meta>
-    <div class="portfolio-meta">
-      <lib-landing-v2-detail-toc class="portfolio-meta__toc" [items]="tocItems()" />
-
-      <div class="portfolio-meta__chips">
-        @for (group of chipGroups; track group.headingKey) {
-          <lib-landing-v2-tech-chip-group
-            [chips]="group.chips"
-            [heading]="group.headingKey | rokuT"
-          />
-        }
-      </div>
-    </div>
-  </div>
+  <nav class="portfolio-meta" meta>
+    <lib-landing-v2-detail-toc [items]="tocItems()" />
+  </nav>
 </lib-landing-v2-detail-page-shell>
 
 <ng-template #revealButton>

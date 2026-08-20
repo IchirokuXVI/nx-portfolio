@@ -5,6 +5,34 @@
   width: 100%;
 }
 
+// Tech chips: labelled groups, stacked. On mobile they sit under the title (the
+// shell header stacks); on desktop the shell floats this block to the header's
+// right and centres it vertically against the title.
+.portfolio-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+// The swapping body. Animating grid-template-rows between 1fr and 0fr gives a
+// real height transition to auto-sized content: the current view collapses to
+// the top, and (after the content swaps while collapsed) the new view grows to
+// the bottom. Because the height changes smoothly there is no reflow bump.
+.portfolio-swap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.45s ease;
+
+  &--collapsed {
+    grid-template-rows: 0fr;
+  }
+
+  &__inner {
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
 .portfolio-sections {
   display: flex;
   flex-direction: column;
@@ -85,36 +113,20 @@
   overflow-wrap: break-word;
 }
 
+// The side navigation. Desktop only (the mobile page is a single scannable
+// column) and sticky, so it stays in view down the long body.
 .portfolio-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1.75rem;
+  display: none;
 
-  // On desktop the meta rail follows the reader down the long body.
   @media (min-width: $breakpoint-desktop) {
+    display: block;
     position: sticky;
     top: 1.5rem;
-  }
-
-  &__toc {
-    // The TOC is navigation for a long page; on the single-column mobile layout
-    // the sections are already right there, so it only earns its place beside
-    // the body. The chips still lead on mobile (the shell puts meta first).
-    display: none;
-
-    @media (min-width: $breakpoint-desktop) {
-      display: block;
-    }
-  }
-
-  &__chips {
-    display: flex;
-    flex-direction: column;
-    gap: 1.1rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .portfolio-swap,
   .portfolio-reveal__caret,
   .portfolio-reveal__button {
     transition: none;

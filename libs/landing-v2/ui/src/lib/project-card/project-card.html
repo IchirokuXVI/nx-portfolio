@@ -3,9 +3,9 @@
   class="project-card"
 >
   <a
-    [class.project-card__media--disabled]="!appLink()"
+    [class.project-card__media--disabled]="!primaryLink()"
     [class.project-card__media--placeholder]="!project().image"
-    [routerLink]="appLink() ? [appLink()] : null"
+    [routerLink]="primaryLink() ? [primaryLink()] : null"
     class="project-card__media"
   >
     @if (project().image) {
@@ -21,8 +21,8 @@
   <div class="project-card__body">
     <h3 class="project-card__title">
       <a
-        [class.project-card__name--disabled]="!appLink()"
-        [routerLink]="appLink() ? [appLink()] : null"
+        [class.project-card__name--disabled]="!primaryLink()"
+        [routerLink]="primaryLink() ? [primaryLink()] : null"
         class="project-card__name"
         >{{ project().name }}</a
       >
@@ -50,7 +50,17 @@
           <lib-arrow-icon class="project-card__view-icon" />
         </a>
       }
-      @if (appLink()) {
+      @if (isCurrentSite()) {
+        <span
+          [attr.data-tooltip]="'landingV2.project_current' | rokuT"
+          aria-disabled="true"
+          class="project-card__view project-card__view--disabled"
+          tabindex="0"
+        >
+          {{ 'landingV2.project_view' | rokuT }}
+          <lib-arrow-icon class="project-card__view-icon" />
+        </span>
+      } @else if (appLink()) {
         <a [routerLink]="[appLink()]" class="project-card__view">
           {{ 'landingV2.project_view' | rokuT }}
           <lib-arrow-icon class="project-card__view-icon" />

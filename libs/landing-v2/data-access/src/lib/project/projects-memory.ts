@@ -71,6 +71,9 @@ export class ProjectMemory implements ProjectServiceI {
         project.appSlug !== undefined
           ? `/${locale}${project.appSlug ? `/${project.appSlug}` : ''}`
           : undefined,
+      // An empty appSlug means the live app is the site root itself, so the
+      // card is showing a project you are already inside.
+      isCurrentSite: project.appSlug === '',
       image: project.image?.(),
     };
 

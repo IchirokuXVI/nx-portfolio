@@ -32,13 +32,22 @@ export class ProjectCard {
     return typeof image === 'string' ? Promise.resolve(image) : image;
   });
 
-  /** "View project" / title / media target: the live app. `null` when the
-   * project has no live app yet (e.g. POS), which disables those links. */
+  /** "View project" target: the live app. `null` when the project has no live
+   * app yet (e.g. POS). */
   readonly appLink = computed(() => this.project().appLink ?? null);
 
   /** "More details" target: the in-portfolio detail page. Absent for
    * projects with no detail page yet (e.g. POS). */
   readonly detailLink = computed(() => this.project().detailLink ?? null);
+
+  /** Title / media target: the detail page, falling back to the live app.
+   * Clicking the card's title or image leads into the project's story. */
+  readonly primaryLink = computed(
+    () => this.detailLink() ?? this.appLink() ?? null
+  );
+
+  /** The live app is this very site, so "View project" is disabled. */
+  readonly isCurrentSite = computed(() => this.project().isCurrentSite ?? false);
 
   /** Generic placeholder initial for image-less projects. */
   readonly initial = computed(() =>

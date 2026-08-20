@@ -3,8 +3,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  ElementRef,
-  inject,
   input,
   signal,
 } from '@angular/core';
@@ -88,12 +86,17 @@ const CHIP_GROUPS: { headingKey: string; chips: string[] }[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PortfolioContent {
-  private _host = inject<ElementRef<HTMLElement>>(ElementRef);
-
   project = input.required<TranslatedProject>();
 
   /** Highlights-only by default; flips to reveal the deep view. */
   readonly deepDive = signal(false);
+
+  /** Drives the height animation: the current view collapses to the top, the
+   * content swaps while collapsed, then the new view grows to the bottom. A
+   * smooth height change (not an instant reflow) keeps the scroll from bumping. */
+  readonly collapsed = signal(false);
+
+  private _swapTimer?: ReturnType<typeof setTimeout>;
 
   readonly key = KEY;
   readonly chipGroups = CHIP_GROUPS;
@@ -127,21 +130,25 @@ export class PortfolioContent {
 
   toggleDeepDive(): void {
     const opening = !this.deepDive();
-    this.deepDive.set(opening);
+    const prefersReduced = window.matchMedia?.(
+      '(prefers-reduced-motion: reduce)'
+    ).matches;
 
-    // On expanding, bring the (now top) button and the fresh, longer content
-    // back into view; the reader clicked the button from the bottom.
-    if (opening) {
-      const prefersReduced = window.matchMedia?.(
-        '(prefers-reduced-motion: reduce)'
-      ).matches;
-
-      requestAnimationFrame(() =>
-        this._host.nativeElement.scrollIntoView({
-          behavior: prefersReduced ? 'auto' : 'smooth',
-          block: 'start',
-        })
-      );
+    if (prefersReduced) {
+      this.deepDive.set(opening);
+      return;
     }
+
+    // Phase 1: collapse the current view to the top (height animates to 0).
+    this.collapsed.set(true);
+
+    clearTimeout(this._swapTimer);
+    this._swapTimer = setTimeout(() => {
+      // Phase 2 (collapsed, invisible): swap the content and relocate the
+      // button, then let the browser paint the collapsed state for one frame
+      // before growing so the height transition actually runs.
+      this.deepDive.set(opening);
+      requestAnimationFrame(() => this.collapsed.set(false));
+    }, 450);
   }
 }
