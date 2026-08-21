@@ -154,23 +154,31 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [x] The interactive chart rendering: SVG? how tooth zones are drawn/clicked.
       (Answered + verified: not SVG; 2 images + 2 masks per tooth; rotated sqrt(2)*50%
       diamond clipped to triangles + center circle; `:has()` adjacency borders. The
-      ToothImageLoader cache bug noted here is now FIXED on dev `5b84a32`; the odontogram
-      CASE_STUDY note about it needs updating to say the cache is now populated.)
+      ToothImageLoader cache is now real on dev `5b84a32`; the CASE_STUDY note (5) was
+      updated to say the in-service cache is now populated for the app session.)
 - [x] Treatment visualization (colors/states per zone).
       (Answered: two colors pending/completed; extraction = X cross, implant = bars;
       zone-status precedence any-pending-wins.)
 - [~] Image preloading: images loaded via JS, chart shown only once all load.
       (Covered via rendering answer: dynamic import() + forkJoin + LoadingNotifier;
       could expand the "show only when all loaded" coordination.)
-- [~] memory vs api service + shared-spec tests. (UNBLOCKED: di-token wiring landed on
-      dev `f3a7fc0` — services now inject via interface tokens, `service-token.ts`.
-      Ready to ask Daniel why both impls and how the token chooses. Not yet asked.)
-- [~] full CRUD feature: state management, how edits persist.
-      (Partial: click-tooth form uses squares not the image, 5 in a circle + front row,
-      plus per-tooth history. STILL OPEN: edit-state handling, save/persistence flow,
-      hardest UX.)
-- [~] Backend integration (BACK_API_* env) vs in-memory demo mode. (UNBLOCKED by the
-      token wiring; re-read which impl is bound before asking. Not yet asked.)
+- [x] memory vs api service + shared-spec tests.
+      (Answered: memory backs tests AND lets him deploy without a backend to share early;
+      switch is meant to be environment-driven but is memory-only today. Verified: token
+      defaults to `OdontogramMemory`, both consumers inject the token, shared-spec holds
+      both to one contract. Gap flagged: the env-driven switch is intent, not code yet.)
+- [x] full CRUD feature: state management, how edits persist.
+      (Answered: edit state = per-form ObservableMap keyed by dynamic
+      ToothTreatmentDetailedForm; save = explicit Save button (auto-save gated off after
+      500-1000 req/min vs ~10, plus websocket concurrency issues at the clinics) emits
+      toothConfirmedChanges -> parent diffs create/update/delete via forkJoin; history is
+      read-only w/ tempTreatments restore; hardest part = the history. Flagged a confirmed
+      update-branch bug: `req.subscribe` inside req's own tap re-runs the update.)
+- [x] Backend integration (BACK_API_* env) vs in-memory demo mode.
+      (Answered: portfolio should have a backend, most services on it; not started yet.
+      Roadmap = microservices in NestJS/Java/.NET + varied DBs (Cassandra etc.) to learn
+      each. Verified: runs in memory today; `OdontogramApi`/`ApiConsumer`/`OwnApiUrlResolver`
+      consume `BACK_API_*` env and are ready, but no backend exists in the repo.)
 
 ### landing (to be merged later)
 - [ ] Original purpose vs landingV2. What's being kept/merged.

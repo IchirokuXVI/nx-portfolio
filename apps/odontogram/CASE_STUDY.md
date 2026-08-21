@@ -95,9 +95,11 @@ works wonders. Each tooth is fully independent.
 > dashed border only appears between two treated neighboring zones.
 > (4) Upper vs lower teeth (quadrants 1 to 2 vs 3 to 4) are mirrored via
 > `flex-direction: column-reverse` and a flipped cross/implant offset.
-> (5) Minor bug to note: `ToothImageLoader` keeps a `loadedImages` Map for caching but
-> never writes to it, so that in-service cache is dead code (the bundler still dedupes
-> the dynamic `import()`, so it works anyway). Easy fix if you want the cache real.
+> (5) Caching: `ToothImageLoader` memoizes each tooth's image bundle in a `loadedImages`
+> Map (the service is `providedIn: 'root'`), so a repeat load of the same tooth replays
+> the resolved `shareReplay(1)` observable instead of re-running the four dynamic
+> `import()`s. This was previously dead code (the Map was read but never written); it was
+> fixed on dev (`5b84a32`), so the in-service cache is now real for the whole app session.
 
 **Q: How do treatments get visualized on a tooth (colors/states per zone)?**
 A: Treatments are shown in two colors, one for completed treatments and one for
@@ -115,36 +117,94 @@ implant or an extraction is drawn with bars over the root rather than as a fill.
 ## Data access
 
 **Q: There's both an in-memory service and an API service (`odontogram-memory.ts` vs `odontogram-api.ts`) behind a shared interface, tested with `*.shared-spec.ts`. Why build both, and how do you switch?**
-A: _(Deferred. Daniel will answer this after fixing the wiring.)_
+A: The memory implementation does double duty. It backs the tests, and it lets me deploy
+the app without a backend so I can share it as soon as the design is done. I have not had
+time to build a backend yet, so the memory services work great in the meanwhile. The
+switch between memory and API is meant to happen based on the environment, but for now
+everything runs in memory mode.
 
-> Note (Claude): Skipped for now because the wiring is currently a bug. The components
-> inject the concrete `OdontogramMemory` directly (`feature-full-odontogram-crud.ts`
-> and `tooth-treatments-modal.ts`), so there is no token-based switch even though a
-> complete `OdontogramApi` exists behind the same `OdontogramServiceI`. This is one of
-> several sites tracked in
-> `libs/shared/data-access/plans/0001-data-access-di-token-wiring.md`. Revisit this
-> answer once the token wiring is in place.
+> Note (Claude): Verified, with one gap to flag. Both implementations sit behind
+> `OdontogramServiceI`, and the root token `ODONTOGRAM_SERVICE` defaults to
+> `OdontogramMemory` via `() => inject(OdontogramMemory)` (`service-token.ts` +
+> `odontogram-service.ts`). Both consumers (`feature-full-odontogram-crud.ts`,
+> `tooth-treatments-modal.ts`) now inject the token typed as the interface, not the
+> concrete class, so the app depends on the contract; and one
+> `odontogram-service.shared-spec.ts` holds both impls to the same behavior. The gap: the
+> environment-driven switch is intent, not code yet. Nothing reads `environment` to pick
+> an implementation today, the token has a single hardcoded default, and no
+> `provideService(ODONTOGRAM_SERVICE, OdontogramApi)` override exists anywhere. The wiring
+> supports the switch (flip the default, add a `provideService` at a route/remote
+> injector, or gate it on the environment), but that selection logic is still to be written.
 
 **Q: Does the deployed app talk to a real backend (`BACK_API_*` env) or run fully in-memory as a demo? Why?**
-A: _(Deferred, tied to the wiring fix above.)_
+A: **The portfolio should have a backend.** Maybe not every service will be implemented on
+the backend, but most of them should be. It is not connected yet simply because I have not
+started on it.
 
-> Note (Claude): In its current state the deployed odontogram runs fully in memory
-> (seeded from `ODONTOGRAMS` static data), because the memory implementation is the one
-> being injected. The `OdontogramApi` (HttpClient + `OwnApiUrlResolver` + the
-> `/odontograms` endpoint) is written and ready but not connected. Confirm with Daniel,
-> once the DI wiring is fixed, whether a real backend is actually intended for the
-> portfolio version or whether the demo is meant to stay in memory on purpose.
+**The plan.** My idea is a microservices backend built with NestJS, Java and .NET,
+deliberately using different technologies so I can learn each one. For databases I want to
+try a bunch too. I have already used MySQL, PostgreSQL, MongoDB and the usual ones, so I
+will reach for Cassandra and other databases that are powerful but rarely used in small
+projects.
+
+> Note (Claude): The deployed odontogram currently runs fully in memory (seeded from the
+> static `ODONTOGRAMS` data), matching the Q1 answer. No backend exists in this repo yet,
+> so the roadmap above is intent, not code. The consuming side is already in place though:
+> `OdontogramApi` extends `ApiConsumer` and resolves its URL through `OwnApiUrlResolver`
+> from the `BACK_API_DOMAIN`/`BACK_API_PATH`/`BACK_API_PORT` env values
+> (`libs/shared/environments` + `libs/shared/data-access`). When a backend appears, wiring
+> it up is the environment switch from Q1 plus pointing those env values at it. The
+> multi-stack microservices plan (NestJS/Java/.NET, Cassandra and friends) is not
+> represented in the code today.
 
 ## CRUD feature
 
 **Q: The full CRUD feature: how is edit state managed and persisted, and what was the hardest part of the UX?**
-A: _(Partially answered, more to cover on edit-state and persistence.)_ When you click
-a tooth you get a form that does not reuse the tooth image. It is easier to work with
-plain squares because they are easier to click, so the form shows five squares arranged
-in a circle for the five crown zones, plus a few more squares below them for the front
-view. The form also includes a history, so you can check the status of that tooth at
-any earlier point for which an odontogram exists.
+A: **The form.** When you click a tooth you get a form that does not reuse the tooth image.
+It is easier to work with plain squares because they are easier to click, so the form shows
+five squares arranged in a circle for the five crown zones, plus a few more squares below
+them for the front view. The form also includes a history, so you can check the status of
+that tooth at any earlier point for which an odontogram exists.
 
-> Note (Claude): Still open for this question: how edit state is held while the user is
-> making changes, how and when it is persisted (save flow), and what the hardest part
-> of the UX actually was. Revisit once the data-access questions are answered.
+**Save button instead of auto save.** Auto save caused a huge number of requests, between
+500 and 1000, while the dedicated Save button generates about 10 requests per minute. I
+measured this while the app was in use by two dental clinics, around 20 users in each. On
+top of that, the old auto save was wired to a websocket, and clients did not notice when
+someone else edited their treatments, which was a problem. A Save button makes concurrency
+easier to control, because the backend can return an error if someone edited the same data,
+and it gives the user more control, for example to reset the form. I do not think I will
+bring auto save back.
+
+**History is read-only.** The history is read-only for clarity. If you need to edit
+something from another odontogram, you have to go into that odontogram. Otherwise you might
+forget that you are looking at the history and edit the wrong data. The form has had the
+restoration system since it was first implemented, so users have never lost edits.
+
+**The hardest part.** The CRUD itself was not too difficult; the hardest part was the
+history. It needs special handling, because selecting a past odontogram swaps the
+treatments to the ones from that odontogram and also has to display the tooth as if it
+belonged to that different odontogram.
+
+> Note (Claude): The mechanics check out against the code. Edit state lives in the modal's
+> `treatments` ObservableMap, keyed by each dynamically created `ToothTreatmentDetailedForm`
+> component ref and updated as each form emits `toothTreatmentChange`. `disableForms` (a
+> computed) makes the forms read-only whenever the selected tooth's odontogram is not the
+> one the modal opened, and `tempTreatments` stashes the in-progress forms when you browse
+> into history and restores them on return (this is the restoration system). Saving is a two
+> step flow: `saveTooth()` emits `toothConfirmedChanges` with the final treatment set, and
+> the parent's `onToothSelected` diffs it against the loaded treatments to fire `create`,
+> `update` and `delete` through the service, batched with `forkJoin`. The auto save pipeline
+> (`combineLatest` of the form outputs plus `debounceTime(250)`) is still in the code but
+> gated behind `enableAutoSave = false`. One context note: the request counts, the websocket
+> and the concurrency story describe the original app running at the clinic; this portfolio
+> version has no backend or websocket yet (it runs in memory), so those are lessons carried
+> over, not behavior of the deployed demo.
+
+> Note (Claude): Confirmed bug in the update branch of `onToothSelected`
+> (`feature-full-odontogram-crud.ts`, the `else if (foundTreatment && toothTreatment.id)`
+> case). The intended "on update success, splice the updated value into `currentTreatments`"
+> logic is wrapped in `req.subscribe(...)` called from inside that same `req`'s own `tap`,
+> so every update re-subscribes to itself and runs the update again, recursively. With the
+> memory service it is a redundant re-run; against a real backend it would send duplicate
+> and potentially unbounded update requests. Fix: run the splice directly inside
+> `tap((updated) => ...)` using `updated`, and drop the inner `req.subscribe`.
