@@ -4,8 +4,8 @@ ARG TARGET_REGISTRY
 ARG NX_APP
 
 # Use the builder image to build the microfrontend app. BUILDER_TAG selects which
-# base image tag to build FROM (latest by default; overridable via the docker
-# executor's PORTFOLIO_BUILDER_TAG environment variable).
+# base image tag to build FROM (latest by default; set per build:docker configuration
+# in project.json, or forwarded from a BUILDER_TAG env var via the target's forwardEnv).
 FROM ${TARGET_REGISTRY}nx-portfolio/builder:${BUILDER_TAG} AS builder
 ARG NODE_ENV=development
 ENV NODE_ENV=$NODE_ENV

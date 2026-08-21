@@ -28,13 +28,13 @@ const runExecutor: PromiseExecutor<PushExecutorSchema> = async (
 
   const { imageName } = options;
   const versionTags = resolveVersionTags(options.versionTags);
-  const registry = options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY;
+  const registry = options.registry || process.env.DOCKER_REGISTRY;
 
   const skipLogin =
-    options.skipLogin || process.env.PORTFOLIO_DOCKER_SKIP_LOGIN == 'true';
+    options.skipLogin || process.env.DOCKER_SKIP_LOGIN == 'true';
 
-  const username = process.env.PORTFOLIO_DOCKER_USERNAME;
-  const password = process.env.PORTFOLIO_DOCKER_PASSWORD;
+  const username = process.env.DOCKER_USERNAME;
+  const password = process.env.DOCKER_PASSWORD;
 
   if (!registry || (!skipLogin && (!username || !password))) {
     throw new Error(

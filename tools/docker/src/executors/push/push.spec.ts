@@ -54,13 +54,13 @@ const context: ExecutorContext = {
 beforeEach(() => {
   jest.clearAllMocks();
 
-  process.env.PORTFOLIO_DOCKER_USERNAME = 'testuser';
-  process.env.PORTFOLIO_DOCKER_PASSWORD = 'testpass';
+  process.env.DOCKER_USERNAME = 'testuser';
+  process.env.DOCKER_PASSWORD = 'testpass';
 });
 
 afterEach(() => {
-  delete process.env.PORTFOLIO_DOCKER_USERNAME;
-  delete process.env.PORTFOLIO_DOCKER_PASSWORD;
+  delete process.env.DOCKER_USERNAME;
+  delete process.env.DOCKER_PASSWORD;
 });
 
 describe('Push Executor', () => {
@@ -119,8 +119,8 @@ describe('Push Executor', () => {
   });
 
   it('throws error if required env vars are missing', async () => {
-    delete process.env.PORTFOLIO_DOCKER_USERNAME;
-    delete process.env.PORTFOLIO_DOCKER_PASSWORD;
+    delete process.env.DOCKER_USERNAME;
+    delete process.env.DOCKER_PASSWORD;
 
     await expect(executor(options, context)).rejects.toThrow();
 
@@ -136,9 +136,9 @@ describe('Push Executor', () => {
   });
 
   it('does not throw error if user/pass missing but skipLogin is true', async () => {
-    delete process.env.PORTFOLIO_DOCKER_USERNAME;
-    delete process.env.PORTFOLIO_DOCKER_PASSWORD;
-    process.env.PORTFOLIO_DOCKER_SKIP_LOGIN = 'true';
+    delete process.env.DOCKER_USERNAME;
+    delete process.env.DOCKER_PASSWORD;
+    process.env.DOCKER_SKIP_LOGIN = 'true';
 
     await executor(options, context);
 
@@ -174,7 +174,7 @@ describe('Push Executor', () => {
   // });
 
   it('skips login if set in env', async () => {
-    process.env.PORTFOLIO_DOCKER_SKIP_LOGIN = 'true';
+    process.env.DOCKER_SKIP_LOGIN = 'true';
 
     mockedExec.mockImplementation(
       (

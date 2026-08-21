@@ -59,18 +59,23 @@
     "build:docker": {
       "executor": "@portfolio/docker:build",
       "options": {
-        "imageName": "nx-portfolio/landingV2"
+        "imageName": "nx-portfolio/landingV2",
+        "forwardEnv": ["BUILDER_TAG"]
       },
       "configurations": {
         "development": {
           "versionTags": ["dev"],
           "buildArgs": {
+            "NODE_ENV": "development",
             "BUILDER_TAG": "dev"
           }
         },
         "production": {
           "pushToRegistry": true,
-          "versionTags": ["latest"]
+          "versionTags": ["latest"],
+          "buildArgs": {
+            "NODE_ENV": "production"
+          }
         }
       },
       "defaultConfiguration": "development"
