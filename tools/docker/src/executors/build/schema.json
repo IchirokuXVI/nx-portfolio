@@ -7,7 +7,7 @@
   "properties": {
     "registry": {
       "type": "string",
-      "description": "Docker registry base URL. If not provided, the PORTFOLIO_DOCKER_REGISTRY environment variable will be used.",
+      "description": "Docker registry base URL. If not provided, the DOCKER_REGISTRY environment variable is used.",
       "default": ""
     },
     "imageName": {
@@ -38,10 +38,32 @@
       },
       "default": {}
     },
+    "forwardEnv": {
+      "type": "array",
+      "description": "Names of environment variables to forward as build args when they are set (an explicit buildArg of the same name wins). Lets the project pass dynamic values without the executor knowing what they are.",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
     "noCache": {
       "type": "boolean",
       "description": "Build without cache",
       "default": false
+    },
+    "cache": {
+      "type": "string",
+      "enum": ["local", "gha", "registry", "none"],
+      "description": "Buildx cache backend. Falls back to the DOCKER_BUILD_CACHE env var, then 'local'."
+    },
+    "cacheMode": {
+      "type": "string",
+      "enum": ["max", "min"],
+      "description": "Buildx cache export mode. Falls back to DOCKER_BUILD_CACHE_MODE, then 'max'."
+    },
+    "cacheScope": {
+      "type": "string",
+      "description": "Cache scope/key for the gha backend. Falls back to DOCKER_BUILD_CACHE_SCOPE, then the image name."
     },
     "pushToRegistry": {
       "type": "boolean",

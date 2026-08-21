@@ -30,7 +30,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   const projectRoot = path.join(context.root, project.root);
 
   let registry =
-    options.registry || process.env.PORTFOLIO_DOCKER_REGISTRY || '';
+    options.registry || process.env.DOCKER_REGISTRY || '';
 
   if (registry && !registry.endsWith('/')) {
     registry += '/';
@@ -52,40 +52,27 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   const buildArgs = [];
 
-  if (!options.buildArgs.NODE_ENV) {
-    options.buildArgs.NODE_ENV = process.env.NODE_ENV || 'development';
-  }
+  options.buildArgs = options.buildArgs || {};
 
+  // Expose the executor's own context to the Dockerfile. These are the only build
+  // args the executor injects itself; everything else is caller-provided.
   options.buildArgs.NX_APP = context.projectName;
   options.buildArgs.TARGET_REGISTRY = registry;
 
-  // Which builder / local-http-server base image tag to build FROM. An explicit
-  // per-configuration buildArg wins; otherwise fall back to the PORTFOLIO_BUILDER_TAG
-  // environment variable, otherwise the Dockerfile default (latest). This lets a
-  // build pick the dev tag, a release tag, or a specific commit without editing
-  // project.json (e.g. PORTFOLIO_BUILDER_TAG=dev nx run landing:build:docker).
-  if (!options.buildArgs.BUILDER_TAG && process.env.PORTFOLIO_BUILDER_TAG) {
-    options.buildArgs.BUILDER_TAG = process.env.PORTFOLIO_BUILDER_TAG;
+  // Forward selected environment variables as build args. The caller lists the names
+  // in `forwardEnv`, so the executor stays generic: it does not know what any of them
+  // mean, only that the project asked for them to reach the Dockerfile. An explicit
+  // buildArg already set for the same name wins.
+  for (const name of options.forwardEnv || []) {
+    if (options.buildArgs[name] === undefined && process.env[name] !== undefined) {
+      options.buildArgs[name] = process.env[name] as string;
+    }
   }
 
-  // The shell embeds the micro-frontend base URL at build time, so it differs per
-  // environment (staging vs production). Pass it through from the environment when
-  // set; non-shell Dockerfiles simply do not declare the arg.
-  if (!options.buildArgs.MFE_BASE_URL && process.env.MFE_BASE_URL) {
-    options.buildArgs.MFE_BASE_URL = process.env.MFE_BASE_URL;
-  }
-
-  // Alternative to MFE_BASE_URL: an explicit per-remote URL map (name=url,...) for
-  // when each remote lives on its own origin/port (the local "port" mode). Also
-  // baked into the shell only; other Dockerfiles do not declare the arg.
-  if (!options.buildArgs.MFE_REMOTE_URLS && process.env.MFE_REMOTE_URLS) {
-    options.buildArgs.MFE_REMOTE_URLS = process.env.MFE_REMOTE_URLS;
-  }
-
-  for (const [key, value] of Object.entries(options.buildArgs || {})) {
+  for (const [key, value] of Object.entries(options.buildArgs)) {
     if (value) {
-      // Quote the value so build args containing shell/cmd delimiters survive — e.g.
-      // MFE_REMOTE_URLS, whose commas would otherwise be split by cmd.exe on Windows.
+      // Quote the value so build args containing shell/cmd delimiters survive (e.g.
+      // a comma-separated value, which cmd.exe on Windows would otherwise split).
       buildArgs.push(`--build-arg ${key}="${value}"`);
     }
   }
@@ -110,41 +97,50 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   buildCommandArr.push(buildArgs.join(' '));
 
-  // Which buildx cache backend to use, via PORTFOLIO_DOCKER_CACHE:
+  // Which buildx cache backend to use. From the `cache` option or the
+  // DOCKER_BUILD_CACHE env var (env lets CI pick it globally without editing
+  // project.json), default `local`:
   //   local    (default) — a local dir cache, swapped into place after the build.
   //   gha                — GitHub Actions cache backend (type=gha). Needs the
   //                        docker-container buildx driver and the Actions runtime
   //                        env (ACTIONS_CACHE_URL / ACTIONS_RUNTIME_TOKEN).
   //   registry           — a `<image>:buildcache` image in the registry.
   //   none / off         — no cache (same as noCache).
-  const cacheType = (process.env.PORTFOLIO_DOCKER_CACHE || 'local').toLowerCase();
+  const cacheType = (
+    options.cache ||
+    process.env.DOCKER_BUILD_CACHE ||
+    'local'
+  ).toLowerCase();
   const cacheEnabled =
     !options.noCache && cacheType !== 'none' && cacheType !== 'off';
 
-  // Cache export mode, via PORTFOLIO_DOCKER_CACHE_MODE (max default, or min). `max`
-  // exports every intermediate layer; `min` exports only the final image's layers.
-  // For the multi-stage app images the builder stage (the `nx build`) re-runs every
-  // commit anyway, so caching it buys little — `min` exports less and can be faster.
+  // Cache export mode (from the `cacheMode` option or DOCKER_BUILD_CACHE_MODE env),
+  // max default or min. `max` exports every intermediate layer; `min` exports only
+  // the final image's layers.
   const cacheMode =
-    (process.env.PORTFOLIO_DOCKER_CACHE_MODE || 'max').toLowerCase() === 'min'
+    (
+      options.cacheMode ||
+      process.env.DOCKER_BUILD_CACHE_MODE ||
+      'max'
+    ).toLowerCase() === 'min'
       ? 'min'
       : 'max';
 
   const { cacheCurrent, cacheNew } = getCachePaths(options.imageName);
 
   if (cacheEnabled && cacheType === 'gha') {
-    // Scope keeps each image's cache separate. The scope can be overridden per
-    // build (e.g. the builder keys its scope by the lockfile hash so its deps
-    // cache is reused until dependencies actually change).
+    // Scope keeps each image's cache separate. From the `cacheScope` option or the
+    // DOCKER_BUILD_CACHE_SCOPE env, defaulting to the image name.
     const scope =
-      process.env.PORTFOLIO_DOCKER_CACHE_SCOPE ||
+      options.cacheScope ||
+      process.env.DOCKER_BUILD_CACHE_SCOPE ||
       options.imageName.replace(/[^a-zA-Z0-9_.-]/g, '-');
     buildCommandArr.push(`--cache-from=type=gha,scope=${scope}`);
     buildCommandArr.push(`--cache-to=type=gha,mode=${cacheMode},scope=${scope}`);
   } else if (cacheEnabled && cacheType === 'registry') {
     if (!registry) {
       console.warn(
-        'PORTFOLIO_DOCKER_CACHE=registry but no registry is configured; skipping build cache.'
+        'Registry cache requested but no registry is configured; skipping build cache.'
       );
     } else {
       const ref = `${registry}${options.imageName}:buildcache`.toLowerCase();

@@ -98,8 +98,8 @@ That SHA becomes `--base` (with `--head=${{ github.sha }}`) for three separate `
 
 ### Images & registry
 
-- Registry: **`ghcr.io/ichirokuxvi`** (env `PORTFOLIO_DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>` and tagged `latest` in the `production` configuration.
-- The workflow logs in with `docker/login-action` using the built-in `GITHUB_TOKEN`, so the executor is told to skip its own login via `PORTFOLIO_DOCKER_SKIP_LOGIN=true`.
+- Registry: **`ghcr.io/ichirokuxvi`** (env `DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>` and tagged `latest` in the `production` configuration.
+- The workflow logs in with `docker/login-action` using the built-in `GITHUB_TOKEN`, so the executor is told to skip its own login via `DOCKER_SKIP_LOGIN=true`.
 - `push` only happens for targets whose `production` configuration sets `pushToRegistry: true` (see each app's `project.json`).
 - Tests run _inside_ `ghcr.io/<repo-lowercase>/builder:latest` — the builder image is rebuilt first so tests use the current toolchain.
 

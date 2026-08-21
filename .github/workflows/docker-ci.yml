@@ -36,17 +36,17 @@ jobs:
 
     env:
       GH_TOKEN: ${{ github.token }}
-      PORTFOLIO_DOCKER_REGISTRY: ghcr.io/ichirokuxvi
-      PORTFOLIO_DOCKER_SKIP_LOGIN: true
+      DOCKER_REGISTRY: ghcr.io/ichirokuxvi
+      DOCKER_SKIP_LOGIN: true
       # Use the GitHub Actions cache backend (type=gha) for every docker build,
       # instead of the local-dir cache + actions/cache tarball round-trip. Needs the
       # docker-container buildx driver (set up below) and the Actions runtime env
       # (exposed below).
-      PORTFOLIO_DOCKER_CACHE: gha
+      DOCKER_BUILD_CACHE: gha
       # Export only the final image layers to the cache. The app images' builder
       # stage (the `nx build`) re-runs every commit regardless, so caching it buys
       # little; `min` writes less. Flip back to `max` to compare.
-      PORTFOLIO_DOCKER_CACHE_MODE: min
+      DOCKER_BUILD_CACHE_MODE: min
       # Where the shell loads its remotes from on staging. Baked into the shell
       # bundle at build time (ignored by the other, environment-agnostic apps).
       STAGING_MFE_BASE_URL: https://mfe.staging.ichirokuxvi.com
@@ -109,7 +109,7 @@ jobs:
       # caches. Other images use the default per-image scope.
       - name: Build main docker builder
         env:
-          PORTFOLIO_DOCKER_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
+          DOCKER_BUILD_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
         run: npx nx build docker/builder --configuration=production
 
       - name: Get last successful commit on current branch
@@ -192,7 +192,7 @@ jobs:
       - name: Build & push staging images
         if: ${{ steps.get-affected-apps.outputs.affected_apps_tobuild != '' }}
         env:
-          PORTFOLIO_IMAGE_TAG: staging
+          DOCKER_IMAGE_TAG: staging
           MFE_BASE_URL: ${{ env.STAGING_MFE_BASE_URL }}
         run: |
           npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}

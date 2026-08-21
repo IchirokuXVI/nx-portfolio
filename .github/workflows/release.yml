@@ -27,12 +27,12 @@ jobs:
 
     env:
       GH_TOKEN: ${{ github.token }}
-      PORTFOLIO_DOCKER_REGISTRY: ghcr.io/ichirokuxvi
-      PORTFOLIO_DOCKER_SKIP_LOGIN: true
+      DOCKER_REGISTRY: ghcr.io/ichirokuxvi
+      DOCKER_SKIP_LOGIN: true
       # Use the GitHub Actions cache backend (type=gha) for every docker build.
-      PORTFOLIO_DOCKER_CACHE: gha
+      DOCKER_BUILD_CACHE: gha
       # Export only the final image layers to the cache (see docker-ci.yml).
-      PORTFOLIO_DOCKER_CACHE_MODE: min
+      DOCKER_BUILD_CACHE_MODE: min
       # Where the shell loads its remotes from in production.
       PROD_MFE_BASE_URL: https://mfe.ichirokuxvi.com
 
@@ -98,7 +98,7 @@ jobs:
       # layer is reused until dependencies change.
       - name: Build docker builder
         env:
-          PORTFOLIO_DOCKER_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
+          DOCKER_BUILD_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
         run: npx nx build docker/builder --configuration=production
 
       # Infrastructure images (local http server base, reverse proxy, certbot).
@@ -122,7 +122,7 @@ jobs:
       # also move `latest`, which keeps values.yaml's default meaningful.
       - name: Build & push production images
         env:
-          PORTFOLIO_IMAGE_TAG: ${{ steps.version.outputs.version }},latest
+          DOCKER_IMAGE_TAG: ${{ steps.version.outputs.version }},latest
           MFE_BASE_URL: ${{ env.PROD_MFE_BASE_URL }}
         run: |
           apps_tobuild=$(npx nx show projects --type "app" --with-target build:docker | paste -sd, -)

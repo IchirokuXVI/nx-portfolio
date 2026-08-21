@@ -7,7 +7,7 @@
   "properties": {
     "registry": {
       "type": "string",
-      "description": "Docker registry base URL. If not provided, the PORTFOLIO_DOCKER_REGISTRY environment variable will be used.",
+      "description": "Docker registry base URL. If not provided, the DOCKER_REGISTRY environment variable is used.",
       "default": ""
     },
     "imageName": {

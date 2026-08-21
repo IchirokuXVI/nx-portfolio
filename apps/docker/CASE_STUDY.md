@@ -12,7 +12,7 @@ A:
 **Q: The `build` executor shells out to `docker buildx build` with a local cache keyed by a hash of the image name, and auto-injects `NX_APP` / `TARGET_REGISTRY` / `NODE_ENV` build args. Walk through why it's built that way (the cache swap dance, the mapped build contexts project/root/dockerfile).**
 A:
 
-**Q: The `push` executor and `pushToRegistry` flow — how images get tagged and pushed, and how the registry is configured (`PORTFOLIO_DOCKER_REGISTRY`, skip-login)?**
+**Q: The `push` executor and `pushToRegistry` flow — how images get tagged and pushed, and how the registry is configured (`DOCKER_REGISTRY`, skip-login)?**
 A:
 
 **Q: The `application` generator scaffolds a Dockerfile into a new app. What does it set up and why have a generator for it?**
