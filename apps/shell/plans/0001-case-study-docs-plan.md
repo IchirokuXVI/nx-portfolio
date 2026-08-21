@@ -167,10 +167,13 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
       switch is meant to be environment-driven but is memory-only today. Verified: token
       defaults to `OdontogramMemory`, both consumers inject the token, shared-spec holds
       both to one contract. Gap flagged: the env-driven switch is intent, not code yet.)
-- [~] full CRUD feature: state management, how edits persist.
-      (Partial: click-tooth form uses squares not the image, 5 in a circle + front row,
-      plus per-tooth history. STILL OPEN: edit-state handling, save/persistence flow,
-      hardest UX.)
+- [x] full CRUD feature: state management, how edits persist.
+      (Answered: edit state = per-form ObservableMap keyed by dynamic
+      ToothTreatmentDetailedForm; save = explicit Save button (auto-save gated off after
+      500-1000 req/min vs ~10, plus websocket concurrency issues at the clinics) emits
+      toothConfirmedChanges -> parent diffs create/update/delete via forkJoin; history is
+      read-only w/ tempTreatments restore; hardest part = the history. Flagged a confirmed
+      update-branch bug: `req.subscribe` inside req's own tap re-runs the update.)
 - [x] Backend integration (BACK_API_* env) vs in-memory demo mode.
       (Answered: portfolio should have a backend, most services on it; not started yet.
       Roadmap = microservices in NestJS/Java/.NET + varied DBs (Cassandra etc.) to learn

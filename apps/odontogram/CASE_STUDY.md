@@ -160,13 +160,51 @@ projects.
 ## CRUD feature
 
 **Q: The full CRUD feature: how is edit state managed and persisted, and what was the hardest part of the UX?**
-A: _(Partially answered, more to cover on edit-state and persistence.)_ When you click
-a tooth you get a form that does not reuse the tooth image. It is easier to work with
-plain squares because they are easier to click, so the form shows five squares arranged
-in a circle for the five crown zones, plus a few more squares below them for the front
-view. The form also includes a history, so you can check the status of that tooth at
-any earlier point for which an odontogram exists.
+A: **The form.** When you click a tooth you get a form that does not reuse the tooth image.
+It is easier to work with plain squares because they are easier to click, so the form shows
+five squares arranged in a circle for the five crown zones, plus a few more squares below
+them for the front view. The form also includes a history, so you can check the status of
+that tooth at any earlier point for which an odontogram exists.
 
-> Note (Claude): Still open for this question: how edit state is held while the user is
-> making changes, how and when it is persisted (save flow), and what the hardest part
-> of the UX actually was. Revisit once the data-access questions are answered.
+**Save button instead of auto save.** Auto save caused a huge number of requests, between
+500 and 1000, while the dedicated Save button generates about 10 requests per minute. I
+measured this while the app was in use by two dental clinics, around 20 users in each. On
+top of that, the old auto save was wired to a websocket, and clients did not notice when
+someone else edited their treatments, which was a problem. A Save button makes concurrency
+easier to control, because the backend can return an error if someone edited the same data,
+and it gives the user more control, for example to reset the form. I do not think I will
+bring auto save back.
+
+**History is read-only.** The history is read-only for clarity. If you need to edit
+something from another odontogram, you have to go into that odontogram. Otherwise you might
+forget that you are looking at the history and edit the wrong data. The form has had the
+restoration system since it was first implemented, so users have never lost edits.
+
+**The hardest part.** The CRUD itself was not too difficult; the hardest part was the
+history. It needs special handling, because selecting a past odontogram swaps the
+treatments to the ones from that odontogram and also has to display the tooth as if it
+belonged to that different odontogram.
+
+> Note (Claude): The mechanics check out against the code. Edit state lives in the modal's
+> `treatments` ObservableMap, keyed by each dynamically created `ToothTreatmentDetailedForm`
+> component ref and updated as each form emits `toothTreatmentChange`. `disableForms` (a
+> computed) makes the forms read-only whenever the selected tooth's odontogram is not the
+> one the modal opened, and `tempTreatments` stashes the in-progress forms when you browse
+> into history and restores them on return (this is the restoration system). Saving is a two
+> step flow: `saveTooth()` emits `toothConfirmedChanges` with the final treatment set, and
+> the parent's `onToothSelected` diffs it against the loaded treatments to fire `create`,
+> `update` and `delete` through the service, batched with `forkJoin`. The auto save pipeline
+> (`combineLatest` of the form outputs plus `debounceTime(250)`) is still in the code but
+> gated behind `enableAutoSave = false`. One context note: the request counts, the websocket
+> and the concurrency story describe the original app running at the clinic; this portfolio
+> version has no backend or websocket yet (it runs in memory), so those are lessons carried
+> over, not behavior of the deployed demo.
+
+> Note (Claude): Confirmed bug in the update branch of `onToothSelected`
+> (`feature-full-odontogram-crud.ts`, the `else if (foundTreatment && toothTreatment.id)`
+> case). The intended "on update success, splice the updated value into `currentTreatments`"
+> logic is wrapped in `req.subscribe(...)` called from inside that same `req`'s own `tap`,
+> so every update re-subscribes to itself and runs the update again, recursively. With the
+> memory service it is a redundant re-run; against a real backend it would send duplicate
+> and potentially unbounded update requests. Fix: run the splice directly inside
+> `tap((updated) => ...)` using `updated`, and drop the inner `req.subscribe`.
