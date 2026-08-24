@@ -163,13 +163,41 @@ for serving an Angular app.
 ## CI/CD (`.github/workflows/docker-ci.yml`)
 
 **Q: The pipeline computes affected projects against the *last successful commit on the branch* (via `gh run list`) rather than the previous commit. Why, and what problem did that solve?**
-A:
+A: It is exactly that. Diffing only the previous commit has problems. A merge can bring in
+multiple commits at once, and the previous commit might itself have been skipped because its
+tests failed or it had compile errors. So the safest base is the last commit that actually
+succeeded, which is the last one whose apps were really built and deployed.
+
+> Note (Claude): Confirmed. The `last_success` step runs `gh run list` filtered to this
+> workflow and branch, takes the first run with `conclusion == "success"`, and uses its
+> `headSha` as the `--base` for every `nx affected` query. When there is no previous success
+> (first run) it falls back to building everything, which is also how missing staging images
+> get bootstrapped.
 
 **Q: Why run tests *inside the builder docker image* (`docker run … builder:latest npx nx run-many -t test`) rather than on the runner directly?**
-A:
+A: Since the builder image is already built, I thought it was better to run the tests in a
+controlled environment rather than a barebones runner. If I ever need specific configuration to
+run the tests, I only have to tweak the builder, not the runner, and anyone who wants to run the
+tests can do it with the builder.
+
+> Note (Claude): Consistent with the build order: the builder is built at the top of the run,
+> so by the test step the image already exists locally and `docker run …builder:latest` reuses
+> it. The same image is the FROM base of every app build, so tests and builds share one toolchain
+> definition.
 
 **Q: Walk through the build order: main builder → affected static-docker apps → test → build:docker → deploy. Why that sequence?**
-A:
+A: First the builder is needed, because it is the one that installs all the dependencies and
+builds the other apps and the tests. After the builder it does not really matter whether the
+static docker apps are built before or after; they are very quick and usually do not change.
+Then the tests run before building the app images, because if the tests fail the build can be
+skipped. The e2e has to go last because it needs all the other images built and running, and the
+same goes for the Helm deploy, because it needs the images pushed to the registry.
+
+> Note (Claude): Matches the workflow. One nuance on "tests before build lets the build be
+> skipped": the steps run sequentially and a failed test step fails the job, so the later
+> `build:docker` / e2e / deploy steps never run. The e2e stage additionally pulls the exact
+> images that were just pushed (`docker compose … --pull always` against the `staging` tag), so
+> it can only run after the push, and the Helm deploy runs only after e2e passes.
 
 ## Kubernetes / Helm deploy
 
