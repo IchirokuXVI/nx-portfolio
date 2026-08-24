@@ -97,6 +97,9 @@
       ],
       "@portfolio/landing-v2/feature-project": [
         "./libs/landing-v2/feature-project/src/index.ts"
+      ],
+      "@portfolio/luna-shopper/contracts": [
+        "./libs/luna-shopper/contracts/src/index.ts"
       ]
     }
   },
