@@ -29,7 +29,9 @@ single service so it never leaks across a boundary.
 
 ## 2. Service topology
 
-Four deployable services to start, plus a message broker and per service databases.
+Four deployable services to start, plus a message broker and per service databases. A fifth
+service, `luna-shopper-catalog` (owner curated products and supermarkets), is added last in plan
+0012 and is not part of the initial scaffold.
 
 ### 2.1 api-gateway (public HTTP entry point)
 
@@ -138,6 +140,8 @@ Concrete enum lists appear in the service plans (0005 through 0009).
 ## 4. Nx scaffolding steps
 
 1. Add the `@nx/nest` plugin to the workspace (dev dependency + install in plan 0003).
+   Everything is generated through the Nx plugins, and tests use Jest (unit, via `@nx/jest`)
+   and Playwright (e2e, via `@nx/playwright`); see 0010.
 2. Generate the apps under `apps/` as NestJS applications (`@nx/nest:application`) with jest
    and eslint targets:
    - `luna-shopper-gateway`

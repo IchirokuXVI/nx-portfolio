@@ -63,13 +63,21 @@ in `libs/luna-shopper/contracts`.
 
 ### 4.1 Temporary user (token by creating or joining a zone)
 
-There is no email step here. When a client with no token creates a zone or joins one by code,
-the gateway asks auth to **mint a temporary identity**: auth creates a `User(kind =
-TEMPORARY)` and returns an access + refresh token. The gateway then proceeds to the core
-service to actually create or join the zone with that `userId`. The token is what the device
-keeps; losing it loses the temporary user unless it was upgraded.
+There is no email step here. A temporary user is minted **only at the moment a client actually
+creates or joins a zone**, never on merely opening the app, so a browsing visitor leaves no
+account behind. When a client with no token creates a zone or joins one by code, the gateway
+asks auth to **mint a temporary identity**: auth creates a `User(kind = TEMPORARY)` and returns
+an access + refresh token. The gateway then proceeds to core to create or join the zone with
+that `userId`, under one idempotency key (0004 section 9) so a retry never mints two users. The
+token is what the device keeps; losing it loses the temporary user unless it was upgraded.
 
 Message: `auth.createTemporaryUser` -> `{ userId, accessToken, refreshToken }`.
+
+**Orphan cleanup (annotated, later):** a temporary user can still end up with no memberships
+(it left every zone, or its zones were deleted). A scheduled job will delete temporary users
+that hold no zone membership after a grace period. It is not built now; it is recorded so the
+orphan case has an owner. Core is the authority on "has any membership", so the job coordinates
+with core (an event or a periodic reconciliation) rather than auth guessing.
 
 ### 4.2 Email + password registration
 
@@ -77,9 +85,17 @@ Message: `auth.createTemporaryUser` -> `{ userId, accessToken, refreshToken }`.
   taken email. Creates `User(kind = REGISTERED)` + `Credential` (password hashed with argon2)
   + an `OAuthIdentity`-free email record, and issues tokens.
 - Email confirmation is optional: on register, create an `EmailVerification` and send a
-  confirmation email (SMTP, plan 0002). A `auth.verifyEmail` message consumes the token and
-  sets `emailVerifiedAt`. Unverified accounts still work; verification is a trust signal, not
-  a gate (unless a later policy decides otherwise).
+  confirmation email. A `auth.verifyEmail` message consumes it and sets `emailVerifiedAt`.
+  Unverified accounts still work; verification is a trust signal, not a gate (unless a later
+  policy decides otherwise).
+- **Email delivery**: mail is sent over SMTP from an `@ichirokuxvi.com` address (for example
+  `no-reply@ichirokuxvi.com`), using SMTP credentials, not a third party provider API token.
+  Config is in plan 0002. Note: the requirement "the email will not use a token" is read as
+  this delivery detail (SMTP, no API token); if instead it means the verification itself should
+  use a short numeric **code** the user types rather than a tokenized link, the
+  `EmailVerification` record stays the same and only the transport of the secret changes. This
+  is a late project concern and is flagged for confirmation, not blocking.
+- The confirmation email is localized to the user's locale (0004 section 12).
 
 ### 4.3 Login
 

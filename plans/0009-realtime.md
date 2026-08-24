@@ -66,7 +66,37 @@ zone or list it has no access to.
 All event names come from the `RealtimeEvent` enum so client and server never disagree on a
 string literal.
 
-## 7. Zero downtime and scaling
+## 7. Presence (online, viewing, editing)
+
+The realtime service tracks and broadcasts presence:
+
+- **Online in a zone**: when a socket authenticates and joins `zone:{zoneId}`, the user is
+  marked online there; on disconnect or leave, cleared. The zone room receives a
+  `presence.zoneUpdated` event with the current online users.
+- **Viewing / editing a list**: a client signals intent over the socket (opened a list =
+  viewing; focused an input = editing), and the `list:{listId}` room receives a
+  `presence.listUpdated` event listing current viewers and editors. This is what surfaces "who
+  is looking at or editing this list right now".
+- Presence is **ephemeral** state held in the realtime service's memory for now (single
+  replica). When Redis is added (see section 9 below) presence moves to a shared store so it is
+  correct across replicas.
+- New `RealtimeEvent` entries: `PRESENCE_ZONE_UPDATED`, `PRESENCE_LIST_UPDATED`.
+
+## 8. Concurrency: last write wins with reconciliation
+
+Confirmed model for collaborative edits: **last write wins**, reconciled through realtime.
+
+- The server is the single source of truth. On a line edit, core applies the write, bumps the
+  line `version` (0007), and broadcasts `line.updated` with the new `version` and content.
+  Clients reconcile to whatever the server last accepted; there is no locking, which keeps plain
+  text edits fast.
+- The **editing** presence indicator (section 7) is the social mechanism that keeps collisions
+  rare, since users see who else is editing a line before they clash.
+- Explicitly out of scope: character level co-editing (operational transforms or CRDTs). If that
+  is ever wanted it is a separate, much larger effort; field level last write wins is the
+  deliberate choice for a shopping list.
+
+## 9. Zero downtime and scaling
 
 - On deploy the realtime pod drains gracefully (0002 section 6 and 0004 section 7): it stops
   accepting new sockets, and socket.io clients auto reconnect to a healthy pod. Brief reconnects
@@ -77,7 +107,7 @@ string literal.
   planned later for caching (see 0001). A single replica does not need it; this is recorded so
   scaling out is a deliberate step, not a production surprise.
 
-## 8. Exit criteria
+## 10. Exit criteria
 
 - A client opens a socket, authenticates with its token, and subscribes only to zones and
   lists it may access.

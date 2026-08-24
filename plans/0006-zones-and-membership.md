@@ -15,68 +15,119 @@ never reads the auth database. Timestamps omitted.
 - `config` (jsonb, typed configuration object; empty for now, future boolean flags such as
   "allow new members" land here with their keys defined in an enum)
 - `joinCode` (unique, regenerable)
-- `ownerUserId` (opaque userId)
+- `status`: `ZoneStatus` enum (`ACTIVE`, `MARKED_FOR_DELETION`)
+- `ownerUserId` (opaque userId, **nullable**: a zone may temporarily have no owner)
 
 **ZoneMembership**
 - `id` (uuid)
 - `zoneId` -> Zone
 - `userId` (opaque)
 - `username` (per zone display name, required at join time)
-- `role`: `ZoneRole` enum (`OWNER`, `MEMBER`)
+- `role`: `ZoneRole` enum (`OWNER`, `ADMIN`, `MEMBER`)
 - `status`: `MembershipStatus` enum (`PENDING`, `APPROVED`, `KICKED`, `BANNED`)
 - `approvedByUserId` (nullable)
 - unique (`zoneId`, `userId`)
 - unique (`zoneId`, `username`)
 
-Enums: `ZoneRole`, `MembershipStatus`. Zone config keys become an enum once the concrete
-flags are defined; the column exists now so nothing needs a schema change to start using it.
+Enums: `ZoneStatus`, `ZoneRole`, `MembershipStatus`. Zone config keys become an enum once the
+concrete flags are defined; the column exists now so nothing needs a schema change to start
+using it.
 
-## 2. Create or join, and the token handshake
+## 2. Roles and powers
 
-Both entry actions also produce a token for a client that has none, via the gateway (see
-0005 section 4.1). The gateway orchestrates:
+- **OWNER** (at most one per zone, may be absent): everything an admin can do, plus delete the
+  zone, promote/demote admins, and transfer ownership.
+- **ADMIN** (any number): governance (approve/reject/kick/ban members, approve merges from
+  0008), manage lists and list access, edit the zone name and config. Cannot delete the zone,
+  manage admins, or change ownership.
+- **MEMBER**: participates according to list access (0007).
+
+## 3. Create or join, and the token handshake
+
+The temporary identity is minted **only when a client actually creates or joins a zone**, never
+before (this is the fix for orphaned temp users; a client that only opens the app and does
+nothing gets no account). The gateway orchestrates, with an idempotency key (0004 section 9) so
+a retry never mints two users:
 
 - **Create a space**: if the client has no token, gateway asks auth to mint a temporary user,
-  then calls core `zone.create { name, username, ownerUserId }`. Core creates the `Zone` and
-  an owner `ZoneMembership` already `APPROVED` with role `OWNER`. Response carries the token
-  (if newly minted) and the zone.
+  then calls core `zone.create { name, username, ownerUserId }`. Core creates the `Zone`
+  (`status = ACTIVE`) and an owner `ZoneMembership` already `APPROVED` with role `OWNER`.
+  Response carries the token (if newly minted) and the zone.
 - **Join by code**: same token handshake, then core `zone.join { joinCode, username, userId }`
-  creates a `ZoneMembership` with status `PENDING`. The user has no access to zone data until
-  an owner approves. A `BANNED` prior membership blocks rejoining.
+  creates a `ZoneMembership` with status `PENDING`. The user has no access to zone data until an
+  owner or admin approves. A `BANNED` prior membership blocks rejoining.
 
 Per zone `username` uniqueness is enforced by the unique constraint; a clash is a clean
 validation error the client can retry.
 
-## 3. Owner operations
+## 4. Owner and admin operations
 
-- `zone.update { zoneId, name?, config? }`: owner only, edits name and configuration.
+- `zone.update { zoneId, name?, config? }`: owner or admin.
 - `zone.delete { zoneId }`: owner only.
-- `zone.regenerateJoinCode { zoneId }`: owner only.
-- Membership governance (owner only):
+- `zone.regenerateJoinCode { zoneId }`: owner or admin.
+- `zone.setRole { zoneId, membershipId, role }`: owner only (promote a member to admin or
+  demote an admin).
+- `zone.transferOwnership { zoneId, membershipId }`: owner only.
+- Membership governance (owner or admin):
   - `membership.approve` / `membership.reject` a `PENDING` member.
   - `membership.kick`: sets `KICKED` (access removed, may re request).
   - `membership.ban`: sets `BANNED` (rejoin blocked).
 
-## 4. Authorization
+## 5. Ownerless zones and deletion fallback
+
+When a zone loses its owner (triggered later by account deletion, plan 0011), core:
+1. Sets `ownerUserId = null` and `status = MARKED_FOR_DELETION`, and emits an event so members
+   see the zone is scheduled for deletion and can act.
+2. If the zone has any `ADMIN`, an admin may `zone.claimOwnership { zoneId }`, which makes them
+   `OWNER` and returns `status` to `ACTIVE`.
+3. If no admin claims it, members are notified and a cleanup job (plan 0011) eventually deletes
+   the zone. The model and the claim path are built here; the delete trigger and the job land
+   with account deletion.
+
+## 6. Authorization
 
 Every core message resolves the caller's `ZoneMembership` for the target zone and checks:
 - the member is `APPROVED` for read/data operations,
-- the member is the `OWNER` for the owner operations above.
+- the member is `OWNER` or `ADMIN` for governance operations, and `OWNER` for the owner only
+  operations in section 4.
 Tokens are verified offline; core trusts the `userId` claim and looks up membership locally.
 
-## 5. Events published (for realtime, wired in 0009)
+## 7. Listing (deferred)
 
-`zone.updated`, `zone.deleted`, `member.joined` (pending), `member.approved`, `member.rejected`,
-`member.kicked`, `member.banned`. Names live in the `RealtimeEvent` enum in `contracts`.
+There is **no zone listing endpoint yet**. For the small closed test group, a client keeps its
+own list of joined zones. Two listings come later and are annotated here so nothing is designed
+into a corner:
+- a user facing "my spaces" listing (paginated, per 0004),
+- an admin back office listing of all zones with usage info.
 
-## 6. Migrations
+## 8. Join codes (simple now, richer later)
 
-First core migration creates `Zone` and `ZoneMembership`. Append only thereafter.
+For now the join code is a short, human typeable code, adequate for a closed group of under ten
+testers. **Annotated future work, not implemented now:**
+- higher entropy codes once the app is public,
+- joining only through a **share link with the code embedded**, where sharing is configurable:
+  custom expiry up to infinite, and a use policy of single use, limited uses, or infinite uses,
+- per user rate limits on creation and joining, configurable (for example no more than 2 zones
+  created per 10 minutes), enforced via the throttler from 0004 with values read from config.
 
-## 7. Exit criteria
+## 9. Events published (for realtime, wired in 0009)
 
-- A client with no token can create a space and receive a token in one round trip.
+`zone.updated`, `zone.deleted`, `zone.markedForDeletion`, `zone.ownershipChanged`,
+`member.joined` (pending), `member.approved`, `member.rejected`, `member.kicked`,
+`member.banned`, `member.roleChanged`. Names live in the `RealtimeEvent` enum in `contracts`.
+
+## 10. Migrations
+
+First core migration creates `Zone` and `ZoneMembership` with the enums above. Append only
+thereafter.
+
+## 11. Exit criteria
+
+- A client with no token can create a space and receive a token in one round trip, and no token
+  is issued to a client that does not create or join.
 - A client can join by code with a per zone username and land in `PENDING`.
-- Owner can approve, reject, kick, ban, edit the zone, delete it, and regenerate the code.
-- Non owners cannot perform owner operations; unapproved members cannot read zone data.
+- Owner and admins can approve, reject, kick, ban, edit the zone, and regenerate the code; only
+  the owner can delete, manage admins, or transfer ownership.
+- Losing the owner marks the zone for deletion and lets an admin claim ownership.
+- Non privileged members cannot perform governance; unapproved members cannot read zone data.
 - Every listed event is emitted on the matching mutation.

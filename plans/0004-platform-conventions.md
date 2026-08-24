@@ -128,14 +128,41 @@ log line is meaningful.
   alternative is a shared deny list checked on each request, which trades away some
   independence; it is not adopted now.
 
-## 11. Where this lives
+## 11. Pagination and ordering
+
+Every collection endpoint is paginated from the start (a must have, not a later retrofit).
+
+- **Cursor based** pagination (opaque cursor over a stable sort key), not offset, so results
+  stay correct while rows are inserted concurrently. Standard response envelope:
+  `{ items, nextCursor }`, with a configurable page size capped at a maximum.
+- **Ordering**: each endpoint declares which sort fields it allows and whether the caller may
+  choose. Lists and lines are orderable by the caller (lines default to their manual
+  `position`); comments have a fixed newest to oldest order (0007). The chosen order is part of
+  the cursor so paging stays consistent.
+
+## 12. Localization
+
+The backend is multilingual by requirement, not just the frontend.
+
+- **Request locale** is resolved from an explicit locale (param or the versioned path segment
+  the frontend already uses) or `Accept-Language`, falling back to the user's stored preference
+  when known, then to a default of English.
+- **Localized error messages**: the house error envelope (section 2) always carries a
+  user readable `message` already translated to the request locale, so the frontend never has
+  to know about backend error codes to display them. Each service keeps an error catalog mapping
+  its error codes to messages in **at least English and Spanish** (more later).
+- **Reference data** (catalog item names, labels, and similar system owned content in plan 0012)
+  is stored **multilingual, at least English and Spanish**. User generated content (list names,
+  line text, comments) is stored exactly as entered and is never auto translated.
+
+## 13. Where this lives
 
 A small `libs/luna-shopper/platform` library (or a set of shared Nest modules) provides the
 logging setup, exception filter, correlation middleware/interceptor, versioning bootstrap, and
 health module, so each service imports the same behavior rather than re implementing it. The
 written specs in this plan are the contract a non Node service reimplements.
 
-## 12. Exit criteria
+## 14. Exit criteria
 
 - Every service logs structured, colored (in dev) lines tagged with correlation id, IP, and
   (when available) username and zone; secrets are redacted.
@@ -146,3 +173,6 @@ written specs in this plan are the contract a non Node service reimplements.
 - Health endpoints exist and back the k8s probes; graceful shutdown drains cleanly.
 - Rate limits protect the open endpoints; event consumers and cross service commands are
   idempotent.
+- Collection endpoints are cursor paginated with declared ordering.
+- Errors return a message already localized to the request locale (English and Spanish at
+  minimum); the frontend does not translate backend errors.
