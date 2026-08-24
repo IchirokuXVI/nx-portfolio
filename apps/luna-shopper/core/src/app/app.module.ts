@@ -1,17 +1,25 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Transport } from '@nestjs/microservices';
+import {
+  MicroserviceHealthIndicator,
+  TypeOrmHealthIndicator,
+  type HealthIndicatorFunction,
+} from '@nestjs/terminus';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   PlatformHealthModule,
   PlatformModule,
 } from '@portfolio/luna-shopper/platform';
+import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
+import { CORE_ENTITIES } from './entities';
+import { ZonesModule } from './zones/zones.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      // Service specific vars first, then the shared `.env.luna-shopper`. Earlier
-      // files win.
       envFilePath: [
         'apps/luna-shopper/core/.env',
         'apps/luna-shopper/.env.luna-shopper',
@@ -20,11 +28,43 @@ import { coreConfiguration, coreValidationSchema } from './config/app-config';
       validationSchema: coreValidationSchema,
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
-    // Platform conventions (plan 0004): pino logging, correlation context and the
-    // global exception filter, which here also guards the NATS message surface.
     PlatformModule.forRoot({ serviceName: 'luna-shopper-core' }),
-    // Liveness/readiness on the small HTTP health port (plan 0004, section 6).
-    PlatformHealthModule.forRoot(),
+    // Core owns its private Postgres. Schema is committed migrations only.
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        url: config.getOrThrow<CoreConfig>('core').dbUrl,
+        entities: CORE_ENTITIES,
+        synchronize: false,
+      }),
+    }),
+    ZonesModule,
+    // Readiness probes the private DB and the broker (plan 0004, section 6).
+    PlatformHealthModule.forRoot({
+      readiness: {
+        inject: [
+          TypeOrmHealthIndicator,
+          MicroserviceHealthIndicator,
+          ConfigService,
+        ],
+        useFactory: (
+          db: TypeOrmHealthIndicator,
+          micro: MicroserviceHealthIndicator,
+          config: ConfigService
+        ): HealthIndicatorFunction[] => [
+          () => db.pingCheck('database'),
+          () =>
+            micro.pingCheck('nats', {
+              transport: Transport.NATS,
+              options: {
+                servers: [config.getOrThrow<CoreConfig>('core').natsUrl],
+              },
+              timeout: 2000,
+            }),
+        ],
+      },
+    }),
   ],
 })
 export class AppModule {}

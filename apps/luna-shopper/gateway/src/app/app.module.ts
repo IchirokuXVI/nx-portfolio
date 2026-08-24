@@ -18,6 +18,7 @@ import {
   gatewayConfiguration,
   gatewayValidationSchema,
 } from './config/app-config';
+import { GatewayZonesModule } from './zones/zones.module';
 
 @Module({
   imports: [
@@ -66,6 +67,8 @@ import {
     ThrottlerModule.forRoot(createThrottlerOptions()),
     // Auth endpoints + JWT verification (plan 0005).
     GatewayAuthModule,
+    // Zone + membership endpoints (plan 0006).
+    GatewayZonesModule,
   ],
   providers: [
     // The throttler guard runs globally; open endpoints opt into a named bucket.
