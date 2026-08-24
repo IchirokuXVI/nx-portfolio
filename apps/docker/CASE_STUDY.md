@@ -21,12 +21,12 @@ my own.
 > override via `DOCKER_IMAGE_TAG`.
 
 **Q: The `build` executor shells out to `docker buildx build`. Walk through the main design choices: the local buildx cache keyed by a hash of the image name (and the "swap dance"), the mapped build contexts (`project` / `root` / `dockerfile`), and the `forwardEnv` refactor that made the executor stop knowing about `MFE_BASE_URL` and friends (it now injects only `NX_APP` / `TARGET_REGISTRY` itself).**
-A: **The local cache and the "swap dance"** — I do not fully remember the original
+A: **The local cache and the "swap dance".** I do not fully remember the original
 reason. My recollection is that it came from how I cached the buildx folder in GitHub
 Actions during a deploy: build into a new folder, then move it into place once the build
 succeeds.
 
-**Going generic (`forwardEnv`)** — making the executor stop referencing project specific
+**Going generic (`forwardEnv`).** Making the executor stop referencing project specific
 build args was deliberate. I wanted the plugin to be reusable and not tied to portfolio
 details, so the project lists the env var names it wants (`forwardEnv`) and the executor
 forwards them without knowing what they mean.
@@ -202,13 +202,64 @@ same goes for the Helm deploy, because it needs the images pushed to the registr
 ## Kubernetes / Helm deploy
 
 **Q: You deploy to a k3s cluster via `helm upgrade` over SSH after rsync'ing `k8s/`. Why k3s + this rsync/SSH approach instead of GitOps (ArgoCD/Flux) or a managed cluster?**
-A:
+A: I used SSH simply because it was the easiest thing to set up at the moment and I did not
+have time for anything more complicated. For now it works, but I know it has to change for a
+scalable solution.
 
 **Q: How is the Helm chart structured (app deployment/service templates, the reverse-proxy templates, the LoadBalancer IP-address pool)?**
-A:
+A: Production and staging are currently a bit nested, because staging is turned on with a
+variable on the same machine as production. I might change that later, but it works for now.
+Each app has its own deployment and service, so it is isolated.
+
+> Note (Claude): The chart is data driven from the `apps` list in `values.yaml`. Each entry
+> renders one Deployment and one Service (`templates/apps/*.tpl` `range` over the list), and the
+> same list also feeds the reverse proxy's routing, the certbot `DOMAINS`, and the init
+> container's dummy certs, so adding an app in one place wires it everywhere. Staging entries are
+> gated by `staging.enabled` (`{{- if or (ne .env "staging") $.Values.staging.enabled }}`), so
+> one release in one namespace holds both environments. The image tag is chosen per entry by
+> `env`: production apps use `productionImageTag` (an immutable version, kept in
+> `/root/helm-live/prod-tag.yaml` **outside** the rsynced chart and passed with a second `-f`, so
+> staging deploys never disturb it and a rollback is just re-pinning an older version); staging
+> apps use the mutable `stagingImageTag`. App Services are plain ClusterIP (the proxy fronts
+> them); only the reverse-proxy Service is a `LoadBalancer`, and it is the sole consumer of the
+> MetalLB `IPAddressPool` (`ipadd-pool.yaml.tpl`), a single `/32` for the bare-metal IP, scoped
+> to the namespace and gated by `metallb.enabled`. The `lbPort` field on an app switches it to
+> its own LoadBalancer for the local "port" mode.
 
 **Q: TLS: how do the reverse-proxy + certbot pieces get and renew Let's Encrypt certs (the init-container certs, the deploy hook)?**
-A:
+A: For nginx to start it needs either to drop the TLS config, which I do not want, or to have
+some certs in place, so I use dummy certs so it can start without errors. The certs are stored in
+a PVC so they are not generated more than once, and if they are not there the dummy ones are
+generated. Certbot is sort of connected to the reverse proxy in that it tells the proxy to reload
+when new certs are issued.
+
+> Note (Claude): The flow across the two pieces. An alpine **init container** (`init-certs`)
+> runs first and, for every host in `apps`, writes a self-signed `openssl` cert into the shared
+> `/certs` PVC only if one is not already there, so nginx always has a `.crt`/`.key` to load and
+> can start serving 443 before any real cert exists. The **certbot sidecar** (same pod, gated by
+> `certbot.enabled`) then requests real Let's Encrypt certs over the webroot HTTP-01 challenge and
+> its `deploy-hook.sh` overwrites the dummy files in `/certs` with the real `fullchain`/`privkey`,
+> then reloads nginx. Three volumes make it work: `certs` (PVC, shared by init container, certbot,
+> and nginx), `certbot-webroot` (emptyDir, where nginx serves `/.well-known/acme-challenge/`), and
+> `letsencrypt-data` (PVC, so certbot's account and issued certs survive pod restarts and it does
+> not re-request and burn rate limits). `shareProcessNamespace: true` is what lets certbot reload
+> nginx with `pkill -HUP nginx`. Local deploys set `certbot.enabled: false` (no public DNS), so the
+> dummy certs are the whole TLS story there.
 
 **Q: How does the reverse-proxy route traffic to the shell + remotes, and how does that mirror the local `compose.yml` / reverse-proxy setup?**
-A:
+A: Helm generates a dynamic `nginx.conf` with a proxy block for each app. The `compose.yml`
+generates dummy certs for the staging domains and simply runs all the app images; it is used
+solely for the e2e tests in GitHub Actions.
+
+> Note (Claude): The generated config (`_nginx.conf.tpl`, rendered into a ConfigMap) groups the
+> `apps` by `host` into one `server` block per host (listening on 80 and 443 with that host's
+> cert), and inside each host a `location <path>` per app that `proxy_pass`es to
+> `http://<app-name>:80` (the app's ClusterIP Service). For any non `/` path it rewrites the
+> prefix off (`rewrite ^<path>/?(.*)$ /$1 break`) so the app sees a root relative URL, and it
+> serves `/.well-known/acme-challenge/` from the webroot for certbot. A `checksum/config`
+> annotation on the Deployment restarts the proxy only when the rendered config actually changes.
+> `k8s/e2e/compose.yml` mirrors this topology with static files instead of templates: a `certs`
+> init service (the same alpine + openssl dummy certs, for the two staging hosts), a bare
+> `nginx:latest` reverse proxy mounting a hand written `k8s/e2e/nginx.conf`, and the five app
+> images pulled at the `staging` tag. It exists so the e2e suite exercises the real published
+> staging images through the same proxy shape the cluster uses, not a dev server.

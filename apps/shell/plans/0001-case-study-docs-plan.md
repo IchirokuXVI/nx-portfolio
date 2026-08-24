@@ -193,8 +193,8 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [x] CI (`docker-ci.yml`): affected detection via last successful commit, build order.
 - [x] builder image: running tests inside it; why.
 - [x] reverse-proxy + certbot apps — TLS/Let's Encrypt flow (webroot HTTP-01, sidecar pod, /certs + deploy-hook). Helm init-container piece still in k8s section.
-- [ ] k8s: k3s cluster, Helm chart layout, reverse-proxy templates, LB IP pool.
-- [ ] Deploy step: rsync k8s/ + `helm upgrade` over SSH. Why this vs GitOps/ArgoCD.
+- [x] k8s: k3s cluster, Helm chart layout, reverse-proxy templates, LB IP pool (MetalLB /32), TLS init-container + certbot sidecar, compose.yml mirror.
+- [x] Deploy step: rsync k8s/ + `helm upgrade` over SSH. Why this vs GitOps/ArgoCD.
 - [x] Per-app Dockerfile (multi-stage Angular build + nginx static serve; BUILDER_TAG, CORS/.mjs config).
 
 ## Session summaries
