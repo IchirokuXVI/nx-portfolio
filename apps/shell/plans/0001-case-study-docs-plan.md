@@ -185,10 +185,10 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [ ] projects / areas / project-areas data model — what it represented.
 
 ### docker (infra: Docker + k8s)
-- [ ] Why a custom Nx `@portfolio/docker` plugin instead of `@nx-tools/nx-docker` etc.
-- [ ] `build` executor: buildx, local cache keyed by image hash, auto build-args (NX_APP…).
-- [ ] `push` executor + `pushToRegistry` flow; registry via `PORTFOLIO_DOCKER_REGISTRY`.
-- [ ] The `application` generator (scaffolds a Dockerfile into a new app).
+- [x] Why a custom Nx `@portfolio/docker` plugin instead of `@nx-tools/nx-docker` etc.
+- [x] `build` executor: buildx, local cache keyed by image hash (swap dance is CI-inert, gha backend does CI caching), `forwardEnv` generic-executor refactor, auto build-args (NX_APP…).
+- [x] `push` executor + `pushToRegistry` flow; registry via `DOCKER_REGISTRY`, skip-login.
+- [x] The `application` generator (scaffolds a Dockerfile into a new app). NOTE: generator drifted (emits `type:docker` + `tag`, needs fixing to `versionTags` + static/dynamic tags).
 - [ ] static-docker vs dynamic-docker tags — how CI uses them.
 - [ ] CI (`docker-ci.yml`): affected detection via last successful commit, build order.
 - [ ] builder image: running tests inside it; why.
