@@ -1,0 +1,101 @@
+import type { UserKind } from '../enums/auth.enums';
+
+/**
+ * Auth service message contracts (plan 0005).
+ *
+ * The gateway talks to auth over NATS request/reply; these are the subject names
+ * and the request/response payload shapes. Keeping them in `contracts` lets a
+ * future polyglot service answer the same subjects. Subjects carry the service
+ * prefix; a version token can be appended when a contract needs to evolve
+ * (plan 0004, section 4).
+ */
+export const AUTH_PATTERNS = {
+  /** Mint a throwaway identity when a client first creates or joins a zone. */
+  createTemporaryUser: 'auth.createTemporaryUser',
+  /** Email + password registration. */
+  register: 'auth.register',
+  /** Email + password login. */
+  login: 'auth.login',
+  /** Consume an email verification token. */
+  verifyEmail: 'auth.verifyEmail',
+  /** Exchange a refresh token for a fresh token pair (rotates). */
+  refresh: 'auth.refresh',
+  /** Upgrade a temporary user into a registered one, in place. */
+  upgrade: 'auth.upgrade',
+  /** Create or link an account from a verified Google profile. */
+  googleLogin: 'auth.googleLogin',
+} as const;
+
+export type AuthPattern = (typeof AUTH_PATTERNS)[keyof typeof AUTH_PATTERNS];
+
+/** The claims carried inside the signed access token. */
+export interface AccessTokenClaims {
+  /** userId. */
+  sub: string;
+  kind: UserKind;
+  iat?: number;
+  exp?: number;
+}
+
+/** The token pair every successful auth flow returns. */
+export interface AuthTokens {
+  userId: string;
+  kind: UserKind;
+  accessToken: string;
+  refreshToken: string;
+}
+
+/** No fields: a temporary identity is minted purely from the request context. */
+export type CreateTemporaryUserRequest = Record<string, never>;
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  displayName?: string;
+  /** Locale for the confirmation email; defaults to the request locale. */
+  locale?: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface VerifyEmailRequest {
+  /** The raw token from the confirmation link (auth stores only its hash). */
+  token: string;
+}
+
+export interface RefreshRequest {
+  refreshToken: string;
+}
+
+/**
+ * Upgrade a temporary user in place (plan 0005, section 4.5). `userId` is taken
+ * from the caller's verified token by the gateway. Either an email + password or
+ * a linked Google identity is supplied.
+ */
+export interface UpgradeRequest {
+  userId: string;
+  email?: string;
+  password?: string;
+  displayName?: string;
+  google?: GoogleProfile;
+  locale?: string;
+}
+
+/** A verified Google profile, resolved by the gateway's passport callback. */
+export interface GoogleProfile {
+  providerUserId: string;
+  email?: string;
+  displayName?: string;
+}
+
+/**
+ * Google login (plan 0005, section 4.4). If `linkUserId` is set (the caller held
+ * a temporary token), the Google identity is linked onto that user, upgrading it
+ * in place; otherwise auth finds or creates a registered user.
+ */
+export interface GoogleLoginRequest extends GoogleProfile {
+  linkUserId?: string;
+}

@@ -102,6 +102,30 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     };
   }
 
+  /**
+   * Recognises a house error envelope that a downstream service already produced
+   * and returned over the broker (plan 0004, section 2). NATS nests it under
+   * `error`; either shape is accepted. The gateway passes it straight through
+   * rather than reclassifying a handled downstream outcome as an internal error,
+   * so a 404/409/401 from auth or core keeps its status and localized message.
+   */
+  private extractRemoteProblem(exception: unknown): ProblemDetails | undefined {
+    const candidates = [exception, (exception as { error?: unknown })?.error];
+    for (const candidate of candidates) {
+      if (
+        candidate &&
+        typeof candidate === 'object' &&
+        typeof (candidate as ProblemDetails).status === 'number' &&
+        typeof (candidate as ProblemDetails).code === 'string' &&
+        typeof (candidate as ProblemDetails).message === 'string' &&
+        'correlationId' in candidate
+      ) {
+        return candidate as ProblemDetails;
+      }
+    }
+    return undefined;
+  }
+
   private classify(exception: unknown): {
     code: ErrorCode;
     detail?: string;
@@ -137,13 +161,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const req = http.getRequest();
     const res = http.getResponse();
     const { correlationId, locale } = this.resolveMeta();
-    const classified = this.classify(exception);
 
-    const problem = buildProblemDetails({
-      ...classified,
-      correlationId,
-      locale,
-    });
+    const remote = this.extractRemoteProblem(exception);
+    const problem: ProblemDetails = remote
+      ? { ...remote, correlationId }
+      : buildProblemDetails({
+          ...this.classify(exception),
+          correlationId,
+          locale,
+        });
 
     if (problem.status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(
@@ -171,12 +197,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
   private handleRpc(exception: unknown): Observable<never> {
     const { correlationId, locale } = this.resolveMeta();
-    const classified = this.classify(exception);
-    const problem = buildProblemDetails({
-      ...classified,
-      correlationId,
-      locale,
-    });
+    const remote = this.extractRemoteProblem(exception);
+    const problem: ProblemDetails = remote
+      ? { ...remote, correlationId }
+      : buildProblemDetails({
+          ...this.classify(exception),
+          correlationId,
+          locale,
+        });
 
     if (problem.code === ERROR_CODES.INTERNAL) {
       this.logger.error(

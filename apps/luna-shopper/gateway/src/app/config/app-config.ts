@@ -31,6 +31,14 @@ export const gatewayValidationSchema = Joi.object({
   AUTH_JWT_PUBLIC_KEY: Joi.string(),
   AUTH_JWT_PUBLIC_KEY_FILE: Joi.string(),
   CORS_ORIGINS: Joi.string().allow('').default(''),
+
+  // Google OAuth (login with Google): the passport dance runs at the gateway,
+  // which then asks auth to create or link the account (plan 0005, section 4.4).
+  // Optional: when unset the /auth/google routes are simply not registered.
+  GOOGLE_CLIENT_ID: Joi.string().allow('').default(''),
+  GOOGLE_CLIENT_SECRET: Joi.string().allow('').default(''),
+  GOOGLE_CALLBACK_URL: Joi.string().uri().allow('').default(''),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -41,6 +49,13 @@ export interface GatewayConfig {
   natsUrl: string;
   authJwtPublicKey: string;
   corsOrigins: string[];
+  google: {
+    clientId: string;
+    clientSecret: string;
+    callbackUrl: string;
+    /** True only when the id, secret and callback are all present. */
+    enabled: boolean;
+  };
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -61,6 +76,16 @@ export const gatewayConfiguration = registerAs(
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean),
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+      callbackUrl: process.env.GOOGLE_CALLBACK_URL ?? '',
+      enabled: Boolean(
+        process.env.GOOGLE_CLIENT_ID &&
+        process.env.GOOGLE_CLIENT_SECRET &&
+        process.env.GOOGLE_CALLBACK_URL
+      ),
+    },
     logLevel: process.env.LOG_LEVEL as GatewayConfig['logLevel'],
   })
 );

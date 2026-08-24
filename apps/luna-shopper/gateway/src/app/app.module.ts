@@ -1,12 +1,19 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { Transport } from '@nestjs/microservices';
+import {
+  MicroserviceHealthIndicator,
+  type HealthIndicatorFunction,
+} from '@nestjs/terminus';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import {
   createThrottlerOptions,
   PlatformHealthModule,
   PlatformModule,
 } from '@portfolio/luna-shopper/platform';
+import { GatewayAuthModule } from './auth/auth.module';
+import type { GatewayConfig } from './config/app-config';
 import {
   gatewayConfiguration,
   gatewayValidationSchema,
@@ -34,11 +41,31 @@ import {
     // Platform conventions (plan 0004): pino logging, correlation context, the
     // global problem+json exception filter and the validation pipe.
     PlatformModule.forRoot({ serviceName: 'luna-shopper-gateway' }),
-    // Liveness/readiness on /health/live and /health/ready (plan 0004, section 6).
-    PlatformHealthModule.forRoot(),
+    // Liveness/readiness on /health/live and /health/ready (plan 0004, section 6);
+    // readiness probes the broker the gateway depends on for every request.
+    PlatformHealthModule.forRoot({
+      readiness: {
+        inject: [MicroserviceHealthIndicator, ConfigService],
+        useFactory: (
+          micro: MicroserviceHealthIndicator,
+          config: ConfigService
+        ): HealthIndicatorFunction[] => [
+          () =>
+            micro.pingCheck('nats', {
+              transport: Transport.NATS,
+              options: {
+                servers: [config.getOrThrow<GatewayConfig>('gateway').natsUrl],
+              },
+              timeout: 2000,
+            }),
+        ],
+      },
+    }),
     // Global rate limiting with stricter named buckets for the open surfaces
     // (plan 0004, section 8).
     ThrottlerModule.forRoot(createThrottlerOptions()),
+    // Auth endpoints + JWT verification (plan 0005).
+    GatewayAuthModule,
   ],
   providers: [
     // The throttler guard runs globally; open endpoints opt into a named bucket.

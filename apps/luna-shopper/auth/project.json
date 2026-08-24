@@ -98,6 +98,24 @@
         "jestConfig": "apps/luna-shopper/auth/jest.config.cts",
         "passWithNoTests": true
       }
+    },
+    "migration:run": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper/auth/src/app/db/cli.js migration:run -d apps/luna-shopper/auth/src/app/db/data-source.ts"
+      }
+    },
+    "migration:revert": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper/auth/src/app/db/cli.js migration:revert -d apps/luna-shopper/auth/src/app/db/data-source.ts"
+      }
+    },
+    "migration:generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper/auth/src/app/db/cli.js migration:generate apps/luna-shopper/auth/src/app/db/migrations/Migration -d apps/luna-shopper/auth/src/app/db/data-source.ts"
+      }
     }
   }
 }

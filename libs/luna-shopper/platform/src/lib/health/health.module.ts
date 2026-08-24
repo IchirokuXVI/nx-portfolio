@@ -18,9 +18,15 @@ import { ReadinessState } from './readiness-state';
 /**
  * A readiness indicator is any Terminus check. Services contribute their own
  * (DB for auth/core, NATS for all, downstream readiness for gateway/realtime) as
- * those clients are wired in later plans.
+ * those clients are wired in later plans. The factory may inject Terminus
+ * indicators (declare them in `inject`, with `imports` for any extra module they
+ * need) so a service can build a DB ping or a microservice probe.
  */
-export type ReadinessIndicatorFactory = () => HealthIndicatorFunction[];
+export interface ReadinessConfig {
+  imports?: DynamicModule['imports'];
+  inject?: unknown[];
+  useFactory: (...args: unknown[]) => HealthIndicatorFunction[];
+}
 
 export const READINESS_INDICATORS = Symbol('LUNA_READINESS_INDICATORS');
 
@@ -75,17 +81,24 @@ export class HealthController {
 @Module({})
 export class PlatformHealthModule {
   static forRoot(options?: {
-    readiness?: ReadinessIndicatorFactory;
+    readiness?: ReadinessConfig;
     imports?: DynamicModule['imports'];
   }): DynamicModule {
-    const readinessProvider: Provider = {
-      provide: READINESS_INDICATORS,
-      useFactory: () => options?.readiness?.() ?? [],
-    };
+    const readinessProvider: Provider = options?.readiness
+      ? {
+          provide: READINESS_INDICATORS,
+          inject: options.readiness.inject as never,
+          useFactory: options.readiness.useFactory,
+        }
+      : { provide: READINESS_INDICATORS, useValue: [] };
 
     return {
       module: PlatformHealthModule,
-      imports: [TerminusModule, ...(options?.imports ?? [])],
+      imports: [
+        TerminusModule,
+        ...(options?.readiness?.imports ?? []),
+        ...(options?.imports ?? []),
+      ],
       controllers: [HealthController],
       providers: [ReadinessState, readinessProvider],
     };

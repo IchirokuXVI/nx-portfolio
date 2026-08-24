@@ -1,6 +1,7 @@
 import { Module, type DynamicModule, type Provider } from '@nestjs/common';
-import { APP_FILTER, APP_PIPE } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
+import { RpcCorrelationInterceptor } from './context/rpc-correlation.interceptor';
 import { GlobalExceptionFilter } from './errors/global-exception.filter';
 import { createLoggerOptions } from './logging/logger.options';
 import { createValidationPipe } from './validation/validation-pipe';
@@ -26,6 +27,7 @@ export class PlatformModule {
   static forRoot(options: PlatformModuleOptions): DynamicModule {
     const providers: Provider[] = [
       { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+      { provide: APP_INTERCEPTOR, useClass: RpcCorrelationInterceptor },
       { provide: APP_PIPE, useFactory: createValidationPipe },
     ];
 

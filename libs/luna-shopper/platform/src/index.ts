@@ -14,6 +14,7 @@ export * from './lib/logging/redaction';
 export * from './lib/context/correlation.constants';
 export * from './lib/context/correlation.middleware';
 export * from './lib/context/request-context';
+export * from './lib/context/rpc-correlation.interceptor';
 
 // Errors
 export * from './lib/errors/domain-exception';
