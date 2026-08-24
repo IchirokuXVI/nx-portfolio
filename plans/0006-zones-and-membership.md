@@ -1,7 +1,7 @@
-# 0005 Zones and membership
+# 0006 Zones and membership
 
 First domain slice of `luna-shopper-core`: zones (spaces) and the governance around who is in
-them. Depends on auth (0004) for identities and on the gateway to orchestrate the token plus
+them. Depends on auth (0005) for identities and on the gateway to orchestrate the token plus
 zone flows.
 
 ## 1. Data model (core database)
@@ -34,7 +34,7 @@ flags are defined; the column exists now so nothing needs a schema change to sta
 ## 2. Create or join, and the token handshake
 
 Both entry actions also produce a token for a client that has none, via the gateway (see
-0004 section 4.1). The gateway orchestrates:
+0005 section 4.1). The gateway orchestrates:
 
 - **Create a space**: if the client has no token, gateway asks auth to mint a temporary user,
   then calls core `zone.create { name, username, ownerUserId }`. Core creates the `Zone` and
@@ -64,7 +64,7 @@ Every core message resolves the caller's `ZoneMembership` for the target zone an
 - the member is the `OWNER` for the owner operations above.
 Tokens are verified offline; core trusts the `userId` claim and looks up membership locally.
 
-## 5. Events published (for realtime, wired in 0008)
+## 5. Events published (for realtime, wired in 0009)
 
 `zone.updated`, `zone.deleted`, `member.joined` (pending), `member.approved`, `member.rejected`,
 `member.kicked`, `member.banned`. Names live in the `RealtimeEvent` enum in `contracts`.

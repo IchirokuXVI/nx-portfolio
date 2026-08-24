@@ -1,4 +1,4 @@
-# 0004 Auth service
+# 0005 Auth service
 
 Builds `luna-shopper-auth`: the identity provider. It owns identity data, issues tokens, and
 handles every way a user comes to exist. Its database is private to this service.
@@ -10,7 +10,7 @@ handles every way a user comes to exist. Its database is private to this service
   a registered one.
 - Email + password registration with optional (not mandatory) email confirmation.
 - Google login that creates or links an account.
-- Publish identity events other services react to (notably the upgrade saga in 0007).
+- Publish identity events other services react to (notably the upgrade saga in 0008).
 
 ## 2. Data model (auth database)
 
@@ -105,10 +105,10 @@ token. Auth:
 3. Issues fresh tokens.
 
 Note: this in place upgrade is the simple path and is distinct from the cross account **merge**
-in 0007. Merge exists for the case where the user lost the temp token and cannot prove
+in 0008. Merge exists for the case where the user lost the temp token and cannot prove
 ownership, so they register fresh and ask a zone owner to move the old account's data over.
 If a future requirement needs upgrade to instead create a brand new `User` and delete the old
-one (rewriting references), that is the same saga described in 0007 and would reuse it; the
+one (rewriting references), that is the same saga described in 0008 and would reuse it; the
 default here keeps the row and avoids a distributed operation.
 
 ## 5. Events published
@@ -129,7 +129,7 @@ plan 0002, never by `synchronize`.
 ## 7. Exit criteria
 
 - A no token client can obtain a temporary identity (driven by the zone create/join path in
-  0005).
+  0006).
 - Email + password registration works, with an optional confirmation email delivered to the
   local mail catcher and a working verify endpoint.
 - Google login creates or links an account.

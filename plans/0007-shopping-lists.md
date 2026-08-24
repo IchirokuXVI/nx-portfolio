@@ -1,8 +1,8 @@
-# 0006 Shopping lists, lines, and comments
+# 0007 Shopping lists, lines, and comments
 
 Second domain slice of `luna-shopper-core`: the actual shopping lists inside a zone, their per
 user write permissions, the lines with their two state machines, and comments. Depends on
-0005 (zones and approved memberships).
+0006 (zones and approved memberships).
 
 ## 1. Data model (core database)
 
@@ -66,7 +66,7 @@ approval (it has to be approved) and item state (pending, ready, not available).
 - Setting access and list update/delete are limited to the list creator or the zone owner.
 - All checks run against core's own membership and access tables using the token `userId`.
 
-## 4. Events published (realtime, wired in 0008)
+## 4. Events published (realtime, wired in 0009)
 
 `list.created`, `list.updated`, `list.deleted`, `list.accessChanged`, `line.added`,
 `line.updated` (covers approval and status changes), `line.reordered`, `line.deleted`,

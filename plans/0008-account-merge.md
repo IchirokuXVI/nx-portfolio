@@ -1,12 +1,12 @@
-# 0007 Account merge (per zone)
+# 0008 Account merge (per zone)
 
 Adds the owner approved, single zone account merge to `luna-shopper-core`, plus the note on
-how it relates to the in place upgrade from 0004. Depends on 0005 and 0006 because merge
+how it relates to the in place upgrade from 0005. Depends on 0006 and 0007 because merge
 reassigns data those plans created.
 
 ## 1. What merge is for
 
-A user who lost their temporary token cannot upgrade in place (0004 section 4.5), because they
+A user who lost their temporary token cannot upgrade in place (0005 section 4.5), because they
 can no longer prove they own that old account. Instead they register a fresh account, join the
 zone, and ask the zone owner to **merge** the old account's data into the new one. Because a
 user is claiming another account's data, it requires owner approval. Merge is scoped to a
@@ -45,7 +45,7 @@ deliberate design benefit of keeping per zone usernames and zone data in core.
 
 ## 4. Relationship to the in place upgrade
 
-- In place upgrade (0004): user still holds the temp token, keeps the same `userId`, nothing
+- In place upgrade (0005): user still holds the temp token, keeps the same `userId`, nothing
   is reassigned, temp row is kept and flipped to registered.
 - Merge (this plan): user lost the temp token, two distinct `userId`s exist, owner approves,
   per zone data is reassigned and the source is kicked from that zone.
@@ -56,7 +56,7 @@ emits `user.merged { fromUserId, toUserId }`; core subscribes and rewrites refer
 zone in a transaction. It is documented here as the extension point but is not built now,
 since the two mechanisms above cover the stated requirements without a distributed write.
 
-## 5. Events published (realtime, wired in 0008)
+## 5. Events published (realtime, wired in 0009)
 
 `merge.requested`, `merge.approved` (also implies a `member.kicked` for the source),
 `merge.rejected`. Names in the `RealtimeEvent` enum in `contracts`.
