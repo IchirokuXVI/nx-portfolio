@@ -92,13 +92,18 @@ Every core message resolves the caller's `ZoneMembership` for the target zone an
   operations in section 4.
 Tokens are verified offline; core trusts the `userId` claim and looks up membership locally.
 
-## 7. Listing (deferred)
+## 7. Listing zones
 
-There is **no zone listing endpoint yet**. For the small closed test group, a client keeps its
-own list of joined zones. Two listings come later and are annotated here so nothing is designed
-into a corner:
-- a user facing "my spaces" listing (paginated, per 0004),
-- an admin back office listing of all zones with usage info.
+- **My zones** (built now): a user lists the zones they belong to, both owned and joined.
+  Creating a zone auto joins it with role `OWNER`, so owned zones are simply the memberships
+  where `role = OWNER`; there is no separate "owned" concept. The listing returns every zone
+  where the user holds a membership that is `APPROVED` or `PENDING` (so a user also sees a zone
+  they are waiting to be approved into), each annotated with the caller's membership `role` and
+  `status`. It is **cursor paginated and orderable** per 0004: the caller chooses the order (for
+  example by name, by joined time, or by recent activity). Message:
+  `zone.listMine { cursor?, order? }`.
+- **Admin listing (deferred)**: a back office listing of **all** zones with usage info, gated
+  behind the platform admin role (0012 section 3). Not built now.
 
 ## 8. Join codes (simple now, richer later)
 
@@ -129,5 +134,6 @@ thereafter.
 - Owner and admins can approve, reject, kick, ban, edit the zone, and regenerate the code; only
   the owner can delete, manage admins, or transfer ownership.
 - Losing the owner marks the zone for deletion and lets an admin claim ownership.
+- A user can list their own zones (owned and joined), cursor paginated and orderable.
 - Non privileged members cannot perform governance; unapproved members cannot read zone data.
 - Every listed event is emitted on the matching mutation.

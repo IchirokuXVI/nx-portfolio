@@ -70,7 +70,9 @@ development/production configurations (dev tags `dev`, production pushes `latest
 - Add the stateful dependencies: two PostgreSQL instances (StatefulSets with PVCs, or managed
   databases) and NATS with JetStream (with a persistent volume so streams survive restarts).
   Database credentials, the JWT keypair, Google OAuth secrets, and SMTP credentials are
-  Kubernetes Secrets.
+  Kubernetes Secrets. SMTP connects over TLS on the submission port (587/465). Separately from
+  the cluster, `ichirokuxvi.com` needs SPF, DKIM, and DMARC DNS records so confirmation emails
+  are not treated as spam (a DNS setup step, recorded in 0005).
 - Run **database migrations on deploy** before new pods take traffic: a Helm pre upgrade Job
   (or init container) per stateful service that runs that service's `migration:run`. Never by
   app boot / `synchronize`.

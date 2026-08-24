@@ -88,13 +88,26 @@ with core (an event or a periodic reconciliation) rather than auth guessing.
   confirmation email. A `auth.verifyEmail` message consumes it and sets `emailVerifiedAt`.
   Unverified accounts still work; verification is a trust signal, not a gate (unless a later
   policy decides otherwise).
-- **Email delivery**: mail is sent over SMTP from an `@ichirokuxvi.com` address (for example
-  `no-reply@ichirokuxvi.com`), using SMTP credentials, not a third party provider API token.
-  Config is in plan 0002. Note: the requirement "the email will not use a token" is read as
-  this delivery detail (SMTP, no API token); if instead it means the verification itself should
-  use a short numeric **code** the user types rather than a tokenized link, the
-  `EmailVerification` record stays the same and only the transport of the secret changes. This
-  is a late project concern and is flagged for confirmation, not blocking.
+- **Email delivery**: mail is sent over SMTP from an `@ichirokuxvi.com` address, not through a
+  third party provider API token. Auth details:
+  - A **dedicated sending mailbox** (for example `no-reply@ichirokuxvi.com`) with its own
+    username + password, separate from any personal mailbox, so the credential is scoped and a
+    leak means rotating one account.
+  - Connect **over TLS on the submission port** (587 with STARTTLS, or 465 implicit TLS) so the
+    password is never sent in cleartext. This matters more than the choice of secret.
+  - The password is a Kubernetes Secret (plan 0002), never in the image or repo. No rotation is
+    required, though it stays rotatable at no cost.
+  - Password auth is the right fit here; the alternatives do not apply (XOAUTH2 is only for
+    Gmail/Microsoft 365 mailboxes, which this is not). If deliverability ever becomes the
+    problem rather than auth, the upgrade is a transactional provider (Postmark/Mailgun/SES) with
+    an API key, which is the third party being avoided for now.
+  - **Deliverability, not auth, is the real risk**: `ichirokuxvi.com` needs SPF, DKIM, and DMARC
+    DNS records or confirmation emails land in spam regardless of how the server authenticated.
+    Recorded as a required setup step.
+  - Note: "the email will not use a token" is read as this delivery detail (SMTP, no API token).
+    If it instead means the verification should be a short numeric **code** the user types rather
+    than a tokenized link, the `EmailVerification` record is unchanged and only the transport of
+    the secret changes. Flagged for confirmation, not blocking.
 - The confirmation email is localized to the user's locale (0004 section 12).
 
 ### 4.3 Login
