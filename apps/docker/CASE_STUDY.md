@@ -97,13 +97,68 @@ rebuild unless their own files change.
 ## Dockerfiles
 
 **Q: How is an Angular app containerized (multi-stage build → static serve via nginx)? Walk through a per-app Dockerfile.**
-A:
+A: Right now all the Angular apps share the same Dockerfile structure, but I keep a separate
+Dockerfile per app because it might differ at some point, especially if I add apps that are
+not Angular. The shape is a multi-stage build with the builder: build the app in the builder
+stage, then copy the result into an nginx static serve image. I am serving statically through
+nginx because it was the simplest and most common way I found to serve the app to the reverse
+proxy. I have not researched http servers much beyond that.
+
+> Note (Claude): Confirmed. Stage 1 is `FROM …/nx-portfolio/builder:${BUILDER_TAG}` and runs
+> `npx nx build ${NX_APP} --configuration=${NODE_ENV}`. Stage 2 is
+> `FROM …/nx-portfolio/local-http-server:${BUILDER_TAG}` and copies `/app/dist/apps/${NX_APP}`
+> into `/var/www/html/`, then `CMD ["nginx", "-g", "daemon off;"]`. `BUILDER_TAG` selects the
+> tag for both base images, so a dev build uses the `:dev` builder and server. The static nginx
+> config (baked into `local-http-server`) does two things worth calling out for module
+> federation: it adds `Access-Control-Allow-Origin: *` on static assets (the shell loads each
+> remote's files cross origin) and declares the `.mjs` MIME type, plus the usual Angular SPA
+> fallback (`try_files $uri $uri/ /index.html`).
 
 **Q: The `type:static-docker` vs `type:dynamic-docker` tags — what's the distinction and how does CI use it?**
-A:
+A: (Answered in the generator question above.) The split tells CI which docker apps need a
+rebuild even when the app's own files were not modified, because they bake in files from other
+projects. The builder is `dynamic-docker` (it has all the project code, so it rebuilds on every
+deploy); the others are `static-docker` and only need a rebuild when their own files change.
+
+> Note (Claude): In CI this maps to two paths. The builder (`type:dynamic-docker`) is built
+> unconditionally at the top of every run; the `static-docker` apps (`certbot`, `reverse-proxy`,
+> `local-http-server`) go through the normal Nx `affected` query and are built only when changed.
+> See the generator answer for whether the builder rebuild can be made cheaper.
 
 **Q: The `builder`, `reverse-proxy`, `certbot`, `local-http-server` docker apps — what does each do?**
-A:
+A: **Builder** has all of the project code, compiles every app and can also run the tests. I
+made it so I did not need to install packages and dependencies multiple times.
+
+**Reverse proxy** is an nginx that redirects each request to the correct Angular app, since each
+app has its own container with its own nginx. It is the piece that links all the apps in one
+place, and it is configured from a Helm template so the routing is built dynamically from the
+values set in Helm.
+
+**Certbot** issues the TLS certificates and is wired together with the reverse proxy so they work
+as a pair.
+
+**Local http server** is the base for the static serve on the Angular apps. It is a small wrapper
+around `nginx:latest` that clears the default html folder and swaps in the correct nginx config
+for serving an Angular app.
+
+> Note (Claude): Details behind each. **Builder** is `FROM node:22`; it copies every
+> `package*.json` first (`COPY --parents`, the `dockerfile:1-labs` syntax) and runs
+> `npm ci --legacy-peer-deps` before `COPY . .`, so the expensive dependency layer is cached
+> until the lockfile changes. It is the single toolchain image every app build and the CI test
+> step run FROM. **Reverse-proxy**'s image is literally just `FROM nginx:latest`; it ships no
+> config of its own, the routing comes entirely from the Helm template mounted at runtime.
+> **Local-http-server** is `FROM nginx:latest`, `rm -rf` of the default html, and copies in
+> `nginx-static-app.conf` (the CORS + `.mjs` + SPA-fallback config above). **Certbot** is the
+> official `certbot/certbot` image plus `docker-cli`; `entrypoint.sh` requires a `DOMAINS` env
+> and issues each cert with the webroot HTTP-01 challenge (`certbot certonly --webroot -w
+> /var/www/certbot`), retrying with backoff (five 3-minute retries, then every 15 minutes, cap
+> 100) because ACME can fail transiently. It then enters a `certbot renew` loop every 12 hours.
+> The key detail: certbot runs as a **sidecar in the same pod** as the reverse-proxy nginx, so
+> it reloads nginx with `pkill -HUP nginx` and they share two volumes: `/var/www/certbot` (where
+> nginx serves the ACME challenge) and `/certs` (where `deploy-hook.sh` copies `fullchain.pem` →
+> `<domain>.crt` and `privkey.pem` → `<domain>.key` for nginx to read). The `docker-cli` in the
+> image is for the local `compose.yml` path, where the reload goes through Docker instead of a
+> shared process namespace.
 
 ## CI/CD (`.github/workflows/docker-ci.yml`)
 
