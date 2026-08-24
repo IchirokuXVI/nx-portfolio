@@ -42,7 +42,7 @@ Three GitHub Actions workflows, one per boundary:
 | Workflow | Trigger | Does |
 | --- | --- | --- |
 | **`pr.yml`** | PR into `main` or `dev` | lint + unit-test the affected projects (against the PR's target branch). Fast pre-merge feedback. |
-| **`docker-ci.yml`** | push to `main` | unit-test affected, build + push affected staging images, e2e them (`k8s/e2e/compose.yml`), deploy staging. |
+| **`docker-ci.yml`** | push to `main` | unit-test affected, build + push affected staging images, e2e them (`k8s/e2e/portfolio-frontend/compose.yml`), deploy staging. |
 | **`release.yml`** | GitHub Release published | test all apps, build + push all production images, deploy production. |
 
 **Testing model.** Tests run at every stage rather than once. The PR runs unit tests
@@ -68,7 +68,7 @@ push to main
   ├─ Build affected static-docker apps            (nx run-many -t build)
   ├─ Test affected apps inside the builder image  (nx run-many -t test)
   ├─ Build & push affected Angular apps           (nx run-many -t build:docker)
-  ├─ e2e the staging images                       (k8s/e2e/compose.yml — gates the deploy)
+  ├─ e2e the staging images                       (k8s/e2e/portfolio-frontend/compose.yml — gates the deploy)
   └─ Deploy: rsync k8s/ to the host + `helm upgrade`
 ```
 

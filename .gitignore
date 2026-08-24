@@ -34,6 +34,20 @@ yarn-error.log
 testem.log
 /typings
 
+# Local dev config/secrets (Luna Shopper). The tracked .env.development /
+# .env.production only hold NODE_ENV; these git ignored files carry local runtime
+# config and secrets. Only the .example files are committed. See
+# apps/luna-shopper/.env.luna-shopper.example and each apps/luna-shopper/<svc>/.env.example.
+/.env
+/.env.local
+apps/luna-shopper/.env.luna-shopper
+apps/luna-shopper/*/.env
+# Local dev JWT keypair lives here (out of any .env); the dir is kept via .gitkeep.
+apps/luna-shopper/secrets/*
+!apps/luna-shopper/secrets/.gitkeep
+jwt.key
+jwt.pub
+
 # System Files
 .DS_Store
 Thumbs.db

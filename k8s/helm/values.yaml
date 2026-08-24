@@ -121,3 +121,180 @@ apps:
     image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
     host: mfe.staging.ichirokuxvi.com
     path: /landingV2
+
+# ---------------------------------------------------------------------------
+# Luna Shopper backend (plan 0002).
+#
+# Long running Node services (gateway, realtime, auth, core), their stateful
+# dependencies (two Postgres instances + NATS with JetStream) and the zero
+# downtime deploy config (rolling update with a readiness gate, graceful
+# shutdown, PodDisruptionBudgets). Kept out of the `apps` list above because the
+# shape differs: these carry env/secrets, health probes and PDBs, and only the
+# gateway and realtime are public (routed by the reverse proxy); auth and core
+# are internal (ClusterIP, reached over NATS and by the gateway).
+#
+# Disabled by default: turning it on requires the runtime Secrets to exist (see
+# k8s/helm/luna-shopper-secrets.md) and the api./rt. DNS records. Flip to true
+# once those are in place. Staging entries additionally honour `staging.enabled`.
+# ---------------------------------------------------------------------------
+lunaShopper:
+  enabled: false
+
+  imagePullPolicy: Always
+
+  # At least two replicas per service so a rolling update (maxUnavailable 0) and a
+  # PodDisruptionBudget (minAvailable 1) actually deliver zero downtime: one pod
+  # keeps serving while the other is replaced or its node is drained.
+  replicaCount: 2
+
+  # Zero downtime knobs (plan 0002, section 6). maxUnavailable 0 + maxSurge 1
+  # means a new pod must pass its readiness probe before an old one is removed.
+  rollout:
+    maxUnavailable: 0
+    maxSurge: 1
+  # Long enough for in flight requests to drain on SIGTERM before SIGKILL.
+  terminationGracePeriodSeconds: 30
+  # Node maintenance may never take the last replica of a service.
+  pdb:
+    minAvailable: 1
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Non secret config, rendered into a ConfigMap per environment. Secret values
+  # (DB URLs, JWT keys, OAuth secret, SMTP password) live in a separate, pre
+  # created Secret per environment; see luna-shopper-secrets.md.
+  config:
+    production:
+      natsUrl: nats://luna-shopper-nats:4222
+      logLevel: info
+      corsOrigins: https://ichirokuxvi.com
+      authJwtKid: prod-1
+      accessTokenTtl: 15m
+      refreshTokenTtl: 30d
+      googleClientId: ''
+      googleCallbackUrl: https://api.ichirokuxvi.com/auth/google/callback
+      smtpHost: ''
+      smtpPort: '587'
+      smtpUser: ''
+      mailFrom: Luna Shopper <no-reply@ichirokuxvi.com>
+      mailVerifyBaseUrl: https://ichirokuxvi.com/verify-email
+    staging:
+      natsUrl: nats://luna-shopper-nats:4222
+      logLevel: debug
+      corsOrigins: https://staging.ichirokuxvi.com
+      authJwtKid: staging-1
+      accessTokenTtl: 15m
+      refreshTokenTtl: 30d
+      googleClientId: ''
+      googleCallbackUrl: https://api.staging.ichirokuxvi.com/auth/google/callback
+      smtpHost: ''
+      smtpPort: '587'
+      smtpUser: ''
+      mailFrom: Luna Shopper (staging) <no-reply@staging.ichirokuxvi.com>
+      mailVerifyBaseUrl: https://staging.ichirokuxvi.com/verify-email
+
+  # Each backend service: one Deployment + Service (+ PDB). `routed` services get
+  # a reverse-proxy server block on `host`; the rest are ClusterIP only. `role`
+  # drives which env vars (and thus which secret keys) the pod receives, so only
+  # the auth pod ever sees the JWT private key. Images are the tag-less repo path;
+  # the tag comes from productionImageTag/stagingImageTag like the apps above.
+  services:
+    # Production
+    - name: luna-shopper-gateway
+      role: gateway
+      env: production
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-gateway
+      port: 3000
+      routed: true
+      host: api.ichirokuxvi.com
+      websocket: false
+    - name: luna-shopper-realtime
+      role: realtime
+      env: production
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-realtime
+      port: 3001
+      routed: true
+      host: rt.ichirokuxvi.com
+      websocket: true
+    - name: luna-shopper-auth
+      role: auth
+      env: production
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-auth
+      port: 3002
+      routed: false
+    - name: luna-shopper-core
+      role: core
+      env: production
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-core
+      port: 3003
+      routed: false
+    # Staging
+    - name: luna-shopper-gateway-staging
+      role: gateway
+      env: staging
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-gateway
+      port: 3000
+      routed: true
+      host: api.staging.ichirokuxvi.com
+      websocket: false
+    - name: luna-shopper-realtime-staging
+      role: realtime
+      env: staging
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-realtime
+      port: 3001
+      routed: true
+      host: rt.staging.ichirokuxvi.com
+      websocket: true
+    - name: luna-shopper-auth-staging
+      role: auth
+      env: staging
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-auth
+      port: 3002
+      routed: false
+    - name: luna-shopper-core-staging
+      role: core
+      env: staging
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-core
+      port: 3003
+      routed: false
+
+  # Stateful dependencies. Two Postgres instances (auth owns one, core the other,
+  # so the no shared database rule holds) and one NATS server with JetStream on a
+  # persistent volume so streams survive a restart. Production and staging share
+  # these instances but use separate logical databases / stream prefixes via the
+  # per environment Secret; fully separate instances per environment is a later
+  # refinement. The postgres password comes from each instance's pre created
+  # Secret (see luna-shopper-secrets.md).
+  postgres:
+    image: postgres:16-alpine
+    storageClassName: local-path
+    storageSize: 2Gi
+    instances:
+      - name: luna-shopper-auth-db
+        database: luna_auth
+        user: luna_auth
+        secret: luna-shopper-auth-db-secret
+      - name: luna-shopper-core-db
+        database: luna_core
+        user: luna_core
+        secret: luna-shopper-core-db-secret
+
+  nats:
+    image: nats:2.10-alpine
+    storageClassName: local-path
+    storageSize: 1Gi
+
+  # Database migrations on deploy (plan 0002, section 5 and 6): a Helm pre upgrade
+  # Job per stateful service runs that service's `migration:run` before new pods
+  # take traffic, never on app boot / synchronize. Disabled until the services
+  # ship a migration entrypoint (TypeORM lands in plan 0005+); flip on then.
+  migrations:
+    enabled: false
+    # Command the Job runs inside the service image once migrations exist.
+    command: ['node', 'migrate.js']

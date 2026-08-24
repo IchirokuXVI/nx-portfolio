@@ -15,7 +15,7 @@
       "skipFiles": ["<node_internals>/**"],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/apps/luna-shopper-gateway/dist/**/*.(m|c|)js",
+        "${workspaceFolder}/apps/luna-shopper/gateway/dist/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
     },
@@ -33,7 +33,7 @@
       "skipFiles": ["<node_internals>/**"],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/apps/luna-shopper-realtime/dist/**/*.(m|c|)js",
+        "${workspaceFolder}/apps/luna-shopper/realtime/dist/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
     },
@@ -51,7 +51,7 @@
       "skipFiles": ["<node_internals>/**"],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/apps/luna-shopper-auth/dist/**/*.(m|c|)js",
+        "${workspaceFolder}/apps/luna-shopper/auth/dist/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
     },
@@ -69,7 +69,7 @@
       "skipFiles": ["<node_internals>/**"],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/apps/luna-shopper-core/dist/**/*.(m|c|)js",
+        "${workspaceFolder}/apps/luna-shopper/core/dist/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
     }

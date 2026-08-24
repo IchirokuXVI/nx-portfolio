@@ -1,0 +1,17 @@
+{
+  "name": "luna-shopper-core",
+  "version": "0.0.1",
+  "private": true,
+  "comment": "Runtime dependency manifest for the container image. Development uses the single root package.json (plan 0003); this is the authoritative list of what the built service needs at runtime, so `nx prune` produces a pruned package.json + lockfile for a reproducible `npm ci` in the Dockerfile (plan 0002, section 3). Keep in sync with the imports the service actually uses.",
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/microservices": "^11.2.1",
+    "@nestjs/platform-express": "^11.0.0",
+    "joi": "^17.13.3",
+    "nats": "^2.29.3",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "~7.8.0"
+  }
+}

@@ -1,0 +1,87 @@
+# Luna Shopper local development stack (plan 0002, section 2).
+#
+# Dev only. It brings up the backing services the four Luna Shopper apps need so
+# they can be run locally with `nx serve luna-shopper-<svc>` against real
+# dependencies. It deliberately does NOT run the apps themselves: those are built
+# and served by Nx, which gives fast rebuilds and debugging.
+#
+# Run it from this folder (or point -f at it). nx serve runs from the workspace
+# root and reaches these on localhost, so the compose file's location does not
+# matter to the services:
+#
+#   docker compose -f k8s/e2e/luna-shopper-backend/compose.yml up -d
+#   cp .env.luna-shopper.example .env   # at the repo root; then fill in the keypair
+#   npx nx serve luna-shopper-auth      # and gateway / core / realtime
+#
+# There are two separate Postgres instances on purpose: auth and core each own a
+# private database and never share one, so the "no shared database" rule holds
+# even locally. Redis is intentionally absent for now (plan 0001, 2.4); it joins
+# this stack when the cache/backplane is introduced.
+
+name: luna-shopper
+
+services:
+  # Auth service database.
+  auth-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_auth
+      POSTGRES_PASSWORD: luna_auth
+      POSTGRES_DB: luna_auth
+    ports:
+      - '5432:5432'
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_auth']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Core service database. A separate instance (and a separate port) from auth.
+  core-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_core
+      POSTGRES_PASSWORD: luna_core
+      POSTGRES_DB: luna_core
+    ports:
+      - '5433:5432'
+    volumes:
+      - core-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_core']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Message broker with JetStream enabled from day one (durable streams, at least
+  # once delivery, replay). The store directory is a named volume so streams
+  # survive a restart, mirroring the persistent volume the cluster uses.
+  #   4222 client / 8222 monitoring
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command: ['-js', '-sd', '/data', '-m', '8222']
+    ports:
+      - '4222:4222'
+      - '8222:8222'
+    volumes:
+      - nats-data:/data
+
+  # Local SMTP catcher so confirmation emails are viewable without a real
+  # provider. Mailpit is the maintained drop in for Mailhog.
+  #   1025 SMTP / 8025 web UI (http://localhost:8025)
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+
+volumes:
+  auth-db-data:
+  core-db-data:
+  nats-data:

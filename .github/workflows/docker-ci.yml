@@ -198,7 +198,7 @@ jobs:
           npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}
 
       # ---------------------------------------------------------------------------
-      # e2e against the exact staging images that were just pushed. k8s/e2e/compose.yml
+      # e2e against the exact staging images that were just pushed. k8s/e2e/portfolio-frontend/compose.yml
       # stands up the shell + remotes behind a reverse proxy on the staging hostnames
       # (mirroring the Kubernetes topology), so the real staging shell — which bakes
       # the staging MFE host — is tested unchanged. Runs after the push and before the
@@ -235,7 +235,7 @@ jobs:
           # staging hostnames resolve to the local reverse proxy.
           echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
 
-          docker compose -f k8s/e2e/compose.yml up -d --pull always
+          docker compose -f k8s/e2e/portfolio-frontend/compose.yml up -d --pull always
 
           # Wait for the shell to answer through the proxy.
           for i in $(seq 1 45); do
@@ -271,7 +271,7 @@ jobs:
 
       - name: Tear down the staging e2e stack
         if: ${{ always() && steps.get-affected-e2e.outputs.projects != '' }}
-        run: docker compose -f k8s/e2e/compose.yml down -v || true
+        run: docker compose -f k8s/e2e/portfolio-frontend/compose.yml down -v || true
 
       - name: Set up SSH for deployment
         uses: webfactory/ssh-agent@v0.9.0

@@ -60,6 +60,16 @@ spec:
                   {{- end }}
                   {{- end }}
                 {{- end }}
+                {{- if .Values.lunaShopper.enabled }}
+                {{- range .Values.lunaShopper.services }}
+                  {{- if and .routed (or (ne .env "staging") $.Values.staging.enabled) }}
+                  {{- if not (hasKey $hosts .host) }}
+                    {{- $_ := set $hosts .host true }}
+                    {{ .host }}
+                  {{- end }}
+                  {{- end }}
+                  {{- end }}
+                {{- end }}
           volumeMounts:
           # To avoid renewing certificates every time the pod restarts
             - name: letsencrypt-data
