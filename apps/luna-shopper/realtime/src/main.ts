@@ -1,17 +1,20 @@
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { bootstrapPlatform } from '@portfolio/luna-shopper/platform';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app/app.module';
 import type { RealtimeConfig } from './app/config/app-config';
 
 /**
  * Dedicated realtime server. It holds the client WebSocket/SSE connections and
  * fans out domain events it consumes from the broker. The socket.io gateway and
- * its NATS subscriptions are built in plan 0009; here it only boots an HTTP app
- * (which also carries the socket server once it exists) and answers /health.
+ * its NATS subscriptions are built in plan 0009; here it boots an HTTP app (which
+ * also carries the socket server once it exists) with the platform conventions
+ * (plan 0004): pino logging, the correlation context, the exception filter and
+ * graceful shutdown.
  */
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
   const config = app.get(ConfigService).getOrThrow<RealtimeConfig>('realtime');
 
@@ -19,17 +22,15 @@ async function bootstrap() {
     app.enableCors({ origin: config.corsOrigins, credentials: true });
   }
 
-  // Graceful shutdown (plan 0002, section 6). On SIGTERM the pod stops accepting
-  // new sockets and closes cleanly; socket.io clients auto reconnect to a
-  // healthy pod, so a rolling update drops no sessions.
-  app.enableShutdownHooks();
+  // pino logging, correlation middleware and shutdown hooks. On SIGTERM readiness
+  // flips to not ready so clients reconnect elsewhere and no session is dropped.
+  bootstrapPlatform(app);
 
   await app.listen(config.port);
 
-  Logger.log(
-    `luna-shopper-realtime listening on http://localhost:${config.port}`,
-    'Bootstrap'
-  );
+  app
+    .get(Logger)
+    .log(`luna-shopper-realtime listening on http://localhost:${config.port}`);
 }
 
 bootstrap();

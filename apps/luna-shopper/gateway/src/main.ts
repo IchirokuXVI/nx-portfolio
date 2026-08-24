@@ -1,17 +1,23 @@
-import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import {
+  bootstrapPlatform,
+  setupSwagger,
+} from '@portfolio/luna-shopper/platform';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app/app.module';
 import type { GatewayConfig } from './app/config/app-config';
 
 /**
- * Public HTTP entry point. Request logging, error envelopes, API versioning and
- * Swagger are layered on in plan 0004; the broker request/reply wiring to auth
- * and core lands with the service plans. For now it boots, validates its config
- * and answers /health.
+ * Public HTTP entry point. The platform conventions (plan 0004) supply request
+ * logging, the correlation context, the problem+json error envelope, URI API
+ * versioning and graceful shutdown; Swagger documents the public surface. The
+ * broker request/reply wiring to auth and core lands with the service plans.
  */
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Buffer logs until the pino logger is installed, so early boot lines share the
+  // same structured format instead of Nest's default console logger.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
   const config = app.get(ConfigService).getOrThrow<GatewayConfig>('gateway');
 
@@ -19,17 +25,20 @@ async function bootstrap() {
     app.enableCors({ origin: config.corsOrigins, credentials: true });
   }
 
-  // Graceful shutdown (plan 0002, section 6): on SIGTERM Nest runs shutdown
-  // hooks, stops taking new work and closes broker/DB connections before exit,
-  // so a rolling update drains in flight requests instead of dropping them.
-  app.enableShutdownHooks();
+  // pino logging, correlation middleware, URI versioning and shutdown hooks.
+  bootstrapPlatform(app, { versioning: true });
+
+  setupSwagger(app, {
+    title: 'Luna Shopper API',
+    description: 'Public API for the Luna Shopper shared shopping lists.',
+    path: 'docs',
+  });
 
   await app.listen(config.port);
 
-  Logger.log(
-    `luna-shopper-gateway listening on http://localhost:${config.port}`,
-    'Bootstrap'
-  );
+  app
+    .get(Logger)
+    .log(`luna-shopper-gateway listening on http://localhost:${config.port}`);
 }
 
 bootstrap();

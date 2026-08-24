@@ -100,6 +100,9 @@
       ],
       "@portfolio/luna-shopper/contracts": [
         "./libs/luna-shopper/contracts/src/index.ts"
+      ],
+      "@portfolio/luna-shopper/platform": [
+        "./libs/luna-shopper/platform/src/index.ts"
       ]
     }
   },

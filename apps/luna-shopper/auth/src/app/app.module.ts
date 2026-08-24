@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import {
+  PlatformHealthModule,
+  PlatformModule,
+} from '@portfolio/luna-shopper/platform';
 import { authConfiguration, authValidationSchema } from './config/app-config';
-import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
@@ -17,7 +20,11 @@ import { HealthController } from './health/health.controller';
       validationSchema: authValidationSchema,
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
+    // Platform conventions (plan 0004): pino logging, correlation context and the
+    // global exception filter, which here also guards the NATS message surface.
+    PlatformModule.forRoot({ serviceName: 'luna-shopper-auth' }),
+    // Liveness/readiness on the small HTTP health port (plan 0004, section 6).
+    PlatformHealthModule.forRoot(),
   ],
-  controllers: [HealthController],
 })
 export class AppModule {}
