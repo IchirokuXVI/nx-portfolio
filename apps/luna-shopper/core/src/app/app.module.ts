@@ -14,6 +14,7 @@ import {
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
 import { CORE_ENTITIES } from './entities';
+import { ListsModule } from './lists/lists.module';
 import { ZonesModule } from './zones/zones.module';
 
 @Module({
@@ -40,6 +41,7 @@ import { ZonesModule } from './zones/zones.module';
       }),
     }),
     ZonesModule,
+    ListsModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({
       readiness: {

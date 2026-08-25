@@ -18,6 +18,7 @@ import {
   gatewayConfiguration,
   gatewayValidationSchema,
 } from './config/app-config';
+import { GatewayListsModule } from './lists/lists.module';
 import { GatewayZonesModule } from './zones/zones.module';
 
 @Module({
@@ -69,6 +70,8 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayAuthModule,
     // Zone + membership endpoints (plan 0006).
     GatewayZonesModule,
+    // Shopping list / line / comment endpoints (plan 0007).
+    GatewayListsModule,
   ],
   providers: [
     // The throttler guard runs globally; open endpoints opt into a named bucket.

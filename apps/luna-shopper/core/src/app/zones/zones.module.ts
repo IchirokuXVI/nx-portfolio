@@ -40,5 +40,8 @@ import { ZoneService } from './zone.service';
     ZoneAuthzService,
     CoreEventsPublisher,
   ],
+  // Exported so the lists slice (plan 0007) reuses membership resolution and the
+  // event publisher rather than re-implementing them.
+  exports: [ZoneAuthzService, CoreEventsPublisher],
 })
 export class ZonesModule {}
