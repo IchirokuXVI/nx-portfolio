@@ -7,7 +7,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   getRequestContext,
-  THROTTLE_BUCKETS,
+  THROTTLE_LIMITS,
 } from '@portfolio/luna-shopper/platform';
 import { NatsClient } from '../messaging/nats-client';
 import {
@@ -32,7 +32,7 @@ export class AuthController {
   constructor(private readonly nats: NatsClient) {}
 
   @Post('register')
-  @Throttle({ [THROTTLE_BUCKETS.registration]: {} })
+  @Throttle(THROTTLE_LIMITS.registration)
   register(@Body() dto: RegisterDto): Promise<AuthTokens> {
     return this.nats.send(AUTH_PATTERNS.register, {
       ...dto,
@@ -41,13 +41,13 @@ export class AuthController {
   }
 
   @Post('login')
-  @Throttle({ [THROTTLE_BUCKETS.login]: {} })
+  @Throttle(THROTTLE_LIMITS.login)
   login(@Body() dto: LoginDto): Promise<AuthTokens> {
     return this.nats.send(AUTH_PATTERNS.login, dto);
   }
 
   @Post('verify-email')
-  @Throttle({ [THROTTLE_BUCKETS.verifyResend]: {} })
+  @Throttle(THROTTLE_LIMITS.verifyResend)
   verifyEmail(@Body() dto: VerifyEmailDto): Promise<{ userId: string }> {
     return this.nats.send(AUTH_PATTERNS.verifyEmail, dto);
   }

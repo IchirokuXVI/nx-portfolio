@@ -20,7 +20,7 @@ import {
   type ZonePage,
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
-import { THROTTLE_BUCKETS } from '@portfolio/luna-shopper/platform';
+import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
@@ -66,7 +66,7 @@ export class ZoneController {
 
   @Post()
   @UseGuards(OptionalJwtAuthGuard)
-  @Throttle({ [THROTTLE_BUCKETS.anonymousZone]: {} })
+  @Throttle(THROTTLE_LIMITS.anonymousZone)
   async create(
     @AuthUser() user: CurrentUser | undefined,
     @Body() dto: CreateZoneDto
@@ -82,7 +82,7 @@ export class ZoneController {
 
   @Post('join')
   @UseGuards(OptionalJwtAuthGuard)
-  @Throttle({ [THROTTLE_BUCKETS.anonymousZone]: {} })
+  @Throttle(THROTTLE_LIMITS.anonymousZone)
   async join(
     @AuthUser() user: CurrentUser | undefined,
     @Body() dto: JoinZoneDto
