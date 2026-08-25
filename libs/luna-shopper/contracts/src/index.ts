@@ -8,11 +8,13 @@ export * from './lib/pagination';
 // Enums
 export * from './lib/enums/auth.enums';
 export * from './lib/enums/list.enums';
+export * from './lib/enums/merge.enums';
 export * from './lib/enums/zone.enums';
 
 // Messages
 export * from './lib/messages/auth.messages';
 export * from './lib/messages/list.messages';
+export * from './lib/messages/merge.messages';
 export * from './lib/messages/zone.messages';
 
 // Events

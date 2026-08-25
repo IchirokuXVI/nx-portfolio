@@ -29,6 +29,12 @@ export enum RealtimeEvent {
   LineReordered = 'line.reordered',
   LineDeleted = 'line.deleted',
   CommentAdded = 'comment.added',
+
+  // Account merge (plan 0008). `MergeApproved` also implies a `MemberKicked` for
+  // the source membership, emitted alongside it.
+  MergeRequested = 'merge.requested',
+  MergeApproved = 'merge.approved',
+  MergeRejected = 'merge.rejected',
 }
 
 /**
