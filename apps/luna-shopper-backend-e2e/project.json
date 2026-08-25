@@ -7,6 +7,8 @@
   "// e2e": "The suite drives the gateway's public REST surface and the realtime SSE channel through whole flows (plan 0010, section 1). Infrastructure and the four services are brought up externally via k8s/e2e/luna-shopper-backend (luna-slot.sh + docker compose + nx serve), so playwright.config.ts has NO webServer and dependsOn is [] — the suite skips itself when the gateway is not reachable.",
   "targets": {
     "e2e": {
+      "// ": "Uncached on purpose (plan 0015): the result depends on a live stack, the E2E_* URLs and LUNA_REQUIRE_STACK, none of which Nx hashes. A replayed cache entry would report a pass without a single request leaving the machine — the same green-check-proving-nothing this plan exists to stop.",
+      "cache": false,
       "dependsOn": []
     }
   }

@@ -124,11 +124,47 @@ parallel everywhere (strategy 2's free lane), and only spin up a worker slot
 Reserve simultaneous worker slots (1, 2, 3) for the final cross-worktree
 integration pass — all still clear of your slot 0.
 
+## One command per suite
+
+The sequence above (compose up, wait, migrate, run, tear down) is wrapped by the
+stack targets from plan 0015, and those honour `.env.slot` — so once this worktree
+is on a slot, they run its isolated copy with no extra flags:
+
+```sh
+npx nx run luna-shopper-backend:test-integration:stack
+npx nx run luna-shopper-backend:e2e:stack
+```
+
+`e2e:stack` also builds and starts the five services, polls `/health/ready` on
+each, and points the Playwright suite at **this slot's** gateway and realtime
+ports. That last part matters: left to its defaults the suite talks to
+`:3000/:3001`, which from a slotted worktree is either nothing (so it skips itself
+and reports a green run that tested nothing) or your own slot 0 stack.
+
+The service lifecycle is `k8s/e2e/luna-shopper-backend/run-services.sh`, usable on
+its own if you want the services without the suite:
+
+```sh
+bash k8s/e2e/luna-shopper-backend/run-services.sh start   # build, launch, health gate
+bash k8s/e2e/luna-shopper-backend/run-services.sh logs    # tail every service log
+bash k8s/e2e/luna-shopper-backend/run-services.sh stop    # SIGTERM, so shutdown hooks run
+bash k8s/e2e/luna-shopper-backend/run-services.sh ports   # the ports it resolved
+```
+
 ## CI note
 
 CI runs one job at a time against a freshly created stack on its own machine, so
 it needs no slot (the reserved-slot-0 rule is only about not colliding with your
-local dev ports, which do not exist on a CI runner). Slots are a local-parallel
-convenience; nothing about them leaks into the images or the Helm chart. If CI
-ever runs Luna jobs concurrently on one runner, give each job a worker slot
-(≥ 1) via the same `--env-file` mechanism.
+local dev ports, which do not exist on a CI runner). It runs `luna-slot.sh 0` to
+get the service `.env` files and a throwaway JWT keypair, then deletes the
+`.env.slot` it wrote and namespaces the compose project per run id instead.
+
+Slots are a local-parallel convenience; nothing about them leaks into the images
+or the Helm chart. If CI ever runs Luna jobs concurrently on one runner, give each
+job a worker slot (≥ 1) via the same `--env-file` mechanism.
+
+The scripts CI runs are the ones in this directory, not a copy inlined into a
+workflow, so the CI path and the local path cannot drift apart. See
+`apps/luna-shopper-backend/docs/testing-strategy.md` for the two tiers and for
+`LUNA_REQUIRE_STACK`, which turns an intended skip into a failure wherever a stack
+was brought up on purpose.

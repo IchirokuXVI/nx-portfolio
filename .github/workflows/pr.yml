@@ -5,6 +5,14 @@ name: PR checks
 # always tested, which is what lets the staging and release workflows skip re-testing
 # the same code. For that guarantee to hold, protect both branches so this check is
 # required and cannot be bypassed (see k8s/README.md / the repo's branch rules).
+#
+# There are two jobs, and BOTH must be required checks:
+#
+#   verify        lint + unit/schema tests. Fast, needs no infrastructure.
+#   verify-infra  the Luna Shopper integration and e2e layers, against a stack the
+#                 job brings up itself (plan 0015). Skips itself entirely when no
+#                 Luna Shopper project is affected, so a pull request touching only
+#                 the Angular micro frontends pays nothing for it.
 on:
   pull_request:
     branches:
@@ -41,3 +49,165 @@ jobs:
         run: |
           npx nx affected -t lint test \
             --base=origin/${{ github.base_ref }} --head=HEAD
+
+  # ---------------------------------------------------------------------------
+  # Tier 1 of plan 0015: the infrastructure backed layers, on a stack this job
+  # creates and destroys. The services run as plain `node dist/.../main.js`
+  # processes rather than images, which is fast enough to block a merge on and
+  # covers everything except the image itself; the images are covered before the
+  # staging deploy by docker-ci.yml's tier 2.
+  #
+  # LUNA_REQUIRE_STACK is the whole point. Both suites are written to skip when no
+  # stack answers, which is right at a developer's keyboard and a lie here: this
+  # job brought a stack up on purpose, so an intended skip becomes a failure.
+  # ---------------------------------------------------------------------------
+  verify-infra:
+    runs-on: ubuntu-latest
+    env:
+      # A skip, an empty suite, or a stack that failed to come up all fail the job.
+      LUNA_REQUIRE_STACK: '1'
+      # Namespace the compose project per run, so a retried or overlapping run can
+      # never adopt a previous run's containers or volumes.
+      COMPOSE_PROJECT_NAME: luna-ci-${{ github.run_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      # Everything below is guarded on this. A pull request that touches no Luna
+      # Shopper project does no Docker work, installs no browsers, and finishes in
+      # the time `npm ci` takes.
+      - name: Which Luna Shopper projects are affected
+        id: affected
+        run: |
+          # --json, because `nx show projects` prints a JSON array rather than one
+          # name per line whenever stdout is not a TTY — which it never is here.
+          # Matching line by line against the pretty form silently finds nothing
+          # and skips the entire job, which is the failure this plan is about.
+          affected=$(npx nx show projects --affected --json \
+            --base=origin/${{ github.base_ref }} --head=HEAD \
+            | jq -r '.[]' | grep -E '^luna-shopper' || true)
+
+          integration=$(npx nx show projects --affected --with-target test-integration --json \
+            --base=origin/${{ github.base_ref }} --head=HEAD \
+            | jq -r '.[]' | grep -E '^luna-shopper' | paste -sd, - || true)
+
+          {
+            echo "any=$([ -n "$affected" ] && echo true || echo false)"
+            echo "integration=$integration"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Affected Luna Shopper projects:"
+          echo "${affected:-(none)}"
+          echo "With a test-integration target: ${integration:-(none)}"
+
+      # Writes every service .env and a throwaway JWT keypair. Reusing the slot
+      # script rather than spelling the variables out in the workflow keeps one
+      # definition of what a Luna Shopper service needs to boot. Slot 0 gives the
+      # default ports, which is what a runner with the machine to itself wants.
+      - name: Configure the service environment
+        if: steps.affected.outputs.any == 'true'
+        run: |
+          bash k8s/e2e/luna-shopper-backend/luna-slot.sh 0
+          # The slot file would pin COMPOSE_PROJECT_NAME back to the shared default;
+          # CI namespaces the project per run instead, and needs no slot.
+          rm -f k8s/e2e/luna-shopper-backend/.env.slot
+
+      - name: Resolve the Playwright version
+        if: steps.affected.outputs.any == 'true'
+        id: playwright
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # A cold browser download is a large fraction of this job's wall time, and
+      # the browser only changes when Playwright does, so key the cache on that.
+      - name: Cache Playwright browsers
+        if: steps.affected.outputs.any == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium
+        if: steps.affected.outputs.any == 'true'
+        run: npx playwright install --with-deps chromium
+
+      # Docker is on ubuntu-latest with no setup action, so this works directly.
+      # `up --wait` blocks on the healthchecks in compose.yml (including the NATS
+      # one plan 0015 added), so nothing downstream races a broker that is not
+      # listening yet. The script then applies each service's migrations.
+      - name: Bring the stack up
+        if: steps.affected.outputs.any == 'true'
+        run: bash k8s/e2e/luna-shopper-backend/stack.sh up
+
+      # `affected` narrows which services' integration suites run; the assertion
+      # then proves the ones that ran actually executed specs, so a testMatch typo
+      # cannot empty a suite and leave the pipeline green.
+      - name: Integration suites
+        if: steps.affected.outputs.integration != ''
+        env:
+          LUNA_INTEGRATION: '1'
+        run: |
+          npx nx run-many -t test-integration \
+            --projects "${{ steps.affected.outputs.integration }}"
+          node apps/luna-shopper-backend/tools/ci/assert-integration-ran.js \
+            "${{ steps.affected.outputs.integration }}"
+
+      # Builds the five services and polls /health/ready on each. On timeout it
+      # prints the tail of every service log, so a boot failure is diagnosable from
+      # this output alone.
+      - name: Start the five services
+        if: steps.affected.outputs.any == 'true'
+        run: bash k8s/e2e/luna-shopper-backend/run-services.sh start
+
+      # e2e is all or nothing: it exercises the whole system, so `affected` cannot
+      # meaningfully narrow it.
+      - name: End to end suite
+        if: steps.affected.outputs.any == 'true'
+        env:
+          E2E_GATEWAY_URL: http://localhost:3000
+          E2E_REALTIME_URL: http://localhost:3001
+          # Seed the demo world so the seeded specs can navigate by fixed ids. The
+          # snapshot/restore round trip stays off on its own: support/db.ts keys
+          # `isThrowawayStack()` off CI, which Actions always sets.
+          E2E_SEED: '1'
+        run: npx nx e2e luna-shopper-backend-e2e
+
+      # An infra backed suite that fails opaquely gets disabled within a month, so
+      # the diagnostics are part of the design, not an afterthought.
+      - name: Collect logs
+        if: ${{ always() && steps.affected.outputs.any == 'true' }}
+        run: |
+          mkdir -p test-output/luna-shopper-backend
+          docker compose -f k8s/e2e/luna-shopper-backend/compose.yml logs --no-color \
+            > test-output/luna-shopper-backend/compose.log 2>&1 || true
+          bash k8s/e2e/luna-shopper-backend/run-services.sh logs \
+            > test-output/luna-shopper-backend/services-tail.log 2>&1 || true
+
+      - name: Upload failure diagnostics
+        if: ${{ failure() && steps.affected.outputs.any == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: luna-shopper-verify-infra-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            test-output/luna-shopper-backend/
+            dist/.playwright/apps/luna-shopper-backend-e2e/
+
+      - name: Tear the stack down
+        if: ${{ always() && steps.affected.outputs.any == 'true' }}
+        run: |
+          bash k8s/e2e/luna-shopper-backend/run-services.sh stop || true
+          bash k8s/e2e/luna-shopper-backend/stack.sh down || true

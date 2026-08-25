@@ -7,7 +7,7 @@ import {
   ZONE_WEEKLY_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
 import { GATEWAY_URL } from '../playwright.config';
-import { gatewayReachable, seedingRequested } from './support/db';
+import { gateOnStack } from './support/db';
 
 /**
  * Navigation over the SEEDED demo world using the shared fixed ids (plan 0013,
@@ -16,7 +16,8 @@ import { gatewayReachable, seedingRequested } from './support/db';
  * be there, proving the seeder and the fixtures agree.
  *
  * Gated on E2E_SEED (global-setup only seeds then) AND a reachable gateway, so a
- * default run without seeding is a clean skip.
+ * default run without seeding is a clean skip. Under LUNA_REQUIRE_STACK the same
+ * gate fails instead of skipping (plan 0015, section 3.2).
  */
 
 /**
@@ -32,14 +33,7 @@ function rows<T = { id: string; name?: string }>(body: unknown): T[] {
 
 test.describe('Luna Shopper seeded demo world', () => {
   test.beforeAll(async () => {
-    test.skip(
-      !seedingRequested(),
-      'seeded suite runs only with E2E_SEED (global-setup seeds the demo world)'
-    );
-    test.skip(
-      !(await gatewayReachable()),
-      'gateway not reachable; bring up the stack (see parallel-worktree-testing.md)'
-    );
+    await gateOnStack({ seeded: true });
   });
 
   test('log in as the seeded owner and read the seeded zone and list', async () => {

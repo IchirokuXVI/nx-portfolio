@@ -48,6 +48,10 @@ apps/luna-shopper-backend/*/.env.test
 apps/luna-shopper-backend/.snapshots/
 # Per worktree compose slot file written by luna-slot.sh / luna-slot.ps1.
 k8s/e2e/luna-shopper-backend/.env.slot
+# Jest JSON summaries and per service logs from the stack targets (plan 0015);
+# CI reads them to prove the infra-backed suites actually executed, then uploads
+# them as failure artifacts. Nothing here is worth committing.
+/test-output
 # Local dev JWT keypair lives here (out of any .env); the dir is kept via .gitkeep.
 apps/luna-shopper-backend/secrets/*
 !apps/luna-shopper-backend/secrets/.gitkeep

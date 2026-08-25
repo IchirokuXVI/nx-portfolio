@@ -12,5 +12,8 @@ module.exports = {
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
   testMatch: ['**/*.integration.spec.ts'],
+  // Creates the directory the JSON summary is written into; Jest's --outputFile
+  // does not mkdir (plan 0015, section 3.3).
+  globalSetup: '<rootDir>/../tools/ci/ensure-summary-dir.js',
   coverageDirectory: '../../../coverage/apps/luna-shopper-backend/auth-integration',
 };

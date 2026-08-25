@@ -273,6 +273,80 @@ jobs:
         if: ${{ always() && steps.get-affected-e2e.outputs.projects != '' }}
         run: docker compose -f k8s/e2e/portfolio-frontend/compose.yml down -v || true
 
+      # ---------------------------------------------------------------------------
+      # Tier 2 of plan 0015: the Luna Shopper backend e2e suite against the five
+      # images that were just built and pushed, not against `node dist/...`.
+      #
+      # The pull request gate (pr.yml's verify-infra) already proved the
+      # application logic on this commit; what it could not prove is the image —
+      # entrypoint, non root user, the runtime dependency install, baked config,
+      # and SIGTERM reaching PID 1. Those images exist by this point in the job, so
+      # this costs the stack boot and the suite, not a rebuild.
+      #
+      # It runs BEFORE the helm upgrade, so a red suite stops the deploy and a
+      # broken image never reaches staging. That is what makes the staging deploy
+      # gated rather than optimistic.
+      # ---------------------------------------------------------------------------
+      - name: Are any Luna Shopper backend images affected
+        id: luna-affected
+        run: |
+          # `nx show projects` prints a JSON array when stdout is not a TTY and one
+          # name per line when it is, so the upstream output can arrive either as
+          # `a,b` or as `["a","b"]`. Strip the JSON punctuation before splitting so
+          # this reads the same list either way.
+          luna=$(echo "${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}" \
+            | tr -d '[]" ' | tr ',' '\n' | sed '/^$/d' \
+            | grep -E '^luna-shopper-backend-' | paste -sd, - || true)
+          echo "projects=$luna" >> "$GITHUB_OUTPUT"
+          echo "Affected Luna Shopper backend images: ${luna:-(none)}"
+
+      - name: Configure the Luna Shopper service environment
+        if: ${{ steps.luna-affected.outputs.projects != '' }}
+        run: |
+          # Writes the service .env files (which the migration CLI reads) and a
+          # throwaway JWT keypair the images mount. One definition of what a
+          # service needs to boot, shared with local development.
+          bash k8s/e2e/luna-shopper-backend/luna-slot.sh 0
+          rm -f k8s/e2e/luna-shopper-backend/.env.slot
+
+      - name: Luna Shopper e2e against the built images
+        if: ${{ steps.luna-affected.outputs.projects != '' }}
+        env:
+          # A skip, an empty suite, or a stack that fails to come up fails the job
+          # — and therefore blocks the deploy.
+          LUNA_REQUIRE_STACK: '1'
+          COMPOSE_PROJECT_NAME: luna-tier2-${{ github.run_id }}
+          LUNA_IMAGE_PREFIX: ghcr.io/${{ env.REPO_LOWERCASE }}
+          LUNA_IMAGE_TAG: staging
+          E2E_SEED: '1'
+        run: |
+          npx playwright install --with-deps chromium
+          # Pull all five at the staging tag: only the affected ones were rebuilt
+          # in this run, and the rest are the staging images currently deployed,
+          # which is exactly the combination about to be rolled out.
+          docker compose -f k8s/e2e/luna-shopper-backend/compose.yml \
+            -f k8s/e2e/luna-shopper-backend/compose.apps.yml pull
+          bash k8s/e2e/luna-shopper-backend/stack.sh e2e-images
+
+      - name: Upload Luna Shopper tier 2 diagnostics
+        if: ${{ failure() && steps.luna-affected.outputs.projects != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: luna-shopper-tier2-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            test-output/luna-shopper-backend/
+            dist/.playwright/apps/luna-shopper-backend-e2e/
+
+      - name: Tear down the Luna Shopper tier 2 stack
+        if: ${{ always() && steps.luna-affected.outputs.projects != '' }}
+        env:
+          COMPOSE_PROJECT_NAME: luna-tier2-${{ github.run_id }}
+        run: |
+          docker compose -f k8s/e2e/luna-shopper-backend/compose.yml \
+            -f k8s/e2e/luna-shopper-backend/compose.apps.yml down -v --remove-orphans || true
+
       - name: Set up SSH for deployment
         uses: webfactory/ssh-agent@v0.9.0
         with:

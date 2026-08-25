@@ -106,6 +106,9 @@
       ],
       "@portfolio/luna-shopper/test-fixtures": [
         "./libs/luna-shopper/test-fixtures/src/index.ts"
+      ],
+      "@portfolio/luna-shopper/test-fixtures/jest": [
+        "./libs/luna-shopper/test-fixtures/src/jest.ts"
       ]
     }
   },

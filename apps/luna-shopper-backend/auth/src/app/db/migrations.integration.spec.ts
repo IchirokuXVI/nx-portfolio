@@ -1,7 +1,10 @@
 import { UserKind } from '@portfolio/luna-shopper/contracts';
+import {
+  describeIntegration,
+  requiredEnv,
+} from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
 import { AUTH_ENTITIES, User } from '../entities';
-import { describeIntegration } from '../../test/infra-gate';
 
 /**
  * Real-Postgres integration test (plan 0010, section 1). Runs only with
@@ -17,7 +20,7 @@ describeIntegration('auth schema (real Postgres)', () => {
   beforeAll(async () => {
     dataSource = new DataSource({
       type: 'postgres',
-      url: process.env.AUTH_DB_URL,
+      url: requiredEnv('AUTH_DB_URL'),
       entities: AUTH_ENTITIES,
       synchronize: false,
     });

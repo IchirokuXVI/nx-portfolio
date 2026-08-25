@@ -1,7 +1,10 @@
 import { ZoneStatus } from '@portfolio/luna-shopper/contracts';
+import {
+  describeIntegration,
+  requiredEnv,
+} from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
 import { CORE_ENTITIES, Zone } from '../entities';
-import { describeIntegration } from '../../test/infra-gate';
 
 /**
  * Real-Postgres integration test (plan 0010, section 1). Runs only with
@@ -17,7 +20,7 @@ describeIntegration('core schema (real Postgres)', () => {
   beforeAll(async () => {
     dataSource = new DataSource({
       type: 'postgres',
-      url: process.env.CORE_DB_URL,
+      url: requiredEnv('CORE_DB_URL'),
       entities: CORE_ENTITIES,
       synchronize: false,
     });

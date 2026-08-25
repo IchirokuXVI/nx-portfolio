@@ -4,8 +4,40 @@
   "sourceRoot": "apps/luna-shopper-backend/tools",
   "projectType": "application",
   "tags": [],
-  "// ": "Umbrella project for the Luna Shopper backend (plan 0013). It has no build; it only hosts the cross-service test-data orchestrator targets (seed / db:snapshot / db:restore). The services themselves — luna-shopper-backend-auth, -core, -catalog, -gateway, -realtime — are their own nested projects under this directory. Pass args after `--`, e.g. `nx run luna-shopper-backend:db:snapshot -- --label initial`.",
+  "// ": "Umbrella project for the Luna Shopper backend (plans 0013, 0015). It has no build; it hosts the cross-service test-data orchestrator targets (seed / db:snapshot / db:restore) and the stack targets that wrap compose + migrations + a suite in one command. The services themselves — luna-shopper-backend-auth, -core, -catalog, -gateway, -realtime — are their own nested projects under this directory. Pass args after `--`, e.g. `nx run luna-shopper-backend:db:snapshot -- --label initial`.",
   "targets": {
+    "stack:up": {
+      "executor": "nx:run-commands",
+      "// ": "Plan 0015, section 4. Brings the compose stack up honoring .env.slot, waits on every healthcheck (`up --wait`, never a sleep), and runs migration:run for auth, core and catalog.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh up"
+      }
+    },
+    "stack:down": {
+      "executor": "nx:run-commands",
+      "// ": "Tears the stack down INCLUDING volumes, so nothing survives between runs.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh down"
+      }
+    },
+    "test-integration:stack": {
+      "executor": "nx:run-commands",
+      "// ": "stack:up, then run-many -t test-integration with LUNA_INTEGRATION=1, then stack:down in a guaranteed cleanup step — the suite's exit code survives the teardown. This is the same sequence CI runs.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh test-integration"
+      }
+    },
+    "e2e:stack": {
+      "executor": "nx:run-commands",
+      "// ": "stack:up, build and start the five services, gate on /health/ready, run the Playwright suite, then stop the services and tear the stack down whatever happened.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh e2e"
+      }
+    },
     "seed": {
       "executor": "nx:run-commands",
       "options": {

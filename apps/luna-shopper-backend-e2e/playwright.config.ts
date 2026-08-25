@@ -20,6 +20,12 @@ export const REALTIME_URL =
 
 export default defineConfig({
   ...nxE2EPreset(__filename, { testDir: './src' }),
+  // One retry in CI, not the preset's two (plan 0015, section 8). A broker hop
+  // and an SSE stream make a first attempt worth retrying once; a test that only
+  // passes on the third go is telling us something we should not paper over.
+  // Locally the preset's zero stands, so a flake is visible where it is cheapest
+  // to debug.
+  retries: process.env['CI'] ? 1 : 0,
   // The seed round trip (plan 0013, section 4). Both are no-ops unless E2E_SEED is
   // set and a stack is reachable, so the default suite is unchanged. Setup
   // optionally snapshots then seeds the demo world; teardown restores the snapshot

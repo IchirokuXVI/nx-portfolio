@@ -156,6 +156,19 @@ services:
       - '${LUNA_NATS_MONITOR_PORT:-8222}:8222'
     volumes:
       - nats-data:/data
+    # `docker compose up --wait` blocks on healthchecks, and it is what the stack
+    # targets and both CI tiers use instead of a sleep (plan 0015, section 4).
+    # Without a check here compose calls NATS started the moment the container
+    # runs, and a migration or a service can connect to a broker that is not
+    # listening yet — exactly the intermittent flake that gets a CI suite
+    # disabled. `/healthz` on the monitoring port is the broker's own answer to
+    # "am I ready"; wget is BusyBox's, from the alpine base.
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'wget --spider -q http://127.0.0.1:8222/healthz || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # Local SMTP catcher so confirmation emails are viewable without a real
   # provider. Mailpit is the maintained drop in for Mailhog.

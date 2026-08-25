@@ -24,3 +24,28 @@ insert the same canonical scenario through the real TypeORM repositories.
 There is deliberately **no `package.json`** (it matches the `contracts` and
 `platform` libraries): it is a workspace only, test only source library consumed
 through the `@portfolio/luna-shopper/test-fixtures` path alias.
+
+## The Jest entry point
+
+`@portfolio/luna-shopper/test-fixtures/jest` is a **second** entry point holding
+the infrastructure gate (plan 0015, section 3.1): `describeIntegration`, which
+decides whether a missing stack is a green skip or a red failure, and
+`requiredEnv`. It lives here because this is already the test only library every
+service may depend on, and one definition of that gate is the point — it replaced
+two identical per service copies.
+
+It is kept out of the package barrel on purpose: the gate reaches for Jest's
+globals, and the Playwright e2e suite imports the barrel for the fixed ids and has
+no `describe`. Import the gate from the `/jest` subpath, never from the barrel.
+
+```ts
+import {
+  describeIntegration,
+  requiredEnv,
+} from '@portfolio/luna-shopper/test-fixtures/jest';
+
+describeIntegration('core schema (real Postgres)', () => {
+  // runs with LUNA_INTEGRATION=1; skips without it; FAILS without it when
+  // LUNA_REQUIRE_STACK says CI brought a stack up on purpose.
+});
+```

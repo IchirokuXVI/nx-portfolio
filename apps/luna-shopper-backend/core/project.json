@@ -101,10 +101,14 @@
     },
     "test-integration": {
       "executor": "@nx/jest:jest",
+      "// ": "Uncached on purpose (plan 0015, section 3.3): the result depends on LUNA_INTEGRATION, LUNA_REQUIRE_STACK and the live database, none of which Nx hashes, so a replayed cache entry could report a pass from a run that skipped everything. The JSON summary is what CI reads to prove the suite actually executed specs.",
+      "cache": false,
       "options": {
         "jestConfig": "apps/luna-shopper-backend/core/jest.integration.config.cts",
         "runInBand": true,
-        "passWithNoTests": true
+        "passWithNoTests": true,
+        "json": true,
+        "outputFile": "test-output/luna-shopper-backend/integration/luna-shopper-backend-core.json"
       }
     },
     "migration:run": {

@@ -1,5 +1,6 @@
 import { expect, request, test } from '@playwright/test';
 import { GATEWAY_URL, REALTIME_URL } from '../playwright.config';
+import { gateOnStack } from './support/db';
 
 /**
  * The core collaborative flow end to end (plan 0010, section 1), against the
@@ -7,22 +8,13 @@ import { GATEWAY_URL, REALTIME_URL } from '../playwright.config';
  * internal port: create a zone and get a token, join and get approved, create a
  * list, add a line, and see the realtime `line.added` event arrive.
  *
- * Infra-gated: if the gateway is not reachable (no stack running) the whole suite
- * skips, so it is a clean green no-op without `docker compose up` + the services.
+ * Infra-gated through the shared `gateOnStack` (plan 0015, section 3.1): if the
+ * gateway is not reachable the whole suite skips, so it is a clean green no-op
+ * without `docker compose up` + the services — and under LUNA_REQUIRE_STACK the
+ * same condition fails instead, because CI stood the stack up on purpose. This
+ * file used to carry its own copy of the probe; the one definition now lives in
+ * `support/db.ts`.
  */
-
-async function gatewayReachable(): Promise<boolean> {
-  try {
-    const ctx = await request.newContext();
-    const res = await ctx.get(`${GATEWAY_URL}/health/live`, {
-      timeout: 2000,
-    });
-    await ctx.dispose();
-    return res.ok();
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Read the SSE stream until a `line.added` event arrives or the timeout fires.
@@ -84,10 +76,7 @@ async function waitForLineAdded(
 
 test.describe('Luna Shopper core flow', () => {
   test.beforeAll(async () => {
-    test.skip(
-      !(await gatewayReachable()),
-      'gateway not reachable; bring up the stack (see parallel-worktree-testing.md)'
-    );
+    await gateOnStack();
   });
 
   test('zone -> token -> approve -> list -> line -> realtime line.added', async () => {
