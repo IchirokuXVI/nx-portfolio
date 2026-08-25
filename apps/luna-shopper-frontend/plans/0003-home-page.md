@@ -33,7 +33,8 @@ Phone frames are 390 by 844. Five artboards:
 | Signed in (returning) | Registered user with groups and an active list. |
 | Guest account + pending group | Temporary user, plus a membership awaiting approval. |
 | Day theme (signed in) | The same signed in screen in the light theme. |
-| Empty / offline / error | Three phone frames: no groups yet, offline with queued changes, load failure. |
+| Velista mark and wordmark | The sailboat mark at 512, 64, 44, 30 and 16px, both lockups, and the outline variant. |
+| Empty / no connection / error | Three phone frames: no groups yet, connection lost, load failure. |
 
 **Phone only.** No desktop or tablet artboards are planned. Wide screens fall back to a
 centred column per `0002` section 8, which is a media query rather than a design.
@@ -55,18 +56,39 @@ be built until each has a defined appearance.
 | Guest | `UserKind.TEMPORARY` | Populated, plus the secure account banner |
 | Pending membership | A zone with `MembershipStatus.PENDING` | Dashed card, PENDING badge, no lists, not tappable through to content |
 | Needs attention | Caller is OWNER or ADMIN and a join request is waiting | Violet row inside the group card with a Review action |
-| Offline | No connectivity | Banner, cached content, queued change count, presence suppressed |
+| No connection | `navigator.onLine` is false, or a request fails with no network | **Blocking** full screen state, reloads itself when the connection returns. See 3.1 |
 | Error | Group load failed | Centred error state, retry, copyable correlation reference |
-| Group marked for deletion | `ZoneStatus.MARKED_FOR_DELETION` | **Not drawn yet.** See section 10. |
 
 Two notes on states that are easy to get wrong:
 
 - **Loading is not a spinner.** The user opens this in a shop. Skeletons that match the
   final layout keep the page from jumping when data lands, and the resume card should come
   from cache instantly where one exists.
-- **Offline is not an error.** The offline artboard deliberately keeps the primary action
-  enabled: creating a list works offline and queues. Only actions that genuinely cannot work
-  without the network, such as joining a zone by code, are disabled, and they say why.
+### 3.1 Connection loss, and why this one is a placeholder
+
+Decided by the user on 2026-08-25, and **explicitly temporary**. Losing the network shows a
+single blocking screen: "You have lost connection", one line telling the user the page will
+come back on its own, and a quiet Reload now button. When the connection returns, the app
+reloads itself. There is no offline queue, no cached content behind the screen, and no
+service worker. See `0001` section 8.
+
+- **Detection** is `navigator.onLine` plus the window `online` and `offline` events, reached
+  through the injectable browser facade rather than touched directly, so the standalone SSR
+  build keeps working. A failed request with no network also trips it, because
+  `navigator.onLine` reports the network interface, not whether the internet is reachable,
+  and a phone attached to a captive portal reports true while nothing works.
+- **The Reload now button is an addition**, not part of the brief. The automatic reload
+  depends on an event that does not always fire on a flapping mobile connection, and without
+  a manual way out the user is stuck on a dead screen. It is one quiet button, and it can be
+  dropped if it is unwanted.
+- **The reload must not fire while a dialog or an unsaved field is open**, or it discards
+  what someone typed. Wait until the user is idle on the blocking screen, which they are by
+  definition, and never reload a screen behind it.
+
+Worth stating once, since this plan is the record: **this is the weakest part of the
+design.** The product is a shopping list used in a supermarket, and this behaviour is at its
+worst exactly there. It is a deliberate simplification to get the app shipped, and it is the
+first thing the PWA work should replace. Nothing in this page's structure depends on it.
 
 ## 4. Anatomy
 
@@ -80,7 +102,7 @@ Top to bottom. Component names are provisional. All components live in
 | Live preview (anonymous) | `ListPreviewCardComponent` | Static illustrative list showing the three line states. Not real data |
 | Entry actions (anonymous) | `AuthActionsComponent` | Create, join, Google, email sign in, plus the "what is a zone" line |
 | Guest banner | `GuestUpgradeBannerComponent` | Violet attention treatment, two actions, no dismiss X |
-| Connection banner | `ConnectionBannerComponent` | Offline and reconnecting. Shared with every other page |
+| No connection screen | `ConnectionLostComponent` | Blocking, covers the page. Shared with every other page. See 3.1 |
 | Resume card | `ResumeListCardComponent` | Last opened list, progress, presence |
 | Zone list | `ZoneCardComponent` in a `ZoneListComponent` | Role badge, counts, attention row, nested list rows |
 | Bottom action bar | `BottomActionBarComponent` | Primary New list, secondary Join. Respects safe area insets |
@@ -224,9 +246,9 @@ Keys this page introduces:
 | `home.request.review` | Review |
 | `home.empty.title` | No groups yet |
 | `home.empty.body` | A group is the household or flatmates you share lists with. Start one, or join someone else's with their code. |
-| `home.offline.banner` | You are offline. Your changes are saved here and will sync when you are back. |
-| `home.offline.queued` | {{count}} changes waiting to sync |
-| `home.offline.noPresence` | Cannot show who is shopping while offline |
+| `connection.lost.title` | You have lost connection |
+| `connection.lost.body` | Check your wifi or mobile data. This page reloads on its own as soon as you are back. |
+| `connection.lost.reload` | Reload now |
 | `home.error.title` | We could not load your groups |
 | `home.error.body` | Something went wrong on our side. Nothing you saved has been lost. |
 | `home.error.retry` | Try again |
@@ -247,6 +269,8 @@ user facing word is **grupo**, and Spanish makes that more than a find and repla
   need checking at 320px width.
 - `home.presence.shopping` needs single and plural name forms in both languages rather than
   string concatenation, for the same reason.
+- The `connection.*` keys are **not** `home.*` on purpose: the blocking screen is shared by
+  every page, so its copy does not belong to this one.
 
 ## 7. Accessibility and input
 
@@ -277,7 +301,8 @@ user facing word is **grupo**, and Spanish makes that more than a find and repla
 - [ ] The guest banner appears for `UserKind.TEMPORARY` only, is dismissible, and does not
       reappear within the same session after dismissal.
 - [ ] Both themes are implemented and verified against the contrast floor in `0002`.
-- [ ] The page renders from cache and is interactive before the network settles.
+- [ ] Losing the network shows the blocking screen, and regaining it reloads the page
+      without discarding an open dialog or a field the user was typing into.
 - [ ] A realtime membership or list change updates the page without a manual refresh.
 - [ ] No product name string appears anywhere outside `APP_BRAND` and the translation files,
       and the app bar renders the neutral mark with no wordmark until a name exists.
@@ -306,6 +331,8 @@ Resolved since the mock was approved, kept here as a record:
 - ~~Where do product specific icons live?~~ **Decided: in this app's own ui library.** See
   `0002` section 9.
 - ~~Is a desktop layout needed?~~ **Decided: no.** Phone only, with a centred column fallback.
+- ~~What is the product called?~~ **Decided: Velista**, with the sailboat and paper sail mark.
+- ~~How is offline handled?~~ **Decided: minimally and temporarily.** See section 3.1.
 
 Still open:
 
@@ -313,13 +340,14 @@ Still open:
    and the strongest argument for the home page being the landing page, but it depends on
    device stored state plus per list counts. If the counts in section 5.2 are slow to land,
    the page still works without it.
-2. **Two states are not drawn yet**: a zone in `MARKED_FOR_DELETION`, which a user can hit
-   after an owner deletes their account, and the reconnecting state between offline and
-   online. Both need a treatment before the page is built.
+2. **The `MARKED_FOR_DELETION` group state is deliberately skipped for now** (user decision,
+   2026-08-25). A user can still reach it after an owner deletes their account, so the page
+   must not crash on it: render such a group as a plain, non tappable card until it gets a
+   real treatment. That is the whole requirement for this phase.
 3. **Does the anonymous state need more than one screen of marketing?** The mock is
    deliberately one screen with no scroll, on the theory that the entry actions matter more
    than persuasion. If this route is ever expected to rank in search, it needs real
    marketing content below the fold, and that pulls the SSR question in `0001` section 4.3
    forward.
-4. **The product name**, which gates the wordmark slot in the app bar and the hero. The page
-   is built to work without one, so this blocks nothing here.
+4. **Whether the Nx project is renamed to `velista`** before scaffolding. See `0001`
+   section 2. It does not change this page, only the paths it lives at.

@@ -17,18 +17,21 @@ plan with an approved mock before any of it is built** (see section 9).
 
 ## 2. Naming
 
-The product **has no name yet**. "Luna Shopper" is a discarded working title, kept only as
-an internal codename so that the directories and Nx project names line up with the backend.
-That constraint is load bearing and shapes several decisions below, so state it once here:
+The product is named **Velista** (decided 2026-08-25). It comes from *velero*, a sailing
+boat: a *velista* is the person sailing it. "Luna Shopper" is the discarded earlier working
+title and survives only as an internal codename in directory and Nx project names.
+
+Rule N1 stays in force even though the name is now settled, because its value was never
+only about this rename:
 
 > **Rule N1.** The product name must never be hardcoded in a component, a CSS token, a
 > route path, a class name, a translation key, or an asset filename. It appears only as
 > **values** in one brand configuration object and in the translation JSON files. Renaming
 > the product must be a change to data, never a refactor.
 
-Until a name exists, the app ships a neutral mark and **no wordmark text at all**. A
-stand-in name placed in an approved design tends to survive into production by inertia, so
-the slot stays visibly empty and `APP_BRAND.wordmarkSrc` fills it the day there is a name.
+The name has already changed once. Keeping it out of the code costs nothing and means a
+second change, or a different name per market, stays a data edit. It also keeps the
+codename and the product name from being confused for one another.
 
 ### 2.1 Rule N2: the UI says "group", the code says "zone"
 
@@ -65,6 +68,19 @@ Technical identifiers, which are internal and stay stable across a rename:
 | Library directory | `libs/luna-shopper-frontend/*` | See D5 |
 | Library alias | `@portfolio/luna-shopper-frontend/<lib>` | See D5 |
 | Dev port | **4205** | 4200 shell, 4201 landing, 4202 odontogram, 4203 damoclesSword, 4204 landingV2 |
+
+> **Decision needed before scaffolding: keep the `lunaShopper` codename, or rename the
+> project to `velista`?** The table above is written for the codename. Renaming the project
+> (`apps/velista`, `libs/velista/*`, MF name `velista`, alias `@portfolio/velista/*`) is
+> **free right now**, because not one file of this app exists yet, and it stops a discarded
+> name from being carried forever. The argument for keeping `lunaShopper` is symmetry with
+> `apps/luna-shopper-backend`, which is a much larger rename that nobody has asked for.
+>
+> These two never have to match: they are separate deployables, and the only thing they
+> share is `@portfolio/luna-shopper/contracts`. My recommendation is to **rename the
+> frontend to `velista` now** and leave the backend alone, accepting the asymmetry, because
+> the cost of this rename only goes up from here. Nothing else in this plan set depends on
+> the answer, so it is recorded here rather than blocking.
 
 ## 3. D1: ship as a shell remote now, as a standalone app later
 
@@ -188,8 +204,10 @@ scoped**, which the remote phase cannot satisfy:
 installable and not publishable**. Installability, offline support via a service worker,
 and store packaging move to the standalone phase and are out of scope for every plan in
 this set. What the remote phase **does** do is build the app so that turning those on is
-purely additive: a mobile first layout, touch sized targets, an offline tolerant data
-layer, and no assumption that the network is present. See D7.
+purely additive: a mobile first layout, touch sized targets, and every mutation funnelled
+through one place in `data-access` so an offline queue can be slotted in behind it without
+touching a component. See D6, which also covers the deliberately minimal, temporary
+handling of connection loss in the meantime.
 
 ## 6. D4: routing
 
@@ -289,10 +307,22 @@ Recorded here because every page plan depends on it. The detail belongs to the
 - **Concurrency.** The backend is last write wins with a `version` column for
   reconciliation. The UI updates optimistically and reconciles when the realtime event
   arrives, and must show when a change was overwritten by someone else.
-- **Offline.** No service worker in this phase, but the data layer is written as if there
-  will be one: queued mutations, an explicit connection state in the UI, and no screen that
-  breaks when a request is in flight or has failed. A shopping list is used in a
-  supermarket, where signal is bad. This is a product requirement, not a nicety.
+- **Connection loss: deliberately minimal, and temporary.** Decided by the user on
+  2026-08-25. There is **no offline queue, no background sync, no optimistic replay and no
+  service worker** in this phase. Losing the network shows **one blocking screen** saying
+  the connection is gone, and the app **reloads itself when the connection returns**.
+  Implementation is a `navigator.onLine` listener plus the `online` and `offline` window
+  events, both reached through the injectable browser facade rather than touched directly,
+  so the standalone SSR build keeps working.
+
+  Recorded plainly so it is not mistaken for a finished design: this is **weak for the
+  product's actual use case**, a shopping list used in a supermarket where signal is bad,
+  and a full screen block plus a reload can lose what someone was typing. It is a
+  placeholder chosen to get the app shipped, and it is the first thing the PWA work should
+  replace. Two constraints keep that door open at no cost now:
+  - Mutations still go through a single choke point in `data-access`, so a queue can be
+    added behind it later without touching a component.
+  - No screen may assume a request succeeds. Every mutation has a visible failure path.
 
 ## 9. How the page plans work
 
@@ -331,12 +361,8 @@ the mocks first.
 
 ## 11. Open questions
 
-1. **Product name.** Still being chosen. "Luna" is discarded for good. Everything is built
-   to survive naming it late (rule N1), and the design ships a neutral mark with no wordmark
-   in the meantime, so this blocks nothing until the app is published or submitted to a
-   store. The internal codename `lunaShopper` stays as the Nx project name so the frontend
-   and backend directories keep matching; it is not the product name and never reaches a
-   user.
+1. **Whether to rename the Nx project from `lunaShopper` to `velista`.** See the note in
+   section 2. Free now, expensive after scaffolding, and recommended.
 2. **Spanish and English only?** Assumed yes, matching landingV2 and the backend error
    catalog. Say so if a third locale is expected, because it changes nothing structurally
    but does change the translation workload per page.

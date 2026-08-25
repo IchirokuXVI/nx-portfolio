@@ -249,7 +249,48 @@ export interface AppBrand {
 export const APP_BRAND = new InjectionToken<AppBrand>('APP_BRAND');
 ```
 
+Current values:
+
+```ts
+{ name: 'Velista', shortName: 'Velista', wordmarkSrc: …, iconSrc: 'velista-app-icon.svg' }
+```
+
+### 5.0 The mark
+
+**Velista** comes from *velero*, a sailing boat. A *velista* is the person sailing it.
+
+The mark is a small sailboat carrying **one oversized sail that is a sheet of paper with
+handwriting on it**. The sail is the shopping list, and the list is what carries you along.
+It is drawn, not decorative: the sail is deliberately far too large for the hull so the
+paper reads first and the boat second.
+
+Three things about it are load bearing, and a redraw must keep them:
+
+- **The scribbles get longer as they go down**, following the sail widening toward the foot.
+  That is what makes them read as written lines rather than as hatching.
+- **The scribbles stop well short of the sail's trailing edge**, by roughly 1.4 to 1.9 units
+  in the 24 unit grid. Running them to the edge makes the sail look striped and hides the
+  curve. There is a comfortable margin at the mast side too.
+- **The foot of the sail curves.** A straight bottom edge reads as a flag; the curve reads
+  as paper.
+- **It degrades by dropping detail, not by shrinking it.** At 16px the three scribbles
+  become one bolder stroke, because three would merge into a smudge. See the brand artboard.
+
+Two assets, both in `apps/luna-shopper-frontend/plans/mocks/brand/`:
+
+| File | Use |
+| --- | --- |
+| `velista-app-icon.svg` | Full bleed amber tile with the boat in ink. App icon, favicon, install icon, store listing |
+| `velista-mark.svg` | Outline version in `currentColor`, two scribbles. For anywhere the amber tile is too loud |
+
+The tile version is **not** a `currentColor` icon: its scribbles are knocked out in the
+background colour, so it only works on its own amber tile. Anywhere the mark has to adopt
+the surrounding colour, use the outline version.
+
 ### 5.1 The rename procedure, written down now so it stays true
+
+The product has already been renamed once, from Luna Shopper to Velista, which is exactly
+why this is written down:
 
 1. Change the values in the single `AppBrand` provider.
 2. Replace the wordmark and icon asset files.
@@ -261,7 +302,8 @@ is a defect against rule N1 and it gets fixed rather than worked around.
 
 ### 5.2 What this forbids
 
-- No `.luna-*` CSS classes, no `LunaButton`, no `luna` in a token name or an asset filename.
+- No `.velista-*` CSS classes, no `VelistaButton`, no `velista` in a token name. The two
+  brand **asset files** are the one exception, since they are the identity itself.
 - No product name in a translation **key**. `home.title` is correct,
   `home.welcome-to-luna` is not.
 - No product name in a route path.
@@ -378,10 +420,10 @@ The split for this page and the ones after it:
 | --- | --- |
 | Reuse from `libs/shared/ui` | `arrow`, `calendar`, `close`, `download`, `edit`, `email`, `loading`, `save`, `trash`, `upload` |
 | Add to `libs/shared/ui` (product neutral) | `check`, `plus`, `minus`, `chevron`, `search`, `settings`, `filter`, `more`, `share`, `lock`, `copy` |
-| Add to `libs/luna-shopper-frontend/ui` (app specific) | `basket`, `list-lines`, `offline`, `presence-dot`, `member-add`, `google` |
+| Add to `libs/luna-shopper-frontend/ui` (app specific) | `brand-mark`, `list-lines`, `offline`, `presence-dot`, `member-add`, `google` |
 
 The boundary is a judgement call, so the test is: **would another app in this workspace
-plausibly use it?** A chevron yes, a shopping basket no. `google` sits in the app library
+plausibly use it?** A chevron yes, the Velista sailboat no. `google` sits in the app library
 because it is a third party brand mark tied to this app's sign in flow, not a UI primitive.
 
 ## 10. Component inventory

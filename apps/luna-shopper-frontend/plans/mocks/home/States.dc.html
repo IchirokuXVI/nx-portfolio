@@ -24,11 +24,19 @@
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; display: flex; flex-direction: column; overflow: hidden; border-radius: 4px;">
 
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-        <div style="display: flex; align-items: center;">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-label="App mark, placeholder until the product is named">
-            <rect x="2.5" y="2.5" width="19" height="19" rx="6" fill="#ffb454"/>
-            <path d="m7.8 12.4 2.9 2.9 5.5-6.2" stroke="#0a0c14" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+            <g transform="translate(-0.25 0.732) scale(0.98)">
+              <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+              <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+              <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+            </g>
           </svg>
+          <span style="font-family: 'Instrument Serif', Georgia, serif; font-size: 22px; line-height: 1;">Velista</span>
         </div>
         <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
       </div>
@@ -36,9 +44,12 @@
       <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 0 32px;">
         <div style="position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center;">
           <div style="position: absolute; inset: 0; border-radius: 999px; background: radial-gradient(circle, rgba(255,180,84,0.13) 0%, rgba(10,12,20,0) 70%);"></div>
-          <svg width="76" height="76" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="2.8" y="2.8" width="18.4" height="18.4" rx="5.8" stroke="#525a78" stroke-width="1.1" fill="rgba(255,255,255,0.02)"/>
-            <path d="m7.8 12.4 2.9 2.9 5.5-6.2" stroke="#525a78" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#525a78" aria-hidden="true">
+            <path d="M11.8 2.4V17" stroke-width="1.1" stroke-linecap="round"/>
+            <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" stroke-width="1.1" stroke-linejoin="round"/>
+            <path d="M12.9 8.4c.45-.4.92.4 1.37 0" stroke-width="0.9" stroke-linecap="round"/>
+            <path d="M13 10.9c.45-.42.9.42 1.35 0s.9.42 1.35 0" stroke-width="0.9" stroke-linecap="round"/>
+            <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" stroke-width="1.1" stroke-linejoin="round"/>
           </svg>
         </div>
         <div style="display: flex; flex-direction: column; gap: 9px; align-items: center;">
@@ -62,89 +73,52 @@
     </div>
   </div>
 
-  <!-- OFFLINE -->
+  <!-- NO CONNECTION -->
   <div style="display: flex; flex-direction: column; gap: 12px;">
-    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">OFFLINE &middot; cached data, queued changes</span>
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">NO CONNECTION &middot; temporary handling, reloads on its own</span>
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; display: flex; flex-direction: column; overflow: hidden; border-radius: 4px;">
 
-      <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px;">
-        <div style="display: flex; align-items: center;">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-label="App mark, placeholder until the product is named">
-            <rect x="2.5" y="2.5" width="19" height="19" rx="6" fill="#ffb454"/>
-            <path d="m7.8 12.4 2.9 2.9 5.5-6.2" stroke="#0a0c14" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+            <g transform="translate(-0.25 0.732) scale(0.98)">
+              <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+              <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+              <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+            </g>
           </svg>
+          <span style="font-family: 'Instrument Serif', Georgia, serif; font-size: 22px; line-height: 1;">Velista</span>
         </div>
         <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 10px; margin: 4px 20px 0; padding: 11px 13px; background: #1a1e2e; border: 1px solid rgba(255,255,255,0.11); border-radius: 12px;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;" aria-hidden="true">
-          <path d="M3 3.4 20.6 21"/>
-          <path d="M8.4 12.6a6 6 0 0 1 3.2-1.5M5 9.4a10.4 10.4 0 0 1 3.4-2.2M11.4 16.1a1.4 1.4 0 0 1 1.4 1.4"/>
-          <path d="M15.8 12.9c.5.3.9.6 1.3 1M19.2 9.5a10.6 10.6 0 0 0-6.9-2.9"/>
-        </svg>
-        <span style="flex: 1; font-size: 13px; line-height: 1.4; color: #c2c8db;">You are offline. Your changes are saved here and will sync when you are back.</span>
-      </div>
-
-      <div style="flex: 1; display: flex; flex-direction: column; gap: 18px; padding: 16px 20px 0; overflow: hidden;">
-        <div style="display: flex; flex-direction: column; gap: 9px;">
-          <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">PICK UP WHERE YOU LEFT OFF</span>
-          <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 15px 16px; display: flex; flex-direction: column; gap: 12px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0;">
-                <span style="font-size: 18px; font-weight: 600;">Weekly shop</span>
-                <span style="font-size: 12.5px; color: #6f7899;">Home &middot; 12 items</span>
-              </div>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <div style="height: 6px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
-                <div style="width: 58%; height: 100%; border-radius: 999px; background: #34d399;"></div>
-              </div>
-              <span style="font-size: 12px; color: #98a0bb;">7 of 12 ready</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 11px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); border-radius: 10px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="8.6"/><path d="M12 7.6V12l2.8 1.7"/>
-              </svg>
-              <span style="flex: 1; font-size: 12.5px; color: #98a0bb;">2 changes waiting to sync</span>
-            </div>
-          </div>
-        </div>
-
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-          <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">YOUR GROUPS</span>
-          <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 14px 15px; display: flex; flex-direction: column; gap: 10px;">
-            <div style="display: flex; align-items: center; gap: 11px;">
-              <span style="width: 38px; height: 38px; border-radius: 12px; background: #262b40; color: #ffc271; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">H</span>
-              <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
-                <div style="display: flex; align-items: center; gap: 7px;">
-                  <span style="font-size: 16px; font-weight: 600;">Home</span>
-                  <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #ffc271; background: rgba(255,180,84,0.09); border: 1px solid rgba(255,180,84,0.28); border-radius: 999px; padding: 2px 7px;">OWNER</span>
-                </div>
-                <span style="font-size: 12.5px; color: #6f7899;">3 members &middot; 2 lists</span>
-              </div>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,0.06);">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M19 20v-1.8a3.6 3.6 0 0 0-3.6-3.6H8.6A3.6 3.6 0 0 0 5 18.2V20"/><circle cx="12" cy="7.6" r="3.6"/>
-              </svg>
-              <span style="font-size: 12px; color: #525a78;">Cannot show who is shopping while offline</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 20px 22px; border-top: 1px solid rgba(255,255,255,0.07);">
-        <button type="button" style="flex: 1; height: 52px; border: none; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-          New list
-        </button>
-        <button type="button" style="width: 52px; height: 52px; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; background: transparent; cursor: not-allowed; display: flex; align-items: center; justify-content: center;" aria-label="Joining a group needs a connection" disabled>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3f4661" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="3.2" y="6.2" width="17.6" height="11.6" rx="2.6"/><path d="M7.6 12h1.6M11.2 12h1.6M14.8 12h1.6"/>
+      <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 0 32px;">
+        <span style="width: 68px; height: 68px; border-radius: 999px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center;">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 3.4 20.6 21"/>
+            <path d="M8.4 12.6a6 6 0 0 1 3.2-1.5"/>
+            <path d="M5 9.4a10.4 10.4 0 0 1 3.4-2.2"/>
+            <path d="M11.9 16.6h.01"/>
+            <path d="M15.8 12.9c.5.3.9.6 1.3 1"/>
+            <path d="M19.2 9.5a10.6 10.6 0 0 0-6.9-2.9"/>
           </svg>
+        </span>
+        <div style="display: flex; flex-direction: column; gap: 9px; align-items: center;">
+          <span style="font-size: 20px; font-weight: 600; color: #f7f8fc; text-align: center;">You have lost connection</span>
+          <p style="margin: 0; font-size: 14.5px; line-height: 1.5; color: #98a0bb; text-align: center; text-wrap: pretty;">Check your wifi or mobile data. This page reloads on its own as soon as you are back.</p>
+        </div>
+      </div>
+
+      <div style="padding: 0 20px 26px; display: flex; flex-direction: column; gap: 10px;">
+        <button type="button" style="height: 52px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20.4 12a8.4 8.4 0 1 1-2.5-6"/><path d="M20.4 4.2V10h-5.8"/>
+          </svg>
+          Reload now
         </button>
       </div>
     </div>
@@ -156,18 +130,26 @@
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; display: flex; flex-direction: column; overflow: hidden; border-radius: 4px;">
 
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-        <div style="display: flex; align-items: center;">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-label="App mark, placeholder until the product is named">
-            <rect x="2.5" y="2.5" width="19" height="19" rx="6" fill="#ffb454"/>
-            <path d="m7.8 12.4 2.9 2.9 5.5-6.2" stroke="#0a0c14" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+            <g transform="translate(-0.25 0.732) scale(0.98)">
+              <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+              <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+              <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+            </g>
           </svg>
+          <span style="font-family: 'Instrument Serif', Georgia, serif; font-size: 22px; line-height: 1;">Velista</span>
         </div>
         <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
       </div>
 
       <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 0 32px;">
-        <span style="width: 62px; height: 62px; border-radius: 999px; background: rgba(251,113,133,0.10); border: 1px solid rgba(251,113,133,0.26); display: flex; align-items: center; justify-content: center;">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <span style="width: 68px; height: 68px; border-radius: 999px; background: rgba(251,113,133,0.10); border: 1px solid rgba(251,113,133,0.26); display: flex; align-items: center; justify-content: center;">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 8.2v5"/><path d="M12 16.4h.01"/><circle cx="12" cy="12" r="9"/>
           </svg>
         </span>
