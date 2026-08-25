@@ -18,7 +18,12 @@
 # even locally. Redis is intentionally absent for now (plan 0001, 2.4); it joins
 # this stack when the cache/backplane is introduced.
 
-name: luna-shopper
+# The project name (container/network/volume namespace) is overridable so that
+# several git worktrees can each run a fully isolated copy of this stack at the
+# same time. Set COMPOSE_PROJECT_NAME (and the matching LUNA_*_PORT overrides)
+# to a per worktree "slot"; see parallel-worktree-testing.md. Left unset, every
+# default below reproduces the original single stack workflow unchanged.
+name: ${COMPOSE_PROJECT_NAME:-luna-shopper}
 
 services:
   # Auth service database.
@@ -30,7 +35,7 @@ services:
       POSTGRES_PASSWORD: luna_auth
       POSTGRES_DB: luna_auth
     ports:
-      - '5432:5432'
+      - '${LUNA_AUTH_DB_PORT:-5432}:5432'
     volumes:
       - auth-db-data:/var/lib/postgresql/data
     healthcheck:
@@ -48,7 +53,7 @@ services:
       POSTGRES_PASSWORD: luna_core
       POSTGRES_DB: luna_core
     ports:
-      - '5433:5432'
+      - '${LUNA_CORE_DB_PORT:-5433}:5432'
     volumes:
       - core-db-data:/var/lib/postgresql/data
     healthcheck:
@@ -66,8 +71,8 @@ services:
     restart: unless-stopped
     command: ['-js', '-sd', '/data', '-m', '8222']
     ports:
-      - '4222:4222'
-      - '8222:8222'
+      - '${LUNA_NATS_PORT:-4222}:4222'
+      - '${LUNA_NATS_MONITOR_PORT:-8222}:8222'
     volumes:
       - nats-data:/data
 
@@ -78,8 +83,8 @@ services:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - '1025:1025'
-      - '8025:8025'
+      - '${LUNA_SMTP_PORT:-1025}:1025'
+      - '${LUNA_MAILPIT_UI_PORT:-8025}:8025'
 
 volumes:
   auth-db-data:
