@@ -1,0 +1,33 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Anonymous (first open)" },
+    { "file": "Authenticated.dc.html", "x": 490, "y": 0, "w": 390, "h": 844, "title": "Signed in (returning)" },
+    { "file": "TemporaryAccount.dc.html", "x": 980, "y": 0, "w": 390, "h": 844, "title": "Guest account + pending zone" },
+    { "file": "DayTheme.dc.html", "x": 1470, "y": 0, "w": 390, "h": 844, "title": "Day theme (signed in)" },
+    { "file": "States.dc.html", "x": 0, "y": 1000, "w": 1330, "h": 970, "title": "Empty / offline / error" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -170,
+      "w": 430,
+      "text": "Home page, plan 0003.\nPhone frames are 390x844. The home route IS the landing page: anonymous visitors get the front door, signed in users get their zones.\nTop row is the Night theme. Bottom row covers empty, offline and error."
+    },
+    {
+      "id": "naming",
+      "x": 470,
+      "y": -170,
+      "w": 400,
+      "text": "\"Luna\" in the wordmark is a PLACEHOLDER. The product name is not decided. Nothing in the build encodes it: the name lives in one brand config plus the translation files, so a rename touches no component."
+    },
+    {
+      "id": "zone-copy",
+      "x": 940,
+      "y": -170,
+      "w": 420,
+      "text": "Open question on the artboards: \"zone\" is the backend's word and means nothing to a first time user. The mock keeps it and explains it in one line under the buttons. Worth deciding whether the UI says zone, group, or household."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}
