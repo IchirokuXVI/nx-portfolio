@@ -25,4 +25,13 @@ export class Zone extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   ownerUserId!: string | null;
+
+  /**
+   * When the zone was marked for deletion (plan 0011). Set together with
+   * `status = MARKED_FOR_DELETION` when its owner is deleted; the zone reaper
+   * removes zones whose marker is older than the grace period. Cleared when an
+   * admin claims ownership and the zone returns to ACTIVE.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  markedForDeletionAt!: Date | null;
 }

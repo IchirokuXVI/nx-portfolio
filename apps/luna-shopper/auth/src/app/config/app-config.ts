@@ -1,5 +1,6 @@
 import { registerAs } from '@nestjs/config';
 import * as Joi from 'joi';
+import { parseDurationMs } from '../tokens/duration';
 import { readKey } from './read-key';
 
 /**
@@ -57,6 +58,14 @@ export const authValidationSchema = Joi.object({
   MAIL_FROM: Joi.string().required(),
   MAIL_VERIFY_BASE_URL: Joi.string().uri().required(),
 
+  // Orphan temporary-user reaper (plan 0011, section 3). Deletes temporary users
+  // with no zone membership after a grace period; core is the authority on
+  // membership and answers the reconciliation query.
+  ORPHAN_REAPER_ENABLED: Joi.boolean().default(true),
+  ORPHAN_USER_GRACE: Joi.string().default('30d'),
+  ORPHAN_REAPER_INTERVAL: Joi.string().default('1h'),
+  ORPHAN_REAPER_BATCH: Joi.number().integer().min(1).default(200),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -87,6 +96,12 @@ export interface AuthConfig {
     pass: string;
     from: string;
     verifyBaseUrl: string;
+  };
+  reaper: {
+    enabled: boolean;
+    graceMs: number;
+    intervalMs: number;
+    batchSize: number;
   };
   logLevel: (typeof LOG_LEVELS)[number];
 }
@@ -122,6 +137,12 @@ export const authConfiguration = registerAs(
       pass: process.env.SMTP_PASS ?? '',
       from: process.env.MAIL_FROM as string,
       verifyBaseUrl: process.env.MAIL_VERIFY_BASE_URL as string,
+    },
+    reaper: {
+      enabled: process.env.ORPHAN_REAPER_ENABLED !== 'false',
+      graceMs: parseDurationMs(process.env.ORPHAN_USER_GRACE as string),
+      intervalMs: parseDurationMs(process.env.ORPHAN_REAPER_INTERVAL as string),
+      batchSize: Number(process.env.ORPHAN_REAPER_BATCH),
     },
     logLevel: process.env.LOG_LEVEL as AuthConfig['logLevel'],
   })

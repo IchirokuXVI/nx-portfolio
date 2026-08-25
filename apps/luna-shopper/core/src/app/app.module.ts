@@ -13,6 +13,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
+import { AccountModule } from './account/account.module';
 import { CORE_ENTITIES } from './entities';
 import { ListsModule } from './lists/lists.module';
 import { MergeModule } from './merge/merge.module';
@@ -46,6 +47,7 @@ import { ZonesModule } from './zones/zones.module';
     ListsModule,
     MergeModule,
     RealtimeAccessModule,
+    AccountModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({
       readiness: {

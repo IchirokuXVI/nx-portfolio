@@ -1,5 +1,6 @@
 import { registerAs } from '@nestjs/config';
 import * as Joi from 'joi';
+import { parseDurationMs } from './duration';
 import { readKey } from './read-key';
 
 /**
@@ -26,6 +27,14 @@ export const coreValidationSchema = Joi.object({
   CORE_DB_URL: Joi.string().required(),
   AUTH_JWT_PUBLIC_KEY: Joi.string(),
   AUTH_JWT_PUBLIC_KEY_FILE: Joi.string(),
+
+  // Zone reaper (plan 0011, section 3): deletes zones marked for deletion that
+  // are past the grace period with no owner claim, cascading their lists/lines.
+  ZONE_REAPER_ENABLED: Joi.boolean().default(true),
+  ZONE_DELETION_GRACE: Joi.string().default('7d'),
+  ZONE_REAPER_INTERVAL: Joi.string().default('1h'),
+  ZONE_REAPER_BATCH: Joi.number().integer().min(1).default(200),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -36,6 +45,12 @@ export interface CoreConfig {
   natsUrl: string;
   dbUrl: string;
   authJwtPublicKey: string;
+  reaper: {
+    enabled: boolean;
+    graceMs: number;
+    intervalMs: number;
+    batchSize: number;
+  };
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -49,6 +64,12 @@ export const coreConfiguration = registerAs(
       process.env.AUTH_JWT_PUBLIC_KEY,
       process.env.AUTH_JWT_PUBLIC_KEY_FILE
     ),
+    reaper: {
+      enabled: process.env.ZONE_REAPER_ENABLED !== 'false',
+      graceMs: parseDurationMs(process.env.ZONE_DELETION_GRACE as string),
+      intervalMs: parseDurationMs(process.env.ZONE_REAPER_INTERVAL as string),
+      batchSize: Number(process.env.ZONE_REAPER_BATCH),
+    },
     logLevel: process.env.LOG_LEVEL as CoreConfig['logLevel'],
   })
 );

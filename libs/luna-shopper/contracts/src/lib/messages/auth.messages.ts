@@ -24,6 +24,8 @@ export const AUTH_PATTERNS = {
   upgrade: 'auth.upgrade',
   /** Create or link an account from a verified Google profile. */
   googleLogin: 'auth.googleLogin',
+  /** Delete the authenticated user's account and all personal identity data. */
+  deleteAccount: 'auth.deleteAccount',
 } as const;
 
 export type AuthPattern = (typeof AUTH_PATTERNS)[keyof typeof AUTH_PATTERNS];
@@ -82,6 +84,25 @@ export interface UpgradeRequest {
   displayName?: string;
   google?: GoogleProfile;
   locale?: string;
+}
+
+/**
+ * Delete the authenticated user's account (plan 0011, section 1). `userId` is set
+ * by the gateway from the verified token, never the request body, so a caller can
+ * only ever delete themselves.
+ */
+export interface DeleteAccountRequest {
+  userId: string;
+}
+
+/** The outcome of a delete-account call. */
+export interface DeleteAccountResult {
+  userId: string;
+  /**
+   * True if this call performed the deletion; false if the user was already gone
+   * (the operation is idempotent, so a repeat is a clean no-op).
+   */
+  deleted: boolean;
 }
 
 /** A verified Google profile, resolved by the gateway's passport callback. */
