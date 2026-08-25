@@ -99,6 +99,14 @@
         "passWithNoTests": true
       }
     },
+    "test-integration": {
+      "executor": "@nx/jest:jest",
+      "options": {
+        "jestConfig": "apps/luna-shopper/core/jest.integration.config.cts",
+        "runInBand": true,
+        "passWithNoTests": true
+      }
+    },
     "migration:run": {
       "executor": "nx:run-commands",
       "options": {
