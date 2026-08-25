@@ -1,0 +1,18 @@
+// Token scope. Plan 0001's extraction contract, item 4: the app's tokens live on
+// its own root element, never on `:root`, so the portfolio shell's global styles
+// and this app's tokens cannot reach each other. On extraction this selector
+// becomes `:root` and nothing else changes.
+//
+// Plan 0002 fills this in: layer 1 primitives and the layer 2 semantic tokens the
+// Night and Day theme classes redefine. Deliberately empty until then rather than
+// guessed at, so the design system has exactly one source.
+:host {
+  display: block;
+  min-height: 100%;
+}
+
+.app-main {
+  // Phone first (plan 0001, D3): the layout starts at the small screen and every
+  // wider breakpoint is an addition, never the other way round.
+  display: block;
+}

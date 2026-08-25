@@ -116,6 +116,11 @@ apps:
     image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
     host: mfe.ichirokuxvi.com
     path: /landingV2
+  - name: velista
+    env: production
+    image: ghcr.io/ichirokuxvi/nx-portfolio/velista
+    host: mfe.ichirokuxvi.com
+    path: /velista
   # Staging - staging.ichirokuxvi.com
   - name: shell-staging
     env: staging
@@ -142,6 +147,11 @@ apps:
     image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
     host: mfe.staging.ichirokuxvi.com
     path: /landingV2
+  - name: velista-staging
+    env: staging
+    image: ghcr.io/ichirokuxvi/nx-portfolio/velista
+    host: mfe.staging.ichirokuxvi.com
+    path: /velista
 
 # ---------------------------------------------------------------------------
 # Luna Shopper backend (plan 0002).

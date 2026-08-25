@@ -19,6 +19,7 @@ export default composePlugins(async (config) => {
         ['odontogram', `${mfeBaseUrl}/odontogram`],
         ['damoclesSword', `${mfeBaseUrl}/damoclesSword`],
         ['landingV2', `${mfeBaseUrl}/landingV2`],
+        ['velista', `${mfeBaseUrl}/velista`],
       ],
     },
     { dts: false }

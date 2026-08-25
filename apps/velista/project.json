@@ -1,0 +1,138 @@
+{
+  "name": "velista",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "prefix": "app",
+  "sourceRoot": "apps/velista/src",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/angular:webpack-browser",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/velista",
+        "index": "apps/velista/src/index.html",
+        "main": "apps/velista/src/main.ts",
+        "tsConfig": "apps/velista/tsconfig.app.json",
+        "inlineStyleLanguage": "scss",
+        "assets": [
+          {
+            "glob": "**/*",
+            "input": "apps/velista/public"
+          }
+        ],
+        "styles": ["apps/velista/src/styles.scss"],
+        "customWebpackConfig": {
+          "path": "apps/velista/webpack.config.ts"
+        }
+      },
+      "configurations": {
+        "production": {
+          "budgets": [
+            {
+              "type": "initial",
+              "maximumWarning": "500kb",
+              "maximumError": "1mb"
+            },
+            {
+              "type": "anyComponentStyle",
+              "maximumWarning": "4kb",
+              "maximumError": "8kb"
+            }
+          ],
+          "outputHashing": "all",
+          "customWebpackConfig": {
+            "path": "apps/velista/webpack.prod.config.ts"
+          },
+          "fileReplacements": [
+            {
+              "replace": "apps/velista/src/environments/environment.ts",
+              "with": "apps/velista/src/environments/environment.prod.ts"
+            }
+          ]
+        },
+        "development": {
+          "buildOptimizer": false,
+          "optimization": false,
+          "vendorChunk": true,
+          "extractLicenses": false,
+          "sourceMap": true,
+          "namedChunks": true
+        }
+      },
+      "defaultConfiguration": "production"
+    },
+    "build:docker": {
+      "executor": "@portfolio/docker:build",
+      "options": {
+        "imageName": "nx-portfolio/velista"
+      },
+      "configurations": {
+        "development": {
+          "versionTags": ["dev"],
+          "buildArgs": {
+            "BUILDER_TAG": "dev"
+          }
+        },
+        "production": {
+          "pushToRegistry": true,
+          "versionTags": ["latest"]
+        }
+      },
+      "defaultConfiguration": "development"
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/angular:dev-server",
+      "options": {
+        "port": 4205,
+        "publicHost": "http://localhost:4205"
+      },
+      "configurations": {
+        "production": {
+          "buildTarget": "velista:build:production"
+        },
+        "development": {
+          "buildTarget": "velista:build:development"
+        }
+      },
+      "defaultConfiguration": "development",
+      "dependsOn": ["shell:serve"]
+    },
+    "extract-i18n": {
+      "executor": "@angular-devkit/build-angular:extract-i18n",
+      "options": {
+        "buildTarget": "velista:build"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "apps/velista/jest.config.cts",
+        "tsConfig": "apps/velista/tsconfig.spec.json"
+      }
+    },
+    "serve-static": {
+      "continuous": true,
+      "executor": "@nx/web:file-server",
+      "defaultConfiguration": "production",
+      "options": {
+        "buildTarget": "velista:build",
+        "port": 4205,
+        "watch": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "velista:build:development"
+        },
+        "production": {
+          "buildTarget": "velista:build:production"
+        }
+      }
+    }
+  }
+}

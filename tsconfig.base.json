@@ -112,6 +112,15 @@
       ],
       "@portfolio/luna-shopper/test-fixtures/jest": [
         "./libs/luna-shopper/test-fixtures/src/jest.ts"
+      ],
+      "velista/Routes": ["./apps/velista/src/app/remote-entry/entry.routes.ts"],
+      "@portfolio/velista/models": ["./libs/velista/models/src/index.ts"],
+      "@portfolio/velista/data-access": [
+        "./libs/velista/data-access/src/index.ts"
+      ],
+      "@portfolio/velista/ui": ["./libs/velista/ui/src/index.ts"],
+      "@portfolio/velista/feature-shell": [
+        "./libs/velista/feature-shell/src/index.ts"
       ]
     }
   },

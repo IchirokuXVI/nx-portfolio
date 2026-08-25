@@ -13,7 +13,7 @@
 // Children of the shell's `:locale` route. Keep in sync with the shell's
 // app.routes.ts (`''` is the root landing app; the `**` wildcard is not a real
 // entry path and is exercised by the existing 404 spec instead).
-const APP_PATHS = ['', 'odontogram', 'damoclesSword'];
+const APP_PATHS = ['', 'odontogram', 'damoclesSword', 'velista'];
 
 // Same shape the shell's locale routing accepts.
 const LOCALE_SEGMENT = /^[a-z]{2}(-[a-z]{2})?$/i;

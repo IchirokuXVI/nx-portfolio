@@ -1,5 +1,5 @@
-import { localeGuard } from '@portfolio/localization/rokutranslator-angular';
 import { Route } from '@angular/router';
+import { localeGuard } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
 
 export const appRoutes: Route[] = [
@@ -23,6 +23,17 @@ export const appRoutes: Route[] = [
         data: { titleNs: 'damoclesSword', titleFallback: "Damocle'Sword" },
         loadChildren: () =>
           import('damoclesSword/Routes').then((m) => m.remoteRoutes),
+      },
+      {
+        // Must stay ABOVE the empty-path landingV2 entry. An empty-path route
+        // with loadChildren is not terminal: Angular would hand `velista/...`
+        // to landingV2's own route table and render its not-found page instead
+        // (velista plan 0001, section 6.1).
+        path: 'velista',
+        title: 'app-title',
+        data: { titleNs: 'velista', titleFallback: 'Velista' },
+        loadChildren: () =>
+          import('velista/Routes').then((m) => m.remoteRoutes),
       },
       {
         path: '',
