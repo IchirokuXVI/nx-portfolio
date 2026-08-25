@@ -185,17 +185,17 @@ Legend: `[ ]` todo · `[~]` partial · `[x]` done. Add questions freely as code 
 - [ ] projects / areas / project-areas data model — what it represented.
 
 ### docker (infra: Docker + k8s)
-- [ ] Why a custom Nx `@portfolio/docker` plugin instead of `@nx-tools/nx-docker` etc.
-- [ ] `build` executor: buildx, local cache keyed by image hash, auto build-args (NX_APP…).
-- [ ] `push` executor + `pushToRegistry` flow; registry via `PORTFOLIO_DOCKER_REGISTRY`.
-- [ ] The `application` generator (scaffolds a Dockerfile into a new app).
-- [ ] static-docker vs dynamic-docker tags — how CI uses them.
-- [ ] CI (`docker-ci.yml`): affected detection via last successful commit, build order.
-- [ ] builder image: running tests inside it; why.
-- [ ] reverse-proxy + certbot apps — TLS/Let's Encrypt flow.
-- [ ] k8s: k3s cluster, Helm chart layout, reverse-proxy templates, LB IP pool.
-- [ ] Deploy step: rsync k8s/ + `helm upgrade` over SSH. Why this vs GitOps/ArgoCD.
-- [ ] Per-app Dockerfile (multi-stage Angular build + nginx static serve).
+- [x] Why a custom Nx `@portfolio/docker` plugin instead of `@nx-tools/nx-docker` etc.
+- [x] `build` executor: buildx, local cache keyed by image hash (swap dance is CI-inert, gha backend does CI caching), `forwardEnv` generic-executor refactor, auto build-args (NX_APP…).
+- [x] `push` executor + `pushToRegistry` flow; registry via `DOCKER_REGISTRY`, skip-login.
+- [x] The `application` generator (scaffolds a Dockerfile into a new app). NOTE: generator drifted (emits `type:docker` + `tag`, needs fixing to `versionTags` + static/dynamic tags).
+- [x] static-docker vs dynamic-docker tags — how CI uses them.
+- [x] CI (`docker-ci.yml`): affected detection via last successful commit, build order.
+- [x] builder image: running tests inside it; why.
+- [x] reverse-proxy + certbot apps — TLS/Let's Encrypt flow (webroot HTTP-01, sidecar pod, /certs + deploy-hook). Helm init-container piece still in k8s section.
+- [x] k8s: k3s cluster, Helm chart layout, reverse-proxy templates, LB IP pool (MetalLB /32), TLS init-container + certbot sidecar, compose.yml mirror.
+- [x] Deploy step: rsync k8s/ + `helm upgrade` over SSH. Why this vs GitOps/ArgoCD.
+- [x] Per-app Dockerfile (multi-stage Angular build + nginx static serve; BUILDER_TAG, CORS/.mjs config).
 
 ## Session summaries
 
