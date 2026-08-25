@@ -116,6 +116,12 @@
       "options": {
         "command": "node apps/luna-shopper/catalog/src/app/db/cli.js migration:generate apps/luna-shopper/catalog/src/app/db/migrations/Migration -d apps/luna-shopper/catalog/src/app/db/data-source.ts"
       }
+    },
+    "seed": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper/catalog/src/app/db/seed/cli.js"
+      }
     }
   }
 }

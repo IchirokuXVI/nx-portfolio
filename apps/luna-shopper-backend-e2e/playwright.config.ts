@@ -20,6 +20,12 @@ export const REALTIME_URL =
 
 export default defineConfig({
   ...nxE2EPreset(__filename, { testDir: './src' }),
+  // The seed round trip (plan 0013, section 4). Both are no-ops unless E2E_SEED is
+  // set and a stack is reachable, so the default suite is unchanged. Setup
+  // optionally snapshots then seeds the demo world; teardown restores the snapshot
+  // (skipped against a CI throwaway stack, which is torn down instead).
+  globalSetup: './src/global-setup.ts',
+  globalTeardown: './src/global-teardown.ts',
   use: {
     baseURL: GATEWAY_URL,
     ignoreHTTPSErrors: true,

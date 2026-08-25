@@ -81,6 +81,67 @@ services:
       timeout: 5s
       retries: 10
 
+  # --- Opt-in test databases (plan 0013, section 3.1) -----------------------
+  # A dedicated database per service so a test run never touches the developer's
+  # own dev data. They are gated behind the `test` profile, so a plain `up` never
+  # starts them; bring them up with:
+  #   docker compose --profile test -f k8s/e2e/luna-shopper-backend/compose.yml up -d
+  # Then run any db target with LUNA_ENV=test (which loads each .env.test). A
+  # separate instance and port per service keeps the "no shared database" rule.
+  auth-db-test:
+    image: postgres:16-alpine
+    profiles: ['test']
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_auth
+      POSTGRES_PASSWORD: luna_auth
+      POSTGRES_DB: luna_auth_test
+    ports:
+      - '${LUNA_AUTH_DB_TEST_PORT:-5442}:5432'
+    volumes:
+      - auth-db-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_auth']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  core-db-test:
+    image: postgres:16-alpine
+    profiles: ['test']
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_core
+      POSTGRES_PASSWORD: luna_core
+      POSTGRES_DB: luna_core_test
+    ports:
+      - '${LUNA_CORE_DB_TEST_PORT:-5443}:5432'
+    volumes:
+      - core-db-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_core']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  catalog-db-test:
+    image: postgres:16-alpine
+    profiles: ['test']
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_catalog
+      POSTGRES_PASSWORD: luna_catalog
+      POSTGRES_DB: luna_catalog_test
+    ports:
+      - '${LUNA_CATALOG_DB_TEST_PORT:-5444}:5432'
+    volumes:
+      - catalog-db-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_catalog']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # Message broker with JetStream enabled from day one (durable streams, at least
   # once delivery, replay). The store directory is a named volume so streams
   # survive a restart, mirroring the persistent volume the cluster uses.
@@ -109,4 +170,7 @@ volumes:
   auth-db-data:
   core-db-data:
   catalog-db-data:
+  auth-db-test-data:
+  core-db-test-data:
+  catalog-db-test-data:
   nats-data:

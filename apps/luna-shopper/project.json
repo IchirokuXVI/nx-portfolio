@@ -1,0 +1,28 @@
+{
+  "name": "luna-shopper",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/luna-shopper/tools",
+  "projectType": "application",
+  "tags": [],
+  "// ": "Umbrella project for the Luna Shopper backend (plan 0013). It has no build; it only hosts the cross-service test-data orchestrator targets (seed / db:snapshot / db:restore). The services themselves — luna-shopper-auth, -core, -catalog, -gateway, -realtime — are their own nested projects under this directory. Pass args after `--`, e.g. `nx run luna-shopper:db:snapshot -- --label initial`.",
+  "targets": {
+    "seed": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper/tools/db/seed.js"
+      }
+    },
+    "db:snapshot": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper/tools/db/snapshot.js"
+      }
+    },
+    "db:restore": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper/tools/db/restore.js"
+      }
+    }
+  }
+}
