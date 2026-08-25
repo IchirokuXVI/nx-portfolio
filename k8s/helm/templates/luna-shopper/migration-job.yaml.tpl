@@ -2,7 +2,7 @@
 {{- $root := . }}
 {{- $ls := .Values.lunaShopper }}
 {{- range $ls.services }}
-{{- if or (eq .role "auth") (eq .role "core") }}
+{{- if or (eq .role "auth") (eq .role "core") (eq .role "catalog") }}
 {{- if or (ne .env "staging") $root.Values.staging.enabled }}
 {{- $tag := $root.Values.productionImageTag }}
 {{- if eq .env "staging" }}{{- $tag = $root.Values.stagingImageTag }}{{- end }}

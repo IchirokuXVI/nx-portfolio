@@ -100,6 +100,12 @@ export interface AddLineRequest {
   listId: string;
   content: string;
   quantity?: number;
+  /**
+   * Optional opaque reference to a catalog Item (plan 0012). Validated as a UUID
+   * in application code, never a database foreign key: catalog is a separate
+   * service with its own database and core never joins to it.
+   */
+  itemId?: string | null;
 }
 
 export interface UpdateLineRequest {
@@ -107,6 +113,8 @@ export interface UpdateLineRequest {
   lineId: string;
   content?: string;
   quantity?: number;
+  /** Set/clear the optional catalog Item reference (plan 0012). `null` clears it. */
+  itemId?: string | null;
 }
 
 export interface SetLineApprovalRequest {

@@ -21,6 +21,9 @@ data:
   SMTP_USER: {{ $cfg.smtpUser | quote }}
   MAIL_FROM: {{ $cfg.mailFrom | quote }}
   MAIL_VERIFY_BASE_URL: {{ $cfg.mailVerifyBaseUrl | quote }}
+  # Comma-separated platform-admin (app owner) user ids allowed to write the
+  # catalog (plan 0012). Empty by default so no one can write until it is set.
+  PLATFORM_ADMIN_USER_IDS: {{ $cfg.platformAdminUserIds | default "" | quote }}
 {{- end }}
 {{- end }}
 {{- end }}
