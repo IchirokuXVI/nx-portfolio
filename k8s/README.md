@@ -26,7 +26,9 @@ CI/CD pipeline and the chart internals see the [root README](../README.md).
 - **Docker** with the **Kubernetes** feature enabled (Docker Desktop). The cluster
   must be running and `kubectl config current-context` should be `docker-desktop`.
   Because Docker Desktop's Kubernetes shares the Docker image store, locally built
-  images are visible to the cluster with no registry push.
+  images are visible to the cluster with no registry push. On Windows, if the cluster
+  refuses to start at all, see
+  [`docker-desktop-kubernetes-wsl2.md`](./docker-desktop-kubernetes-wsl2.md).
 - **Docker Buildx** (bundled with Docker Desktop) — the build executor uses
   `docker buildx build --load`.
 - **Helm** 3.x and **kubectl**.
@@ -225,6 +227,11 @@ release version instead of `staging`).
 
 ## Possible problems
 
+- **The Docker Desktop cluster won't start at all** (HTTP 500, "Unable to start a
+  cluster", and `kubectl` left with no context). On Windows this is almost always the
+  WSL2 VM booting with cgroup v1 while the kind node image requires cgroup v2. Clearing
+  images or resetting the cluster cannot fix it, because the fault is below Docker. See
+  [`docker-desktop-kubernetes-wsl2.md`](./docker-desktop-kubernetes-wsl2.md).
 - **`kubectl config current-context` is not `docker-desktop`.** The images live in the
   Docker Desktop image store; another cluster won't see them without a registry push.
 - **A rebuilt image isn't picked up.** The tag stays `dev`, so `helm upgrade` alone
