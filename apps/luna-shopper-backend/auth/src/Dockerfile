@@ -26,7 +26,16 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --from=builder --chown=node:node /app/dist/apps/${NX_APP}/ ./
-RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
+# `npm install` rather than the `npm ci` the other four services use. The mailer
+# drags in an optional CSS inlining chain (juice, posthtml-parser) that nx 22.7's
+# prune-lockfile misplaces: the root lockfile nests entities@2.2.0 under
+# posthtml-parser/node_modules/dom-serializer, and the pruned copy moves it under
+# htmlparser2, where dom-serializer can no longer reach it. `npm ci` refuses that
+# tree outright ("Missing: entities@2.2.0 from lock file") and --omit=optional
+# does not help, because the tree is validated before anything is omitted.
+# `npm install` repairs the one bad branch and still takes every other version
+# from the pruned lockfile. Restore `npm ci` once the pruner is fixed upstream.
+RUN npm install --omit=dev --legacy-peer-deps && npm cache clean --force
 
 USER node
 
