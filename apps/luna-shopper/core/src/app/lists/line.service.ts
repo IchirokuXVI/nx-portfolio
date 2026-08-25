@@ -35,6 +35,10 @@ interface LineCursor {
   id: string;
 }
 
+/** Canonical UUID shape, for validating the cross-service catalog `itemId`. */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class LineService {
   constructor(
@@ -47,6 +51,24 @@ export class LineService {
 
   private async zoneIdOf(listId: string): Promise<string> {
     return (await this.listAccess.getList(listId)).zoneId;
+  }
+
+  /**
+   * Validate the optional catalog `itemId` (plan 0012, section 4). A line may
+   * reference a catalog Item or be free text. The reference is cross service, so
+   * only its shape is checked here (a UUID); its existence is the client's
+   * concern and core never joins to the catalog database. `null` clears it.
+   */
+  private validateItemId(itemId: string | null): string | null {
+    if (itemId === null) {
+      return null;
+    }
+    if (!UUID_PATTERN.test(itemId)) {
+      throw new ValidationException('itemId must be a valid item reference', {
+        messageArgs: { field: 'itemId' },
+      });
+    }
+    return itemId;
   }
 
   private emit(event: RealtimeEvent, zoneId: string, line: ListLine): void {
@@ -67,6 +89,7 @@ export class LineService {
         listId: req.listId,
         content: req.content,
         quantity: req.quantity ?? 1,
+        itemId: this.validateItemId(req.itemId ?? null),
         position: Number(max?.max ?? 0) + 1,
         approvalStatus: LineApprovalStatus.PENDING,
         status: LineStatus.PENDING,
@@ -87,6 +110,9 @@ export class LineService {
     }
     if (req.quantity !== undefined) {
       line.quantity = req.quantity;
+    }
+    if (req.itemId !== undefined) {
+      line.itemId = this.validateItemId(req.itemId);
     }
     line.version += 1;
     const saved = await this.lines.save(line);

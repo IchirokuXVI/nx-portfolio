@@ -3,6 +3,8 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AUTH_PATTERNS,
   type AuthTokens,
+  type DeleteAccountRequest,
+  type DeleteAccountResult,
   type GoogleLoginRequest,
   type LoginRequest,
   type RefreshRequest,
@@ -56,5 +58,12 @@ export class IdentityController {
   @MessagePattern(AUTH_PATTERNS.googleLogin)
   googleLogin(@Payload() req: GoogleLoginRequest): Promise<AuthTokens> {
     return this.identity.googleLogin(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.deleteAccount)
+  deleteAccount(
+    @Payload() req: DeleteAccountRequest
+  ): Promise<DeleteAccountResult> {
+    return this.identity.deleteAccount(req);
   }
 }

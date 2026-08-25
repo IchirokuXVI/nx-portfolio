@@ -70,6 +70,15 @@ export class AddLineDto {
   @Min(1)
   @Max(100000)
   quantity?: number;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description: 'Optional catalog item this line references (plan 0012)',
+  })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string | null;
 }
 
 export class UpdateLineDto {
@@ -86,6 +95,15 @@ export class UpdateLineDto {
   @Min(1)
   @Max(100000)
   quantity?: number;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description: 'Set or clear the catalog item link; null clears it (plan 0012)',
+  })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string | null;
 }
 
 export class SetApprovalDto {

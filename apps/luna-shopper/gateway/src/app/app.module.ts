@@ -12,7 +12,9 @@ import {
   PlatformHealthModule,
   PlatformModule,
 } from '@portfolio/luna-shopper/platform';
+import { GatewayAccountModule } from './account/account.module';
 import { GatewayAuthModule } from './auth/auth.module';
+import { GatewayCatalogModule } from './catalog/catalog.module';
 import type { GatewayConfig } from './config/app-config';
 import {
   gatewayConfiguration,
@@ -75,6 +77,10 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayListsModule,
     // Per zone account merge endpoints (plan 0008).
     GatewayMergeModule,
+    // Account deletion endpoint (plan 0011).
+    GatewayAccountModule,
+    // Catalog endpoints — items, supermarkets, per location prices (plan 0012).
+    GatewayCatalogModule,
   ],
   providers: [
     // The throttler guard runs globally; open endpoints opt into a named bucket.

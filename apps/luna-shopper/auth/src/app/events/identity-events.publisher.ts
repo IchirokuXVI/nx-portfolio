@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ClientProxy, NatsRecordBuilder } from '@nestjs/microservices';
 import {
   IDENTITY_EVENTS,
+  type UserDeletedEvent,
   type UserEmailVerifiedEvent,
   type UserRegisteredEvent,
   type UserUpgradedEvent,
@@ -38,5 +39,9 @@ export class IdentityEventsPublisher {
 
   userEmailVerified(event: UserEmailVerifiedEvent): void {
     this.emit(IDENTITY_EVENTS.userEmailVerified, event);
+  }
+
+  userDeleted(event: UserDeletedEvent): void {
+    this.emit(IDENTITY_EVENTS.userDeleted, event);
   }
 }

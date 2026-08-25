@@ -7,6 +7,7 @@ export * from './lib/pagination';
 
 // Enums
 export * from './lib/enums/auth.enums';
+export * from './lib/enums/catalog.enums';
 export * from './lib/enums/list.enums';
 export * from './lib/enums/merge.enums';
 export * from './lib/enums/realtime.enums';
@@ -14,11 +15,18 @@ export * from './lib/enums/zone.enums';
 
 // Messages
 export * from './lib/messages/auth.messages';
+export * from './lib/messages/catalog.messages';
 export * from './lib/messages/list.messages';
 export * from './lib/messages/merge.messages';
 export * from './lib/messages/realtime.messages';
+export * from './lib/messages/reconciliation.messages';
 export * from './lib/messages/zone.messages';
 
 // Events
 export * from './lib/events/identity.events';
 export * from './lib/events/realtime.events';
+
+// JSON Schemas + validator (plan 0010): the language neutral, cross-service
+// contract. Every NATS message and event payload has a schema here, validated in
+// tests, so a future .NET/Spring service can hold the same contract.
+export * from './schemas';

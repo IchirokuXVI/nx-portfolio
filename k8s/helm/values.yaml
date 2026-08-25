@@ -184,6 +184,9 @@ lunaShopper:
       smtpUser: ''
       mailFrom: Luna Shopper <no-reply@ichirokuxvi.com>
       mailVerifyBaseUrl: https://ichirokuxvi.com/verify-email
+      # Comma-separated user ids allowed to write the catalog (plan 0012). Set to
+      # the app owner's registered user id; empty means no one can write.
+      platformAdminUserIds: ''
     staging:
       natsUrl: nats://luna-shopper-nats:4222
       logLevel: debug
@@ -198,6 +201,7 @@ lunaShopper:
       smtpUser: ''
       mailFrom: Luna Shopper (staging) <no-reply@staging.ichirokuxvi.com>
       mailVerifyBaseUrl: https://staging.ichirokuxvi.com/verify-email
+      platformAdminUserIds: ''
 
   # Each backend service: one Deployment + Service (+ PDB). `routed` services get
   # a reverse-proxy server block on `host`; the rest are ClusterIP only. `role`
@@ -234,6 +238,12 @@ lunaShopper:
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-core
       port: 3003
       routed: false
+    - name: luna-shopper-catalog
+      role: catalog
+      env: production
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-catalog
+      port: 3004
+      routed: false
     # Staging
     - name: luna-shopper-gateway-staging
       role: gateway
@@ -263,6 +273,12 @@ lunaShopper:
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-core
       port: 3003
       routed: false
+    - name: luna-shopper-catalog-staging
+      role: catalog
+      env: staging
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-catalog
+      port: 3004
+      routed: false
 
   # Stateful dependencies. Two Postgres instances (auth owns one, core the other,
   # so the no shared database rule holds) and one NATS server with JetStream on a
@@ -284,6 +300,10 @@ lunaShopper:
         database: luna_core
         user: luna_core
         secret: luna-shopper-core-db-secret
+      - name: luna-shopper-catalog-db
+        database: luna_catalog
+        user: luna_catalog
+        secret: luna-shopper-catalog-db-secret
 
   nats:
     image: nats:2.10-alpine

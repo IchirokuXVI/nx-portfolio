@@ -23,6 +23,7 @@ import { IdentityController } from './identity/identity.controller';
 import { IdentityService } from './identity/identity.service';
 import { MailModule } from './mail/mail.module';
 import { PasswordService } from './password/password.service';
+import { OrphanUserReaperService } from './reaper/orphan-user-reaper.service';
 import { TokenService } from './tokens/token.service';
 
 @Module({
@@ -97,6 +98,7 @@ import { TokenService } from './tokens/token.service';
     TokenService,
     PasswordService,
     IdentityEventsPublisher,
+    OrphanUserReaperService,
   ],
 })
 export class AppModule {}
