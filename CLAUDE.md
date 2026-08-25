@@ -117,6 +117,13 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `landing`, `odontog
   then a kebab-case title. Numbering is per `plans/` directory, sequential, and
   **always starts at `0001`** (no `0000`, no unnumbered files). The next plan in a
   directory takes the next free number.
+- A plan in `plans/` is **part of the build order**: it is being built, or it is next.
+- A design that is agreed but **not scheduled for development** goes in `plans/backlog/`
+  instead, which is its own numbering namespace starting at `0001`. This keeps parked
+  designs from burning a number in the build sequence. When one is picked up it moves
+  into `plans/` and takes the next free number there. Backlog plans open with a
+  `> **Status: backlog. Not scheduled for development.**` blockquote, so the file says
+  so on its own and not only by where it sits.
 
 ## Git workflow
 
