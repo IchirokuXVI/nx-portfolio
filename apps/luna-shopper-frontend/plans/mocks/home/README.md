@@ -10,12 +10,18 @@ Published canvas: https://claude.ai/code/artifact/71175929-0234-4c6e-a277-e26db8
 | --- | --- |
 | `Main.dc.html` | Anonymous, first open |
 | `Authenticated.dc.html` | Signed in, returning user |
-| `TemporaryAccount.dc.html` | Guest account, plus a zone pending approval |
+| `TemporaryAccount.dc.html` | Guest account, plus a group pending approval |
 | `DayTheme.dc.html` | The signed in screen in the light theme |
 | `States.dc.html` | Empty, offline and error, three phone frames in one artboard |
 | `canvas.json` | Positions, artboard titles and the sticky notes |
 
-Phone frames are 390 by 844. Colour values are literal here rather than tokenized, because
+Two conventions the artboards follow, both easy to undo by accident:
+
+- The UI says **group** and **grupo**. The code says **zone**. See rule N2 in `../../0001`.
+- There is **no wordmark text**, only a neutral mark, because the product has no name yet.
+
+Phone frames are 390 by 844, and there are deliberately no desktop artboards. Colour values
+are literal here rather than tokenized, because
 an artboard is a flat HTML file with no build step. They follow the token values in
 `../../0002-design-system-and-theming.md`, so **if a token changes there, change it here
 too** or the mock stops describing the system.

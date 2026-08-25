@@ -17,13 +17,42 @@ plan with an approved mock before any of it is built** (see section 9).
 
 ## 2. Naming
 
-The product name **is not final**. "Luna Shopper" is the working technical name. That
-constraint is load bearing and shapes several decisions below, so state it once here:
+The product **has no name yet**. "Luna Shopper" is a discarded working title, kept only as
+an internal codename so that the directories and Nx project names line up with the backend.
+That constraint is load bearing and shapes several decisions below, so state it once here:
 
 > **Rule N1.** The product name must never be hardcoded in a component, a CSS token, a
 > route path, a class name, a translation key, or an asset filename. It appears only as
 > **values** in one brand configuration object and in the translation JSON files. Renaming
 > the product must be a change to data, never a refactor.
+
+Until a name exists, the app ships a neutral mark and **no wordmark text at all**. A
+stand-in name placed in an approved design tends to survive into production by inertia, so
+the slot stays visibly empty and `APP_BRAND.wordmarkSrc` fills it the day there is a name.
+
+### 2.1 Rule N2: the UI says "group", the code says "zone"
+
+The domain object the backend calls a **Zone** is called a **group** in English and a
+**grupo** in Spanish everywhere a user can read it. The backend word means nothing to
+someone opening a shopping list app.
+
+> **Rule N2.** This is a **translation layer decision only**. Nothing in the code changes
+> name: the API paths stay `/v1/zones`, the contract types stay `ZoneView`, `ZoneRole` and
+> `MembershipStatus`, the enums keep their values, the routes stay `zones/:zoneId`, and
+> component and service names keep saying zone. The word "group" exists **only as values in
+> the translation JSON**.
+
+Two consequences worth internalising, because both are easy to get wrong:
+
+- **Never rename a code symbol to match the UI word.** A `GroupCardComponent` talking to
+  `ZoneService` about a `MyZoneView` is exactly the confusion this rule is meant to prevent.
+  The component is `ZoneCardComponent` and it renders a translated label.
+- **Never build the user facing word by string concatenation** in a way that assumes English
+  grammar. "group" and "grupo" differ in gender agreement in Spanish, so phrases like "your
+  groups" and "no groups yet" are whole translation keys, not a noun glued to a prefix.
+
+If the user facing word changes again later, it is a change to two JSON files and nothing
+else. That is the entire point of keeping it out of the code.
 
 Technical identifiers, which are internal and stay stable across a rename:
 
@@ -185,10 +214,13 @@ reached, and the user would land on landingV2's not found page instead.
 Deep links matter here, because sharing a list or a zone invite is a core product action,
 and because those links are what a store wrapper will open later.
 
+Route paths keep the word `zones` per rule N2, even though the page is called a group in
+the interface.
+
 | Route | Page | Access | Plan |
 | --- | --- | --- | --- |
 | `''` | Home | Public, adaptive by auth state | `0003` |
-| `zones/:zoneId` | Zone detail, its lists | Authenticated, zone member | later |
+| `zones/:zoneId` | Group detail, its lists | Authenticated, zone member | later |
 | `zones/:zoneId/members` | Members and roles | Authenticated, manager | later |
 | `lists/:listId` | Shopping list, the main screen | Authenticated, list access | later |
 | `lists/:listId/lines/:lineId` | Line detail and comments | Authenticated, list access | later |
@@ -299,8 +331,12 @@ the mocks first.
 
 ## 11. Open questions
 
-1. **Product name.** Everything is built to survive a rename (rule N1), so this does not
-   block. It does need an answer before anything is published or submitted to a store.
+1. **Product name.** Still being chosen. "Luna" is discarded for good. Everything is built
+   to survive naming it late (rule N1), and the design ships a neutral mark with no wordmark
+   in the meantime, so this blocks nothing until the app is published or submitted to a
+   store. The internal codename `lunaShopper` stays as the Nx project name so the frontend
+   and backend directories keep matching; it is not the product name and never reaches a
+   user.
 2. **Spanish and English only?** Assumed yes, matching landingV2 and the backend error
    catalog. Say so if a third locale is expected, because it changes nothing structurally
    but does change the translation workload per page.

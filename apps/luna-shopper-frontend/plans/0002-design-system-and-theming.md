@@ -33,31 +33,35 @@ The rule that makes re-theming safe:
 Raw values. No meaning attached. These live in exactly one file and are the only place a
 literal colour appears.
 
+Primitive names describe **colour**, never the product or a theme. The palette came out of
+a moonlight direction, but that name is gone and the tokens must not carry a dead identity,
+so the ramps are named for what they are.
+
 ```scss
 // libs/luna-shopper-frontend/ui/src/lib/styles/_primitives.scss
-// Night: the brand ground. Cool indigo, never pure black.
---app-night-950: #0a0c14;
---app-night-900: #11141f;
---app-night-850: #161a28;
---app-night-800: #1a1e2e;
---app-night-700: #262b40;
---app-night-600: #343a54;
+// Ink: the dark ramp. Cool indigo tinted, never pure black.
+--app-ink-950: #0a0c14;
+--app-ink-900: #11141f;
+--app-ink-850: #161a28;
+--app-ink-800: #1a1e2e;
+--app-ink-700: #262b40;
+--app-ink-600: #343a54;
 
-// Moon: the neutral ramp. Cool tinted greys, never pure white on dark.
---app-moon-50:  #f7f8fc;
---app-moon-100: #eef0f7;
---app-moon-200: #dde1ed;
---app-moon-300: #c2c8db;
---app-moon-400: #98a0bb;
---app-moon-500: #6f7899;
---app-moon-600: #525a78;
+// Neutral: the grey ramp. Cool tinted, never pure white on dark.
+--app-neutral-50:  #f7f8fc;
+--app-neutral-100: #eef0f7;
+--app-neutral-200: #dde1ed;
+--app-neutral-300: #c2c8db;
+--app-neutral-400: #98a0bb;
+--app-neutral-500: #6f7899;
+--app-neutral-600: #525a78;
 
-// Glow: the single warm accent. The "moonlight" in the identity.
---app-glow-300: #ffd39a;
---app-glow-400: #ffc271;
---app-glow-500: #ffb454;
---app-glow-600: #e89a35;
---app-glow-800: #8a5a12;   // text only, and only on Day. See the note below.
+// Amber: the single warm accent.
+--app-amber-300: #ffd39a;
+--app-amber-400: #ffc271;
+--app-amber-500: #ffb454;
+--app-amber-600: #e89a35;
+--app-amber-800: #8a5a12;   // text only, and only on Day. See the note below.
 
 // Status ramps. The 400s are for Night, the 700s are for text on Day.
 --app-mint-400:   #34d399;   --app-mint-600:   #059669;   --app-mint-700:   #047857;
@@ -69,10 +73,10 @@ literal colour appears.
 > **Why the 700s exist.** Drawing the home page mock in both themes surfaced a real
 > failure: the bright ramps that carry the Night theme are close to unreadable as **text**
 > on white. `#34d399` on `#ffffff` is about 1.9:1, well under the 4.5:1 floor, and
-> `--app-glow-500` as a text colour is about 1.9:1 too. So each status role resolves to a
+> `--app-amber-500` as a text colour is about 1.9:1 too. So each status role resolves to a
 > **different primitive per theme**: the 400 on Night, the 700 on Day. The bright value
 > stays correct for a fill or a progress bar in either theme, where only 3:1 is required.
-> A quiet, text only action on Day uses `--app-glow-800`, never `--app-glow-500`. This is
+> A quiet, text only action on Day uses `--app-amber-800`, never `--app-amber-500`. This is
 > exactly the kind of thing that only shows up when both themes are actually drawn, which
 > is why every page mock has to include a Day artboard.
 
@@ -156,33 +160,34 @@ conditions routinely, and the mock for every page must be checked in both.
 ### 4.1 Night
 
 ```scss
---app-surface-ground:  var(--app-night-950);
---app-surface-raised:  var(--app-night-850);
---app-surface-overlay: var(--app-night-800);
---app-surface-sunken:  var(--app-night-900);
---app-text-primary:    var(--app-moon-50);
---app-text-secondary:  var(--app-moon-300);
---app-text-muted:      var(--app-moon-500);
+--app-surface-ground:  var(--app-ink-950);
+--app-surface-raised:  var(--app-ink-850);
+--app-surface-overlay: var(--app-ink-800);
+--app-surface-sunken:  var(--app-ink-900);
+--app-text-primary:    var(--app-neutral-50);
+--app-text-secondary:  var(--app-neutral-300);
+--app-text-muted:      var(--app-neutral-500);
 --app-border-subtle:   rgb(255 255 255 / 8%);
 --app-border-strong:   rgb(255 255 255 / 18%);
---app-action-bg:       var(--app-glow-500);
---app-action-fg:       var(--app-night-950);
+--app-action-bg:       var(--app-amber-500);
+--app-action-fg:       var(--app-ink-950);
 ```
 
 ### 4.2 Day
 
 ```scss
---app-surface-ground:  var(--app-moon-50);
+--app-surface-ground:  var(--app-neutral-50);
 --app-surface-raised:  #ffffff;
 --app-surface-overlay: #ffffff;
---app-surface-sunken:  var(--app-moon-100);
---app-text-primary:    var(--app-night-900);
---app-text-secondary:  var(--app-moon-600);
---app-text-muted:      var(--app-moon-500);
---app-border-subtle:   var(--app-moon-200);
---app-border-strong:   var(--app-moon-300);
---app-action-bg:       var(--app-glow-500);
---app-action-fg:       var(--app-night-950);
+--app-surface-sunken:  var(--app-neutral-100);
+--app-text-primary:    var(--app-ink-900);
+--app-text-secondary:  var(--app-neutral-600);
+--app-text-muted:      var(--app-neutral-500);
+--app-border-subtle:   var(--app-neutral-200);
+--app-border-strong:   var(--app-neutral-300);
+--app-action-bg:       var(--app-amber-500);
+--app-action-fg:       var(--app-ink-950);
+--app-action-quiet-fg: var(--app-amber-800);
 ```
 
 ### 4.3 One deliberate decision worth flagging
@@ -260,10 +265,14 @@ is a defect against rule N1 and it gets fixed rather than worked around.
 - No product name in a translation **key**. `home.title` is correct,
   `home.welcome-to-luna` is not.
 - No product name in a route path.
-- The word "moon", "night", and "glow" in the palette describe **colours**, not the product,
-  so they survive a rename. If the rebrand is not lunar, those primitive names become
-  slightly odd but stay correct, and renaming them is a single file find and replace with no
-  component impact.
+- Primitive ramps are named `ink`, `neutral`, `amber`, `mint`, `coral`, `violet` and `sky`.
+  They describe **colour**, so no rename can make them wrong. The theme names Night and Day
+  describe the **lighting the user is in**, a dim kitchen or a bright supermarket, not a
+  brand, so they survive too.
+- The user facing word for a Zone is `group` in English and `grupo` in Spanish, and it lives
+  in the translation JSON like any other copy (rule N2 in `0001`). It is **not** a brand
+  value and does not belong in `AppBrand`: it is vocabulary, not identity, and changing it
+  again later is a change to two JSON files.
 
 ## 6. Type
 
@@ -338,32 +347,42 @@ This is the part that is easy to get wrong on a desktop and painful on a phone.
   actions do not sit next to frequently tapped ones.
 - **Safe area insets** are respected via `env(safe-area-inset-*)`, so a bottom action bar is
   not hidden behind the home indicator.
-- **Breakpoints**, mobile first: base is the phone, `sm: 480px`, `md: 768px`, `lg: 1024px`,
-  `xl: 1280px`. Above `md` the app becomes a centred column of about 720px rather than
-  stretching, because a shopping list at 1900px wide is unusable.
+- **Phone only, by decision.** No desktop or tablet designs are being produced, and no page
+  plan is expected to carry a wide artboard. Every mock is a 390 by 844 phone frame. This is
+  correct for the product: it is used in a supermarket, and it is heading for an app store.
+- **Wide screens still must not break**, they are just not designed. One rule covers it: at
+  and above roughly `768px` the app renders as a **centred column of about 480px** on the
+  page ground, which is the phone layout given room to breathe. A shopping list stretched to
+  1900px is unusable, and this costs one media query rather than a second design.
+- Breakpoints exist for that single purpose: base is the phone, `sm: 480px`, `md: 768px`.
+  `lg` and `xl` are deliberately not defined, because nothing is designed for them.
 - **Scroll containers are page level.** Nested scroll areas on a touch device fight the
   user.
 
 ## 9. Icons
 
-CLAUDE.md is explicit: icons are standalone components in `libs/shared/ui`, built from an
-inlined SVG, and raw `<svg>` markup never appears in a feature or ui component. That rule
-is followed here.
+The mechanical rule from CLAUDE.md holds everywhere: an icon is a standalone component
+built from an inlined SVG, and raw `<svg>` markup never appears in a feature or ui
+component. What changed is **where** they live.
 
-Already available and reusable: `arrow`, `calendar`, `close`, `download`, `edit`, `email`,
-`github`, `home`, `linkedin`, `loading`, `save`, `trash`, `upload`.
+**Decided by the user: an icon that is strictly for this app belongs in this app's own ui
+library**, `libs/luna-shopper-frontend/ui`. Only genuinely reusable, product neutral icons
+go in `libs/shared/ui`. This is a deliberate, authorised deviation from CLAUDE.md's "icons
+live in `libs/shared/ui`", and it is the right call twice over: it keeps one product's
+domain icons out of a shared portfolio library, and it means the eventual extraction takes
+the app's icons with it as part of the same directory move.
 
-This product needs roughly these additions: `check`, `plus`, `minus`, `basket`, `comment`,
-`users`, `search`, `share`, `chevron`, `settings`, `filter`, `more`, `offline`, `lock`,
-`bell`, and a `google` brand mark for the sign in button.
+The split for this page and the ones after it:
 
-> **Open question for the user.** Those are one product's icons landing in a shared
-> portfolio library, and some of them (`basket`, `offline`) are not plausibly shared. The
-> options are to follow the rule literally and put all of them in `libs/shared/ui`, or to
-> put the generic ones there and keep the product specific ones in
-> `libs/luna-shopper-frontend/ui`. The second is better for the eventual extraction, but it
-> is a deviation from CLAUDE.md, so it needs an explicit decision rather than a quiet one.
-> Nothing is generated until this is answered.
+| Location | Icons |
+| --- | --- |
+| Reuse from `libs/shared/ui` | `arrow`, `calendar`, `close`, `download`, `edit`, `email`, `loading`, `save`, `trash`, `upload` |
+| Add to `libs/shared/ui` (product neutral) | `check`, `plus`, `minus`, `chevron`, `search`, `settings`, `filter`, `more`, `share`, `lock`, `copy` |
+| Add to `libs/luna-shopper-frontend/ui` (app specific) | `basket`, `list-lines`, `offline`, `presence-dot`, `member-add`, `google` |
+
+The boundary is a judgement call, so the test is: **would another app in this workspace
+plausibly use it?** A chevron yes, a shopping basket no. `google` sits in the app library
+because it is a third party brand mark tied to this app's sign in flow, not a UI primitive.
 
 ## 10. Component inventory
 
