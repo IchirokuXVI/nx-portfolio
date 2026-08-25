@@ -4,6 +4,8 @@ import {
   AuthProvider,
   UserKind,
   type AuthTokens,
+  type DeleteAccountRequest,
+  type DeleteAccountResult,
   type GoogleLoginRequest,
   type LoginRequest,
   type RegisterRequest,
@@ -275,6 +277,25 @@ export class IdentityService {
 
     this.events.userUpgraded({ userId: user.id });
     return this.tokens.issueTokens(user);
+  }
+
+  /**
+   * Delete the caller's account and all personal identity data (plan 0011,
+   * section 1). Deleting the `users` row cascades its credentials, OAuth
+   * identities, email verifications and refresh tokens (every child FK is
+   * `ON DELETE CASCADE`), so this one delete satisfies the right to be forgotten
+   * for the identity data, which lives only in auth. Idempotent: if the user is
+   * already gone the delete affects no rows and no event is emitted.
+   */
+  async deleteAccount(req: DeleteAccountRequest): Promise<DeleteAccountResult> {
+    const result = await this.dataSource
+      .getRepository(User)
+      .delete({ id: req.userId });
+    const deleted = (result.affected ?? 0) > 0;
+    if (deleted) {
+      this.events.userDeleted({ userId: req.userId });
+    }
+    return { userId: req.userId, deleted };
   }
 
   private async linkGoogle(

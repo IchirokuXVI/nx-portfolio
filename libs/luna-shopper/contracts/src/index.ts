@@ -19,6 +19,7 @@ export * from './lib/messages/catalog.messages';
 export * from './lib/messages/list.messages';
 export * from './lib/messages/merge.messages';
 export * from './lib/messages/realtime.messages';
+export * from './lib/messages/reconciliation.messages';
 export * from './lib/messages/zone.messages';
 
 // Events

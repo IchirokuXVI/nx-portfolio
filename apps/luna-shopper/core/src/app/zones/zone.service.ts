@@ -269,6 +269,8 @@ export class ZoneService {
       await manager.getRepository(ZoneMembership).save(membership);
       zone.ownerUserId = req.userId;
       zone.status = ZoneStatus.ACTIVE;
+      // Rescued: clear the deletion marker so the zone reaper leaves it alone.
+      zone.markedForDeletionAt = null;
       const view = toZoneView(await manager.getRepository(Zone).save(zone));
       this.events.emit(RealtimeEvent.ZoneOwnershipChanged, req.zoneId, view);
       return view;

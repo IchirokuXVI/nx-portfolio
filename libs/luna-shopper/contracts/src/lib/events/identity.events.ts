@@ -9,6 +9,7 @@ export const IDENTITY_EVENTS = {
   userRegistered: 'user.registered',
   userUpgraded: 'user.upgraded',
   userEmailVerified: 'user.emailVerified',
+  userDeleted: 'user.deleted',
 } as const;
 
 export type IdentityEvent =
@@ -23,5 +24,14 @@ export interface UserUpgradedEvent {
 }
 
 export interface UserEmailVerifiedEvent {
+  userId: string;
+}
+
+/**
+ * Emitted after auth removes a user and its personal data (plan 0011). Core
+ * reacts by retiring the user's memberships and marking any zones they owned for
+ * deletion. Idempotent: a redelivered event is a no-op.
+ */
+export interface UserDeletedEvent {
   userId: string;
 }
