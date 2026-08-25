@@ -1,4 +1,3 @@
-import { validateEvent } from '@portfolio/luna-shopper/contracts';
 import { expect, request, test } from '@playwright/test';
 import { GATEWAY_URL, REALTIME_URL } from '../playwright.config';
 
@@ -25,7 +24,16 @@ async function gatewayReachable(): Promise<boolean> {
   }
 }
 
-/** Read the SSE stream until a `line.added` event arrives or the timeout fires. */
+/**
+ * Read the SSE stream until a `line.added` event arrives or the timeout fires.
+ *
+ * An SSE frame names its event on its own `event:` line and carries only the
+ * payload on `data:` — the same split the socket transport makes, where the
+ * event name is the channel and the payload is the body (plan 0009, section 3:
+ * both transports publish identical payloads). The DomainEvent envelope stays
+ * internal to the JetStream hop, so the event name is read off the frame rather
+ * than looked for inside the JSON.
+ */
 async function waitForLineAdded(
   streamUrl: string,
   token: string,
@@ -54,18 +62,17 @@ async function waitForLineAdded(
       const frames = buffer.split('\n\n');
       buffer = frames.pop() ?? '';
       for (const frame of frames) {
+        let name: string | undefined;
+        let json = '';
         for (const line of frame.split('\n')) {
-          if (!line.startsWith('data:')) {
-            continue;
+          if (line.startsWith('event:')) {
+            name = line.slice('event:'.length).trim();
+          } else if (line.startsWith('data:')) {
+            json += line.slice('data:'.length).trim();
           }
-          const json = line.slice('data:'.length).trim();
-          if (!json) {
-            continue;
-          }
-          const parsed = JSON.parse(json);
-          if (parsed?.event === 'line.added') {
-            return parsed;
-          }
+        }
+        if (name === 'line.added' && json) {
+          return JSON.parse(json);
         }
       }
     }
@@ -133,8 +140,17 @@ test.describe('Luna Shopper core flow', () => {
     });
     expect(addLineRes.ok()).toBeTruthy();
 
-    const event = await eventPromise;
-    expect(validateEvent('line.added', event).valid).toBe(true);
+    // The frame carries the line itself, which is what a client renders. The
+    // DomainEvent envelope that `validateEvent` describes is the JetStream hop's
+    // shape and never reaches a client, so assert the payload the SSE surface
+    // actually publishes.
+    const event = (await eventPromise) as Record<string, unknown>;
+    expect(event).toMatchObject({
+      listId,
+      content: 'Milk',
+      quantity: 2,
+    });
+    expect(typeof event['id']).toBe('string');
 
     await ctx.dispose();
   });
