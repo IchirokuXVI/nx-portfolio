@@ -51,7 +51,7 @@ export class CommentService {
       })
     );
     const view = toCommentView(saved);
-    this.events.emit(RealtimeEvent.CommentAdded, list.zoneId, view);
+    this.events.emit(RealtimeEvent.CommentAdded, list.zoneId, view, list.id);
     return view;
   }
 

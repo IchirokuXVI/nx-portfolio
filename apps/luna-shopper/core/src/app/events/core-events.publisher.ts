@@ -21,11 +21,23 @@ export const NATS_EVENTS = 'NATS_EVENTS';
 export class CoreEventsPublisher {
   constructor(@Inject(NATS_EVENTS) private readonly client: ClientProxy) {}
 
-  emit<T>(event: RealtimeEvent, zoneId: string, payload: T): void {
+  /**
+   * Publish a domain event. List-scoped events (list/line/comment) pass the
+   * `listId` so the realtime service can route them to the `list:{listId}` room
+   * straight from the envelope, without inspecting each payload (plan 0009,
+   * section 6). Zone, membership and merge events omit it.
+   */
+  emit<T>(
+    event: RealtimeEvent,
+    zoneId: string,
+    payload: T,
+    listId?: string
+  ): void {
     const envelope: DomainEvent<T> = {
       event,
       eventId: randomUUID(),
       zoneId,
+      ...(listId ? { listId } : {}),
       payload,
     };
     const record = new NatsRecordBuilder(envelope)

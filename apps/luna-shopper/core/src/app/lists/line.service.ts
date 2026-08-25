@@ -50,7 +50,7 @@ export class LineService {
   }
 
   private emit(event: RealtimeEvent, zoneId: string, line: ListLine): void {
-    this.events.emit(event, zoneId, toLineView(line));
+    this.events.emit(event, zoneId, toLineView(line), line.listId);
   }
 
   /** Add a line (plan 0007, section 2): writers only. Starts PENDING/PENDING. */
@@ -149,10 +149,15 @@ export class LineService {
       }
     });
 
-    this.events.emit(RealtimeEvent.LineReordered, list.zoneId, {
-      listId: req.listId,
-      orderedLineIds: req.orderedLineIds,
-    });
+    this.events.emit(
+      RealtimeEvent.LineReordered,
+      list.zoneId,
+      {
+        listId: req.listId,
+        orderedLineIds: req.orderedLineIds,
+      },
+      req.listId
+    );
     return { listId: req.listId };
   }
 
@@ -161,10 +166,15 @@ export class LineService {
     const line = await this.listAccess.getLine(req.lineId);
     const list = await this.listAccess.requireWrite(line.listId, req.userId);
     await this.lines.delete({ id: line.id });
-    this.events.emit(RealtimeEvent.LineDeleted, list.zoneId, {
-      id: line.id,
-      listId: line.listId,
-    });
+    this.events.emit(
+      RealtimeEvent.LineDeleted,
+      list.zoneId,
+      {
+        id: line.id,
+        listId: line.listId,
+      },
+      line.listId
+    );
     return { id: line.id };
   }
 

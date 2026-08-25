@@ -32,5 +32,8 @@ import { ListService } from './list.service';
   ],
   controllers: [ListController],
   providers: [ListService, LineService, CommentService, ListAccessService],
+  // Exported so the realtime access checks (plan 0009) can reuse list-access
+  // resolution rather than re-implementing it.
+  exports: [ListAccessService],
 })
 export class ListsModule {}

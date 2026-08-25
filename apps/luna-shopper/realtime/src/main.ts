@@ -24,7 +24,9 @@ async function bootstrap() {
 
   // pino logging, correlation middleware and shutdown hooks. On SIGTERM readiness
   // flips to not ready so clients reconnect elsewhere and no session is dropped.
-  bootstrapPlatform(app);
+  // URI versioning is on for the SSE endpoints (`/v1/zones/:id/stream`, plan
+  // 0009, section 3); the socket transport is unversioned.
+  bootstrapPlatform(app, { versioning: true });
 
   await app.listen(config.port);
 

@@ -70,7 +70,7 @@ export class ListService {
     });
 
     const view = toListView(list);
-    this.events.emit(RealtimeEvent.ListCreated, req.zoneId, view);
+    this.events.emit(RealtimeEvent.ListCreated, req.zoneId, view, view.id);
     return view;
   }
 
@@ -101,9 +101,14 @@ export class ListService {
       }
     });
 
-    this.events.emit(RealtimeEvent.ListAccessChanged, list.zoneId, {
-      listId: req.listId,
-    });
+    this.events.emit(
+      RealtimeEvent.ListAccessChanged,
+      list.zoneId,
+      {
+        listId: req.listId,
+      },
+      req.listId
+    );
     return { listId: req.listId };
   }
 
@@ -114,7 +119,7 @@ export class ListService {
       list.name = req.name;
     }
     const view = toListView(await this.lists.save(list));
-    this.events.emit(RealtimeEvent.ListUpdated, list.zoneId, view);
+    this.events.emit(RealtimeEvent.ListUpdated, list.zoneId, view, view.id);
     return view;
   }
 
@@ -122,9 +127,14 @@ export class ListService {
   async delete(req: ListIdRequest): Promise<{ id: string }> {
     const list = await this.listAccess.requireManage(req.listId, req.userId);
     await this.lists.delete({ id: req.listId });
-    this.events.emit(RealtimeEvent.ListDeleted, list.zoneId, {
-      id: req.listId,
-    });
+    this.events.emit(
+      RealtimeEvent.ListDeleted,
+      list.zoneId,
+      {
+        id: req.listId,
+      },
+      req.listId
+    );
     return { id: req.listId };
   }
 
