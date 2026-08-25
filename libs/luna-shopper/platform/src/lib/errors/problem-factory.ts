@@ -25,7 +25,7 @@ export function buildProblemDetails(input: {
   );
 
   return {
-    type: `https://errors.luna-shopper/${input.code}`,
+    type: `https://errors.luna-shopper-backend/${input.code}`,
     title: input.code,
     status,
     code: input.code,

@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "sourceRoot": "apps/luna-shopper-backend-e2e/src",
-  "implicitDependencies": ["luna-shopper-gateway", "luna-shopper-realtime"],
+  "implicitDependencies": ["luna-shopper-backend-gateway", "luna-shopper-backend-realtime"],
   "// e2e": "The suite drives the gateway's public REST surface and the realtime SSE channel through whole flows (plan 0010, section 1). Infrastructure and the four services are brought up externally via k8s/e2e/luna-shopper-backend (luna-slot.sh + docker compose + nx serve), so playwright.config.ts has NO webServer and dependsOn is [] — the suite skips itself when the gateway is not reachable.",
   "targets": {
     "e2e": {

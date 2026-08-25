@@ -4,9 +4,9 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug luna-shopper-gateway with Nx",
+      "name": "Debug luna-shopper-backend-gateway with Nx",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["nx", "serve", "luna-shopper-gateway"],
+      "runtimeArgs": ["nx", "serve", "luna-shopper-backend-gateway"],
       "env": {
         "NODE_OPTIONS": "--inspect=9229"
       },
@@ -15,16 +15,16 @@
       "skipFiles": ["<node_internals>/**"],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/apps/luna-shopper/gateway/dist/**/*.(m|c|)js",
+        "${workspaceFolder}/apps/luna-shopper-backend/gateway/dist/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
     },
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug luna-shopper-realtime with Nx",
+      "name": "Debug luna-shopper-backend-realtime with Nx",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["nx", "serve", "luna-shopper-realtime"],
+      "runtimeArgs": ["nx", "serve", "luna-shopper-backend-realtime"],
       "env": {
         "NODE_OPTIONS": "--inspect=9230"
       },
@@ -33,16 +33,16 @@
       "skipFiles": ["<node_internals>/**"],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/apps/luna-shopper/realtime/dist/**/*.(m|c|)js",
+        "${workspaceFolder}/apps/luna-shopper-backend/realtime/dist/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
     },
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug luna-shopper-auth with Nx",
+      "name": "Debug luna-shopper-backend-auth with Nx",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["nx", "serve", "luna-shopper-auth"],
+      "runtimeArgs": ["nx", "serve", "luna-shopper-backend-auth"],
       "env": {
         "NODE_OPTIONS": "--inspect=9231"
       },
@@ -51,16 +51,16 @@
       "skipFiles": ["<node_internals>/**"],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/apps/luna-shopper/auth/dist/**/*.(m|c|)js",
+        "${workspaceFolder}/apps/luna-shopper-backend/auth/dist/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
     },
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug luna-shopper-core with Nx",
+      "name": "Debug luna-shopper-backend-core with Nx",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["nx", "serve", "luna-shopper-core"],
+      "runtimeArgs": ["nx", "serve", "luna-shopper-backend-core"],
       "env": {
         "NODE_OPTIONS": "--inspect=9232"
       },
@@ -69,7 +69,7 @@
       "skipFiles": ["<node_internals>/**"],
       "sourceMaps": true,
       "outFiles": [
-        "${workspaceFolder}/apps/luna-shopper/core/dist/**/*.(m|c|)js",
+        "${workspaceFolder}/apps/luna-shopper-backend/core/dist/**/*.(m|c|)js",
         "!**/node_modules/**"
       ]
     }

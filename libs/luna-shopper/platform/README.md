@@ -11,7 +11,7 @@ and a future .NET or Spring service has a written spec to match. Implements
 // app.module.ts
 imports: [
   ConfigModule.forRoot({ /* ... */ }),
-  PlatformModule.forRoot({ serviceName: 'luna-shopper-gateway' }),
+  PlatformModule.forRoot({ serviceName: 'luna-shopper-backend-gateway' }),
   PlatformHealthModule.forRoot(/* { readiness } */),
 ]
 

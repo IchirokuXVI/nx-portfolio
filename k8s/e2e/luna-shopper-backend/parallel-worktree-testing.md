@@ -32,7 +32,7 @@ others:
   pointed at that slot's Postgres / NATS / SMTP ports.
 
 **Slot 0 is reserved for your own local development** — it is the original
-single stack (default ports, project name `luna-shopper`) that your primary
+single stack (default ports, project name `luna-shopper-backend`) that your primary
 checkout may already have running. Parallel workers (agents, extra worktrees)
 must **never** take slot 0, so they can never collide with the ports you are
 already using. Worker slots therefore start at **1** (1, 2, 3, …). A lone
@@ -41,7 +41,7 @@ workflow (no slot flag needed = slot 0).
 
 | | slot 0 (yours) | slot 1 | slot 2 | slot 3 |
 | --- | --- | --- | --- | --- |
-| compose project | `luna-shopper` | `luna-slot1` | `luna-slot2` | `luna-slot3` |
+| compose project | `luna-shopper-backend` | `luna-slot1` | `luna-slot2` | `luna-slot3` |
 | auth-db | 5432 | 5532 | 5632 | 5732 |
 | core-db | 5433 | 5533 | 5633 | 5733 |
 | nats (client / mon) | 4222 / 8222 | 4322 / 8322 | 4422 / 8422 | 4522 / 8522 |
@@ -84,9 +84,9 @@ docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \
   -f k8s/e2e/luna-shopper-backend/compose.yml up -d
 
 # run migrations for this slot's databases, then serve / test
-npx nx run luna-shopper-auth:migration:run
-npx nx run luna-shopper-core:migration:run
-npx nx serve luna-shopper-gateway     # + realtime / auth / core, all on slot ports
+npx nx run luna-shopper-backend-auth:migration:run
+npx nx run luna-shopper-backend-core:migration:run
+npx nx serve luna-shopper-backend-gateway     # + realtime / auth / core, all on slot ports
 ```
 
 `luna-slot.{sh,ps1}` is idempotent: re-run it with the same N to refresh the

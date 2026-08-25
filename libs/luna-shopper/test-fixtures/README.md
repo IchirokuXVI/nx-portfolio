@@ -2,7 +2,7 @@
 
 The single source of truth for Luna Shopper test data (plan 0013). It is
 independent of where the data lands: unit tests import the factories directly,
-and the per service database seeders (`apps/luna-shopper/<svc>/src/app/db/seed`)
+and the per service database seeders (`apps/luna-shopper-backend/<svc>/src/app/db/seed`)
 insert the same canonical scenario through the real TypeORM repositories.
 
 - **Factories** (`makeUser`, `makeZone`, `makeList`, `makeLine`, `makeComment`,

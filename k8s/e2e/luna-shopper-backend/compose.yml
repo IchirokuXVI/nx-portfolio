@@ -1,7 +1,7 @@
 # Luna Shopper local development stack (plan 0002, section 2).
 #
 # Dev only. It brings up the backing services the four Luna Shopper apps need so
-# they can be run locally with `nx serve luna-shopper-<svc>` against real
+# they can be run locally with `nx serve luna-shopper-backend-<svc>` against real
 # dependencies. It deliberately does NOT run the apps themselves: those are built
 # and served by Nx, which gives fast rebuilds and debugging.
 #
@@ -10,8 +10,9 @@
 # matter to the services:
 #
 #   docker compose -f k8s/e2e/luna-shopper-backend/compose.yml up -d
-#   cp .env.luna-shopper.example .env   # at the repo root; then fill in the keypair
-#   npx nx serve luna-shopper-auth      # and gateway / core / realtime
+#   cp apps/luna-shopper-backend/.env.luna-shopper-backend.example \
+#      apps/luna-shopper-backend/.env.luna-shopper-backend   # then fill in the keypair
+#   npx nx serve luna-shopper-backend-auth      # and gateway / core / realtime
 #
 # There are two separate Postgres instances on purpose: auth and core each own a
 # private database and never share one, so the "no shared database" rule holds
@@ -23,7 +24,7 @@
 # same time. Set COMPOSE_PROJECT_NAME (and the matching LUNA_*_PORT overrides)
 # to a per worktree "slot"; see parallel-worktree-testing.md. Left unset, every
 # default below reproduces the original single stack workflow unchanged.
-name: ${COMPOSE_PROJECT_NAME:-luna-shopper}
+name: ${COMPOSE_PROJECT_NAME:-luna-shopper-backend}
 
 services:
   # Auth service database.

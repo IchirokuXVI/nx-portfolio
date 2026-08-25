@@ -134,10 +134,10 @@ apps:
 # are internal (ClusterIP, reached over NATS and by the gateway).
 #
 # Disabled by default: turning it on requires the runtime Secrets to exist (see
-# k8s/helm/luna-shopper-secrets.md) and the api./rt. DNS records. Flip to true
+# k8s/helm/luna-shopper-backend-secrets.md) and the api./rt. DNS records. Flip to true
 # once those are in place. Staging entries additionally honour `staging.enabled`.
 # ---------------------------------------------------------------------------
-lunaShopper:
+lunaShopperBackend:
   enabled: false
 
   imagePullPolicy: Always
@@ -168,10 +168,10 @@ lunaShopper:
 
   # Non secret config, rendered into a ConfigMap per environment. Secret values
   # (DB URLs, JWT keys, OAuth secret, SMTP password) live in a separate, pre
-  # created Secret per environment; see luna-shopper-secrets.md.
+  # created Secret per environment; see luna-shopper-backend-secrets.md.
   config:
     production:
-      natsUrl: nats://luna-shopper-nats:4222
+      natsUrl: nats://luna-shopper-backend-nats:4222
       logLevel: info
       corsOrigins: https://ichirokuxvi.com
       authJwtKid: prod-1
@@ -188,7 +188,7 @@ lunaShopper:
       # the app owner's registered user id; empty means no one can write.
       platformAdminUserIds: ''
     staging:
-      natsUrl: nats://luna-shopper-nats:4222
+      natsUrl: nats://luna-shopper-backend-nats:4222
       logLevel: debug
       corsOrigins: https://staging.ichirokuxvi.com
       authJwtKid: staging-1
@@ -210,73 +210,73 @@ lunaShopper:
   # the tag comes from productionImageTag/stagingImageTag like the apps above.
   services:
     # Production
-    - name: luna-shopper-gateway
+    - name: luna-shopper-backend-gateway
       role: gateway
       env: production
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-gateway
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-gateway
       port: 3000
       routed: true
       host: api.ichirokuxvi.com
       websocket: false
-    - name: luna-shopper-realtime
+    - name: luna-shopper-backend-realtime
       role: realtime
       env: production
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-realtime
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-realtime
       port: 3001
       routed: true
       host: rt.ichirokuxvi.com
       websocket: true
-    - name: luna-shopper-auth
+    - name: luna-shopper-backend-auth
       role: auth
       env: production
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-auth
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-auth
       port: 3002
       routed: false
-    - name: luna-shopper-core
+    - name: luna-shopper-backend-core
       role: core
       env: production
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-core
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-core
       port: 3003
       routed: false
-    - name: luna-shopper-catalog
+    - name: luna-shopper-backend-catalog
       role: catalog
       env: production
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-catalog
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-catalog
       port: 3004
       routed: false
     # Staging
-    - name: luna-shopper-gateway-staging
+    - name: luna-shopper-backend-gateway-staging
       role: gateway
       env: staging
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-gateway
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-gateway
       port: 3000
       routed: true
       host: api.staging.ichirokuxvi.com
       websocket: false
-    - name: luna-shopper-realtime-staging
+    - name: luna-shopper-backend-realtime-staging
       role: realtime
       env: staging
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-realtime
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-realtime
       port: 3001
       routed: true
       host: rt.staging.ichirokuxvi.com
       websocket: true
-    - name: luna-shopper-auth-staging
+    - name: luna-shopper-backend-auth-staging
       role: auth
       env: staging
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-auth
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-auth
       port: 3002
       routed: false
-    - name: luna-shopper-core-staging
+    - name: luna-shopper-backend-core-staging
       role: core
       env: staging
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-core
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-core
       port: 3003
       routed: false
-    - name: luna-shopper-catalog-staging
+    - name: luna-shopper-backend-catalog-staging
       role: catalog
       env: staging
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-catalog
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-catalog
       port: 3004
       routed: false
 
@@ -286,24 +286,24 @@ lunaShopper:
   # these instances but use separate logical databases / stream prefixes via the
   # per environment Secret; fully separate instances per environment is a later
   # refinement. The postgres password comes from each instance's pre created
-  # Secret (see luna-shopper-secrets.md).
+  # Secret (see luna-shopper-backend-secrets.md).
   postgres:
     image: postgres:16-alpine
     storageClassName: local-path
     storageSize: 2Gi
     instances:
-      - name: luna-shopper-auth-db
+      - name: luna-shopper-backend-auth-db
         database: luna_auth
         user: luna_auth
-        secret: luna-shopper-auth-db-secret
-      - name: luna-shopper-core-db
+        secret: luna-shopper-backend-auth-db-secret
+      - name: luna-shopper-backend-core-db
         database: luna_core
         user: luna_core
-        secret: luna-shopper-core-db-secret
-      - name: luna-shopper-catalog-db
+        secret: luna-shopper-backend-core-db-secret
+      - name: luna-shopper-backend-catalog-db
         database: luna_catalog
         user: luna_catalog
-        secret: luna-shopper-catalog-db-secret
+        secret: luna-shopper-backend-catalog-db-secret
 
   nats:
     image: nats:2.10-alpine

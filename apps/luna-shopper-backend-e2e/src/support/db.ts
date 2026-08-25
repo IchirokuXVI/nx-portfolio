@@ -6,7 +6,7 @@ import { GATEWAY_URL } from '../../playwright.config';
  * Shared helpers for the Playwright seed round trip (plan 0013, section 4).
  *
  * The suite drives the seed / snapshot / restore Nx tooling by shelling out to
- * the same scripts `nx run luna-shopper:*` uses, from the workspace root, so the
+ * the same scripts `nx run luna-shopper-backend:*` uses, from the workspace root, so the
  * global-setup, global-teardown and the seeded spec all agree.
  */
 
@@ -16,7 +16,7 @@ export const workspaceRoot = resolve(__dirname, '../../../..');
 /** Where global-setup records the pre-run snapshot for global-teardown to restore. */
 export const RESTORE_MARKER = resolve(
   workspaceRoot,
-  'apps/luna-shopper/.snapshots/.e2e-restore-target'
+  'apps/luna-shopper-backend/.snapshots/.e2e-restore-target'
 );
 
 export function runDbTool(
@@ -25,7 +25,7 @@ export function runDbTool(
 ): { status: number | null; stdout: string } {
   const result = spawnSync(
     process.execPath,
-    [`apps/luna-shopper/tools/db/${script}`, ...args],
+    [`apps/luna-shopper-backend/tools/db/${script}`, ...args],
     { cwd: workspaceRoot, env: process.env, encoding: 'utf8' }
   );
   if (result.stdout) process.stdout.write(result.stdout);

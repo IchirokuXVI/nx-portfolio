@@ -37,20 +37,20 @@ testem.log
 # Local dev config/secrets (Luna Shopper). The tracked .env.development /
 # .env.production only hold NODE_ENV; these git ignored files carry local runtime
 # config and secrets. Only the .example files are committed. See
-# apps/luna-shopper/.env.luna-shopper.example and each apps/luna-shopper/<svc>/.env.example.
+# apps/luna-shopper-backend/.env.luna-shopper-backend.example and each apps/luna-shopper-backend/<svc>/.env.example.
 /.env
 /.env.local
-apps/luna-shopper/.env.luna-shopper
-apps/luna-shopper/*/.env
+apps/luna-shopper-backend/.env.luna-shopper-backend
+apps/luna-shopper-backend/*/.env
 # Opt-in test database URLs (plan 0013); only the .env.test.example files are committed.
-apps/luna-shopper/*/.env.test
-# pg_dump snapshots written by luna-shopper:db:snapshot (plan 0013, section 3.2).
-apps/luna-shopper/.snapshots/
+apps/luna-shopper-backend/*/.env.test
+# pg_dump snapshots written by luna-shopper-backend:db:snapshot (plan 0013, section 3.2).
+apps/luna-shopper-backend/.snapshots/
 # Per worktree compose slot file written by luna-slot.sh / luna-slot.ps1.
 k8s/e2e/luna-shopper-backend/.env.slot
 # Local dev JWT keypair lives here (out of any .env); the dir is kept via .gitkeep.
-apps/luna-shopper/secrets/*
-!apps/luna-shopper/secrets/.gitkeep
+apps/luna-shopper-backend/secrets/*
+!apps/luna-shopper-backend/secrets/.gitkeep
 jwt.key
 jwt.pub
 

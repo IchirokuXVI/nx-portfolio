@@ -7,7 +7,7 @@ import { createLoggerOptions } from './logging/logger.options';
 import { createValidationPipe } from './validation/validation-pipe';
 
 export interface PlatformModuleOptions {
-  /** Emitting service name, e.g. `luna-shopper-gateway`. Tags every log line. */
+  /** Emitting service name, e.g. `luna-shopper-backend-gateway`. Tags every log line. */
   serviceName: string;
 }
 

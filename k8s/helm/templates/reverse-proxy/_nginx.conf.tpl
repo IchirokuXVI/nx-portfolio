@@ -51,12 +51,12 @@ http {
     }
   {{- end }}
 
-  {{- if $.Values.lunaShopper.enabled }}
+  {{- if $.Values.lunaShopperBackend.enabled }}
   # Luna Shopper public services (plan 0002, section 5). The gateway (REST) and
   # realtime (WebSocket/SSE) each own a dedicated host. Only these two are routed;
   # auth and core stay internal. The realtime host carries the WebSocket upgrade
   # headers and long read/send timeouts so sockets survive.
-  {{- range $.Values.lunaShopper.services }}
+  {{- range $.Values.lunaShopperBackend.services }}
   {{- if and .routed (or (ne .env "staging") $.Values.staging.enabled) }}
     server {
       listen 80;

@@ -6,7 +6,7 @@ import { getRequestContext } from '../context/request-context';
 import { REDACTION_CENSOR, REDACTION_PATHS } from './redaction';
 
 export interface LoggerOptions {
-  /** Tags every line with the emitting service, e.g. `luna-shopper-auth`. */
+  /** Tags every line with the emitting service, e.g. `luna-shopper-backend-auth`. */
   serviceName: string;
   /** pino level; comes from the validated `LOG_LEVEL` env var. */
   level: string;

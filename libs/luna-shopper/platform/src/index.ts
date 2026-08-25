@@ -1,4 +1,4 @@
-// Platform conventions shared by every luna-shopper service (plan 0004).
+// Platform conventions shared by every luna-shopper-backend service (plan 0004).
 // Import the module and bootstrap helper for wiring; the rest are building blocks
 // the feature plans (0005+) use on their controllers, consumers and DTOs.
 
