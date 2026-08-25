@@ -171,7 +171,7 @@ jobs:
           echo "Affected apps to build: $affected_apps_tobuild"
           echo "Affected staging deployments: $affected_staging"
 
-      # Build affected static docker apps (builder base, local http server, proxy, certbot)
+      # Build affected static docker apps (builder base, local http server)
       - name: Build affected docker apps
         if: ${{ steps.get-affected-apps.outputs.affected_docker_apps != '' }}
         run: |

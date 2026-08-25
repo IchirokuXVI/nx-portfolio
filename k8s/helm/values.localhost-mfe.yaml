@@ -1,23 +1,27 @@
 # Local override for Docker Desktop Kubernetes — "mfe-path" variant.
 #
 # Alternative to values.localhost.yaml (the default "port" variant). Here every app
-# is served through the reverse proxy on a single `localhost` host, and the remotes
-# sit under an /mfe/<remote> path prefix instead of on their own ports. That prefix
+# is served through the gateway on a single `localhost` host, and the remotes sit
+# under an /mfe/<remote> path prefix instead of on their own ports. That prefix
 # stands in for production's dedicated `mfe.` subdomain: it keeps the remote bundles
 # from shadowing the shell's own routes, so a locale-less deep link like /odontogram
 # still reaches the shell (which redirects to /en/odontogram) instead of hitting the
 # remote's blank entry page.
 #
+#   ./k8s/bootstrap/install.ps1 -Issuer selfsigned      # once per cluster
 #   # shell built with MFE_BASE_URL=http://localhost/mfe
 #   helm upgrade --install nx-portfolio k8s/helm \
 #     --namespace nx-portfolio --create-namespace \
 #     --values k8s/helm/values.yaml --values k8s/helm/values.localhost-mfe.yaml
 #   # -> open http://localhost
 #
-# The reverse-proxy Service is a LoadBalancer, which Docker Desktop publishes on
-# localhost:80/443 directly. If port 80 is taken, fall back to
-# `kubectl port-forward -n nx-portfolio svc/reverse-proxy 8080:80` and rebuild the
-# shell with MFE_BASE_URL=http://localhost:8080/mfe to match.
+# The Service to reach is the data plane Envoy Gateway provisions for the Gateway.
+# It is NOT declared by this chart, it lives in `envoy-gateway-system` rather than
+# `nx-portfolio`, and its name carries a hash, so look it up rather than memorise
+# it: `kubectl get svc -n envoy-gateway-system`. It is a LoadBalancer, which
+# Docker Desktop publishes on localhost:80/443 directly. If port 80 is taken, fall
+# back to `kubectl port-forward -n envoy-gateway-system svc/<that name> 8080:80`
+# and rebuild the shell with MFE_BASE_URL=http://localhost:8080/mfe to match.
 #
 # See values.local.yaml for the local-hostnames setup (portfolio.localhost /
 # mfe.localhost), which mirrors production most literally but needs hosts entries.
@@ -26,13 +30,24 @@
 productionImageTag: dev
 appImagePullPolicy: IfNotPresent
 
-# Docker Desktop ships a `hostpath` default StorageClass, not k3s's `local-path`.
-certsVolume:
-  storageClassName: hostpath
+# Route through the gateway, but with self signed certificates: the hosts have no
+# public DNS, so ACME would only fail and burn rate limits. Same objects as
+# production, only the issuer name differs, so a local deploy now exercises the
+# real certificate wiring instead of a separate openssl code path.
+#
+# Requires the cluster bootstrap once:
+#   ./k8s/bootstrap/install.ps1 -Issuer selfsigned
+gateway:
+  enabled: true
+  className: eg
+  tls:
+    enabled: true
+    issuer: selfsigned
+    # Everything here is plain HTTP; redirecting would just break it.
+    redirectHttp: false
 
-# No public DNS / no MetalLB routing needed locally; keep the reverse proxy.
-certbot:
-  enabled: false
+# Docker Desktop surfaces LoadBalancer services on localhost, and the pool's
+# public IP is not routable here.
 metallb:
   enabled: false
 

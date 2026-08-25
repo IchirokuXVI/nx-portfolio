@@ -17,7 +17,10 @@ metadata:
     app: {{ .name }}
     app.kubernetes.io/part-of: luna-shopper-backend
 spec:
-  replicas: {{ $ls.replicaCount | default $root.Values.replicaCount }}
+  {{/* The old fallback here was the chart wide .Values.replicaCount, which went
+       away with the reverse proxy that was its only other reader. Default to 2
+       instead, which is what zero downtime needs (plan 0002, section 6). */}}
+  replicas: {{ $ls.replicaCount | default 2 }}
   selector:
     matchLabels:
       app: {{ .name }}

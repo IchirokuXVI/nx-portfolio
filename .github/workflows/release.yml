@@ -101,7 +101,7 @@ jobs:
           DOCKER_BUILD_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
         run: npx nx build docker/builder --configuration=production
 
-      # Infrastructure images (local http server base, reverse proxy, certbot).
+      # Infrastructure images (local http server base).
       - name: Build static docker apps
         run: |
           static_apps=$(npx nx show projects --type "app" --projects tag:type:static-docker | paste -sd, -)

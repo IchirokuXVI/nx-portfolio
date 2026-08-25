@@ -25,7 +25,7 @@
 #
 # Alternatives:
 #   - values.localhost-mfe.yaml : single localhost host, remotes under /mfe/<remote>,
-#     behind the reverse proxy (shell built with MFE_BASE_URL=http://localhost/mfe).
+#     behind the gateway (shell built with MFE_BASE_URL=http://localhost/mfe).
 #   - values.local.yaml         : portfolio.localhost / mfe.localhost hostnames,
 #     closest to production, but needs hosts-file entries (admin).
 
@@ -33,11 +33,10 @@
 productionImageTag: dev
 appImagePullPolicy: IfNotPresent
 
-# Port mode exposes each app directly, so the reverse proxy (and its certs / MetalLB
-# pool) is not needed.
-reverseProxy:
-  enabled: false
-certbot:
+# Port mode exposes each app directly, so the routing layer is not needed at all:
+# no Gateway object, no Gateway API CRDs, no cert-manager, and therefore no
+# k8s/bootstrap run. This stays the zero setup path.
+gateway:
   enabled: false
 metallb:
   enabled: false

@@ -6,9 +6,14 @@ as one release. The same chart runs in three shapes:
 
 | Environment | Driven by | Notes |
 | --- | --- | --- |
-| **Production** | `helm/values.yaml` | Public cluster (k3s + MetalLB), TLS via Let's Encrypt, host/path routing behind the reverse proxy. Deployed by CI. |
+| **Production** | `helm/values.yaml` | Public cluster (k3s + MetalLB), TLS via Let's Encrypt, host/path routing through the Gateway API. Deployed by CI. |
 | **Staging** | `helm/values.yaml` (`staging.enabled`) | Same release/namespace, its own hostnames. |
 | **Local** | `helm/values.yaml` + a `values.localhost*.yaml` overlay | Docker Desktop Kubernetes, locally built `:dev` images, no registry, no admin. |
+
+Routing is the Kubernetes **Gateway API**, served by **Envoy Gateway**, with
+**cert-manager** issuing the certificates. The chart declares only `Gateway` and
+`HTTPRoute` objects; the data plane is provisioned by the implementation. See
+[`plans/0001-gateway-api-migration.md`](./plans/0001-gateway-api-migration.md).
 
 This document is about running the stack **locally end to end** (build every image
 from scratch, deploy, and run e2e against the real containers). For the production
@@ -27,10 +32,44 @@ CI/CD pipeline and the chart internals see the [root README](../README.md).
 - **Helm** 3.x and **kubectl**.
 - **Node 22** and the workspace dependencies installed (`npm ci --legacy-peer-deps`).
 - For e2e: **Cypress** and **Playwright** browsers (`npx playwright install chromium`).
+- **Kubernetes 1.31 or newer** if you use a mode that routes through the gateway.
+  Gateway API v1.5+ CRDs use CEL functions (`isIP`, `format.dns1123Label`) that older
+  API servers cannot compile, and the bundle refuses to install anything older than
+  v1.5.0 over itself. Check with `kubectl version`; on Docker Desktop this means
+  keeping Docker Desktop reasonably current. Port mode (the default) needs none of
+  this.
 
 > Everything below also works on a real **k3s + MetalLB** cluster; only the overlay
-> values differ (storage class, LoadBalancer addressing). The commands assume Docker
+> values differ (issuer, LoadBalancer addressing). The commands assume Docker
 > Desktop.
+
+---
+
+## Cluster bootstrap (once per cluster)
+
+The routing layer's prerequisites are **not** part of the Helm chart, which is what
+keeps the implementation swappable: the chart names it only through
+`gateway.className`. Install them once with the script pair in
+[`bootstrap/`](./bootstrap):
+
+```powershell
+# Windows / Docker Desktop
+./k8s/bootstrap/install.ps1 -Issuer selfsigned
+```
+
+```sh
+# Linux / the VPS
+./k8s/bootstrap/install.sh --issuer letsencrypt --email you@example.com
+```
+
+It installs, at pinned versions: the Gateway API CRDs (standard channel), Envoy
+Gateway, its `eg` GatewayClass, cert-manager with its Gateway integration enabled,
+and a `ClusterIssuer` (`selfsigned` or `letsencrypt-prod`). It is idempotent, and it
+prints the GatewayClass name at the end because that value is what
+`gateway.className` must match.
+
+**Only the gateway-routed modes need this.** `values.localhost.yaml` (port mode, the
+default) sets `gateway.enabled: false` and stays the zero setup path.
 
 ---
 
@@ -98,9 +137,15 @@ particular way**. Pick one overlay:
 
 | Overlay | Topology | Reach it at | Build the shell with |
 | --- | --- | --- | --- |
-| **`values.localhost.yaml`** (default) | each app its own LoadBalancer port (shell 80, remotes 8081–8084) | `http://localhost` | `MFE_REMOTE_URLS=landing=http://localhost:8081,…` |
-| `values.localhost-mfe.yaml` | one `localhost` host, remotes under `/mfe/<remote>`, behind the reverse proxy | `http://localhost` | `MFE_BASE_URL=http://localhost/mfe` |
+| **`values.localhost.yaml`** (default) | each app its own LoadBalancer port (shell 80, remotes 8081–8084). **No bootstrap needed.** | `http://localhost` | `MFE_REMOTE_URLS=landing=http://localhost:8081,…` |
+| `values.localhost-mfe.yaml` | one `localhost` host, remotes under `/mfe/<remote>`, through the gateway | `http://localhost` | `MFE_BASE_URL=http://localhost/mfe` |
 | `values.local.yaml` | `portfolio.localhost` / `mfe.localhost` hostnames (closest to production) | `http://portfolio.localhost` | `MFE_BASE_URL=http://mfe.localhost` |
+
+The two gateway modes need [the bootstrap](#cluster-bootstrap-once-per-cluster) run
+once, with `-Issuer selfsigned`. They no longer set a storage class for
+certificates: certificates live in cert-manager issued Secrets rather than on a PVC,
+so the local and production certificate paths are now the same objects and differ
+only by the issuer name.
 
 The shell resolves its remotes by build-time precedence: **`MFE_REMOTE_URLS`** (an
 explicit per-remote `name=url` map, for distinct origins/ports) → **`MFE_BASE_URL`** (a
@@ -118,6 +163,10 @@ the hostnames overlay reproduces it literally but needs hosts-file entries:
 # C:\Windows\System32\drivers\etc\hosts  (needs administrator)
 127.0.0.1 portfolio.localhost mfe.localhost
 ```
+
+> Chrome and Edge resolve `*.localhost` to loopback internally, so the hostnames mode
+> may work in a browser with no hosts entry at all. The Windows resolver does not do
+> this, so `curl`, Node, and Playwright still need the entries.
 
 To switch modes, rebuild the shell with the matching env from the table's last column,
 `helm upgrade` with the other overlay, then `kubectl rollout restart deployment/shell`.
@@ -152,8 +201,11 @@ npx cypress run --project apps/shell-e2e --browser electron
 ### e2e against the published images (what CI runs)
 
 `e2e/compose.yml` stands up the **published** images (default: the `staging` tag)
-behind a reverse proxy on the staging hostnames, mirroring the Kubernetes topology,
+behind its own nginx on the staging hostnames, mirroring the Kubernetes topology,
 so the exact shell image, which bakes the staging MFE host, is tested unchanged.
+That stack is Docker Compose and deliberately keeps nginx: it exists to test the
+**images**, not the cluster's routing layer. Its prefix stripping must stay
+equivalent to the `HTTPRoute` filters, so changing one is a prompt to check the other.
 CI runs this after pushing the staging images and before deploying, so a failure
 gates the deploy. To run it yourself:
 
@@ -188,20 +240,36 @@ release version instead of `staging`).
 - **Port already in use (4200–4204, or 80/443 for the other overlays).** Something
   else (a running `nx serve`, IIS, another service) holds the port. Stop it, or use a
   different overlay.
-- **PVC stuck `Pending` / pod won't start (mfe-path & hostnames overlays).** The
-  chart's default `certsVolume.storageClassName` is k3s's `local-path`; Docker Desktop
-  uses `hostpath`. The local overlays already set `certsVolume.storageClassName:
-  hostpath` — keep that if you copy them.
+- **The Service to reach is not in `nx-portfolio`.** Envoy Gateway provisions a data
+  plane Deployment and Service *for* the Gateway, named
+  `envoy-nx-portfolio-portfolio-<hash>`, in the **`envoy-gateway-system`** namespace.
+  Neither object is declared by this chart, and the name carries a hash, so look it up
+  rather than memorise it: `kubectl get svc -n envoy-gateway-system`.
 - **LoadBalancer stuck `<pending>` / not reachable.** Docker Desktop publishes
   LoadBalancer services on `localhost` even while `EXTERNAL-IP` shows `<pending>`; just
-  use `localhost:<port>`. The MetalLB pool is disabled locally (`metallb.enabled:
-  false`) because its public IP isn't routable on Docker Desktop.
+  use `localhost`. The MetalLB pool is disabled locally (`metallb.enabled: false`)
+  because its public IP isn't routable on Docker Desktop. On the **public** cluster the
+  same symptom is a real bug with a different cause: the pool must list
+  `envoy-gateway-system` in `metallb.serviceNamespaces`, or the data plane Service
+  never gets the address while `kubectl get svc -n nx-portfolio` looks perfectly
+  healthy.
+- **`Gateway ... PROGRAMMED False` locally.** Expected on Docker Desktop: the only
+  failing condition is "No addresses have been assigned", because no MetalLB pool is
+  active. Traffic still flows. Check the listeners instead, which do report
+  `Programmed=True` and an `Attached Routes` count:
+  `kubectl describe gateway portfolio -n nx-portfolio`.
+- **A route isn't serving.** Unlike Ingress, a route that fails to attach says so:
+  `kubectl get httproute -n nx-portfolio -o wide` and
+  `kubectl describe gateway portfolio -n nx-portfolio`.
+- **Gateway API CRDs won't install.** They need Kubernetes 1.31+ (see Dependencies).
+  On an older API server the CRDs fail to compile their CEL validation rules.
 - **`kubectl port-forward` resets connections under load.** The unbundled `dev` remotes
   fire hundreds of chunk requests and overwhelm `port-forward`. Prefer the LoadBalancer
   (`localhost` directly); only fall back to `port-forward` if a port is unavailable.
-- **certbot noise.** Let's Encrypt is disabled locally (`certbot.enabled: false`) since
-  the hosts have no public DNS; the init container's self-signed certs are enough for
-  nginx to start in the overlays that keep the proxy.
+- **Certificate warnings in the browser locally.** Expected. The local overlays issue
+  from the `selfsigned` ClusterIssuer, since the hosts have no public DNS and ACME
+  would only fail and burn rate limits. Check issuance with
+  `kubectl get certificate -n nx-portfolio`; `READY: True` is what matters.
 
 ---
 
@@ -214,7 +282,9 @@ helm template nx-portfolio helm -n nx-portfolio \
 
 # Inspect
 kubectl -n nx-portfolio get pods,svc
+kubectl -n nx-portfolio get gateway,httproute,certificate
+kubectl -n envoy-gateway-system get svc        # the provisioned data plane
 
-# Tear down
+# Tear down (the chart only; the bootstrap stays)
 helm uninstall nx-portfolio -n nx-portfolio
 ```

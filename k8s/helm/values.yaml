@@ -1,5 +1,4 @@
 namespace: nx-portfolio
-replicaCount: 1
 
 # Pull policy for the micro-frontend app images. Production/staging pull the
 # freshly pushed images from the registry (Always). A local dev deploy builds the
@@ -20,54 +19,76 @@ productionImageTag: latest
 stagingImageTag: staging
 
 # Staging runs alongside production in the same release/namespace, routed by the
-# reverse proxy on its own hostnames. Turn it off to deploy production only.
+# gateway on its own hostnames. Turn it off to deploy production only.
 staging:
   enabled: true
 
-proxyImage:
-  image: nginx
-  pullPolicy: Always
-  tag: 'latest'
-
-certbotImage:
-  image: ghcr.io/ichirokuxvi/nx-portfolio/certbot
-  pullPolicy: Always
-  tag: 'latest'
-
-# Certbot sidecar (Let's Encrypt). Enabled for the public environments. A local
-# deploy turns this off: the hosts have no public DNS/A record, so ACME would only
-# fail and burn rate limits. The init container's self-signed dummy certs are
-# enough for nginx to start and serve TLS locally.
-certbot:
+# ---------------------------------------------------------------------------
+# Routing (plan 0001). The chart declares WHAT the routes are, as core Gateway
+# API objects, and the implementation owns the data plane.
+#
+# The portability contract: swapping the implementation should mean editing this
+# block, plus the one namespace in metallb.serviceNamespaces, and nothing else.
+# That holds as long as the templates use only core gateway.networking.k8s.io/v1
+# types and in spec `filters`. The single knowing exception is
+# templates/gateway/implementation-envoy.yaml.tpl (the realtime timeouts).
+#
+# The cluster prerequisites (Gateway API CRDs, the implementation, cert-manager,
+# the ClusterIssuer) are NOT in this chart. Install them once with
+# k8s/bootstrap/install.sh (or install.ps1).
+# ---------------------------------------------------------------------------
+gateway:
+  # The public cluster and the local "mfe-path" / hostnames modes route through
+  # the gateway. The local "port" mode instead exposes each app on its own
+  # LoadBalancer port (see values.localhost.yaml) and turns this off, which is
+  # what keeps it the zero setup path: no bootstrap, no Gateway object.
   enabled: true
 
-# MetalLB IPAddressPool. The public cluster needs it to expose the reverse proxy
-# on the bare-metal IP below. Docker Desktop already surfaces LoadBalancer
+  # Read the installed class name from `kubectl get gatewayclass`; the bootstrap
+  # script prints it at the end for exactly this reason.
+  className: eg
+
+  tls:
+    enabled: true
+    # Must match a ClusterIssuer the bootstrap created: letsencrypt-prod for the
+    # public cluster, selfsigned locally.
+    issuer: letsencrypt-prod
+    # nginx served plain HTTP unencrypted (one server block for :80 and :443), so
+    # redirecting is a behaviour change. On in production, off locally where
+    # everything is plain HTTP.
+    redirectHttp: true
+
+  # Long lived connection timeout for the routed WebSocket services, carried over
+  # from nginx's proxy_read_timeout / proxy_send_timeout. Applied by the one
+  # implementation specific template; see implementation-envoy.yaml.tpl.
+  websocketTimeout: 3600s
+
+  # Escape hatch for implementation specific annotations on the Gateway. Empty by
+  # design; anything landing here is a signal to check whether the core spec
+  # covers it first.
+  extraAnnotations: {}
+
+# MetalLB IPAddressPool. The public cluster needs it to expose the gateway's data
+# plane on the bare-metal IP below. Docker Desktop already surfaces LoadBalancer
 # services on localhost, so a local deploy disables the pool (its public IP is not
 # routable there and would leave the service pending).
 metallb:
   enabled: true
-
-# Reverse proxy. The public cluster fronts every app with it (TLS + host/path
-# routing). The local "port" mode instead exposes each app on its own LoadBalancer
-# port (see values.localhost.yaml) and turns the proxy off; the local "mfe-path"
-# mode keeps it (see values.localhost-mfe.yaml).
-reverseProxy:
-  enabled: true
-
-certsVolume:
-  claimName: certs-pvc
-  # StorageClass for the shared certs PVC. Defaults to the k3s dynamic provisioner
-  # used in the public cluster; a local deploy overrides it to the cluster's own
-  # default class (e.g. Docker Desktop's `hostpath`). Empty string uses the
-  # cluster default.
-  storageClassName: local-path
+  # Namespaces allowed to claim the pool. The gateway implementation provisions
+  # its data plane Service in its OWN namespace, not this chart's, so that
+  # namespace needs an entry here or the Service sits <pending> forever and the
+  # site never comes up. The failure is silent: `kubectl get svc -n nx-portfolio`
+  # looks entirely healthy while nothing is reachable. This is the one value
+  # besides gateway.className that must change when swapping implementations.
+  serviceNamespaces:
+    - nx-portfolio
+    - envoy-gateway-system
 
 ipAddress: 46.62.204.230
 
 # Each app is one deployment/service. `env` selects which image tag it uses
-# (production -> productionImageTag, staging -> stagingImageTag) and the reverse
-# proxy routes it on `host` under `path`. Image names are the tag-less repo path.
+# (production -> productionImageTag, staging -> stagingImageTag) and one HTTPRoute
+# routes it on `host` under `path`. Image names are the tag-less repo path.
 apps:
   # Production - ichirokuxvi.com
   - name: shell
@@ -130,7 +151,7 @@ apps:
 # downtime deploy config (rolling update with a readiness gate, graceful
 # shutdown, PodDisruptionBudgets). Kept out of the `apps` list above because the
 # shape differs: these carry env/secrets, health probes and PDBs, and only the
-# gateway and realtime are public (routed by the reverse proxy); auth and core
+# gateway and realtime are public (each gets an HTTPRoute); auth and core
 # are internal (ClusterIP, reached over NATS and by the gateway).
 #
 # Disabled by default: turning it on requires the runtime Secrets to exist (see
@@ -222,7 +243,8 @@ lunaShopperBackend:
       metricsEnabled: true
 
   # Each backend service: one Deployment + Service (+ PDB). `routed` services get
-  # a reverse-proxy server block on `host`; the rest are ClusterIP only. `role`
+  # an HTTPRoute on `host`; the rest are ClusterIP only. `websocket` additionally
+  # earns the one implementation specific timeout policy. `role`
   # drives which env vars (and thus which secret keys) the pod receives, so only
   # the auth pod ever sees the JWT private key. Images are the tag-less repo path;
   # the tag comes from productionImageTag/stagingImageTag like the apps above.

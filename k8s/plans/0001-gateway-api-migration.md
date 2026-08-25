@@ -584,3 +584,96 @@ in these templates, which is why step 2 exists.
 - `apps/docker/reverse-proxy` and `apps/docker/certbot` are deleted and CI is green with
   no workflow changes.
 - `k8s/README.md` documents the bootstrap and the revised local modes.
+
+## 13. Implementation notes
+
+Written while building this. Each entry is a place the design above turned out to be
+wrong or incomplete against the real APIs, kept here so the plan does not mislead the
+next reader.
+
+**Pinned versions.** Gateway API `v1.6.1`, Envoy Gateway `v1.9.0`, cert-manager
+`v1.21.1`. The first two are a matched pair: EG v1.9.0 bundles Gateway API v1.6.1,
+confirmed by grepping `gateway.networking.k8s.io/bundle-version` in the pulled chart.
+Bump them together.
+
+**Kubernetes 1.31 is a hard floor.** From v1.5 the Gateway API CRDs use CEL functions
+(`isIP`, `format.dns1123Label().validate`) that a 1.30 API server cannot compile, and
+the bundle installs a `ValidatingAdmissionPolicy` that then refuses anything older
+than v1.5.0 over it, so there is no downgrade path either. Section 7 said the local
+stack "does" keep working on Docker Desktop; that holds only if Docker Desktop is
+current. Port mode is unaffected, since it installs none of this.
+
+**The Envoy Gateway chart does not create a GatewayClass.** Section 3 step 2 says it
+does. It does not: it only sets the controller name the controller answers to. The
+bootstrap creates the `eg` GatewayClass itself, which matches the table in section 2
+that already listed `GatewayClass` as "installed by the bootstrap".
+
+**The chart's bundled CRDs have to be skipped.** Installing Gateway API CRDs from the
+pinned URL (step 1) and then letting the EG chart install its own copy collides: the
+release cannot adopt CRDs it did not create. The bootstrap passes `--skip-crds` and
+applies Envoy Gateway's *own* CRDs separately, from the same pinned chart. Those go on
+with `--server-side`, because `envoyproxies` and `securitypolicies` exceed the 262144
+byte `last-applied-configuration` annotation a client side apply would write.
+
+**cert-manager's flag moved again.** Section 3 step 3 predicted
+`config.enableGatewayAPI=true`. In v1.21.1 it is `config.gatewayAPI.enabled=true`.
+Verified after install by reading the rendered controller ConfigMap. The advice to
+check against the installed chart was the right instinct.
+
+**Section 4.3's redirect could not have worked as written.** A catch all
+`RequestRedirect` route never fires while any app route is attached to the same HTTP
+listener, because Gateway API resolves conflicts by specificity and an app route
+matching host plus a path prefix always beats a route with neither. Deployed as
+designed, plain HTTP kept serving the site in cleartext, which is the exact bug the
+section set out to fix. Confirmed by `curl`: 200, not 301.
+
+The fix keeps the design's shape but pins attachment. When
+`gateway.tls.redirectHttp` is on, each app `HTTPRoute` sets
+`sectionName: <host>-https`, so the shared HTTP listener carries only the redirect.
+Section 4.2's note that `parentRefs` "deliberately omits `sectionName`" is therefore
+true only for the local overlays, where the redirect is off and routes should answer
+on both listeners. Hostname intersection still does the grouping work in both cases;
+what it cannot do is exclude the hostname-less HTTP listener.
+
+This does not change the ACME argument. The solver route carries an exact path match
+and so still outranks the redirect on the HTTP listener.
+
+**`_implementation-envoy.yaml.tpl` would have rendered nothing.** Helm treats a
+leading underscore as "partial, do not render" (as `_helpers.tpl` and
+`luna-shopper-backend/_env.tpl` already do in this chart). The file is
+`implementation-envoy.yaml.tpl`, no underscore. Everything else about section 8.2 is
+unchanged, including it being the single deliberate exception.
+
+**`replicaCount` had a second reader.** Section 5 says it "was only ever read by the
+proxy Deployment". `luna-shopper-backend/deployment.yaml.tpl` also used it as a
+fallback. Since `lunaShopperBackend.replicaCount` is always set, the fallback was
+dead; it now defaults to 2 directly.
+
+**A `gateway.enabled` value was needed.** Section 7 requires `values.localhost.yaml`
+to need "no Envoy Gateway, no bootstrap, and no Gateway object", which was previously
+`reverseProxy.enabled: false`. `gateway.enabled` is its successor and gates all four
+routing templates.
+
+### What was verified, and what was not
+
+Rehearsed on Docker Desktop (cutover step 1), with the caveat that its k8s 1.30.5
+could not take the Gateway API CRDs cleanly; only the unused `TLSRoute` CRD failed, so
+the controller ran and the rehearsal was real:
+
+- Gateway accepted, both listeners `Programmed=True`, 5 attached routes
+- all rendered manifests pass `kubectl apply --dry-run=server` against the real CRDs,
+  in production, staging, and `lunaShopperBackend.enabled` shapes
+- prefix stripping matches nginx exactly: `/mfe/landing` serves the index,
+  `/mfe/landing/remoteEntry.mjs` serves the bundle, for all four remotes
+- cert-manager issued `localhost-tls` from the Gateway annotation with no PVC, no init
+  container and no certbot; HTTPS terminates
+- with `redirectHttp=true`, HTTP returns `301` to the same path and HTTPS still serves
+- `damoclesSword-e2e` (34 passed) and `landing-v2-e2e` (15 passed) against the
+  deployment, so a real browser composes shell plus remote through the Gateway
+- the Nx graph resolves with no reference to the deleted projects, and the
+  `type:static-docker` list shrank to `docker/local-http-server` with no workflow edit
+
+Not verified, because it needs the VPS: steps 2 through 6 of section 10. Specifically
+untested are ACME issuance against Let's Encrypt, the MetalLB allocation fix in 3.1
+actually handing `46.62.204.230` to the provisioned Service, and the coexistence
+window in step 4.
