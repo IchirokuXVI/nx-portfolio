@@ -19,11 +19,15 @@ import { gatewayReachable, seedingRequested } from './support/db';
  * default run without seeding is a clean skip.
  */
 
-/** A gateway list/collection response is either an array or a `{ data: [] }` page. */
+/**
+ * Rows out of a gateway collection response, which is a cursor page shaped
+ * `{ items: [...], nextCursor }`. A bare array is still accepted so an
+ * unpaginated endpoint reads the same way.
+ */
 function rows<T = { id: string; name?: string }>(body: unknown): T[] {
   if (Array.isArray(body)) return body as T[];
-  const data = (body as { data?: unknown })?.data;
-  return Array.isArray(data) ? (data as T[]) : [];
+  const items = (body as { items?: unknown })?.items;
+  return Array.isArray(items) ? (items as T[]) : [];
 }
 
 test.describe('Luna Shopper seeded demo world', () => {
