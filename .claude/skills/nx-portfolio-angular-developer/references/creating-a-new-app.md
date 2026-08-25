@@ -1,6 +1,10 @@
-# Scaffolding & shell wiring
+# Creating a new app (remote)
 
-Structural skeleton for a new remote. Reference files to copy from:
+The full flow for standing up a new remote micro-frontend: generate the app, make
+it zoneless, empty the remote entry, wire the shell route, and generate its
+`libs/<app>/*` scope. (Adding a single lib to an **existing** app is just step 5's
+generator with the right `--directory`/`--importPath`, plus the zoneless test
+setup and asset-import-types step.) Reference files to copy from:
 `apps/landing-v2/{module-federation.config.ts,project.json,src/bootstrap.ts,src/app/app.config.ts,src/app/app.routes.ts,src/app/remote-entry/*}`
 and `apps/shell/{module-federation.config.ts,src/app/app.routes.ts}`.
 
@@ -132,7 +136,7 @@ Lib roles (Nx convention):
 - **ui** — presentational components + the i18n namespace + translation JSON
   assets. → `references/localization.md`.
 - **feature-shell** — the routed, locale-aware wrapper. →
-  `references/feature-shell.md`.
+  `references/routing-and-locale.md`.
 
 ### Asset-import types gotcha (do not skip)
 

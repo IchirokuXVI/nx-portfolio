@@ -25,7 +25,7 @@ export const MY_APP_DEFAULT_LOCALE = 'en';
 ```
 
 `AVAILABLE` = the locales the UI ships assets for. The **enabled** subset
-(`*_USABLE_LOCALES`) is the feature-shell's call — see `references/feature-shell.md`.
+(`*_USABLE_LOCALES`) is the feature-shell's call — see `references/routing-and-locale.md`.
 
 ## Register the namespace (in the `ui` lib's NgModule)
 
