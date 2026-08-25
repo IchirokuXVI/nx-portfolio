@@ -19,7 +19,7 @@ product is meant to be installed and launched from a phone home screen: a market
 that a returning user has to navigate past every time would be a tax on the main use case.
 So the route is **adaptive**: what it renders is a function of authentication state.
 
-Route: `''` (that is, `/<locale>/luna-shopper`). **Public**, with authenticated variants.
+Route: `''` (that is, `/<locale>/velista`). **Public**, with authenticated variants.
 
 ## 2. Mock
 
@@ -39,7 +39,7 @@ Phone frames are 390 by 844. Five artboards:
 **Phone only.** No desktop or tablet artboards are planned. Wide screens fall back to a
 centred column per `0002` section 8, which is a media query rather than a design.
 
-Working sources are in `apps/luna-shopper-frontend/plans/mocks/home/` and the canvas is
+Working sources are in `apps/velista/plans/mocks/home/` and the canvas is
 re-seeded from them, so edit those rather than the published page when the design changes.
 
 ## 3. States
@@ -93,7 +93,7 @@ first thing the PWA work should replace. Nothing in this page's structure depend
 ## 4. Anatomy
 
 Top to bottom. Component names are provisional. All components live in
-`libs/luna-shopper-frontend/ui` unless marked otherwise.
+`libs/velista/ui` unless marked otherwise.
 
 | Region | Component | Notes |
 | --- | --- | --- |
@@ -108,7 +108,7 @@ Top to bottom. Component names are provisional. All components live in
 | Bottom action bar | `BottomActionBarComponent` | Primary New list, secondary Join. Respects safe area insets |
 | Empty / error | `EmptyStateComponent`, `ErrorStateComponent` | Shared, used by every page |
 
-The page component itself lives in `libs/luna-shopper-frontend/feature-home` and holds no
+The page component itself lives in `libs/velista/feature-home` and holds no
 presentation logic beyond choosing which of the above to render for the current state.
 
 Component names keep the code word Zone per rule N2 in `0001`, so `ZoneCardComponent`
@@ -210,7 +210,7 @@ working offline, and it is per device, which is arguably more correct than a ser
 
 ## 6. Localization
 
-Namespace `lunaShopper`, English and Spanish, registered by the ui library the same way
+Namespace `velista`, English and Spanish, registered by the ui library the same way
 `libs/landing-v2/ui` does it. Per rule N1 in `0001`, **no key contains the product name**,
 and the product name reaches the template as a value from `APP_BRAND`.
 
@@ -292,7 +292,7 @@ user facing word is **grupo**, and Spanish makes that more than a find and repla
 
 ## 8. Acceptance criteria
 
-- [ ] `/<locale>/luna-shopper` resolves to this page, and an e2e test asserts it, guarding
+- [ ] `/<locale>/velista` resolves to this page, and an e2e test asserts it, guarding
       the shell route ordering trap described in `0001` section 6.1.
 - [ ] All ten states in section 3 render, including the two not yet drawn once they are.
 - [ ] Anonymous state offers exactly four ways in: create, join, Google, email.

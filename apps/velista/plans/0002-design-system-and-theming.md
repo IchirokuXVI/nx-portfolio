@@ -7,8 +7,8 @@
 
 Two constraints from the brief drive everything here:
 
-1. **The product will be renamed.** "Luna Shopper" is a working title. A rename must be a
-   data change, not a refactor.
+1. **The product gets renamed.** It already has once, from "Luna Shopper" to **Velista**. A
+   rename must be a data change, not a refactor.
 2. **The theme must be genuinely swappable.** Not "we used variables", but "a new brand
    can be applied by replacing one file, without touching a single component".
 
@@ -38,7 +38,7 @@ a moonlight direction, but that name is gone and the tokens must not carry a dea
 so the ramps are named for what they are.
 
 ```scss
-// libs/luna-shopper-frontend/ui/src/lib/styles/_primitives.scss
+// libs/velista/ui/src/lib/styles/_primitives.scss
 // Ink: the dark ramp. Cool indigo tinted, never pure black.
 --app-ink-950: #0a0c14;
 --app-ink-900: #11141f;
@@ -233,7 +233,7 @@ once is genuinely disorienting.
 Everything that carries product identity lives in one object, provided through a DI token.
 
 ```ts
-// libs/luna-shopper-frontend/models
+// libs/velista/models
 export interface AppBrand {
   /** Full product name. Display only. Never used as an identifier. */
   readonly name: string;
@@ -276,7 +276,7 @@ Three things about it are load bearing, and a redraw must keep them:
 - **It degrades by dropping detail, not by shrinking it.** At 16px the three scribbles
   become one bolder stroke, because three would merge into a smudge. See the brand artboard.
 
-Two assets, both in `apps/luna-shopper-frontend/plans/mocks/brand/`:
+Two assets, both in `apps/velista/plans/mocks/brand/`:
 
 | File | Use |
 | --- | --- |
@@ -330,9 +330,31 @@ the device and looks native.
 A display face is permitted in exactly two places: **the wordmark**, and **the hero
 headline on the public home page**. Both are on the unauthenticated surface, where the
 first impression is the job, and both are absent from every authenticated screen, so the
-app itself stays on the system stack. The mock uses Instrument Serif there. Load it as an
-asset rather than as a render blocking web font. Note that Audiowide appears throughout
-`libs/damoclesSword/ui`: that is that project's identity and must not be borrowed here.
+app itself stays on the system stack. Load it as an asset rather than as a render blocking
+web font. Note that Audiowide appears throughout `libs/damoclesSword/ui`: that is that
+project's identity and must not be borrowed here.
+
+**The display face is Marcellus.** The first attempt used Instrument Serif and it was
+wrong for the wordmark: its letterforms are narrow and its default tracking tight, so
+"Velista" read as cramped. Marcellus has classical Roman proportions, meaning genuinely
+wider round letters and open counters, which is what the word needed.
+
+```scss
+--app-font-display: 'Marcellus', Georgia, 'Times New Roman', serif;
+```
+
+Two rules that came out of fixing it:
+
+- **The wordmark carries `letter-spacing: 0.05em`.** A short word set in a wide serif still
+  needs air between the characters to read as a mark rather than as a word.
+- **The hero headline does not inherit that tracking.** At 41px the same value is far too
+  loose. The hero sits near zero, and the two are set separately on purpose rather than
+  sharing one value.
+
+Georgia leads the fallback stack deliberately: it is wide and available everywhere, so a
+failed webfont load degrades to something with similar proportions rather than collapsing
+the lockup. This matters more than usual because PNG and PDF export of the mocks does not
+embed Google Fonts, so the fallback is what an exported design actually shows.
 
 Monospace is reserved for one job: **join codes and invite codes**, where character
 ambiguity matters.
@@ -408,7 +430,7 @@ built from an inlined SVG, and raw `<svg>` markup never appears in a feature or 
 component. What changed is **where** they live.
 
 **Decided by the user: an icon that is strictly for this app belongs in this app's own ui
-library**, `libs/luna-shopper-frontend/ui`. Only genuinely reusable, product neutral icons
+library**, `libs/velista/ui`. Only genuinely reusable, product neutral icons
 go in `libs/shared/ui`. This is a deliberate, authorised deviation from CLAUDE.md's "icons
 live in `libs/shared/ui`", and it is the right call twice over: it keeps one product's
 domain icons out of a shared portfolio library, and it means the eventual extraction takes
@@ -420,7 +442,7 @@ The split for this page and the ones after it:
 | --- | --- |
 | Reuse from `libs/shared/ui` | `arrow`, `calendar`, `close`, `download`, `edit`, `email`, `loading`, `save`, `trash`, `upload` |
 | Add to `libs/shared/ui` (product neutral) | `check`, `plus`, `minus`, `chevron`, `search`, `settings`, `filter`, `more`, `share`, `lock`, `copy` |
-| Add to `libs/luna-shopper-frontend/ui` (app specific) | `brand-mark`, `list-lines`, `offline`, `presence-dot`, `member-add`, `google` |
+| Add to `libs/velista/ui` (app specific) | `brand-mark`, `list-lines`, `offline`, `presence-dot`, `member-add`, `google` |
 
 The boundary is a judgement call, so the test is: **would another app in this workspace
 plausibly use it?** A chevron yes, the Velista sailboat no. `google` sits in the app library
@@ -428,7 +450,7 @@ because it is a third party brand mark tied to this app's sign in flow, not a UI
 
 ## 10. Component inventory
 
-Built in `libs/luna-shopper-frontend/ui` as each page plan calls for it. Listed here so the
+Built in `libs/velista/ui` as each page plan calls for it. Listed here so the
 same button is not invented three times.
 
 **Foundations:** layout shell (header, content, bottom action bar), page header, sheet and
@@ -463,7 +485,7 @@ Non negotiable, checked per page:
 ## 12. Acceptance criteria for this plan
 
 - [ ] `_primitives.scss`, `_semantic.scss`, `_themes.scss` exist in
-      `libs/luna-shopper-frontend/ui/src/lib/styles`, and are the only files containing
+      `libs/velista/ui/src/lib/styles`, and are the only files containing
       literal colour values.
 - [ ] Tokens are scoped to the app root element, not `:root`.
 - [ ] Both Night and Day are implemented and switchable, with system preference detection

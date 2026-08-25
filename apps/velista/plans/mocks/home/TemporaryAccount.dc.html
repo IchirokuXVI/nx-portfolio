@@ -7,7 +7,7 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
   <style>
     body { margin: 0; }
     * { box-sizing: border-box; }
@@ -31,7 +31,7 @@
           <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
         </g>
       </svg>
-      <span style="font-family: 'Instrument Serif', Georgia, serif; font-size: 22px; line-height: 1; color: #f7f8fc;">Velista</span>
+      <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
     </div>
     <div style="display: flex; align-items: center; gap: 2px;">
       <button type="button" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;" aria-label="Search">
@@ -40,13 +40,35 @@
           <path d="m16 16 4 4"/>
         </svg>
       </button>
-      <button type="button" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;" aria-label="Your account">
-        <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
+      <button type="button" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;" aria-label="Your guest account">
+        <span style="width: 30px; height: 30px; border-radius: 999px; background: rgba(167,139,250,0.12); border: 1px dashed rgba(167,139,250,0.55); display: flex; align-items: center; justify-content: center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M19 20v-1.8a3.6 3.6 0 0 0-3.6-3.6H8.6A3.6 3.6 0 0 0 5 18.2V20"/>
+            <circle cx="12" cy="7.6" r="3.6"/>
+          </svg>
+        </span>
       </button>
     </div>
   </div>
 
-  <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 18px; padding: 18px 20px 0;">
+  <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 0;">
+
+    <div style="background: rgba(167,139,250,0.09); border: 1px solid rgba(167,139,250,0.28); border-radius: 16px; padding: 14px 15px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: flex-start; gap: 11px;">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;" aria-hidden="true">
+          <path d="M12 3.2 19.2 6v5.4c0 4.3-2.9 8.1-7.2 9.4-4.3-1.3-7.2-5.1-7.2-9.4V6Z"/>
+          <path d="m9.4 12.2 1.9 1.9 3.5-3.8"/>
+        </svg>
+        <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+          <span style="font-size: 14.5px; font-weight: 600; color: #f7f8fc;">You are shopping as a guest</span>
+          <span style="font-size: 13px; line-height: 1.45; color: #c2c8db;">This phone is the only thing holding your account. Add an email or Google to keep your groups and lists if you lose it.</span>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button type="button" style="flex: 1; height: 44px; border: none; border-radius: 12px; background: #a78bfa; color: #11141f; font-family: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer;">Secure my account</button>
+        <button type="button" style="height: 44px; padding: 0 14px; border: none; border-radius: 12px; background: transparent; color: #98a0bb; font-family: inherit; font-size: 14.5px; font-weight: 500; cursor: pointer;">Not now</button>
+      </div>
+    </div>
 
     <div style="display: flex; flex-direction: column; gap: 9px;">
       <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">PICK UP WHERE YOU LEFT OFF</span>
@@ -60,23 +82,11 @@
             <path d="m9 6 6 6-6 6"/>
           </svg>
         </div>
-
         <div style="display: flex; flex-direction: column; gap: 6px;">
           <div style="height: 6px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
             <div style="width: 58%; height: 100%; border-radius: 999px; background: #34d399;"></div>
           </div>
           <span style="font-size: 12px; color: #98a0bb;">7 of 12 ready</span>
-        </div>
-
-        <div style="display: flex; align-items: center; gap: 9px; padding-top: 2px; border-top: 1px solid rgba(255,255,255,0.06);">
-          <div style="display: flex; align-items: center; padding-top: 10px;">
-            <span style="width: 24px; height: 24px; border-radius: 999px; background: #7c3aed; border: 2px solid #161a28; color: #f7f8fc; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
-            <span style="width: 24px; height: 24px; border-radius: 999px; background: #2563eb; border: 2px solid #161a28; color: #f7f8fc; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">M</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 6px; padding-top: 10px;">
-            <span style="width: 6px; height: 6px; border-radius: 999px; background: #34d399;"></span>
-            <span style="font-size: 12px; color: #98a0bb;">Ana and Marc are shopping now</span>
-          </div>
         </div>
       </div>
     </div>
@@ -94,56 +104,13 @@
 
       <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 14px 15px; display: flex; flex-direction: column; gap: 11px;">
         <div style="display: flex; align-items: center; gap: 11px;">
-          <span style="width: 38px; height: 38px; border-radius: 12px; background: #262b40; color: #ffc271; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">H</span>
+          <span style="width: 38px; height: 38px; border-radius: 12px; background: #262b40; color: #98a0bb; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">H</span>
           <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
             <div style="display: flex; align-items: center; gap: 7px;">
               <span style="font-size: 16px; font-weight: 600; color: #f7f8fc;">Home</span>
-              <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #ffc271; background: rgba(255,180,84,0.09); border: 1px solid rgba(255,180,84,0.28); border-radius: 999px; padding: 2px 7px;">OWNER</span>
-            </div>
-            <span style="font-size: 12.5px; color: #6f7899;">3 members &middot; 2 lists</span>
-          </div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="m9 6 6 6-6 6"/>
-          </svg>
-        </div>
-
-        <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 11px; background: rgba(167,139,250,0.10); border: 1px solid rgba(167,139,250,0.26); border-radius: 10px;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M16 19v-1.6a3.4 3.4 0 0 0-3.4-3.4H6.4A3.4 3.4 0 0 0 3 17.4V19"/>
-            <circle cx="9.5" cy="7.4" r="3.4"/>
-            <path d="M19 8.4v4M21 10.4h-4"/>
-          </svg>
-          <span style="flex: 1; font-size: 13px; font-weight: 500; color: #c2c8db;">Ines and 2 more want to join</span>
-          <span style="font-size: 12.5px; font-weight: 600; color: #a78bfa;">Review</span>
-        </div>
-
-        <div style="display: flex; flex-direction: column; gap: 1px;">
-          <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid rgba(255,255,255,0.06);">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/>
-            </svg>
-            <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Weekly shop</span>
-            <span style="font-size: 12px; color: #34d399;">7 of 12 ready</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid rgba(255,255,255,0.06);">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/>
-            </svg>
-            <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Costco run</span>
-            <span style="font-size: 12px; color: #6f7899;">4 items</span>
-          </div>
-        </div>
-      </div>
-
-      <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 14px 15px; display: flex; flex-direction: column; gap: 11px;">
-        <div style="display: flex; align-items: center; gap: 11px;">
-          <span style="width: 38px; height: 38px; border-radius: 12px; background: #262b40; color: #98a0bb; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">F</span>
-          <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
-            <div style="display: flex; align-items: center; gap: 7px;">
-              <span style="font-size: 16px; font-weight: 600; color: #f7f8fc;">Flat 3B</span>
               <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #98a0bb; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.13); border-radius: 999px; padding: 2px 7px;">MEMBER</span>
             </div>
-            <span style="font-size: 12.5px; color: #6f7899;">5 members &middot; 1 list</span>
+            <span style="font-size: 12.5px; color: #6f7899;">3 members &middot; 1 list</span>
           </div>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="m9 6 6 6-6 6"/>
@@ -153,8 +120,19 @@
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/>
           </svg>
-          <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Party supplies</span>
-          <span style="font-size: 12px; color: #6f7899;">8 items</span>
+          <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Weekly shop</span>
+          <span style="font-size: 12px; color: #34d399;">7 of 12 ready</span>
+        </div>
+      </div>
+
+      <div style="background: #11141f; border: 1px dashed rgba(255,255,255,0.13); border-radius: 18px; padding: 14px 15px; display: flex; align-items: center; gap: 11px;">
+        <span style="width: 38px; height: 38px; border-radius: 12px; background: rgba(255,255,255,0.04); color: #525a78; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">F</span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span style="font-size: 16px; font-weight: 600; color: #c2c8db;">Flat 3B</span>
+            <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #a78bfa; background: rgba(167,139,250,0.10); border: 1px solid rgba(167,139,250,0.30); border-radius: 999px; padding: 2px 7px;">PENDING</span>
+          </div>
+          <span style="font-size: 12.5px; color: #6f7899;">Waiting for Marc to let you in</span>
         </div>
       </div>
     </div>

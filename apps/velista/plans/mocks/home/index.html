@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Velista home page mocks</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      background: #11141f;
+      color: #f7f8fc;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+    h1 { margin: 0 0 6px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 30px; letter-spacing: 0.03em; }
+    p.lede { margin: 0 0 28px; font-size: 14px; line-height: 1.55; color: #98a0bb; max-width: 720px; }
+    p.lede a { color: #ffb454; }
+    .board { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+    figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    figcaption { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; color: #98a0bb; text-transform: uppercase; }
+    iframe { border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; background: #0a0c14; display: block; }
+  </style>
+</head>
+<body>
+  <h1>Velista home page mocks</h1>
+  <p class="lede">
+    A local, offline look at the same artboards published in the design canvas. This file is a
+    convenience for reading the repo without opening the artifact. The artboards themselves
+    (<code>*.dc.html</code>) are the source of truth, and the canvas is the place to edit them.
+    See <code>README.md</code> for how to export static images for embedding in the plan docs.
+  </p>
+
+  <div class="board">
+    <figure>
+      <figcaption>Anonymous, first open</figcaption>
+      <iframe src="./Main.dc.html" width="390" height="844" title="Anonymous, first open"></iframe>
+    </figure>
+    <figure>
+      <figcaption>Signed in, returning</figcaption>
+      <iframe src="./Authenticated.dc.html" width="390" height="844" title="Signed in, returning"></iframe>
+    </figure>
+    <figure>
+      <figcaption>Guest account, pending group</figcaption>
+      <iframe src="./TemporaryAccount.dc.html" width="390" height="844" title="Guest account and pending group"></iframe>
+    </figure>
+    <figure>
+      <figcaption>Day theme, signed in</figcaption>
+      <iframe src="./DayTheme.dc.html" width="390" height="844" title="Day theme, signed in"></iframe>
+    </figure>
+    <figure>
+      <figcaption>Brand, mark and wordmark</figcaption>
+      <iframe src="./Brand.dc.html" width="980" height="800" title="Brand, mark and wordmark"></iframe>
+    </figure>
+    <figure>
+      <figcaption>Empty, no connection, error</figcaption>
+      <iframe src="./States.dc.html" width="1330" height="970" title="Empty, no connection and error states"></iframe>
+    </figure>
+  </div>
+</body>
+</html>

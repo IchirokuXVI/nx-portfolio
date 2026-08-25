@@ -1,4 +1,4 @@
-# 0001 Luna Shopper frontend: overview and architecture
+# 0001 Velista frontend: overview and architecture
 
 > Paths are repo relative. Never use relative imports across lib boundaries, use the
 > `@portfolio/<scope>/<lib>` aliases. **Commit locally only, never push** (CLAUDE.md
@@ -7,7 +7,7 @@
 
 ## 1. Goal
 
-Ship the Luna Shopper client: a phone first, installable, collaborative shopping list
+Ship the Velista client: a phone first, installable, collaborative shopping list
 app that talks to the existing `luna-shopper-backend` gateway over REST and to the
 realtime service over WebSocket or SSE.
 
@@ -61,26 +61,27 @@ Technical identifiers, which are internal and stay stable across a rename:
 
 | Thing | Value | Why |
 | --- | --- | --- |
-| Nx project / module federation name | `lunaShopper` | MF names must be valid JS identifiers, so no hyphen is allowed |
-| App directory | `apps/luna-shopper-frontend` | Mirrors `apps/luna-shopper-backend` |
-| e2e project | `lunaShopper-e2e`, directory `apps/luna-shopper-frontend-e2e` | Matches `landingV2-e2e` |
-| Routes alias | `lunaShopper/Routes` | Matches the other remotes |
-| Library directory | `libs/luna-shopper-frontend/*` | See D5 |
-| Library alias | `@portfolio/luna-shopper-frontend/<lib>` | See D5 |
+| Nx project / module federation name | `velista` | MF names must be valid JS identifiers, so no hyphen is allowed |
+| App directory | `apps/velista` | Named for the product, not the backend |
+| e2e project | `velista-e2e`, directory `apps/velista-e2e` | Matches `landingV2-e2e` |
+| Routes alias | `velista/Routes` | Matches the other remotes |
+| Library directory | `libs/velista/*` | See D5 |
+| Library alias | `@portfolio/velista/<lib>` | See D5 |
 | Dev port | **4205** | 4200 shell, 4201 landing, 4202 odontogram, 4203 damoclesSword, 4204 landingV2 |
 
-> **Decision needed before scaffolding: keep the `lunaShopper` codename, or rename the
-> project to `velista`?** The table above is written for the codename. Renaming the project
-> (`apps/velista`, `libs/velista/*`, MF name `velista`, alias `@portfolio/velista/*`) is
-> **free right now**, because not one file of this app exists yet, and it stops a discarded
-> name from being carried forever. The argument for keeping `lunaShopper` is symmetry with
-> `apps/luna-shopper-backend`, which is a much larger rename that nobody has asked for.
+> **The frontend was renamed to `velista` on 2026-08-25, and the backend was deliberately
+> left alone.** So `apps/velista` sits next to `apps/luna-shopper-backend`, and the
+> frontend libraries `libs/velista/*` sit next to the backend's `libs/luna-shopper/*`.
 >
-> These two never have to match: they are separate deployables, and the only thing they
-> share is `@portfolio/luna-shopper/contracts`. My recommendation is to **rename the
-> frontend to `velista` now** and leave the backend alone, accepting the asymmetry, because
-> the cost of this rename only goes up from here. Nothing else in this plan set depends on
-> the answer, so it is recorded here rather than blocking.
+> That asymmetry is intentional, not an oversight mid rename. The two are separate
+> deployables that share exactly one thing, `@portfolio/luna-shopper/contracts`, and
+> renaming the backend is a large job touching image names, Helm keys, CI and migrations
+> that buys nothing. The frontend rename was done now precisely because no file of it
+> existed yet, which is the only moment it is free.
+>
+> **Consequence to remember:** in this repo `luna-shopper` now means *the backend*, and
+> `velista` means *the frontend*. Anything still saying `luna-shopper` in a frontend
+> context is a leftover and should be fixed, with one exception, the contracts import.
 
 ## 3. D1: ship as a shell remote now, as a standalone app later
 
@@ -100,7 +101,7 @@ rewrite. They are binding on every page plan in this set.
 1. **The app owns its own chrome.** It renders its own header, navigation, and footer
    inside its own layout component. It never relies on anything the shell draws, and it
    never styles anything outside its own host element.
-2. **All logic lives in `libs/luna-shopper-frontend/*`.** `apps/luna-shopper-frontend`
+2. **All logic lives in `libs/velista/*`.** `apps/velista`
    holds only bootstrap, module federation config, providers, and the remote entry. When
    the app is extracted, the libraries move unchanged and only the thin app shell is
    rebuilt.
@@ -111,7 +112,7 @@ rewrite. They are binding on every page plan in this set.
    Tokens are defined on the app's own root element, not on `:root`, so the shell's
    global styles cannot leak in and the app's tokens cannot leak out. See `0002`.
 5. **Routing is relative.** The app never constructs an absolute URL that assumes the
-   `/<locale>/luna-shopper` prefix. A single injectable base path token supplies it, and
+   `/<locale>/velista` prefix. A single injectable base path token supplies it, and
    the standalone build supplies an empty one.
 6. **Its own API configuration.** Backend base URLs come from the app's own environment
    surface, not from assumptions baked into shared portfolio code.
@@ -131,7 +132,7 @@ configuration gap.**
 
 In module federation the **host** produces the document. A remote is code the host loads
 at runtime into a page the host already rendered. If `shell` is client rendered, then
-nothing inside `lunaShopper` can be server rendered, whatever that remote's own build
+nothing inside `velista` can be server rendered, whatever that remote's own build
 does.
 
 This is confirmed by the toolchain actually installed in this workspace. In Nx 22.7.2,
@@ -146,7 +147,7 @@ the remotes it renders", never "one SSR remote under a client rendered host".
 
 ### 4.1 What enabling it would actually cost
 
-Turning `shell` into an SSR host is a portfolio wide change, not a Luna change:
+Turning `shell` into an SSR host is a portfolio wide change, not a Velista change:
 
 - `shell` becomes a Node process instead of static files behind nginx, which changes the
   Dockerfile, the Helm deployment, the probes, and the reverse proxy for the **whole**
@@ -192,7 +193,7 @@ The goal is an installable app that can be published to a store. Both are **orig
 scoped**, which the remote phase cannot satisfy:
 
 - A **service worker** controls a scope under one origin. Registered from
-  `ichirokuxvi.com/en/luna-shopper`, its scope sits inside the portfolio origin and it
+  `ichirokuxvi.com/en/velista`, its scope sits inside the portfolio origin and it
   shares that origin's storage, cookies, and cache with the portfolio.
 - A **web app manifest** describes an app whose `start_url` and scope are the portfolio's,
   so an install prompt would install "the portfolio", not this product.
@@ -212,19 +213,19 @@ handling of connection loss in the meantime.
 ## 6. D4: routing
 
 Locale first, like every other app here (CLAUDE.md "Locale-first routing"). The app mounts
-at `/<locale>/luna-shopper` and all of its own routes are relative to that.
+at `/<locale>/velista` and all of its own routes are relative to that.
 
 ### 6.1 A route ordering trap in the shell
 
 `apps/shell/src/app/app.routes.ts` currently ends its `:locale` children with an
 empty path route that loads `landingV2/Routes`, followed by a wildcard. An empty path
 route with `loadChildren` is **not terminal**: Angular will hand the remaining segments to
-landingV2's own route table. So a `luna-shopper` route appended after it would never be
+landingV2's own route table. So a `velista` route appended after it would never be
 reached, and the user would land on landingV2's not found page instead.
 
-> **The `luna-shopper` route must be inserted before the empty path `''` entry**, next to
+> **The `velista` route must be inserted before the empty path `''` entry**, next to
 > `odontogram` and `damoclesSword`. The scaffolding plan will call this out again with the
-> exact diff, and the e2e suite must cover `/<locale>/luna-shopper` resolving to this app,
+> exact diff, and the e2e suite must cover `/<locale>/velista` resolving to this app,
 > so a future route reshuffle cannot silently break it.
 
 ### 6.2 Route table
@@ -252,7 +253,7 @@ filled in as the set grows.
 
 ## 7. D5: library layout
 
-New scope: **`libs/luna-shopper-frontend/*`**, alias `@portfolio/luna-shopper-frontend/<lib>`.
+New scope: **`libs/velista/*`**, alias `@portfolio/velista/<lib>`.
 
 It is deliberately **not** folded into the existing `libs/luna-shopper/` scope, which holds
 backend libraries (`contracts`, `platform`, `test-fixtures`). Two reasons: `platform` is
@@ -361,15 +362,13 @@ the mocks first.
 
 ## 11. Open questions
 
-1. **Whether to rename the Nx project from `lunaShopper` to `velista`.** See the note in
-   section 2. Free now, expensive after scaffolding, and recommended.
-2. **Spanish and English only?** Assumed yes, matching landingV2 and the backend error
+1. **Spanish and English only?** Assumed yes, matching landingV2 and the backend error
    catalog. Say so if a third locale is expected, because it changes nothing structurally
    but does change the translation workload per page.
-3. **Store target.** Play Store via TWA is assumed, since it is the cheap path from a PWA.
+2. **Store target.** Play Store via TWA is assumed, since it is the cheap path from a PWA.
    iOS App Store does not accept a plain web wrapper, and reaching it means Capacitor or a
    native shell, which is a much larger decision. It does not affect this phase but should
    be settled before the standalone phase.
-4. **Does the public marketing surface live here at all**, or on the portfolio as a
-   project page? If Luna keeps a marketing page, it is the one route that genuinely wants
+3. **Does the public marketing surface live here at all**, or on the portfolio as a
+   project page? If Velista keeps a marketing page, it is the one route that genuinely wants
    SSR, and it may be better served as a prerendered page than as part of the app.
