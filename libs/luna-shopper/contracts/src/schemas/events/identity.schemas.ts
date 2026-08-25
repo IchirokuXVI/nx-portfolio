@@ -10,6 +10,7 @@ export const IDENTITY_EVENT_SCHEMA_IDS = {
   userRegistered: schemaId('event/user.registered'),
   userUpgraded: schemaId('event/user.upgraded'),
   userEmailVerified: schemaId('event/user.emailVerified'),
+  userDeleted: schemaId('event/user.deleted'),
 } as const;
 
 const userIdPayload = (id: string): JsonSchema =>
@@ -19,6 +20,7 @@ export const identityEventSchemas: JsonSchema[] = [
   userIdPayload(IDENTITY_EVENT_SCHEMA_IDS.userRegistered),
   userIdPayload(IDENTITY_EVENT_SCHEMA_IDS.userUpgraded),
   userIdPayload(IDENTITY_EVENT_SCHEMA_IDS.userEmailVerified),
+  userIdPayload(IDENTITY_EVENT_SCHEMA_IDS.userDeleted),
 ];
 
 /** event name -> payload schema id. */
@@ -27,4 +29,5 @@ export const identityEventContracts: Record<string, string> = {
   [IDENTITY_EVENTS.userUpgraded]: IDENTITY_EVENT_SCHEMA_IDS.userUpgraded,
   [IDENTITY_EVENTS.userEmailVerified]:
     IDENTITY_EVENT_SCHEMA_IDS.userEmailVerified,
+  [IDENTITY_EVENTS.userDeleted]: IDENTITY_EVENT_SCHEMA_IDS.userDeleted,
 };

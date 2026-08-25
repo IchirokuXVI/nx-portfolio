@@ -150,6 +150,8 @@ const addLineRequest = object(
     listId: nonEmptyString(),
     content: string(),
     quantity: integer({ minimum: 1 }),
+    // Optional opaque catalog Item reference (plan 0012); null or absent = none.
+    itemId: nullableString(),
   },
   ['userId', 'listId', 'content']
 );
@@ -160,6 +162,8 @@ const updateLineRequest = object(
     lineId: nonEmptyString(),
     content: string(),
     quantity: integer({ minimum: 1 }),
+    // Set or clear the catalog Item reference (plan 0012); null clears it.
+    itemId: nullableString(),
   },
   ['userId', 'lineId']
 );

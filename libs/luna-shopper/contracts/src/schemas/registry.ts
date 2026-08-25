@@ -9,7 +9,15 @@ import {
   domainEventContracts,
   realtimeEventSchemas,
 } from './events/realtime.schemas';
+import {
+  accountMessageContracts,
+  accountSchemas,
+} from './messages/account.schemas';
 import { authMessageContracts, authSchemas } from './messages/auth.schemas';
+import {
+  catalogMessageContracts,
+  catalogSchemas,
+} from './messages/catalog.schemas';
 import { listMessageContracts, listSchemas } from './messages/list.schemas';
 import { mergeMessageContracts, mergeSchemas } from './messages/merge.schemas';
 import {
@@ -26,10 +34,12 @@ export interface MessageContract {
 /** subject -> { request schema id, response schema id } for every request/reply. */
 export const messageContracts: Record<string, MessageContract> = {
   ...authMessageContracts,
+  ...accountMessageContracts,
   ...zoneMessageContracts,
   ...listMessageContracts,
   ...mergeMessageContracts,
   ...realtimeMessageContracts,
+  ...catalogMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -43,10 +53,12 @@ export const allSchemas: JsonSchema[] = [
   ...enumSchemas,
   ...commonSchemas,
   ...authSchemas,
+  ...accountSchemas,
   ...zoneSchemas,
   ...listSchemas,
   ...mergeSchemas,
   ...realtimeSchemas,
+  ...catalogSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
 ];

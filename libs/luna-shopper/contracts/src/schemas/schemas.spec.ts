@@ -2,12 +2,19 @@ import { IDENTITY_EVENTS } from '../lib/events/identity.events';
 import { RealtimeEvent } from '../lib/events/realtime.events';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
+  ITEM_PATTERNS,
+  SUPERMARKET_ITEM_PATTERNS,
+  SUPERMARKET_LOCATION_PATTERNS,
+  SUPERMARKET_PATTERNS,
+} from '../lib/messages/catalog.messages';
+import {
   COMMENT_PATTERNS,
   LINE_PATTERNS,
   LIST_PATTERNS,
 } from '../lib/messages/list.messages';
 import { MERGE_PATTERNS } from '../lib/messages/merge.messages';
 import { REALTIME_ACCESS_PATTERNS } from '../lib/messages/realtime.messages';
+import { RECONCILIATION_PATTERNS } from '../lib/messages/reconciliation.messages';
 import {
   MEMBERSHIP_PATTERNS,
   ZONE_PATTERNS,
@@ -32,6 +39,7 @@ describe('contract schemas', () => {
   describe('registry completeness', () => {
     const allMessageSubjects = [
       ...Object.values(AUTH_PATTERNS),
+      ...Object.values(RECONCILIATION_PATTERNS),
       ...Object.values(ZONE_PATTERNS),
       ...Object.values(MEMBERSHIP_PATTERNS),
       ...Object.values(LIST_PATTERNS),
@@ -39,6 +47,10 @@ describe('contract schemas', () => {
       ...Object.values(COMMENT_PATTERNS),
       ...Object.values(MERGE_PATTERNS),
       ...Object.values(REALTIME_ACCESS_PATTERNS),
+      ...Object.values(SUPERMARKET_PATTERNS),
+      ...Object.values(SUPERMARKET_LOCATION_PATTERNS),
+      ...Object.values(ITEM_PATTERNS),
+      ...Object.values(SUPERMARKET_ITEM_PATTERNS),
     ];
 
     it.each(allMessageSubjects)(
@@ -152,6 +164,54 @@ describe('contract schemas', () => {
         }).valid
       ).toBe(true);
     });
+
+    it('user.deleted event and auth.deleteAccount response (plan 0011)', () => {
+      expect(validateEvent('user.deleted', { userId: 'u' }).valid).toBe(true);
+      expect(
+        validateMessageResponse('auth.deleteAccount', {
+          userId: 'u',
+          deleted: true,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('line.add request may carry an optional itemId (plan 0012)', () => {
+      expect(
+        validateMessageRequest('line.add', {
+          userId: 'u',
+          listId: 'li',
+          content: 'Milk',
+          itemId: 'item-1',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('catalog item.create request + item.search response (plan 0012)', () => {
+      expect(
+        validateMessageRequest('item.create', {
+          userId: 'owner',
+          name: { en: 'Milk', es: 'Leche' },
+          category: 'DAIRY',
+          defaultUnit: 'LITER',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('item.search', {
+          items: [
+            {
+              id: 'i',
+              name: { en: 'Milk', es: 'Leche' },
+              brand: null,
+              imageUrl: null,
+              sku: null,
+              category: 'DAIRY',
+              defaultUnit: 'LITER',
+            },
+          ],
+          nextCursor: null,
+        }).valid
+      ).toBe(true);
+    });
   });
 
   describe('malformed payloads fail', () => {
@@ -218,6 +278,16 @@ describe('contract schemas', () => {
           config: {},
         }).valid
       ).toBe(true);
+    });
+
+    it('catalog item.create rejects a missing required enum (plan 0012)', () => {
+      expect(
+        validateMessageRequest('item.create', {
+          userId: 'owner',
+          name: { en: 'Milk', es: 'Leche' },
+          defaultUnit: 'LITER',
+        }).valid
+      ).toBe(false);
     });
   });
 });
