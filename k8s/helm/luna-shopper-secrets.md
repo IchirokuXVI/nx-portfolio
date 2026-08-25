@@ -19,13 +19,14 @@ staging is enabled, `luna-shopper-secrets-staging`:
 | ---------------------- | ------------------------------------------------------ |
 | `AUTH_DB_URL`          | `postgres://<user>:<pw>@luna-shopper-auth-db:5432/<db>`|
 | `CORE_DB_URL`          | `postgres://<user>:<pw>@luna-shopper-core-db:5432/<db>`|
+| `CATALOG_DB_URL`       | `postgres://<user>:<pw>@luna-shopper-catalog-db:5432/<db>`|
 | `AUTH_JWT_PRIVATE_KEY` | PEM private key — **only** the auth pod receives it    |
 | `AUTH_JWT_PUBLIC_KEY`  | PEM public key — every service verifies tokens with it |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret                             |
 | `SMTP_PASS`            | SMTP submission password                               |
 
-Per Postgres instance — `luna-shopper-auth-db-secret` and
-`luna-shopper-core-db-secret`:
+Per Postgres instance — `luna-shopper-auth-db-secret`,
+`luna-shopper-core-db-secret`, and `luna-shopper-catalog-db-secret`:
 
 | Key                 | What it is                                    |
 | ------------------- | --------------------------------------------- |
@@ -50,6 +51,8 @@ kubectl -n nx-portfolio create secret generic luna-shopper-auth-db-secret \
   --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)"
 kubectl -n nx-portfolio create secret generic luna-shopper-core-db-secret \
   --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)"
+kubectl -n nx-portfolio create secret generic luna-shopper-catalog-db-secret \
+  --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)"
 ```
 
 Application secret (repeat with `-staging` for staging, using the staging DB
@@ -59,6 +62,7 @@ names / credentials):
 kubectl -n nx-portfolio create secret generic luna-shopper-secrets-production \
   --from-literal=AUTH_DB_URL="postgres://luna_auth:PW@luna-shopper-auth-db:5432/luna_auth" \
   --from-literal=CORE_DB_URL="postgres://luna_core:PW@luna-shopper-core-db:5432/luna_core" \
+  --from-literal=CATALOG_DB_URL="postgres://luna_catalog:PW@luna-shopper-catalog-db:5432/luna_catalog" \
   --from-file=AUTH_JWT_PRIVATE_KEY=jwt.key \
   --from-file=AUTH_JWT_PUBLIC_KEY=jwt.pub \
   --from-literal=GOOGLE_CLIENT_SECRET="..." \

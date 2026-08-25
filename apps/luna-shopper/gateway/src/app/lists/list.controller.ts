@@ -148,6 +148,7 @@ export class ListsController {
       listId: id,
       content: dto.content,
       quantity: dto.quantity,
+      itemId: dto.itemId,
     });
   }
 
@@ -184,6 +185,7 @@ export class LinesController {
       lineId: id,
       content: dto.content,
       quantity: dto.quantity,
+      itemId: dto.itemId,
     });
   }
 

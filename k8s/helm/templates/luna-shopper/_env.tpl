@@ -50,6 +50,24 @@ Call with a dict: (dict "svc" <service> "cfg" <configMapName> "sec" <secretName>
       name: {{ $sec }}
       key: AUTH_JWT_PUBLIC_KEY
 {{- end }}
+{{- if eq $svc.role "catalog" }}
+- name: CATALOG_DB_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: CATALOG_DB_URL
+- name: AUTH_JWT_PUBLIC_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: AUTH_JWT_PUBLIC_KEY
+# The platform-admin allowlist (the app owner) that may write the catalog.
+- name: PLATFORM_ADMIN_USER_IDS
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: PLATFORM_ADMIN_USER_IDS
+{{- end }}
 {{- if eq $svc.role "auth" }}
 - name: AUTH_DB_URL
   valueFrom:

@@ -62,6 +62,25 @@ services:
       timeout: 5s
       retries: 10
 
+  # Catalog service database. A separate instance (and port) from auth and core,
+  # so the "no shared database" rule holds even locally (plan 0012).
+  catalog-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_catalog
+      POSTGRES_PASSWORD: luna_catalog
+      POSTGRES_DB: luna_catalog
+    ports:
+      - '${LUNA_CATALOG_DB_PORT:-5434}:5432'
+    volumes:
+      - catalog-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_catalog']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # Message broker with JetStream enabled from day one (durable streams, at least
   # once delivery, replay). The store directory is a named volume so streams
   # survive a restart, mirroring the persistent volume the cluster uses.
@@ -89,4 +108,5 @@ services:
 volumes:
   auth-db-data:
   core-db-data:
+  catalog-db-data:
   nats-data:
