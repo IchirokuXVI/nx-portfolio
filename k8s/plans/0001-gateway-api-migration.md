@@ -1,13 +1,13 @@
 # 0001 Move routing to the Gateway API
 
 First plan in `k8s/`. It replaces the hand templated nginx reverse proxy with the
-Kubernetes **Gateway API**, served by **Traefik**, with **cert-manager** issuing the
+Kubernetes **Gateway API**, served by **Envoy Gateway**, with **cert-manager** issuing the
 certificates. The cluster stays a single k3s node on the VPS, and the datastore stays
 SQLite. Nothing about the applications themselves changes: the images, the module
 federation topology, the hostnames, and the paths are all identical before and after.
 
-The plan is written so that swapping Traefik for another Gateway API implementation
-later is a values edit plus a bootstrap flag, not a chart rewrite.
+The plan is written so that swapping Envoy Gateway for another implementation later is a
+values edit plus a bootstrap flag, not a chart rewrite.
 
 ## 1. Why
 
@@ -43,8 +43,9 @@ tracks pod IPs live.
 
 ## 2. Target architecture
 
-The proxy pod disappears. Traefik runs once, cluster wide, as the data plane. The chart
-stops describing *how* to route and starts describing *what* the routes are.
+The proxy pod disappears from the chart. The chart stops describing *how* to route and
+starts describing *what* the routes are, and the data plane becomes something the
+implementation manages.
 
 ```
 values.yaml (.apps, unchanged)
@@ -53,9 +54,14 @@ values.yaml (.apps, unchanged)
       +--> HTTPRoute per app         host + path + backend + prefix strip
                      |
                      v
-            Traefik (watches Gateway API objects)
-                     |
-            Service type LoadBalancer  <-- MetalLB assigns 46.62.204.230
+       Envoy Gateway controller  (namespace envoy-gateway-system)
+                     |  watches Gateway API objects, and for each Gateway
+                     |  provisions a data plane of its own
+                     v
+       Deployment + Service  envoy-nx-portfolio-portfolio-<hash>
+                     |        (namespace envoy-gateway-system, type LoadBalancer)
+                     v
+            MetalLB assigns 46.62.204.230
 ```
 
 Three object kinds replace seven template files:
@@ -66,38 +72,62 @@ Three object kinds replace seven template files:
 | `Gateway` | 1, in the chart | the `server` block headers, `listen`, `ssl_certificate`, the proxy Deployment and Service |
 | `HTTPRoute` | one per routed app | each `location` block, its `rewrite`, and its `proxy_set_header` lines |
 
-Traefik is deliberately chosen over Envoy Gateway for one structural reason: Traefik **is**
-the data plane and attaches to Gateways, whereas Envoy Gateway provisions a separate
-data plane Deployment and Service per Gateway. Traefik's model is one proxy Deployment
-behind one LoadBalancer Service, which is exactly the shape the chart has today, so the
-MetalLB wiring and the local overlays carry over unchanged.
+### 2.1 What Envoy Gateway does differently, and why it was chosen
+
+The one behaviour to internalise before reading the rest of this plan:
+
+> Creating a `Gateway` object causes the Envoy Gateway controller to **provision a
+> Deployment and a Service for it**, named `envoy-<namespace>-<gateway-name>-<hash>`, in
+> the `envoy-gateway-system` namespace. Neither object is in this chart, neither is in the
+> application namespace, and the Service defaults to `type: LoadBalancer`.
+
+Traefik works the other way around: Traefik itself *is* the data plane, one Deployment
+behind one Service, and Gateways merely attach to it. That model is closer to the shape
+the chart has today, which makes Traefik marginally simpler to drop in.
+
+Envoy Gateway is chosen anyway, and the reason is the portability requirement in section 6.
+Traefik supports three overlapping ways to express the same route (Ingress, its own
+`IngressRoute` CRD, and the Gateway API), so staying portable there means continuously
+declining to use the proprietary path. Envoy Gateway has **no proprietary routing CRDs at
+all**: routing is the Gateway API or nothing. Its own CRDs (`EnvoyProxy`,
+`BackendTrafficPolicy`, `ClientTrafficPolicy`, `SecurityPolicy`) are *policy attachments*
+that decorate standard objects rather than replace them, so the drift this plan is trying
+to prevent is structurally harder to introduce.
+
+The cost is honest and worth stating: two pods instead of one (a controller plus a data
+plane) and roughly 200 to 300Mi more memory on a VPS that is not large. With a single
+Gateway there is a single data plane, so this does not grow with the number of apps.
 
 ## 3. Cluster prerequisites (the bootstrap)
 
 These install once per cluster and are **not** part of the application chart. Keeping
-them out is what makes the implementation swappable: the chart never names Traefik
+them out is what makes the implementation swappable: the chart never names Envoy Gateway
 except through a single values key.
 
 Add `k8s/bootstrap/` with a script pair, following the existing `luna-slot.sh` /
 `luna-slot.ps1` precedent so Windows is a first class path:
 
 - `k8s/bootstrap/install.sh` and `k8s/bootstrap/install.ps1`
-- Both take an implementation argument defaulting to `traefik`, plus an issuer argument
+- Both take an implementation argument defaulting to `envoy`, plus an issuer argument
   (`letsencrypt` or `selfsigned`) so the local and production paths differ by a flag
   rather than by mechanism.
 
 What the script does, in order:
 
-1. **Gateway API CRDs.** Apply the standard channel release. Traefik's chart can install
-   them, but applying them explicitly keeps the version pinned in the repo and keeps the
-   CRDs from being removed when the implementation is uninstalled.
-2. **The implementation.** For Traefik:
-   - `providers.kubernetesGateway.enabled=true`
-   - `providers.kubernetesIngressRoute.enabled=false`, deliberately, so the proprietary
-     `IngressRoute` and `Middleware` CRDs are not even available to reach for
-   - `gateway.enabled=false`, so Traefik's chart does not create its own default Gateway;
-     the application chart owns the Gateway object
-   - `service.type=LoadBalancer`
+1. **Gateway API CRDs.** Apply the standard channel release explicitly. Envoy Gateway's
+   chart bundles them, but applying them from a pinned URL keeps the version recorded in
+   the repo and keeps the CRDs from being torn out when the implementation is uninstalled.
+2. **The implementation.**
+
+   ```sh
+   helm install eg oci://docker.io/envoyproxy/gateway-helm \
+     --version <pinned> -n envoy-gateway-system --create-namespace
+   ```
+
+   The chart creates a `GatewayClass` named `eg` whose controller is
+   `gateway.envoyproxy.io/gatewayclass-controller`. Unlike the Traefik alternative there
+   is no provider to switch on and no default Gateway to switch off: the controller does
+   nothing until this chart's `Gateway` object appears.
 3. **cert-manager**, with the Gateway integration enabled. This is off by default and the
    flag name has moved between versions, so verify against the installed chart: recent
    versions take `config.enableGatewayAPI=true`, older ones take
@@ -108,13 +138,20 @@ What the script does, in order:
 Verification the script should print at the end:
 
 ```sh
-kubectl get gatewayclass                       # the class name and its controllerName
-kubectl get pods -n traefik
+kubectl get gatewayclass                       # expect `eg`, and Accepted=True
+kubectl get pods -n envoy-gateway-system
 kubectl get pods -n cert-manager
 ```
 
-The `gatewayclass` output is what feeds `gateway.className` in the next section, so it is
-worth surfacing rather than assuming.
+The `gatewayclass` output is what feeds `gateway.className` in section 6, so it is worth
+surfacing rather than assuming.
+
+After the chart's Gateway is deployed, one more check matters more here than it would
+with Traefik, because the object being checked is one the chart does not declare:
+
+```sh
+kubectl get svc -n envoy-gateway-system        # the provisioned envoy-... LoadBalancer
+```
 
 ### 3.1 MetalLB namespace allocation (blocking, found during analysis)
 
@@ -126,9 +163,15 @@ serviceAllocation:
     - {{ .Values.namespace }}     # nx-portfolio only
 ```
 
-Traefik installs into its own namespace, so under the current pool it would **never** be
-allocated `46.62.204.230` and its LoadBalancer Service would sit at `<pending>` forever.
-This is silent: nothing errors, the site simply never comes up.
+The data plane Service that Envoy Gateway provisions lives in `envoy-gateway-system`, not
+in `nx-portfolio`, so under the current pool it would **never** be allocated
+`46.62.204.230` and would sit at `<pending>` forever. This is silent: nothing errors, the
+site simply never comes up.
+
+It is also harder to spot than it would be with Traefik, because the stuck Service is not
+one this chart declares. `kubectl get svc -n nx-portfolio` looks entirely healthy while
+the site is unreachable, which is why section 3 makes checking `envoy-gateway-system` an
+explicit bootstrap step.
 
 Fix it as part of this plan by making the allocation a list:
 
@@ -136,16 +179,18 @@ Fix it as part of this plan by making the allocation a list:
 # values.yaml
 metallb:
   enabled: true
-  # Namespaces allowed to claim the pool. The gateway implementation lives outside
-  # the application namespace, so it needs an entry here.
+  # Namespaces allowed to claim the pool. The gateway implementation provisions its
+  # data plane Service in its own namespace, so that namespace needs an entry here.
+  # This is the one value that must change when swapping implementations.
   serviceNamespaces:
     - nx-portfolio
-    - traefik
+    - envoy-gateway-system
 ```
 
-Installing Traefik into `nx-portfolio` instead would also work and would need no chart
-change, but it mixes a cluster wide component into the application namespace and makes
-the swap to another implementation messier. The list is the better shape.
+An alternative is to pin the data plane into `nx-portfolio` with an `EnvoyProxy` resource
+(see 8.1), which would need no pool change. It is not worth it: it mixes a cluster wide
+component into the application namespace and trades a one line values edit for an
+implementation specific CRD, which is exactly the trade section 6 is trying to avoid.
 
 ## 4. Chart additions
 
@@ -326,9 +371,10 @@ cutover (section 10) so a rollback does not have to re-issue against rate limits
 ```yaml
 # values.yaml
 gateway:
-  # Swapping the implementation should mean editing this block and nothing else.
+  # Swapping the implementation should mean editing this block, plus the one
+  # namespace in metallb.serviceNamespaces, and nothing else.
   # Read the installed class name from `kubectl get gatewayclass`.
-  className: traefik
+  className: eg
 
   tls:
     enabled: true
@@ -343,34 +389,48 @@ gateway:
 The discipline that keeps the swap cheap is a single rule: **use only core
 `gateway.networking.k8s.io/v1` types and in spec `filters`.**
 
-| Portable | Locks the chart to Traefik |
+| Portable | Implementation specific |
 | --- | --- |
-| `Gateway`, `HTTPRoute`, `GatewayClass`, `ReferenceGrant` | `IngressRoute`, `Middleware`, `TraefikService`, `ServersTransport` |
-| `filters`: `URLRewrite`, `RequestRedirect`, `RequestHeaderModifier`, `ResponseHeaderModifier`, `RequestMirror` | `traefik.ingress.kubernetes.io/*` and `traefik.io/*` annotations |
-| `matches` on path, header, query, method | provider specific `Policy` CRDs |
+| `Gateway`, `HTTPRoute`, `GatewayClass`, `ReferenceGrant` | Envoy Gateway: `EnvoyProxy`, `BackendTrafficPolicy`, `ClientTrafficPolicy`, `SecurityPolicy`, `EnvoyPatchPolicy` |
+| `filters`: `URLRewrite`, `RequestRedirect`, `RequestHeaderModifier`, `ResponseHeaderModifier`, `RequestMirror` | Traefik, for comparison: `IngressRoute`, `Middleware`, `TraefikService`, `ServersTransport`, and `traefik.io/*` annotations |
+| `matches` on path, header, query, method | any `*.io/v1alpha1` policy CRD |
 | `backendRefs` with `weight` | |
 
-Everything this chart needs today is in the left column. The migration can be done
-without a single Traefik specific object, which is why disabling the
-`kubernetesIngressRoute` provider in section 3 is worth doing: it removes the temptation
-rather than relying on discipline.
+Everything this chart needs today is in the left column, with the single exception in 8.2.
 
-Swapping to Envoy Gateway later would then be: run the bootstrap with a different
-implementation argument, change `gateway.className`, and re devise only the one item in
-section 8.
+The distinction worth keeping in mind is that Envoy Gateway's CRDs are **policy
+attachments**, not alternative routing objects: an `EnvoyProxy` or a
+`BackendTrafficPolicy` decorates a standard `Gateway` or `HTTPRoute` rather than
+replacing it. So even where the chart is forced to use one, the routing itself stays
+expressed in portable objects and only the decoration has to be re-devised. That is a
+materially better failure mode than a proprietary route type, and it is the main reason
+Envoy Gateway suits this requirement.
+
+Swapping to another implementation would be: run the bootstrap with a different
+implementation argument, change `gateway.className`, change the namespace in
+`metallb.serviceNamespaces`, and re-express the one policy in 8.2.
 
 ## 7. Local development on Docker Desktop
 
 The whole stack has to keep working on Windows with Docker Desktop Kubernetes, which it
 does, because Gateway API is CRDs plus a controller Deployment and needs no cloud
-infrastructure. Traefik's Service is a LoadBalancer, and Docker Desktop publishes those
-on `localhost`, exactly as the reverse proxy Service is published today.
+infrastructure. The provisioned data plane Service is a LoadBalancer, and Docker Desktop
+publishes those on `localhost`, exactly as the reverse proxy Service is published today.
+
+Two Envoy Gateway specifics change the local muscle memory, and both belong in the README
+update in step 8:
+
+- The Service to inspect or port forward is in **`envoy-gateway-system`**, not
+  `nx-portfolio`, and its name carries a hash. `kubectl get svc -n envoy-gateway-system`
+  rather than a name that can be memorised.
+- `metallb.enabled` is already `false` in every local overlay, so the namespace allocation
+  from 3.1 is a production only concern and needs no local counterpart.
 
 Effect on each existing overlay:
 
 | Overlay | Effect |
 | --- | --- |
-| `values.localhost.yaml` (port mode, the default) | **Unaffected.** It sets `reverseProxy.enabled: false` and gives each app its own `lbPort`, bypassing the routing layer entirely. It needs no Traefik, no bootstrap, and no Gateway. This stays the zero setup path. |
+| `values.localhost.yaml` (port mode, the default) | **Unaffected.** It sets `reverseProxy.enabled: false` and gives each app its own `lbPort`, bypassing the routing layer entirely. It needs no Envoy Gateway, no bootstrap, and no Gateway object. This stays the zero setup path. |
 | `values.localhost-mfe.yaml` | Becomes one Gateway with a `localhost` listener plus five HTTPRoutes. Same host, same paths. |
 | `values.local.yaml` | Becomes one Gateway with `portfolio.localhost` and `mfe.localhost` listeners. Same hosts. |
 
@@ -410,18 +470,38 @@ optional either.
 The gateway service is a plain host root route and maps directly onto the template in
 4.2 with `path: /` and no rewrite.
 
-The realtime service is **the one portability wart in the whole migration**. Its nginx
+### 8.1 `EnvoyProxy`, and why this plan does not need one
+
+`EnvoyProxy` is the resource that configures the provisioned data plane: Service type and
+annotations, replica count, resources, and which namespace it lands in. It attaches to a
+Gateway through `spec.infrastructure.parametersRef`.
+
+This plan deliberately uses none. The defaults are already what is wanted (a
+`LoadBalancer` Service, one replica), and section 3.1 fixes the MetalLB allocation with a
+one line values change rather than reaching for this CRD. Recording that as a decision
+matters, because `EnvoyProxy` is the obvious tool to grab when the Service sits
+`<pending>` and it would quietly make the chart implementation specific for no gain.
+
+### 8.2 The one portability wart
+
+The realtime service is the single place section 6's rule is knowingly broken. Its nginx
 block carries WebSocket upgrade headers and `proxy_read_timeout 3600s` /
-`proxy_send_timeout 3600s`. The upgrade headers are handled automatically, but the long
-timeouts have no core spec equivalent yet:
+`proxy_send_timeout 3600s`. The upgrade headers need nothing (HTTP/1.1 upgrade is handled
+for a normal `HTTPRoute`), but the long lived connection timeouts have no core spec
+equivalent yet and must be expressed per implementation:
 
-- Traefik: a `ServersTransport`, or an entrypoint level timeout on the Traefik install
-- Envoy Gateway: a `BackendTrafficPolicy`
+- Envoy Gateway: a `BackendTrafficPolicy` with a `targetRef` at the realtime `HTTPRoute`,
+  setting the stream idle and request timeouts
+- Traefik, if ever swapped back to: a `ServersTransport`, or an entrypoint level timeout
 
-Keep this in a single clearly named file, `templates/gateway/_implementation-traefik.yaml.tpl`,
-gated on `.Values.gateway.className`, so the port to another implementation is mechanical
-and the blast radius is one file. This is the only place section 6's rule is knowingly
-broken, and it should be commented as such.
+Keep it in a single clearly named file, `templates/gateway/_implementation-envoy.yaml.tpl`,
+gated on `.Values.gateway.className`, so the port is mechanical and the blast radius is
+one file. It should carry a comment saying it is the deliberate exception.
+
+Because a `BackendTrafficPolicy` only decorates the `HTTPRoute`, the realtime route itself
+stays a portable object: swapping implementations loses the timeout tuning, not the
+routing, and the symptom would be sockets dropping at the default idle timeout rather
+than the service failing to route at all.
 
 ## 9. Out of scope
 
@@ -452,18 +532,20 @@ serving throughout.
 2. **Back up the certificates.** On the VPS, copy the contents of the `certs-pvc` and
    `letsencrypt-pvc` volumes off the node. Let's Encrypt rate limits make a lost account
    annoying rather than fatal, but there is no reason to find out.
-3. **Bootstrap the VPS.** Run `install.sh`, then fix the MetalLB pool from 3.1 and confirm
-   Traefik's Service actually receives `46.62.204.230` rather than sitting `<pending>`.
-   The bundled k3s Traefik must be disabled (`--disable=traefik`) so it does not contend;
-   check the existing k3s flags first, since MetalLB's presence suggests `--disable=servicelb`
-   is already set.
+3. **Bootstrap the VPS.** Run `install.sh`, then apply the MetalLB pool change from 3.1.
+   The bundled k3s Traefik must be disabled (`--disable=traefik`) so it does not contend
+   for ports 80 and 443; check the existing k3s flags first, since MetalLB's presence
+   suggests `--disable=servicelb` is already set.
 4. **Deploy the Gateway and HTTPRoutes alongside the existing proxy**, staging hostnames
-   only. Both stacks coexist: the nginx proxy holds the LoadBalancer IP, so verify Traefik
-   through a `port-forward` or a temporary second address. Confirm certificate issuance,
-   prefix stripping on every remote, and the HTTP to HTTPS redirect.
+   only. Both stacks coexist: the nginx proxy still holds `46.62.204.230`, so the
+   provisioned Service will sit `<pending>` at this stage, which is expected rather than
+   the 3.1 failure. Verify through `kubectl port-forward` against the
+   `envoy-gateway-system` Service. Confirm certificate issuance, prefix stripping on every
+   remote, and the HTTP to HTTPS redirect.
 5. **Cut over.** Delete the reverse-proxy templates and values keys from section 5, then
-   `helm upgrade`. Traefik takes the LoadBalancer IP. Watch route attachment status
-   rather than guessing:
+   `helm upgrade`. The provisioned Service takes the LoadBalancer IP once the proxy
+   Service releases it; confirm with `kubectl get svc -n envoy-gateway-system` before
+   testing hostnames. Watch route attachment status rather than guessing:
 
    ```sh
    kubectl get httproute -n nx-portfolio -o wide
@@ -487,13 +569,16 @@ in these templates, which is why step 2 exists.
 
 ## 12. Exit criteria
 
-- Production and staging serve on all four hostnames through Traefik, with valid Let's
-  Encrypt certificates issued by cert-manager, and no nginx proxy pod in the namespace.
+- Production and staging serve on all four hostnames through Envoy Gateway, with valid
+  Let's Encrypt certificates issued by cert-manager, and no nginx proxy pod in the
+  namespace.
+- The provisioned Service in `envoy-gateway-system` holds `46.62.204.230` rather than
+  sitting `<pending>`.
 - `templates/reverse-proxy/` is gone, and the chart's routing is three files totalling
   roughly 90 lines.
 - Plain HTTP redirects to HTTPS in production.
-- `helm template` renders no Traefik specific object except the single file named in
-  section 8.
+- `helm template` renders no `gateway.envoyproxy.io` object except the single file named
+  in 8.2, and no `EnvoyProxy` at all.
 - All three local overlays work on Windows with Docker Desktop, `values.localhost.yaml`
   still with no bootstrap at all, and no overlay sets a storage class for certificates.
 - `apps/docker/reverse-proxy` and `apps/docker/certbot` are deleted and CI is green with
