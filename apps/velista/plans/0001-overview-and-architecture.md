@@ -296,6 +296,18 @@ Recorded here because every page plan depends on it. The detail belongs to the
   messages. Errors come back as RFC 7807 problem documents with a correlation id, so the
   UI has a stable error code to switch on and an id worth surfacing in a support copy
   action rather than a raw message.
+
+  **One HTTP interceptor owns all of that**, plus the trace header below. Every outgoing
+  header is decided in one place, so nothing is set per call site and nothing is forgotten.
+- **Tracing: send `traceparent` once the backend is ready for it.** Backend plan
+  `0016-tracing-and-metrics.md` (written, **not yet implemented**) adds OpenTelemetry with
+  W3C trace context propagated across every hop, and it explicitly means the trace to run
+  from the originating HTTP request through to the realtime push another user's browser
+  receives. That tree starts one hop too late unless the **browser** emits the
+  `traceparent`, so when 0016 lands the interceptor should generate and send it, and the
+  correlation id stays exactly as it is (0016 promises the log and event contracts do not
+  change). Recorded now because it is a few lines in an interceptor that already exists,
+  and a retrofit across every call site later if it is forgotten.
 - **Identity.** Three states the UI must handle everywhere: anonymous, **temporary** user
   (minted by creating or joining a zone, holds a real token, has no credentials), and
   registered. The temporary state is a first class product state, not an edge case, and
