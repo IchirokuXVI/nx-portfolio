@@ -284,8 +284,9 @@ git grep -n '"name"' -- 'libs/luna-shopper/*/project.json'
 # 3. Nx resolves the renamed graph. Confirmed: all six app projects present.
 npx nx show projects | grep -i luna
 
-# 4. Lint and test. Confirmed green for all 8 projects.
-npx nx run-many -t lint test -p luna-shopper-backend-auth,luna-shopper-backend-core,\
+# 4. Lint, test and build. Confirmed green for all 8 projects; the five service
+#    builds emit to dist/apps/luna-shopper-backend-<svc>. See 7.1 if build fails.
+npx nx run-many -t lint test build -p luna-shopper-backend-auth,luna-shopper-backend-core,\
 luna-shopper-backend-catalog,luna-shopper-backend-gateway,luna-shopper-backend-realtime,\
 luna-shopper/contracts,luna-shopper/platform,luna-shopper/test-fixtures
 
@@ -300,21 +301,32 @@ npx nx serve luna-shopper-backend-auth   # then core / catalog / gateway / realt
 npx nx e2e luna-shopper-backend-e2e
 ```
 
-### 7.1 Pre existing build failure, unrelated to this rename
+### 7.1 If the build fails in a worktree, it is the worktree, not the rename
 
-`nx build` fails for all five services with 30 webpack `Module not found` errors,
-every one of them inside `node_modules`: `@grpc/proto-loader`, `kafkajs`, `mqtt`,
-`ioredis`, `amqplib`, `amqp-connection-manager`, `@mikro-orm/core`,
-`@nestjs/mongoose`, `@nestjs/sequelize`. These are optional peer dependencies of
-`@nestjs/microservices` and `@nestjs/terminus` that the workspace does not declare
-or install, and webpack resolves them eagerly instead of treating them as
-optional.
+The first build attempt failed for all five services with 30 webpack
+`Module not found` errors, every one inside `node_modules`: `@grpc/proto-loader`,
+`kafkajs`, `mqtt`, `ioredis`, `amqplib`, `amqp-connection-manager`,
+`@mikro-orm/core`, `@nestjs/mongoose`, `@nestjs/sequelize`.
 
-**This is not caused by the rename.** Building the same service at the parent
-commit, before any rename, produces the identical count of 30 errors, and not one
-error references a path under `apps/`. It needs its own fix (declare the optional
-deps, or add them to the webpack `externals` / `IgnorePlugin` list) and belongs in
-its own plan.
+That is the known worktree gotcha, not a rename problem and not a missing
+dependency. A fresh git worktree has no `node_modules` of its own. Node still
+resolves packages by walking up to the main checkout, so `nx`, `lint` and `test`
+all work, but Nx cannot externalize `@nestjs/microservices` without a project
+local `node_modules`, so webpack tries to **bundle** it and drags in every
+optional transport it references.
+
+The fix is a junction, not a dependency change:
+
+```sh
+cmd /c mklink /J "<worktree>\node_modules" "D:\Projects\nx-portfolio\node_modules"
+```
+
+After that, `build` is green for all five services and the outputs land in the
+renamed `dist/apps/luna-shopper-backend-<svc>` directories.
+
+Two independent checks confirmed the rename was never implicated: building the
+same service at the parent commit, before any rename, produced the identical 30
+errors, and no error referenced a path under `apps/`.
 
 ## 8. Follow ups
 
@@ -324,7 +336,6 @@ its own plan.
   `landing` / `odontogram` / `damoclesSword` convention.
 - `libs/luna-shopper/contracts` is the seam that frontend will import from. Keep
   it free of NestJS and Node only dependencies so a browser build can consume it.
-- Fix the optional dependency build failure described in 7.1.
 - Steps 6 and 7 of section 7 (booting each service against a live compose stack,
   and the e2e suite) still need a pass on a machine with the stack up. They are
   the only checks that exercise the rewritten `.env` paths.
