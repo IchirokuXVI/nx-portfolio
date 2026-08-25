@@ -4,7 +4,10 @@ import {
   RealtimeEvent,
   type DomainEvent,
 } from '@portfolio/luna-shopper/contracts';
-import { buildNatsHeaders } from '@portfolio/luna-shopper/platform';
+import {
+  buildNatsHeaders,
+  traceNatsSend,
+} from '@portfolio/luna-shopper/platform';
 import { randomUUID } from 'node:crypto';
 
 /** Injection token for the NATS client core uses to publish domain events. */
@@ -40,9 +43,14 @@ export class CoreEventsPublisher {
       ...(listId ? { listId } : {}),
       payload,
     };
-    const record = new NatsRecordBuilder(envelope)
-      .setHeaders(buildNatsHeaders())
-      .build();
-    this.client.emit(event, record);
+    // Inside a producer span so the fan out stays part of the originating
+    // request's trace: this publish is the link between the user's HTTP call and
+    // the push another user's browser receives (plan 0016, section 4.3).
+    traceNatsSend(event, () => {
+      const record = new NatsRecordBuilder(envelope)
+        .setHeaders(buildNatsHeaders())
+        .build();
+      this.client.emit(event, record);
+    });
   }
 }

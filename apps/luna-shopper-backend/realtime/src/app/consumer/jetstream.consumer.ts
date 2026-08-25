@@ -4,13 +4,19 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { context as otelContext } from '@opentelemetry/api';
 import {
   DOMAIN_EVENT_SUBJECTS,
   listRoom,
   zoneRoom,
   type DomainEvent,
 } from '@portfolio/luna-shopper/contracts';
-import { readCorrelationFromHeaders } from '@portfolio/luna-shopper/platform';
+import {
+  beginConsumerSpan,
+  readCorrelationFromHeaders,
+  recordFanoutLatency,
+  runWithRequestContext,
+} from '@portfolio/luna-shopper/platform';
 import {
   AckPolicy,
   connect,
@@ -156,19 +162,51 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     }
 
     const correlationId = readCorrelationFromHeaders(message.headers);
-    // Zone/membership/merge events reach the zone room; list-scoped events reach
-    // both the list room and the zone room, for a zone-level list index (section 6).
-    const rooms = [zoneRoom(envelope.zoneId)];
-    if (envelope.listId) {
-      rooms.push(listRoom(envelope.listId));
-    }
 
-    this.relay.publish({
-      rooms,
-      event: envelope.event,
-      payload: envelope.payload,
-      correlationId,
-    });
+    /**
+     * The fan out, wrapped in a consumer span parented to the publish in core
+     * (plan 0016, section 4.3). This is the hop that completes the single most
+     * valuable trace in the system: one tree running from the user's HTTP request
+     * through core and the broker to the push another user's browser receives.
+     * The latency from receiving the event to pushing it is recorded alongside,
+     * from the same place, so span and metric cannot disagree.
+     */
+    const fanOut = () => {
+      const scope = beginConsumerSpan(message.subject, message.headers);
+      const startedAt = Date.now();
+      try {
+        otelContext.with(scope.context, () => {
+          // Zone/membership/merge events reach the zone room; list-scoped events
+          // reach both the list room and the zone room, for a zone-level list
+          // index (section 6).
+          const rooms = [zoneRoom(envelope.zoneId)];
+          if (envelope.listId) {
+            rooms.push(listRoom(envelope.listId));
+          }
+
+          this.relay.publish({
+            rooms,
+            event: envelope.event,
+            payload: envelope.payload,
+            correlationId,
+          });
+        });
+        scope.finish();
+      } catch (err) {
+        scope.finish(err);
+        throw err;
+      } finally {
+        recordFanoutLatency(envelope.event, Date.now() - startedAt);
+      }
+    };
+
+    // Only when the publisher supplied one, so an uncorrelated internal event
+    // still logs exactly as it does today rather than gaining a minted id.
+    if (correlationId) {
+      runWithRequestContext({ correlationId }, fanOut);
+    } else {
+      fanOut();
+    }
   }
 
   /** True when this event id was already handled, remembering it otherwise. */

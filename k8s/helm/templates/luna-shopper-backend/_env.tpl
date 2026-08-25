@@ -7,12 +7,16 @@ the DB URLs stay with the service that owns the database, etc. Non secret values
 come from the per environment ConfigMap; secret values from the per environment
 Secret.
 
-Call with a dict: (dict "svc" <service> "cfg" <configMapName> "sec" <secretName>)
+Call with a dict:
+  (dict "svc" <service> "cfg" <configMapName> "sec" <secretName>
+        "env" <production|staging> "tag" <imageTag>)
 */}}
 {{- define "lunaShopperBackend.env" -}}
 {{- $svc := .svc -}}
 {{- $cfg := .cfg -}}
 {{- $sec := .sec -}}
+{{- $env := .env -}}
+{{- $tag := .tag -}}
 # Common to every service.
 - name: PORT
   value: {{ $svc.port | quote }}
@@ -26,6 +30,25 @@ Call with a dict: (dict "svc" <service> "cfg" <configMapName> "sec" <secretName>
     configMapKeyRef:
       name: {{ $cfg }}
       key: LOG_LEVEL
+# Telemetry (plan 0016, section 7). The identity is per pod and comes from the
+# release, so one image still serves both environments: the service name is the
+# role rather than the deployment name (a staging pod is the same service, told
+# apart by deployment.environment), and the version is the image tag already
+# being deployed. The switches come from the per environment ConfigMap and are
+# off by default, because there is no collector in the cluster yet (section 8).
+- name: OTEL_SERVICE_NAME
+  value: {{ printf "luna-shopper-backend-%s" $svc.role | quote }}
+- name: SERVICE_VERSION
+  value: {{ $tag | quote }}
+- name: DEPLOYMENT_ENVIRONMENT
+  value: {{ $env | quote }}
+{{- range $key := (list "OTEL_ENABLED" "OTEL_EXPORTER_OTLP_ENDPOINT" "OTEL_TRACES_SAMPLER_ARG" "METRICS_ENABLED") }}
+- name: {{ $key }}
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: {{ $key }}
+{{- end }}
 {{- if or (eq $svc.role "gateway") (eq $svc.role "realtime") }}
 - name: CORS_ORIGINS
   valueFrom:

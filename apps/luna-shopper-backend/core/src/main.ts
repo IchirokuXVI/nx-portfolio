@@ -1,3 +1,10 @@
+// Starts the OpenTelemetry SDK (plan 0016, section 4.1). It MUST stay the first
+// import of this file: the auto instrumentations patch modules as they are
+// required, so anything imported above it (@nestjs/core, http, pg) is already
+// resolved, never patched, and silently missing from every trace. A bare side
+// effect import is a barrier to organize-imports, so a format cannot move it.
+import '@portfolio/luna-shopper/platform/tracing';
+
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';

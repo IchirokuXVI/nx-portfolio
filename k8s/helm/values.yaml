@@ -187,6 +187,18 @@ lunaShopperBackend:
       # Comma-separated user ids allowed to write the catalog (plan 0012). Set to
       # the app owner's registered user id; empty means no one can write.
       platformAdminUserIds: ''
+      # Telemetry (plan 0016). Tracing stays off until a collector exists in the
+      # cluster (section 8): with no endpoint no exporter is constructed and no
+      # network call is attempted, so the services run exactly as they do today.
+      # Turning it on is a values change and a `helm upgrade`, not a new image.
+      otelEnabled: false
+      otelExporterEndpoint: ''
+      # Full sampling is right while traffic is small; lower it if the volume
+      # ever costs something. Parent based, so it only decides at a trace root.
+      otelSamplerArg: 1
+      # /metrics on each service's health port, reachable inside the cluster
+      # only. It costs nothing until something scrapes it.
+      metricsEnabled: true
     staging:
       natsUrl: nats://luna-shopper-backend-nats:4222
       logLevel: debug
@@ -202,6 +214,12 @@ lunaShopperBackend:
       mailFrom: Luna Shopper (staging) <no-reply@staging.ichirokuxvi.com>
       mailVerifyBaseUrl: https://staging.ichirokuxvi.com/verify-email
       platformAdminUserIds: ''
+      # Telemetry (plan 0016). Same posture as production; staging is the natural
+      # place to switch tracing on first once a collector lands.
+      otelEnabled: false
+      otelExporterEndpoint: ''
+      otelSamplerArg: 1
+      metricsEnabled: true
 
   # Each backend service: one Deployment + Service (+ PDB). `routed` services get
   # a reverse-proxy server block on `host`; the rest are ClusterIP only. `role`

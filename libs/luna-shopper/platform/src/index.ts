@@ -50,3 +50,17 @@ export * from './lib/idempotency/idempotency';
 
 // NATS correlation
 export * from './lib/nats/correlation-headers';
+
+// Telemetry (plan 0016). The SDK bootstrap is deliberately absent from this
+// barrel: it must load before Nest does, so a service imports it as a bare side
+// effect from `@portfolio/luna-shopper/platform/tracing` at the top of `main.ts`.
+export * from './lib/telemetry/metrics/declared-metrics';
+export * from './lib/telemetry/metrics/http.metrics';
+export * from './lib/telemetry/metrics/nats.metrics';
+export * from './lib/telemetry/metrics/runtime.metrics';
+export * from './lib/telemetry/nats-propagation';
+export * from './lib/telemetry/span-attributes';
+export * from './lib/telemetry/telemetry-runtime';
+export * from './lib/telemetry/telemetry.config';
+export * from './lib/telemetry/telemetry.module';
+export * from './lib/telemetry/telemetry.schema';

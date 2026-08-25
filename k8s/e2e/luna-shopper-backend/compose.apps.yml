@@ -41,6 +41,11 @@ services:
       CORS_ORIGINS: http://localhost:4200
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       PORT: '3000'
+      # Names this container on every span and metric (plan 0016, section 4.2).
+      # Tracing stays off unless OTEL_ENABLED and an endpoint are supplied, so
+      # this tier runs unchanged without a collector.
+      OTEL_SERVICE_NAME: luna-shopper-backend-gateway
+      DEPLOYMENT_ENVIRONMENT: development
     ports:
       - '${LUNA_GATEWAY_PORT:-3000}:3000'
     volumes:
@@ -67,6 +72,8 @@ services:
       CORS_ORIGINS: http://localhost:4200
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       PORT: '3001'
+      OTEL_SERVICE_NAME: luna-shopper-backend-realtime
+      DEPLOYMENT_ENVIRONMENT: development
     ports:
       - '${LUNA_REALTIME_PORT:-3001}:3001'
     volumes:
@@ -111,6 +118,8 @@ services:
       GOOGLE_CLIENT_SECRET: e2e-client-secret
       GOOGLE_CALLBACK_URL: http://localhost:3000/auth/google/callback
       PORT: '3002'
+      OTEL_SERVICE_NAME: luna-shopper-backend-auth
+      DEPLOYMENT_ENVIRONMENT: development
     ports:
       - '${LUNA_AUTH_PORT:-3002}:3002'
     volumes:
@@ -141,6 +150,8 @@ services:
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       ZONE_REAPER_ENABLED: 'false'
       PORT: '3003'
+      OTEL_SERVICE_NAME: luna-shopper-backend-core
+      DEPLOYMENT_ENVIRONMENT: development
     ports:
       - '${LUNA_CORE_PORT:-3003}:3003'
     volumes:
@@ -171,6 +182,8 @@ services:
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       PLATFORM_ADMIN_USER_IDS: ''
       PORT: '3004'
+      OTEL_SERVICE_NAME: luna-shopper-backend-catalog
+      DEPLOYMENT_ENVIRONMENT: development
     ports:
       - '${LUNA_CATALOG_PORT:-3004}:3004'
     volumes:

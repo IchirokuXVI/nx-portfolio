@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolveLocale } from '../localization/locale';
+import { setCorrelationIdOnActiveSpan } from '../telemetry/span-attributes';
 import { CORRELATION_ID_HEADER } from './correlation.constants';
 import { runWithRequestContext } from './request-context';
 
@@ -44,6 +45,11 @@ export function correlationMiddleware(
   const locale = resolveLocale({
     acceptLanguage: headerValue(req, 'accept-language'),
   });
+
+  // The HTTP instrumentation's server span is already active here, so this tags
+  // the request's root span with the id a user quotes out of a problem+json
+  // response (plan 0016, section 4.4). A no op when telemetry is off.
+  setCorrelationIdOnActiveSpan(correlationId);
 
   runWithRequestContext({ correlationId, ip: ip || undefined, locale }, () =>
     next()

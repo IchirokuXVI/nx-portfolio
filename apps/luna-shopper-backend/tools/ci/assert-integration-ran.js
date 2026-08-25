@@ -38,7 +38,18 @@ const EXPECTED_TO_HAVE_SPECS = new Set([
   'luna-shopper-backend-auth',
   'luna-shopper-backend-core',
   'luna-shopper-backend-catalog',
+  // The trace propagation guard over a real broker (plan 0016, section 10).
+  'luna-shopper/platform',
 ]);
+
+/**
+ * A project name is not always a usable file name: library projects are scoped
+ * (`luna-shopper/platform`), and a slash in `outputFile` would write into a
+ * subdirectory that nothing creates. The targets flatten it, so this must too.
+ */
+function toSummaryName(project) {
+  return project.replace(/\//g, '-');
+}
 
 /** Where the targets write their summaries; matches `outputFile` in project.json. */
 const SUMMARY_DIR = join(
@@ -74,7 +85,7 @@ function main() {
       continue;
     }
 
-    const summaryPath = join(SUMMARY_DIR, `${project}.json`);
+    const summaryPath = join(SUMMARY_DIR, `${toSummaryName(project)}.json`);
     if (!existsSync(summaryPath)) {
       problems.push(
         `${project}: no Jest summary at ${summaryPath}. The target either did ` +

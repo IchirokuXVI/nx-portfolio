@@ -7,7 +7,10 @@ import {
   type UserRegisteredEvent,
   type UserUpgradedEvent,
 } from '@portfolio/luna-shopper/contracts';
-import { buildNatsHeaders } from '@portfolio/luna-shopper/platform';
+import {
+  buildNatsHeaders,
+  traceNatsSend,
+} from '@portfolio/luna-shopper/platform';
 
 /** Injection token for the NATS client used to publish identity events. */
 export const NATS_EVENTS = 'NATS_EVENTS';
@@ -23,10 +26,14 @@ export class IdentityEventsPublisher {
   constructor(@Inject(NATS_EVENTS) private readonly client: ClientProxy) {}
 
   private emit(subject: string, payload: object): void {
-    const record = new NatsRecordBuilder(payload)
-      .setHeaders(buildNatsHeaders())
-      .build();
-    this.client.emit(subject, record);
+    // A producer span per event, so the publish is a hop in the originating
+    // request's trace instead of an unexplained gap (plan 0016, section 4.3).
+    traceNatsSend(subject, () => {
+      const record = new NatsRecordBuilder(payload)
+        .setHeaders(buildNatsHeaders())
+        .build();
+      this.client.emit(subject, record);
+    });
   }
 
   userRegistered(event: UserRegisteredEvent): void {

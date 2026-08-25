@@ -50,6 +50,10 @@ workflow (no slot flag needed = slot 0).
 | realtime | 3001 | 3101 | 3201 | 3301 |
 | auth | 3002 | 3102 | 3202 | 3302 |
 | core | 3003 | 3103 | 3203 | 3303 |
+| otlp (http / grpc) | 4318 / 4317 | 4418 / 4417 | 4518 / 4517 | 4618 / 4617 |
+| jaeger ui | 16686 | 16786 | 16886 | 16986 |
+| prometheus | 9090 | 9190 | 9290 | 9390 |
+| grafana | 3010 | 3110 | 3210 | 3310 |
 
 Slot 0 (first column) is **yours** — reserved for your own development; workers
 use slots 1 and up. The step of 100 is larger than the spread of the base ports,
@@ -99,6 +103,38 @@ Tear a slot down (removes only that slot's containers and volumes):
 docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \
   -f k8s/e2e/luna-shopper-backend/compose.yml down -v
 ```
+
+### Traces and metrics, per slot
+
+The observability stack (plan 0016, section 9) is behind the `observability`
+profile, so a plain `up` never starts it and nobody pays for four extra
+containers they did not ask for. Add it to any slot:
+
+```sh
+docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \
+  --profile observability \
+  -f k8s/e2e/luna-shopper-backend/compose.yml up -d
+```
+
+`luna-slot.{sh,ps1}` already wrote `OTEL_ENABLED=true` and this slot's collector
+endpoint into **each service's own `.env`**, so the services export as soon as
+they restart. The per service file is not a style choice: the OpenTelemetry SDK
+starts before Nest and reads `process.env`, Nx loads `{projectRoot}/.env` into a
+project's tasks, and nothing loads the shared `.env.luna-shopper-backend` into
+the environment at all, so a telemetry variable placed there is read too late and
+silently ignored.
+Open Jaeger at the slot's port from the table above and a single list load shows
+one trace spanning the gateway, the NATS hops, the database work and the realtime
+push.
+
+Every port shifts by the slot offset like the rest, so two worktrees can each run
+their own collector, Jaeger and Prometheus at the same time. The collector
+scrapes the services on the **host** (they run under `nx serve`, not in compose),
+which is why `.env.slot` also carries the five service ports.
+
+With the profile down, telemetry is harmless: the batch processor drops spans and
+logs a warning, and requests are unaffected. Set `OTEL_ENABLED=false` in
+`apps/luna-shopper-backend/.env.luna-shopper-backend` to silence it entirely.
 
 ## Two strategies
 

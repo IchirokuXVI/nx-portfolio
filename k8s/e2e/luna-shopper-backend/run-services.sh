@@ -13,8 +13,9 @@
 #   bash k8s/e2e/luna-shopper-backend/run-services.sh stop
 #
 # `start` builds the five services, launches each one in the background with its
-# stdout and stderr captured, then polls `GET /health/ready` on each until it
-# passes. Readiness, not liveness: readiness is the probe that already means
+# stdout and stderr captured, polls `GET /health/ready` on each until it passes,
+# then checks that each one serves `GET /metrics` in Prometheus format (plan
+# 0016, section 5.1). Readiness, not liveness: readiness is the probe that already means
 # "dependencies reachable" (plan 0004, section 6), which is exactly the condition
 # the suites need, so there is no second readiness signal to invent. On timeout it
 # prints the tail of every service log and exits non zero, so a boot failure is
@@ -64,6 +65,64 @@ port_of() {
   echo "${DEFAULT_PORT[$svc]}"
 }
 
+# The telemetry variables from a service's .env, as NAME=VALUE lines (plan 0016).
+#
+# They have to be in the real process environment, not merely in a file
+# @nestjs/config will read later: the OpenTelemetry SDK starts before Nest exists
+# (section 4.1) and can only see `process.env`. Under `nx serve` Nx loads a
+# project's own `.env` and that happens for free, but this script launches plain
+# `node`, so it does the same job explicitly. Without it a service would run with
+# telemetry off and the wrong service name, which shows up only as a mislabelled
+# dashboard weeks later.
+telemetry_env_of() {
+  local svc="$1"
+  local env_file="$root/apps/luna-shopper-backend/$svc/.env"
+  # A canonical service name regardless of what the .env says, so a trace is
+  # never attributed to the wrong service from here.
+  echo "OTEL_SERVICE_NAME=luna-shopper-backend-$svc"
+  [[ -f "$env_file" ]] || return 0
+  sed -n 's/^[[:space:]]*\(OTEL_ENABLED\|OTEL_EXPORTER_OTLP_[A-Z_]*\|OTEL_TRACES_[A-Z_]*\|DEPLOYMENT_ENVIRONMENT\|SERVICE_VERSION\|METRICS_ENABLED\)=\(.*\)$/\1=\2/p' "$env_file"
+}
+
+# Whether a service was told to serve /metrics. Default on (plan 0016,
+# section 7), so the check below runs unless it was deliberately switched off.
+metrics_enabled() {
+  local value
+  value="$(telemetry_env_of "$1" | sed -n 's/^METRICS_ENABLED=//p' | tail -n 1 | tr -d '[:space:]')"
+  [[ "${value:-true}" != "false" ]]
+}
+
+# The /metrics contract, on every service (plan 0016, sections 5.1 and 10).
+#
+# It is checked here rather than in the e2e suite because /metrics lives on each
+# service's own health port, and the e2e suite deliberately never touches a
+# service's internal port. Checking it where the five services are already known
+# to be up is the cheapest place that covers all of them, and it fails the run
+# loudly if a service ever stops answering: a scrape that silently 404s looks
+# exactly like a healthy service with no traffic.
+check_metrics() {
+  for svc in "${SERVICES[@]}"; do
+    local port body
+    port="$(port_of "$svc")"
+    if ! metrics_enabled "$svc"; then
+      echo "$svc has METRICS_ENABLED=false: skipping its /metrics check."
+      continue
+    fi
+    if ! body="$(curl -fsS --max-time 5 "http://127.0.0.1:$port/metrics" 2>/dev/null)"; then
+      echo "$svc did not answer GET :$port/metrics." >&2
+      dump_logs
+      stop || true
+      exit 1
+    fi
+    # Prometheus exposition format always names the type of a series it exports.
+    if ! grep -q '^# TYPE ' <<<"$body"; then
+      echo "$svc answered :$port/metrics but not in Prometheus exposition format." >&2
+      exit 1
+    fi
+    echo "$svc serves /metrics on :$port"
+  done
+}
+
 dump_logs() {
   echo
   echo "--- service logs (last 60 lines each) ------------------------------"
@@ -99,8 +158,14 @@ start() {
     fi
     # Started from the workspace root on purpose: each service's ConfigModule
     # resolves its envFilePath relative to the process cwd, the same way `nx
-    # serve` runs it.
-    node "$main" >"$run_dir/$svc.log" 2>&1 &
+    # serve` runs it. The telemetry variables are passed through the environment
+    # rather than left to that config load, because the SDK reads them before
+    # Nest exists (plan 0016, section 4.1).
+    local -a service_env=()
+    while IFS= read -r assignment; do
+      service_env+=("$assignment")
+    done < <(telemetry_env_of "$svc")
+    env "${service_env[@]}" node "$main" >"$run_dir/$svc.log" 2>&1 &
     echo $! >"$run_dir/$svc.pid"
     echo "started $svc (pid $(cat "$run_dir/$svc.pid"), port $(port_of "$svc"))"
   done
@@ -136,6 +201,8 @@ start() {
   done
 
   echo "all five services are ready."
+
+  check_metrics
 }
 
 stop() {

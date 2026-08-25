@@ -43,7 +43,7 @@ spec:
           image: {{ .image }}:{{ $tag }}
           command: {{ toYaml $ls.migrations.command | nindent 12 }}
           env:
-            {{- include "lunaShopperBackend.env" (dict "svc" . "cfg" $cfgName "sec" $secName) | nindent 12 }}
+            {{- include "lunaShopperBackend.env" (dict "svc" . "cfg" $cfgName "sec" $secName "env" .env "tag" $tag) | nindent 12 }}
 {{- end }}
 {{- end }}
 {{- end }}

@@ -1,0 +1,105 @@
+# OpenTelemetry Collector for local development (plan 0016, section 9).
+#
+# It mirrors the topology the cluster is expected to grow (section 8): the
+# services know exactly one endpoint, this collector, and the backends behind it
+# can change without touching a service. Running the same shape locally is what
+# makes the local and deployed configuration match rather than diverge.
+#
+# The `${env:...}` references are expanded by the collector itself, which is why
+# the scrape targets can follow the slot harness's LUNA_*_PORT overrides without
+# a generated file: compose passes the slot's ports through as env vars.
+
+receivers:
+  # Traces (and metrics, if a service is ever configured to push them) from the
+  # services, over the standard OTLP ports.
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Metrics are pulled, not pushed: each service serves /metrics on its health
+  # port (section 5.1). The services run on the host under `nx serve`, so the
+  # collector reaches them through the host gateway.
+  #
+  # One job per service, not one job with five targets. The Prometheus receiver
+  # derives `service.name` from the **job name**, so a single shared job labels
+  # all five identically and they can only be told apart by a host:port. Naming
+  # the job after the service is what makes `service_name` usable as a label
+  # downstream. (A scraped service's own resource attributes arrive as the
+  # `target_info` metric rather than as a resource, which is why they cannot
+  # simply be read from the endpoint.)
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: luna-shopper-backend-gateway
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['host.docker.internal:${env:LUNA_GATEWAY_PORT}']
+        - job_name: luna-shopper-backend-realtime
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['host.docker.internal:${env:LUNA_REALTIME_PORT}']
+        - job_name: luna-shopper-backend-auth
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['host.docker.internal:${env:LUNA_AUTH_PORT}']
+        - job_name: luna-shopper-backend-core
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['host.docker.internal:${env:LUNA_CORE_PORT}']
+        - job_name: luna-shopper-backend-catalog
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['host.docker.internal:${env:LUNA_CATALOG_PORT}']
+
+processors:
+  # Batching keeps export off the hot path, the same posture as the SDK side.
+  batch:
+
+  # Trim the resource to the three attributes that identify a service, so they
+  # can be promoted to metric labels below without dragging the rest along. The
+  # auto detected resource carries the host name, the process id and the full
+  # command line: as labels those are unbounded and would breach the cardinality
+  # rule (section 5.3) the moment a pod restarts.
+  transform/trim-resource:
+    metric_statements:
+      - context: resource
+        statements:
+          - keep_keys(attributes, ["service.name", "service.version", "deployment.environment.name"])
+
+exporters:
+  # Traces to Jaeger, over OTLP so the trace backend stays swappable.
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Metrics re-exposed for Prometheus to scrape. Prometheus therefore has one
+  # static target and needs no knowledge of the slot's ports.
+  #
+  # `resource_to_telemetry_conversion` puts `service_name` (and version and
+  # environment) directly on every series. Without it the service identity lives
+  # only in the `target_info` metric and every query needs a label join to tell
+  # the five services apart, which is a poor trade on a laptop whose whole point
+  # is seeing the answer in seconds. It is safe here only because the transform
+  # above already reduced the resource to three bounded attributes.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+
+service:
+  telemetry:
+    logs:
+      level: warn
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [transform/trim-resource, batch]
+      exporters: [prometheus]

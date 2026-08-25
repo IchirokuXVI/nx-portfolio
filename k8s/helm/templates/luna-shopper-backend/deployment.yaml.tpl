@@ -46,7 +46,7 @@ spec:
           ports:
             - containerPort: {{ .port }}
           env:
-            {{- include "lunaShopperBackend.env" (dict "svc" . "cfg" $cfgName "sec" $secName) | nindent 12 }}
+            {{- include "lunaShopperBackend.env" (dict "svc" . "cfg" $cfgName "sec" $secName "env" .env "tag" $tag) | nindent 12 }}
           # Liveness/readiness hit the /health endpoint. It is a plain liveness
           # check today; the richer terminus readiness (DB/NATS reachable) arrives
           # in plan 0004 and slots in here without changing the rollout contract.

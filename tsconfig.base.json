@@ -104,6 +104,9 @@
       "@portfolio/luna-shopper/platform": [
         "./libs/luna-shopper/platform/src/index.ts"
       ],
+      "@portfolio/luna-shopper/platform/tracing": [
+        "./libs/luna-shopper/platform/src/tracing.ts"
+      ],
       "@portfolio/luna-shopper/test-fixtures": [
         "./libs/luna-shopper/test-fixtures/src/index.ts"
       ],

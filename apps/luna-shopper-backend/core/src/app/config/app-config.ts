@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config';
+import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
 import { parseDurationMs } from './duration';
 import { readKey } from './read-key';
@@ -38,6 +39,13 @@ export const coreValidationSchema = Joi.object({
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
+
+  // Tracing and metrics (plan 0016, section 7). Declared once in the platform
+  // library so all five services accept the same names. Every one is optional
+  // with a working default: with none of them set the service runs exactly as it
+  // did before, and what the validation buys is failing fast on a malformed
+  // value rather than silently sampling everything.
+  ...telemetryValidationSchema,
 }).or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE');
 
 export interface CoreConfig {

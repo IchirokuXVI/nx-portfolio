@@ -30,6 +30,17 @@ export interface LoggerOptions {
  *   while handling a request, including inside NATS message handlers, is tagged
  *   with the correlation id and (only when known) ip, user and zone.
  * - `redact` strips secrets before anything is written.
+ *
+ * `trace_id`, `span_id` and `trace_flags` are **not** added here, though plan
+ * 0016 section 4.4 asks for them on every line. The auto instrumentation bundle
+ * includes `@opentelemetry/instrumentation-pino`, which patches pino as it is
+ * required (which is after `tracing.ts` has run) and injects exactly those three
+ * from the active span already. Adding them in this mixin as well would be two
+ * mechanisms writing the same keys, and the one that is not the library's own is
+ * the one that silently goes stale. They appear on the same line as
+ * `correlationId`, which is the two way navigation the plan asked for; when
+ * telemetry is off there is no span, so nothing is added and the log contract is
+ * exactly as it was.
  */
 export function createLoggerOptions(options: LoggerOptions): Params {
   const pretty = options.pretty ?? process.env['NODE_ENV'] !== 'production';

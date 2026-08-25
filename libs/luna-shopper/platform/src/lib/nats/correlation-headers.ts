@@ -5,11 +5,12 @@ import {
   toSupportedLocale,
   type SupportedLocale,
 } from '../localization/locale';
+import { injectTraceContext } from '../telemetry/nats-propagation';
 
 const LOCALE_HEADER = 'x-locale';
 
 /**
- * Correlation over the broker (plan 0004, section 3).
+ * Correlation over the broker (plan 0004, section 3; plan 0016, section 4.3).
  *
  * The gateway propagates the correlation id (and the request locale) on NATS
  * message headers so one id threads a single user action across auth, core and
@@ -17,6 +18,13 @@ const LOCALE_HEADER = 'x-locale';
  * helpers keep the header names in one place; the request/reply client wiring in
  * the service plans calls {@link buildNatsHeaders} on send and the message
  * handlers read them back with {@link readCorrelationFromHeaders}.
+ *
+ * Because this is the one place outbound headers are written, it is also where
+ * the W3C `traceparent` is injected. That is deliberate: tracing is only useful
+ * if *every* hop propagates, and one publish path that forgot would break the
+ * tree for every request through it. Adding a new publish path here cannot
+ * forget, because it gets propagation by calling the function it already had to
+ * call. The correlation id is untouched and stays user facing (section 4.4).
  */
 export function buildNatsHeaders(overrides?: {
   correlationId?: string;
@@ -30,6 +38,7 @@ export function buildNatsHeaders(overrides?: {
   if (overrides?.locale) {
     hdrs.set(LOCALE_HEADER, overrides.locale);
   }
+  injectTraceContext(hdrs);
   return hdrs;
 }
 

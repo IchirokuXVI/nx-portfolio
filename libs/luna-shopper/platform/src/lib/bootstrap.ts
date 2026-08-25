@@ -22,7 +22,10 @@ export interface BootstrapPlatformOptions {
  *   (correlation id, IP, locale) wraps the whole request,
  * - enables API versioning when asked,
  * - enables shutdown hooks so `SIGTERM` drains cleanly (the app half of the zero
- *   downtime contract whose infra half lives in 0002 section 6).
+ *   downtime contract whose infra half lives in 0002 section 6). Those hooks are
+ *   also what flush pending spans: `TelemetryModule` shuts the OpenTelemetry SDK
+ *   down with a bounded timeout on `onApplicationShutdown` (plan 0016,
+ *   section 4.6), so a rollout keeps the traces that explain why it happened.
  */
 export function bootstrapPlatform(
   app: INestApplication,

@@ -1,0 +1,19 @@
+# Grafana datasource provisioning (plan 0016, section 9).
+#
+# Grafana is the optional part of the profile; provisioning both sources here
+# means it is useful the moment it starts rather than after a manual setup. The
+# URLs are in-network container names, so they are the same in every slot.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686

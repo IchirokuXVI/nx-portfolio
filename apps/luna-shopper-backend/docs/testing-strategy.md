@@ -74,6 +74,12 @@ npx nx run luna-shopper-backend-catalog:migration:run
 # integration (real Postgres); LUNA_INTEGRATION un-skips the gated specs
 LUNA_INTEGRATION=1 npx nx run luna-shopper-backend-core:test-integration
 
+# The platform library has one too (plan 0016): it drives a real NATS round trip
+# and asserts the whole chain lands in ONE trace. It reads NATS_URL, which no
+# project .env supplies for a library, so pass this slot's broker port.
+LUNA_INTEGRATION=1 NATS_URL=nats://localhost:4322 \
+  npx nx run luna-shopper/platform:test-integration
+
 # e2e: start the five services, then point the suite at THEIR ports. The default
 # is :3000/:3001, which on a slot is either nothing (so the suite skips itself and
 # reports a green run that tested nothing) or somebody else's stack.

@@ -6,7 +6,10 @@ import {
   type CheckListAccessRequest,
   type CheckZoneAccessRequest,
 } from '@portfolio/luna-shopper/contracts';
-import { buildNatsHeaders } from '@portfolio/luna-shopper/platform';
+import {
+  buildNatsHeaders,
+  traceNatsSend,
+} from '@portfolio/luna-shopper/platform';
 import { randomUUID } from 'node:crypto';
 import { firstValueFrom } from 'rxjs';
 
@@ -39,12 +42,14 @@ export class CoreAccessClient {
   }
 
   private async check(subject: string, payload: object): Promise<boolean> {
-    const record = new NatsRecordBuilder(payload)
-      .setHeaders(buildNatsHeaders({ correlationId: randomUUID() }))
-      .build();
-    const result = await firstValueFrom(
-      this.client.send<AccessCheckResult>(subject, record)
-    );
+    const result = await traceNatsSend(subject, () => {
+      const record = new NatsRecordBuilder(payload)
+        .setHeaders(buildNatsHeaders({ correlationId: randomUUID() }))
+        .build();
+      return firstValueFrom(
+        this.client.send<AccessCheckResult>(subject, record)
+      );
+    });
     return result.allowed;
   }
 }
