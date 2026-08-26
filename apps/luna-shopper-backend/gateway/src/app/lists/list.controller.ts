@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -25,6 +26,7 @@ import {
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
   AddCommentDto,
@@ -44,11 +46,14 @@ import {
 @ApiTags('lists')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'zones/:zoneId/lists', version: '1' })
 export class ZoneListsController {
   constructor(private readonly nats: NatsClient) {}
 
   @Post()
+  @ApiContractResponse(LIST_PATTERNS.create, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
   create(
     @AuthUser() user: CurrentUser,
     @Param('zoneId') zoneId: string,
@@ -62,6 +67,7 @@ export class ZoneListsController {
   }
 
   @Get()
+  @ApiContractResponse(LIST_PATTERNS.list)
   list(
     @AuthUser() user: CurrentUser,
     @Param('zoneId') zoneId: string,
@@ -81,11 +87,14 @@ export class ZoneListsController {
 @ApiTags('lists')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'lists', version: '1' })
 export class ListsController {
   constructor(private readonly nats: NatsClient) {}
 
   @Patch(':id')
+  @ApiContractResponse(LIST_PATTERNS.update)
+  @ApiProblemResponses({ body: true })
   update(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -99,6 +108,7 @@ export class ListsController {
   }
 
   @Delete(':id')
+  @ApiContractResponse(LIST_PATTERNS.delete)
   remove(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -110,6 +120,8 @@ export class ListsController {
   }
 
   @Put(':id/access')
+  @ApiContractResponse(LIST_PATTERNS.setAccess)
+  @ApiProblemResponses({ body: true })
   setAccess(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -123,6 +135,7 @@ export class ListsController {
   }
 
   @Get(':id/lines')
+  @ApiContractResponse(LINE_PATTERNS.list)
   listLines(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -138,6 +151,8 @@ export class ListsController {
   }
 
   @Post(':id/lines')
+  @ApiContractResponse(LINE_PATTERNS.add, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
   addLine(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -153,6 +168,8 @@ export class ListsController {
   }
 
   @Post(':id/lines/reorder')
+  @ApiContractResponse(LINE_PATTERNS.reorder, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
   reorder(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -170,11 +187,14 @@ export class ListsController {
 @ApiTags('lines')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'lines', version: '1' })
 export class LinesController {
   constructor(private readonly nats: NatsClient) {}
 
   @Patch(':id')
+  @ApiContractResponse(LINE_PATTERNS.update)
+  @ApiProblemResponses({ body: true })
   update(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -190,6 +210,10 @@ export class LinesController {
   }
 
   @Post(':id/approval')
+  @ApiContractResponse(LINE_PATTERNS.setApproval, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
   setApproval(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -203,6 +227,8 @@ export class LinesController {
   }
 
   @Post(':id/status')
+  @ApiContractResponse(LINE_PATTERNS.setStatus, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
   setStatus(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -216,6 +242,7 @@ export class LinesController {
   }
 
   @Delete(':id')
+  @ApiContractResponse(LINE_PATTERNS.delete)
   remove(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -227,6 +254,7 @@ export class LinesController {
   }
 
   @Get(':id/comments')
+  @ApiContractResponse(COMMENT_PATTERNS.list)
   listComments(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -241,6 +269,8 @@ export class LinesController {
   }
 
   @Post(':id/comments')
+  @ApiContractResponse(COMMENT_PATTERNS.add, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
   addComment(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,

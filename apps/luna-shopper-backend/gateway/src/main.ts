@@ -14,6 +14,7 @@ import {
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app/app.module';
 import type { GatewayConfig } from './app/config/app-config';
+import { gatewaySwaggerOptions } from './app/docs';
 
 /**
  * Public HTTP entry point. The platform conventions (plan 0004) supply request
@@ -35,11 +36,9 @@ async function bootstrap() {
   // pino logging, correlation middleware, URI versioning and shutdown hooks.
   bootstrapPlatform(app, { versioning: true });
 
-  setupSwagger(app, {
-    title: 'Luna Shopper API',
-    description: 'Public API for the Luna Shopper shared shopping lists.',
-    path: 'docs',
-  });
+  // The same options the committed `docs/openapi.json` is generated from, so the
+  // live docs and the published artifact can never describe different APIs.
+  setupSwagger(app, gatewaySwaggerOptions());
 
   await app.listen(config.port);
 

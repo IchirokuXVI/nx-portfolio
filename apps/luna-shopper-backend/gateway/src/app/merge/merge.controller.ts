@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -16,6 +17,7 @@ import {
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { ListMergesQueryDto, RequestMergeDto } from './merge.dto';
 
@@ -27,11 +29,14 @@ import { ListMergesQueryDto, RequestMergeDto } from './merge.dto';
 @ApiTags('merges')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
 @Controller({ version: '1' })
 export class MergeController {
   constructor(private readonly nats: NatsClient) {}
 
   @Post('zones/:zoneId/merges')
+  @ApiContractResponse(MERGE_PATTERNS.request, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, conflict: true })
   request(
     @AuthUser() user: CurrentUser,
     @Param('zoneId') zoneId: string,
@@ -46,6 +51,7 @@ export class MergeController {
   }
 
   @Get('zones/:zoneId/merges')
+  @ApiContractResponse(MERGE_PATTERNS.list)
   list(
     @AuthUser() user: CurrentUser,
     @Param('zoneId') zoneId: string,
@@ -60,6 +66,8 @@ export class MergeController {
   }
 
   @Post('merges/:id/approve')
+  @ApiContractResponse(MERGE_PATTERNS.approve, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ conflict: true })
   approve(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -71,6 +79,8 @@ export class MergeController {
   }
 
   @Post('merges/:id/reject')
+  @ApiContractResponse(MERGE_PATTERNS.reject, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ conflict: true })
   reject(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -82,6 +92,8 @@ export class MergeController {
   }
 
   @Post('merges/:id/cancel')
+  @ApiContractResponse(MERGE_PATTERNS.cancel, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ conflict: true })
   cancel(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string

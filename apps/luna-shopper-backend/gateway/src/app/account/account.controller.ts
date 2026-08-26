@@ -17,6 +17,7 @@ import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { UpdateProfileDto } from './account.dto';
 
@@ -64,6 +65,8 @@ export class AccountController {
   }
 
   @Delete()
+  @ApiContractResponse(AUTH_PATTERNS.deleteAccount)
+  @ApiProblemResponses({ auth: true })
   remove(@AuthUser() user: CurrentUser): Promise<DeleteAccountResult> {
     return this.nats.send<DeleteAccountResult>(AUTH_PATTERNS.deleteAccount, {
       userId: user.userId,

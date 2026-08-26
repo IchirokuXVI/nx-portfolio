@@ -1,11 +1,12 @@
 import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiFoundResponse, ApiTags } from '@nestjs/swagger';
 import {
   AUTH_PATTERNS,
   type AuthTokens,
   type GoogleProfile,
 } from '@portfolio/luna-shopper/contracts';
+import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 
 /**
@@ -21,6 +22,13 @@ export class GoogleController {
 
   @Get()
   @UseGuards(AuthGuard('google'))
+  // The only route in the gateway with no response body to document: the guard
+  // answers with a redirect before the handler runs, so what a client sees is a
+  // `Location` header, not a payload.
+  @ApiFoundResponse({
+    description: "Redirects to Google's consent screen.",
+  })
+  @ApiProblemResponses()
   // The guard triggers the redirect to Google; this body never runs.
   start(): void {
     return;
@@ -28,6 +36,8 @@ export class GoogleController {
 
   @Get('callback')
   @UseGuards(AuthGuard('google'))
+  @ApiContractResponse(AUTH_PATTERNS.googleLogin)
+  @ApiProblemResponses({ auth: true })
   callback(@Req() req: { user?: GoogleProfile }): Promise<AuthTokens> {
     const profile = req.user as GoogleProfile;
     return this.nats.send(AUTH_PATTERNS.googleLogin, { ...profile });
