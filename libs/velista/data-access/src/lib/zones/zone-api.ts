@@ -23,9 +23,10 @@ import type {
  * Zones, over HTTP.
  *
  * **The default behind `ZONE_SERVICE`**, and still bound explicitly at the app injector
- * with `provideService(ZONE_SERVICE, ZoneApi)`, because it needs the `HttpClient` the
- * app configures and that only exists in the app's injector. Anything wanting the fake
- * asks for `ZoneMemory` by name (plan 0004, section 9).
+ * with `provideService(ZONE_SERVICE, ZoneApi)`. That helper provides the class as well
+ * as binding it, which is what this needs: it depends on the `HttpClient` the app
+ * configures, so it can only be built in the app's own injector, never at the root.
+ * Anything wanting the fake asks for `ZoneMemory` by name (plan 0004, section 9).
  *
  * Injects `ApiUrl`, not `ApiConsumer`: the shared helper resolves URLs from
  * `@portfolio/shared/environments`, which describes the **portfolio's** backend, and

@@ -9,6 +9,7 @@ import {
   type EnvironmentProviders,
   type Provider,
 } from '@angular/core';
+import { provideService } from '@portfolio/shared/data-access';
 import {
   ConnectionRecovery,
   gatewayInterceptor,
@@ -89,13 +90,10 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // **here**: `ZoneApi` needs the `HttpClient` configured a few lines above, and that
   // only exists in this injector, so resolving the token at the root would not work.
   //
-  // `useClass` rather than `provideService`, which is `useExisting`. An alias only
-  // says where to look; it never creates the thing, so it needs the implementation to
-  // be provided somewhere already. That helper is built for a `providedIn: 'root'`
-  // implementation, which under rule D5 this is not. `useClass` provides and binds in
-  // one entry, and nothing injects `ZoneApi` directly, so there is no second instance
-  // to worry about.
-  { provide: ZONE_SERVICE, useClass: ZoneApi },
+  // `provideService`, not `useService`: the first provides the implementation as well
+  // as binding it, the second is an alias to one provided elsewhere. Under rule D5
+  // `ZoneApi` provides itself nowhere, so an alias would have nothing to point at.
+  provideService(ZONE_SERVICE, ZoneApi),
 
   // Start the connection listener. Nothing injects it, so without this nothing would
   // ever construct it: it is a listener, not a dependency. It probes the backend while

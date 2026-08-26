@@ -56,11 +56,22 @@ Export everything flat from the data-access `index.ts`.
 export function serviceToken<T>(description: string, defaultImpl: () => T) {
   return new InjectionToken<T>(description, { providedIn: 'root', factory: defaultImpl });
 }
-// provideService: bind the token to another impl at a route/remote injector.
+// provideService: bind the token to an impl AND provide it. Reach for this one.
 export function provideService<T>(token: InjectionToken<T>, impl: Type<T>) {
-  return { provide: token, useExisting: impl }; // useExisting keeps the root singleton
+  return { provide: token, useClass: impl };
+}
+// useService: alias the token to an impl provided elsewhere (a `providedIn: 'root'`
+// singleton). Never constructs anything, so it fails if the impl provides itself
+// nowhere. Only worth it to avoid duplicating a stateful root singleton.
+export function useService<T>(token: InjectionToken<T>, impl: Type<T>) {
+  return { provide: token, useExisting: impl };
 }
 ```
+
+**Which one:** `provideService` unless the implementation is `providedIn: 'root'` *and*
+something injects the concrete class directly. A remote's services often cannot be root
+provided at all, because under module federation the root injector belongs to the host
+(see velista plan 0005), and `useService` cannot help there.
 
 Consumers `inject(X_SERVICE)` typed as `XServiceI` — they depend on the contract,
 not the implementation.
