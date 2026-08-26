@@ -181,6 +181,8 @@ export class ZoneController {
   @Get('count')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(ZONE_PATTERNS.countsMine)
+  @ApiProblemResponses({ auth: true })
   countMine(@AuthUser() user: CurrentUser): Promise<MyZoneCounts> {
     return this.nats.send<MyZoneCounts>(ZONE_PATTERNS.countsMine, {
       userId: user.userId,
@@ -190,6 +192,8 @@ export class ZoneController {
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(ZONE_PATTERNS.get)
+  @ApiProblemResponses({ auth: true, membership: true })
   get(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -203,6 +207,8 @@ export class ZoneController {
   @Get(':id/members')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(MEMBERSHIP_PATTERNS.list)
+  @ApiProblemResponses({ auth: true, membership: true })
   listMembers(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -388,6 +394,8 @@ export class ZoneController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @Throttle(THROTTLE_LIMITS.usernameChange)
+  @ApiContractResponse(MEMBERSHIP_PATTERNS.setUsername)
+  @ApiProblemResponses({ auth: true, membership: true, body: true })
   setMembershipUsername(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,

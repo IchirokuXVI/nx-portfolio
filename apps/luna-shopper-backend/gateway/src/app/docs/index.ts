@@ -20,6 +20,7 @@ export {
 export {
   componentNameFor,
   componentRef,
+  hoistPlatformStats,
   openApiComponents,
   toOpenApiSchema,
 } from './openapi-schema';

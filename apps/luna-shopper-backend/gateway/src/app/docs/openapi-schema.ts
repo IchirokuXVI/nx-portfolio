@@ -1,4 +1,8 @@
-import { allSchemas, AUTH_SCHEMA_IDS } from '@portfolio/luna-shopper/contracts';
+import {
+  allSchemas,
+  AUTH_SCHEMA_IDS,
+  STATS_SCHEMA_IDS,
+} from '@portfolio/luna-shopper/contracts';
 import {
   PROBLEM_DETAILS_SCHEMA,
   PROBLEM_DETAILS_SCHEMA_NAME,
@@ -148,6 +152,44 @@ export function hoistTokenHandshake(schemaId: string): string {
         description: 'Present only when the caller was anonymous.',
       },
       data: componentRef(data),
+    },
+  });
+}
+
+/**
+ * Publishes the body of `GET /v1/stats` (plan 0017, section 8.2).
+ *
+ * Composed here for the same reason the handshake envelope is: no broker message
+ * has this shape. The gateway fans out to `stats.identity` and `stats.core` and
+ * assembles the answer, so the two blocks are the contract schemas those subjects
+ * already define, and only the composition around them is authored here. Either
+ * block is `null` when its service did not answer, which is the whole point of
+ * the endpoint degrading rather than failing.
+ */
+export function hoistPlatformStats(): string {
+  const identity = hoistContractSchema(STATS_SCHEMA_IDS.identityStats);
+  const core = hoistContractSchema(STATS_SCHEMA_IDS.coreStats);
+  return registerComponent('stats.PlatformStatsResponse', {
+    type: 'object',
+    description:
+      'Platform totals. Either block is `null` when that service did not answer: a broken service degrades the figure rather than taking down the public page.',
+    required: ['identity', 'core', 'measuredAt'],
+    additionalProperties: false,
+    properties: {
+      identity: {
+        oneOf: [componentRef(identity), { type: 'null' }],
+        description: 'Identity totals, from auth.',
+      },
+      core: {
+        oneOf: [componentRef(core), { type: 'null' }],
+        description: 'Zone totals, from core.',
+      },
+      measuredAt: {
+        type: 'string',
+        format: 'date-time',
+        description:
+          'When the snapshot was taken, so the 60 second cache is visible rather than hidden.',
+      },
     },
   });
 }

@@ -3,7 +3,15 @@ import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { PlatformStatsResponse } from '@portfolio/luna-shopper/contracts';
 import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
+import {
+  ApiProblemResponses,
+  componentRef,
+  hoistPlatformStats,
+} from '../docs';
 import { GatewayStatsService } from './stats.service';
+
+/** Hoisted at module load, so the component exists before the document is built. */
+const PLATFORM_STATS_SCHEMA = hoistPlatformStats();
 
 /**
  * The platform totals (plan 0017, section 8). Deliberately public: the numbers
@@ -21,7 +29,9 @@ export class StatsController {
   @ApiOkResponse({
     description:
       'Platform totals. Either block is null when that service did not answer.',
+    schema: componentRef(PLATFORM_STATS_SCHEMA),
   })
+  @ApiProblemResponses()
   platform(): Promise<PlatformStatsResponse> {
     return this.stats.platform();
   }

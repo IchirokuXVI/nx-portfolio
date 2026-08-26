@@ -676,7 +676,146 @@
         ]
       }
     },
+    "/v1/zones/count": {
+      "get": {
+        "operationId": "ZoneController_countMine_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `zone.countsMine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/zone.MyZoneCounts"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "zones"
+        ]
+      }
+    },
     "/v1/zones/{id}": {
+      "get": {
+        "operationId": "ZoneController_get_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `zone.get` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/zone.MyZoneView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "zones"
+        ]
+      },
       "patch": {
         "operationId": "ZoneController_update_v1",
         "parameters": [
@@ -799,6 +938,122 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "zones"
+        ]
+      }
+    },
+    "/v1/zones/{id}/members": {
+      "get": {
+        "operationId": "ZoneController_listMembers_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "joined",
+                "name",
+                "role"
+              ]
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Defaults to APPROVED. Other values need owner or admin.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PENDING",
+                  "APPROVED",
+                  "KICKED",
+                  "BANNED"
+                ]
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `membership.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/zone.MembershipPage"
                 }
               }
             }
@@ -1464,6 +1719,119 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/zone.MembershipView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "zones"
+        ]
+      }
+    },
+    "/v1/zones/{id}/members/{membershipId}/username": {
+      "patch": {
+        "operationId": "ZoneController_setMembershipUsername_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "membershipId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetMembershipUsernameDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `membership.setUsername` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/zone.MembershipView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -3494,6 +3862,136 @@
         ]
       }
     },
+    "/v1/account/me": {
+      "get": {
+        "operationId": "AccountController_me_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `auth.getProfile` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.UserProfileView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      },
+      "patch": {
+        "operationId": "AccountController_updateMe_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `auth.setUsername` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.UserProfileView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
     "/v1/account": {
       "delete": {
         "operationId": "AccountController_remove_v1",
@@ -5459,6 +5957,47 @@
           "catalog"
         ]
       }
+    },
+    "/v1/stats": {
+      "get": {
+        "operationId": "StatsController_platform_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Platform totals. Either block is null when that service did not answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/stats.PlatformStatsResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "stats"
+        ]
+      }
     }
   },
   "info": {
@@ -5570,12 +6109,11 @@
           "username": {
             "type": "string",
             "maxLength": 40,
-            "description": "Your display name in this zone"
+            "description": "Your display name in this zone. Omit it to be called by your global username."
           }
         },
         "required": [
-          "name",
-          "username"
+          "name"
         ]
       },
       "JoinZoneDto": {
@@ -5587,12 +6125,11 @@
           "username": {
             "type": "string",
             "maxLength": 40,
-            "description": "Your display name in this zone"
+            "description": "Your display name in this zone. Omit it to be called by your global username."
           }
         },
         "required": [
-          "joinCode",
-          "username"
+          "joinCode"
         ]
       },
       "UpdateZoneDto": {
@@ -5620,6 +6157,19 @@
         },
         "required": [
           "role"
+        ]
+      },
+      "SetMembershipUsernameDto": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "Your display name in this zone. Omit it to be called by your global username."
+          }
+        },
+        "required": [
+          "username"
         ]
       },
       "CreateListDto": {
@@ -5796,6 +6346,28 @@
         "required": [
           "sourceUserId",
           "targetUserId"
+        ]
+      },
+      "UpdateProfileDto": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "propagation": {
+            "type": "string",
+            "enum": [
+              "GLOBAL_ONLY",
+              "MATCHING_ZONES",
+              "ALL_ZONES"
+            ],
+            "default": "GLOBAL_ONLY",
+            "description": "How far the change travels. Omitted means GLOBAL_ONLY: the zones where you chose a different name keep it."
+          }
+        },
+        "required": [
+          "username"
         ]
       },
       "LocalizedTextDto": {
@@ -6064,6 +6636,10 @@
           "kind": {
             "$ref": "#/components/schemas/enums.UserKind"
           },
+          "username": {
+            "type": "string",
+            "minLength": 1
+          },
           "accessToken": {
             "type": "string",
             "minLength": 1
@@ -6076,6 +6652,7 @@
         "required": [
           "userId",
           "kind",
+          "username",
           "accessToken",
           "refreshToken"
         ],
@@ -6095,6 +6672,46 @@
         "required": [
           "userId",
           "deleted"
+        ],
+        "additionalProperties": false
+      },
+      "auth.UserProfileView": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.UserKind"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 1
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "userId",
+          "kind",
+          "username",
+          "email",
+          "emailVerified",
+          "displayName"
         ],
         "additionalProperties": false
       },
@@ -6642,6 +7259,14 @@
           },
           "version": {
             "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -6655,7 +7280,27 @@
           "status",
           "createdByUserId",
           "approvedByUserId",
-          "version"
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "list.ListCounts": {
+        "type": "object",
+        "properties": {
+          "lineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "readyCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "lineCount",
+          "readyCount"
         ],
         "additionalProperties": false
       },
@@ -6700,13 +7345,27 @@
           "createdByUserId": {
             "type": "string",
             "minLength": 1
+          },
+          "counts": {
+            "$ref": "#/components/schemas/list.ListCounts"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
           "id",
           "zoneId",
           "name",
-          "createdByUserId"
+          "createdByUserId",
+          "counts",
+          "createdAt",
+          "updatedAt"
         ],
         "additionalProperties": false
       },
@@ -6839,6 +7498,109 @@
           }
         }
       },
+      "stats.CoreStats": {
+        "type": "object",
+        "properties": {
+          "zones": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "activeZones": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "zones",
+          "activeZones"
+        ],
+        "additionalProperties": false
+      },
+      "stats.IdentityStats": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "registeredUsers": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "temporaryUsers": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "users",
+          "registeredUsers",
+          "temporaryUsers"
+        ],
+        "additionalProperties": false
+      },
+      "stats.PlatformStatsResponse": {
+        "type": "object",
+        "description": "Platform totals. Either block is `null` when that service did not answer: a broken service degrades the figure rather than taking down the public page.",
+        "required": [
+          "identity",
+          "core",
+          "measuredAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "identity": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/stats.IdentityStats"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Identity totals, from auth."
+          },
+          "core": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/stats.CoreStats"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Zone totals, from core."
+          },
+          "measuredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the snapshot was taken, so the 60 second cache is visible rather than hidden."
+          }
+        }
+      },
+      "zone.MembershipPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/zone.MembershipView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "zone.MembershipView": {
         "type": "object",
         "properties": {
@@ -6863,6 +7625,14 @@
           },
           "status": {
             "$ref": "#/components/schemas/enums.MembershipStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -6871,7 +7641,9 @@
           "userId",
           "username",
           "role",
-          "status"
+          "status",
+          "createdAt",
+          "updatedAt"
         ],
         "additionalProperties": false
       },
@@ -6891,6 +7663,34 @@
             "$ref": "#/components/schemas/zone.MembershipView"
           }
         }
+      },
+      "zone.MyZoneCounts": {
+        "type": "object",
+        "properties": {
+          "owned": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "joined": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "owned",
+          "joined",
+          "pending",
+          "total"
+        ],
+        "additionalProperties": false
       },
       "zone.MyZoneView": {
         "type": "object",
@@ -6920,11 +7720,28 @@
             "type": "object",
             "additionalProperties": true
           },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "myRole": {
             "$ref": "#/components/schemas/enums.ZoneRole"
           },
           "myStatus": {
             "$ref": "#/components/schemas/enums.MembershipStatus"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/zone.ZoneCounts"
+          },
+          "lists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/zone.ZoneListPreview"
+            }
           }
         },
         "required": [
@@ -6934,8 +7751,73 @@
           "status",
           "ownerUserId",
           "config",
+          "createdAt",
+          "updatedAt",
           "myRole",
-          "myStatus"
+          "myStatus",
+          "counts",
+          "lists"
+        ],
+        "additionalProperties": false
+      },
+      "zone.ZoneCounts": {
+        "type": "object",
+        "properties": {
+          "memberCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "listCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pendingRequestCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "firstPendingRequesterName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "memberCount",
+          "listCount",
+          "pendingRequestCount",
+          "firstPendingRequesterName"
+        ],
+        "additionalProperties": false
+      },
+      "zone.ZoneListPreview": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "readyCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "lineCount",
+          "readyCount"
         ],
         "additionalProperties": false
       },
@@ -6989,6 +7871,14 @@
           "config": {
             "type": "object",
             "additionalProperties": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -6997,7 +7887,9 @@
           "joinCode",
           "status",
           "ownerUserId",
-          "config"
+          "config",
+          "createdAt",
+          "updatedAt"
         ],
         "additionalProperties": false
       },

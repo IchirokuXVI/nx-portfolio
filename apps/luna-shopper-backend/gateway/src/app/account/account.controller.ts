@@ -40,6 +40,8 @@ export class AccountController {
 
   /** The caller's own profile, which is where the app bar gets a name to show. */
   @Get('me')
+  @ApiContractResponse(AUTH_PATTERNS.getProfile)
+  @ApiProblemResponses({ auth: true })
   me(@AuthUser() user: CurrentUser): Promise<UserProfileView> {
     return this.nats.send<UserProfileView>(AUTH_PATTERNS.getProfile, {
       userId: user.userId,
@@ -53,6 +55,8 @@ export class AccountController {
    */
   @Patch('me')
   @Throttle(THROTTLE_LIMITS.usernameChange)
+  @ApiContractResponse(AUTH_PATTERNS.setUsername)
+  @ApiProblemResponses({ auth: true, body: true })
   updateMe(
     @AuthUser() user: CurrentUser,
     @Body() dto: UpdateProfileDto
