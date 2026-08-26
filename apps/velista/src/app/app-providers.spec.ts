@@ -73,7 +73,6 @@ describe('appProviders, resolved the way the router resolves them', () => {
     ['TokenStore', TokenStore],
     ['SessionStore', SessionStore],
     ['ZoneStore', ZoneStore],
-    ['ZoneApi', ZoneApi],
     ['ConnectionRecovery', ConnectionRecovery],
   ])('constructs %s from the route injector', (_name, type) => {
     expect(routeInjector().get(type as Type<unknown>)).toBeInstanceOf(type);

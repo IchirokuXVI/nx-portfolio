@@ -9,7 +9,6 @@ import {
   type EnvironmentProviders,
   type Provider,
 } from '@angular/core';
-import { provideService } from '@portfolio/shared/data-access';
 import {
   ConnectionRecovery,
   gatewayInterceptor,
@@ -86,26 +85,28 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // pipe while every lazily loaded page under it threw. See `translation-providers.ts`.
   ...VELISTA_TRANSLATION_PROVIDERS,
 
-  // The real gateway. This is also the token's own default now, so the binding is a
-  // statement of intent rather than an override, but it is **not** redundant:
-  // `ZoneApi` needs the `HttpClient` configured a few lines above, which only exists
-  // in this injector, so the token has to resolve here rather than at the root.
+  // The real gateway, which is the token's default too, but it still has to be bound
+  // **here**: `ZoneApi` needs the `HttpClient` configured a few lines above, and that
+  // only exists in this injector, so resolving the token at the root would not work.
   //
-  // `useExisting` needs `ZoneApi` itself to be resolvable in this injector, which is
-  // why the class is listed too. It is here rather than in the library's array
-  // because choosing the real backend is the app's decision, not the library's.
-  ZoneApi,
-  provideService(ZONE_SERVICE, ZoneApi),
+  // `useClass` rather than `provideService`, which is `useExisting`. An alias only
+  // says where to look; it never creates the thing, so it needs the implementation to
+  // be provided somewhere already. That helper is built for a `providedIn: 'root'`
+  // implementation, which under rule D5 this is not. `useClass` provides and binds in
+  // one entry, and nothing injects `ZoneApi` directly, so there is no second instance
+  // to worry about.
+  { provide: ZONE_SERVICE, useClass: ZoneApi },
 
-  // Not injected by anything, so nothing would construct it: it is a listener, not
-  // a dependency. It probes the backend while the connection screen is up and
-  // reloads the page once something answers (plan 0004, section 8).
+  // Start the connection listener. Nothing injects it, so without this nothing would
+  // ever construct it: it is a listener, not a dependency. It probes the backend while
+  // the connection screen is up and reloads once something answers (plan 0004, section 8).
+  // The class itself is installed by `VELISTA_DATA_ACCESS_PROVIDERS`; being available
+  // is the library's business, being *running* is the app's, which is the split here.
   //
   // An **environment** initializer, not `provideAppInitializer`. `APP_INITIALIZER` is
   // read once by `ApplicationInitStatus` at bootstrap from the root injector, and
   // nothing ever asks a route injector for it, so as an app initializer this listener
   // was simply never constructed. `ENVIRONMENT_INITIALIZER` runs when the injector it
   // is declared on is created, which is true in both the mounted and standalone cases.
-  ConnectionRecovery,
   provideEnvironmentInitializer(() => void inject(ConnectionRecovery)),
 ];

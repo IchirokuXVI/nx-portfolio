@@ -2,6 +2,7 @@ import type { Provider } from '@angular/core';
 import { ApiUrl } from './api-url';
 import { SessionStore } from './auth/session-store';
 import { TokenStore } from './auth/token-store';
+import { ConnectionRecovery } from './connection-recovery';
 import { ZoneMemory } from './zones/zone-memory';
 import { ZoneStore } from './zones/zone-store';
 
@@ -24,15 +25,20 @@ import { ZoneStore } from './zones/zone-store';
  *   `TokenStore` reaches `APP_API_CONFIG`. It is no longer any token's default, so it
  *   is only here for the specs and backend-less runs that ask for it by name.
  *
- * `ZoneApi` and `ConnectionRecovery` are deliberately **not** here. Both are the app's
- * choice rather than the library's: one says this deployment talks to a real gateway,
- * the other is a listener the app decides to run. They are provided in `appProviders`,
- * next to the decisions that select them.
+ * `ConnectionRecovery` is here so it is **available**, which is the library's business.
+ * Nothing injects it, so listing it constructs nothing: it is a listener, and starting
+ * it is the app's decision, made by the environment initializer in `appProviders`.
+ * Separating those two is what stops the app file from having to name the class twice.
+ *
+ * `ZoneApi` is deliberately **not** here. Choosing to talk to a real gateway is the
+ * app's call, and `appProviders` binds it to `ZONE_SERVICE` with `useClass`, which
+ * provides it in the same breath.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
   TokenStore,
   SessionStore,
+  ConnectionRecovery,
   ZoneMemory,
   ZoneStore,
 ];
