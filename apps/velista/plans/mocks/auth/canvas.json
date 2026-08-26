@@ -1,0 +1,54 @@
+{
+  "title": "Velista Credential Flows",
+  "lede": "The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "artboards": [
+    { "file": "SignIn.dc.html", "x": 0, "y": 0, "w": 1330, "h": 970, "title": "Sign in" },
+    { "file": "Register.dc.html", "x": 1400, "y": 0, "w": 900, "h": 970, "title": "Make an account" },
+    { "file": "Upgrade.dc.html", "x": 0, "y": 1120, "w": 900, "h": 970, "title": "Secure a guest account" },
+    { "file": "VerifyEmail.dc.html", "x": 960, "y": 1120, "w": 900, "h": 970, "title": "The confirmation link" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -230,
+      "w": 430,
+      "text": "Credential flows, plan 0009. The two front door buttons 0008 left recorded, plus the guest banner's action and what a confirmation link opens.\nPhone only, 390x844, Night only: no new colour role, so a Day artboard would restate 0003 rather than find anything.\nThese are full routes, not sheets. 0008's rule is that a sheet completes one field in place; each of these is a destination with its own alternatives underneath."
+    },
+    {
+      "id": "no-wall",
+      "x": 470,
+      "y": -230,
+      "w": 420,
+      "text": "REGISTERING SIGNS YOU IN IMMEDIATELY. identity.service register() issues tokens at the end and sends the confirmation email outside the transaction, with the comment \"verification is optional\".\nSo there is no \"check your email to continue\" wall, and designing one would invent a barrier the backend does not have. The second frame is the dashboard, with a dismissible nudge.\nLogin never checks emailVerifiedAt either."
+    },
+    {
+      "id": "upgrade-not-register",
+      "x": 940,
+      "y": -230,
+      "w": 430,
+      "text": "A GUEST MUST NEVER BE SHOWN REGISTER. register() creates a NEW user, so a guest who used it would be signed in as somebody else and every group they made would be stranded on the account they just walked away from.\nupgrade() converts the SAME user in place, keeps the userId, and therefore keeps the groups. That is why the guest banner has its own screen and its own words, and why it counts the groups back at you.\nThis is the email twin of rule D3 from 0004."
+    },
+    {
+      "id": "google-blocked",
+      "x": 1400,
+      "y": -230,
+      "w": 430,
+      "text": "GOOGLE IS DRAWN BUT CANNOT BE WIRED YET, for two separate backend reasons.\n1. GET /v1/auth/google/callback returns AuthTokens as JSON, so a browser lands on a page of JSON instead of coming back to the app. It needs to 302 back with the pair in the URL fragment.\n2. The callback sends the profile with no linkUserId, and linkUserId is the parameter that upgrades a guest in place. Without it a guest who taps Google is handed a brand new registered account and loses their groups, exactly as if they had used register.\nSo the button stays recorded until both land. Both are backend work the user reserved."
+    },
+    {
+      "id": "generic-login",
+      "x": 1920,
+      "y": 1120,
+      "w": 430,
+      "text": "ONE ERROR FOR BOTH CAUSES, on purpose. login() returns the same UnauthorizedException whether the email is unknown or the password is wrong, with the comment that this is so the response does not reveal which emails are registered.\nSo the screen must never say \"no account with that email\", and the message hangs under the pair of fields rather than under one of them."
+    },
+    {
+      "id": "verification-decorative",
+      "x": 1920,
+      "y": 1450,
+      "w": 430,
+      "text": "CONFIRMING AN EMAIL CURRENTLY BUYS NOTHING, and there is no way to ask again.\nNo resend endpoint exists anywhere: POST /v1/auth/verify-email only consumes a token, and the throttle bucket named verifyResend is the only trace of the intention. So the expired screen offers no \"send me a new link\", because there is nothing to call.\nWorse for upgrade(): it sets the email but never creates a verification, so an upgraded account can never be verified at all. Recorded as backend work, not designed around."
+    }
+  ]
+}

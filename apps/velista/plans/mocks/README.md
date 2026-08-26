@@ -7,6 +7,7 @@ on top of them, and the page built from both.
 | --- | --- | --- |
 | `home/` | `0003` home page, `0007` landing and home split | https://claude.ai/code/artifact/71175929-0234-4c6e-a277-e26db88e05d5 |
 | `entry/` | `0008` creating a group and joining with a code | https://claude.ai/code/artifact/eb800fe2-6786-4528-9f43-2d638f6e5acb |
+| `auth/` | `0009` signing in, registering, and the guest upgrade | https://claude.ai/code/artifact/5bc9cb60-284c-4f4a-9fc9-63e6ace1109a |
 | `brand/` | The mark itself. Source of truth for both, see below | |
 
 ## How a folder is put together
@@ -54,7 +55,7 @@ artboard or `canvas.json` and run the script.
   Night ones.
 - Only draw a Day artboard when the page introduces a colour role that `0003` has not
   already proven on Day. `0003` has one because the bright Night ramps fail as text on
-  white; `0008` reuses those roles and stays Night only.
+  white; `0008` and `0009` reuse those roles and stay Night only.
 
 ## The mark
 

@@ -1,0 +1,630 @@
+<title>Velista Credential Flows</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-SignIn * { box-sizing: border-box; }
+#ab-SignIn a { color: #ffb454; text-decoration: none; }
+#ab-SignIn a:hover { color: #ffc271; }
+#ab-Register * { box-sizing: border-box; }
+#ab-Register a { color: #ffb454; text-decoration: none; }
+#ab-Register a:hover { color: #ffc271; }
+#ab-Upgrade * { box-sizing: border-box; }
+#ab-Upgrade a { color: #ffb454; text-decoration: none; }
+#ab-Upgrade a:hover { color: #ffc271; }
+#ab-VerifyEmail * { box-sizing: border-box; }
+#ab-VerifyEmail a { color: #ffb454; text-decoration: none; }
+#ab-VerifyEmail a:hover { color: #ffc271; }
+</style>
+
+<header>
+  <h1>Velista Credential Flows</h1>
+  <p class="lede">The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 2350px; height: 2320px;">
+      <figure class="board" style="left: 0px; top: 230px; width: 1330px;">
+        <figcaption>Sign in</figcaption>
+        <div class="frame" id="ab-SignIn" style="width: 1330px; height: 970px;">
+          <div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- EMPTY -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ARRIVED &middot; a destination, not a sheet</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
+                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
+
+                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Welcome back</h1>
+                  <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Sign in and your groups come with you, on any phone.</p>
+
+                  <label for="email-a" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Email</label>
+                  <div id="email-a" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 15px; gap: 2px; margin-bottom: 18px;">
+                    <span style="width: 1.5px; height: 21px; background: #ffb454;"></span>
+                    <span style="font-size: 16px; color: #4d5470;">you@example.com</span>
+                  </div>
+
+                  <label for="pass-a" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Password</label>
+                  <div id="pass-a" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 8px 0 15px; gap: 10px; margin-bottom: 24px;">
+                    <span style="flex: 1; font-size: 16px; color: #4d5470;">Your password</span>
+                    <button type="button" style="width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Show password">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/>
+                        <circle cx="12" cy="12" r="2.9"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <button type="button" disabled style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: rgba(255,180,84,0.24); color: rgba(10,12,20,0.55); font-family: inherit; font-size: 16.5px; font-weight: 650;">Sign in</button>
+
+                  <div style="display: flex; align-items: center; gap: 14px; margin: 26px 0;">
+                    <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.09);"></span>
+                    <span style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; color: #6f7899;">OR</span>
+                    <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.09);"></span>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 52px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.14); background: transparent; color: #f7f8fc; font-family: inherit; font-size: 15.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;">
+                    <svg width="19" height="19" viewBox="0 0 48 48" aria-hidden="true">
+                      <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.8-.4-4H24v7.2h12.1c-.2 2-1.6 5-4.5 7l6.9 5.3c4.1-3.8 6.6-9.4 6.6-15.5z"/>
+                      <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C8.1 41.1 15.5 46 24 46z"/>
+                      <path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.7-2.9-.7-4.4s.3-3 .7-4.4l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 9.9l7.1-5.5z"/>
+                      <path fill="#EA4335" d="M24 10.5c4.1 0 6.9 1.8 8.5 3.3l6.1-6C34.9 4.3 29.9 2 24 2 15.5 2 8.1 6.9 4.4 14.1l7.1 5.5c1.8-5.3 6.7-9.1 12.5-9.1z"/>
+                    </svg>
+                    Continue with Google
+                  </button>
+
+                  <div style="flex: 1;"></div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; font-size: 14.5px; color: #98a0bb;">
+                    New here?
+                    <a href="#" style="font-weight: 600;">Create an account</a>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+            <!-- FILLED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">FILLED &middot; the keyboard covers what it does not need</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
+
+                <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
+                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div style="flex: 1; padding: 8px 24px 24px;">
+
+                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Welcome back</h1>
+                  <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Sign in and your groups come with you, on any phone.</p>
+
+                  <label for="email-b" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Email</label>
+                  <div id="email-b" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 15px; margin-bottom: 18px;">
+                    <span style="font-size: 16px; color: #f7f8fc;">marta@example.com</span>
+                  </div>
+
+                  <label for="pass-b" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Password</label>
+                  <div id="pass-b" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 8px 0 15px; gap: 10px; margin-bottom: 24px;">
+                    <span style="flex: 1; font-size: 17px; letter-spacing: 0.2em; color: #f7f8fc;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+                    <button type="button" style="width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Show password">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/>
+                        <circle cx="12" cy="12" r="2.9"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Sign in</button>
+
+                </div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- REJECTED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REJECTED &middot; one message, because the server tells us no more</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
+                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
+
+                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Welcome back</h1>
+                  <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Sign in and your groups come with you, on any phone.</p>
+
+                  <label for="email-c" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Email</label>
+                  <div id="email-c" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 15px; margin-bottom: 18px;">
+                    <span style="font-size: 16px; color: #f7f8fc;">marta@example.com</span>
+                  </div>
+
+                  <label for="pass-c" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Password</label>
+                  <div id="pass-c" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid #fb7185; display: flex; align-items: center; padding: 0 8px 0 15px; gap: 10px;">
+                    <span style="flex: 1; font-size: 17px; letter-spacing: 0.2em; color: #f7f8fc;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+                    <button type="button" style="width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Show password">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/>
+                        <circle cx="12" cy="12" r="2.9"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div role="alert" style="display: flex; gap: 9px; align-items: flex-start; margin-top: 12px; margin-bottom: 24px;">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9.2" stroke="#fb7185" stroke-width="1.7"/>
+                      <path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6" stroke="#fb7185" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                    <div style="font-size: 13px; line-height: 1.5; color: #fb7185;">That email and password do not match. Check both and try again.</div>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Sign in</button>
+
+                  <div style="flex: 1;"></div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; font-size: 14.5px; color: #98a0bb;">
+                    New here?
+                    <a href="#" style="font-weight: 600;">Create an account</a>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1400px; top: 230px; width: 900px;">
+        <figcaption>Make an account</figcaption>
+        <div class="frame" id="ab-Register" style="width: 900px; height: 970px;">
+          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- FORM -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">TWO FIELDS &middot; no display name, no confirm password</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
+                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
+
+                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Make an account</h1>
+                  <p style="margin: 0 0 28px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">So your lists are not tied to one phone.</p>
+
+                  <label for="email-r" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Email</label>
+                  <div id="email-r" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 15px; margin-bottom: 18px;">
+                    <span style="font-size: 16px; color: #f7f8fc;">marta@example.com</span>
+                  </div>
+
+                  <label for="pass-r" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Password</label>
+                  <div id="pass-r" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 8px 0 15px; gap: 10px;">
+                    <span style="flex: 1; font-size: 17px; letter-spacing: 0.2em; color: #f7f8fc;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+                    <button type="button" style="width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Hide password">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/>
+                        <circle cx="12" cy="12" r="2.9"/>
+                        <path d="M4.5 19.5l15-15"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 7px; margin-top: 9px; margin-bottom: 26px;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex: none;" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9.2" stroke="#34d399" stroke-width="1.8"/>
+                      <path d="M8.2 12.2l2.6 2.6 5-5.2" stroke="#34d399" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span style="font-size: 12px; color: #34d399;">At least 8 characters</span>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Create account</button>
+
+                  <div style="flex: 1;"></div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; font-size: 14.5px; color: #98a0bb;">
+                    Already have one?
+                    <a href="#" style="font-weight: 600;">Sign in</a>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+            <!-- STRAIGHT IN -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">STRAIGHT IN &middot; no wall, because the backend does not put one up</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 21px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650; color: #c2c8db;">M</div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 20px 20px 0;">
+
+                  <div style="display: flex; gap: 11px; align-items: flex-start; padding: 15px 16px; border-radius: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); margin-bottom: 26px;">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" stroke="#98a0bb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <rect x="2.8" y="5.2" width="18.4" height="13.6" rx="2.6"/>
+                      <path d="M3.4 6.6L12 12.6l8.6-6"/>
+                    </svg>
+                    <div style="flex: 1;">
+                      <div style="font-size: 14px; font-weight: 650; margin-bottom: 4px;">Confirm your email</div>
+                      <div style="font-size: 12.5px; line-height: 1.5; color: #98a0bb;">We sent a link to marta@example.com. You can carry on without it, but confirming keeps the account yours.</div>
+                    </div>
+                    <button type="button" style="width: 30px; height: 30px; flex: none; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Dismiss">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M7 7l10 10M17 7L7 17"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #98a0bb; margin-bottom: 12px;">Your groups</div>
+
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.06); padding: 24px 18px; text-align: center;">
+                    <div style="font-size: 15.5px; font-weight: 650; margin-bottom: 6px;">No groups yet</div>
+                    <div style="font-size: 13px; line-height: 1.5; color: #98a0bb; margin-bottom: 18px;">A group is the household or flatmates you share lists with.</div>
+                    <button type="button" style="width: 100%; height: 48px; border: 0; border-radius: 13px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 15px; font-weight: 650; cursor: pointer;">Create a group</button>
+                    <button type="button" style="width: 100%; height: 46px; margin-top: 9px; border-radius: 13px; border: 1px solid rgba(255,255,255,0.14); background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer;">Join with a code</button>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 1350px; width: 900px;">
+        <figcaption>Secure a guest account</figcaption>
+        <div class="frame" id="ab-Upgrade" style="width: 900px; height: 970px;">
+          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- UPGRADE FORM -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SECURE MY ACCOUNT &middot; the same user, kept</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
+                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
+
+                  <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Keep what you have</h1>
+                  <p style="margin: 0 0 22px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Add an email and a password to the account already on this phone. Nothing moves and nothing is lost.</p>
+
+                  <div style="display: flex; gap: 11px; align-items: flex-start; padding: 14px 15px; border-radius: 16px; background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.22); margin-bottom: 26px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9.2" stroke="#34d399" stroke-width="1.7"/>
+                      <path d="M8.2 12.2l2.6 2.6 5-5.2" stroke="#34d399" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <div style="font-size: 12.5px; line-height: 1.5; color: #e4e7f1;">Your 2 groups and everything in them stay exactly where they are. This is the same account, with a way back into it.</div>
+                  </div>
+
+                  <label for="email-u" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Email</label>
+                  <div id="email-u" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 15px; margin-bottom: 18px;">
+                    <span style="font-size: 16px; color: #f7f8fc;">marta@example.com</span>
+                  </div>
+
+                  <label for="pass-u" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Password</label>
+                  <div id="pass-u" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 8px 0 15px; gap: 10px; margin-bottom: 26px;">
+                    <span style="flex: 1; font-size: 17px; letter-spacing: 0.2em; color: #f7f8fc;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+                    <button type="button" style="width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Show password">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/>
+                        <circle cx="12" cy="12" r="2.9"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Secure my account</button>
+
+                  <div style="flex: 1;"></div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Not now</span>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+            <!-- DONE -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">DONE &middot; the banner is gone, and that is the reward</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 21px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650; color: #c2c8db;">M</div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 20px 20px 0;">
+
+                  <div style="display: flex; gap: 11px; align-items: center; padding: 14px 16px; border-radius: 16px; background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.22); margin-bottom: 26px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style="flex: none;" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9.2" stroke="#34d399" stroke-width="1.7"/>
+                      <path d="M8.2 12.2l2.6 2.6 5-5.2" stroke="#34d399" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <div style="font-size: 13.5px; line-height: 1.45; color: #e4e7f1;">Your account is secured. Sign in anywhere with marta@example.com.</div>
+                  </div>
+
+                  <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #98a0bb; margin-bottom: 12px;">Your groups</div>
+
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.06); padding: 17px 18px; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px;">
+                      <span style="font-size: 16.5px; font-weight: 650;">Flat 3B</span>
+                      <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: #ffb454; background: rgba(255,180,84,0.13); border-radius: 999px; padding: 4px 9px;">OWNER</span>
+                    </div>
+                    <div style="font-size: 13px; color: #98a0bb;">3 members &middot; 2 lists</div>
+                  </div>
+
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.06); padding: 17px 18px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px;">
+                      <span style="font-size: 16.5px; font-weight: 650;">Casa de mis padres</span>
+                      <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: #98a0bb; background: rgba(255,255,255,0.07); border-radius: 999px; padding: 4px 9px;">MEMBER</span>
+                    </div>
+                    <div style="font-size: 13px; color: #98a0bb;">4 members &middot; 1 list</div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 960px; top: 1350px; width: 900px;">
+        <figcaption>The confirmation link</figcaption>
+        <div class="frame" id="ab-VerifyEmail" style="width: 900px; height: 970px;">
+          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- CONFIRMED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">CONFIRMED &middot; opened from the email, maybe on another phone</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
+
+                <div style="position: absolute; top: -150px; right: -110px; width: 360px; height: 360px; border-radius: 999px; background: radial-gradient(circle, rgba(52,211,153,0.13) 0%, rgba(167,139,250,0.08) 44%, rgba(10,12,20,0) 72%); pointer-events: none;"></div>
+
+                <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px 4px; position: relative;">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                    <g transform="translate(-0.25 0.732) scale(0.98)">
+                      <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                      <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                      <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                    </g>
+                  </svg>
+                  <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                </div>
+
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 24px 24px; position: relative;">
+
+                  <div style="width: 60px; height: 60px; border-radius: 999px; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.28); display: flex; align-items: center; justify-content: center; margin-bottom: 24px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M7.4 12.4l3.2 3.2 6.2-6.4" stroke="#34d399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </div>
+
+                  <h1 style="margin: 0 0 12px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Email confirmed</h1>
+                  <p style="margin: 0 0 30px; font-size: 15px; line-height: 1.55; color: #98a0bb;">marta@example.com is yours. You can sign in with it on any phone.</p>
+
+                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Go to my groups</button>
+
+                </div>
+
+              </div>
+            </div>
+
+            <!-- EXPIRED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">EXPIRED OR USED &middot; one message, because the server cannot tell them apart</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
+
+                <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px 4px; position: relative;">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                    <g transform="translate(-0.25 0.732) scale(0.98)">
+                      <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                      <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                      <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                    </g>
+                  </svg>
+                  <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                </div>
+
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 24px 24px; position: relative;">
+
+                  <div style="width: 60px; height: 60px; border-radius: 999px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; margin-bottom: 24px;">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="8.6"/>
+                      <path d="M12 7.4V12l3 1.8"/>
+                    </svg>
+                  </div>
+
+                  <h1 style="margin: 0 0 12px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">That link has run out</h1>
+                  <p style="margin: 0 0 30px; font-size: 15px; line-height: 1.55; color: #98a0bb;">Confirmation links last a short while and work once. Nothing is wrong with your account: signing in and everything else works exactly the same.</p>
+
+                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Go to my groups</button>
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 430px;"><p>Credential flows, plan 0009. The two front door buttons 0008 left recorded, plus the guest banner's action and what a confirmation link opens.</p><p>Phone only, 390x844, Night only: no new colour role, so a Day artboard would restate 0003 rather than find anything.</p><p>These are full routes, not sheets. 0008's rule is that a sheet completes one field in place; each of these is a destination with its own alternatives underneath.</p></aside>
+      <aside class="note" style="left: 470px; top: 0px; width: 420px;"><p>REGISTERING SIGNS YOU IN IMMEDIATELY. identity.service register() issues tokens at the end and sends the confirmation email outside the transaction, with the comment "verification is optional".</p><p>So there is no "check your email to continue" wall, and designing one would invent a barrier the backend does not have. The second frame is the dashboard, with a dismissible nudge.</p><p>Login never checks emailVerifiedAt either.</p></aside>
+      <aside class="note" style="left: 940px; top: 0px; width: 430px;"><p>A GUEST MUST NEVER BE SHOWN REGISTER. register() creates a NEW user, so a guest who used it would be signed in as somebody else and every group they made would be stranded on the account they just walked away from.</p><p>upgrade() converts the SAME user in place, keeps the userId, and therefore keeps the groups. That is why the guest banner has its own screen and its own words, and why it counts the groups back at you.</p><p>This is the email twin of rule D3 from 0004.</p></aside>
+      <aside class="note" style="left: 1400px; top: 0px; width: 430px;"><p>GOOGLE IS DRAWN BUT CANNOT BE WIRED YET, for two separate backend reasons.</p><p>1. GET /v1/auth/google/callback returns AuthTokens as JSON, so a browser lands on a page of JSON instead of coming back to the app. It needs to 302 back with the pair in the URL fragment.</p><p>2. The callback sends the profile with no linkUserId, and linkUserId is the parameter that upgrades a guest in place. Without it a guest who taps Google is handed a brand new registered account and loses their groups, exactly as if they had used register.</p><p>So the button stays recorded until both land. Both are backend work the user reserved.</p></aside>
+      <aside class="note" style="left: 1920px; top: 1350px; width: 430px;"><p>ONE ERROR FOR BOTH CAUSES, on purpose. login() returns the same UnauthorizedException whether the email is unknown or the password is wrong, with the comment that this is so the response does not reveal which emails are registered.</p><p>So the screen must never say "no account with that email", and the message hangs under the pair of fields rather than under one of them.</p></aside>
+      <aside class="note" style="left: 1920px; top: 1680px; width: 430px;"><p>CONFIRMING AN EMAIL CURRENTLY BUYS NOTHING, and there is no way to ask again.</p><p>No resend endpoint exists anywhere: POST /v1/auth/verify-email only consumes a token, and the throttle bucket named verifyResend is the only trace of the intention. So the expired screen offers no "send me a new link", because there is nothing to call.</p><p>Worse for upgrade(): it sets the email but never creates a verification, so an upgraded account can never be verified at all. Recorded as backend work, not designed around.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 2350;
+    var h = 2320;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

@@ -6,6 +6,9 @@
 >
 > **This is a page plan** and follows the template in `0001` section 9.
 >
+> **Status: mock approved by the user on 2026-08-26.** The design is settled and the
+> plan is ready for development.
+>
 > It covers two of the four ways in that the front door offers. The other two, Google
 > and email sign in, are credential flows and get their own plan. Nothing here needs
 > them: a person can create a group, invite people, and be let into somebody else's
@@ -397,9 +400,12 @@ exist and are reused unchanged.
 ## 9. Out of scope
 
 - **Email and Google.** `auth/login`, `auth/register`, `auth/verify` and `auth/callback`
-  are the next plan. The Google button on the front door keeps recording its tap.
+  are **`0009`**. The Google button on the front door keeps recording its tap, and
+  `0009` section 5.6 shows it stays that way past its own plan too.
 - **Upgrading a guest to a real account.** The banner is drawn and its action still
-  goes nowhere. `POST /v1/auth/upgrade` belongs with the credential flows.
+  goes nowhere. `POST /v1/auth/upgrade` is **`0009`**, which also establishes rule C2:
+  a guest must never be shown the register screen, because it would strand every group
+  this plan just helped them make.
 - **Approving anybody.** The join request row on a zone card, the members screen and
   `membership.approve` are the group detail plan. This plan produces pending
   memberships and shows them; it cannot resolve one.
