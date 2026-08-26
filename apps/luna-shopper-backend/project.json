@@ -6,9 +6,17 @@
   "tags": [],
   "// ": "Umbrella project for the Luna Shopper backend (plans 0013, 0015). It has no build; it hosts the cross-service test-data orchestrator targets (seed / db:snapshot / db:restore) and the stack targets that wrap compose + migrations + a suite in one command. The services themselves — luna-shopper-backend-auth, -core, -catalog, -gateway, -realtime — are their own nested projects under this directory. Pass args after `--`, e.g. `nx run luna-shopper-backend:db:snapshot -- --label initial`.",
   "targets": {
+    "stack:bootstrap": {
+      "executor": "nx:run-commands",
+      "// ": "Writes whatever a local stack needs and does not have: the six git ignored service .env files (from the slot 0 defaults) and the throwaway dev JWT keypair. Idempotent, and never overwrites a file that already exists. stack:up runs it first, so this is only needed to configure a checkout without starting anything.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh bootstrap"
+      }
+    },
     "stack:up": {
       "executor": "nx:run-commands",
-      "// ": "Plan 0015, section 4. Brings the compose stack up honoring .env.slot, waits on every healthcheck (`up --wait`, never a sleep), and runs migration:run for auth, core and catalog.",
+      "// ": "Plan 0015, section 4. Configures the checkout first (see stack:bootstrap), then brings the compose stack up honoring .env.slot, waits on every healthcheck (`up --wait`, never a sleep), and runs migration:run for auth, core and catalog.",
       "cache": false,
       "options": {
         "command": "bash k8s/e2e/luna-shopper-backend/stack.sh up"
