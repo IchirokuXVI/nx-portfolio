@@ -111,6 +111,21 @@ profile, so a plain `up` never starts it and nobody pays for four extra
 containers they did not ask for. Add it to any slot:
 
 ```sh
+nx run luna-shopper-backend:observability:up      # prints this slot's URLs
+nx run luna-shopper-backend:observability:down    # removes only those four
+```
+
+Both wrap `stack.sh -p observability {up,down}`, and `-p` accepts any profile in
+`compose.yml`. The two directions are not symmetric, which is deliberate: `up` is
+additive (the base stack plus the profile's containers), while `down` is scoped
+to the profile's own containers and keeps their volumes, so taking the telemetry
+down never takes the databases with it and never costs you the Prometheus
+history. `stack:down` is still the whole project including volumes, profiled
+containers and all.
+
+The same thing by hand, without the wrapper:
+
+```sh
 docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \
   --profile observability \
   -f k8s/e2e/luna-shopper-backend/compose.yml up -d
