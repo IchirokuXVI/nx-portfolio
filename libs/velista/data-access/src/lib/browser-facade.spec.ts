@@ -32,6 +32,38 @@ describe('BrowserFacade', () => {
       expect(facade.readStorage('velista-test-key')).toBeNull();
     });
 
+    it('answers false for a media query jsdom cannot evaluate', () => {
+      // jsdom ships no `matchMedia`. The bias is deliberate: a caller phrases the
+      // query so that false is the answer it wants when nothing can answer.
+      expect(facade.matchMedia('(prefers-color-scheme: light)')()).toBe(false);
+    });
+
+    it('tracks a media query and shares one signal per query', () => {
+      const listeners: ((event: MediaQueryListEvent) => void)[] = [];
+      const list = {
+        matches: true,
+        addEventListener: (_: string, fn: (e: MediaQueryListEvent) => void) =>
+          listeners.push(fn),
+        removeEventListener: jest.fn(),
+      };
+      const matchMedia = jest.fn().mockReturnValue(list);
+      Object.defineProperty(window, 'matchMedia', {
+        value: matchMedia,
+        configurable: true,
+      });
+
+      const query = '(prefers-color-scheme: light)';
+      const matches = facade.matchMedia(query);
+      expect(matches()).toBe(true);
+
+      listeners.forEach((fn) => fn({ matches: false } as MediaQueryListEvent));
+      expect(matches()).toBe(false);
+
+      // Memoised, so a second caller shares the listener rather than adding one.
+      expect(facade.matchMedia(query)).toBe(matches);
+      expect(matchMedia).toHaveBeenCalledTimes(1);
+    });
+
     it('returns null instead of throwing when storage is unavailable', () => {
       jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
         throw new Error('storage blocked');
@@ -63,6 +95,7 @@ describe('BrowserFacade', () => {
       expect(facade.readStorage('anything')).toBeNull();
       expect(() => facade.writeStorage('a', 'b')).not.toThrow();
       expect(() => facade.reload()).not.toThrow();
+      expect(facade.matchMedia('(prefers-color-scheme: light)')()).toBe(false);
     });
 
     it('never reports offline during a server render', () => {

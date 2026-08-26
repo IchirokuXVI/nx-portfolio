@@ -54,6 +54,7 @@ so the ramps are named for what they are.
 --app-neutral-300: #c2c8db;
 --app-neutral-400: #98a0bb;
 --app-neutral-500: #6f7899;
+--app-neutral-550: #616a8a;  // muted text on Day only. See 4.6.
 --app-neutral-600: #525a78;
 
 // Amber: the single warm accent.
@@ -166,9 +167,10 @@ conditions routinely, and the mock for every page must be checked in both.
 --app-surface-sunken:  var(--app-ink-900);
 --app-text-primary:    var(--app-neutral-50);
 --app-text-secondary:  var(--app-neutral-300);
---app-text-muted:      var(--app-neutral-500);
+--app-text-muted:      var(--app-neutral-400);   // was neutral-500, see 4.6
 --app-border-subtle:   rgb(255 255 255 / 8%);
---app-border-strong:   rgb(255 255 255 / 18%);
+--app-border-strong:   rgb(255 255 255 / 35%);   // was 18%, see 4.6
+--app-focus-ring:      var(--app-sky-400);
 --app-action-bg:       var(--app-amber-500);
 --app-action-fg:       var(--app-ink-950);
 ```
@@ -182,9 +184,10 @@ conditions routinely, and the mock for every page must be checked in both.
 --app-surface-sunken:  var(--app-neutral-100);
 --app-text-primary:    var(--app-ink-900);
 --app-text-secondary:  var(--app-neutral-600);
---app-text-muted:      var(--app-neutral-500);
+--app-text-muted:      var(--app-neutral-550);   // was neutral-500, see 4.6
 --app-border-subtle:   var(--app-neutral-200);
---app-border-strong:   var(--app-neutral-300);
+--app-border-strong:   var(--app-neutral-500);   // was neutral-300, see 4.6
+--app-focus-ring:      var(--app-sky-600);
 --app-action-bg:       var(--app-amber-500);
 --app-action-fg:       var(--app-ink-950);
 --app-action-quiet-fg: var(--app-amber-800);
@@ -227,6 +230,37 @@ than touching `localStorage` directly, so the standalone SSR build keeps working
 `prefers-reduced-motion` and `prefers-contrast` are honoured. Reduced motion is not
 optional politeness here, since motion on a list that is being edited by several people at
 once is genuinely disorienting.
+
+### 4.6 What the contrast check moved, once it was actually run
+
+Criterion 6 in section 12 says a contrast check has to be run over both themes for every
+token pair that is actually used together. Running it moved four of the values sketched
+above. They are corrected in place in 4.1 and 4.2; this is the record of why, in the same
+spirit as the 400 versus 700 note in section 2, because these are exactly the failures that
+only appear when both themes are checked rather than looked at.
+
+| Token | Sketched | Now | Measured |
+| --- | --- | --- | --- |
+| Night `--app-text-muted` | `neutral-500` | `neutral-400` | 3.99:1 on `surface-raised`, which is where metadata sits |
+| Day `--app-text-muted` | `neutral-500` | `neutral-550` | 4.09:1 on the Day ground, 4.35:1 on a white card |
+| Night `--app-border-strong` | 18% white | 35% white | About 1.7:1 on every surface |
+| Day `--app-border-strong` | `neutral-300` | `neutral-500` | About 1.7:1 on a white card |
+
+`neutral-550` is a new primitive, and it exists for one role: it is the only grey that
+clears 4.5:1 as muted text on Day without colliding with the secondary step.
+
+The two `border-strong` values move for the same reason as each other. That token is the
+outline that identifies an input, so WCAG's 3:1 non-text floor applies to it, and both
+sketched values were sitting at roughly half of it. `border-subtle`, a row separator, is
+decorative and stays where it was.
+
+One assertion was deliberately **not** written: the focus ring against the fill of the
+control it surrounds. No single colour clears 3:1 against both a near black surface and the
+amber primary button, since the two sit on opposite sides of every mid-tone. What makes
+that a non-problem is `--app-focus-ring-offset`: the ring is drawn wholly outside the
+control, on the surface behind it, so the surface is the pair that matters and the offset
+is load bearing rather than cosmetic. It has a test of its own so it cannot quietly go to
+zero.
 
 ## 5. Brand configuration: surviving the rename
 
@@ -315,6 +349,40 @@ is a defect against rule N1 and it gets fixed rather than worked around.
   in the translation JSON like any other copy (rule N2 in `0001`). It is **not** a brand
   value and does not belong in `AppBrand`: it is vocabulary, not identity, and changing it
   again later is a change to two JSON files.
+
+### 5.3 Resolving the asset filenames is deferred, and why
+
+`AppBrand` describes the wordmark and icon as "resolved at runtime, never inlined
+into a template", and that is still the right shape. It is not implemented yet, and this
+records the reason so the next person does not rediscover it.
+
+Turning a filename into a URL means emitting the SVG as a build asset, which under this
+workspace's module federation setup fails the production build:
+
+```
+./libs/velista/ui/src/index.ts + 9 modules - Error: Can't handle conflicting asset info
+  for sourceFilename
+  while analyzing module asset/resource|.../velista-mark.svg for concatenation
+```
+
+It reproduces with a bundler context over `assets/brand/`, with a hand written map of two
+static imports, and with either one of the two files alone. It survives clearing `dist`,
+removing the `@font-face` rules, and taking the module out of the public barrel. The same
+rules and the same import shape build fine in `damoclesSword`, so this is a scope hoisting
+interaction specific to how this library sits in the federated graph, not a mistake in the
+import.
+
+What is built instead: `BrandMark` inlines the outline mark with `?raw`, which is the
+repo's icon convention anyway and builds reliably. Nothing needs the amber tile as a URL
+yet, because everything that consumes it — the favicon, the install icon, the PWA manifest,
+the store listing — is document level and belongs to the standalone phase that section 13
+already defers.
+
+When the tile is needed, the seam is a `BrandAssetResolver` injectable taking a filename
+and returning a URL, so no component learns a filename either way. The likely fix is a
+`generator.filename` on the asset rule, or excluding this library from
+`optimization.concatenateModules`; both want measuring against a real need rather than
+guessing now.
 
 ## 6. Type
 
@@ -484,19 +552,34 @@ Non negotiable, checked per page:
 
 ## 12. Acceptance criteria for this plan
 
-- [ ] `_primitives.scss`, `_semantic.scss`, `_themes.scss` exist in
+- [x] `_primitives.scss`, `_semantic.scss`, `_themes.scss` exist in
       `libs/velista/ui/src/lib/styles`, and are the only files containing
-      literal colour values.
-- [ ] Tokens are scoped to the app root element, not `:root`.
-- [ ] Both Night and Day are implemented and switchable, with system preference detection
-      and a persisted user override behind an injectable storage facade.
-- [ ] `AppBrand` and `APP_BRAND` exist and are the only source of the product name.
-- [ ] A lint rule or a documented review check catches literal colours and raw pixel values
-      in component styles.
-- [ ] A contrast check has been run over both themes for every token pair that is actually
-      used together.
-- [ ] Renaming the product has been rehearsed once by changing only the brand provider and
+      literal colour values. In practice only `_primitives.scss` does: the themes derive
+      their tints and hairlines from a ramp's `-rgb` companion, so no second literal is
+      ever written down. `_tokens.scss` joins them as the entry point and holds no values.
+- [x] Tokens are scoped to the app root element, not `:root`. `app-layout.scss` applies
+      them on `:host`, which is that selector translated for Angular's emulated
+      encapsulation: a literal `.app-root { }` in a component stylesheet is rewritten to
+      match a descendant, so it would land on nothing.
+- [x] Both Night and Day are implemented and switchable, with system preference detection
+      and a persisted user override behind an injectable storage facade. `ThemeStore`
+      resolves choice, then the OS, then Night, reaching `localStorage` and `matchMedia`
+      only through `BrowserFacade`.
+- [x] `AppBrand` and `APP_BRAND` exist and are the only source of the product name.
+      Every name a person can read or hear comes from the provider. Resolving the asset
+      **filenames** to URLs is the one piece not built, and 5.3 records why: it fails the
+      production build, and nothing needs it until the favicon and manifest, which section
+      13 defers to the standalone phase.
+- [x] A lint rule or a documented review check catches literal colours and raw pixel values
+      in component styles. `token-hygiene.spec.ts`, which also asserts its own patterns
+      still fire, so a broken one cannot pass silently.
+- [x] A contrast check has been run over both themes for every token pair that is actually
+      used together. `contrast.spec.ts`, run against the compiled stylesheet rather than a
+      second copy of the palette. It moved four values; see 4.6.
+- [x] Renaming the product has been rehearsed once by changing only the brand provider and
       the translation values, confirming no component needed a change.
+      `brand-rename.spec.ts` keeps the rehearsal repeatable, because one done by hand stops
+      being true the first time somebody types the product name into a template.
 
 ## 13. Out of scope
 

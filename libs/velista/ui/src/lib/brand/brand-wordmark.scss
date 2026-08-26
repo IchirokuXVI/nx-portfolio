@@ -1,0 +1,26 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  color: var(--app-text-primary);
+}
+
+.wordmark__mark {
+  // Follows the name's size, which is what keeps the lockup in proportion at
+  // every size it is used at without a second knob.
+  font-size: 1.33em;
+}
+
+.wordmark__name {
+  // One of the two places the display face is permitted (plan 0002, section 6),
+  // the other being the hero headline on the public home page. It is absent from
+  // every authenticated screen, so the app itself stays on the system stack.
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-2xl);
+  font-weight: 400;
+  line-height: 1;
+  // A short word set in a wide serif needs air between the characters to read as
+  // a mark rather than as a word. The hero deliberately does not inherit this:
+  // at 41px the same value is far too loose.
+  letter-spacing: var(--app-tracking-wordmark);
+}

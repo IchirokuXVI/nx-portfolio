@@ -1,0 +1,39 @@
+// The one entry point for the design system. Everything that needs a token, a
+// breakpoint or a helper writes `@use '../styles/tokens' as tokens;` and nothing
+// reaches past this file into the three layers directly.
+//
+// Layout of the system (plan 0002, section 2):
+//
+//   _primitives.scss  Layer 1. Raw colour ramps. The only literal colours.
+//   _semantic.scss    Layer 2 (theme independent) and layer 3. Type, space,
+//                     radius, motion, touch, component knobs.
+//   _themes.scss      Layer 2 (colour). Night and Day, and nothing else.
+//
+// Rule T1: a component may reference only semantic or component tokens. Reaching
+// for a primitive is a bug, because it will not follow a theme change, and
+// `token-hygiene.spec.ts` fails the build over it.
+
+@use 'primitives';
+@use 'semantic';
+@use 'themes';
+
+@forward 'semantic' show $app-breakpoint-sm, $app-breakpoint-md,
+  $app-content-max, app-from, app-focus-ring;
+@forward 'themes' show app-theme-night, app-theme-day;
+
+/// Everything the app root carries, minus the theme.
+///
+/// The theme is applied by a separate selector on the same element rather than
+/// being an argument here, because which theme is active is a runtime decision
+/// and both have to be present in the stylesheet for the class swap to be the
+/// whole mechanism.
+///
+/// Extraction contract, item 4 (plan 0001): this lands on the app's own root
+/// element, never on `:root`, so the portfolio shell's global styles and this
+/// app's tokens cannot reach each other in either direction. On extraction the
+/// selector becomes `:root` and nothing else changes.
+@mixin app-root {
+  @include primitives.app-primitives;
+  @include semantic.app-semantic;
+  @include semantic.app-motion-preferences;
+}

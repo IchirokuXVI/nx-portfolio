@@ -6,13 +6,15 @@
  * enabled subset (`APP_USABLE_LOCALES`), which drives the route-data guard and the
  * language switcher.
  *
- * `APP_KEY` namespaces the persisted locale (`roku-locale:{appKey}`). Its value is
- * the Nx project name — a technical identifier, stable across a rename (plan 0001,
- * section 2) — not the product name, which lives only in `AppBrand`.
+ * `APP_KEY` namespaces the persisted locale (`roku-locale:{appKey}`) and, since
+ * plan 0002, the persisted theme choice too. It now lives in `models`, so that
+ * `data-access` can namespace its own storage keys without depending on the
+ * presentation layer, and is re-exported here so this import site keeps working.
  *
  * These constants are deliberately unprefixed: rule N1 keeps the product name out
  * of code symbols, and the `@portfolio/velista/ui` import path already scopes them.
  */
-export const APP_KEY = 'velista';
+export { APP_KEY } from '@portfolio/velista/models';
+
 export const APP_AVAILABLE_LOCALES: string[] = ['en', 'es'];
 export const APP_DEFAULT_LOCALE = 'en';

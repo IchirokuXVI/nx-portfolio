@@ -6,6 +6,7 @@ import {
   Injectable,
   PLATFORM_ID,
   signal,
+  Signal,
 } from '@angular/core';
 
 /**
@@ -42,6 +43,7 @@ export class BrowserFacade {
   private readonly _platformId = inject(PLATFORM_ID);
   private readonly _document = inject(DOCUMENT);
   private readonly _destroyRef = inject(DestroyRef);
+  private readonly _mediaQueries = new Map<string, Signal<boolean>>();
 
   constructor() {
     this.isBrowser = isPlatformBrowser(this._platformId);
@@ -79,6 +81,44 @@ export class BrowserFacade {
   /** The location, or null on the server. */
   get location(): Location | null {
     return this.window?.location ?? null;
+  }
+
+  /**
+   * A media query as a signal, so a component can react to `prefers-color-scheme`
+   * or `prefers-reduced-motion` without ever touching `matchMedia` itself.
+   *
+   * **False on the server, and false when the browser has no `matchMedia`.** That
+   * is a deliberate bias rather than an oversight: a caller must phrase the query
+   * so the answer it wants by default is the false one. The theme store asks for
+   * `(prefers-color-scheme: light)` rather than `dark` for exactly this reason,
+   * which is what makes Night the default under a server render, in a test, and
+   * on a browser that reports nothing (plan 0002, section 4.5).
+   *
+   * Memoised per query string, so repeated calls share one listener and one
+   * signal. Listeners are released with this root scoped service, which in
+   * practice means for the life of the app.
+   */
+  matchMedia(query: string): Signal<boolean> {
+    const cached = this._mediaQueries.get(query);
+    if (cached) {
+      return cached;
+    }
+
+    const matches = signal(false);
+    const list = this.window?.matchMedia?.(query);
+    if (list) {
+      matches.set(list.matches);
+      const onChange = (event: MediaQueryListEvent) =>
+        matches.set(event.matches);
+      list.addEventListener('change', onChange);
+      this._destroyRef.onDestroy(() =>
+        list.removeEventListener('change', onChange)
+      );
+    }
+
+    const result = matches.asReadonly();
+    this._mediaQueries.set(query, result);
+    return result;
   }
 
   /**

@@ -1,0 +1,189 @@
+// Layer 2 of the token architecture (plan 0002, section 2), plus layer 3.
+//
+// Layer 2 is what components actually use, and a theme is nothing but a
+// redefinition of it. The **colour** half of layer 2 therefore lives in
+// `_themes.scss`, because its values differ per theme and nowhere else. What is
+// here is the half that does not: type, space, radius, motion, and the layout
+// constants. Those are the same in a dim kitchen and in a bright supermarket, so
+// duplicating them into each theme would only create two places to drift.
+//
+// The colour roles a theme must define, listed here so the contract has one home
+// even though the values do not:
+//
+//   Surfaces   --app-surface-ground | -raised | -overlay | -sunken
+//   Text       --app-text-primary | -secondary | -muted | -on-action
+//   Lines      --app-border-subtle | -strong, --app-focus-ring
+//   Action     --app-action-bg | -bg-hover | -bg-pressed | -fg | -quiet-fg
+//   Status     --app-status-{success,danger,attention,info,neutral}-{fg,bg,border}
+//   Elevation  --app-elevation-1 | -2
+//
+// There is deliberately no `warning` role (section 4.4): an amber brand action and
+// an amber warning are hard to tell apart, and on a shopping list row that
+// ambiguity does the most damage. What a warning would have covered is split into
+// `danger` (destructive, and NOT_AVAILABLE) and `attention` (anything awaiting a
+// human decision, which is the far commoner case here).
+
+// Breakpoints. Base is the phone; these are the only two that exist, because
+// nothing above them is designed (section 8). `lg` and `xl` are absent on purpose
+// rather than by omission: adding one would invite a layout nobody has drawn.
+$app-breakpoint-sm: 480px;
+$app-breakpoint-md: 768px;
+
+// The width the phone layout is allowed to grow to on a wide screen. Section 8:
+// wide screens are not designed, they are only kept from breaking, and one
+// centred column of about this width is the phone layout given room to breathe.
+// A shopping list stretched to 1900px is unusable.
+$app-content-max: 480px;
+
+/// Media query helper, so a component never writes a raw breakpoint value.
+/// @param {Length} $from - one of the two breakpoints above.
+@mixin app-from($from) {
+  @media (min-width: $from) {
+    @content;
+  }
+}
+
+@mixin app-semantic {
+  // ---------------------------------------------------------------- Type
+  //
+  // System stack, no webfont (section 6). On a phone on supermarket signal a
+  // webfont is a render blocking download for a screen the user wants now, and
+  // the system stack is already on the device and looks native.
+  --app-font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace;
+  // Permitted in exactly two places, both on the unauthenticated surface: the
+  // wordmark and the public home page's hero headline. Georgia leads the
+  // fallbacks deliberately, being wide and available everywhere, so a failed
+  // font load degrades to similar proportions rather than collapsing the lockup.
+  --app-font-display: 'Marcellus', Georgia, 'Times New Roman', serif;
+
+  --app-text-2xs: 11px; // Dense metadata only, never body copy
+  --app-text-xs: 12px; // Timestamps, helper text
+  --app-text-sm: 14px; // Secondary copy, chips
+  --app-text-base: 16px; // Body. Never smaller for input fields, see rule T3
+  --app-text-lg: 18px; // List line labels, the thing read while shopping
+  --app-text-xl: clamp(20px, 5vw, 24px); // Section headings
+  --app-text-2xl: clamp(24px, 7vw, 32px); // Page titles
+  --app-text-3xl: clamp(30px, 9vw, 44px); // Home hero only
+
+  --app-leading-body: 1.5;
+  --app-leading-heading: 1.2;
+
+  // A short word in a wide serif still needs air between the characters to read
+  // as a mark. The hero does not inherit this: at 41px the same value is far too
+  // loose, so the two are set separately on purpose (section 6).
+  --app-tracking-wordmark: 0.05em;
+  --app-tracking-display: 0.005em;
+
+  // ---------------------------------------------------------------- Space
+  //
+  // 4px base. Eleven steps, starting at zero so that "no gap" is expressible as a
+  // token and a component never needs a bare `0` alongside tokenised values.
+  --app-space-1: 0;
+  --app-space-2: 4px;
+  --app-space-3: 8px;
+  --app-space-4: 12px;
+  --app-space-5: 16px;
+  --app-space-6: 20px;
+  --app-space-7: 24px;
+  --app-space-8: 32px;
+  --app-space-9: 40px;
+  --app-space-10: 48px;
+  --app-space-11: 64px;
+
+  // ---------------------------------------------------------------- Radius
+  //
+  // Soft rather than sharp: this is a domestic, shared, everyday product, not a
+  // technical dashboard.
+  --app-radius-sm: 8px;
+  --app-radius-md: 12px;
+  --app-radius-lg: 16px;
+  --app-radius-xl: 24px;
+  --app-radius-full: 999px;
+
+  // ---------------------------------------------------------------- Motion
+  //
+  // All three collapse to zero under `prefers-reduced-motion`, via
+  // `app-motion-preferences` below. That is not optional politeness here: motion
+  // on a list several people are editing at once is genuinely disorienting.
+  --app-motion-fast: 120ms;
+  --app-motion-base: 200ms;
+  --app-motion-slow: 320ms;
+  --app-motion-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  // Anything arriving from another user gets a distinctly gentler entrance than
+  // something the user did themselves, so that "the list changed under me" is
+  // legible rather than startling.
+  --app-motion-remote: 420ms;
+
+  // ---------------------------------------------------------------- Touch
+  //
+  // 44 by 44 CSS pixels, including the checkbox that marks a line as bought.
+  // That control is tapped dozens of times per trip, one handed, often while
+  // holding something else.
+  --app-touch-target: 44px;
+
+  // The focus ring's geometry. Its colour is a theme's job and lives in
+  // `_themes.scss`; how thick it is and how far it stands off is not. The offset
+  // is what keeps the ring legible on the amber primary button, by putting most
+  // of the stroke on the surface behind rather than on the fill.
+  --app-focus-ring-width: 2px;
+  --app-focus-ring-offset: 2px;
+
+  // Safe area insets, so a bottom action bar is not hidden behind the home
+  // indicator. Read through tokens rather than `env()` at each call site, both
+  // because it is easy to forget one and because a test environment that does
+  // not understand `env()` still gets a usable zero.
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-right: env(safe-area-inset-right, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-safe-left: env(safe-area-inset-left, 0px);
+
+  // ------------------------------------------------- Layer 3, component tokens
+  //
+  // Only where a component needs a knob a theme might want to turn on its own.
+  // Anything a theme would never touch belongs above, as a plain semantic token.
+  --app-button-radius: var(--app-radius-md);
+  --app-button-height: 52px;
+  --app-control-height: var(--app-touch-target);
+  --app-line-row-height: 56px;
+  --app-chip-radius: var(--app-radius-full);
+  --app-card-radius: var(--app-radius-lg);
+  --app-field-radius: var(--app-radius-md);
+  // Rule T3: iOS Safari zooms the viewport when a focused input is under 16px,
+  // which on a phone form is a jarring, hard to undo jump. This is a floor, so a
+  // field may set a larger size but reads this one to know where the floor is.
+  --app-field-font-size: var(--app-text-base);
+}
+
+/// The focus ring, as a mixin rather than as three declarations a component
+/// copies. Section 11 requires a visible ring on every interactive element and
+/// makes the ring a token so it cannot be quietly removed; this is the other half
+/// of that, so no component has to remember `outline-offset` or reach for
+/// `outline: none` to fix a ring that was drawn too tight.
+@mixin app-focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+/// User preference handling (section 4.5). Applied on the same element the tokens
+/// are scoped to, so both stay together.
+///
+/// Zeroing the tokens is the whole mechanism, and deliberately so. The blanket
+/// `*, *::before, *::after { animation-duration: 0.01ms !important }` that usually
+/// accompanies this cannot work from here: under Angular's emulated encapsulation
+/// the universal selector is rewritten to match only this component's own template
+/// elements, so it would reach nothing that matters while reading as though it
+/// covered everything. The token is the honest version, and `token-hygiene.spec.ts`
+/// is what keeps a component from writing a raw duration that escapes it.
+@mixin app-motion-preferences {
+  @media (prefers-reduced-motion: reduce) {
+    --app-motion-fast: 0ms;
+    --app-motion-base: 0ms;
+    --app-motion-slow: 0ms;
+    --app-motion-remote: 0ms;
+  }
+}
