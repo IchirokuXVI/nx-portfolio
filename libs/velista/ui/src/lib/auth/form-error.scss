@@ -1,0 +1,47 @@
+@use '../styles/tokens' as tokens;
+
+:host {
+  display: block;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+  text-wrap: pretty;
+}
+
+.glyph {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  // Sits on the first line's cap height rather than its box, so the mark reads as
+  // aligned with the text next to it.
+  margin-block-start: 1px;
+}
+
+.text {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+// Inline with the sentence, so the offer reads as part of the message rather than as
+// a second thing to consider. It is a button and not an anchor because it goes
+// somewhere inside this app and carries state with it (the typed address), which is a
+// navigation rather than a document to open.
+.action {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+
+  @include tokens.app-focus-ring;
+}

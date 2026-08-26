@@ -2,9 +2,13 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  AccountNotice,
   fakeZoneStore,
+  provideAccountNotice,
+  provideFakeAuthService,
   provideFakeSessionStore,
   provideFakeZoneStore,
+  VERIFY_RESEND_AVAILABLE,
   type FakeIdentity,
   type FakeZoneStore,
   type ZoneEntry,
@@ -45,6 +49,8 @@ interface Options {
   storage?: Map<string, string>;
   /** The way in the person has just come through (plan 0008, section 3.3). */
   lastEntry?: ZoneEntry | null;
+  /** What just happened to the account, which this page reports once (plan 0009). */
+  accountNotice?: { kind: 'registered' | 'upgraded'; email: string };
 }
 
 /**
@@ -83,8 +89,19 @@ async function render(
       provideFakeBrowserFacade(options.storage),
       provideFakeZoneStore(store),
       provideFakeSessionStore(options.identity ?? 'REGISTERED'),
+      // Both arrived with plan 0009: the page reports what just happened to the
+      // account, and offers another confirmation email once there is an endpoint.
+      provideAccountNotice(),
+      provideFakeAuthService(),
     ],
   }).compileComponents();
+
+  if (options.accountNotice !== undefined) {
+    TestBed.inject(AccountNotice).set(
+      options.accountNotice.kind,
+      options.accountNotice.email
+    );
+  }
 
   const fixture = TestBed.createComponent(HomePage);
   fixture.detectChanges();
@@ -261,6 +278,115 @@ describe('HomePage', () => {
 
       const buttons = queryAll(fixture, 'lib-guest-upgrade-banner button');
       expect(buttons).toHaveLength(2);
+    });
+
+    /**
+     * **Rule C2, from the one control that could get it wrong** (plan 0009, section
+     * 5.3). Register creates a new user row, so a guest who followed the banner there
+     * would fill in a valid form, land on an empty dashboard, and have no way back to
+     * groups now owned by an account whose only credential was the token that call
+     * replaced. Nothing would warn them, which is why this is a test and not a comment.
+     */
+    it('sends the banner action to upgrade, and never to register', async () => {
+      const fixture = await render({ identity: 'TEMPORARY' });
+      const router = TestBed.inject(Router);
+      const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+
+      (
+        queryAll(
+          fixture,
+          'lib-guest-upgrade-banner button'
+        )[0] as HTMLButtonElement
+      ).click();
+
+      // Out of `home` first, because the credential screens are its siblings rather
+      // than its children, and relative so neither the locale nor the mount is
+      // written down here (extraction contract, item 5).
+      expect(navigate).toHaveBeenCalledWith(
+        ['..', 'auth', 'upgrade'],
+        expect.anything()
+      );
+      expect(navigate.mock.calls[0]?.[0]).not.toContain('register');
+    });
+  });
+
+  /**
+   * What just happened to the account, reported once (plan 0009). The address is known
+   * only on the navigation that follows the form: the token pair carries none and
+   * `GET /v1/account/me` is out of scope for this plan.
+   */
+  describe('after a credential flow', () => {
+    it('nudges a new account to confirm its address, and names it', async () => {
+      const fixture = await render({
+        accountNotice: { kind: 'registered', email: 'marta@example.com' },
+      });
+
+      expect(query(fixture, 'lib-confirm-email-nudge')).not.toBeNull();
+      expect(text(fixture)).toContain('auth.nudge.body');
+    });
+
+    it('lets the nudge be dismissed, because confirming is optional', async () => {
+      // `register()` sends the confirmation outside the transaction and `login()`
+      // never reads `emailVerifiedAt`, so a blocking step would be a barrier this
+      // product does not have (section 5.2).
+      const fixture = await render({
+        accountNotice: { kind: 'registered', email: 'marta@example.com' },
+      });
+
+      (
+        query(
+          fixture,
+          'lib-confirm-email-nudge button'
+        ) as HTMLButtonElement
+      ).click();
+      fixture.detectChanges();
+
+      expect(query(fixture, 'lib-confirm-email-nudge')).toBeNull();
+    });
+
+    it('does not offer another send until there is an endpoint behind it', async () => {
+      // Section 5.8: the nudge without its last sentence is the screen plan 0009
+      // would have shipped anyway.
+      const fixture = await render({
+        accountNotice: { kind: 'registered', email: 'marta@example.com' },
+      });
+
+      expect(fixture.componentInstance.resendOffered).toBe(
+        VERIFY_RESEND_AVAILABLE
+      );
+      if (!VERIFY_RESEND_AVAILABLE) {
+        expect(query(fixture, 'lib-resend-sentence')).toBeNull();
+      }
+    });
+
+    it('confirms an upgrade with one line, and no nudge', async () => {
+      const fixture = await render({
+        accountNotice: { kind: 'upgraded', email: 'marta@example.com' },
+      });
+
+      expect(query(fixture, 'lib-success-note')).not.toBeNull();
+      expect(text(fixture)).toContain('auth.upgrade.done');
+      expect(query(fixture, 'lib-confirm-email-nudge')).toBeNull();
+    });
+
+    it('says nothing at all on an ordinary visit', async () => {
+      const fixture = await render();
+
+      expect(query(fixture, 'lib-confirm-email-nudge')).toBeNull();
+      expect(query(fixture, 'lib-success-note')).toBeNull();
+    });
+
+    it('clears the notice when the page goes, so it is not said twice', async () => {
+      // News, not state. Coming back to this URL tomorrow is a different visit.
+      const fixture = await render({
+        accountNotice: { kind: 'upgraded', email: 'marta@example.com' },
+      });
+      const notice = TestBed.inject(AccountNotice);
+
+      expect(notice.notice()).not.toBeNull();
+      fixture.destroy();
+
+      expect(notice.notice()).toBeNull();
     });
   });
 

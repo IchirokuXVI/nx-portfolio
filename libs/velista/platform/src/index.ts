@@ -1,4 +1,5 @@
 export * from './lib/access-token-expiry';
+export * from './lib/app-path';
 export * from './lib/browser-facade';
 export * from './lib/connection-state';
 export * from './lib/platform-providers';

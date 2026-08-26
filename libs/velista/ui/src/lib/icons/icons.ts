@@ -56,6 +56,28 @@ export class ChevronDownIcon {
   );
 }
 
+/**
+ * Back, on a page that is a destination rather than a sheet (plan 0009, section 4.1).
+ *
+ * A separate file from `chevron-right-icon` rather than the same artwork under a CSS
+ * rotation: a rotated glyph flips again under `dir="rtl"`, where back is genuinely the
+ * other way round, and the rotation would then be fighting the direction rather than
+ * following it.
+ */
+@Component({
+  selector: 'lib-chevron-left-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class ChevronLeftIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./chevron-left-icon.svg?raw')
+  );
+}
+
 @Component({
   selector: 'lib-plus-icon',
   template: TEMPLATE,
@@ -292,6 +314,114 @@ export class SpinnerIcon {
     () =>
       // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
       import('./spinner-icon.svg?raw')
+  );
+}
+
+/**
+ * The password reveal toggle's two states (plan 0009, section 7).
+ *
+ * Two icons and not one that is styled differently, because the difference between
+ * showing and hiding a password has to survive a monochrome display and a person who
+ * cannot distinguish the amber from the grey. The button's `aria-label` carries the
+ * same distinction for anybody who is not looking at it at all.
+ */
+@Component({
+  selector: 'lib-eye-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class EyeIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./eye-icon.svg?raw')
+  );
+}
+
+@Component({
+  selector: 'lib-eye-off-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class EyeOffIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./eye-off-icon.svg?raw')
+  );
+}
+
+/** The confirm-your-email nudge, and nothing else: this app sends one kind of mail. */
+@Component({
+  selector: 'lib-mail-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class MailIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./mail-icon.svg?raw')
+  );
+}
+
+/** Dismissing something optional. The first control in this app that is an X. */
+@Component({
+  selector: 'lib-close-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class CloseIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./close-icon.svg?raw')
+  );
+}
+
+/**
+ * A bare tick, for the badge on the confirmed screen.
+ *
+ * The circle around it there is a styled element rather than part of the artwork,
+ * because it is 60px of surface and border that follows the theme, which a two colour
+ * glyph could not do.
+ */
+@Component({
+  selector: 'lib-check-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class CheckIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./check-icon.svg?raw')
+  );
+}
+
+/**
+ * A ticked circle drawn in outline, beside a sentence.
+ *
+ * Distinct from `check-circle-icon`, which is filled and knocks its tick out in the
+ * surface colour: that one marks a list line as done at a glance in a dense row, and
+ * this one sits inline with text where a filled disc would read as a bullet.
+ */
+@Component({
+  selector: 'lib-check-outline-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class CheckOutlineIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./check-outline-icon.svg?raw')
   );
 }
 

@@ -1,0 +1,29 @@
+<div class="screen">
+  <!-- 44 by 44, like every other target in the app (plan 0009, section 7). The icon
+       inside it is smaller; the button is not. -->
+  <header class="head">
+    <button
+      (click)="back.emit()"
+      [attr.aria-label]="backLabel()"
+      class="back"
+      type="button"
+    >
+      <lib-chevron-left-icon class="back-glyph" />
+    </button>
+  </header>
+
+  <main class="content">
+    <h1 class="title">{{ title() }}</h1>
+    <p class="lede">{{ lede() }}</p>
+
+    <ng-content />
+
+    <!-- Pushes the alternative path to the bottom of the screen, where it is out of
+         the way of the form but still in thumb reach. It stays put when the keyboard
+         is up because the keyboard shrinks the layout viewport, which is what
+         `interactive-widget=resizes-content` in both index.html files buys. -->
+    <div class="spacer"></div>
+
+    <ng-content select="[authFooter]" />
+  </main>
+</div>

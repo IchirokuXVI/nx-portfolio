@@ -12,7 +12,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { TokenStore, ZoneStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import { BrowserFacade } from '@portfolio/velista/platform';
+import { appPath, BrowserFacade } from '@portfolio/velista/platform';
 import {
   AccountLostPanel,
   AlertIcon,
@@ -23,7 +23,7 @@ import {
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { entryErrorKey } from '../entry-error-copy';
-import { appPath, returnPath, type EntryReturnTo } from '../entry-urls';
+import { returnPath, type EntryReturnTo } from '../entry-urls';
 
 /**
  * Enter a code somebody sent you, and ask to be let in.

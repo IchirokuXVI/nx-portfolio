@@ -31,6 +31,26 @@
 
     @case ('empty') {
       <div class="content">
+        <!-- What just happened to the account, said once (plan 0009). Above the guest
+             banner, which cannot be showing at the same time: both of these mean the
+             person has just stopped being a guest. -->
+        @if (confirmEmail(); as address) {
+          <lib-confirm-email-nudge
+            (dismiss)="dismissNudge()"
+            (resend)="resendConfirmation()"
+            [email]="address"
+            [resendOffered]="resendOffered"
+            [resendState]="resendState()"
+            [resendWaitSeconds]="resendWaitSeconds()"
+          />
+        }
+
+        @if (securedEmail(); as address) {
+          <lib-success-note
+            [message]="'auth.upgrade.done' | rokuT: { email: address }"
+          />
+        }
+
         @if (page.guest) {
           <lib-guest-upgrade-banner
             (dismiss)="dismissGuestBanner()"
@@ -73,6 +93,24 @@
           } @else {
             <lib-asked-notice [zoneName]="arrival.zone.name" />
           }
+        }
+
+        @if (confirmEmail(); as address) {
+          <lib-confirm-email-nudge
+            (dismiss)="dismissNudge()"
+            (resend)="resendConfirmation()"
+            [email]="address"
+            [resendOffered]="resendOffered"
+            [resendState]="resendState()"
+            [resendWaitSeconds]="resendWaitSeconds()"
+          />
+        }
+
+        @if (securedEmail(); as address) {
+          <!-- The banner is gone, and that is the reward. This line says why. -->
+          <lib-success-note
+            [message]="'auth.upgrade.done' | rokuT: { email: address }"
+          />
         }
 
         @if (page.guest) {

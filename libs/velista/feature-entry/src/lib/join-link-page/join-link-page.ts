@@ -16,6 +16,7 @@ import {
   ZoneStore,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
+import { appPath } from '@portfolio/velista/platform';
 import {
   AccountLostPanel,
   AlertIcon,
@@ -27,7 +28,6 @@ import {
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { entryErrorKey } from '../entry-error-copy';
-import { appPath } from '../entry-urls';
 
 /**
  * Arriving on somebody else's invite link.

@@ -1,0 +1,103 @@
+@use '../styles/tokens' as tokens;
+
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100%;
+  padding-block-start: var(--app-safe-top);
+}
+
+.head {
+  padding: var(--app-space-5) var(--app-space-6) var(--app-space-2);
+}
+
+// Vertically centred, because there is nothing else on the screen and a block of text
+// pinned to the top of a phone looks like a page that failed to load.
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 var(--app-space-7)
+    calc(var(--app-space-7) + var(--app-safe-bottom));
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-icon-display);
+  block-size: var(--app-icon-display);
+  margin-block-end: var(--app-space-7);
+  border-radius: var(--app-radius-full);
+
+  &.confirmed {
+    border: 1px solid var(--app-status-success-border);
+    background: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
+  }
+
+  // Neutral rather than danger. Nothing is wrong with the account, and a red mark
+  // here would tell somebody their data was in trouble when it is not.
+  &.expired {
+    border: 1px solid var(--app-border-subtle);
+    background: var(--app-surface-raised);
+    color: var(--app-text-secondary);
+  }
+}
+
+.mark-glyph {
+  font-size: var(--app-icon-lg);
+}
+
+.title {
+  margin: 0 0 var(--app-space-4);
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+  letter-spacing: var(--app-tracking-display);
+  color: var(--app-text-primary);
+
+  // It takes focus programmatically so the outcome is announced, so it needs a ring
+  // like anything else that can hold focus.
+  @include tokens.app-focus-ring;
+}
+
+.body {
+  margin: 0 0 var(--app-space-7);
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.primary {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  margin-block-start: var(--app-space-5);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:active {
+    background: var(--app-action-bg-pressed);
+  }
+
+  @include tokens.app-focus-ring;
+}

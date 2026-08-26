@@ -1,0 +1,35 @@
+@switch (shown()) {
+  @case ('ready') {
+    <p class="line">
+      {{ promptKey() | rokuT }}
+      <!-- The only accented words in the sentence, and the only tappable ones. -->
+      <button (click)="resend.emit()" class="action" type="button">
+        {{ 'auth.resend.action' | rokuT }}
+      </button>
+    </p>
+  }
+
+  @case ('sent') {
+    <!-- Polite rather than assertive: the person asked for this, so it answers them
+         rather than interrupting whatever they were reading next. -->
+    <p aria-live="polite" class="line sent">
+      @if (clock(); as wait) {
+        {{ 'auth.resend.sent' | rokuT: { wait } }}
+      } @else {
+        <!-- The server named no wait, and rule C3 forbids inventing one. The
+             sentence confirms the send and promises no particular moment. -->
+        {{ 'auth.resend.sentNoWait' | rokuT }}
+      }
+    </p>
+  }
+
+  @case ('refused') {
+    <p aria-live="polite" class="line refused">
+      @if (clock(); as wait) {
+        {{ 'auth.resend.refused' | rokuT: { wait } }}
+      } @else {
+        {{ 'auth.resend.refusedNoWait' | rokuT }}
+      }
+    </p>
+  }
+}

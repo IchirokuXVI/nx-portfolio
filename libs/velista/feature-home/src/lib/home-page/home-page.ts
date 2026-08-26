@@ -9,10 +9,14 @@ import {
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  AccountNotice,
+  AUTH_SERVICE,
   GatewayError,
   NetworkError,
   SessionStore,
+  VERIFY_RESEND_AVAILABLE,
   ZoneStore,
+  type AuthServiceI,
 } from '@portfolio/velista/data-access';
 import type { HomeState, MyZone } from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
@@ -20,13 +24,16 @@ import {
   AppBar,
   AskedNotice,
   BottomActionBar,
+  ConfirmEmailNudge,
   EmptyState,
   ErrorState,
   GuestUpgradeBanner,
   InviteCard,
   ResumeListCard,
+  SuccessNote,
   ZoneCard,
   ZoneSkeleton,
+  type ResendState,
 } from '@portfolio/velista/ui';
 import { selectHomeState } from './select-home-state';
 
@@ -57,11 +64,13 @@ import { selectHomeState } from './select-home-state';
     AppBar,
     AskedNotice,
     BottomActionBar,
+    ConfirmEmailNudge,
     EmptyState,
     ErrorState,
     GuestUpgradeBanner,
     InviteCard,
     ResumeListCard,
+    SuccessNote,
     ZoneCard,
     ZoneSkeleton,
   ],
@@ -72,6 +81,8 @@ import { selectHomeState } from './select-home-state';
 export class HomePage {
   private readonly _zoneStore = inject(ZoneStore);
   private readonly _session = inject(SessionStore);
+  private readonly _accountNotice = inject(AccountNotice);
+  private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
   private readonly _browser = inject(BrowserFacade);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
@@ -158,6 +169,43 @@ export class HomePage {
     return zone === undefined ? null : { kind: last.kind, zone };
   });
 
+  /**
+   * What just happened to the account, which this page reports once (plan 0009).
+   *
+   * Two shapes and two treatments: a fresh registration gets the dismissible
+   * confirm-your-email nudge, and an upgrade gets one line saying the account is
+   * secured and naming the address. Both are drawn in the second frame of their
+   * artboard, and both are news rather than state, which is why the notice is cleared
+   * when this page is destroyed.
+   */
+  readonly accountNotice = this._accountNotice.notice;
+
+  /** Dismissing the nudge. Only the nudge has a dismiss; the secured line is a line. */
+  private readonly _nudgeDismissed = signal(false);
+
+  readonly confirmEmail = computed(() => {
+    const notice = this.accountNotice();
+    return notice?.kind === 'registered' && !this._nudgeDismissed()
+      ? notice.email
+      : null;
+  });
+
+  readonly securedEmail = computed(() => {
+    const notice = this.accountNotice();
+    return notice?.kind === 'upgraded' ? notice.email : null;
+  });
+
+  /**
+   * Whether the nudge offers another send.
+   *
+   * False until the section 5.8 endpoint lands, and the card is exactly the screen
+   * plan 0009 would have shipped anyway without its last sentence.
+   */
+  readonly resendOffered = VERIFY_RESEND_AVAILABLE;
+
+  readonly resendState = signal<ResendState>('ready');
+  readonly resendWaitSeconds = signal<number | null>(null);
+
   /** Set for a moment after the invite code is copied, which swaps the label. */
   readonly codeCopied = signal(false);
 
@@ -178,7 +226,37 @@ export class HomePage {
     // just happened, and coming back to the dashboard later is a different visit.
     // Opening a sheet does not destroy this page, since the sheets are its children,
     // so cancelling out of one does not take the card with it.
-    inject(DestroyRef).onDestroy(() => this._zoneStore.clearLastEntry());
+    inject(DestroyRef).onDestroy(() => {
+      this._zoneStore.clearLastEntry();
+      // Same reasoning, and the same one-shot: being told an account was just secured
+      // is news, and coming back to this URL tomorrow is not the moment for it.
+      this._accountNotice.clear();
+    });
+  }
+
+  dismissNudge(): void {
+    this._nudgeDismissed.set(true);
+  }
+
+  /**
+   * Ask for another confirmation email.
+   *
+   * Unreachable until `VERIFY_RESEND_AVAILABLE` is true, because the sentence that
+   * calls it is not rendered. Rule C3 lives in what happens to the answer: whatever
+   * wait the **server** returned is handed to the sentence, and a refusal's wait can be
+   * many minutes because the bucket is three per ten of them.
+   */
+  async resendConfirmation(): Promise<void> {
+    const outcome = await this._auth.resendVerification();
+
+    if (outcome.state === 'failed') {
+      // Nothing is claimed. The sentence stays on Ready so the person can try again,
+      // which is the only useful offer for a send that may not have happened.
+      return;
+    }
+
+    this.resendWaitSeconds.set(outcome.waitSeconds);
+    this.resendState.set(outcome.state);
   }
 
   /**
@@ -261,11 +339,33 @@ export class HomePage {
   }
 
   /**
+   * Securing a guest account, which plan 0009 built.
+   *
+   * **`auth/upgrade` and never `auth/register`**, and that is rule C2 rather than a
+   * preference (plan 0009, section 5.3). Register creates a new user row, so a guest
+   * who followed it would fill in a valid form, land on an empty dashboard, and have
+   * no way back to groups now owned by an account whose only credential was the token
+   * that call replaced. `guestOnlyGuard` is the other half of the same rule.
+   *
+   * `['..', 'auth', 'upgrade']` because this page's own path is `home`, so the
+   * credential screens are its **siblings** rather than its children. The two entry
+   * sheets are children and use a bare relative path; this one climbs out first, the
+   * same way `shareCode` builds the invite link. Neither the locale nor the mount is
+   * written down either way (extraction contract, item 5).
+   */
+  secureAccount(): void {
+    void this._router.navigate(['..', 'auth', 'upgrade'], {
+      relativeTo: this._route,
+    });
+  }
+
+  /**
    * Everything else this page can start, and where each of them currently stops.
    *
    * Each of these leads somewhere `0003` puts out of scope: zone detail, list detail
-   * and the account upgrade each get their own plan and their own approved mock before
-   * they are built. The two entry actions have gone, because `0008` built them.
+   * and the account screen each get their own plan and their own approved mock before
+   * they are built. The two entry actions have gone because `0008` built them, and
+   * securing an account has gone because `0009` did.
    *
    * They are recorded rather than left unbound so the controls are real, focusable and
    * testable now, and so that connecting each one later is a single line here instead
@@ -295,10 +395,6 @@ export class HomePage {
 
   account(): void {
     this._notYetRouted('account');
-  }
-
-  secureAccount(): void {
-    this._notYetRouted('account.upgrade');
   }
 
   /**

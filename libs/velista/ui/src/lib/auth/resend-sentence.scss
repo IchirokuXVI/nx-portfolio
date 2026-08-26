@@ -1,0 +1,47 @@
+@use '../styles/tokens' as tokens;
+
+:host {
+  display: block;
+}
+
+.line {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  // The clock is the only number in the app that changes once a second, so it is set
+  // in tabular figures: proportional digits make the whole sentence twitch as 1 turns
+  // into 8 and back.
+  font-variant-numeric: tabular-nums;
+  text-wrap: pretty;
+}
+
+.sent {
+  color: var(--app-status-success-fg);
+}
+
+.refused {
+  color: var(--app-status-danger-fg);
+}
+
+// Inline, so the two words read as part of the question rather than as a control
+// beside it. It is the one place in this app where a tap target is deliberately under
+// 44px: making it 44 would turn the sentence into a button, which is precisely the
+// treatment the decision behind this component rejected. The nudge's own dismiss and
+// every other control on both screens are full size.
+.action {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  @include tokens.app-focus-ring;
+}

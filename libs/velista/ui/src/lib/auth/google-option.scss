@@ -1,0 +1,50 @@
+@use '../styles/tokens' as tokens;
+
+:host {
+  display: block;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  margin-block: var(--app-space-7);
+}
+
+.rule {
+  flex: 1;
+  block-size: 1px;
+  background: var(--app-border-subtle);
+}
+
+.or {
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--app-text-muted);
+}
+
+// Deliberately not themed. See the class comment: Google's guidelines fix these two,
+// and they are component tokens so no primitive is named from a component (rule T1).
+.google {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-3);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-google-button-bg);
+  color: var(--app-google-button-fg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include tokens.app-focus-ring;
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+}

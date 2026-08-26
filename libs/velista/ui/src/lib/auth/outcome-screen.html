@@ -1,0 +1,26 @@
+<div class="screen">
+  <!-- The wordmark, because this page is often opened from a mail app on a phone that
+       has never seen the product, and the first thing to establish is what it is. -->
+  <header class="head"><lib-brand-wordmark /></header>
+
+  <main class="content">
+    <span [class]="'mark ' + tone()" aria-hidden="true">
+      @if (tone() === 'confirmed') {
+        <lib-check-icon class="mark-glyph" />
+      } @else {
+        <lib-clock-icon class="mark-glyph" />
+      }
+    </span>
+
+    <h1 class="title" tabindex="-1">{{ title() }}</h1>
+    <p class="body">{{ body() }}</p>
+
+    <!-- The resend sentence, on the expired screen and only when the viewer is signed
+         in. The caller decides both, because both are facts about the session. -->
+    <ng-content />
+
+    <button (click)="action.emit()" class="primary" type="button">
+      {{ actionLabel() }}
+    </button>
+  </main>
+</div>

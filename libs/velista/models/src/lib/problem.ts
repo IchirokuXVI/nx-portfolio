@@ -51,6 +51,22 @@ export interface ProblemDetails {
   readonly correlationId: string;
   /** Present only for `validation_failed`. Used for its keys, not its strings. */
   readonly errors?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * How long the caller must wait, in seconds, on a `rate_limited`.
+   *
+   * **In the body rather than in a `Retry-After` header, and that is forced.**
+   * `main.ts` calls `enableCors({ origin, credentials: true })` with no
+   * `exposedHeaders`, so a browser reading this API cross origin can see only the
+   * CORS safelisted response headers, and `Retry-After` is not one of them. It is the
+   * same reasoning that already puts the correlation id in the body (plan 0004,
+   * section 4.6).
+   *
+   * Optional, because most throttled routes do not need the client to render a clock
+   * and only the resend flow does (plan 0009, rule C3). Absent means "we were not
+   * told", which is a state the UI has to have an answer for rather than a number it
+   * may invent.
+   */
+  readonly retryAfterSeconds?: number;
 }
 
 /**

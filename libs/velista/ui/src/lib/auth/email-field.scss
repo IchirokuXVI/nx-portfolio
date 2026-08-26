@@ -1,0 +1,17 @@
+@use 'auth-form';
+
+:host {
+  display: block;
+}
+
+.label {
+  @include auth-form.field-label;
+}
+
+.field {
+  @include auth-form.field-box;
+
+  &.invalid {
+    @include auth-form.field-invalid;
+  }
+}

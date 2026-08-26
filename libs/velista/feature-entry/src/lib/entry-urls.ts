@@ -1,25 +1,16 @@
+import { appPath } from '@portfolio/velista/platform';
+
 /**
- * Where a sheet goes when it closes, and where a way in ends.
+ * Where a sheet goes when it closes.
  *
- * Both are absolute URLs built from the two things that vary, rather than relative
- * navigations. A relative navigation would have to know how many empty path routes sit
- * between the sheet and the app's mount, which is a fact about the route table that
- * would break silently the first time one was added. The locale segment belongs to the
- * shell and the mount is `/velista` today and `''` after extraction (extraction
- * contract item 5), so neither may be written down anywhere: they are read from
- * `RokuLocaleStore` and `APP_BASE_PATH` and passed in here.
+ * `appPath` used to live here. It moved to `@portfolio/velista/platform` when plan
+ * 0009 added a second feature library that navigates: it is the same function for
+ * both, and a feature library reaching into a sibling's barrel to get it would couple
+ * the two and pull this one's sheets into the other one's lazy chunk.
  *
  * `zones` rather than the word the interface uses, per rule N2 (plan 0001): the
  * translation layer renames the word, the URLs never do.
  */
-export function appPath(
-  locale: string,
-  basePath: string,
-  ...segments: readonly string[]
-): string {
-  const mount = basePath.split('/').filter((segment) => segment !== '');
-  return ['', locale, ...mount, ...segments].join('/');
-}
 
 /** The two pages a sheet can be dismissed back onto, as a route table can say it. */
 export type EntryReturnTo = 'landing' | 'home';

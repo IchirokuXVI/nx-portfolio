@@ -26,6 +26,71 @@
       "reload": "Reload now"
     }
   },
+  "auth": {
+    "back": "Back",
+    "signIn": {
+      "title": "Welcome back",
+      "body": "Sign in and your groups come with you, on any phone",
+      "submit": "Sign in",
+      "newHere": "New here?",
+      "createAccount": "Create an account"
+    },
+    "register": {
+      "title": "Make an account",
+      "body": "So your lists are not tied to one phone",
+      "submit": "Create account",
+      "haveOne": "Already have one?"
+    },
+    "upgrade": {
+      "title": "Keep what you have",
+      "body": "Add an email and a password to the account already on this phone. Nothing moves and nothing is lost",
+      "keepsafe_one": "Your group and everything in it stay exactly where they are. This is the same account, with a way back into it",
+      "keepsafe_other": "Your {{count}} groups and everything in them stay exactly where they are. This is the same account, with a way back into it",
+      "submit": "Secure my account",
+      "later": "Not now",
+      "done": "Your account is secured. Sign in anywhere with {{email}}"
+    },
+    "field": {
+      "email": "Email",
+      "password": "Password",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Your password",
+      "passwordRule": "At least 8 characters",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password"
+    },
+    "verify": {
+      "working": "Confirming your email",
+      "confirmedTitle": "Email confirmed",
+      "confirmedBody": "{{email}} is yours. You can sign in with it on any phone",
+      "confirmedBodyNoEmail": "Your email is confirmed. You can sign in with it on any phone",
+      "expiredTitle": "That link has run out",
+      "expiredBody": "Confirmation links last a short while and work once. Nothing is wrong with your account: signing in and everything else works exactly the same",
+      "toGroups": "Go to my groups"
+    },
+    "nudge": {
+      "title": "Confirm your email",
+      "body": "We sent a link to {{email}}. You can carry on without it, but confirming keeps the account yours",
+      "dismiss": "Dismiss"
+    },
+    "resend": {
+      "prompt": "Did not get it?",
+      "promptExpired": "Still want to confirm it?",
+      "action": "Send it again",
+      "sent": "Sent again. You can ask for another in {{wait}}",
+      "sentNoWait": "Sent again. Give it a minute to arrive",
+      "refused": "Too many requests. You can ask for another in {{wait}}",
+      "refusedNoWait": "Too many requests. Try again in a while"
+    },
+    "error": {
+      "badCredentials": "That email and password do not match. Check both and try again",
+      "emailTaken": "That email already has an account",
+      "emailTakenAction": "Sign in instead",
+      "badEmail": "That does not look like an email address",
+      "shortPassword": "Passwords need at least 8 characters",
+      "tooMany": "Too many tries. Wait a minute and try again"
+    }
+  },
   "entry": {
     "createZone": {
       "title": "Name your group",

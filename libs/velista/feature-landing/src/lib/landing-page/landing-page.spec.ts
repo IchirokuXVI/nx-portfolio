@@ -220,9 +220,29 @@ describe('LandingPage', () => {
       ]);
     });
 
-    it('still only records where the credential flows are meant to go', async () => {
-      // Google and email are the next plan's, and the recording is what will make
-      // connecting them one line each.
+    it('sends the email action to the sign in screen', async () => {
+      // Plan 0009 built it, so this is a navigation rather than a recording. Relative
+      // like the two above, and a **sibling** of this page rather than a child:
+      // signing in is a destination, not a sheet over the front door.
+      const { fixture, router } = await render();
+
+      const buttons = queryAll(
+        fixture,
+        'lib-auth-actions button'
+      ) as HTMLButtonElement[];
+      buttons[3]?.click();
+
+      expect(router.navigate).toHaveBeenCalledWith(
+        ['auth', 'login'],
+        expect.anything()
+      );
+    });
+
+    it('still only records where Google is meant to go', async () => {
+      // The one control here that plan 0009 deliberately left unwired, and not for a
+      // frontend reason: the gateway's callback answers JSON rather than redirecting
+      // into the app, and it never passes `linkUserId` (section 5.6). The recording is
+      // what will make connecting it one line.
       const { fixture } = await render();
 
       const buttons = queryAll(
@@ -230,12 +250,8 @@ describe('LandingPage', () => {
         'lib-auth-actions button'
       ) as HTMLButtonElement[];
       buttons[2]?.click();
-      buttons[3]?.click();
 
-      expect(fixture.componentInstance.pendingRoutes()).toEqual([
-        'auth.google',
-        'auth.login',
-      ]);
+      expect(fixture.componentInstance.pendingRoutes()).toEqual(['auth.google']);
     });
 
     it('has an outlet for the sheet to render into', async () => {

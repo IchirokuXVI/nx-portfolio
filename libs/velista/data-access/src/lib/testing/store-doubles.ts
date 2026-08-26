@@ -1,5 +1,17 @@
 import { computed, signal, type Provider } from '@angular/core';
-import type { Identity, MyZone, UserKind } from '@portfolio/velista/models';
+import type {
+  Identity,
+  MyZone,
+  SessionTokens,
+  UserKind,
+} from '@portfolio/velista/models';
+import { AccountNotice } from '../auth/account-notice';
+import {
+  AUTH_SERVICE,
+  type AuthServiceI,
+  type ResendOutcome,
+  type VerifiedEmail,
+} from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
 import {
   ZoneStore,
@@ -188,4 +200,119 @@ export function provideFakeSessionStore(
     provide: SessionStore,
     useValue: fakeSessionStore(kind, overrides),
   };
+}
+
+/**
+ * A `SessionTokens` with the shape the app actually stores.
+ *
+ * Only `kind` and `userId` usually matter to a caller, so the rest is filled in rather
+ * than asked for.
+ */
+function tokensFor(userId: string, kind: UserKind): SessionTokens {
+  return {
+    userId,
+    kind,
+    username: 'dani',
+    accessToken: 'access',
+    refreshToken: 'refresh',
+  };
+}
+
+/** One recorded call to a faked auth service. */
+export type AuthCall =
+  | { readonly method: 'register'; readonly email: string }
+  | { readonly method: 'login'; readonly email: string }
+  | { readonly method: 'upgrade'; readonly email: string }
+  | { readonly method: 'verifyEmail'; readonly token: string }
+  | { readonly method: 'resendVerification' };
+
+/** What a faked auth service does when asked. */
+export interface FakeAuthOptions {
+  /**
+   * The user id every issued pair carries.
+   *
+   * One id for all three calls by default, because the property plan 0009 cares about
+   * most is that upgrading keeps the caller's own. A spec that wants to prove register
+   * does not keep it says so.
+   */
+  readonly userId?: string;
+
+  /** What each call throws, if anything. Keyed by method, so one fake covers a form. */
+  readonly rejectWith?: Partial<Record<AuthCall['method'], unknown>>;
+
+  /** What a resend answers. The default is a send with a wait the server named. */
+  readonly resend?: ResendOutcome;
+}
+
+/**
+ * An `AuthServiceI` that records what it was asked and answers without a transport.
+ *
+ * The same reasoning as {@link fakeZoneStore}: a page spec using the real `AuthApi`
+ * would be building an `HttpClient`, an interceptor and a token store to get a form on
+ * screen, and would then be testing the transport rather than the page. `AuthApi` keeps
+ * its own spec, which is where that behaviour belongs.
+ */
+export function fakeAuthService(options: FakeAuthOptions = {}) {
+  const userId = options.userId ?? 'u1';
+  const calls: AuthCall[] = [];
+
+  const answer = (call: AuthCall, kind: UserKind): SessionTokens => {
+    calls.push(call);
+    const rejection = options.rejectWith?.[call.method];
+    if (rejection !== undefined) {
+      throw rejection;
+    }
+
+    return tokensFor(userId, kind);
+  };
+
+  const service: AuthServiceI = {
+    register: async (email: string) =>
+      answer({ method: 'register', email }, 'REGISTERED'),
+    login: async (email: string) =>
+      answer({ method: 'login', email }, 'REGISTERED'),
+    upgrade: async (email: string) =>
+      answer({ method: 'upgrade', email }, 'REGISTERED'),
+
+    verifyEmail: async (token: string): Promise<VerifiedEmail> => {
+      calls.push({ method: 'verifyEmail', token });
+      const rejection = options.rejectWith?.['verifyEmail'];
+      if (rejection !== undefined) {
+        throw rejection;
+      }
+
+      return { userId };
+    },
+
+    resendVerification: async (): Promise<ResendOutcome> => {
+      calls.push({ method: 'resendVerification' });
+      return options.resend ?? { state: 'sent', waitSeconds: 52 };
+    },
+  };
+
+  return {
+    ...service,
+    /** Everything the page asked for, in order. */
+    calls: calls as readonly AuthCall[],
+  };
+}
+
+export type FakeAuthService = ReturnType<typeof fakeAuthService>;
+
+/** {@link fakeAuthService} bound to the real token. */
+export function provideFakeAuthService(
+  service: FakeAuthService = fakeAuthService()
+): Provider {
+  return { provide: AUTH_SERVICE, useValue: service };
+}
+
+/**
+ * The real `AccountNotice`, provided.
+ *
+ * Deliberately not a double: it is one signal and two setters with no dependencies, so
+ * faking it would mean writing the same object twice and would let a spec pass against
+ * behaviour the app does not have.
+ */
+export function provideAccountNotice(): Provider {
+  return AccountNotice;
 }
