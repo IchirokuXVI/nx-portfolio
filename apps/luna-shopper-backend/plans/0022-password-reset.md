@@ -50,20 +50,23 @@ hand back the enumeration oracle that comment exists to close.
 `retryAfterSeconds` comes from section 2.2 and is the same for everyone, so it leaks nothing
 either.
 
-### 2.2 Throttled per address, in auth
+### 2.2 Throttled by the gateway bucket, like everything else
 
-Same reasoning as 0021 section 4.2, and here it has a second job. The gateway bucket keys on IP,
-which does nothing about somebody walking one address's inbox full of reset mails from a
-rotating set of clients. The address is the thing to protect, so the limit is enforced in auth
-against `password_resets`: **one per minute per address**, refusing with `RateLimitedException`
-when the newest live grant for that user is younger than sixty seconds.
+Same decision as 0021 section 4.2, and for the same reason: one rate limiter, in the gateway,
+not a second one hand written into the domain service. `THROTTLE_LIMITS` gains a
+`passwordReset` entry at one per minute, the route carries it as a per route override of the
+single registered bucket, and `retryAfterSeconds` is read from that bucket's `ttl` so the
+constant and the response cannot drift.
 
-The gateway keeps a coarse per IP bucket on the route as the abuse backstop, reusing
-`THROTTLE_LIMITS.registration` style limits rather than introducing another named bucket, per
-the constraint recorded at the top of `throttler-config.ts`.
+The property this gives up is worth naming, because it is the one place the reset flow is weaker
+than a per address limit would be. The bucket keys on IP, so it does nothing about somebody
+filling one person's inbox with reset mails from a rotating set of clients. What protects the
+account in that scenario is not the rate limit anyway: the mails are noise, each link is single
+use and expires in an hour, and none of them is a way in. If inbox flooding ever becomes a real
+complaint, a per address limit is the fix and section 9 records it as such.
 
-For an address with no account there is nothing to throttle against, so the endpoint returns the
-same sixty and sends nothing. The response is indistinguishable, which is the point.
+For an address with no account nothing is sent, and the response is the same sixty. It has to
+be, or the response time and shape would answer the question section 2.1 refuses to answer.
 
 ### 2.3 The account that signs in with Google
 
@@ -163,9 +166,10 @@ Both gateway handlers carry `@ApiContractResponse` and `@ApiProblemResponses` pe
   property is the equality rather than any single response.
 - **Mail routing**: a password account gets the reset template; a Google only account gets the
   Google template; an unknown address gets no mail at all.
-- **Throttle**: a second request for the same address inside sixty seconds returns 429 with the
-  remainder, and a request for a *different* address in the same window is unaffected. The second
-  half is what proves the limit is keyed on the address and not on the process.
+- **Throttle**: a second request inside sixty seconds returns 429 carrying the real remaining
+  seconds rather than a flat sixty. Note for whoever writes it that the bucket keys on IP, so a
+  request for a different address from the same client is refused too; that is the documented
+  behaviour of section 2.2 and the test should assert it rather than be surprised by it.
 - **Reset**: a valid token sets the hash, returns a usable pair, and the old password no longer
   logs in; a consumed token fails; an expired token fails; a token for a user whose
   `emailVerifiedAt` was null leaves it set.
@@ -199,8 +203,9 @@ have sent a link" and must never claim delivery.
 
 - **Changing a known password from inside the app.** That is an account settings concern, needs
   the current password rather than a mailed token, and belongs with the account screen.
-- **Rate limiting by anything cleverer than address and IP.** No device fingerprinting, no
-  captcha.
+- **Rate limiting by anything other than the gateway's IP bucket.** A per address limit is the
+  answer if inbox flooding ever becomes a real complaint (section 2.2), and it is not built now.
+  No device fingerprinting and no captcha either.
 - **Bounce and delivery tracking.** Same answer as 0021: it needs a provider webhook and a
   delivery state model, neither of which exists.
 - **Forcing a reset.** No administrative "expire this user's password" path; nothing in the

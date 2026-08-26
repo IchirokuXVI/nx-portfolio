@@ -63,8 +63,8 @@ export class RateLimitedException extends DomainException {
 ```
 
 with the wait travelling in the existing `details` bag and the filter lifting it onto the
-envelope. This matters beyond throttling: it is how **a service**, not the gateway, refuses
-something as too frequent, which is exactly what section 4.2 needs.
+envelope. It exists so the guard in section 2.3 has something to throw that the filter already
+knows how to render, rather than the guard assembling an envelope of its own.
 
 ### 2.3 A throttler guard that fills it in
 
@@ -78,18 +78,26 @@ Registered in place of `ThrottlerGuard` at `gateway/src/app/app.module.ts:90`. I
 platform library beside `throttler-config.ts`, because any service that grows an HTTP surface
 wants the same answer.
 
-### 2.4 The honest limitation
+### 2.4 The honest limitation, and why it is accepted
 
 The throttler's default storage is in memory, per process, and its default tracker is the
 client IP. `k8s/helm/values.yaml` sets `replicaCount: 2`. So a gateway 429's number is per pod
-and per IP: two people behind one NAT share a bucket, and the same person can get two buckets'
-worth by being load balanced onto the other pod.
+and per IP: two people behind one NAT share a bucket, and the same person can get roughly two
+buckets' worth by being load balanced onto the other pod.
 
-That is tolerable for an abuse backstop, whose job is to make hammering unrewarding rather than
-to be exact. It is **not** tolerable as the source of a countdown the user watches tick, which
-is why section 4.2 puts the resend's own limit in auth's database instead. Moving the throttler
-to a shared store is a real option later; it is not needed for anything in this plan and is
-recorded in section 8 rather than built.
+**This is accepted rather than engineered around.** The alternative considered and rejected was
+enforcing the resend's own limit in auth against the `email_verifications` table, which would be
+exact and per user. It was rejected because it puts a second, hand maintained rate limiter in
+the domain service for one route, and because the thing it buys is precision in a countdown
+whose whole purpose is to stop somebody tapping a link twice. A bucket that is occasionally
+twice as generous as advertised still does that.
+
+What the client must not do is assume the number. Velista's rule C3 already says the countdown
+is whatever the server returned, never a hardcoded sixty, and this is a second reason it is the
+right rule: the number can legitimately differ between two requests from the same person.
+
+Moving the throttler to a shared store would make the limits cluster wide and is a real option
+later. It is not needed for anything here and is recorded in section 8 rather than built.
 
 ## 3. Extracting the token grant
 
@@ -120,7 +128,7 @@ This is a refactor with no behaviour change, and it is the reason 0022 and 0023 
 | Auth | `JwtAuthGuard`. Resending needs to know whose address to send to, and only a token says that. |
 | Body | none |
 | Returns | `{ retryAfterSeconds: number }`, 201, the house default for a POST in this gateway |
-| Throttle | `THROTTLE_LIMITS.verifyResend`, moved here from the consume route (section 4.3) |
+| Throttle | `THROTTLE_LIMITS.verifyResend`, retargeted to one per minute and moved here from the consume route (sections 4.2 and 4.3) |
 
 The success body carries the wait too, not only the 429. That is deliberate and it is what lets
 velista's "Sent again. You can ask for another in 0:52" state exist without the client inventing
@@ -131,27 +139,34 @@ New `AUTH_PATTERNS.resendVerification` subject with its request and response int
 `src/schemas/messages/auth.schemas.ts`. The completeness spec from plan 0010 fails if the schemas
 are missing, and the handler carries `@ApiContractResponse` per plan 0019.
 
-### 4.2 The limit that matters is in auth, one per minute, per user
+### 4.2 The limit is the gateway bucket, one per minute
 
-The gateway bucket cannot produce a truthful countdown, for the reasons in section 2.4. So the
-real limit is enforced in `IdentityService.resendVerification`, against the table:
+No second rate limiter. `THROTTLE_LIMITS.verifyResend` is **retargeted to one per minute** and
+hung on this route, and that is the whole of the enforcement.
 
-> Find the newest unconsumed, unexpired `EmailVerification` for this user. If it was created
-> less than sixty seconds ago, throw `RateLimitedException` carrying the remaining seconds.
-> Otherwise issue a new grant, send the mail, and return sixty.
+```ts
+/** Email verification resend. One at a time, so the client's countdown means something. */
+verifyResend: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 1 } },
+```
 
-Three properties follow, and each is one the gateway bucket does not have.
+Retargeting is safe because the bucket's only current user is the consume route, which section
+4.3 moves off it.
 
-- **It is per user**, so two housemates on one wifi do not share a countdown.
-- **It is the same answer from either pod**, because the database is the shared state that
-  already exists. No Redis is introduced; this stack has none.
-- **The sixty it returns on success is true.** The next resend really is refused until then, so
-  the client's timer and the server's rule agree, which is the whole of rule C3.
+The three states velista draws all fall out of this one bucket:
 
-The gateway's `verifyResend` bucket (three per ten minutes) stays on top as the coarse per IP
-backstop against someone scripting the route with many tokens. It is also what keeps velista's
-coral "Refused" state reachable: the fourth ask inside ten minutes waits far longer than a
-minute, which is precisely the case a hardcoded sixty would get wrong.
+- **Ready.** Nothing to enforce.
+- **Just sent.** The handler returns `retryAfterSeconds: 60`, read from the bucket's own `ttl`
+  rather than written as a literal, so the constant and the response cannot drift apart. It is
+  true in the ordinary case: the next resend really is refused for a minute.
+- **Refused.** The `ProblemThrottlerGuard` from section 2.3 answers 429 with the real remaining
+  seconds off `timeToExpire`, so the countdown starts from what is left rather than from sixty.
+
+Section 2.4 is the caveat on all three, and it is the reason the client renders the number it
+was given instead of assuming it.
+
+Note what this deliberately does not do. It does not stop the same person resending from a
+second device, or from the same device after a load balancer moves them to the other pod. It
+stops the impatient double tap, which is what the sentence in the nudge is for.
 
 ### 4.3 The bucket moves off the consume route
 
@@ -165,10 +180,12 @@ Consume gets its own bucket instead. Brute forcing a 256 bit single use token is
 worth designing around, so the limit exists only to make hammering pointless: ten per minute is
 ample for every honest pattern including prefetch.
 
-`THROTTLE_LIMITS` gains `verifyConsume` and keeps `verifyResend`, which finally means what its
-name says. Note the constraint recorded at the top of `throttler-config.ts`: these are per route
-**overrides** of one registered bucket, not additional named throttlers, because the global
-guard applies every registered throttler to every route.
+`THROTTLE_LIMITS` gains `verifyConsume` and keeps `verifyResend` at its new value, which finally
+means what its name says. Note the constraint recorded at the top of `throttler-config.ts`:
+these are per route **overrides** of one registered bucket, not additional named throttlers,
+because the global guard applies every registered throttler to every route. That is also why
+resend cannot have both a short and a long bucket: it gets one, and section 4.2 picks the short
+one, because a countdown the user watches is worth more here than a ten minute ceiling.
 
 ### 4.4 The two refusals
 
@@ -250,9 +267,10 @@ Same check, same `ConflictException`, same `messageArgs: { field: 'email' }`.
   `timeToExpire`.
 - **`TokenGrantService`**: issue then consume succeeds; consume twice fails; consume after
   `expiresAt` fails; the stored value is a hash and never the raw token.
-- **Resend**: a first call sends and returns 60; a second inside the window returns 429 with a
-  remainder strictly under 60 (this is the spec velista's rule C3 leans on, so it asserts the
-  number, not just the status); no email returns `conflict`; already verified returns `conflict`.
+- **Resend**: a first call sends and returns 60, and the 60 comes from the bucket's `ttl` rather
+  than a literal; a second call inside the window returns 429 with a remainder strictly under 60
+  (this is the spec velista's rule C3 leans on, so it asserts the number, not just the status);
+  no email returns `conflict`; already verified returns `conflict`.
 - **Consume**: two live grants, consuming the second after the first succeeds without a second
   `userEmailVerified` event. Assert on the publisher, since the event is the observable part.
 - **Upgrade**: the email branch writes an `email_verifications` row and calls the mailer; the
@@ -268,8 +286,8 @@ requires it and `openapi-document.spec.ts` turns a forgotten regeneration into a
 - [ ] Every 429 this API returns carries `retryAfterSeconds` in the body, and the published
       OpenAPI document says so.
 - [ ] `POST /v1/auth/resend-verification` sends a fresh link and returns `{ retryAfterSeconds }`.
-- [ ] A second resend inside sixty seconds returns 429 with the real remainder, and the number is
-      per user rather than per IP.
+- [ ] A second resend inside sixty seconds returns 429 with the real remaining seconds, not a
+      flat sixty.
 - [ ] `POST /v1/auth/verify-email` no longer carries the resend bucket, and a fourth consume
       inside ten minutes succeeds.
 - [ ] A link that was superseded by a resend still works, and confirming a second time emits no
@@ -285,9 +303,10 @@ requires it and `openapi-document.spec.ts` turns a forgotten regeneration into a
 - **Blocking anything on verification.** `login()` does not look at `emailVerifiedAt` and this
   plan does not change that. velista 0009 section 5.2 is explicit that a blocking step would be
   a barrier this product does not have, and it would strand users whenever mail delivery failed.
-- **Shared throttler storage.** Section 2.4 documents the per pod limitation and section 4.2
-  routes around it where it matters. Making the buckets cluster wide is an operational change
-  with no user visible payoff here.
+- **Shared throttler storage, and any second rate limiter.** Section 2.4 documents the per pod,
+  per IP limitation and accepts it. Making the buckets cluster wide is an operational change
+  with no user visible payoff here, and enforcing a parallel limit in the domain service is the
+  thing that decision explicitly rejected.
 - **Changing what the confirmation mail says or looks like.** The template in `mail.service.ts`
   is unchanged; 0022 adds new ones beside it.
 - **A resend for an address that was never deliverable.** Bounce handling needs a provider
