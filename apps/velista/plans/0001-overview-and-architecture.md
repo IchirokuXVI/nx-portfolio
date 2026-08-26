@@ -238,12 +238,15 @@ the interface.
 
 | Route | Page | Access | Plan |
 | --- | --- | --- | --- |
-| `''` | Home | Public, adaptive by auth state | `0003` |
+| `''` | The front door | Public, anonymous only | `0003`, `0007` |
+| `home` | The dashboard | Authenticated | `0003`, `0007` |
 | `zones/:zoneId` | Group detail, its lists | Authenticated, zone member | later |
 | `zones/:zoneId/members` | Members and roles | Authenticated, manager | later |
 | `lists/:listId` | Shopping list, the main screen | Authenticated, list access | later |
 | `lists/:listId/lines/:lineId` | Line detail and comments | Authenticated, list access | later |
-| `join/:code` | Join a zone from a shared code or link | Public, adaptive | later |
+| `zones/new`, `home/zones/new` | Name a group, as a sheet over the page beneath | Public / authenticated | `0008` |
+| `zones/join`, `home/zones/join` | Enter a join code, as a sheet | Public / authenticated | `0008` |
+| `join/:code` | Join a zone from a shared code or link | Public, adaptive | `0008` |
 | `auth/login`, `auth/register`, `auth/verify` | Credentials flows | Public | later |
 | `auth/callback` | Consumes the token pair the backend redirects back with after Google | Public | `0004` section 5.7 |
 | `account` | Profile, upgrade a temporary account, delete | Authenticated | later |
@@ -373,10 +376,18 @@ A page plan is not ready for development until its mock is approved.
 | Plan | Subject | Status |
 | --- | --- | --- |
 | `0001` | This document: overview and architecture, plus the app and library scaffolding | **Implemented** |
-| `0002` | Design system and theming | Written, in development |
-| `0003` | Home page | Written, mock approved 2026-08-25 |
-| `0004` | Data access, auth, and realtime | Written 2026-08-26 |
+| `0002` | Design system and theming | **Implemented** |
+| `0003` | Home page | **Implemented**, mock approved 2026-08-25 |
+| `0004` | Data access, auth, and realtime | **Implemented** except the Socket.IO transport |
+| `0005` | Injector scope, and one place to declare test providers | **Implemented** |
+| `0006` | Translation ownership: feature-shell composes, and waits | **Implemented** |
+| `0007` | Splitting the front door from the dashboard | **Implemented** |
+| `0008` | The way in: creating a group, and joining with a code | Written 2026-08-26, mock awaiting approval |
 | later | One plan per remaining page, in build order | Not written |
+
+The route table in section 6.2 is the build order that remains. After `0008` the
+credential flows are the only thing still standing between a visitor and every other
+page: `auth/login`, `auth/register`, `auth/verify` and `auth/callback`.
 
 Scaffolding is deliberately **not** plan `0002`. Nothing is generated until enough of the
 design is settled that the shape of the libraries is known, which is the point of doing

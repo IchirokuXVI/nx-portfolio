@@ -1,0 +1,54 @@
+{
+  "title": "Velista Entry Flows",
+  "lede": "The design for plan <code>0008</code>: creating a group, joining with a code, and arriving on a shared link. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "artboards": [
+    { "file": "CreateGroup.dc.html", "x": 0, "y": 0, "w": 1330, "h": 970, "title": "Create a group" },
+    { "file": "JoinCode.dc.html", "x": 1400, "y": 0, "w": 1330, "h": 970, "title": "Join with a code" },
+    { "file": "JoinLink.dc.html", "x": 0, "y": 1120, "w": 470, "h": 970, "title": "Arriving on a shared link" },
+    { "file": "AfterEntry.dc.html", "x": 560, "y": 1120, "w": 900, "h": 970, "title": "The two outcomes" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -210,
+      "w": 430,
+      "text": "Entry flows, plan 0008. The four ways in that the front door offers, minus the two credential ones.\nPhone only, 390x844. Night theme only: these screens introduce no colour role that 0003 has not already proven on Day.\nBoth sheets sit above the keyboard, which is drawn as a band so the thumb reach is honest."
+    },
+    {
+      "id": "one-field",
+      "x": 470,
+      "y": -210,
+      "w": 420,
+      "text": "ONE field per sheet, and that is a backend decision, not a simplification.\nCreateZoneDto and JoinZoneDto both make username OPTIONAL, and the DTO comment says why: omitting it means \"call me by my global username\", which already exists by the time either call runs.\nSo neither sheet asks who you are. Renaming yourself per group is a later screen."
+    },
+    {
+      "id": "guest-mint",
+      "x": 940,
+      "y": -210,
+      "w": 430,
+      "text": "These two routes are the ONLY places an account is created. Both take an optional token: with none, the gateway mints a temporary user and hands the token pair back beside the data.\nRule D3: refresh BEFORE calling either. OptionalJwtAuthGuard swallows an expired token rather than rejecting it, so a stale one silently mints a SECOND guest and orphans the groups on the first, which nobody can reach again.\nThe submitting frame says an account is being made. It is not a surprise to spring after the fact."
+    },
+    {
+      "id": "pending",
+      "x": 1400,
+      "y": -210,
+      "w": 430,
+      "text": "JOINING DOES NOT LET YOU IN. Core lands every join in PENDING with no access until an owner or admin approves.\nSo the button says \"Ask to join\", not \"Join\", and the outcome screen says \"Waiting to be let in\". A success toast that implied membership would be a lie the next screen exposes.\nA prior BANNED membership is refused; a KICKED one may ask again."
+    },
+    {
+      "id": "no-name",
+      "x": 1520,
+      "y": 1120,
+      "w": 450,
+      "text": "NOTHING CAN NAME THE GROUP BEFORE YOU JOIN, and everything can name it after. There is no endpoint that resolves a join code to a zone: POST /v1/zones/join is the only route that accepts one, and it joins.\nSo neither the sheet nor the shared link screen may preview \"You are joining Flat 3B\", and both are written to promise nothing they cannot show.\nThe moment the ask lands it flips, because core's listMine selects memberships with status APPROVED **or** PENDING and joins the zone row either way. So the outcome screen names the group, and the pending card is the one from the approved 0003 mock, unchanged.\nA public preview endpoint is recorded as backend work, not assumed."
+    },
+    {
+      "id": "code-alphabet",
+      "x": 1520,
+      "y": 1400,
+      "w": 450,
+      "text": "Codes are 8 characters from ABCDEFGHJKMNPQRSTUVWXYZ23456789: no O, 0, I, 1 or L, on purpose, because they are read off a screen and typed by somebody else.\nThe field uppercases as it goes and drops anything outside that alphabet, so a misread O never becomes a failed request. The helper line says which letters never appear, which is also the fix for the 404 below it."
+    }
+  ]
+}

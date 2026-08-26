@@ -39,8 +39,9 @@ Phone frames are 390 by 844. Five artboards:
 **Phone only.** No desktop or tablet artboards are planned. Wide screens fall back to a
 centred column per `0002` section 8, which is a media query rather than a design.
 
-Working sources are in `apps/velista/plans/mocks/home/` and the canvas is
-re-seeded from them, so edit those rather than the published page when the design changes.
+Working sources are in `apps/velista/plans/mocks/home/`, and the published page is
+generated from them by `mocks/build-index.mjs`, so edit those rather than the published
+page when the design changes. See `mocks/README.md`.
 
 ## 3. States
 
