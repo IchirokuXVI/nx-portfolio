@@ -9,8 +9,12 @@ import { selectHomeState } from './select-home-state';
  */
 
 const anonymous: Identity = { kind: 'anonymous' };
-const registered: Identity = { kind: 'REGISTERED', userId: 'u1' };
-const guest: Identity = { kind: 'TEMPORARY', userId: 'u1' };
+const registered: Identity = {
+  kind: 'REGISTERED',
+  userId: 'u1',
+  username: 'dani',
+};
+const guest: Identity = { kind: 'TEMPORARY', userId: 'u1', username: 'guest' };
 
 function zone(overrides: Partial<MyZone> = {}): MyZone {
   return {
@@ -21,13 +25,13 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
     ownerUserId: 'u1',
     myRole: 'OWNER',
     myStatus: 'APPROVED',
-    summary: {
+    counts: {
       memberCount: 3,
       listCount: 2,
       pendingRequestCount: 0,
       firstPendingRequesterName: null,
-      lists: [{ id: 'l1', name: 'Weekly shop', lineCount: 12, readyCount: 7 }],
     },
+    lists: [{ id: 'l1', name: 'Weekly shop', lineCount: 12, readyCount: 7 }],
     ...overrides,
   };
 }
@@ -163,32 +167,57 @@ describe('selectHomeState', () => {
       expect(state).toMatchObject({ zones: [{ tappable: false }] });
     });
 
-    it('passes the counts through, and leaves them undefined when absent', () => {
-      const withSummary = select();
-      expect(withSummary).toMatchObject({
+    it('passes the counts through', () => {
+      // Always present since backend plan 0017, so there is no absent case to cover
+      // here any more. What a *malformed* counts block does is the mapper's job, and
+      // mappers.spec covers it.
+      expect(select()).toMatchObject({
         zones: [{ memberCount: 3, listCount: 2 }],
       });
+    });
 
-      const without = select({ zones: [zone({ summary: undefined })] });
-      expect(without).toMatchObject({
-        zones: [{ memberCount: undefined, listCount: undefined, lists: [] }],
+    it('shows a list preview that is empty because the caller can read none', () => {
+      // An empty preview never means "this group has no lists": it means the caller
+      // has been given access to none of them.
+      const state = select({
+        zones: [
+          zone({
+            lists: [],
+            counts: {
+              memberCount: 4,
+              listCount: 0,
+              pendingRequestCount: null,
+              firstPendingRequesterName: null,
+            },
+          }),
+        ],
       });
+
+      expect(state).toMatchObject({ zones: [{ lists: [], listCount: 0 }] });
     });
   });
 
   describe('the join request row', () => {
-    function withRequests(count: number, role: MyZone['myRole'] = 'OWNER') {
+    /**
+     * @param count pending requests, or `null` for a caller who may not see them.
+     *   The backend sends `null` to anybody who is not OWNER or ADMIN, so the null
+     *   **is** the permission and the role beside it is only there for realism.
+     */
+    function withRequests(
+      count: number | null,
+      role: MyZone['myRole'] = 'OWNER'
+    ) {
       return select({
         zones: [
           zone({
             myRole: role,
-            summary: {
+            counts: {
               memberCount: 3,
               listCount: 1,
               pendingRequestCount: count,
-              firstPendingRequesterName: 'Ines',
-              lists: [],
+              firstPendingRequesterName: count === null ? null : 'Ines',
             },
+            lists: [],
           }),
         ],
       });
@@ -211,10 +240,13 @@ describe('selectHomeState', () => {
       expect(firstZone(withRequests(0)).joinRequests).toBeUndefined();
     });
 
-    it('is absent for a member who could not act on it anyway', () => {
-      // Its presence in the view model implies the permission, so the template
-      // never has to re-check a role.
-      expect(firstZone(withRequests(3, 'MEMBER')).joinRequests).toBeUndefined();
+    it('is absent for a caller the backend will not tell', () => {
+      // A null count is how the backend says "you may not see who is waiting". The
+      // frontend does not second-guess it with its own role check, so the two can
+      // never disagree.
+      expect(
+        firstZone(withRequests(null, 'MEMBER')).joinRequests
+      ).toBeUndefined();
     });
 
     it('is shown to an admin as well as an owner', () => {

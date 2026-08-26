@@ -38,6 +38,10 @@ export class RealtimeMemory implements RealtimeClientI {
     return this._join(`zone:${zoneId}`);
   }
 
+  subscribeZoneStaff(zoneId: string): () => void {
+    return this._join(`zone:${zoneId}:staff`);
+  }
+
   subscribeList(listId: string): () => void {
     return this._join(`list:${listId}`);
   }

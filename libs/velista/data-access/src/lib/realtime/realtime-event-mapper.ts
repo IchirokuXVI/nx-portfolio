@@ -7,7 +7,13 @@ import {
   toZone,
   toZonePresence,
 } from '../mapping/mappers';
-import { isRecord, mapArray, str } from '../mapping/primitives';
+import {
+  isRecord,
+  mapArray,
+  nullableStr,
+  numOr,
+  str,
+} from '../mapping/primitives';
 import type { RealtimeEvent } from './realtime-events';
 
 /**
@@ -38,6 +44,35 @@ export function toRealtimeEvent(
     case 'zone.deleted': {
       const zoneId = idOf(payload);
       return zoneId === null ? null : { type: name, zoneId };
+    }
+
+    case 'zone.countsUpdated': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+
+      const zoneId = str(payload['zoneId']);
+      const counts = payload['counts'];
+      if (zoneId === null || !isRecord(counts)) {
+        return null;
+      }
+
+      const pending = counts['pendingRequestCount'];
+
+      return {
+        type: name,
+        zoneId,
+        memberCount: numOr(counts['memberCount'], 0),
+        // Null means "you may not see this", not "there are none", so it is carried
+        // through rather than collapsed to zero.
+        pendingRequestCount:
+          typeof pending === 'number' && Number.isFinite(pending)
+            ? pending
+            : null,
+        firstPendingRequesterName: nullableStr(
+          counts['firstPendingRequesterName']
+        ),
+      };
     }
 
     case 'member.joined':

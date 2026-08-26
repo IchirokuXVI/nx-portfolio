@@ -31,13 +31,13 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
     ownerUserId: 'u1',
     myRole: 'OWNER',
     myStatus: 'APPROVED',
-    summary: {
+    counts: {
       memberCount: 3,
       listCount: 1,
       pendingRequestCount: 0,
       firstPendingRequesterName: null,
-      lists: [{ id: 'l1', name: 'Weekly shop', lineCount: 12, readyCount: 7 }],
     },
+    lists: [{ id: 'l1', name: 'Weekly shop', lineCount: 12, readyCount: 7 }],
     ...overrides,
   };
 }
@@ -103,10 +103,11 @@ async function render(
           identity: () =>
             identity === 'anonymous'
               ? { kind: 'anonymous' }
-              : { kind: identity, userId: 'u1' },
+              : { kind: identity, userId: 'u1', username: 'Dani' },
           isAuthenticated: () => identity !== 'anonymous',
           isGuest: () => identity === 'TEMPORARY',
           userId: () => (identity === 'anonymous' ? null : 'u1'),
+          username: () => (identity === 'anonymous' ? null : 'Dani'),
         },
       },
     ],
@@ -246,13 +247,13 @@ describe('HomePage', () => {
       const fixture = await render({
         zones: [
           zone({
-            summary: {
+            counts: {
               memberCount: 4,
               listCount: 0,
               pendingRequestCount: 3,
               firstPendingRequesterName: 'Ines',
-              lists: [],
             },
+            lists: [],
           }),
         ],
       });
@@ -265,13 +266,13 @@ describe('HomePage', () => {
       const fixture = await render({
         zones: [
           zone({
-            summary: {
+            counts: {
               memberCount: 2,
               listCount: 0,
               pendingRequestCount: 1,
               firstPendingRequesterName: 'Ines',
-              lists: [],
             },
+            lists: [],
           }),
         ],
       });

@@ -42,6 +42,16 @@ export interface RealtimeClientI {
    */
   subscribeZone(zoneId: string): () => void;
 
+  /**
+   * Join a zone's **staff** room, `zone:{id}:staff`, refcounted like the rest.
+   *
+   * The only room that carries the governance fields on a counts broadcast: who is
+   * waiting to join is not sent to the plain zone room at all. The server refuses it
+   * for a caller who is not OWNER or ADMIN, which surfaces through
+   * {@link refusedRooms} like any other refusal.
+   */
+  subscribeZoneStaff(zoneId: string): () => void;
+
   /** Join a list room, refcounted. See {@link subscribeZone}. */
   subscribeList(listId: string): () => void;
 

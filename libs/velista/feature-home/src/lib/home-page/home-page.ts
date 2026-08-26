@@ -98,12 +98,18 @@ export class HomePage {
     })
   );
 
-  /** The letter in the app bar's account button. */
+  /**
+   * The letter in the app bar's account button.
+   *
+   * From the global username the token pair now carries (backend plan 0018), so it
+   * costs no request. Null falls back to a neutral glyph, which is right for a guest
+   * whose pair predates that change rather than showing them somebody else's letter.
+   */
   readonly accountInitial = computed(() => {
-    // There is no display name to derive one from: the API exposes no profile
-    // (plan 0004, section 11 item 2). Until it does, the button shows a neutral
-    // glyph rather than an initial invented from a user id.
-    return null;
+    const username = this._session.username();
+    return username === null
+      ? null
+      : (Array.from(username)[0] ?? '').toLocaleUpperCase();
   });
 
   /**

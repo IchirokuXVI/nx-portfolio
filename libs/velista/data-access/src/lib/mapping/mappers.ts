@@ -22,9 +22,10 @@ import {
   type PresenceUser,
   type SessionTokens,
   type ShoppingList,
+  type UserProfile,
   type Zone,
+  type ZoneCounts,
   type ZonePresence,
-  type ZoneSummary,
 } from '@portfolio/velista/models';
 import {
   date,
@@ -77,19 +78,14 @@ export function toZone(raw: unknown): Zone | null {
 }
 
 /**
- * From `MyZoneView` (`GET /v1/zones`).
- *
- * The summary block is absent from the API today (see the note on `MyZone`), so it is
- * mapped when present and left undefined otherwise rather than being defaulted to
- * zeroes. Zero members is a claim; absent is the truth.
+ * From `MyZoneView` (`GET /v1/zones`), which since backend plan 0017 carries the
+ * counts and a preview of up to three lists.
  */
 export function toMyZone(raw: unknown): MyZone | null {
   const zone = toZone(raw);
   if (zone === null || !isRecord(raw)) {
     return null;
   }
-
-  const summary = toZoneSummary(raw['summary']);
 
   return {
     ...zone,
@@ -99,21 +95,41 @@ export function toMyZone(raw: unknown): MyZone | null {
       MEMBERSHIP_STATUSES,
       MEMBERSHIP_STATUS_FALLBACK
     ),
-    ...(summary ? { summary } : {}),
+    counts: toZoneCounts(raw['counts']),
+    lists: mapArray(raw['lists'], toListPreview),
   };
 }
 
-function toZoneSummary(raw: unknown): ZoneSummary | null {
+/**
+ * The counts block, which the gateway now always sends.
+ *
+ * Defaulted rather than required, because rule D4 does not stop applying once a field
+ * is guaranteed: "always present" is a promise about the current deploy, and a phone
+ * running a cached bundle against an older one would otherwise render a card with no
+ * numbers at all instead of zeroes.
+ *
+ * The two governance fields keep their `null`, which is not a missing value: it means
+ * the caller may not see who is waiting, and collapsing it to `0` would quietly turn
+ * "you cannot see this" into "there is nothing to see".
+ */
+function toZoneCounts(raw: unknown): ZoneCounts {
   if (!isRecord(raw)) {
-    return null;
+    return {
+      memberCount: 0,
+      listCount: 0,
+      pendingRequestCount: null,
+      firstPendingRequesterName: null,
+    };
   }
+
+  const pending = raw['pendingRequestCount'];
 
   return {
     memberCount: numOr(raw['memberCount'], 0),
     listCount: numOr(raw['listCount'], 0),
-    pendingRequestCount: numOr(raw['pendingRequestCount'], 0),
+    pendingRequestCount:
+      typeof pending === 'number' && Number.isFinite(pending) ? pending : null,
     firstPendingRequesterName: nullableStr(raw['firstPendingRequesterName']),
-    lists: mapArray(raw['lists'], toListPreview),
   };
 }
 
@@ -320,8 +336,33 @@ export function toSessionTokens(raw: unknown): SessionTokens | null {
   return {
     userId,
     kind: oneOf(raw['kind'], USER_KINDS, USER_KIND_FALLBACK),
+    // Required on the wire since backend plan 0018, but defaulted rather than
+    // required here: a pair written to storage before that landed has no username,
+    // and rejecting it would sign out every existing session on deploy.
+    username: strOr(raw['username'], ''),
     accessToken,
     refreshToken,
+  };
+}
+
+/** From `UserProfileView` (`GET /v1/account/me`). */
+export function toUserProfile(raw: unknown): UserProfile | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const userId = str(raw['userId']);
+  if (userId === null) {
+    return null;
+  }
+
+  return {
+    userId,
+    kind: oneOf(raw['kind'], USER_KINDS, USER_KIND_FALLBACK),
+    username: strOr(raw['username'], ''),
+    email: nullableStr(raw['email']),
+    emailVerified: raw['emailVerified'] === true,
+    displayName: nullableStr(raw['displayName']),
   };
 }
 

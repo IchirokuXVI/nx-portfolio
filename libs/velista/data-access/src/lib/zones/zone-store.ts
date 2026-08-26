@@ -128,7 +128,19 @@ export class ZoneStore {
    * bytes twice.
    */
   private _syncRooms(): void {
-    const wanted = new Set(this.myZones().map((zone) => zone.id));
+    const wanted = new Map(
+      this.myZones().map((zone) => [
+        zone.id,
+        // Staff also join `zone:{id}:staff`, which is the only room that carries the
+        // governance fields on a counts broadcast. Without it an owner's join request
+        // row would go stale until the next full load, which is the one number on the
+        // card that most wants to be live.
+        //
+        // Non-null pendingRequestCount is the backend's own answer to "is this caller
+        // staff", so asking it here cannot disagree with what the server will allow.
+        zone.counts.pendingRequestCount !== null,
+      ])
+    );
 
     for (const [zoneId, release] of this._rooms) {
       if (!wanted.has(zoneId)) {
@@ -137,9 +149,17 @@ export class ZoneStore {
       }
     }
 
-    for (const zoneId of wanted) {
+    for (const [zoneId, isStaff] of wanted) {
       if (!this._rooms.has(zoneId)) {
-        this._rooms.set(zoneId, this._realtime.subscribeZone(zoneId));
+        const leaveZone = this._realtime.subscribeZone(zoneId);
+        const leaveStaff = isStaff
+          ? this._realtime.subscribeZoneStaff(zoneId)
+          : null;
+
+        this._rooms.set(zoneId, () => {
+          leaveZone();
+          leaveStaff?.();
+        });
       }
     }
   }
@@ -175,6 +195,27 @@ export class ZoneStore {
 
       case 'zone.deleted': {
         this._remove(event.zoneId);
+        break;
+      }
+
+      case 'zone.countsUpdated': {
+        this._patch(event.zoneId, (zone) => ({
+          ...zone,
+          counts: {
+            ...zone.counts,
+            memberCount: event.memberCount,
+            // The plain zone room sends both governance fields as null, and the
+            // staff room sends them filled. Taking the null would blank the join
+            // request row for an owner every time somebody joined, so a null is
+            // read as "this broadcast could not say" and the known value is kept.
+            pendingRequestCount:
+              event.pendingRequestCount ?? zone.counts.pendingRequestCount,
+            firstPendingRequesterName:
+              event.pendingRequestCount === null
+                ? zone.counts.firstPendingRequesterName
+                : event.firstPendingRequesterName,
+          },
+        }));
         break;
       }
 
@@ -215,6 +256,8 @@ export class ZoneStore {
         // itself on the next load rather than being guessed at here.
         break;
 
+      // `listCount` is access filtered per caller, so the counts broadcast cannot
+      // carry it and the store keeps its own from the list events it already gets.
       case 'list.created':
         this._patch(event.list.zoneId, (zone) => bumpLists(zone, 1));
         break;
@@ -274,25 +317,21 @@ export class ZoneStore {
 }
 
 function bumpMembers(zone: MyZone, by: number): MyZone {
-  return zone.summary === undefined
-    ? zone
-    : {
-        ...zone,
-        summary: {
-          ...zone.summary,
-          memberCount: Math.max(0, zone.summary.memberCount + by),
-        },
-      };
+  return {
+    ...zone,
+    counts: {
+      ...zone.counts,
+      memberCount: Math.max(0, zone.counts.memberCount + by),
+    },
+  };
 }
 
 function bumpLists(zone: MyZone, by: number): MyZone {
-  return zone.summary === undefined
-    ? zone
-    : {
-        ...zone,
-        summary: {
-          ...zone.summary,
-          listCount: Math.max(0, zone.summary.listCount + by),
-        },
-      };
+  return {
+    ...zone,
+    counts: {
+      ...zone.counts,
+      listCount: Math.max(0, zone.counts.listCount + by),
+    },
+  };
 }

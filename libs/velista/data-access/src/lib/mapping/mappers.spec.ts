@@ -104,33 +104,58 @@ describe('toMyZone', () => {
     );
   });
 
-  it('leaves the summary undefined when the API did not send one', () => {
-    // Absent is the truth; zero members would be a claim. The API has no summary
-    // fields today at all (plan 0003 section 5.2).
-    expect(toMyZone({ id: 'z1' })?.summary).toBeUndefined();
+  it('falls back to zeroes when the counts block is missing entirely', () => {
+    // The gateway always sends it now, but "always" is a promise about the current
+    // deploy: a phone on a cached bundle can still meet an older one, and a card of
+    // zeroes beats a crash.
+    expect(toMyZone({ id: 'z1' })?.counts).toEqual({
+      memberCount: 0,
+      listCount: 0,
+      pendingRequestCount: null,
+      firstPendingRequesterName: null,
+    });
   });
 
-  it('maps a summary when one is present', () => {
+  it('maps the counts and the list preview', () => {
     const zone = toMyZone({
       id: 'z1',
       myRole: 'OWNER',
       myStatus: 'APPROVED',
-      summary: {
+      counts: {
         memberCount: 3,
         listCount: 2,
         pendingRequestCount: 3,
         firstPendingRequesterName: 'Ines',
-        lists: [{ id: 'l1', name: 'Weekly', lineCount: 12, readyCount: 7 }],
       },
+      lists: [{ id: 'l1', name: 'Weekly', lineCount: 12, readyCount: 7 }],
     });
 
-    expect(zone?.summary).toEqual({
+    expect(zone?.counts).toEqual({
       memberCount: 3,
       listCount: 2,
       pendingRequestCount: 3,
       firstPendingRequesterName: 'Ines',
-      lists: [{ id: 'l1', name: 'Weekly', lineCount: 12, readyCount: 7 }],
     });
+    expect(zone?.lists).toEqual([
+      { id: 'l1', name: 'Weekly', lineCount: 12, readyCount: 7 },
+    ]);
+  });
+
+  it('keeps a null pending count as null rather than collapsing it to zero', () => {
+    // Null means "you may not see who is waiting". Zero would mean "nobody is",
+    // which is a different claim and would hide the row from somebody entitled to
+    // it the moment the two were confused.
+    const zone = toMyZone({
+      id: 'z1',
+      counts: {
+        memberCount: 2,
+        listCount: 1,
+        pendingRequestCount: null,
+        firstPendingRequesterName: null,
+      },
+    });
+
+    expect(zone?.counts.pendingRequestCount).toBeNull();
   });
 
   it('never reports more ready than there are lines', () => {
@@ -138,23 +163,23 @@ describe('toMyZone', () => {
     // number on the page.
     const zone = toMyZone({
       id: 'z1',
-      summary: { lists: [{ id: 'l1', lineCount: 5, readyCount: 9 }] },
+      lists: [{ id: 'l1', lineCount: 5, readyCount: 9 }],
     });
 
-    expect(zone?.summary?.lists[0]).toMatchObject({
+    expect(zone?.lists[0]).toMatchObject({
       lineCount: 5,
       readyCount: 5,
     });
   });
 
-  it('drops a malformed list from the preview without losing the summary', () => {
+  it('drops a malformed list from the preview without losing the rest', () => {
     const zone = toMyZone({
       id: 'z1',
-      summary: { lists: [{ name: 'no id' }, { id: 'l2', name: 'fine' }] },
+      lists: [{ name: 'no id' }, { id: 'l2', name: 'fine' }],
     });
 
-    expect(zone?.summary?.lists).toHaveLength(1);
-    expect(zone?.summary?.lists[0].id).toBe('l2');
+    expect(zone?.lists).toHaveLength(1);
+    expect(zone?.lists[0].id).toBe('l2');
   });
 });
 
@@ -222,20 +247,37 @@ describe('toComment', () => {
 });
 
 describe('toSessionTokens', () => {
-  it('maps a complete pair', () => {
+  it('maps a complete pair, username included', () => {
     expect(
       toSessionTokens({
         userId: 'u1',
         kind: 'REGISTERED',
+        username: 'dani',
         accessToken: 'a',
         refreshToken: 'r',
       })
     ).toEqual({
       userId: 'u1',
       kind: 'REGISTERED',
+      username: 'dani',
       accessToken: 'a',
       refreshToken: 'r',
     });
+  });
+
+  it('accepts a pair with no username rather than signing the user out', () => {
+    // A pair written to storage before backend plan 0018 landed has none. Rejecting
+    // it would clear the session of every existing user on deploy, which is a far
+    // worse outcome than an app bar with no initial for one session.
+    const tokens = toSessionTokens({
+      userId: 'u1',
+      kind: 'REGISTERED',
+      accessToken: 'a',
+      refreshToken: 'r',
+    });
+
+    expect(tokens).not.toBeNull();
+    expect(tokens?.username).toBe('');
   });
 
   it.each(['userId', 'accessToken', 'refreshToken'])(

@@ -81,7 +81,7 @@ function selectResume(
   }
 
   for (const zone of zones) {
-    const list = zone.summary?.lists.find((entry) => entry.id === resumeListId);
+    const list = zone.lists.find((entry) => entry.id === resumeListId);
     if (list !== undefined) {
       return {
         listId: list.id,
@@ -102,7 +102,7 @@ function selectResume(
 function toZoneCard(zone: MyZone): ZoneCardVm {
   const pending = zone.myStatus === 'PENDING';
   const active = zone.status === 'ACTIVE';
-  const summary = zone.summary;
+  const { counts } = zone;
 
   return {
     id: zone.id,
@@ -110,19 +110,20 @@ function toZoneCard(zone: MyZone): ZoneCardVm {
     initial: initialOf(zone.name),
     role: zone.myRole,
     membership: zone.myStatus,
-    memberCount: summary?.memberCount,
-    listCount: summary?.listCount,
-    lists: pending ? [] : (summary?.lists.map(toListRow) ?? []),
+    memberCount: counts.memberCount,
+    listCount: counts.listCount,
+    lists: pending ? [] : zone.lists.map(toListRow),
 
-    // The attention row is only ever built for somebody who can act on it, so its
-    // presence in the view model already implies the permission and the template
-    // never has to re-check a role.
-    ...(canReview(zone) && summary && summary.pendingRequestCount > 0
+    // `pendingRequestCount` is non-null only for a caller the backend considers
+    // staff, so **the value is the permission** and nothing here re-derives it from
+    // a role. That also means the two can never disagree, which they could while the
+    // frontend was deciding for itself.
+    ...(counts.pendingRequestCount !== null && counts.pendingRequestCount > 0
       ? {
           joinRequests: {
-            firstName: summary.firstPendingRequesterName ?? '',
+            firstName: counts.firstPendingRequesterName ?? '',
             // Excludes the person already named (plan 0003, section 4.1).
-            othersCount: Math.max(0, summary.pendingRequestCount - 1),
+            othersCount: Math.max(0, counts.pendingRequestCount - 1),
           },
         }
       : {}),
@@ -132,7 +133,7 @@ function toZoneCard(zone: MyZone): ZoneCardVm {
     // open question 2 asks only that the page not break on the latter.
     tappable: !pending && active,
 
-    ...(pending ? { waitingOn: ownerNameFor(zone) } : {}),
+    ...(pending ? { waitingOn: '' } : {}),
   };
 }
 
@@ -148,25 +149,6 @@ function toListRow(list: {
     lineCount: list.lineCount,
     readyCount: list.readyCount,
   };
-}
-
-function canReview(zone: MyZone): boolean {
-  return (
-    zone.myStatus === 'APPROVED' &&
-    (zone.myRole === 'OWNER' || zone.myRole === 'ADMIN')
-  );
-}
-
-/**
- * The name shown in "Waiting for {name} to let you in".
- *
- * There is no endpoint that lists a zone's members and no profile endpoint, so the
- * owner's **name** is not available to a pending member: `ownerUserId` is an id, and
- * printing an id at somebody is worse than being vague. An empty string lets the
- * translation fall back to a phrasing that names nobody.
- */
-function ownerNameFor(_zone: MyZone): string {
-  return '';
 }
 
 /**

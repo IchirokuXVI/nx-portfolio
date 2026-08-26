@@ -30,6 +30,23 @@ export type RealtimeEvent =
   | { readonly type: 'zone.markedForDeletion'; readonly zone: Zone }
   | { readonly type: 'zone.deleted'; readonly zoneId: string }
   | {
+      /**
+       * The counts changed (backend plan 0017, section 9).
+       *
+       * Deliberately **not** the whole `ZoneCounts`: `listCount` is filtered per
+       * caller and a room broadcast has no single asker, so it is absent here and
+       * the store keeps its own from the list events it already receives.
+       *
+       * The governance fields are filled only in the `zone:{id}:staff` room; the
+       * plain zone room gets the same event with both of them null.
+       */
+      readonly type: 'zone.countsUpdated';
+      readonly zoneId: string;
+      readonly memberCount: number;
+      readonly pendingRequestCount: number | null;
+      readonly firstPendingRequesterName: string | null;
+    }
+  | {
       readonly type:
         | 'member.joined'
         | 'member.approved'
@@ -73,6 +90,7 @@ export type RealtimeEvent =
 export const REALTIME_EVENT_NAMES = [
   'zone.updated',
   'zone.deleted',
+  'zone.countsUpdated',
   'zone.markedForDeletion',
   'zone.ownershipChanged',
   'member.joined',
@@ -108,6 +126,18 @@ export const REALTIME_CLIENT_MESSAGES = {
 /** Room names, built the same way the server builds them. */
 export function zoneRoom(zoneId: string): string {
   return `zone:${zoneId}`;
+}
+
+/**
+ * The staff room, `zone:{id}:staff` (backend plan 0017, section 9).
+ *
+ * Derived from {@link zoneRoom} rather than written out, so the two cannot drift.
+ * Subscribing is what fills the governance fields on `zone.countsUpdated`; the server
+ * refuses the room for a caller who is not an OWNER or ADMIN, which the refused-room
+ * handling already surfaces.
+ */
+export function zoneStaffRoom(zoneId: string): string {
+  return `${zoneRoom(zoneId)}:staff`;
 }
 
 export function listRoom(listId: string): string {

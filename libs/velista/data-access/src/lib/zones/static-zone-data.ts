@@ -30,23 +30,23 @@ export const SEED_ZONES: readonly MyZone[] = [
     ownerUserId: 'user-me',
     myRole: 'OWNER',
     myStatus: 'APPROVED',
-    summary: {
+    counts: {
       memberCount: 3,
       listCount: 2,
       // Three waiting, so the line reads "Ines and 2 more want to join": the plural
       // form, with a count that excludes the named person (plan 0003, section 4.1).
       pendingRequestCount: 3,
       firstPendingRequesterName: 'Ines',
-      lists: [
-        {
-          id: 'list-weekly',
-          name: 'Weekly shop',
-          lineCount: 12,
-          readyCount: 7,
-        },
-        { id: 'list-cleaning', name: 'Cleaning', lineCount: 4, readyCount: 4 },
-      ],
     },
+    lists: [
+      {
+        id: 'list-weekly',
+        name: 'Weekly shop',
+        lineCount: 12,
+        readyCount: 7,
+      },
+      { id: 'list-cleaning', name: 'Cleaning', lineCount: 4, readyCount: 4 },
+    ],
   },
   {
     id: 'zone-parents',
@@ -56,20 +56,22 @@ export const SEED_ZONES: readonly MyZone[] = [
     ownerUserId: 'user-mum',
     myRole: 'MEMBER',
     myStatus: 'APPROVED',
-    summary: {
+    counts: {
       memberCount: 4,
       listCount: 1,
-      pendingRequestCount: 0,
+      // Null, not zero: this caller is not staff in this zone, so the backend
+      // does not tell them who is waiting (backend plan 0017, section 6).
+      pendingRequestCount: null,
       firstPendingRequesterName: null,
-      lists: [
-        {
-          id: 'list-sunday',
-          name: 'Sunday lunch',
-          lineCount: 9,
-          readyCount: 2,
-        },
-      ],
     },
+    lists: [
+      {
+        id: 'list-sunday',
+        name: 'Sunday lunch',
+        lineCount: 9,
+        readyCount: 2,
+      },
+    ],
   },
   {
     id: 'zone-climbing',
@@ -81,15 +83,17 @@ export const SEED_ZONES: readonly MyZone[] = [
     ownerUserId: 'user-sam',
     myRole: 'MEMBER',
     myStatus: 'PENDING',
-    summary: {
+    counts: {
       memberCount: 6,
       listCount: 1,
-      pendingRequestCount: 0,
+      // Null, not zero: this caller is not staff in this zone, so the backend
+      // does not tell them who is waiting (backend plan 0017, section 6).
+      pendingRequestCount: null,
       firstPendingRequesterName: null,
-      // A pending member sees no list content, so the preview is empty by design
-      // rather than by omission.
-      lists: [],
     },
+    // A pending member sees no list content, so the preview is empty by design
+    // rather than by omission.
+    lists: [],
   },
   {
     id: 'zone-old-houseshare',
@@ -101,13 +105,15 @@ export const SEED_ZONES: readonly MyZone[] = [
     ownerUserId: null,
     myRole: 'MEMBER',
     myStatus: 'APPROVED',
-    summary: {
+    counts: {
       memberCount: 2,
       listCount: 0,
-      pendingRequestCount: 0,
+      // Null, not zero: this caller is not staff in this zone, so the backend
+      // does not tell them who is waiting (backend plan 0017, section 6).
+      pendingRequestCount: null,
       firstPendingRequesterName: null,
-      lists: [],
     },
+    lists: [],
   },
 ];
 

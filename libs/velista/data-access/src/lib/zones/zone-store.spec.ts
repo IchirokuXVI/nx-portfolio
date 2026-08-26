@@ -16,13 +16,13 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
     ownerUserId: 'user-me',
     myRole: 'OWNER',
     myStatus: 'APPROVED',
-    summary: {
+    counts: {
       memberCount: 3,
       listCount: 2,
       pendingRequestCount: 0,
       firstPendingRequesterName: null,
-      lists: [],
     },
+    lists: [],
     ...overrides,
   };
 }
@@ -35,8 +35,21 @@ describe('ZoneStore', () => {
 
   beforeEach(() => {
     zones = [
+      // Owner of the first, plain member of the second. The member's null pending
+      // count is what the backend actually sends somebody who may not see
+      // governance data, and it is what decides the staff room below.
       zone(),
-      zone({ id: 'z2', name: "Mum and Dad's", myRole: 'MEMBER' }),
+      zone({
+        id: 'z2',
+        name: "Mum and Dad's",
+        myRole: 'MEMBER',
+        counts: {
+          memberCount: 4,
+          listCount: 1,
+          pendingRequestCount: null,
+          firstPendingRequesterName: null,
+        },
+      }),
     ];
     authenticated = true;
 
@@ -129,20 +142,35 @@ describe('ZoneStore', () => {
   });
 
   describe('rooms', () => {
-    it('joins one room per visible zone, and only zone rooms', async () => {
+    it('joins a zone room per zone, and no list rooms', async () => {
       // List and line events reach the zone room too, so subscribing per list on the
       // home screen would pay for the same bytes twice.
       await store.load();
 
-      expect([...realtime.rooms.keys()].sort()).toEqual(['zone:z1', 'zone:z2']);
+      const rooms = [...realtime.rooms.keys()].sort();
+      expect(rooms).toContain('zone:z1');
+      expect(rooms).toContain('zone:z2');
+      expect(rooms.filter((room) => room.startsWith('list:'))).toEqual([]);
     });
 
-    it('leaves the room when a zone goes away', async () => {
+    it('joins the staff room only where the caller is staff', async () => {
+      // The staff room is the only one carrying the governance fields on a counts
+      // broadcast, so an owner needs it and a plain member must not ask for it.
       await store.load();
 
-      realtime.emit('zone.deleted', { id: 'z2' });
+      expect([...realtime.rooms.keys()]).toContain('zone:z1:staff');
+      expect([...realtime.rooms.keys()]).not.toContain('zone:z2:staff');
+    });
 
-      expect([...realtime.rooms.keys()]).toEqual(['zone:z1']);
+    it('leaves both rooms when a zone goes away', async () => {
+      await store.load();
+
+      realtime.emit('zone.deleted', { id: 'z1' });
+
+      const rooms = [...realtime.rooms.keys()];
+      expect(rooms).not.toContain('zone:z1');
+      expect(rooms).not.toContain('zone:z1:staff');
+      expect(rooms).toContain('zone:z2');
     });
   });
 
@@ -163,16 +191,67 @@ describe('ZoneStore', () => {
       expect(store.myZones()[0].name).toBe('Flat 3C');
     });
 
-    it('keeps the summary when a zone is renamed', () => {
-      // The event carries a ZoneView, which has no summary. Replacing the record
-      // wholesale would blank every count on the card.
+    it('keeps the counts when a zone is renamed', () => {
+      // The event carries a ZoneView, which has no counts. Replacing the record
+      // wholesale would blank every number on the card.
       realtime.emit('zone.updated', {
         id: 'z1',
         name: 'Flat 3C',
         status: 'ACTIVE',
       });
 
-      expect(store.myZones()[0].summary?.memberCount).toBe(3);
+      expect(store.myZones()[0].counts.memberCount).toBe(3);
+    });
+
+    it('applies a counts broadcast', () => {
+      realtime.emit('zone.countsUpdated', {
+        zoneId: 'z1',
+        counts: {
+          memberCount: 9,
+          pendingRequestCount: 2,
+          firstPendingRequesterName: 'Ines',
+        },
+      });
+
+      expect(store.myZones()[0].counts).toMatchObject({
+        memberCount: 9,
+        pendingRequestCount: 2,
+        firstPendingRequesterName: 'Ines',
+      });
+    });
+
+    it('keeps known governance numbers when the plain room sends nulls', () => {
+      // The staff room fills those fields and the plain zone room sends the same
+      // event with both null. Taking the null would blank an owner's join request
+      // row every time somebody joined.
+      realtime.emit('zone.countsUpdated', {
+        zoneId: 'z1',
+        counts: {
+          memberCount: 5,
+          pendingRequestCount: 4,
+          firstPendingRequesterName: 'Ines',
+        },
+      });
+      realtime.emit('zone.countsUpdated', {
+        zoneId: 'z1',
+        counts: {
+          memberCount: 6,
+          pendingRequestCount: null,
+          firstPendingRequesterName: null,
+        },
+      });
+
+      expect(store.myZones()[0].counts).toMatchObject({
+        memberCount: 6,
+        pendingRequestCount: 4,
+        firstPendingRequesterName: 'Ines',
+      });
+    });
+
+    it('ignores a counts broadcast with no counts block', () => {
+      realtime.emit('zone.countsUpdated', { zoneId: 'z1' });
+
+      expect(store.myZones()[0].counts.memberCount).toBe(3);
     });
 
     it('marks a zone for deletion rather than removing it', () => {
@@ -232,7 +311,7 @@ describe('ZoneStore', () => {
         createdByUserId: 'user-me',
       });
 
-      expect(store.myZones()[0].summary?.listCount).toBe(3);
+      expect(store.myZones()[0].counts.listCount).toBe(3);
     });
 
     it('ignores an event for a zone it does not hold', () => {

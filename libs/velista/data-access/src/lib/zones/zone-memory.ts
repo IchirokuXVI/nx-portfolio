@@ -17,9 +17,10 @@ import type {
 /**
  * Zones, in memory. The default behind `ZONE_SERVICE`.
  *
- * It serves the **full** shape including the summary block the gateway cannot produce
- * yet, which is what lets `0003` be built to its approved mock rather than to the
- * API's current limits (plan 0004, section 9.2).
+ * It serves the same shape the gateway does, counts and list previews included, so the
+ * app runs and every test passes with no backend at all (plan 0004, section 9.2). That
+ * is what let `0003` be built to its approved mock before the counts existed, and it
+ * is still what makes every state in section 3 reachable on demand.
  *
  * It also honours rule D3, because the rule is a property of the app's behaviour and
  * not of the transport: if the memory implementation quietly succeeded where the HTTP
@@ -65,13 +66,14 @@ export class ZoneMemory implements ZoneServiceI {
       ownerUserId: this._tokens.tokens()?.userId ?? SEED_USER_ID,
       myRole: 'OWNER',
       myStatus: 'APPROVED',
-      summary: {
+      counts: {
         memberCount: 1,
         listCount: 0,
+        // The creator is the owner, so they are staff and do see this number.
         pendingRequestCount: 0,
         firstPendingRequesterName: null,
-        lists: [],
       },
+      lists: [],
     };
 
     this._zones.update((current) => [zone, ...current]);

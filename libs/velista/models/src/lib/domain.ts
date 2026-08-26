@@ -38,39 +38,50 @@ export interface Zone {
 }
 
 /**
- * A zone the caller belongs to, with their standing in it and the summary the home
+ * A zone the caller belongs to, with their standing in it and the numbers the home
  * page renders.
  *
- * **The summary block does not exist on the API yet.** `MyZoneView` is still
- * `ZoneView` plus `myRole` and `myStatus`, and there is no endpoint that lists a
- * zone's members at all. `0003` section 5.2 records the requirement and the user
- * confirmed on 2026-08-26 that the backend work has not landed, so the in-memory
- * implementation serves these and the HTTP one leaves them undefined until it can.
- *
- * They are therefore **optional**, and every consumer has to render without them.
- * That is not a temporary shim: a summary that has not loaded yet looks the same as
- * one the backend cannot serve, and the page needs to cope with both regardless.
+ * `counts` and `lists` are **always present** (backend plan 0017, landed 2026-08-26).
+ * They were optional here while the gateway could not serve them, which is what let
+ * `0003` be built against the in-memory implementation; now that they are guaranteed,
+ * making them required is what stops every consumer carrying a branch for data that
+ * always arrives.
  */
 export interface MyZone extends Zone {
   readonly myRole: ZoneRole;
   readonly myStatus: MembershipStatus;
-  readonly summary?: ZoneSummary;
+  readonly counts: ZoneCounts;
+  /**
+   * At most three lists, newest activity first, filtered exactly as `listCount` is.
+   *
+   * **Empty means the caller can read no list in this zone, never that the zone has
+   * none.** The distinction matters on a card: "no lists yet" would be a lie told to
+   * somebody who simply has not been given access to any.
+   */
+  readonly lists: readonly ListPreview[];
 }
 
-/** The counts `0003` draws on a zone card. See the note on {@link MyZone}. */
-export interface ZoneSummary {
+/** The summary numbers on a zone card (backend plan 0017, section 3). */
+export interface ZoneCounts {
+  /** APPROVED memberships only. Somebody still pending is not a member yet. */
   readonly memberCount: number;
+  /** Lists **the caller may read**, not the zone's total. */
   readonly listCount: number;
-  /** How many people are waiting to be let in. Zero hides the attention row. */
-  readonly pendingRequestCount: number;
+  /**
+   * People waiting to be let in, or `null` for a caller who may not see that.
+   *
+   * The null is load bearing: who is waiting is governance data, and the backend
+   * only fills it for an OWNER or ADMIN. So a non-null value **is** the permission,
+   * and nothing in the UI needs to re-derive it from a role.
+   */
+  readonly pendingRequestCount: number | null;
   /**
    * The **oldest** pending requester's name, which is what `0003` section 4.1
-   * renders. Order matters: taking whoever arrives first makes the name change on
-   * every reload and the row look broken.
+   * renders. Null when there are none, or when the caller may not see governance
+   * data. Oldest by creation with the id as a tie break, so it is stable across
+   * refreshes rather than changing on every reload.
    */
   readonly firstPendingRequesterName: string | null;
-  /** A short preview of the zone's lists, enough to draw the card without a fan out. */
-  readonly lists: readonly ListPreview[];
 }
 
 /** Enough of a list to draw a row inside a zone card. */
@@ -181,13 +192,39 @@ export interface ListPresence {
  */
 export type Identity =
   | { readonly kind: 'anonymous' }
-  | { readonly kind: UserKind; readonly userId: string };
+  | {
+      readonly kind: UserKind;
+      readonly userId: string;
+      /**
+       * The caller's global username, which the token pair now carries (backend
+       * plan 0018). It is the only human readable name the app has without a
+       * request, which is what lets the app bar show a real initial.
+       */
+      readonly username: string;
+    };
 
 /** The token pair, as this app holds it. */
 export interface SessionTokens {
   readonly userId: string;
   readonly kind: UserKind;
+  /** Global username (backend plan 0018). Empty for a pair stored before it landed. */
+  readonly username: string;
   readonly accessToken: string;
   /** Opaque, rotating, and single use. See plan 0004 section 5.4. */
   readonly refreshToken: string;
+}
+
+/**
+ * The signed-in user's profile, from `GET /v1/account/me`.
+ *
+ * Only needed by the account screen: everything the home page shows comes off the
+ * token pair, so this page issues no extra request for it.
+ */
+export interface UserProfile {
+  readonly userId: string;
+  readonly kind: UserKind;
+  readonly username: string;
+  readonly email: string | null;
+  readonly emailVerified: boolean;
+  readonly displayName: string | null;
 }
