@@ -1,5 +1,8 @@
 /// <reference types="cypress" />
 
+// This file augments the global `Cypress` namespace, which requires it to be a
+// module (see the `export {}` below) so the augmentation is picked up.
+
 // ***********************************************
 // This example commands.ts shows you how to
 // create various custom commands and overwrite
@@ -24,6 +27,9 @@ declare global {
 Cypress.Commands.add('login', (email, password) => {
   console.log('Custom command example: Login', email, password);
 });
+
+// Makes this file a module so the `declare global` augmentation above is valid.
+export {};
 //
 // -- This is a child command --
 // Cypress.Commands.add("drag", { prevSubject: 'element'}, (subject, options) => { ... })

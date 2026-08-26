@@ -14,7 +14,7 @@ export default defineConfig({
     }),
     // E2E_BASE_URL points the suite at an already-running deployment (e.g. the
     // local Docker/Kubernetes reverse proxy at http://portfolio.localhost).
-    baseUrl: process.env.E2E_BASE_URL || 'http://localhost:4201',
+    baseUrl: process.env['E2E_BASE_URL'] || 'http://localhost:4201',
     chromeWebSecurity: false,
   },
 });

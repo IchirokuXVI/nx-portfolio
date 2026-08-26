@@ -41,11 +41,22 @@ export function currentUrlLocale(page: Page): string {
  * list is de-duplicated.
  */
 export async function usableLocales(page: Page): Promise<string[]> {
-  const texts = await page
-    .locator(
-      'lib-damocles-sword-language-selector .selectable-languages button'
-    )
-    .allInnerTexts();
+  const options = page.locator(
+    'lib-damocles-sword-language-selector .selectable-languages button'
+  );
+
+  // The switcher belongs to the lazily mounted remote, and `settle`'s quiet
+  // window can close before that remote attaches. Reading the options right
+  // then yields an empty list, which callers report as "no usable locales"
+  // rather than as the slow load it actually is. Wait for the first option to
+  // exist. A page that genuinely has no switcher still resolves to [] once the
+  // wait elapses, so this only removes the race, not a real assertion.
+  await options
+    .first()
+    .waitFor({ state: 'attached' })
+    .catch(() => undefined);
+
+  const texts = await options.allInnerTexts();
 
   // Lowercase the codes: the options can render uppercase via CSS text-transform
   // (which `innerText` reflects when they are visible), but locale codes are
@@ -67,8 +78,10 @@ export async function usableLocales(page: Page): Promise<string[]> {
  */
 export async function findRawKeys(page: Page): Promise<string[]> {
   return page.evaluate(() => {
-    const keyLike = /^[a-z][a-z0-9]*([_-][a-z0-9]+)*(\.[a-z0-9]+([_-][a-z0-9]+)*)+$/i;
-    const fileExt = /\.(html?|json|svg|png|jpe?g|webp|pdf|css|m?js|ts|ico|woff2?)$/i;
+    const keyLike =
+      /^[a-z][a-z0-9]*([_-][a-z0-9]+)*(\.[a-z0-9]+([_-][a-z0-9]+)*)+$/i;
+    const fileExt =
+      /\.(html?|json|svg|png|jpe?g|webp|pdf|css|m?js|ts|ico|woff2?)$/i;
     const offenders = new Set<string>();
     const walker = document.createTreeWalker(
       document.body,

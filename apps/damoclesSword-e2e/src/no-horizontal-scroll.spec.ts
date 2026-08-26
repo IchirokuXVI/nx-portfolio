@@ -143,6 +143,15 @@ for (const viewport of viewports) {
     page,
     baseURL,
   }) => {
+    // One test here is a whole crawl: every discovered route is loaded once to
+    // read its links and then once more per non-default locale, so the work is
+    // routes x locales navigations, each followed by a settle. Today that is
+    // already 15 navigations, and the crawl exists precisely so that new routes
+    // are picked up without editing this file, so a fixed per-test budget goes
+    // stale the moment the app grows one more page. Scale
+    // the budget with the crawl's own ceiling instead.
+    test.setTimeout(MAX_ROUTES * 6_000);
+
     expect(
       baseURL,
       'baseURL must be configured in playwright.config.ts'

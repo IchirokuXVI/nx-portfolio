@@ -15,13 +15,13 @@ export default defineConfig({
     // E2E_BASE_URL points the suite at an already-running deployment (e.g. the
     // local Docker/Kubernetes reverse proxy at http://portfolio.localhost). Run
     // it with `npx cypress run` directly so no dev server is started.
-    baseUrl: process.env.E2E_BASE_URL || 'http://localhost:4200',
+    baseUrl: process.env['E2E_BASE_URL'] || 'http://localhost:4200',
     chromeWebSecurity: false,
     // Dev-configuration remotes ship unbundled: a heavy remote (e.g. odontogram)
     // lazily loads hundreds of separate chunk requests, and Angular only finalizes
     // the locale redirect once that load resolves. Give those assertions more room
     // when running against the (slower) docker deployment.
-    defaultCommandTimeout: process.env.E2E_BASE_URL ? 30000 : 4000,
-    pageLoadTimeout: process.env.E2E_BASE_URL ? 120000 : 60000,
+    defaultCommandTimeout: process.env['E2E_BASE_URL'] ? 30000 : 4000,
+    pageLoadTimeout: process.env['E2E_BASE_URL'] ? 120000 : 60000,
   },
 });
