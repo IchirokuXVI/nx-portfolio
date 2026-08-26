@@ -24,7 +24,6 @@ import {
   AppBrand,
 } from '@portfolio/velista/models';
 import { VELISTA_PLATFORM_PROVIDERS } from '@portfolio/velista/platform';
-import { VELISTA_TRANSLATION_PROVIDERS } from '@portfolio/velista/ui';
 import { environment } from '../environments/environment';
 
 /**
@@ -80,11 +79,13 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   ...VELISTA_PLATFORM_PROVIDERS,
   ...VELISTA_DATA_ACCESS_PROVIDERS,
 
-  // The app's translation namespace. Here rather than on `AppUiModule`, for the same
-  // reason as everything above it: a module imported by a standalone component
-  // provides that component's injector only, so `AppLayout` could use the `| rokuT`
-  // pipe while every lazily loaded page under it threw. See `translation-providers.ts`.
-  ...VELISTA_TRANSLATION_PROVIDERS,
+  // The app's translations are **not** on this list. They are composed by
+  // `feature-shell` and installed by its own route table (plan 0006, section 3), which
+  // is one injector further down and still above every page. They cannot be named here
+  // even though this is where they conceptually belong: `entry.routes.ts` lazy-loads
+  // `feature-shell`, so importing anything from it statically is forbidden by
+  // `@nx/enforce-module-boundaries`. See the comment on the parent route in
+  // `feature-shell`'s `routes.ts`.
 
   // The real gateway, which is the token's default too, but it still has to be bound
   // **here**: `ZoneApi` needs the `HttpClient` configured a few lines above, and that

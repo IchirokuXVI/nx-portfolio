@@ -28,9 +28,17 @@ test.describe('velista mounts under the shell', () => {
 
       // The i18n namespace resolved through the shared RokuTranslator singleton
       // rather than rendering the raw key.
-      await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-        'Velista'
-      );
+      //
+      // Asserted as "not a key" rather than by pinning one sentence. This used to
+      // expect the literal 'Velista', written when the `<h1>` was the app title;
+      // it is the landing hero's headline now, so a copy edit would have failed a
+      // test that is really about the translation layer being wired up (plan 0005,
+      // section 9, item 2). A raw key is the failure this catches, and a raw key
+      // is exactly what a dotted lowercase token with no spaces looks like.
+      const headline = page.getByRole('heading', { level: 1 });
+
+      await expect(headline).toBeVisible();
+      await expect(headline).not.toHaveText(/^[a-z][\w-]*(\.[\w-]+)+$/);
     });
   }
 });

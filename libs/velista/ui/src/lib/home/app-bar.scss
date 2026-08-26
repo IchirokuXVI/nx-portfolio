@@ -19,13 +19,14 @@
   min-width: 0;
 }
 
-// The mark is sized by font-size, so both halves of the lockup scale together at
-// 200% zoom without either being pinned to a pixel value.
-.mark {
-  font-size: var(--app-icon-lg);
-  color: var(--app-action-bg);
-}
-
+// The wordmark **is** the lockup: it draws the mark and the name itself. The header
+// used to place a second `lib-brand-mark` beside it, which is why the sailboat
+// appeared twice and why the identity had two accessible names (plan 0007,
+// section 6.1).
+//
+// One font-size sizes both halves, because the mark inside the wordmark is sized in
+// `em`, so the lockup scales together at 200% zoom without either half being pinned
+// to a pixel value.
 .wordmark {
   font-size: var(--app-text-xl);
 }
@@ -88,4 +89,63 @@
 .chevron {
   font-size: var(--app-icon-sm);
   color: var(--app-text-muted);
+  transition: transform var(--app-motion-fast) var(--app-motion-ease);
+}
+
+// The visual half of `aria-expanded`. A chevron that never moves is a control that
+// says the same thing open and closed.
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+// The menu is drawn in the app bar's own stacking context rather than through an
+// overlay service. There is one of these, on one screen, under a control that is
+// already positioned; a CDK overlay would be a dependency and a portal for a
+// dropdown of two.
+.locale-menu {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  inset-block-start: calc(100% + var(--app-space-2));
+  inset-inline-end: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: var(--app-touch-target);
+  padding: var(--app-space-2);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-overlay);
+  box-shadow: var(--app-elevation-2);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border: none;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The language already in use, marked by weight and colour as well as by
+// `aria-current`, so it is not signalled by colour alone.
+.menu-item[aria-current='true'] {
+  color: var(--app-text-primary);
+  font-weight: 600;
 }

@@ -36,7 +36,10 @@ const components: never[] = [];
  * **providers** moved to `VELISTA_TRANSLATION_PROVIDERS`, which the app injector
  * installs, because a module imported by a standalone component provides only that
  * component's own injector and not the lazily loaded pages below it. See
- * `translation-providers.ts` for the failure that caused. What is left here is the
+ * `feature-shell`'s `translation-providers.ts` for the failure that caused, and
+ * `translations.ts` beside this file for the descriptor this library still owns. It
+ * keeps the loader, because a relative `import()` of the asset folder has to be
+ * written next to it; the composition is the app's. What is left here is the
  * `| rokuT` pipe, which is all a template actually needs from this import.
  */
 @NgModule({

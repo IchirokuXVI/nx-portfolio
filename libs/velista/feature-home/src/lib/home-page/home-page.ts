@@ -12,17 +12,14 @@ import {
   SessionStore,
   ZoneStore,
 } from '@portfolio/velista/data-access';
-import type { PreviewLineVm } from '@portfolio/velista/models';
+import type { HomeState } from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
 import {
   AppBar,
-  AuthActions,
   BottomActionBar,
   EmptyState,
   ErrorState,
   GuestUpgradeBanner,
-  HomeHero,
-  ListPreviewCard,
   ResumeListCard,
   ZoneCard,
   ZoneSkeleton,
@@ -30,13 +27,17 @@ import {
 import { selectHomeState } from './select-home-state';
 
 /**
- * The home page: the app's front door and its dashboard, on one route.
+ * The dashboard: what a signed in user sees at `/<locale>/velista/home`.
  *
- * Those are usually two pages. They are deliberately one here because the product is
- * meant to be installed and launched from a phone home screen, and a marketing page a
- * returning user has to navigate past every time is a tax on the main use case
- * (plan 0003, section 1). So the route is **adaptive**: what it renders is a function
- * of authentication state.
+ * `0003` made this one adaptive route that rendered a front door or a dashboard
+ * depending on authentication state. `0007` split it in two. The reasoning behind the
+ * original decision survives, because `anonymousOnlyGuard` sends a signed in visitor
+ * here from the mount before anything renders, so a returning user still arrives on
+ * their groups in one navigation. What changed is that authentication now decides
+ * **where you are** rather than what a `@switch` renders, which makes "signed in users
+ * never see the front door" a test instead of an emergent behaviour, and stops this
+ * page shipping the hero, the preview card and the auth actions to somebody who will
+ * never see them.
  *
  * This is the container, and rule D1 (plan 0004) is what shapes it: it is the only
  * thing here that injects a data token, it holds the page's state, and it passes plain
@@ -49,13 +50,10 @@ import { selectHomeState } from './select-home-state';
   imports: [
     RokuTranslatorPipe,
     AppBar,
-    AuthActions,
     BottomActionBar,
     EmptyState,
     ErrorState,
     GuestUpgradeBanner,
-    HomeHero,
-    ListPreviewCard,
     ResumeListCard,
     ZoneCard,
     ZoneSkeleton,
@@ -87,16 +85,28 @@ export class HomePage {
   /** The list this device last opened, resolved against the zones actually loaded. */
   private readonly _resumeListId = signal<string | null>(null);
 
-  readonly state = computed(() =>
-    selectHomeState({
-      identity: this._session.identity(),
+  readonly state = computed<HomeState>(() => {
+    const identity = this._session.identity();
+
+    // Unreachable through the router: `authenticatedGuard` has already sent an
+    // anonymous visitor to the front door before this page is created. It is written
+    // out because the signal's type still admits it, and because a session that ends
+    // while the page is mounted is a real event. The skeleton is the honest thing to
+    // render for the frame before the guard's redirect completes; somebody else's
+    // groups is not.
+    if (identity.kind === 'anonymous') {
+      return { kind: 'loading' };
+    }
+
+    return selectHomeState({
+      identity,
       zones: this._zoneStore.myZones(),
       loadState: this._zoneStore.state(),
       correlationId: this._correlationId(),
       resumeListId: this._resumeListId(),
       guestBannerDismissed: this._guestBannerDismissed(),
-    })
-  );
+    });
+  });
 
   /**
    * The letter in the app bar's account button.
@@ -111,21 +121,6 @@ export class HomePage {
       ? null
       : (Array.from(username)[0] ?? '').toLocaleUpperCase();
   });
-
-  /**
-   * The illustrative list on the anonymous screen.
-   *
-   * Invented, and it stays invented. It shows all three line states because "some of
-   * these are done and somebody else did them" is the whole idea of the product and is
-   * hard to say in a sentence. The strings are **not** translated: they are stand-in
-   * groceries, and a translator asked to localize "Milk" here would reasonably wonder
-   * what it is for. Only the status chip beside them is a real key.
-   */
-  readonly previewLines: readonly PreviewLineVm[] = [
-    { content: 'Milk', quantity: '2 L', status: 'READY', by: 'A' },
-    { content: 'Bread', quantity: '1', status: 'PENDING', by: null },
-    { content: 'Tomatoes', quantity: '', status: 'NOT_AVAILABLE', by: 'M' },
-  ];
 
   constructor() {
     this._resumeListId.set(this._browser.readStorage(StorageKeys.lastList));
@@ -157,11 +152,11 @@ export class HomePage {
    * Everything this page can start, and where each of them currently stops.
    *
    * Each of these leads somewhere `0003` puts out of scope: zone detail, list detail,
-   * the join-by-code flow, the auth screens and the account upgrade each get their own
-   * plan and their own approved mock before they are built. Creating a group is the
-   * subtle one: it needs a name, and no sheet for typing one is drawn in the approved
-   * mock, so building it here would break the project's own rule that nothing is built
-   * before its mock is approved.
+   * the join-by-code flow and the account upgrade each get their own plan and their own
+   * approved mock before they are built. Creating a group is the subtle one: it needs a
+   * name, and no sheet for typing one is drawn in the approved mock, so building it
+   * here would break the project's own rule that nothing is built before its mock is
+   * approved.
    *
    * They are recorded rather than left unbound so the controls are real, focusable and
    * testable now, and so that connecting each one later is a single line here instead
@@ -175,14 +170,6 @@ export class HomePage {
 
   joinZone(): void {
     this._notYetRouted('zones.join');
-  }
-
-  continueWithGoogle(): void {
-    this._notYetRouted('auth.google');
-  }
-
-  signInWithEmail(): void {
-    this._notYetRouted('auth.login');
   }
 
   openZone(zoneId: string): void {
@@ -207,10 +194,6 @@ export class HomePage {
 
   account(): void {
     this._notYetRouted('account');
-  }
-
-  changeLocale(): void {
-    this._notYetRouted('settings');
   }
 
   secureAccount(): void {

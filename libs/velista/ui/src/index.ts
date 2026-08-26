@@ -14,4 +14,4 @@ export * from './lib/home/zone-card';
 export * from './lib/home/zone-skeleton';
 export * from './lib/icons/icons';
 export * from './lib/layout/app-layout';
-export * from './lib/translation-providers';
+export * from './lib/translations';

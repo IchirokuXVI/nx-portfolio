@@ -1,6 +1,5 @@
 <header [class.bordered]="bordered()" class="bar">
   <div class="lockup">
-    <lib-brand-mark class="mark" />
     <lib-brand-wordmark class="wordmark" />
   </div>
 
@@ -27,14 +26,37 @@
       </button>
     </div>
   } @else {
-    <button
-      (click)="changeLocale.emit()"
-      [attr.aria-label]="'home.action.changeLocale' | rokuT"
-      class="locale"
-      type="button"
-    >
-      <span aria-hidden="true">{{ locale() }}</span>
-      <lib-chevron-down-icon class="chevron" />
-    </button>
+    <div class="locale-menu">
+      <button
+        (click)="toggleMenu()"
+        [attr.aria-expanded]="hasMenu() ? menuOpen() : null"
+        [attr.aria-haspopup]="hasMenu() ? 'menu' : null"
+        [attr.aria-label]="'home.action.changeLocale' | rokuT"
+        #localeTrigger
+        class="locale"
+        type="button"
+      >
+        <span aria-hidden="true">{{ locale() }}</span>
+        @if (hasMenu()) {
+          <lib-chevron-down-icon [class.open]="menuOpen()" class="chevron" />
+        }
+      </button>
+
+      @if (menuOpen()) {
+        <div class="menu" role="menu">
+          @for (option of locales(); track option) {
+            <button
+              (click)="pick(option)"
+              [attr.aria-current]="isCurrent(option) ? 'true' : null"
+              class="menu-item"
+              role="menuitem"
+              type="button"
+            >
+              {{ option.toLocaleUpperCase() }}
+            </button>
+          }
+        </div>
+      }
+    </div>
   }
 </header>

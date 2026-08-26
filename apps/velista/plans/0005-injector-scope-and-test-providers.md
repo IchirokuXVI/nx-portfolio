@@ -399,10 +399,12 @@ it has to know who is asking.
       270 tests. Workspace-wide, the only failure is
       `luna-shopper-backend-gateway`'s committed `openapi.json` being stale, which is
       unrelated to this plan and predates it.
-- [ ] **`npx nx e2e velista-e2e` still fails, for two reasons that are not this plan.**
-      The injector failure it used to fail on is gone: `.app-root` is visible, the URL
-      assertion passes, and the `<h1>` exists. It now fails on the last assertion only.
-      See section 9.
+- [x] **`npx nx e2e velista-e2e` passes.** 40 of 40, both locales, all five browser
+      projects, against a shell served with `--devRemotes=velista`. It was left open
+      here for the two reasons in section 9, and both are now closed: the library
+      defect was fixed by rokutranslator `0004` and wired up by `0006`, and the stale
+      `<h1>` assertion was rewritten to check the heading is **not** a raw key rather
+      than to pin one piece of copy, which is what the suite was always for.
 
 ## 8. Open questions
 
@@ -423,7 +425,18 @@ it has to know who is asking.
    why it is the first to meet this. Nothing to audit, but the next remote that grows
    an app layer inherits rule D5 along with the pattern.
 
-## 9. Left open: velista renders its translation keys raw
+## 9. Closed: velista renders its translation keys raw
+
+> **Resolved.** Both problems below were real and both are fixed. (1) was the library
+> defect, diagnosed and fixed in rokutranslator `0004`: `addResources` silently drops
+> any top level value that is an object, and velista ships the workspace's only nested
+> JSON. The last bullet in this section guessed the shape of the JSON as the likelier
+> cause, and that guess was right. (2) was fixed here, in `mount.spec.ts`. The section
+> is kept as written because the eliminations in it are the useful part: they are the
+> paths somebody would otherwise search again.
+>
+> The hyphen mismatch in the shell's module federation config is **not** fixed and is
+> still a genuine bug on its own terms. It did not cause this one.
 
 Not caused by this plan, not fixed by it, and only visible **because** of it: until the
 injector was fixed the page rendered nothing, so nobody could see that its text was

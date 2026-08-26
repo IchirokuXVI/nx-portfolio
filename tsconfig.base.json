@@ -117,6 +117,9 @@
       "@portfolio/velista/feature-home": [
         "./libs/velista/feature-home/src/index.ts"
       ],
+      "@portfolio/velista/feature-landing": [
+        "./libs/velista/feature-landing/src/index.ts"
+      ],
       "@portfolio/velista/models": ["./libs/velista/models/src/index.ts"],
       "@portfolio/velista/platform": ["./libs/velista/platform/src/index.ts"],
       "@portfolio/velista/data-access": [

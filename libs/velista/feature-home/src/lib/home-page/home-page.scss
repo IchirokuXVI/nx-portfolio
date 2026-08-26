@@ -9,10 +9,9 @@
   min-block-size: 100%;
 }
 
-// The signed-in screen scrolls its content between a fixed header and a fixed action
-// bar. The anonymous screen does not scroll at all: it is deliberately one screen,
-// on the theory that the entry actions matter more than persuasion (plan 0003,
-// open question 3).
+// The dashboard scrolls its content between a fixed header and a fixed action bar.
+// The front door, which does not scroll at all, took its `.spacer` rule with it to
+// `landing-page.scss` when the two screens were split (plan 0007).
 .content {
   display: flex;
   flex-direction: column;
@@ -20,11 +19,6 @@
   flex: 1;
   padding: var(--app-space-5) var(--app-space-5) var(--app-space-6);
   overflow-y: auto;
-}
-
-.spacer {
-  flex: 1;
-  min-block-size: var(--app-space-6);
 }
 
 .zones {

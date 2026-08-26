@@ -295,26 +295,60 @@ them, and neither file appears in section 7.
 
 ## 6. Acceptance criteria
 
-1. `VELISTA_TRANSLATION_PROVIDERS` is exported from `@portfolio/velista/feature-shell`
+> **Built 2026-08-26.** All seven met. One change to section 3.5 was forced during
+> implementation and is recorded at the end of this section.
+
+1. [x] `VELISTA_TRANSLATION_PROVIDERS` is exported from `@portfolio/velista/feature-shell`
    and no longer from `@portfolio/velista/ui`. `ui` exports `VELISTA_UI_TRANSLATIONS`
    instead, and still owns the loader and the assets.
-2. Adding a second `TranslationSource` requires an edit to exactly one file in
+2. [x] Adding a second `TranslationSource` requires an edit to exactly one file in
    `feature-shell`. Demonstrated by a unit test that composes two fake sources and
    asserts the dispatching loader routes each namespace to its own loader.
-3. `/en/velista` renders **no** raw translation key at first paint. Not "resolves
+3. [x] `/en/velista` renders **no** raw translation key at first paint. Not "resolves
    shortly after": the resolver means there is no frame with a key in it.
-4. `/es/velista` renders Spanish, and switching the locale in place still works
+4. [x] `/es/velista` renders Spanish, and switching the locale in place still works
    (`0003` of the rokutranslator plans, unchanged by any of this).
-5. A loader that **rejects** still activates the route. The page renders, with keys for
+5. [x] A loader that **rejects** still activates the route. The page renders, with keys for
    the namespace that failed, and no timer is involved anywhere in making that happen.
    Tested with a source whose loader rejects, asserting the route activates within the
    same microtask queue rather than after any elapsed time.
-6. `nx build velista` produces no `Promise.race`, no `setTimeout` and no other
+6. [x] `nx build velista` produces no `Promise.race`, no `setTimeout` and no other
    time-based fallback anywhere in the translation path. This is a criterion rather
    than a note because it is the thing most likely to be reintroduced by somebody
    debugging a slow load.
-7. `npx nx run-many --all --target=test` and `--target=lint` pass, and
-   `npx nx build velista` succeeds.
+7. [x] `npx nx run-many --all --target=test` and `--target=lint` pass, and
+   `npx nx build velista` succeeds. Lint is green across all 59 projects and
+   `nx build velista` succeeds. Workspace-wide the only failing suites are three
+   `luna-shopper-backend` projects, none of them touched here: two fail because the
+   DB seed specs want an `AUTH_DB_URL` that a fresh worktree has no `.env` for, and
+   the third is the stale committed `openapi.json` that `0005` already recorded.
+
+### What changed from section 3.5
+
+Section 3.5 said `apps/velista/src/app/app-providers.ts` would import the providers
+from `@portfolio/velista/feature-shell`. **It cannot**, and the reason is a rule rather
+than a preference: `entry.routes.ts` lazy-loads that library, so a static import of it
+from the app is `@nx/enforce-module-boundaries`' "static imports of lazy-loaded
+libraries are forbidden". It would also fold the whole library into the remote's entry
+chunk, which makes the lint rule right rather than merely strict.
+
+They are installed on `feature-shell`'s **own parent route** instead
+(`providers: [...VELISTA_TRANSLATION_PROVIDERS]` on the `AppLayout` route, beside the
+resolver that waits for them). Nothing in this plan's ownership changes: this file is
+still `feature-shell` composing, and the providers still land on an injector above
+every page, which is the property `0005` section 3.5 was really about. `AppUiModule`
+failed because a standalone component's imported module provides that component and not
+the routes below it; a route's providers are the opposite case.
+
+It also answers **O1** better than either option there. The mounted app and the
+standalone bootstrap both enter through this route table, so the providers are declared
+once and neither mode has to remember to install them, which is exactly what the
+extraction contract wants.
+
+An incidental type fix: `VELISTA_TRANSLATION_PROVIDERS` is typed
+`(Provider | EnvironmentProviders)[]`, because `provideEnvironmentInitializer` returns
+`EnvironmentProviders` and `Provider[]` will not hold one. `appProviders` already had
+this shape for the same reason.
 
 ## 7. Files touched
 

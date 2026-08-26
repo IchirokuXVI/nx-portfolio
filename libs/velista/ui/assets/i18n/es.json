@@ -35,7 +35,20 @@
     },
     "preview": {
       "listName": "Compra semanal",
-      "zoneName": "Casa"
+      "zoneName": "Casa",
+      "line": {
+        "milk": {
+          "content": "Leche",
+          "quantity": "2 L"
+        },
+        "bread": {
+          "content": "Pan",
+          "quantity": "1"
+        },
+        "tomatoes": {
+          "content": "Tomates"
+        }
+      }
     },
     "action": {
       "createZone": "Crear un grupo",

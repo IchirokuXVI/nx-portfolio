@@ -1,36 +1,16 @@
 @let page = state();
 
-<div [class.anonymous]="page.kind === 'anonymous'" class="page">
+<div class="page">
+  <!-- Always the signed-in header here, and `bordered` is left at its default true
+       for the same reason: authenticatedGuard is what says so. -->
   <lib-app-bar
     (account)="account()"
-    (changeLocale)="changeLocale()"
     (openSearch)="search()"
     [accountInitial]="accountInitial()"
-    [bordered]="page.kind !== 'anonymous'"
-    [signedIn]="page.kind !== 'anonymous'"
+    [signedIn]="true"
   />
 
   @switch (page.kind) {
-    @case ('anonymous') {
-      <lib-home-hero />
-
-      <lib-list-preview-card
-        [lines]="previewLines"
-        [listName]="'home.preview.listName' | rokuT"
-        [shoppingNow]="2"
-        [zoneName]="'home.preview.zoneName' | rokuT"
-      />
-
-      <div class="spacer"></div>
-
-      <lib-auth-actions
-        (continueWithGoogle)="continueWithGoogle()"
-        (createZone)="createZone()"
-        (joinZone)="joinZone()"
-        (signInWithEmail)="signInWithEmail()"
-      />
-    }
-
     @case ('loading') {
       <div class="content">
         <lib-zone-skeleton [count]="2" />

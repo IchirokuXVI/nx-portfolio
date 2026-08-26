@@ -96,9 +96,13 @@ export interface PreviewLineVm {
  * The connection-lost state is deliberately **not** here. It is blocking, it covers
  * every page rather than this one, and it is rendered by the app layout
  * (plan 0003, section 3.1).
+ *
+ * `anonymous` used to be one of these. It is now a **page** of its own, reached at the
+ * app's mount and enforced by a route guard rather than by a `@switch` in a template
+ * (plan 0007, section 1). Nobody who is not signed in reaches the dashboard at all, so
+ * a state for them here would be unreachable.
  */
 export type HomeState =
-  | { readonly kind: 'anonymous' }
   | { readonly kind: 'loading' }
   | { readonly kind: 'empty'; readonly guest: boolean }
   | {

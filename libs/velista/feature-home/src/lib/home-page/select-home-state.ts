@@ -18,8 +18,17 @@ import type {
  * A discriminated union rather than a set of booleans, so the page cannot render two
  * states at once. Independent flags always eventually do.
  */
+/**
+ * Who the dashboard is for.
+ *
+ * Narrowed from `Identity` deliberately: `authenticatedGuard` establishes before this
+ * page is created that somebody is signed in, so an anonymous caller is not a case to
+ * handle here, it is a call that should not have been made. The type is what says so.
+ */
+type AuthenticatedIdentity = Exclude<Identity, { kind: 'anonymous' }>;
+
 export function selectHomeState(input: {
-  identity: Identity;
+  identity: AuthenticatedIdentity;
   zones: readonly MyZone[];
   loadState: 'idle' | 'loading' | 'loaded' | 'failed';
   correlationId: string | null;
@@ -29,13 +38,11 @@ export function selectHomeState(input: {
 }): HomeState {
   const { identity, zones, loadState, correlationId, resumeListId } = input;
 
-  // Anonymous is a designed screen, not a signed-out fallback. It is checked first so
-  // a stale load state from a previous session can never show a signed-in shape to
-  // somebody who is not signed in.
-  if (identity.kind === 'anonymous') {
-    return { kind: 'anonymous' };
-  }
-
+  // There used to be an anonymous branch here, checked first so that a stale load state
+  // from a previous session could never show a signed-in shape to somebody who is not
+  // signed in. `authenticatedGuard` does that job now, and does it strictly better: it
+  // runs before the page is created, so it also stops the container's constructor from
+  // firing a request on behalf of a user who is not there (plan 0007, section 4.3).
   if (loadState === 'failed') {
     return { kind: 'error', correlationId };
   }

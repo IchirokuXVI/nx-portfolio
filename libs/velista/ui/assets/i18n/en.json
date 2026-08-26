@@ -35,7 +35,20 @@
     },
     "preview": {
       "listName": "Weekly shop",
-      "zoneName": "Home"
+      "zoneName": "Home",
+      "line": {
+        "milk": {
+          "content": "Milk",
+          "quantity": "2 L"
+        },
+        "bread": {
+          "content": "Bread",
+          "quantity": "1"
+        },
+        "tomatoes": {
+          "content": "Tomatoes"
+        }
+      }
     },
     "action": {
       "createZone": "Create a group",

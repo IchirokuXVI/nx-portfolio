@@ -8,7 +8,6 @@ import { selectHomeState } from './select-home-state';
  * TestBed, or a fake backend (plan 0004, section 2.3).
  */
 
-const anonymous: Identity = { kind: 'anonymous' };
 const registered: Identity = {
   kind: 'REGISTERED',
   userId: 'u1',
@@ -65,18 +64,11 @@ function firstZone(state: ReturnType<typeof selectHomeState>) {
 }
 
 describe('selectHomeState', () => {
+  // There are no anonymous cases here any more, and they did not move to the landing
+  // page's spec: there is no longer a function to test, because the landing page has
+  // no states. Who may see this page at all is `authenticatedGuard`'s job now, and
+  // `auth-guards.spec.ts` is where that is asserted (plan 0007, section 4.3).
   describe('which state wins', () => {
-    it('shows the anonymous screen with no token', () => {
-      expect(select({ identity: anonymous }).kind).toBe('anonymous');
-    });
-
-    it('prefers anonymous over a stale load state from a previous session', () => {
-      // Otherwise somebody who signed out sees a signed-in shape for a frame.
-      expect(select({ identity: anonymous, loadState: 'failed' }).kind).toBe(
-        'anonymous'
-      );
-    });
-
     it('shows the error state when the load failed', () => {
       const state = select({ loadState: 'failed', correlationId: 'ref-1' });
 

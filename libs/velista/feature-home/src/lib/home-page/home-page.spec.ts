@@ -105,39 +105,17 @@ function queryAll(fixture: ComponentFixture<HomePage>, selector: string) {
  * below the container take values rather than fetching them (plan 0004, section 2.2).
  */
 describe('HomePage', () => {
-  describe('the anonymous state', () => {
-    it('offers exactly four ways in', async () => {
-      const fixture = await render({ identity: 'anonymous' });
+  // The anonymous cases moved to `landing-page.spec.ts` with the screen itself
+  // (plan 0007). Who reaches this page at all is `authenticatedGuard`'s job, and
+  // `auth-guards.spec.ts` in `feature-shell` is where that is asserted.
+  describe('the header', () => {
+    it('shows the account button rather than the locale switch', async () => {
+      // The dashboard's half of the header is search and account. Where a signed in
+      // user changes language is a settings screen question (plan 0007, O4).
+      const fixture = await render();
 
-      const buttons = queryAll(fixture, 'lib-auth-actions button');
-      expect(buttons).toHaveLength(4);
-    });
-
-    it('shows the hero and the illustrative list, and no bottom bar', async () => {
-      const fixture = await render({ identity: 'anonymous' });
-
-      expect(query(fixture, 'lib-home-hero')).not.toBeNull();
-      expect(query(fixture, 'lib-list-preview-card')).not.toBeNull();
-      expect(query(fixture, 'lib-bottom-action-bar')).toBeNull();
-    });
-
-    it('shows the locale switch rather than the account button', async () => {
-      // Somebody who has not signed in may well be on the wrong language, and has
-      // nothing else to do in the header.
-      const fixture = await render({ identity: 'anonymous' });
-
-      expect(query(fixture, 'lib-app-bar .locale')).not.toBeNull();
-      expect(query(fixture, 'lib-app-bar .avatar')).toBeNull();
-    });
-
-    it('hides the illustrative list from assistive technology', async () => {
-      // Three invented groceries read out before the two buttons that matter is
-      // noise; the hero already says what the product does in words.
-      const fixture = await render({ identity: 'anonymous' });
-
-      expect(
-        query(fixture, 'lib-list-preview-card [aria-hidden="true"]')
-      ).not.toBeNull();
+      expect(query(fixture, 'lib-app-bar .avatar')).not.toBeNull();
+      expect(query(fixture, 'lib-app-bar .locale')).toBeNull();
     });
   });
 
@@ -307,19 +285,17 @@ describe('HomePage', () => {
     it('records where each entry action is meant to go', async () => {
       // The destinations do not exist yet, but which button points at which one is
       // already worth locking down.
-      const fixture = await render({ identity: 'anonymous' });
+      const fixture = await render({ zones: [] });
 
-      const buttons = queryAll(
-        fixture,
-        'lib-auth-actions button'
-      ) as HTMLButtonElement[];
+      const buttons = [
+        query(fixture, '.empty-primary'),
+        query(fixture, '.empty-secondary'),
+      ] as HTMLButtonElement[];
       buttons.forEach((button) => button.click());
 
       expect(fixture.componentInstance.pendingRoutes()).toEqual([
         'zones.create',
         'zones.join',
-        'auth.google',
-        'auth.login',
       ]);
     });
   });

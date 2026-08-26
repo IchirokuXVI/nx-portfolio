@@ -56,11 +56,29 @@
 // *descendant*, not the host, so the same rule written literally would land on
 // nothing. `:host` is that selector translated, and the class is still on the
 // element for anything outside the component to key off.
+// Under module federation this element is a direct **flex item** of the portfolio
+// shell's own host, which is `display: flex` (`apps/shell/src/app/app.scss`), because
+// the velista route is componentless at the shell level. Without a `flex` declaration
+// the item takes `flex: 0 1 auto` and sizes to its content, so `.app-main`'s 480px
+// column was being centred inside a box that was itself 480px wide and pinned to the
+// start of the row: content at the left edge, and the app's ground colour not filling
+// the viewport (plan 0007, section 5).
+//
+// `flex: 1` is harmless in the standalone build, where the host is not a flex item and
+// the declaration is simply ignored.
+//
+// `min-block-size` was `100%`, which is the same class of mistake on the other axis: a
+// percentage height against a parent with no definite height resolves to `auto`.
+// `100dvh` is what the shell already uses for its own host and what `styles.scss` uses
+// on `body`.
 :host {
   @include tokens.app-root;
 
   display: block;
-  min-height: 100%;
+  flex: 1;
+  // So a wide child cannot push the flex item past the viewport.
+  min-inline-size: 0;
+  min-block-size: 100dvh;
   background: var(--app-surface-ground);
   color: var(--app-text-primary);
   font-family: var(--app-font-sans);

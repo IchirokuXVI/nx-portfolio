@@ -1,0 +1,22 @@
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+// Duplicated from `home-page.scss` rather than shared through a partial: plan 0002
+// keeps component layout in the component, and three lines of flex column is cheaper
+// to read twice than to import.
+.page {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100%;
+}
+
+// This screen does not scroll. It is deliberately one screen, on the theory that the
+// entry actions matter more than persuasion (plan 0003, open question 3), so the
+// spacer takes whatever room is left and pushes the four ways in down into thumb
+// reach instead of letting the page grow past the fold.
+.spacer {
+  flex: 1;
+  min-block-size: var(--app-space-6);
+}

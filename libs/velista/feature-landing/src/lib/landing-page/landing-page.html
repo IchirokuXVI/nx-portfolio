@@ -1,0 +1,27 @@
+<div class="page">
+  <lib-app-bar
+    (localeChange)="switchLocale($event)"
+    [bordered]="false"
+    [locale]="localeLabel()"
+    [locales]="locales"
+    [signedIn]="false"
+  />
+
+  <lib-home-hero />
+
+  <lib-list-preview-card
+    [lines]="previewLines()"
+    [listName]="'home.preview.listName' | rokuT"
+    [shoppingNow]="2"
+    [zoneName]="'home.preview.zoneName' | rokuT"
+  />
+
+  <div class="spacer"></div>
+
+  <lib-auth-actions
+    (continueWithGoogle)="continueWithGoogle()"
+    (createZone)="createZone()"
+    (joinZone)="joinZone()"
+    (signInWithEmail)="signInWithEmail()"
+  />
+</div>

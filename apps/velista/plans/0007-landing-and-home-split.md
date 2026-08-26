@@ -222,7 +222,13 @@ and one centred 480px column is the phone layout given room. After 5.2 the app b
 content and the bottom action bar all sit inside that column, which is the intent. Do
 not widen `$app-content-max` as part of this work.
 
-## 6. The app bar draws the mark twice
+## 6. Two defects in the app bar
+
+Both are in `libs/velista/ui/src/lib/home/app-bar.*`, both are visible on the front
+door, and neither has anything to do with the split. They are here because this plan is
+the one that touches that file.
+
+### 6.1 It draws the mark twice
 
 `app-bar.html` opens with:
 
@@ -249,6 +255,134 @@ standalone mark next to it was a second element for the same identity.
 `brand-rename.spec.ts` renders the wordmark directly and is unaffected. Add an
 assertion to the app bar's spec that the header contains exactly one brand mark, so the
 duplicate cannot come back.
+
+### 6.2 The locale button opens nothing
+
+**Reported from the running app: clicking the language control does nothing at all.**
+Confirmed, and it is two faults stacked, so fixing either one alone still leaves a
+control that lies.
+
+1. **Nothing is wired to it.** The button emits `changeLocale`, and the only handler in
+   the app is `HomePage.changeLocale()`, which calls `_notYetRouted('settings')`. That
+   pushes a string onto an array nothing renders. There is no menu, no navigation and
+   no locale change: the chevron promises a disclosure that does not exist.
+2. **The label is a constant.** `AppBar.locale` defaults to `'EN'` and no template in
+   the app binds it, so `/es/velista` renders a control reading `EN` while the page
+   around it is in Spanish. Somebody who landed on the wrong language sees the switcher
+   already claiming to be on the language they wanted.
+
+This matters more here than it would in most places, because it is the **only** control
+on the anonymous screen that is not an authentication action, and `app-bar.ts`'s own
+comment gives the reason it exists: "someone who has not signed in may well be on the
+wrong language and has nothing else to do up here".
+
+#### The split of responsibility
+
+Rule D1 (`0004`) is what shapes this: `ui` may not inject a service, so the app bar
+cannot switch a locale. It can perfectly well own a menu, because open and closed is
+presentation state and nothing else.
+
+| Piece                                                                                          | Owner         |
+| ---------------------------------------------------------------------------------------------- | ------------- |
+| Whether the menu is open, which locale is marked current, keyboard and outside click dismissal | `AppBar`      |
+| Which locales are offered, and what happens when one is picked                                 | `LandingPage` |
+
+#### `AppBar`'s side
+
+- `locales = input<readonly string[]>([])`, the options to draw. An empty list renders
+  the label with no chevron and no menu, which is the right degenerate case for an app
+  that ever ships with one language enabled.
+- `localeChange = output<string>()`, carrying the locale code that was picked. It
+  **replaces** the existing `changeLocale` output, which meant nothing beyond "somebody
+  pressed a button"; the page no longer needs to be told about the press.
+- A private `menuOpen` signal, toggled by the existing `.locale` button.
+- The menu is a list of `<button type="button">`, one per locale, in a container
+  positioned under the control. The current locale is marked with `aria-current="true"`
+  rather than by colour alone.
+- The trigger carries `aria-haspopup="menu"` and `[attr.aria-expanded]="menuOpen()"`.
+  A chevron that rotates on open is the visual half of the same statement.
+- Dismissal: a `(document:click)` host listener that closes when the click landed
+  outside this component's host, and `(document:keydown.escape)`, which returns focus to
+  the trigger. `LanguageSelector` in `libs/damoclesSword/ui` already does the outside
+  click half with `ElementRef.contains`, and that is the shape to copy rather than
+  reinvent. It does **not** get copied wholesale: it is a zone based component with a
+  `console.log` inside a `computed` and flag images this app has no assets for.
+- Picking a locale emits and closes, so no component in `ui` ever holds a locale.
+
+The menu is drawn in the app bar's own stacking context, not through an overlay service.
+There is one of these, on one screen, sitting under a control that is already
+positioned; a CDK overlay would be a dependency and a portal for a dropdown of two.
+
+#### `LandingPage`'s side
+
+```ts
+private readonly _localeStore = inject(RokuLocaleStore);
+
+/** Reads the store signal, so the label follows an in-place switch. */
+readonly locale = this._localeStore.locale;
+
+switchLocale(locale: string): void {
+  void this._localeStore.switchAppLocale(APP_KEY, locale);
+}
+```
+
+`RokuLocaleStore.switchAppLocale` is the shared mechanism from rokutranslator `0003`,
+and it already does all three parts: persists the choice under this app's key, calls
+`RokuTranslator.changeLocale` so the `pure: false` pipe re-translates in place, and
+rewrites the leading locale segment of the URL with a router navigation rather than a
+reload. `damoclesSword`'s wrapper calls it exactly this way, so nothing new is needed in
+the localization library for this.
+
+The label the app bar shows is `locale().toLocaleUpperCase()`, uppercased in the page
+rather than in the bar, so the bar keeps taking a plain string.
+
+#### Where the list of locales comes from
+
+`APP_USABLE_LOCALES` lives in `feature-shell`, and `feature-landing` may not import it:
+`feature-shell` lazily imports `feature-landing` in its route table, so the reverse
+import closes a cycle in the project graph.
+
+It is read from **route data** instead, which is what `usable-locales.ts`'s own comment
+already says the switcher does ("which reads it from the route data, so the two always
+agree"). The `AppLayout` route already carries `supportedLocales` for
+`localeCorrectionGuard`, so the value is there with nothing to add to the route table:
+
+```ts
+private readonly _route = inject(ActivatedRoute);
+
+readonly locales = (this._route.parent?.snapshot.data['supportedLocales'] ??
+  []) as readonly string[];
+```
+
+Read from `parent` explicitly rather than relying on inheritance: Angular's default
+`paramsInheritanceStrategy` of `emptyOnly` hands parent data to the landing route, whose
+path is `''`, and **not** to `home`, whose path is not. Depending on that distinction
+would make a copy of this line break the moment it moved to a page with a path.
+
+#### What the signed in header does
+
+Nothing, in this plan. `HomePage`'s app bar renders the search and account buttons
+instead of the locale control (`@if (signedIn())`), so there is no locale switcher on
+the dashboard at all, and `HomePage.changeLocale()` goes away with the output it
+handled. Where a signed in user changes language is a settings screen question, and
+settings has no plan and no mock yet. Recorded as **O4** in section 11 rather than
+answered here.
+
+#### Testing it
+
+In `app-bar.spec.ts`, because that is where the behaviour now lives:
+
+- The menu is not in the DOM until the trigger is clicked.
+- Clicking the trigger renders one button per entry in `locales`, and the entry matching
+  `locale` is marked `aria-current`.
+- Clicking an entry emits `localeChange` with that code and closes the menu.
+- A click on `document.body` closes an open menu, and `Escape` closes it.
+- `aria-expanded` tracks the open state.
+
+In `landing-page.spec.ts`, that picking a locale calls `switchAppLocale` with `APP_KEY`
+and the chosen code, against a double. The switch itself is `RokuLocaleStore`'s own
+behaviour and is already covered in the localization library; what this asserts is the
+wiring that was missing, which is the actual defect.
 
 ## 7. Translating the preview lines
 
@@ -334,6 +468,11 @@ has the same table from the other side.
 
 ## 9. Acceptance criteria
 
+> **Built 2026-08-26.** All met. Criteria 6a, 7 and 8 were the ones that needed a real
+> browser, and they were checked there: `apps/velista-e2e/src/landing.spec.ts` drives
+> the locale menu, reads the rendered Spanish and measures the content column at
+> 1440px, and passes on all five browser projects.
+
 1. An anonymous visitor to `/en/velista` sees the landing page: brand, hero, preview
    card, the four auth actions.
 2. An anonymous visitor to `/en/velista/home` is redirected to `/en/velista`, and
@@ -346,13 +485,20 @@ has the same table from the other side.
 5. Both redirects preserve the locale segment, and a redirect from `/es/velista/home`
    lands on `/es/velista`.
 6. The header renders exactly one brand mark. Asserted in `app-bar`'s spec.
+6a. **The locale control opens.** Clicking it on `/en/velista` reveals a menu with one
+    entry per usable locale; picking `es` switches the page to Spanish in place, rewrites
+    the URL to `/es/velista` without a reload, and the control then reads `ES`. Clicking
+    outside the menu, or pressing `Escape`, closes it. This is checked in the browser as
+    well as in the spec, because the reported symptom was "nothing happens on click" and
+    a unit test that clicks a `DebugElement` cannot see a control that is not reachable.
 7. At a viewport of 1440px the content column is 480px wide and horizontally centred,
    and the app's ground colour fills the viewport.
 8. `previewLines` renders the translated strings, and switching the locale switches
-   them without a reload. **This criterion cannot pass until rokutranslator `0004` and
-   `0006` have merged**, since the keys are nested like every other key in the file.
-   Until then the acceptable result is the keys themselves, and the half of the
-   criterion that can be tested now is that the `computed` re-runs on a locale change.
+   them without a reload. **Fully met**: rokutranslator `0004` landed on `dev` and
+   `0006` wired it up, so the caveat this criterion was written under no longer holds.
+   Asserted end to end, on the invented groceries specifically: `/es/velista` renders
+   Leche rather than Milk, and picking `EN` from the menu switches the whole screen in
+   place with a router navigation and no reload.
 9. `npx nx run-many --all --target=test` and `--target=lint` pass, and
    `npx nx build velista` succeeds.
 
@@ -370,7 +516,8 @@ has the same table from the other side.
 | `libs/velista/feature-shell/src/lib/auth-guards.ts`                             | **new.** `authenticatedGuard`, `anonymousOnlyGuard`                                         |
 | `libs/velista/feature-shell/src/index.ts`                                       | export the guards. **Also touched by `0006`**                                               |
 | `libs/velista/ui/src/lib/layout/app-layout.scss`                                | `:host` fills the shell's flex row                                                          |
-| `libs/velista/ui/src/lib/home/app-bar.html` / `.ts` / `.scss`                   | remove the duplicate mark                                                                   |
+| `libs/velista/ui/src/lib/home/app-bar.html` / `.ts` / `.scss`                   | remove the duplicate mark (6.1); the locale menu, its state and its dismissal (6.2)         |
+| `libs/velista/ui/src/lib/home/app-bar.spec.ts`                                  | **new.** One brand mark, and the locale menu's behaviour                                    |
 | `libs/velista/ui/assets/i18n/en.json`, `es.json`                                | five preview line keys                                                                      |
 | `tsconfig.base.json`                                                            | path alias for `@portfolio/velista/feature-landing`                                         |
 
@@ -390,3 +537,10 @@ it.
 **O3. `0003`'s mock shows one adaptive screen.** The mock is still accurate about what
 each screen looks like, and inaccurate about them being one route. It does not need
 redrawing; this plan is the record of the change.
+
+**O4. Where does a signed in user change language?** Not in the app bar: that half of
+the header is search and account, and section 6.2 deliberately leaves it alone. It
+belongs on a settings screen, which has neither a plan nor a mock, so the honest answer
+today is that a signed in user changes it by signing out or by editing the URL. Worth
+solving with the settings plan rather than by squeezing a second control into a header
+that is already full.
