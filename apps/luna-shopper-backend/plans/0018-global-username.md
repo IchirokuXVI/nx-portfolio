@@ -310,7 +310,10 @@ for the per zone name, from one shared implementation in
 between the two produces a name that is legal in one place and not the other).
 
 - Trim, then collapse internal whitespace runs to a single space.
-- Length after normalization: 2 to 32 characters, counted in Unicode code points, not bytes.
+- Length after normalization: 2 to 40 characters, counted in Unicode code points, not bytes.
+  40 rather than a rounder number because `CreateZoneDto` and `JoinZoneDto` already advertise
+  `@MaxLength(40)` for the per zone username; picking anything shorter here would retroactively
+  make stored names invalid and would reject a value the API currently accepts.
 - Allowed: Unicode letters and marks (so accents and non Latin scripts work), digits, spaces,
   and `.`, `_`, `-`, `'`.
 - Rejected: control characters, zero width and bidirectional control characters (a name is
@@ -400,26 +403,75 @@ That is correct and should not be papered over: reverting to a uniqueness rule t
 already violates is a real conflict, and a silent dedupe would rename people without asking.
 Say so in the migration's comment.
 
-## 9. Zone create and join default the name
+## 9. Zone create and join no longer ask for a name
 
-`CreateZoneRequest.username` and `JoinZoneRequest.username` stay required on the NATS contract,
-because core must be told what to write and should not reach into auth for it.
+Supplying a username when creating or joining a zone becomes **optional**. When it is omitted,
+the member is called by their global username in that zone. This is the common path: a user who
+has never thought about names gets a consistent one everywhere, and the per zone name stays
+available for the person who actually wants to be "Mamá" in one place.
 
-The REST layer changes: `username` becomes **optional** in the create and join DTOs. When the
-client omits it, the gateway calls `auth.getProfile` for the caller and uses the global name.
-This is one extra NATS hop, only on the two rarest operations in the product.
+`CreateZoneRequest.username` and `JoinZoneRequest.username` stay **required on the NATS
+contract**. Core must be told what to write and must not reach into auth for it, so the default
+is resolved at the gateway and core keeps receiving a concrete string. The optionality lives
+entirely in `CreateZoneDto` and `JoinZoneDto`, which drop their `@IsString()` requirement for
+`@IsOptional()` and gain the section 6 validation when a value is present.
 
-Rejected alternative: putting `username` in the JWT claims so the gateway needs no hop. Access
-tokens live fifteen minutes, so a user who renames themselves and immediately joins a zone
-would seed that zone with the old name and have no way to know why. A stale name written into
-a durable row is worse than one extra request on a rare path.
+Resolving the default splits by whether the caller already exists, and both branches are on the
+gateway inside `ZoneController`:
+
+- **Authenticated caller.** `resolveIdentity` returns a `userId` and nothing else, so the
+  gateway calls `auth.getProfile` and uses `username` from it. One extra NATS hop, only on the
+  two rarest operations in the product, and only when the client omitted the field.
+- **Anonymous caller.** `resolveIdentity` mints the identity in the same request via
+  `auth.createTemporaryUser`, whose response is `AuthTokens`, which carries `userId` and the
+  tokens **and no name**. The guest's global username was just generated one line earlier
+  inside auth (section 3.4) and then thrown away. Calling `auth.getProfile` immediately after
+  the mint to read back a value auth had in hand is the wrong shape.
+
+So `AuthTokens` gains one field:
+
+```ts
+export interface AuthTokens {
+  userId: string;
+  kind: UserKind;
+  /** The caller's global username at the time this pair was issued (plan 0018). */
+  username: string;
+  accessToken: string;
+  refreshToken: string;
+}
+```
+
+Every auth flow that returns `AuthTokens` (mint, register, login, refresh, upgrade, Google)
+already has the user row loaded, so filling it costs nothing. Two things fall out for free: the
+anonymous create and join path needs no second call, and the client learns its own global
+username on every sign in and every refresh, which is a useful backstop while
+`GET /v1/account/me` does not exist.
+
+**This is not the rejected alternative below.** Putting the name in the *response body* is a
+value read from the database during the call and used immediately. Putting it in the *token
+claims* would sign it into a credential the client then caches for fifteen minutes.
+
+Rejected alternative: adding `username` to `AccessTokenClaims` so the gateway never needs a hop
+at all. Access tokens live fifteen minutes, so a user who renames themselves and immediately
+joins a zone would seed that zone with the old name and have no way to know why. A stale name
+written into a durable row is worse than one extra request on a rare path.
+
+Rejected alternative: letting core fall back to a placeholder when the gateway sends no
+username. That would put a second naming authority in the wrong service and produce members
+called nothing in particular whenever the gateway's lookup failed, instead of failing the
+request.
 
 ## 10. Testing
 
 - **Contract schemas are mandatory.** The completeness spec in
   `libs/luna-shopper/contracts/src/schemas` fails CI if `auth.setUsername`, `auth.getProfile`,
   `membership.setUsername`, `user.usernameChanged` or `member.usernameChanged` lack a schema.
-  Also extend the enum schemas with `UsernamePropagation`.
+  Also extend the enum schemas with `UsernamePropagation` and add `username` to the
+  `AuthTokens` schema (section 9). The `zone.create` and `zone.join` **request** schemas keep
+  `username` required and are not touched: those schemas describe the NATS message, and section
+  9 makes the field optional only in the REST DTO, which is class-validator and Swagger, not a
+  contracts schema. A test that the gateway always sends a non empty username to core is what
+  guards that seam.
 - **Pool specs**, which are what protect the load bearing invariant in 3.1:
   - every locale in `SUPPORTED_LOCALES` has a pool, and no pool is empty;
   - the pools are pairwise disjoint on every word, nouns and adjectives alike;
@@ -445,6 +497,11 @@ a durable row is worse than one extra request on a rare path.
   bidirectional control character.
 - **Non uniqueness is exercised, not merely permitted**: two members of one zone are given the
   same name and both saves succeed, and two users are given the same global name.
+- **Defaulting on create and join** (section 9), four cases: an authenticated caller who omits
+  the username joins under their global name; an authenticated caller who supplies one gets
+  that one and their global name is untouched; an anonymous caller who omits it joins under the
+  name minted with their guest identity, with no `auth.getProfile` call made; and a supplied
+  username that fails validation is rejected rather than silently replaced by the global one.
 - **Integration** (`LUNA_INTEGRATION` gated): a real rename with `ALL_ZONES` across two zones
   updates both membership rows and delivers two `member.usernameChanged` events.
 
@@ -458,6 +515,9 @@ a durable row is worse than one extra request on a rare path.
   `auth.setUsername`, defaults to `GLOBAL_ONLY`, and the two propagating modes update exactly
   the memberships section 4.2 defines.
 - `membership.setUsername` enforces the five authorization rules in section 5.
+- `POST /v1/zones` and `POST /v1/zones/join` succeed with no `username` in the body, for both an
+  authenticated and an anonymous caller, and the resulting membership carries the caller's
+  global username. `AuthTokens.username` is populated by every auth flow that returns it.
 - `uq_membership_zone_username` no longer exists; two members of one zone may share a name; the
   `That username is taken in this zone` error path is gone.
 - `member.usernameChanged` reaches each affected zone room exactly once per change.
