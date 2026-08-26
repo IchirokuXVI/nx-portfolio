@@ -8,9 +8,11 @@
 >
 > **You will not see translated text while building this.** Every string on both
 > screens renders as its raw key today. That is a defect in the shared localization
-> library, it is diagnosed and fixed by `0006`, and it is **not this plan's concern**.
-> Build against the keys. Section 8 is the one place where the two plans actually
-> touch.
+> library: velista ships the workspace's only nested translation JSON, and the library
+> silently drops every nested branch when it registers a namespace. It is diagnosed and
+> fixed in `libs/shared/localization/rokutranslator/plans/0004`, and wired up by `0006`.
+> It is **not this plan's concern**. Build against the keys. Section 8 is the one place
+> where these plans actually touch.
 
 ## 1. What changes, and what `0003` said
 
@@ -265,11 +267,14 @@ the `.ts` rather than the template, because it is a typed `PreviewLineVm[]` hand
 private readonly _t = inject(RokuTranslatorService);
 
 readonly previewLines = computed<readonly PreviewLineVm[]>(() => {
-  // Both reads are dependencies, not statements. `locale()` re-runs this on a
-  // language switch; `loaded()` re-runs it when the strings first arrive, without
-  // which this computed caches the raw keys forever. See 0006 section 3.
+  // A dependency, not a statement: it re-runs this on a language switch, without
+  // which the card keeps the previous language's groceries.
+  //
+  // Nothing here has to wait for the strings to load. `0006` section 4 puts a
+  // resolver on the parent route, so this component cannot be created before the
+  // namespace is ready, which is exactly the guarantee that lets a `.ts` caller
+  // use `t()` at all.
   this._t.locale();
-  this._t.loaded();
 
   return [
     { content: this._t.t('home.preview.line.milk.content'),     quantity: this._t.t('home.preview.line.milk.quantity'), status: 'READY',         by: 'A'  },
@@ -293,26 +298,45 @@ New keys in `libs/velista/ui/assets/i18n/en.json` and `es.json`, under the exist
 The `by` initials stay hardcoded. They stand for people rather than words, and a letter
 is not translatable.
 
-**`loaded()` does not exist until `0006` lands.** Write the line anyway, see section 8.
-
-## 8. The one dependency on `0006`
+## 8. Dependencies and overlap
 
 Everything in this plan can be built, reviewed and merged while the app renders raw
-keys. Two specifics so nobody stops on them:
+keys. Three specifics so nobody stops on them.
 
 1. **Raw keys on screen are expected.** Both screens will show `home.hero.headline`,
    `home.action.newList` and so on. Do not "fix" it here, do not flatten the JSON, do
-   not add a workaround. `0006` fixes it in the shared library, and adding a second
-   fix on top will have to be unpicked.
-2. **`RokuTranslatorService.loaded` is added by `0006` section 3.2.** Section 7 above
-   depends on it. If `0006` has not merged, that line fails to compile, which is the
-   right way to find out and the right time. Do not substitute `loaded$` with a
-   subscription: a signal read inside a `computed` is what makes this work under
-   `OnPush`, and every velista component is `OnPush`.
+   not add a workaround. The library fix lands in
+   `libs/shared/localization/rokutranslator/plans/0004` and is wired up by `0006`;
+   a second fix stacked on top of those would have to be unpicked.
+2. **Nothing in this plan needs a new library API.** Section 7's `computed` reads only
+   `locale()`, which exists today. What it does assume is `0006` section 4's route
+   resolver, and the assumption is safe in the wrong direction: without the resolver
+   the preview lines render as keys like everything else on the screen, and start
+   working the moment `0006` lands. No compile break, no code to revisit.
+3. **Do not add a `loaded$` subscription to a component to work around point 1.**
+   Waiting for translations is decided once, at the app's entry point, in
+   `feature-shell`. A page that does it for itself is a page that has to be found and
+   undone later.
 
-Beyond that the two plans overlap in exactly one file, `libs/velista/feature-shell/src/index.ts`,
-where both add an export line. Whoever merges second re-adds theirs. `0006` section 9
+### Shared files
+
+| File                                | This plan                                        | `0006`                                 |
+| ----------------------------------- | ------------------------------------------------ | -------------------------------------- |
+| `feature-shell/src/lib/routes.ts`   | replaces the child route with two guarded routes | adds a resolver to the parent route    |
+| `feature-shell/src/index.ts`        | exports the auth guards                          | exports the providers and the resolver |
+| `ui/assets/i18n/en.json`, `es.json` | adds five preview line keys                      | removes one hand added debug key       |
+
+`routes.ts` is the only one worth coordinating, since both edit the same route table.
+They touch different properties of different routes, so the merge is mechanical, but
+whoever goes second should open the file rather than trust the diff. `0006` section 8
 has the same table from the other side.
+
+### Cleanup this plan carries
+
+`home-page.ts` on `dev` currently has a debug `ngOnInit` with `console.log`s probing
+`t('app-title')`, `t('home.preview.listName')` and `t('zone.role.owner')`, plus the
+`RokuLocaleStore` injection that supports it. This plan rewrites that file, so it
+removes them rather than leaving `0006` to edit the same file for the same reason.
 
 ## 9. Acceptance criteria
 
@@ -331,28 +355,30 @@ has the same table from the other side.
 7. At a viewport of 1440px the content column is 480px wide and horizontally centred,
    and the app's ground colour fills the viewport.
 8. `previewLines` renders the translated strings, and switching the locale switches
-   them without a reload. **This criterion cannot pass until `0006` has merged**, and
-   until then the acceptable result is the keys, changing when the locale changes.
+   them without a reload. **This criterion cannot pass until rokutranslator `0004` and
+   `0006` have merged**, since the keys are nested like every other key in the file.
+   Until then the acceptable result is the keys themselves, and the half of the
+   criterion that can be tested now is that the `computed` re-runs on a locale change.
 9. `npx nx run-many --all --target=test` and `--target=lint` pass, and
    `npx nx build velista` succeeds.
 
 ## 10. Files touched
 
-| File                                                                            | Change                                                                                      |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `libs/velista/feature-landing/*`                                                | **new library.** `LandingPage`, its template, its stylesheet, its spec, project scaffolding |
-| `libs/velista/feature-home/src/lib/home-page/home-page.ts`                      | drop the anonymous branch, its imports, its handlers and `previewLines`                     |
-| `libs/velista/feature-home/src/lib/home-page/home-page.html`                    | drop the `@case ('anonymous')` block, fix the app bar bindings                              |
-| `libs/velista/feature-home/src/lib/home-page/home-page.scss`                    | move `.anonymous` and `.spacer` out                                                         |
-| `libs/velista/feature-home/src/lib/home-page/select-home-state.ts` and its spec | drop the anonymous branch and its cases                                                     |
-| `libs/velista/models/src/lib/home-view.ts`                                      | `HomeState` loses `{ kind: 'anonymous' }`                                                   |
-| `libs/velista/feature-shell/src/lib/routes.ts`                                  | two child routes with guards                                                                |
-| `libs/velista/feature-shell/src/lib/auth-guards.ts`                             | **new.** `authenticatedGuard`, `anonymousOnlyGuard`                                         |
-| `libs/velista/feature-shell/src/index.ts`                                       | export the guards. **Also touched by `0006`**                                               |
-| `libs/velista/ui/src/lib/layout/app-layout.scss`                                | `:host` fills the shell's flex row                                                          |
-| `libs/velista/ui/src/lib/home/app-bar.html` / `.ts` / `.scss`                   | remove the duplicate mark                                                                   |
-| `libs/velista/ui/assets/i18n/en.json`, `es.json`                                | five preview line keys                                                                      |
-| `tsconfig.base.json`                                                            | path alias for `@portfolio/velista/feature-landing`                                         |
+| File                                                                            | Change                                                                                         |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `libs/velista/feature-landing/*`                                                | **new library.** `LandingPage`, its template, its stylesheet, its spec, project scaffolding    |
+| `libs/velista/feature-home/src/lib/home-page/home-page.ts`                      | drop the anonymous branch, its imports, its handlers, `previewLines`, and the debug `ngOnInit` |
+| `libs/velista/feature-home/src/lib/home-page/home-page.html`                    | drop the `@case ('anonymous')` block, fix the app bar bindings                                 |
+| `libs/velista/feature-home/src/lib/home-page/home-page.scss`                    | move `.anonymous` and `.spacer` out                                                            |
+| `libs/velista/feature-home/src/lib/home-page/select-home-state.ts` and its spec | drop the anonymous branch and its cases                                                        |
+| `libs/velista/models/src/lib/home-view.ts`                                      | `HomeState` loses `{ kind: 'anonymous' }`                                                      |
+| `libs/velista/feature-shell/src/lib/routes.ts`                                  | two child routes with guards. **Also touched by `0006`**                                       |
+| `libs/velista/feature-shell/src/lib/auth-guards.ts`                             | **new.** `authenticatedGuard`, `anonymousOnlyGuard`                                            |
+| `libs/velista/feature-shell/src/index.ts`                                       | export the guards. **Also touched by `0006`**                                                  |
+| `libs/velista/ui/src/lib/layout/app-layout.scss`                                | `:host` fills the shell's flex row                                                             |
+| `libs/velista/ui/src/lib/home/app-bar.html` / `.ts` / `.scss`                   | remove the duplicate mark                                                                      |
+| `libs/velista/ui/assets/i18n/en.json`, `es.json`                                | five preview line keys. **Also touched by `0006`**                                             |
+| `tsconfig.base.json`                                                            | path alias for `@portfolio/velista/feature-landing`                                            |
 
 ## 11. Open questions
 
