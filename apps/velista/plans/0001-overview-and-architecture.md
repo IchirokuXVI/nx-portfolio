@@ -247,8 +247,10 @@ the interface.
 | `zones/new`, `home/zones/new` | Name a group, as a sheet over the page beneath | Public / authenticated | `0008` |
 | `zones/join`, `home/zones/join` | Enter a join code, as a sheet | Public / authenticated | `0008` |
 | `join/:code` | Join a zone from a shared code or link | Public, adaptive | `0008` |
-| `auth/login`, `auth/register`, `auth/verify` | Credentials flows | Public | later |
-| `auth/callback` | Consumes the token pair the backend redirects back with after Google | Public | `0004` section 5.7 |
+| `auth/login`, `auth/register` | Sign in and register | Public, anonymous only | `0009` |
+| `auth/upgrade` | Turn a guest account into a real one, in place | **Guest only** | `0009` |
+| `auth/verify` | Consumes an email confirmation token | Public | `0009` |
+| `auth/callback` | Consumes the token pair the backend redirects back with after Google | Public | `0009`, blocked on the backend |
 | `account` | Profile, upgrade a temporary account, delete | Authenticated | later |
 | `settings` | Locale, theme, density | Any | later |
 
@@ -382,12 +384,14 @@ A page plan is not ready for development until its mock is approved.
 | `0005` | Injector scope, and one place to declare test providers | **Implemented** |
 | `0006` | Translation ownership: feature-shell composes, and waits | **Implemented** |
 | `0007` | Splitting the front door from the dashboard | **Implemented** |
-| `0008` | The way in: creating a group, and joining with a code | Written 2026-08-26, mock awaiting approval |
+| `0008` | The way in: creating a group, and joining with a code | Written 2026-08-26, **mock approved** |
+| `0009` | Credentials: signing in, registering, and keeping a guest account | Written 2026-08-26, mock awaiting approval |
 | later | One plan per remaining page, in build order | Not written |
 
-The route table in section 6.2 is the build order that remains. After `0008` the
-credential flows are the only thing still standing between a visitor and every other
-page: `auth/login`, `auth/register`, `auth/verify` and `auth/callback`.
+The route table in section 6.2 is the build order that remains. `0008` and `0009`
+together finish the front door: once both are built, every control drawn on the
+anonymous screen leads somewhere real, and what is left is the product itself, group
+detail and then the shopping list.
 
 Scaffolding is deliberately **not** plan `0002`. Nothing is generated until enough of the
 design is settled that the shape of the libraries is known, which is the point of doing
