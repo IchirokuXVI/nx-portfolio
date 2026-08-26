@@ -6,6 +6,7 @@ import {
   type DynamicModule,
   type Provider,
 } from '@nestjs/common';
+import { ApiExcludeController } from '@nestjs/swagger';
 import {
   HealthCheck,
   HealthCheckService,
@@ -39,6 +40,12 @@ const HEAP_LIMIT_BYTES = 512 * 1024 * 1024;
  * its liveness and readiness probes at these, which is what makes the zero
  * downtime rollout in 0002 safe.
  */
+// Kept out of the published OpenAPI document (plan 0019, section 3): these are
+// Kubernetes probes, not part of the public API, and their body is Terminus's
+// own shape rather than anything the contracts library describes. Excluding them
+// is what lets "every documented route has a contract backed response" be an
+// unconditional assertion instead of one with an exemption list.
+@ApiExcludeController()
 @Controller('health')
 export class HealthController {
   constructor(

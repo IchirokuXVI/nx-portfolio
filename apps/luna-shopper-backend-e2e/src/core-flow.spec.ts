@@ -1,5 +1,6 @@
 import { expect, request, test } from '@playwright/test';
 import { GATEWAY_URL, REALTIME_URL } from '../playwright.config';
+import { expectDocumentedShape } from './support/contract';
 import { gateOnStack } from './support/db';
 
 /**
@@ -7,6 +8,12 @@ import { gateOnStack } from './support/db';
  * gateway's public REST surface and the realtime SSE channel — never a service's
  * internal port: create a zone and get a token, join and get approved, create a
  * list, add a line, and see the realtime `line.added` event arrive.
+ *
+ * Every response is additionally checked against the schema the published
+ * OpenAPI document promises for that route (plan 0019, section 5), so this suite
+ * asserts the contract and not merely the status: the docs describe the schema,
+ * the schema is the one the services validate their broker messages against, and
+ * these assertions run it against the real server.
  *
  * Infra-gated through the shared `gateOnStack` (plan 0015, section 3.1): if the
  * gateway is not reachable the whole suite skips, so it is a clean green no-op
@@ -35,7 +42,10 @@ async function waitForLineAdded(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(streamUrl, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'text/event-stream',
+      },
       signal: controller.signal,
     });
     if (!res.body) {
@@ -88,6 +98,7 @@ test.describe('Luna Shopper core flow', () => {
     });
     expect(createRes.ok()).toBeTruthy();
     const created = await createRes.json();
+    expectDocumentedShape('post', '/v1/zones', 201, created);
     const ownerToken: string = created.tokens.accessToken;
     const zoneId: string = created.data.id;
     const joinCode: string = created.data.joinCode;
@@ -99,6 +110,7 @@ test.describe('Luna Shopper core flow', () => {
     });
     expect(joinRes.ok()).toBeTruthy();
     const joined = await joinRes.json();
+    expectDocumentedShape('post', '/v1/zones/join', 201, joined);
     const membershipId: string = joined.data.id;
 
     // 3. The owner approves the pending member.
@@ -107,6 +119,12 @@ test.describe('Luna Shopper core flow', () => {
       { headers: auth(ownerToken) }
     );
     expect(approveRes.ok()).toBeTruthy();
+    expectDocumentedShape(
+      'post',
+      '/v1/zones/{id}/members/{membershipId}/approve',
+      201,
+      await approveRes.json()
+    );
 
     // 4. The owner creates a list in the zone.
     const listRes = await ctx.post(`/v1/zones/${zoneId}/lists`, {
@@ -114,7 +132,9 @@ test.describe('Luna Shopper core flow', () => {
       data: { name: 'Groceries' },
     });
     expect(listRes.ok()).toBeTruthy();
-    const listId: string = (await listRes.json()).id;
+    const list = await listRes.json();
+    expectDocumentedShape('post', '/v1/zones/{zoneId}/lists', 201, list);
+    const listId: string = list.id;
 
     // 5. Open the realtime SSE stream for the zone, then add a line and assert
     //    the `line.added` event arrives and satisfies the published contract.
@@ -128,6 +148,12 @@ test.describe('Luna Shopper core flow', () => {
       data: { content: 'Milk', quantity: 2 },
     });
     expect(addLineRes.ok()).toBeTruthy();
+    expectDocumentedShape(
+      'post',
+      '/v1/lists/{id}/lines',
+      201,
+      await addLineRes.json()
+    );
 
     // The frame carries the line itself, which is what a client renders. The
     // DomainEvent envelope that `validateEvent` describes is the JetStream hop's

@@ -91,6 +91,15 @@
         }
       }
     },
+    "openapi": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "{workspaceRoot}",
+        "env": { "LUNA_WRITE_OPENAPI": "1" },
+        "command": "npx nx test luna-shopper-backend-gateway --skip-nx-cache --testFile=apps/luna-shopper-backend/gateway/src/app/docs/openapi-document.spec.ts"
+      }
+    },
     "test": {
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],

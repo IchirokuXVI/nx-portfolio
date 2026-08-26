@@ -7,6 +7,7 @@ import {
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 
 /**
@@ -24,6 +25,8 @@ export class AccountController {
   constructor(private readonly nats: NatsClient) {}
 
   @Delete()
+  @ApiContractResponse(AUTH_PATTERNS.deleteAccount)
+  @ApiProblemResponses({ auth: true })
   remove(@AuthUser() user: CurrentUser): Promise<DeleteAccountResult> {
     return this.nats.send<DeleteAccountResult>(AUTH_PATTERNS.deleteAccount, {
       userId: user.userId,

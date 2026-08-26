@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -28,6 +29,7 @@ import {
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
   CatalogListQueryDto,
@@ -50,11 +52,16 @@ import {
 @ApiTags('catalog')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'catalog/supermarkets', version: '1' })
 export class CatalogSupermarketsController {
   constructor(private readonly nats: NatsClient) {}
 
   @Post()
+  @ApiContractResponse(SUPERMARKET_PATTERNS.create, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
   create(
     @AuthUser() user: CurrentUser,
     @Body() dto: CreateSupermarketDto
@@ -66,6 +73,7 @@ export class CatalogSupermarketsController {
   }
 
   @Get()
+  @ApiContractResponse(SUPERMARKET_PATTERNS.list)
   list(
     @AuthUser() user: CurrentUser,
     @Query() query: CatalogListQueryDto
@@ -79,6 +87,7 @@ export class CatalogSupermarketsController {
   }
 
   @Get(':id')
+  @ApiContractResponse(SUPERMARKET_PATTERNS.get)
   get(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -90,6 +99,8 @@ export class CatalogSupermarketsController {
   }
 
   @Patch(':id')
+  @ApiContractResponse(SUPERMARKET_PATTERNS.update)
+  @ApiProblemResponses({ body: true })
   update(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -103,6 +114,7 @@ export class CatalogSupermarketsController {
   }
 
   @Delete(':id')
+  @ApiContractResponse(SUPERMARKET_PATTERNS.delete)
   remove(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -114,6 +126,10 @@ export class CatalogSupermarketsController {
   }
 
   @Post(':id/locations')
+  @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.create, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
   createLocation(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -126,6 +142,7 @@ export class CatalogSupermarketsController {
   }
 
   @Get(':id/locations')
+  @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.list)
   listLocations(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -146,11 +163,13 @@ export class CatalogSupermarketsController {
 @ApiTags('catalog')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'catalog/locations', version: '1' })
 export class CatalogLocationsController {
   constructor(private readonly nats: NatsClient) {}
 
   @Get(':id')
+  @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.get)
   get(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -162,6 +181,8 @@ export class CatalogLocationsController {
   }
 
   @Patch(':id')
+  @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.update)
+  @ApiProblemResponses({ body: true })
   update(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -174,6 +195,7 @@ export class CatalogLocationsController {
   }
 
   @Delete(':id')
+  @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.delete)
   remove(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -185,6 +207,7 @@ export class CatalogLocationsController {
   }
 
   @Get(':id/offers')
+  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.listByLocation)
   offers(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -205,11 +228,14 @@ export class CatalogLocationsController {
 @ApiTags('catalog')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'catalog/items', version: '1' })
 export class CatalogItemsController {
   constructor(private readonly nats: NatsClient) {}
 
   @Post()
+  @ApiContractResponse(ITEM_PATTERNS.create, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, conflict: true })
   create(
     @AuthUser() user: CurrentUser,
     @Body() dto: CreateItemDto
@@ -221,6 +247,7 @@ export class CatalogItemsController {
   }
 
   @Get()
+  @ApiContractResponse(ITEM_PATTERNS.search)
   search(
     @AuthUser() user: CurrentUser,
     @Query() query: SearchItemsQueryDto
@@ -236,6 +263,7 @@ export class CatalogItemsController {
   }
 
   @Get(':id')
+  @ApiContractResponse(ITEM_PATTERNS.get)
   get(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -247,6 +275,8 @@ export class CatalogItemsController {
   }
 
   @Patch(':id')
+  @ApiContractResponse(ITEM_PATTERNS.update)
+  @ApiProblemResponses({ body: true })
   update(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -260,6 +290,7 @@ export class CatalogItemsController {
   }
 
   @Delete(':id')
+  @ApiContractResponse(ITEM_PATTERNS.delete)
   remove(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -271,6 +302,7 @@ export class CatalogItemsController {
   }
 
   @Get(':id/offers')
+  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.listByItem)
   offers(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -291,11 +323,14 @@ export class CatalogItemsController {
 @ApiTags('catalog')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'catalog/supermarket-items', version: '1' })
 export class CatalogSupermarketItemsController {
   constructor(private readonly nats: NatsClient) {}
 
   @Put()
+  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.upsert)
+  @ApiProblemResponses({ body: true })
   upsert(
     @AuthUser() user: CurrentUser,
     @Body() dto: UpsertSupermarketItemDto
@@ -307,6 +342,7 @@ export class CatalogSupermarketItemsController {
   }
 
   @Get()
+  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.get)
   get(
     @AuthUser() user: CurrentUser,
     @Query('itemId') itemId: string,
@@ -320,6 +356,7 @@ export class CatalogSupermarketItemsController {
   }
 
   @Delete(':id')
+  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.delete)
   remove(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string

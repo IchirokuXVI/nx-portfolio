@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -24,6 +25,7 @@ import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
   CreateZoneDto,
@@ -67,6 +69,13 @@ export class ZoneController {
   @Post()
   @UseGuards(OptionalJwtAuthGuard)
   @Throttle(THROTTLE_LIMITS.anonymousZone)
+  @ApiContractResponse(ZONE_PATTERNS.create, {
+    status: HttpStatus.CREATED,
+    envelope: 'tokenHandshake',
+    description:
+      'The new zone. `tokens` is present when the caller was anonymous.',
+  })
+  @ApiProblemResponses({ body: true })
   async create(
     @AuthUser() user: CurrentUser | undefined,
     @Body() dto: CreateZoneDto
@@ -83,6 +92,13 @@ export class ZoneController {
   @Post('join')
   @UseGuards(OptionalJwtAuthGuard)
   @Throttle(THROTTLE_LIMITS.anonymousZone)
+  @ApiContractResponse(ZONE_PATTERNS.join, {
+    status: HttpStatus.CREATED,
+    envelope: 'tokenHandshake',
+    description:
+      'The pending membership. `tokens` is present when the caller was anonymous.',
+  })
+  @ApiProblemResponses({ body: true, membership: true, conflict: true })
   async join(
     @AuthUser() user: CurrentUser | undefined,
     @Body() dto: JoinZoneDto
@@ -98,6 +114,8 @@ export class ZoneController {
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(ZONE_PATTERNS.listMine)
+  @ApiProblemResponses({ auth: true })
   listMine(
     @AuthUser() user: CurrentUser,
     @Query() query: ListMyZonesQueryDto
@@ -113,6 +131,8 @@ export class ZoneController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(ZONE_PATTERNS.update)
+  @ApiProblemResponses({ auth: true, membership: true, body: true })
   update(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -129,6 +149,8 @@ export class ZoneController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(ZONE_PATTERNS.delete)
+  @ApiProblemResponses({ auth: true, membership: true })
   remove(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -142,6 +164,10 @@ export class ZoneController {
   @Post(':id/regenerate-code')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(ZONE_PATTERNS.regenerateJoinCode, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, membership: true })
   regenerateCode(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -155,6 +181,10 @@ export class ZoneController {
   @Post(':id/claim-ownership')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(ZONE_PATTERNS.claimOwnership, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, membership: true, conflict: true })
   claimOwnership(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
@@ -168,6 +198,8 @@ export class ZoneController {
   @Patch(':id/members/:membershipId/role')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(ZONE_PATTERNS.setRole)
+  @ApiProblemResponses({ auth: true, membership: true, body: true })
   setRole(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -185,6 +217,10 @@ export class ZoneController {
   @Post(':id/members/:membershipId/transfer-ownership')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(ZONE_PATTERNS.transferOwnership, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, membership: true })
   transferOwnership(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -200,6 +236,10 @@ export class ZoneController {
   @Post(':id/members/:membershipId/approve')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(MEMBERSHIP_PATTERNS.approve, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, membership: true })
   approve(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -215,6 +255,10 @@ export class ZoneController {
   @Post(':id/members/:membershipId/reject')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(MEMBERSHIP_PATTERNS.reject, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, membership: true })
   reject(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -230,6 +274,8 @@ export class ZoneController {
   @Post(':id/members/:membershipId/kick')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(MEMBERSHIP_PATTERNS.kick, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ auth: true, membership: true })
   kick(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
@@ -245,6 +291,8 @@ export class ZoneController {
   @Post(':id/members/:membershipId/ban')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(MEMBERSHIP_PATTERNS.ban, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ auth: true, membership: true })
   ban(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,

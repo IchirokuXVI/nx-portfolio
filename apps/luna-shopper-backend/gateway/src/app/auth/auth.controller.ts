@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import {
@@ -9,6 +9,7 @@ import {
   getRequestContext,
   THROTTLE_LIMITS,
 } from '@portfolio/luna-shopper/platform';
+import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
   LoginDto,
@@ -33,6 +34,8 @@ export class AuthController {
 
   @Post('register')
   @Throttle(THROTTLE_LIMITS.registration)
+  @ApiContractResponse(AUTH_PATTERNS.register, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, conflict: true })
   register(@Body() dto: RegisterDto): Promise<AuthTokens> {
     return this.nats.send(AUTH_PATTERNS.register, {
       ...dto,
@@ -42,18 +45,26 @@ export class AuthController {
 
   @Post('login')
   @Throttle(THROTTLE_LIMITS.login)
+  @ApiContractResponse(AUTH_PATTERNS.login, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, auth: true })
   login(@Body() dto: LoginDto): Promise<AuthTokens> {
     return this.nats.send(AUTH_PATTERNS.login, dto);
   }
 
   @Post('verify-email')
   @Throttle(THROTTLE_LIMITS.verifyResend)
+  @ApiContractResponse(AUTH_PATTERNS.verifyEmail, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, membership: true })
   verifyEmail(@Body() dto: VerifyEmailDto): Promise<{ userId: string }> {
     return this.nats.send(AUTH_PATTERNS.verifyEmail, dto);
   }
 
   @Post('refresh')
   @SkipThrottle()
+  @ApiContractResponse(AUTH_PATTERNS.refresh, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, auth: true, throttled: false })
   refresh(@Body() dto: RefreshDto): Promise<AuthTokens> {
     return this.nats.send(AUTH_PATTERNS.refresh, dto);
   }
@@ -61,6 +72,8 @@ export class AuthController {
   @Post('upgrade')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
+  @ApiContractResponse(AUTH_PATTERNS.upgrade, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, auth: true, conflict: true })
   upgrade(
     @AuthUser() user: CurrentUser,
     @Body() dto: UpgradeDto

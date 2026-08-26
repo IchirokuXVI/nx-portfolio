@@ -7,6 +7,7 @@ import {
   ZONE_WEEKLY_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
 import { GATEWAY_URL } from '../playwright.config';
+import { expectDocumentedShape } from './support/contract';
 import { gateOnStack } from './support/db';
 
 /**
@@ -44,7 +45,9 @@ test.describe('Luna Shopper seeded demo world', () => {
       data: { email: 'alice@example.com', password: DEMO_PASSWORD },
     });
     expect(loginRes.ok()).toBeTruthy();
-    const token: string = (await loginRes.json()).accessToken;
+    const tokens = await loginRes.json();
+    expectDocumentedShape('post', '/v1/auth/login', 201, tokens);
+    const token: string = tokens.accessToken;
     const auth = { Authorization: `Bearer ${token}` };
 
     // 2. The seeded zone has exactly the two seeded lists, by fixed id and name.
@@ -52,7 +55,11 @@ test.describe('Luna Shopper seeded demo world', () => {
       headers: auth,
     });
     expect(listsRes.ok()).toBeTruthy();
-    const lists = rows(await listsRes.json());
+    const listsBody = await listsRes.json();
+    // The page envelope itself is part of the contract, so validate before the
+    // `rows` helper unwraps it (plan 0019, section 4).
+    expectDocumentedShape('get', '/v1/zones/{zoneId}/lists', 200, listsBody);
+    const lists = rows(listsBody);
     const listIds = lists.map((l) => l.id);
     expect(listIds).toContain(LIST_GROCERIES_ID);
     expect(listIds).toContain(LIST_HARDWARE_ID);
@@ -65,7 +72,9 @@ test.describe('Luna Shopper seeded demo world', () => {
       headers: auth,
     });
     expect(linesRes.ok()).toBeTruthy();
-    const lines = rows<{ id: string; content?: string }>(await linesRes.json());
+    const linesBody = await linesRes.json();
+    expectDocumentedShape('get', '/v1/lists/{id}/lines', 200, linesBody);
+    const lines = rows<{ id: string; content?: string }>(linesBody);
     const milk = lines.find((l) => l.id === LINE_MILK_ID);
     expect(milk?.content).toBe('Milk');
 

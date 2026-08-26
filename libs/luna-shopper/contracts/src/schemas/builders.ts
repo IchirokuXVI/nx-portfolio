@@ -82,6 +82,11 @@ export const object = (
 export const paginated = (id: string, itemRefId: string): JsonSchema => ({
   $id: id,
   type: 'object',
+  // Carried into the published OpenAPI document (plan 0019, section 4), where a
+  // client author reads it next to the rendered `items` array. Written here so
+  // the page contract is described once for both the broker docs and the HTTP ones.
+  description:
+    'A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.',
   additionalProperties: false,
   required: ['items', 'nextCursor'],
   properties: {

@@ -22,6 +22,7 @@ export * from './lib/errors/error-catalog';
 export * from './lib/errors/error-codes';
 export * from './lib/errors/global-exception.filter';
 export * from './lib/errors/problem-details';
+export * from './lib/errors/problem-details.schema';
 export * from './lib/errors/problem-factory';
 
 // Localization
