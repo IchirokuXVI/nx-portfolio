@@ -1,4 +1,5 @@
 import {
+  hours,
   minutes,
   seconds,
   type ThrottlerModuleOptions,
@@ -51,4 +52,11 @@ export const THROTTLE_LIMITS = {
    * from a 60 second cache, so a client polling faster than this gains nothing.
    */
   publicStats: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 30 } },
+  /**
+   * Renaming, global or per zone (plan 0018, section 6). Usernames are public,
+   * non unique and freely changeable, so rapid renaming is a plausible
+   * harassment pattern: take a target's name, act under it, change back. Five an
+   * hour leaves ordinary editing untouched and makes that loop impractical.
+   */
+  usernameChange: { [DEFAULT_BUCKET]: { ttl: hours(1), limit: 5 } },
 } as const;

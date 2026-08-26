@@ -6,6 +6,7 @@ import {
   type UserEmailVerifiedEvent,
   type UserRegisteredEvent,
   type UserUpgradedEvent,
+  type UserUsernameChangedEvent,
 } from '@portfolio/luna-shopper/contracts';
 import {
   buildNatsHeaders,
@@ -50,5 +51,9 @@ export class IdentityEventsPublisher {
 
   userDeleted(event: UserDeletedEvent): void {
     this.emit(IDENTITY_EVENTS.userDeleted, event);
+  }
+
+  userUsernameChanged(event: UserUsernameChangedEvent): void {
+    this.emit(IDENTITY_EVENTS.userUsernameChanged, event);
   }
 }

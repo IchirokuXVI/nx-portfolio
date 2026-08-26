@@ -6,6 +6,7 @@ import {
   type MembershipActionRequest,
   type MembershipPage,
   type MembershipView,
+  type SetMembershipUsernameRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { MemberListingService } from './member-listing.service';
 import { MembershipService } from './membership.service';
@@ -41,5 +42,12 @@ export class MembershipController {
   @MessagePattern(MEMBERSHIP_PATTERNS.ban)
   ban(@Payload() req: MembershipActionRequest): Promise<MembershipView> {
     return this.membership.ban(req);
+  }
+
+  @MessagePattern(MEMBERSHIP_PATTERNS.setUsername)
+  setUsername(
+    @Payload() req: SetMembershipUsernameRequest
+  ): Promise<MembershipView> {
+    return this.membership.setUsername(req);
   }
 }

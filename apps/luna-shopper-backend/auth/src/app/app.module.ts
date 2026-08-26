@@ -26,6 +26,7 @@ import { PasswordService } from './password/password.service';
 import { StatsService } from './identity/stats.service';
 import { OrphanUserReaperService } from './reaper/orphan-user-reaper.service';
 import { TokenService } from './tokens/token.service';
+import { UsernameGenerator } from './username/username-generator.service';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { TokenService } from './tokens/token.service';
     TokenService,
     PasswordService,
     IdentityEventsPublisher,
+    UsernameGenerator,
     OrphanUserReaperService,
   ],
 })

@@ -36,6 +36,7 @@ export const ZONE_SCHEMA_IDS = {
   listMineRequest: schemaId('msg/zone.listMine/request'),
   countsMineRequest: schemaId('msg/zone.countsMine/request'),
   listMembersRequest: schemaId('msg/membership.list/request'),
+  setMembershipUsernameRequest: schemaId('msg/membership.setUsername/request'),
 } as const;
 
 /**
@@ -153,7 +154,11 @@ const membershipPage = paginated(
 
 const createRequest = object(
   ZONE_SCHEMA_IDS.createRequest,
-  { userId: nonEmptyString(), name: nonEmptyString(), username: nonEmptyString() },
+  {
+    userId: nonEmptyString(),
+    name: nonEmptyString(),
+    username: nonEmptyString(),
+  },
   ['userId', 'name', 'username']
 );
 
@@ -235,6 +240,17 @@ const listMembersRequest = object(
   ['userId', 'zoneId']
 );
 
+const setMembershipUsernameRequest = object(
+  ZONE_SCHEMA_IDS.setMembershipUsernameRequest,
+  {
+    userId: nonEmptyString(),
+    zoneId: nonEmptyString(),
+    membershipId: nonEmptyString(),
+    username: nonEmptyString(),
+  },
+  ['userId', 'zoneId', 'membershipId', 'username']
+);
+
 export const zoneSchemas: JsonSchema[] = [
   zoneView,
   membershipView,
@@ -253,6 +269,7 @@ export const zoneSchemas: JsonSchema[] = [
   listMineRequest,
   countsMineRequest,
   listMembersRequest,
+  setMembershipUsernameRequest,
 ];
 
 export const zoneMessageContracts: Record<
@@ -322,5 +339,9 @@ export const zoneMessageContracts: Record<
   [MEMBERSHIP_PATTERNS.list]: {
     request: ZONE_SCHEMA_IDS.listMembersRequest,
     response: ZONE_SCHEMA_IDS.membershipPage,
+  },
+  [MEMBERSHIP_PATTERNS.setUsername]: {
+    request: ZONE_SCHEMA_IDS.setMembershipUsernameRequest,
+    response: ZONE_SCHEMA_IDS.membershipView,
   },
 };

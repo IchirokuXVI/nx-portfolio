@@ -94,18 +94,21 @@ const auth: AuthSeed = {
       email: 'alice@example.com',
       emailVerifiedAt: new Date('2026-01-01T09:00:00.000Z'),
       displayName: 'Alice',
+      username: 'Swift Sail',
     }),
     makeUser({
       id: BOB_ID,
       email: 'bob@example.com',
       emailVerifiedAt: new Date('2026-01-01T09:05:00.000Z'),
       displayName: 'Bob',
+      username: 'Steady Helm',
     }),
     makeUser({
       id: CAROL_ID,
       email: 'carol@example.com',
       emailVerifiedAt: null,
       displayName: 'Carol',
+      username: 'Bright Beacon',
     }),
     makeUser({
       id: TEMP_USER_ID,
@@ -113,6 +116,8 @@ const auth: AuthSeed = {
       email: null,
       emailVerifiedAt: null,
       displayName: null,
+      // A guest has a generated name from the moment they exist (plan 0018).
+      username: 'Quiet Lantern',
     }),
   ],
   // Alice and Carol log in with email + password; Bob logs in with Google.

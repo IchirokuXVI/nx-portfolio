@@ -87,8 +87,98 @@ describe('contract schemas', () => {
         validateMessageResponse('auth.register', {
           userId: 'u',
           kind: 'TEMPORARY',
+          username: 'Swift Sail',
           accessToken: 'a',
           refreshToken: 'r',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('AuthTokens requires the global username (plan 0018, section 9)', () => {
+      expect(
+        validateMessageResponse('auth.refresh', {
+          userId: 'u',
+          kind: 'REGISTERED',
+          accessToken: 'a',
+          refreshToken: 'r',
+        }).valid
+      ).toBe(false);
+    });
+
+    it('auth.setUsername request defaults propagation by omitting it', () => {
+      expect(
+        validateMessageRequest('auth.setUsername', {
+          userId: 'u',
+          username: 'Vela Rápida',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('auth.setUsername', {
+          userId: 'u',
+          username: 'Vela Rápida',
+          propagation: 'ALL_ZONES',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('auth.setUsername', {
+          userId: 'u',
+          username: 'Vela',
+          propagation: 'EVERYWHERE',
+        }).valid
+      ).toBe(false);
+    });
+
+    it('auth.getProfile response (UserProfileView, nullable email)', () => {
+      expect(
+        validateMessageResponse('auth.getProfile', {
+          userId: 'u',
+          kind: 'TEMPORARY',
+          username: 'Quiet Lantern',
+          email: null,
+          emailVerified: false,
+          displayName: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('membership.setUsername request (plan 0018, section 5)', () => {
+      expect(
+        validateMessageRequest('membership.setUsername', {
+          userId: 'u',
+          zoneId: 'z',
+          membershipId: 'm',
+          username: 'Mamá',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('user.usernameChanged event carries both names and the mode', () => {
+      expect(
+        validateEvent('user.usernameChanged', {
+          eventId: 'e1',
+          userId: 'u',
+          oldUsername: 'Swift Sail',
+          newUsername: 'Vela Rápida',
+          propagation: 'MATCHING_ZONES',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateEvent('user.usernameChanged', {
+          eventId: 'e1',
+          userId: 'u',
+          newUsername: 'Vela',
+          propagation: 'ALL_ZONES',
+        }).valid
+      ).toBe(false);
+    });
+
+    it('member.usernameChanged rides the domain event envelope', () => {
+      expect(
+        validateEvent('member.usernameChanged', {
+          event: 'member.usernameChanged',
+          eventId: 'e2',
+          zoneId: 'z',
+          payload: { id: 'm', username: 'Mamá' },
         }).valid
       ).toBe(true);
     });

@@ -36,6 +36,8 @@ export interface SeedUser {
   email: string | null;
   emailVerifiedAt: Date | null;
   displayName: string | null;
+  /** The global username (plan 0018): never null, and not unique. */
+  username: string;
 }
 
 export interface SeedCredential {

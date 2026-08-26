@@ -32,6 +32,7 @@ export * from './lib/swagger/swagger';
 export * from './lib/versioning/versioning';
 
 // Validation
+export * from './lib/validation/username';
 export * from './lib/validation/validation-pipe';
 
 // Health

@@ -35,6 +35,8 @@ export const MEMBERSHIP_PATTERNS = {
   ban: 'membership.ban',
   /** Read a zone's members (plan 0017, section 5). */
   list: 'membership.list',
+  /** Rename one membership: the member themselves, or the zone's owner/admins. */
+  setUsername: 'membership.setUsername',
 } as const;
 
 /** A zone as returned to clients. */
@@ -128,6 +130,12 @@ export interface ZoneCountsUpdatedPayload {
   counts: BroadcastZoneCounts;
 }
 
+/**
+ * `username` stays required on the NATS contract even though the REST body may
+ * omit it (plan 0018, section 9): core must be told what to write and must never
+ * reach into auth for it, so the gateway resolves the caller's global username
+ * before sending.
+ */
 export interface CreateZoneRequest {
   userId: string;
   name: string;
@@ -163,6 +171,20 @@ export interface MembershipActionRequest {
   userId: string;
   zoneId: string;
   membershipId: string;
+}
+
+/**
+ * Rename one membership (plan 0018, section 5). One message covers both the
+ * member renaming themselves in a single zone and an owner/admin renaming
+ * someone; they are the same write with two authorization branches, resolved
+ * from the caller's own membership.
+ */
+export interface SetMembershipUsernameRequest {
+  /** The caller, from the verified token. */
+  userId: string;
+  zoneId: string;
+  membershipId: string;
+  username: string;
 }
 
 export interface ListMyZonesRequest extends PageQuery {

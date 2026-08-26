@@ -18,6 +18,13 @@ export enum RealtimeEvent {
   MemberKicked = 'member.kicked',
   MemberBanned = 'member.banned',
   MemberRoleChanged = 'member.roleChanged',
+  /**
+   * A member's per zone username changed (plan 0018, section 7), whether they
+   * renamed themselves, an admin renamed them, or a global rename propagated.
+   * The payload is the existing {@link MembershipView}, emitted once per
+   * affected membership into that membership's own zone room.
+   */
+  MemberUsernameChanged = 'member.usernameChanged',
 
   // Zone summary (plan 0017, section 9). Carries the counts a client cannot
   // derive from the events above, chiefly the next pending requester's name.
@@ -68,6 +75,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.MemberKicked,
   RealtimeEvent.MemberBanned,
   RealtimeEvent.MemberRoleChanged,
+  RealtimeEvent.MemberUsernameChanged,
   RealtimeEvent.ZoneCountsUpdated,
   RealtimeEvent.ListCreated,
   RealtimeEvent.ListUpdated,

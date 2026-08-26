@@ -1,11 +1,19 @@
-import { AuthProvider, UserKind } from '../lib/enums/auth.enums';
+import {
+  AuthProvider,
+  UserKind,
+  UsernamePropagation,
+} from '../lib/enums/auth.enums';
 import {
   LineApprovalStatus,
   LineStatus,
   ListRole,
 } from '../lib/enums/list.enums';
 import { MergeRequestStatus } from '../lib/enums/merge.enums';
-import { MembershipStatus, ZoneRole, ZoneStatus } from '../lib/enums/zone.enums';
+import {
+  MembershipStatus,
+  ZoneRole,
+  ZoneStatus,
+} from '../lib/enums/zone.enums';
 import { enumOf, JsonSchema, schemaId } from './builders';
 
 /**
@@ -17,6 +25,7 @@ import { enumOf, JsonSchema, schemaId } from './builders';
 export const ENUM_IDS = {
   userKind: schemaId('enums/UserKind'),
   authProvider: schemaId('enums/AuthProvider'),
+  usernamePropagation: schemaId('enums/UsernamePropagation'),
   zoneStatus: schemaId('enums/ZoneStatus'),
   zoneRole: schemaId('enums/ZoneRole'),
   membershipStatus: schemaId('enums/MembershipStatus'),
@@ -29,6 +38,7 @@ export const ENUM_IDS = {
 export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.userKind, Object.values(UserKind)),
   enumOf(ENUM_IDS.authProvider, Object.values(AuthProvider)),
+  enumOf(ENUM_IDS.usernamePropagation, Object.values(UsernamePropagation)),
   enumOf(ENUM_IDS.zoneStatus, Object.values(ZoneStatus)),
   enumOf(ENUM_IDS.zoneRole, Object.values(ZoneRole)),
   enumOf(ENUM_IDS.membershipStatus, Object.values(MembershipStatus)),
