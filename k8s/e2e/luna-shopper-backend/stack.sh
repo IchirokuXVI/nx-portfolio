@@ -13,10 +13,48 @@
 #   nx run luna-shopper-backend:stack:down
 #   nx run luna-shopper-backend:test-integration:stack
 #   nx run luna-shopper-backend:e2e:stack
+#   nx run luna-shopper-backend:observability:up
+#   nx run luna-shopper-backend:observability:down
 #
 # Every command that starts something configures the checkout first (see
 # bootstrap_config below), so a fresh clone needs no manual .env copying and no
 # keypair ceremony: `stack:up` is the first and only command.
+#
+# --- the -p flag ------------------------------------------------------------
+#
+# `-p <name>` (or `--profile <name>`) activates a compose profile for the verb
+# that follows, so the optional groups in compose.yml get the same one command
+# treatment as the base stack:
+#
+#   stack.sh -p observability up      # the base stack, plus collector/Jaeger/
+#                                     # Prometheus/Grafana
+#   stack.sh -p observability down    # remove ONLY those four, keep the databases
+#
+# It means different things to the two verbs, because compose is itself
+# asymmetric here and pretending otherwise would be a trap:
+#
+#   up   is ADDITIVE. Compose starts every unprofiled service plus the named
+#        profile's, which is what a passthrough of --profile already does.
+#   down is RESTRICTIVE. `compose down` is NOT scoped by a profile in the way it
+#        looks: unprofiled services are always in the active set, so
+#        `--profile observability down` would take the three databases and NATS
+#        with it. So a profiled `down` is a `stop` + `rm` over exactly the
+#        services that profile adds (see profile_services), and it leaves the
+#        volumes alone, because losing six hours of Grafana history to a
+#        teardown of something else is not a tradeoff anybody chose.
+#
+# Which services a profile adds is DERIVED, never hardcoded: see
+# profile_services. Adding a profile to compose.yml is therefore enough to make
+# `-p <that profile>` work, with no matching edit here.
+#
+# Infrastructure deliberately stays unprofiled. Putting it behind an `infra`
+# profile would make teardown scoping fall out for free, but a service with no
+# profile that `depends_on` one that has a profile makes the whole project
+# invalid ("service X depends on undefined service Y: invalid compose project")
+# whenever that profile is inactive, and all five services in compose.apps.yml
+# depend on nats and the databases. The alternative, profiling those too, buys a
+# bare `docker compose up` that silently starts nothing and exits 0, which is
+# the exact green-run-that-did-nothing failure this script exists to prevent.
 #
 # Compose stays the single definition of what the infrastructure IS (plan 0015,
 # section 1): the same file backs local development, the slot harness, and both
@@ -39,7 +77,14 @@ COMPOSE_FILE="$here/compose.yml"
 APPS_FILE="$here/compose.apps.yml"
 SLOT_ENV="$here/.env.slot"
 
-compose() {
+# The profile named by -p, or empty. Parsed at the bottom, before dispatch.
+PROFILE=""
+
+# The base invocations, which own the one thing every caller needs to get right:
+# honoring .env.slot when luna-slot.sh has written one. They take an explicit
+# --profile from the caller, which is what lets profile_services below ask about
+# a profile other than the selected one.
+compose_base() {
   if [[ -f "$SLOT_ENV" ]]; then
     docker compose --env-file "$SLOT_ENV" -f "$COMPOSE_FILE" "$@"
   else
@@ -50,12 +95,40 @@ compose() {
 # Infrastructure plus the five service images (tier 2). The overlay is always
 # applied on top of compose.yml, never on its own, so there is still exactly one
 # definition of the infrastructure.
-compose_apps() {
+compose_apps_base() {
   if [[ -f "$SLOT_ENV" ]]; then
     docker compose --env-file "$SLOT_ENV" -f "$COMPOSE_FILE" -f "$APPS_FILE" "$@"
   else
     docker compose -f "$COMPOSE_FILE" -f "$APPS_FILE" "$@"
   fi
+}
+
+# What the verbs call: the base invocation with -p applied, if one was given.
+compose() {
+  if [[ -n "$PROFILE" ]]; then
+    compose_base --profile "$PROFILE" "$@"
+  else
+    compose_base "$@"
+  fi
+}
+
+compose_apps() {
+  if [[ -n "$PROFILE" ]]; then
+    compose_apps_base --profile "$PROFILE" "$@"
+  else
+    compose_apps_base "$@"
+  fi
+}
+
+# The services a profile ADDS, as the difference between the project with it and
+# without it. Compose has no "list a profile's services" query, and asking it
+# with the profile active returns the unprofiled services too, so the diff is
+# the query. Deriving it this way keeps the service names in compose.yml and
+# nowhere else, which is the same rule the rest of this script follows about
+# Postgres versions and NATS flags.
+profile_services() {
+  comm -13 <(compose_base config --services | sort) \
+           <(compose_base --profile "$1" config --services | sort)
 }
 
 # Export the service ports (and the matching E2E_* URLs) that the suite on the
@@ -201,12 +274,17 @@ up() {
   echo "==> bringing the compose stack up (waiting on healthchecks)"
   compose up -d --wait
 
+  # The migrations run whatever profile is selected. They are idempotent, so the
+  # cost of the uniform rule is a few seconds on `-p observability up`, and the
+  # alternative, an `up` whose meaning shifts with the flag, is how somebody ends
+  # up with an unmigrated database and no idea why.
   for svc in "${MIGRATED_SERVICES[@]}"; do
     echo "==> migrating $svc"
     npx nx run "luna-shopper-backend-$svc:migration:run"
   done
 
   echo "==> stack is up and migrated"
+  print_profile_hints
 }
 
 down() {
@@ -214,6 +292,54 @@ down() {
   # -v on purpose: nothing survives between runs, so a suite can never pass on
   # data a previous run left behind.
   compose down -v --remove-orphans
+}
+
+# Tear down ONLY what a profile adds. See the -p notes at the top for why this
+# cannot just be `compose --profile X down`.
+down_profile() {
+  local profile="$1" svcs
+  svcs="$(profile_services "$profile")"
+  if [[ -z "$svcs" ]]; then
+    echo "no services are gated behind a '$profile' profile in compose.yml" >&2
+    return 1
+  fi
+
+  echo "==> removing the '$profile' profile: $(tr '\n' ' ' <<<"$svcs")"
+  # Word splitting is the point here: $svcs is a newline separated service list.
+  # No -v: a scoped teardown that silently dropped prometheus-data and
+  # grafana-data would destroy the history somebody kept the stack up to collect.
+  # shellcheck disable=SC2086
+  compose_base --profile "$profile" stop $svcs
+  # shellcheck disable=SC2086
+  compose_base --profile "$profile" rm -f $svcs
+}
+
+# A published port as compose resolves it: from .env.slot when luna-slot.sh has
+# written one, otherwise the same default compose.yml falls back to.
+slot_port() {
+  local key="$1" default="$2" val=""
+  if [[ -f "$SLOT_ENV" ]]; then
+    val="$(grep -E "^$key=" "$SLOT_ENV" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+  fi
+  echo "${val:-$default}"
+}
+
+# Where to look once a profile is up. A running container and a developer who
+# knows the URL are not the same thing, and for the observability profile the
+# distance between the two is most of what the profile is worth.
+print_profile_hints() {
+  [[ "$PROFILE" == 'observability' ]] || return 0
+  cat <<EOF
+
+  Grafana      http://localhost:$(slot_port LUNA_GRAFANA_PORT 3010)  (anonymous admin, datasources provisioned)
+  Jaeger       http://localhost:$(slot_port LUNA_JAEGER_UI_PORT 16686)
+  Prometheus   http://localhost:$(slot_port LUNA_PROMETHEUS_PORT 9090)
+  OTLP intake  localhost:$(slot_port LUNA_OTLP_GRPC_PORT 4317) grpc, localhost:$(slot_port LUNA_OTLP_HTTP_PORT 4318) http
+
+  Metrics are pulled, not pushed: the collector scrapes /metrics on each service's
+  own port, so any service you are not running shows up as a down scrape target in
+  Prometheus. Traces need traffic, so send a request before expecting a span.
+EOF
 }
 
 # Write the container logs somewhere durable BEFORE the teardown removes the
@@ -331,6 +457,40 @@ run_suite() {
     npx nx e2e luna-shopper-backend-e2e
 }
 
+usage() {
+  echo "usage: stack.sh [-p|--profile <name>] {bootstrap | up | down | test-integration | e2e | e2e-images}" >&2
+}
+
+# Options come before the verb. The loop stops at the first non-option so the
+# verb and anything after it reach the dispatch below untouched.
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -p | --profile)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "$1 needs a profile name (for example: -p observability)" >&2
+        usage
+        exit 2
+      fi
+      PROFILE="$2"
+      shift 2
+      ;;
+    -p=* | --profile=*)
+      PROFILE="${1#*=}"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+    *) break ;;
+  esac
+done
+
 # Configuration is a precondition of every command that starts something, so it
 # is dispatched here rather than from inside up(): a checkout that cannot be
 # configured has started nothing, and should not reach up_or_clean's teardown.
@@ -338,12 +498,20 @@ run_suite() {
 case "${1:-}" in
   bootstrap) bootstrap_config ;;
   up) bootstrap_config && up ;;
-  down) down ;;
+  # With -p this is scoped to that profile's own containers; without it, it is
+  # the whole project and its volumes, as before.
+  down)
+    if [[ -n "$PROFILE" ]]; then
+      down_profile "$PROFILE"
+    else
+      down
+    fi
+    ;;
   test-integration) bootstrap_config && test_integration ;;
   e2e) bootstrap_config && e2e ;;
   e2e-images) bootstrap_config && e2e_images ;;
   *)
-    echo "usage: stack.sh {bootstrap | up | down | test-integration | e2e | e2e-images}" >&2
+    usage
     exit 2
     ;;
 esac
