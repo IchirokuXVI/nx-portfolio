@@ -1,7 +1,7 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import { APP_BRAND, AppBrand } from '@portfolio/velista/models';
+import { APP_BRAND, type AppBrand } from '@portfolio/velista/models';
 import { AppLayout } from './app-layout';
 
 const brand: AppBrand = {

@@ -13,7 +13,7 @@ import { ConnectionState } from '@portfolio/velista/platform';
 import {
   catchError,
   from,
-  Observable,
+  type Observable,
   of,
   switchMap,
   tap,

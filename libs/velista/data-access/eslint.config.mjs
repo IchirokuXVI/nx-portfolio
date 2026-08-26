@@ -8,6 +8,15 @@ export default [
   {
     files: ['**/*.ts'],
     rules: {
+      // Rule D4 (plan 0004, sections 4.1 and 9.3): the app owns its models and its
+      // enums, so a backend contract is only ever needed as a TYPE. A type-only
+      // import is erased at compile time, which is what keeps the `ajv` that the
+      // contracts barrel re-exports out of the bundle. A rule that depends on
+      // everybody remembering is not a rule, and this one has a mechanical check.
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
+      ],
       '@angular-eslint/directive-selector': [
         'error',
         {
