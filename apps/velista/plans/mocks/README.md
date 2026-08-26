@@ -1,0 +1,74 @@
+# Velista design mocks
+
+One folder per page plan. Each holds the artboards for that plan, the notes that belong
+on top of them, and the page built from both.
+
+| Folder | Plan | Published |
+| --- | --- | --- |
+| `home/` | `0003` home page, `0007` landing and home split | https://claude.ai/code/artifact/71175929-0234-4c6e-a277-e26db88e05d5 |
+| `entry/` | `0008` creating a group and joining with a code | https://claude.ai/code/artifact/eb800fe2-6786-4528-9f43-2d638f6e5acb |
+| `brand/` | The mark itself. Source of truth for both, see below | |
+
+## How a folder is put together
+
+| File | What it is |
+| --- | --- |
+| `*.dc.html` | One artboard. Plain, self contained HTML with inline styles and no build step |
+| `canvas.json` | The page title and lede, where each artboard sits, and the sticky notes |
+| `index.html` | **Generated.** Every artboard inlined and every note placed, in one file |
+
+Build it after any change to the other two:
+
+```sh
+node apps/velista/plans/mocks/build-index.mjs entry
+```
+
+Then publish `index.html` to that folder's existing artifact URL.
+
+## Why index.html is generated, and why that matters
+
+The published page and the committed artboards used to be two things kept in step by
+hand, and they drifted. The old `index.html` pulled each artboard into an
+`<iframe src="./File.dc.html">`, which works from disk and cannot work once published,
+and it carried none of the sticky notes, so the published canvas had commentary the
+repository did not.
+
+Now there is one file. `index.html` is what a browser opens from disk **and** what gets
+published, byte for byte, so the two cannot disagree. It carries no doctype or `<head>`
+on purpose: the publisher supplies that skeleton, and a browser supplies it too.
+
+The consequence to remember: **`index.html` is output.** Never hand edit it. Change an
+artboard or `canvas.json` and run the script.
+
+## Conventions every artboard follows
+
+- Phone frames are **390 by 844**, and there are deliberately no desktop artboards.
+- The UI says **group** and **grupo**. The code says **zone**. See rule N2 in `../0001`.
+- Colour values are literal, because an artboard has no build step. They follow the
+  tokens in `../0002-design-system-and-theming.md`, so **if a token changes there,
+  change it here too** or the mock stops describing the system.
+- The wordmark is Marcellus with `letter-spacing: 0.05em`. The hero headline uses the
+  same face and does **not** take that tracking.
+- A `<helmet>` block holds whatever the artboard needs in a document head. The build
+  scopes its CSS to that artboard, so the Day theme's link colour cannot repaint the
+  Night ones.
+- Only draw a Day artboard when the page introduces a colour role that `0003` has not
+  already proven on Day. `0003` has one because the bright Night ramps fail as text on
+  white; `0008` reuses those roles and stays Night only.
+
+## The mark
+
+`brand/velista-app-icon.svg` and `brand/velista-mark.svg` are the source of truth. The
+artboards inline copies, so a redraw has to be applied in both places. For anything
+that must stay exact, prefer the committed SVG over an exported image.
+
+## Static images for the plan docs
+
+Markdown cannot render an artboard, so when a plan needs to show a screen rather than
+link to it, screenshot the published page or the local `index.html` into `exports/`
+inside the folder, named after the artboard, and reference it normally.
+
+Exports are snapshots: nothing keeps them in step, so re-export when a design changes.
+They also do not embed Google Fonts, so text renders in the fallback stack rather than
+in Marcellus. That is why the fallback leads with Georgia, which has similar
+proportions.

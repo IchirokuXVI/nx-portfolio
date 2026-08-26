@@ -1,11 +1,55 @@
 {
+  "title": "Velista Home Artboards",
+  "lede": "The approved design for plan <code>0003</code>, the home page, and its split into a front door and a dashboard in <code>0007</code>. Phone only, 390 by 844. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
   "artboards": [
-    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Anonymous (first open)" },
-    { "file": "Authenticated.dc.html", "x": 490, "y": 0, "w": 390, "h": 844, "title": "Signed in (returning)" },
-    { "file": "TemporaryAccount.dc.html", "x": 980, "y": 0, "w": 390, "h": 844, "title": "Guest account + pending group" },
-    { "file": "DayTheme.dc.html", "x": 1470, "y": 0, "w": 390, "h": 844, "title": "Day theme (signed in)" },
-    { "file": "Brand.dc.html", "x": 1960, "y": 0, "w": 980, "h": 800, "title": "Velista mark and wordmark" },
-    { "file": "States.dc.html", "x": 0, "y": 1000, "w": 1330, "h": 970, "title": "Empty / no connection / error" }
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Anonymous (first open)"
+    },
+    {
+      "file": "Authenticated.dc.html",
+      "x": 490,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Signed in (returning)"
+    },
+    {
+      "file": "TemporaryAccount.dc.html",
+      "x": 980,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Guest account + pending group"
+    },
+    {
+      "file": "DayTheme.dc.html",
+      "x": 1470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Day theme (signed in)"
+    },
+    {
+      "file": "Brand.dc.html",
+      "x": 1960,
+      "y": 0,
+      "w": 980,
+      "h": 800,
+      "title": "Velista mark and wordmark"
+    },
+    {
+      "file": "States.dc.html",
+      "x": 0,
+      "y": 1000,
+      "w": 1330,
+      "h": 970,
+      "title": "Empty / no connection / error"
+    }
   ],
   "annotations": [
     {
@@ -43,6 +87,5 @@
       "w": 460,
       "text": "The join request row names the FIRST requester, then adds \"and X more want to join\" only when there is more than one. The Home card shows the multi case; with a single request it reads \"Ines wants to join\"."
     }
-  ],
-  "launch": { "view": "canvas" }
+  ]
 }

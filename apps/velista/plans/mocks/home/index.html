@@ -1,63 +1,1062 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Velista home page mocks</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
-  <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      padding: 32px;
-      background: #11141f;
-      color: #f7f8fc;
-      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    }
-    h1 { margin: 0 0 6px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 30px; letter-spacing: 0.03em; }
-    p.lede { margin: 0 0 28px; font-size: 14px; line-height: 1.55; color: #98a0bb; max-width: 720px; }
-    p.lede a { color: #ffb454; }
-    .board { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
-    figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
-    figcaption { font-size: 12px; font-weight: 600; letter-spacing: 0.05em; color: #98a0bb; text-transform: uppercase; }
-    iframe { border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; background: #0a0c14; display: block; }
-  </style>
-</head>
-<body>
-  <h1>Velista home page mocks</h1>
-  <p class="lede">
-    A local, offline look at the same artboards published in the design canvas. This file is a
-    convenience for reading the repo without opening the artifact. The artboards themselves
-    (<code>*.dc.html</code>) are the source of truth, and the canvas is the place to edit them.
-    See <code>README.md</code> for how to export static images for embedding in the plan docs.
-  </p>
+<title>Velista Home Artboards</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
 
-  <div class="board">
-    <figure>
-      <figcaption>Anonymous, first open</figcaption>
-      <iframe src="./Main.dc.html" width="390" height="844" title="Anonymous, first open"></iframe>
-    </figure>
-    <figure>
-      <figcaption>Signed in, returning</figcaption>
-      <iframe src="./Authenticated.dc.html" width="390" height="844" title="Signed in, returning"></iframe>
-    </figure>
-    <figure>
-      <figcaption>Guest account, pending group</figcaption>
-      <iframe src="./TemporaryAccount.dc.html" width="390" height="844" title="Guest account and pending group"></iframe>
-    </figure>
-    <figure>
-      <figcaption>Day theme, signed in</figcaption>
-      <iframe src="./DayTheme.dc.html" width="390" height="844" title="Day theme, signed in"></iframe>
-    </figure>
-    <figure>
-      <figcaption>Brand, mark and wordmark</figcaption>
-      <iframe src="./Brand.dc.html" width="980" height="800" title="Brand, mark and wordmark"></iframe>
-    </figure>
-    <figure>
-      <figcaption>Empty, no connection, error</figcaption>
-      <iframe src="./States.dc.html" width="1330" height="970" title="Empty, no connection and error states"></iframe>
-    </figure>
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Main * { box-sizing: border-box; }
+#ab-Main a { color: #ffb454; text-decoration: none; }
+#ab-Main a:hover { color: #ffc271; }
+#ab-Authenticated * { box-sizing: border-box; }
+#ab-Authenticated a { color: #ffb454; text-decoration: none; }
+#ab-Authenticated a:hover { color: #ffc271; }
+#ab-TemporaryAccount * { box-sizing: border-box; }
+#ab-TemporaryAccount a { color: #ffb454; text-decoration: none; }
+#ab-TemporaryAccount a:hover { color: #ffc271; }
+#ab-DayTheme * { box-sizing: border-box; }
+#ab-DayTheme a { color: #8a5a12; text-decoration: none; }
+#ab-DayTheme a:hover { color: #6d460c; }
+#ab-Brand * { box-sizing: border-box; }
+#ab-Brand a { color: #ffb454; text-decoration: none; }
+#ab-Brand a:hover { color: #ffc271; }
+#ab-States * { box-sizing: border-box; }
+#ab-States a { color: #ffb454; text-decoration: none; }
+#ab-States a:hover { color: #ffc271; }
+</style>
+
+<header>
+  <h1>Velista Home Artboards</h1>
+  <p class="lede">The approved design for plan <code>0003</code>, the home page, and its split into a front door and a dashboard in <code>0007</code>. Phone only, 390 by 844. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 2940px; height: 2140px;">
+      <figure class="board" style="left: 0px; top: 170px; width: 390px;">
+        <figcaption>Anonymous (first open)</figcaption>
+        <div class="frame" id="ab-Main" style="width: 390px; height: 844px;">
+          <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+
+            <div style="position: absolute; top: -150px; right: -110px; width: 360px; height: 360px; border-radius: 999px; background: radial-gradient(circle, rgba(255,180,84,0.15) 0%, rgba(167,139,250,0.09) 44%, rgba(10,12,20,0) 72%); pointer-events: none;"></div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 4px; position: relative;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                  <g transform="translate(-0.25 0.732) scale(0.98)">
+                    <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                    <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                  </g>
+                </svg>
+                <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+              </div>
+              <button type="button" style="height: 44px; padding: 0 12px; display: flex; align-items: center; gap: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; color: #c2c8db; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer;">
+                EN
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </button>
+            </div>
+
+            <div style="padding: 16px 20px 0; position: relative; display: flex; flex-direction: column; gap: 12px;">
+              <h1 style="margin: 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 41px; line-height: 1.08; letter-spacing: 0.005em; color: #f7f8fc;">One list.<br>Everyone in sync.</h1>
+              <p style="margin: 0; font-size: 15px; line-height: 1.5; color: #c2c8db; max-width: 320px; text-wrap: pretty;">Shared shopping lists for the people you actually shop with. Changes show up on everyone's phone as they happen.</p>
+            </div>
+
+            <div style="margin: 20px 20px 0; background: #161a28; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 13px 14px; display: flex; flex-direction: column; gap: 9px; position: relative;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                <div style="display: flex; align-items: baseline; gap: 7px; min-width: 0;">
+                  <span style="font-size: 14px; font-weight: 600; color: #f7f8fc;">Weekly shop</span>
+                  <span style="font-size: 12px; color: #6f7899;">Home</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                  <span style="width: 6px; height: 6px; border-radius: 999px; background: #34d399;"></span>
+                  <span style="font-size: 11px; color: #98a0bb;">2 shopping now</span>
+                </div>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; align-items: center; gap: 10px; height: 38px;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9.2" fill="#34d399"/>
+                    <path d="m8.2 12.3 2.6 2.5 5-5.4" stroke="#0a0c14" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span style="flex: 1; font-size: 15px; color: #6f7899; text-decoration: line-through;">Milk</span>
+                  <span style="font-size: 12px; color: #6f7899;">2 L</span>
+                  <span style="width: 22px; height: 22px; border-radius: 999px; background: #7c3aed; color: #f7f8fc; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px; height: 38px;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9.2" stroke="#525a78" stroke-width="1.8"/>
+                  </svg>
+                  <span style="flex: 1; font-size: 15px; color: #f7f8fc;">Bread</span>
+                  <span style="font-size: 12px; color: #6f7899;">1</span>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px; height: 38px;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9.2" stroke="#fb7185" stroke-width="1.8"/>
+                    <path d="m9.3 9.3 5.4 5.4M14.7 9.3l-5.4 5.4" stroke="#fb7185" stroke-width="1.9" stroke-linecap="round"/>
+                  </svg>
+                  <div style="flex: 1; display: flex; align-items: center; gap: 7px; min-width: 0;">
+                    <span style="font-size: 15px; color: #c2c8db;">Tomatoes</span>
+                    <span style="font-size: 10px; font-weight: 600; letter-spacing: 0.02em; color: #fb7185; border: 1px solid rgba(251,113,133,0.34); border-radius: 999px; padding: 2px 7px; white-space: nowrap;">NOT AVAILABLE</span>
+                  </div>
+                  <span style="width: 22px; height: 22px; border-radius: 999px; background: #2563eb; color: #f7f8fc; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center;">M</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="flex: 1;"></div>
+
+            <div style="padding: 0 20px 24px; display: flex; flex-direction: column; gap: 10px; position: relative;">
+              <button type="button" style="height: 52px; border: none; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                Create a group
+              </button>
+
+              <button type="button" style="height: 52px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3.2" y="6.2" width="17.6" height="11.6" rx="2.6"/>
+                  <path d="M7.6 12h1.6M11.2 12h1.6M14.8 12h1.6"/>
+                </svg>
+                Join with a code
+              </button>
+
+              <p style="margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: #6f7899; text-align: center;">A group is the household or flatmates you share lists with. You can start without an account.</p>
+
+              <div style="display: flex; align-items: center; gap: 12px; margin: 4px 0 2px;">
+                <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.09);"></span>
+                <span style="font-size: 11px; letter-spacing: 0.06em; color: #525a78;">OR</span>
+                <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.09);"></span>
+              </div>
+
+              <button type="button" style="height: 52px; border: none; border-radius: 14px; background: #f7f8fc; color: #11141f; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                  <path d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z" fill="#4285f4"/>
+                  <path d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z" fill="#34a853"/>
+                  <path d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z" fill="#fbbc05"/>
+                  <path d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z" fill="#ea4335"/>
+                </svg>
+                Continue with Google
+              </button>
+
+              <div style="display: flex; align-items: center; justify-content: center; height: 44px;">
+                <a href="#" style="font-size: 14.5px; font-weight: 500; color: #ffb454;">Sign in with email</a>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 490px; top: 170px; width: 390px;">
+        <figcaption>Signed in (returning)</figcaption>
+        <div class="frame" id="ab-Authenticated" style="width: 390px; height: 844px;">
+          <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+              <div style="display: flex; align-items: center; gap: 9px;">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                  <g transform="translate(-0.25 0.732) scale(0.98)">
+                    <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                    <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                  </g>
+                </svg>
+                <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 2px;">
+                <button type="button" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;" aria-label="Search">
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="6.6"/>
+                    <path d="m16 16 4 4"/>
+                  </svg>
+                </button>
+                <button type="button" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;" aria-label="Your account">
+                  <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
+                </button>
+              </div>
+            </div>
+
+            <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 18px; padding: 18px 20px 0;">
+
+              <div style="display: flex; flex-direction: column; gap: 9px;">
+                <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">PICK UP WHERE YOU LEFT OFF</span>
+                <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 15px 16px; display: flex; flex-direction: column; gap: 12px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                      <span style="font-size: 18px; font-weight: 600; color: #f7f8fc;">Weekly shop</span>
+                      <span style="font-size: 12.5px; color: #6f7899;">Home &middot; 12 items</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="m9 6 6 6-6 6"/>
+                    </svg>
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <div style="height: 6px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
+                      <div style="width: 58%; height: 100%; border-radius: 999px; background: #34d399;"></div>
+                    </div>
+                    <span style="font-size: 12px; color: #98a0bb;">7 of 12 ready</span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 9px; padding-top: 2px; border-top: 1px solid rgba(255,255,255,0.06);">
+                    <div style="display: flex; align-items: center; padding-top: 10px;">
+                      <span style="width: 24px; height: 24px; border-radius: 999px; background: #7c3aed; border: 2px solid #161a28; color: #f7f8fc; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
+                      <span style="width: 24px; height: 24px; border-radius: 999px; background: #2563eb; border: 2px solid #161a28; color: #f7f8fc; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">M</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; padding-top: 10px;">
+                      <span style="width: 6px; height: 6px; border-radius: 999px; background: #34d399;"></span>
+                      <span style="font-size: 12px; color: #98a0bb;">Ana and Marc are shopping now</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">YOUR GROUPS</span>
+                  <button type="button" style="height: 30px; padding: 0 4px; display: flex; align-items: center; gap: 6px; background: transparent; border: none; color: #ffb454; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+                      <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    New group
+                  </button>
+                </div>
+
+                <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 14px 15px; display: flex; flex-direction: column; gap: 11px;">
+                  <div style="display: flex; align-items: center; gap: 11px;">
+                    <span style="width: 38px; height: 38px; border-radius: 12px; background: #262b40; color: #ffc271; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">H</span>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                      <div style="display: flex; align-items: center; gap: 7px;">
+                        <span style="font-size: 16px; font-weight: 600; color: #f7f8fc;">Home</span>
+                        <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #ffc271; background: rgba(255,180,84,0.09); border: 1px solid rgba(255,180,84,0.28); border-radius: 999px; padding: 2px 7px;">OWNER</span>
+                      </div>
+                      <span style="font-size: 12.5px; color: #6f7899;">3 members &middot; 2 lists</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="m9 6 6 6-6 6"/>
+                    </svg>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 11px; background: rgba(167,139,250,0.10); border: 1px solid rgba(167,139,250,0.26); border-radius: 10px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M16 19v-1.6a3.4 3.4 0 0 0-3.4-3.4H6.4A3.4 3.4 0 0 0 3 17.4V19"/>
+                      <circle cx="9.5" cy="7.4" r="3.4"/>
+                      <path d="M19 8.4v4M21 10.4h-4"/>
+                    </svg>
+                    <span style="flex: 1; font-size: 13px; font-weight: 500; color: #c2c8db;">Ines and 2 more want to join</span>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #a78bfa;">Review</span>
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 1px;">
+                    <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid rgba(255,255,255,0.06);">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/>
+                      </svg>
+                      <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Weekly shop</span>
+                      <span style="font-size: 12px; color: #34d399;">7 of 12 ready</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid rgba(255,255,255,0.06);">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/>
+                      </svg>
+                      <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Costco run</span>
+                      <span style="font-size: 12px; color: #6f7899;">4 items</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 14px 15px; display: flex; flex-direction: column; gap: 11px;">
+                  <div style="display: flex; align-items: center; gap: 11px;">
+                    <span style="width: 38px; height: 38px; border-radius: 12px; background: #262b40; color: #98a0bb; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">F</span>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                      <div style="display: flex; align-items: center; gap: 7px;">
+                        <span style="font-size: 16px; font-weight: 600; color: #f7f8fc;">Flat 3B</span>
+                        <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #98a0bb; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.13); border-radius: 999px; padding: 2px 7px;">MEMBER</span>
+                      </div>
+                      <span style="font-size: 12.5px; color: #6f7899;">5 members &middot; 1 list</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="m9 6 6 6-6 6"/>
+                    </svg>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid rgba(255,255,255,0.06);">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/>
+                    </svg>
+                    <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Party supplies</span>
+                    <span style="font-size: 12px; color: #6f7899;">8 items</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; padding: 12px 20px 22px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07);">
+              <button type="button" style="flex: 1; height: 52px; border: none; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                New list
+              </button>
+              <button type="button" style="width: 52px; height: 52px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;" aria-label="Join a group with a code">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3.2" y="6.2" width="17.6" height="11.6" rx="2.6"/>
+                  <path d="M7.6 12h1.6M11.2 12h1.6M14.8 12h1.6"/>
+                </svg>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 980px; top: 170px; width: 390px;">
+        <figcaption>Guest account + pending group</figcaption>
+        <div class="frame" id="ab-TemporaryAccount" style="width: 390px; height: 844px;">
+          <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+              <div style="display: flex; align-items: center; gap: 9px;">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                  <g transform="translate(-0.25 0.732) scale(0.98)">
+                    <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                    <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                  </g>
+                </svg>
+                <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 2px;">
+                <button type="button" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;" aria-label="Search">
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="6.6"/>
+                    <path d="m16 16 4 4"/>
+                  </svg>
+                </button>
+                <button type="button" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;" aria-label="Your guest account">
+                  <span style="width: 30px; height: 30px; border-radius: 999px; background: rgba(167,139,250,0.12); border: 1px dashed rgba(167,139,250,0.55); display: flex; align-items: center; justify-content: center;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M19 20v-1.8a3.6 3.6 0 0 0-3.6-3.6H8.6A3.6 3.6 0 0 0 5 18.2V20"/>
+                      <circle cx="12" cy="7.6" r="3.6"/>
+                    </svg>
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 0;">
+
+              <div style="background: rgba(167,139,250,0.09); border: 1px solid rgba(167,139,250,0.28); border-radius: 16px; padding: 14px 15px; display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; align-items: flex-start; gap: 11px;">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;" aria-hidden="true">
+                    <path d="M12 3.2 19.2 6v5.4c0 4.3-2.9 8.1-7.2 9.4-4.3-1.3-7.2-5.1-7.2-9.4V6Z"/>
+                    <path d="m9.4 12.2 1.9 1.9 3.5-3.8"/>
+                  </svg>
+                  <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                    <span style="font-size: 14.5px; font-weight: 600; color: #f7f8fc;">You are shopping as a guest</span>
+                    <span style="font-size: 13px; line-height: 1.45; color: #c2c8db;">This phone is the only thing holding your account. Add an email or Google to keep your groups and lists if you lose it.</span>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <button type="button" style="flex: 1; height: 44px; border: none; border-radius: 12px; background: #a78bfa; color: #11141f; font-family: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer;">Secure my account</button>
+                  <button type="button" style="height: 44px; padding: 0 14px; border: none; border-radius: 12px; background: transparent; color: #98a0bb; font-family: inherit; font-size: 14.5px; font-weight: 500; cursor: pointer;">Not now</button>
+                </div>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 9px;">
+                <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">PICK UP WHERE YOU LEFT OFF</span>
+                <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 15px 16px; display: flex; flex-direction: column; gap: 12px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                      <span style="font-size: 18px; font-weight: 600; color: #f7f8fc;">Weekly shop</span>
+                      <span style="font-size: 12.5px; color: #6f7899;">Home &middot; 12 items</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="m9 6 6 6-6 6"/>
+                    </svg>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <div style="height: 6px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
+                      <div style="width: 58%; height: 100%; border-radius: 999px; background: #34d399;"></div>
+                    </div>
+                    <span style="font-size: 12px; color: #98a0bb;">7 of 12 ready</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">YOUR GROUPS</span>
+                  <button type="button" style="height: 30px; padding: 0 4px; display: flex; align-items: center; gap: 6px; background: transparent; border: none; color: #ffb454; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+                      <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    New group
+                  </button>
+                </div>
+
+                <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 14px 15px; display: flex; flex-direction: column; gap: 11px;">
+                  <div style="display: flex; align-items: center; gap: 11px;">
+                    <span style="width: 38px; height: 38px; border-radius: 12px; background: #262b40; color: #98a0bb; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">H</span>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                      <div style="display: flex; align-items: center; gap: 7px;">
+                        <span style="font-size: 16px; font-weight: 600; color: #f7f8fc;">Home</span>
+                        <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #98a0bb; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.13); border-radius: 999px; padding: 2px 7px;">MEMBER</span>
+                      </div>
+                      <span style="font-size: 12.5px; color: #6f7899;">3 members &middot; 1 list</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="m9 6 6 6-6 6"/>
+                    </svg>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid rgba(255,255,255,0.06);">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/>
+                    </svg>
+                    <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Weekly shop</span>
+                    <span style="font-size: 12px; color: #34d399;">7 of 12 ready</span>
+                  </div>
+                </div>
+
+                <div style="background: #11141f; border: 1px dashed rgba(255,255,255,0.13); border-radius: 18px; padding: 14px 15px; display: flex; align-items: center; gap: 11px;">
+                  <span style="width: 38px; height: 38px; border-radius: 12px; background: rgba(255,255,255,0.04); color: #525a78; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">F</span>
+                  <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                    <div style="display: flex; align-items: center; gap: 7px;">
+                      <span style="font-size: 16px; font-weight: 600; color: #c2c8db;">Flat 3B</span>
+                      <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #a78bfa; background: rgba(167,139,250,0.10); border: 1px solid rgba(167,139,250,0.30); border-radius: 999px; padding: 2px 7px;">PENDING</span>
+                    </div>
+                    <span style="font-size: 12.5px; color: #6f7899;">Waiting for Marc to let you in</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; padding: 12px 20px 22px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07);">
+              <button type="button" style="flex: 1; height: 52px; border: none; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                New list
+              </button>
+              <button type="button" style="width: 52px; height: 52px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;" aria-label="Join a group with a code">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3.2" y="6.2" width="17.6" height="11.6" rx="2.6"/>
+                  <path d="M7.6 12h1.6M11.2 12h1.6M14.8 12h1.6"/>
+                </svg>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1470px; top: 170px; width: 390px;">
+        <figcaption>Day theme (signed in)</figcaption>
+        <div class="frame" id="ab-DayTheme" style="width: 390px; height: 844px;">
+          <div style="width: 390px; height: 844px; background: #f7f8fc; color: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; background: #ffffff; border-bottom: 1px solid #dde1ed;">
+              <div style="display: flex; align-items: center; gap: 9px;">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                  <g transform="translate(-0.25 0.732) scale(0.98)">
+                    <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                    <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                  </g>
+                </svg>
+                <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; line-height: 1; letter-spacing: 0.05em; color: #11141f;">Velista</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 2px;">
+                <button type="button" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;" aria-label="Search">
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="6.6"/>
+                    <path d="m16 16 4 4"/>
+                  </svg>
+                </button>
+                <button type="button" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;" aria-label="Your account">
+                  <span style="width: 30px; height: 30px; border-radius: 999px; background: #eef0f7; border: 1px solid #dde1ed; color: #11141f; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
+                </button>
+              </div>
+            </div>
+
+            <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 18px; padding: 18px 20px 0;">
+
+              <div style="display: flex; flex-direction: column; gap: 9px;">
+                <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">PICK UP WHERE YOU LEFT OFF</span>
+                <div style="background: #ffffff; border: 1px solid #dde1ed; border-radius: 18px; padding: 15px 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 1px 2px rgba(17,20,31,0.04), 0 2px 6px rgba(17,20,31,0.05);">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                      <span style="font-size: 18px; font-weight: 600; color: #11141f;">Weekly shop</span>
+                      <span style="font-size: 12.5px; color: #6f7899;">Home &middot; 12 items</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="m9 6 6 6-6 6"/>
+                    </svg>
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <div style="height: 6px; border-radius: 999px; background: #eef0f7; overflow: hidden;">
+                      <div style="width: 58%; height: 100%; border-radius: 999px; background: #059669;"></div>
+                    </div>
+                    <span style="font-size: 12px; color: #047857;">7 of 12 ready</span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 9px; padding-top: 2px; border-top: 1px solid #eef0f7;">
+                    <div style="display: flex; align-items: center; padding-top: 10px;">
+                      <span style="width: 24px; height: 24px; border-radius: 999px; background: #6d28d9; border: 2px solid #ffffff; color: #ffffff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
+                      <span style="width: 24px; height: 24px; border-radius: 999px; background: #1d4ed8; border: 2px solid #ffffff; color: #ffffff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">M</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; padding-top: 10px;">
+                      <span style="width: 6px; height: 6px; border-radius: 999px; background: #059669;"></span>
+                      <span style="font-size: 12px; color: #525a78;">Ana and Marc are shopping now</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">YOUR GROUPS</span>
+                  <button type="button" style="height: 30px; padding: 0 4px; display: flex; align-items: center; gap: 6px; background: transparent; border: none; color: #8a5a12; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8a5a12" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+                      <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    New group
+                  </button>
+                </div>
+
+                <div style="background: #ffffff; border: 1px solid #dde1ed; border-radius: 18px; padding: 14px 15px; display: flex; flex-direction: column; gap: 11px; box-shadow: 0 1px 2px rgba(17,20,31,0.04), 0 2px 6px rgba(17,20,31,0.05);">
+                  <div style="display: flex; align-items: center; gap: 11px;">
+                    <span style="width: 38px; height: 38px; border-radius: 12px; background: #fdf1dd; color: #8a5a12; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">H</span>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                      <div style="display: flex; align-items: center; gap: 7px;">
+                        <span style="font-size: 16px; font-weight: 600; color: #11141f;">Home</span>
+                        <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #8a5a12; background: #fdf1dd; border: 1px solid #f2d8a8; border-radius: 999px; padding: 2px 7px;">OWNER</span>
+                      </div>
+                      <span style="font-size: 12.5px; color: #6f7899;">3 members &middot; 2 lists</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="m9 6 6 6-6 6"/>
+                    </svg>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 11px; background: #f3efff; border: 1px solid #ddd2fb; border-radius: 10px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6d28d9" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M16 19v-1.6a3.4 3.4 0 0 0-3.4-3.4H6.4A3.4 3.4 0 0 0 3 17.4V19"/>
+                      <circle cx="9.5" cy="7.4" r="3.4"/>
+                      <path d="M19 8.4v4M21 10.4h-4"/>
+                    </svg>
+                    <span style="flex: 1; font-size: 13px; font-weight: 500; color: #3b2a63;">Ines and 2 more want to join</span>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #6d28d9;">Review</span>
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 1px;">
+                    <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid #eef0f7;">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/>
+                      </svg>
+                      <span style="flex: 1; font-size: 14.5px; color: #11141f;">Weekly shop</span>
+                      <span style="font-size: 12px; color: #047857;">7 of 12 ready</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid #eef0f7;">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/>
+                      </svg>
+                      <span style="flex: 1; font-size: 14.5px; color: #11141f;">Costco run</span>
+                      <span style="font-size: 12px; color: #6f7899;">4 items</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="background: #ffffff; border: 1px solid #dde1ed; border-radius: 18px; padding: 14px 15px; display: flex; flex-direction: column; gap: 11px; box-shadow: 0 1px 2px rgba(17,20,31,0.04), 0 2px 6px rgba(17,20,31,0.05);">
+                  <div style="display: flex; align-items: center; gap: 11px;">
+                    <span style="width: 38px; height: 38px; border-radius: 12px; background: #eef0f7; color: #525a78; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">F</span>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                      <div style="display: flex; align-items: center; gap: 7px;">
+                        <span style="font-size: 16px; font-weight: 600; color: #11141f;">Flat 3B</span>
+                        <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #525a78; background: #eef0f7; border: 1px solid #dde1ed; border-radius: 999px; padding: 2px 7px;">MEMBER</span>
+                      </div>
+                      <span style="font-size: 12.5px; color: #6f7899;">5 members &middot; 1 list</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="m9 6 6 6-6 6"/>
+                    </svg>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid #eef0f7;">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/>
+                    </svg>
+                    <span style="flex: 1; font-size: 14.5px; color: #11141f;">Party supplies</span>
+                    <span style="font-size: 12px; color: #6f7899;">8 items</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; padding: 12px 20px 22px; background: #ffffff; border-top: 1px solid #dde1ed;">
+              <button type="button" style="flex: 1; height: 52px; border: none; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                New list
+              </button>
+              <button type="button" style="width: 52px; height: 52px; border: 1px solid #c2c8db; border-radius: 14px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;" aria-label="Join a group with a code">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3.2" y="6.2" width="17.6" height="11.6" rx="2.6"/>
+                  <path d="M7.6 12h1.6M11.2 12h1.6M14.8 12h1.6"/>
+                </svg>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1960px; top: 170px; width: 980px;">
+        <figcaption>Velista mark and wordmark</figcaption>
+        <div class="frame" id="ab-Brand" style="width: 980px; height: 800px;">
+          <div style="width: 980px; height: 800px; background: #11141f; color: #f7f8fc; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; flex-direction: column; gap: 26px;">
+
+            <div style="display: flex; align-items: baseline; gap: 14px;">
+              <span style="font-family: 'Marcellus', Georgia, serif; font-size: 34px; line-height: 1; letter-spacing: 0.05em;">Velista</span>
+              <span style="font-size: 13.5px; color: #6f7899;">app mark, wordmark and size tests</span>
+            </div>
+
+            <div style="display: flex; gap: 28px; align-items: flex-start;">
+
+              <div style="display: flex; flex-direction: column; gap: 12px; align-items: center;">
+                <svg width="132" height="132" viewBox="0 0 24 24" fill="none" aria-label="Velista app icon">
+                  <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                  <g transform="translate(-0.25 0.732) scale(0.98)">
+                    <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                    <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                  </g>
+                </svg>
+                <span style="font-size: 11.5px; color: #6f7899;">app icon, 512px</span>
+              </div>
+
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 10px; padding-top: 6px;">
+                <span style="font-size: 15px; font-weight: 600; color: #f7f8fc;">The sail is the list</span>
+                <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #98a0bb; max-width: 460px; text-wrap: pretty;">A <em style="font-style: italic; color: #c2c8db;">velista</em> is the person sailing the boat. The mark is a small sailboat whose one big sail is a sheet of paper with handwriting on it: the shopping list is what carries you along.</p>
+                <p style="margin: 0; font-size: 13.5px; line-height: 1.55; color: #6f7899; max-width: 460px; text-wrap: pretty;">The sail is deliberately oversized against the hull, so the paper reads first and the boat second. Three scribbles, each longer than the one above it, follow the widening sail and read as written lines rather than as texture.</p>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: flex-end; gap: 26px; padding: 20px 22px; background: #161a28; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;">
+              <div style="display: flex; flex-direction: column; gap: 9px; align-items: center;">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                  <g transform="translate(-0.25 0.732) scale(0.98)">
+                    <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                    <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                  </g>
+                </svg>
+                <span style="font-size: 11px; color: #6f7899;">64</span>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 9px; align-items: center;">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                  <g transform="translate(-0.25 0.732) scale(0.98)">
+                    <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                    <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                  </g>
+                </svg>
+                <span style="font-size: 11px; color: #6f7899;">44</span>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 9px; align-items: center;">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                  <g transform="translate(-0.25 0.732) scale(0.98)">
+                    <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                    <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                  </g>
+                </svg>
+                <span style="font-size: 11px; color: #6f7899;">30, in the app bar</span>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 9px; align-items: center;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                  <g transform="translate(-0.25 0.732) scale(0.98)">
+                    <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                    <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.4" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                  </g>
+                </svg>
+                <span style="font-size: 11px; color: #6f7899;">16, favicon</span>
+              </div>
+
+              <p style="flex: 1; margin: 0 0 4px; font-size: 12.5px; line-height: 1.5; color: #6f7899; max-width: 330px;">Below about 20px the three scribbles collapse into a smudge, so the favicon size drops to a single bolder stroke. Same boat, fewer marks.</p>
+            </div>
+
+            <div style="display: flex; gap: 22px;">
+
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 22px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;">
+                <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">NIGHT LOCKUP</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                    <g transform="translate(-0.25 0.732) scale(0.98)">
+                      <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                      <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                      <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                    </g>
+                  </svg>
+                  <span style="font-family: 'Marcellus', Georgia, serif; font-size: 25px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                </div>
+              </div>
+
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 22px; background: #ffffff; border: 1px solid #dde1ed; border-radius: 16px;">
+                <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">DAY LOCKUP</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                    <g transform="translate(-0.25 0.732) scale(0.98)">
+                      <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                      <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                      <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                    </g>
+                  </svg>
+                  <span style="font-family: 'Marcellus', Georgia, serif; font-size: 25px; line-height: 1; letter-spacing: 0.05em; color: #11141f;">Velista</span>
+                </div>
+              </div>
+
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 22px; background: #161a28; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;">
+                <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">LINE MARK</span>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#f7f8fc" aria-hidden="true">
+                    <path d="M11.8 2.4V17" stroke-width="1.4" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" stroke-width="1.4" stroke-linejoin="round"/>
+                    <path d="M12.9 8.4c.45-.4.92.4 1.37 0" stroke-width="1.05" stroke-linecap="round"/>
+                    <path d="M13 10.9c.45-.42.9.42 1.35 0s.9.42 1.35 0" stroke-width="1.05" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" stroke-width="1.4" stroke-linejoin="round"/>
+                  </svg>
+                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ffb454" aria-hidden="true">
+                    <path d="M11.8 2.4V17" stroke-width="1.4" stroke-linecap="round"/>
+                    <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" stroke-width="1.4" stroke-linejoin="round"/>
+                    <path d="M12.9 8.4c.45-.4.92.4 1.37 0" stroke-width="1.05" stroke-linecap="round"/>
+                    <path d="M13 10.9c.45-.42.9.42 1.35 0s.9.42 1.35 0" stroke-width="1.05" stroke-linecap="round"/>
+                    <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" stroke-width="1.4" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+                <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #6f7899;">Outline version in currentColor, for anywhere the amber tile would be too loud. Two scribbles, not three.</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 1170px; width: 1330px;">
+        <figcaption>Empty / no connection / error</figcaption>
+        <div class="frame" id="ab-States" style="width: 1330px; height: 970px;">
+          <div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- EMPTY -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">EMPTY &middot; registered, no groups yet</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; display: flex; flex-direction: column; overflow: hidden; border-radius: 4px;">
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; line-height: 1; letter-spacing: 0.05em;">Velista</span>
+                  </div>
+                  <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
+                </div>
+
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 0 32px;">
+                  <div style="position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center;">
+                    <div style="position: absolute; inset: 0; border-radius: 999px; background: radial-gradient(circle, rgba(255,180,84,0.13) 0%, rgba(10,12,20,0) 70%);"></div>
+                    <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#525a78" aria-hidden="true">
+                      <path d="M11.8 2.4V17" stroke-width="1.1" stroke-linecap="round"/>
+                      <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" stroke-width="1.1" stroke-linejoin="round"/>
+                      <path d="M12.9 8.4c.45-.4.92.4 1.37 0" stroke-width="0.9" stroke-linecap="round"/>
+                      <path d="M13 10.9c.45-.42.9.42 1.35 0s.9.42 1.35 0" stroke-width="0.9" stroke-linecap="round"/>
+                      <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" stroke-width="1.1" stroke-linejoin="round"/>
+                    </svg>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 9px; align-items: center;">
+                    <span style="font-size: 21px; font-weight: 600; color: #f7f8fc;">No groups yet</span>
+                    <p style="margin: 0; font-size: 14.5px; line-height: 1.5; color: #98a0bb; text-align: center; text-wrap: pretty;">A group is the household or flatmates you share lists with. Start one, or join someone else's with their code.</p>
+                  </div>
+                </div>
+
+                <div style="padding: 0 20px 26px; display: flex; flex-direction: column; gap: 10px;">
+                  <button type="button" style="height: 52px; border: none; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    Create a group
+                  </button>
+                  <button type="button" style="height: 52px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <rect x="3.2" y="6.2" width="17.6" height="11.6" rx="2.6"/><path d="M7.6 12h1.6M11.2 12h1.6M14.8 12h1.6"/>
+                    </svg>
+                    Join with a code
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- NO CONNECTION -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">NO CONNECTION &middot; temporary handling, reloads on its own</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; display: flex; flex-direction: column; overflow: hidden; border-radius: 4px;">
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; line-height: 1; letter-spacing: 0.05em;">Velista</span>
+                  </div>
+                  <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
+                </div>
+
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 0 32px;">
+                  <span style="width: 68px; height: 68px; border-radius: 999px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M3.6 9a12 12 0 0 1 16.8 0"/>
+                      <path d="M6.4 11.8a8 8 0 0 1 11.2 0"/>
+                      <path d="M9.2 14.6a4 4 0 0 1 5.6 0"/>
+                      <path d="M12 17.5h.01"/>
+                      <path d="M4.2 4.2 19.8 19.8"/>
+                    </svg>
+                  </span>
+                  <div style="display: flex; flex-direction: column; gap: 9px; align-items: center;">
+                    <span style="font-size: 20px; font-weight: 600; color: #f7f8fc; text-align: center;">You have lost connection</span>
+                    <p style="margin: 0; font-size: 14.5px; line-height: 1.5; color: #98a0bb; text-align: center; text-wrap: pretty;">Check your wifi or mobile data. This page reloads on its own as soon as you are back.</p>
+                  </div>
+                </div>
+
+                <div style="padding: 0 20px 26px; display: flex; flex-direction: column; gap: 10px;">
+                  <button type="button" style="height: 52px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 16px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M20.4 12a8.4 8.4 0 1 1-2.5-6"/><path d="M20.4 4.2V10h-5.8"/>
+                    </svg>
+                    Reload now
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ERROR -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ERROR &middot; groups failed to load</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; display: flex; flex-direction: column; overflow: hidden; border-radius: 4px;">
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; line-height: 1; letter-spacing: 0.05em;">Velista</span>
+                  </div>
+                  <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
+                </div>
+
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 0 32px;">
+                  <span style="width: 68px; height: 68px; border-radius: 999px; background: rgba(251,113,133,0.10); border: 1px solid rgba(251,113,133,0.26); display: flex; align-items: center; justify-content: center;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 8.2v5"/><path d="M12 16.4h.01"/><circle cx="12" cy="12" r="9"/>
+                    </svg>
+                  </span>
+                  <div style="display: flex; flex-direction: column; gap: 9px; align-items: center;">
+                    <span style="font-size: 20px; font-weight: 600; color: #f7f8fc; text-align: center;">We could not load your groups</span>
+                    <p style="margin: 0; font-size: 14.5px; line-height: 1.5; color: #98a0bb; text-align: center; text-wrap: pretty;">Something went wrong on our side. Nothing you saved has been lost.</p>
+                  </div>
+                </div>
+
+                <div style="padding: 0 20px 26px; display: flex; flex-direction: column; gap: 12px;">
+                  <button type="button" style="height: 52px; border: none; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M20.4 12a8.4 8.4 0 1 1-2.5-6"/><path d="M20.4 4.2V10h-5.8"/>
+                    </svg>
+                    Try again
+                  </button>
+                  <div style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 13px; background: #161a28; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;">
+                    <span style="flex: 1; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; color: #6f7899;">ref 8f2c41d9e07b</span>
+                    <button type="button" style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;" aria-label="Copy reference">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5.5 15H5a1.8 1.8 0 0 1-1.8-1.8V5.4A1.8 1.8 0 0 1 5 3.6h7.8A1.8 1.8 0 0 1 14.6 5.4v.5"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 430px;"><p>Home page, plan 0003.</p><p>Phone only, 390x844. No desktop design is planned.</p><p>The home route IS the landing page: anonymous visitors get the front door, signed in users get their groups.</p><p>Top row is the Night theme. Bottom row covers empty, no connection and error.</p></aside>
+      <aside class="note" style="left: 470px; top: 0px; width: 430px;"><p>Named Velista: the person sailing the velero.</p><p>The mark is a small sailboat whose one oversized sail is a sheet of paper with scribbled lines. The sail IS the shopping list, which is what carries you along.</p><p>See the brand artboard on the right for the size tests.</p></aside>
+      <aside class="note" style="left: 940px; top: 0px; width: 430px;"><p>DECIDED: the UI says "group" in English and "grupo" in Spanish. The CODE keeps saying zone, everywhere: the API, the enums, the routes, the contracts and even the translation KEYS are unchanged.</p><p>So group is purely a translation value. Never rename a zone symbol in code to match the UI word.</p></aside>
+      <aside class="note" style="left: 1960px; top: 1030px; width: 460px;"><p>TEMPORARY connection handling, by decision.</p><p>No offline queue, no background sync, no service worker. Losing the network shows one blocking screen, and the page reloads itself when the connection returns.</p><p>This is knowingly weak for a shopping list used in a supermarket. It is a placeholder until the PWA work lands, not the final answer.</p></aside>
+      <aside class="note" style="left: 1960px; top: 1250px; width: 460px;"><p>The join request row names the FIRST requester, then adds "and X more want to join" only when there is more than one. The Home card shows the multi case; with a single request it reads "Ines wants to join".</p></aside>
   </div>
-</body>
-</html>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 2940;
+    var h = 2140;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

@@ -1,0 +1,726 @@
+<title>Velista Entry Flows</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-CreateGroup * { box-sizing: border-box; }
+#ab-CreateGroup a { color: #ffb454; text-decoration: none; }
+#ab-CreateGroup a:hover { color: #ffc271; }
+#ab-JoinCode * { box-sizing: border-box; }
+#ab-JoinCode a { color: #ffb454; text-decoration: none; }
+#ab-JoinCode a:hover { color: #ffc271; }
+#ab-JoinLink * { box-sizing: border-box; }
+#ab-JoinLink a { color: #ffb454; text-decoration: none; }
+#ab-JoinLink a:hover { color: #ffc271; }
+#ab-AfterEntry * { box-sizing: border-box; }
+#ab-AfterEntry a { color: #ffb454; text-decoration: none; }
+#ab-AfterEntry a:hover { color: #ffc271; }
+</style>
+
+<header>
+  <h1>Velista Entry Flows</h1>
+  <p class="lede">The design for plan <code>0008</code>: creating a group, joining with a code, and arriving on a shared link. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 2730px; height: 2300px;">
+      <figure class="board" style="left: 0px; top: 210px; width: 1330px;">
+        <figcaption>Create a group</figcaption>
+        <div class="frame" id="ab-CreateGroup" style="width: 1330px; height: 970px;">
+          <div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- EMPTY -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">JUST OPENED &middot; one field, nothing else</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <!-- the front door, still there underneath -->
+                <div style="position: absolute; inset: 0; padding: 14px 20px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="margin-top: 96px; font-family: 'Marcellus', Georgia, serif; font-size: 34px; line-height: 1.2; color: #f7f8fc;">One list.<br>Everyone in sync.</div>
+                </div>
+
+                <!-- scrim -->
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <!-- the sheet -->
+                <div style="position: absolute; left: 0; right: 0; bottom: 291px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Name your group</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 20px;">A group is the household or flatmates you share lists with. You can change the name later.</div>
+
+                  <label for="zone-name-a" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Group name</label>
+                  <div id="zone-name-a" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 15px; gap: 2px;">
+                    <span style="width: 1.5px; height: 21px; background: #ffb454;"></span>
+                    <span style="font-size: 16px; color: #6f7899;">Home</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #6f7899;">
+                    <span>&nbsp;</span>
+                    <span style="font-variant-numeric: tabular-nums;">0 / 80</span>
+                  </div>
+
+                  <button type="button" disabled style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: rgba(255,180,84,0.24); color: rgba(10,12,20,0.55); font-family: inherit; font-size: 16px; font-weight: 650;">Create group</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+                  </div>
+                </div>
+
+                <!-- keyboard band: the sheet is drawn where it actually sits, above the keyboard -->
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- TYPED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">TYPED &middot; the only thing that enables the button</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; padding: 14px 20px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="margin-top: 96px; font-family: 'Marcellus', Georgia, serif; font-size: 34px; line-height: 1.2; color: #f7f8fc;">One list.<br>Everyone in sync.</div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 291px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Name your group</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 20px;">A group is the household or flatmates you share lists with. You can change the name later.</div>
+
+                  <label for="zone-name-b" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Group name</label>
+                  <div id="zone-name-b" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 15px; gap: 1px;">
+                    <span style="font-size: 16px; color: #f7f8fc;">Flat 3B</span>
+                    <span style="width: 1.5px; height: 21px; background: #ffb454; margin-left: 2px;"></span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #6f7899;">
+                    <span>&nbsp;</span>
+                    <span style="font-variant-numeric: tabular-nums;">7 / 80</span>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Create group</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- SUBMITTING -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SUBMITTING &middot; an account is being made, and it says so</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; padding: 14px 20px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="margin-top: 96px; font-family: 'Marcellus', Georgia, serif; font-size: 34px; line-height: 1.2; color: #f7f8fc;">One list.<br>Everyone in sync.</div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 34px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Name your group</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 20px;">A group is the household or flatmates you share lists with. You can change the name later.</div>
+
+                  <label for="zone-name-c" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Group name</label>
+                  <div id="zone-name-c" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 15px;">
+                    <span style="font-size: 16px; color: #98a0bb;">Flat 3B</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #6f7899;">
+                    <span>&nbsp;</span>
+                    <span style="font-variant-numeric: tabular-nums;">7 / 80</span>
+                  </div>
+
+                  <button type="button" disabled style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: rgba(255,180,84,0.55); color: rgba(10,12,20,0.75); font-family: inherit; font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" stroke="rgba(10,12,20,0.28)" stroke-width="2.6"/>
+                      <path d="M21 12a9 9 0 0 0-9-9" stroke="rgba(10,12,20,0.8)" stroke-width="2.6" stroke-linecap="round"/>
+                    </svg>
+                    Creating
+                  </button>
+
+                  <div style="display: flex; gap: 9px; align-items: flex-start; margin-top: 18px; padding: 13px 14px; border-radius: 14px; background: rgba(255,180,84,0.09); border: 1px solid rgba(255,180,84,0.2);">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9.2" stroke="#ffb454" stroke-width="1.7"/>
+                      <path d="M12 11v5.4" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round"/>
+                      <circle cx="12" cy="7.9" r="1.05" fill="#ffb454"/>
+                    </svg>
+                    <div style="font-size: 12.5px; line-height: 1.5; color: #e4e7f1;">We are setting up an account on this phone so the group has an owner. You can add an email to it whenever you like.</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1400px; top: 210px; width: 1330px;">
+        <figcaption>Join with a code</figcaption>
+        <div class="frame" id="ab-JoinCode" style="width: 1330px; height: 970px;">
+          <div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- EMPTY -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">JUST OPENED &middot; eight characters, and a paste button</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; padding: 14px 20px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="margin-top: 96px; font-family: 'Marcellus', Georgia, serif; font-size: 34px; line-height: 1.2; color: #f7f8fc;">One list.<br>Everyone in sync.</div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 291px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Enter the code</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 20px;">Whoever set the group up can find its code on the group&rsquo;s page.</div>
+
+                  <label for="join-code-a" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Join code</label>
+                  <div style="display: flex; gap: 10px;">
+                    <div id="join-code-a" style="flex: 1; height: 56px; border-radius: 14px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 16px; gap: 2px;">
+                      <span style="width: 1.5px; height: 24px; background: #ffb454;"></span>
+                      <span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 21px; letter-spacing: 0.22em; color: #4d5470;">XXXXXXXX</span>
+                    </div>
+                    <button type="button" style="width: 56px; height: 56px; flex: none; border-radius: 14px; border: 1px solid rgba(255,255,255,0.14); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Paste">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="8.5" y="8.5" width="11" height="12" rx="2.2"/>
+                        <path d="M15.5 8.5V6a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2H8.5"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-top: 9px; font-size: 12px; color: #6f7899;">
+                    <span>Letters and numbers. Never O, I or L.</span>
+                    <span style="font-variant-numeric: tabular-nums;">0 / 8</span>
+                  </div>
+
+                  <button type="button" disabled style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: rgba(255,180,84,0.24); color: rgba(10,12,20,0.55); font-family: inherit; font-size: 16px; font-weight: 650;">Ask to join</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- TYPED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">FILLED &middot; uppercased as you type, no group name to show yet</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; padding: 14px 20px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="margin-top: 96px; font-family: 'Marcellus', Georgia, serif; font-size: 34px; line-height: 1.2; color: #f7f8fc;">One list.<br>Everyone in sync.</div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 291px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Enter the code</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 20px;">Whoever set the group up can find its code on the group&rsquo;s page.</div>
+
+                  <label for="join-code-b" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Join code</label>
+                  <div style="display: flex; gap: 10px;">
+                    <div id="join-code-b" style="flex: 1; height: 56px; border-radius: 14px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 16px;">
+                      <span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 21px; letter-spacing: 0.22em; color: #f7f8fc;">HK7M2QPD</span>
+                    </div>
+                    <button type="button" style="width: 56px; height: 56px; flex: none; border-radius: 14px; border: 1px solid rgba(255,255,255,0.14); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Paste">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="8.5" y="8.5" width="11" height="12" rx="2.2"/>
+                        <path d="M15.5 8.5V6a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2H8.5"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-top: 9px; font-size: 12px; color: #6f7899;">
+                    <span>Letters and numbers. Never O, I or L.</span>
+                    <span style="font-variant-numeric: tabular-nums; color: #98a0bb;">8 / 8</span>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Ask to join</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- WRONG CODE -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">NO SUCH GROUP &middot; a 404 the server describes generically</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; padding: 14px 20px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="margin-top: 96px; font-family: 'Marcellus', Georgia, serif; font-size: 34px; line-height: 1.2; color: #f7f8fc;">One list.<br>Everyone in sync.</div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 291px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Enter the code</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 20px;">Whoever set the group up can find its code on the group&rsquo;s page.</div>
+
+                  <label for="join-code-c" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Join code</label>
+                  <div style="display: flex; gap: 10px;">
+                    <div id="join-code-c" style="flex: 1; height: 56px; border-radius: 14px; background: #0a0c14; border: 1px solid #fb7185; display: flex; align-items: center; padding: 0 16px;">
+                      <span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 21px; letter-spacing: 0.22em; color: #f7f8fc;">HK7M2QPD</span>
+                    </div>
+                    <button type="button" style="width: 56px; height: 56px; flex: none; border-radius: 14px; border: 1px solid rgba(255,255,255,0.14); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Paste">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="8.5" y="8.5" width="11" height="12" rx="2.2"/>
+                        <path d="M15.5 8.5V6a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2H8.5"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div role="alert" style="display: flex; gap: 9px; align-items: flex-start; margin-top: 12px;">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9.2" stroke="#fb7185" stroke-width="1.7"/>
+                      <path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6" stroke="#fb7185" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                    <div style="font-size: 13px; line-height: 1.5; color: #fb7185;">No group has that code. Check it with whoever sent it. Codes never use O, I or L.</div>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 16px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Ask to join</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 1330px; width: 470px;">
+        <figcaption>Arriving on a shared link</figcaption>
+        <div class="frame" id="ab-JoinLink" style="width: 470px; height: 970px;">
+          <div style="width: 470px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SHARED LINK &middot; cold arrival, no page underneath</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
+
+                <div style="position: absolute; top: -150px; right: -110px; width: 360px; height: 360px; border-radius: 999px; background: radial-gradient(circle, rgba(255,180,84,0.15) 0%, rgba(167,139,250,0.09) 44%, rgba(10,12,20,0) 72%); pointer-events: none;"></div>
+
+                <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px 4px; position: relative;">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                    <g transform="translate(-0.25 0.732) scale(0.98)">
+                      <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                      <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                      <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                      <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                    </g>
+                  </svg>
+                  <span style="font-family: 'Marcellus', Georgia, serif; font-size: 24px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                </div>
+
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 24px 24px; position: relative;">
+
+                  <div style="width: 56px; height: 56px; border-radius: 18px; background: rgba(255,180,84,0.12); border: 1px solid rgba(255,180,84,0.26); display: flex; align-items: center; justify-content: center; margin-bottom: 22px;">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19"/>
+                      <circle cx="10" cy="7.5" r="3.5"/>
+                      <path d="M18 8.5v5M20.5 11h-5"/>
+                    </svg>
+                  </div>
+
+                  <h1 style="margin: 0 0 12px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; letter-spacing: 0; color: #f7f8fc;">Someone wants you<br>on their list</h1>
+                  <p style="margin: 0 0 26px; font-size: 15px; line-height: 1.55; color: #98a0bb;">Ask to join, and whoever runs the group lets you in. You will see the group and its lists once they do.</p>
+
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.07); padding: 18px 20px; margin-bottom: 26px;">
+                    <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 10px;">The code in your link</div>
+                    <div style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 26px; letter-spacing: 0.2em; color: #f7f8fc;">HK7M2QPD</div>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Ask to join</button>
+
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 6px;">
+                    <a href="#" style="font-size: 14.5px; font-weight: 500;">Not now</a>
+                  </div>
+
+                  <div style="display: flex; gap: 9px; align-items: flex-start; margin-top: 14px; padding: 13px 14px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9.2" stroke="#98a0bb" stroke-width="1.7"/>
+                      <path d="M12 11v5.4" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round"/>
+                      <circle cx="12" cy="7.9" r="1.05" fill="#98a0bb"/>
+                    </svg>
+                    <div style="font-size: 12.5px; line-height: 1.5; color: #98a0bb;">Asking makes an account on this phone. Add an email to it later so you do not lose it.</div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 560px; top: 1330px; width: 900px;">
+        <figcaption>The two outcomes</figcaption>
+        <div class="frame" id="ab-AfterEntry" style="width: 900px; height: 970px;">
+          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- CREATED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">CREATED &middot; a group of one is useless, so the code leads</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 21px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650; color: #c2c8db;">S</div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 20px 20px 0;">
+
+                  <!-- the invite card: the one thing that matters right now -->
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,180,84,0.22); padding: 20px; margin-bottom: 26px;">
+                    <div style="font-size: 17px; font-weight: 650; margin-bottom: 5px;">Flat 3B is yours</div>
+                    <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 17px;">Send this code to the people you shop with. They enter it to ask to join.</div>
+
+                    <div style="display: flex; gap: 10px;">
+                      <div style="flex: 1; height: 54px; border-radius: 14px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.09); display: flex; align-items: center; justify-content: center;">
+                        <span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 22px; letter-spacing: 0.2em; color: #f7f8fc;">HK7M2QPD</span>
+                      </div>
+                      <button type="button" style="width: 54px; height: 54px; flex: none; border-radius: 14px; border: 0; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Copy code">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <rect x="8.5" y="8.5" width="11" height="12" rx="2.2"/>
+                          <path d="M15.5 8.5V6a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2H8.5"/>
+                        </svg>
+                      </button>
+                    </div>
+
+                    <button type="button" style="width: 100%; height: 46px; margin-top: 10px; border-radius: 13px; border: 1px solid rgba(255,255,255,0.14); background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#f7f8fc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="17.5" cy="6" r="2.8"/>
+                        <circle cx="6.5" cy="12" r="2.8"/>
+                        <circle cx="17.5" cy="18" r="2.8"/>
+                        <path d="M9 10.7l6-3.4M9 13.3l6 3.4"/>
+                      </svg>
+                      Share the link
+                    </button>
+                  </div>
+
+                  <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #98a0bb; margin-bottom: 12px;">Your groups</div>
+
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.06); padding: 17px 18px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px;">
+                      <span style="font-size: 16.5px; font-weight: 650;">Flat 3B</span>
+                      <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: #ffb454; background: rgba(255,180,84,0.13); border-radius: 999px; padding: 4px 9px;">OWNER</span>
+                    </div>
+                    <div style="font-size: 13px; color: #98a0bb; margin-bottom: 15px;">1 member &middot; no lists yet</div>
+                    <button type="button" style="width: 100%; height: 44px; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.16); background: transparent; color: #c2c8db; font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M12 5.5v13M5.5 12h13"/>
+                      </svg>
+                      New list
+                    </button>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ASKED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ASKED &middot; joining does not let you in, and must not pretend to</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 21px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650; color: #c2c8db;">M</div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 20px 20px 0;">
+
+                  <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.07); padding: 22px 20px; margin-bottom: 26px; text-align: center;">
+                    <div style="width: 48px; height: 48px; border-radius: 999px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09); display: flex; align-items: center; justify-content: center; margin: 0 auto 15px;">
+                      <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="8.6"/>
+                        <path d="M12 7.4V12l3 1.8"/>
+                      </svg>
+                    </div>
+                    <div style="font-size: 18px; font-weight: 650; margin-bottom: 7px;">You asked to join Flat 3B</div>
+                    <div style="font-size: 13.5px; line-height: 1.55; color: #98a0bb;">Whoever runs the group decides. This page updates the moment they do, and the group opens up below.</div>
+                  </div>
+
+                  <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #98a0bb; margin-bottom: 12px;">Your groups</div>
+
+                  <div style="border-radius: 18px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 17px 18px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                      <span style="width: 38px; height: 38px; border-radius: 12px; background: rgba(255,255,255,0.04); color: #525a78; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">F</span>
+                      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                        <div style="display: flex; align-items: center; gap: 7px;">
+                          <span style="font-size: 16px; font-weight: 600; color: #c2c8db;">Flat 3B</span>
+                          <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #a78bfa; background: rgba(167,139,250,0.10); border: 1px solid rgba(167,139,250,0.30); border-radius: 999px; padding: 2px 7px;">PENDING</span>
+                        </div>
+                        <span style="font-size: 12.5px; color: #6f7899;">Waiting to be let in</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; gap: 9px; align-items: flex-start; margin-top: 26px; padding: 15px 16px; border-radius: 16px; background: rgba(255,180,84,0.09); border: 1px solid rgba(255,180,84,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9.2" stroke="#ffb454" stroke-width="1.7"/>
+                      <path d="M12 11v5.4" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round"/>
+                      <circle cx="12" cy="7.9" r="1.05" fill="#ffb454"/>
+                    </svg>
+                    <div>
+                      <div style="font-size: 14px; font-weight: 650; margin-bottom: 4px;">You are shopping as a guest</div>
+                      <div style="font-size: 12.5px; line-height: 1.5; color: #e4e7f1;">This phone is the only thing holding your account. Add an email so you can get back in from anywhere.</div>
+                      <div style="margin-top: 11px; font-size: 14px; font-weight: 650; color: #ffb454;">Secure my account</div>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 430px;"><p>Entry flows, plan 0008. The four ways in that the front door offers, minus the two credential ones.</p><p>Phone only, 390x844. Night theme only: these screens introduce no colour role that 0003 has not already proven on Day.</p><p>Both sheets sit above the keyboard, which is drawn as a band so the thumb reach is honest.</p></aside>
+      <aside class="note" style="left: 470px; top: 0px; width: 420px;"><p>ONE field per sheet, and that is a backend decision, not a simplification.</p><p>CreateZoneDto and JoinZoneDto both make username OPTIONAL, and the DTO comment says why: omitting it means "call me by my global username", which already exists by the time either call runs.</p><p>So neither sheet asks who you are. Renaming yourself per group is a later screen.</p></aside>
+      <aside class="note" style="left: 940px; top: 0px; width: 430px;"><p>These two routes are the ONLY places an account is created. Both take an optional token: with none, the gateway mints a temporary user and hands the token pair back beside the data.</p><p>Rule D3: refresh BEFORE calling either. OptionalJwtAuthGuard swallows an expired token rather than rejecting it, so a stale one silently mints a SECOND guest and orphans the groups on the first, which nobody can reach again.</p><p>The submitting frame says an account is being made. It is not a surprise to spring after the fact.</p></aside>
+      <aside class="note" style="left: 1400px; top: 0px; width: 430px;"><p>JOINING DOES NOT LET YOU IN. Core lands every join in PENDING with no access until an owner or admin approves.</p><p>So the button says "Ask to join", not "Join", and the outcome screen says "Waiting to be let in". A success toast that implied membership would be a lie the next screen exposes.</p><p>A prior BANNED membership is refused; a KICKED one may ask again.</p></aside>
+      <aside class="note" style="left: 1520px; top: 1330px; width: 450px;"><p>NOTHING CAN NAME THE GROUP BEFORE YOU JOIN, and everything can name it after. There is no endpoint that resolves a join code to a zone: POST /v1/zones/join is the only route that accepts one, and it joins.</p><p>So neither the sheet nor the shared link screen may preview "You are joining Flat 3B", and both are written to promise nothing they cannot show.</p><p>The moment the ask lands it flips, because core's listMine selects memberships with status APPROVED **or** PENDING and joins the zone row either way. So the outcome screen names the group, and the pending card is the one from the approved 0003 mock, unchanged.</p><p>A public preview endpoint is recorded as backend work, not assumed.</p></aside>
+      <aside class="note" style="left: 1520px; top: 1610px; width: 450px;"><p>Codes are 8 characters from ABCDEFGHJKMNPQRSTUVWXYZ23456789: no O, 0, I, 1 or L, on purpose, because they are read off a screen and typed by somebody else.</p><p>The field uppercases as it goes and drops anything outside that alphabet, so a misread O never becomes a failed request. The helper line says which letters never appear, which is also the fix for the 404 below it.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 2730;
+    var h = 2300;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>
