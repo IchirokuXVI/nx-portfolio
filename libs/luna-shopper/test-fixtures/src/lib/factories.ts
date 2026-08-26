@@ -51,6 +51,7 @@ export function makeUser(overrides: Partial<SeedUser> = {}): SeedUser {
     email: 'user@example.com',
     emailVerifiedAt: null,
     displayName: 'A User',
+    username: 'Steady Sail',
     ...overrides,
   };
 }

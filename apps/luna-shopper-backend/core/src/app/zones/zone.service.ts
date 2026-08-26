@@ -38,7 +38,7 @@ import { generateJoinCode } from './join-code';
 import { ZoneAuthzService } from './zone-authz.service';
 import { toMembershipView, toMyZoneView, toZoneView } from './zone.mappers';
 
-/** Postgres unique-violation error code, raised on a username/join-code clash. */
+/** Postgres unique-violation error code, raised on a join-code clash. */
 const PG_UNIQUE_VIOLATION = '23505';
 
 interface MyZoneCursor {
@@ -106,8 +106,9 @@ export class ZoneService {
   /**
    * Join a zone by code (plan 0006, section 3). Lands in PENDING with no access
    * until an owner/admin approves. A prior BANNED membership blocks rejoining; a
-   * KICKED one may re-request. Per zone `username` uniqueness is a clean
-   * validation error the client can retry.
+   * KICKED one may re-request. The `username` is whatever the gateway resolved:
+   * the caller's own choice, or their global username when the body omitted one
+   * (plan 0018, section 9). It is not unique within the zone.
    */
   async join(req: JoinZoneRequest): Promise<MembershipView> {
     const zone = await this.zones.findOne({
@@ -131,12 +132,12 @@ export class ZoneService {
       // KICKED: allow a fresh request.
       existing.status = MembershipStatus.PENDING;
       existing.username = req.username;
-      const saved = await this.saveHandlingUsername(existing);
+      const saved = await this.memberships.save(existing);
       this.emitMember(RealtimeEvent.MemberJoined, saved);
       return toMembershipView(saved);
     }
 
-    const saved = await this.saveHandlingUsername(
+    const saved = await this.memberships.save(
       this.memberships.create({
         zoneId: zone.id,
         userId: req.userId,
@@ -147,21 +148,6 @@ export class ZoneService {
     );
     this.emitMember(RealtimeEvent.MemberJoined, saved);
     return toMembershipView(saved);
-  }
-
-  private async saveHandlingUsername(
-    membership: ZoneMembership
-  ): Promise<ZoneMembership> {
-    try {
-      return await this.memberships.save(membership);
-    } catch (error) {
-      if (this.isUniqueViolation(error)) {
-        throw new ValidationException('That username is taken in this zone', {
-          messageArgs: { field: 'username' },
-        });
-      }
-      throw error;
-    }
   }
 
   /** Edit the zone name/config (plan 0006, section 4): owner or admin. */

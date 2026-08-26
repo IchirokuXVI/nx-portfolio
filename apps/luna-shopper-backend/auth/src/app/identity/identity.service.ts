@@ -3,21 +3,26 @@ import { ConfigService } from '@nestjs/config';
 import {
   AuthProvider,
   UserKind,
+  UsernamePropagation,
   type AuthTokens,
   type DeleteAccountRequest,
   type DeleteAccountResult,
+  type GetProfileRequest,
   type GoogleLoginRequest,
   type LoginRequest,
   type RegisterRequest,
+  type SetUsernameRequest,
   type UpgradeRequest,
+  type UserProfileView,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
   NotFoundException,
   UnauthorizedException,
+  validateUsername,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { DataSource, type EntityManager } from 'typeorm';
 import type { AuthConfig } from '../config/app-config';
 import {
@@ -30,6 +35,7 @@ import { IdentityEventsPublisher } from '../events/identity-events.publisher';
 import { MailService } from '../mail/mail.service';
 import { PasswordService } from '../password/password.service';
 import { TokenService } from '../tokens/token.service';
+import { UsernameGenerator } from '../username/username-generator.service';
 
 /** Hours an email verification link stays valid. */
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -51,6 +57,7 @@ export class IdentityService {
     private readonly passwords: PasswordService,
     private readonly mail: MailService,
     private readonly events: IdentityEventsPublisher,
+    private readonly usernames: UsernameGenerator,
     configService: ConfigService
   ) {
     this.config = configService.getOrThrow<AuthConfig>('auth');
@@ -70,11 +77,14 @@ export class IdentityService {
    * leaves no account behind.
    */
   async createTemporaryUser(): Promise<AuthTokens> {
-    const user = await this.dataSource
-      .getRepository(User)
-      .save(
-        this.dataSource.getRepository(User).create({ kind: UserKind.TEMPORARY })
-      );
+    const user = await this.dataSource.getRepository(User).save(
+      this.dataSource.getRepository(User).create({
+        kind: UserKind.TEMPORARY,
+        // A guest is named from the moment they exist (plan 0018, section 3.4),
+        // so the zone they are about to create or join has a name to record.
+        username: this.usernames.generate(),
+      })
+    );
     return this.tokens.issueTokens(user);
   }
 
@@ -101,6 +111,9 @@ export class IdentityService {
             kind: UserKind.REGISTERED,
             email,
             displayName: req.displayName ?? null,
+            // Generated regardless of any supplied `displayName`: the username is
+            // a public, cross zone handle and the display name is not (0018, s1).
+            username: this.usernames.generate(req.locale),
           })
         );
 
@@ -298,6 +311,69 @@ export class IdentityService {
     return { userId: req.userId, deleted };
   }
 
+  /**
+   * Change the caller's global username (plan 0018, section 4). The column change
+   * commits synchronously; the zone names follow when core consumes the event, so
+   * there is a brief window where a client that already refreshed its profile
+   * still sees the old name in a zone list. That is accepted: the realtime events
+   * close it without a refetch, and the alternative is a distributed transaction
+   * across two databases, which is the thing this architecture exists to avoid.
+   */
+  async setUsername(req: SetUsernameRequest): Promise<UserProfileView> {
+    const username = validateUsername(req.username);
+    const propagation = req.propagation ?? UsernamePropagation.GLOBAL_ONLY;
+
+    const { user, oldUsername } = await this.dataSource.transaction(
+      async (manager) => {
+        const user = await manager
+          .getRepository(User)
+          .findOne({ where: { id: req.userId } });
+        if (!user) {
+          throw new NotFoundException('User not found');
+        }
+        const oldUsername = user.username;
+        user.username = username;
+        return {
+          user: await manager.getRepository(User).save(user),
+          oldUsername,
+        };
+      }
+    );
+
+    // Emitted for every mode, GLOBAL_ONLY included, so a consumer sees every
+    // rename; core records a GLOBAL_ONLY event as processed and does nothing.
+    this.events.userUsernameChanged({
+      eventId: randomUUID(),
+      userId: user.id,
+      oldUsername,
+      newUsername: user.username,
+      propagation,
+    });
+    return this.toProfile(user);
+  }
+
+  /** The caller's own profile (plan 0018, section 12). */
+  async getProfile(req: GetProfileRequest): Promise<UserProfileView> {
+    const user = await this.dataSource
+      .getRepository(User)
+      .findOne({ where: { id: req.userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return this.toProfile(user);
+  }
+
+  private toProfile(user: User): UserProfileView {
+    return {
+      userId: user.id,
+      kind: user.kind,
+      username: user.username,
+      email: user.email,
+      emailVerified: user.emailVerifiedAt !== null,
+      displayName: user.displayName,
+    };
+  }
+
   private async linkGoogle(
     manager: EntityManager,
     userId: string,
@@ -360,6 +436,9 @@ export class IdentityService {
           email: req.email ? this.normalizeEmail(req.email) : null,
           displayName: req.displayName ?? null,
           emailVerifiedAt: req.email ? new Date() : null,
+          // Specifically NOT the Google profile name (plan 0018, section 1):
+          // that is the person's real name, which they never chose to publish.
+          username: this.usernames.generate(),
         })
       );
       await this.linkGoogle(manager, created.id, req.providerUserId);

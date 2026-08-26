@@ -1,8 +1,10 @@
 import { AUTH_PATTERNS } from '../../lib/messages/auth.messages';
 import {
+  boolean,
   integer,
   JsonSchema,
   nonEmptyString,
+  nullableString,
   object,
   ref,
   schemaId,
@@ -27,6 +29,9 @@ export const AUTH_SCHEMA_IDS = {
   refreshRequest: schemaId('msg/auth.refresh/request'),
   upgradeRequest: schemaId('msg/auth.upgrade/request'),
   googleLoginRequest: schemaId('msg/auth.googleLogin/request'),
+  setUsernameRequest: schemaId('msg/auth.setUsername/request'),
+  getProfileRequest: schemaId('msg/auth.getProfile/request'),
+  userProfileView: schemaId('auth/UserProfileView'),
 } as const;
 
 const authTokens = object(
@@ -34,10 +39,11 @@ const authTokens = object(
   {
     userId: nonEmptyString(),
     kind: ref(ENUM_IDS.userKind),
+    username: nonEmptyString(),
     accessToken: nonEmptyString(),
     refreshToken: nonEmptyString(),
   },
-  ['userId', 'kind', 'accessToken', 'refreshToken']
+  ['userId', 'kind', 'username', 'accessToken', 'refreshToken']
 );
 
 const accessTokenClaims = object(
@@ -120,6 +126,35 @@ const googleLoginRequest = object(
   ['providerUserId']
 );
 
+const setUsernameRequest = object(
+  AUTH_SCHEMA_IDS.setUsernameRequest,
+  {
+    userId: nonEmptyString(),
+    username: nonEmptyString(),
+    propagation: ref(ENUM_IDS.usernamePropagation),
+  },
+  ['userId', 'username']
+);
+
+const getProfileRequest = object(
+  AUTH_SCHEMA_IDS.getProfileRequest,
+  { userId: nonEmptyString() },
+  ['userId']
+);
+
+const userProfileView = object(
+  AUTH_SCHEMA_IDS.userProfileView,
+  {
+    userId: nonEmptyString(),
+    kind: ref(ENUM_IDS.userKind),
+    username: nonEmptyString(),
+    email: nullableString(),
+    emailVerified: boolean(),
+    displayName: nullableString(),
+  },
+  ['userId', 'kind', 'username', 'email', 'emailVerified', 'displayName']
+);
+
 export const authSchemas: JsonSchema[] = [
   authTokens,
   accessTokenClaims,
@@ -131,6 +166,9 @@ export const authSchemas: JsonSchema[] = [
   refreshRequest,
   upgradeRequest,
   googleLoginRequest,
+  setUsernameRequest,
+  getProfileRequest,
+  userProfileView,
 ];
 
 export const authMessageContracts: Record<
@@ -164,5 +202,13 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.googleLogin]: {
     request: AUTH_SCHEMA_IDS.googleLoginRequest,
     response: AUTH_SCHEMA_IDS.authTokens,
+  },
+  [AUTH_PATTERNS.setUsername]: {
+    request: AUTH_SCHEMA_IDS.setUsernameRequest,
+    response: AUTH_SCHEMA_IDS.userProfileView,
+  },
+  [AUTH_PATTERNS.getProfile]: {
+    request: AUTH_SCHEMA_IDS.getProfileRequest,
+    response: AUTH_SCHEMA_IDS.userProfileView,
   },
 };

@@ -1,4 +1,5 @@
 import {
+  hours,
   minutes,
   seconds,
   type ThrottlerModuleOptions,
@@ -44,4 +45,11 @@ export const THROTTLE_LIMITS = {
   verifyResend: { [DEFAULT_BUCKET]: { ttl: minutes(10), limit: 3 } },
   /** Join code redemption (enumeration protection). */
   joinCode: { [DEFAULT_BUCKET]: { ttl: seconds(30), limit: 5 } },
+  /**
+   * Renaming, global or per zone (plan 0018, section 6). Usernames are public,
+   * non unique and freely changeable, so rapid renaming is a plausible
+   * harassment pattern: take a target's name, act under it, change back. Five an
+   * hour leaves ordinary editing untouched and makes that loop impractical.
+   */
+  usernameChange: { [DEFAULT_BUCKET]: { ttl: hours(1), limit: 5 } },
 } as const;

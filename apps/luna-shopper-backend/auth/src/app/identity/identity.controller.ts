@@ -5,11 +5,14 @@ import {
   type AuthTokens,
   type DeleteAccountRequest,
   type DeleteAccountResult,
+  type GetProfileRequest,
   type GoogleLoginRequest,
   type LoginRequest,
   type RefreshRequest,
   type RegisterRequest,
+  type SetUsernameRequest,
   type UpgradeRequest,
+  type UserProfileView,
   type VerifyEmailRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { IdentityService } from './identity.service';
@@ -65,5 +68,15 @@ export class IdentityController {
     @Payload() req: DeleteAccountRequest
   ): Promise<DeleteAccountResult> {
     return this.identity.deleteAccount(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.setUsername)
+  setUsername(@Payload() req: SetUsernameRequest): Promise<UserProfileView> {
+    return this.identity.setUsername(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.getProfile)
+  getProfile(@Payload() req: GetProfileRequest): Promise<UserProfileView> {
+    return this.identity.getProfile(req);
   }
 }

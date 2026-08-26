@@ -1,20 +1,34 @@
-import { Controller, Delete, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Patch,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import {
   AUTH_PATTERNS,
   type DeleteAccountResult,
+  type UserProfileView,
 } from '@portfolio/luna-shopper/contracts';
+import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
 import { NatsClient } from '../messaging/nats-client';
+import { UpdateProfileDto } from './account.dto';
 
 /**
- * Account deletion (plan 0011). `DELETE /v1/account` removes the authenticated
- * caller's own account — the `userId` comes from the verified token, never the
- * body, so a caller can only ever delete themselves. Works for both temporary and
- * registered users (both hold a token). Auth then emits `user.deleted` and core
- * reacts (retires memberships, marks owned zones for deletion).
+ * The caller's own account: the profile routes (plan 0018, section 12) and
+ * deletion (plan 0011).
+ *
+ * Every route takes its `userId` from the verified token, never from the body or
+ * a path parameter, so a caller can only ever read or change themselves. Deletion
+ * works for temporary and registered users alike (both hold a token): auth then
+ * emits `user.deleted` and core reacts by retiring memberships and marking owned
+ * zones for deletion.
  */
 @ApiTags('account')
 @ApiBearerAuth('access-token')
@@ -22,6 +36,32 @@ import { NatsClient } from '../messaging/nats-client';
 @Controller({ path: 'account', version: '1' })
 export class AccountController {
   constructor(private readonly nats: NatsClient) {}
+
+  /** The caller's own profile, which is where the app bar gets a name to show. */
+  @Get('me')
+  me(@AuthUser() user: CurrentUser): Promise<UserProfileView> {
+    return this.nats.send<UserProfileView>(AUTH_PATTERNS.getProfile, {
+      userId: user.userId,
+    });
+  }
+
+  /**
+   * Change the global username, and optionally the per zone copies of it.
+   * Throttled: a public, non unique, freely changeable name makes rapid renaming
+   * a plausible harassment pattern (plan 0018, section 6).
+   */
+  @Patch('me')
+  @Throttle(THROTTLE_LIMITS.usernameChange)
+  updateMe(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: UpdateProfileDto
+  ): Promise<UserProfileView> {
+    return this.nats.send<UserProfileView>(AUTH_PATTERNS.setUsername, {
+      userId: user.userId,
+      username: dto.username,
+      propagation: dto.propagation,
+    });
+  }
 
   @Delete()
   remove(@AuthUser() user: CurrentUser): Promise<DeleteAccountResult> {

@@ -35,7 +35,9 @@ describeIntegration('auth schema (real Postgres)', () => {
     const rows = await dataSource.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`
     );
-    const names = new Set(rows.map((r: { table_name: string }) => r.table_name));
+    const names = new Set(
+      rows.map((r: { table_name: string }) => r.table_name)
+    );
     for (const table of [
       'users',
       'credentials',
@@ -49,13 +51,29 @@ describeIntegration('auth schema (real Postgres)', () => {
 
   it('round-trips a temporary User through the kind enum column', async () => {
     const users = dataSource.getRepository(User);
-    const saved = await users.save(users.create({ kind: UserKind.TEMPORARY }));
+    const saved = await users.save(
+      users.create({ kind: UserKind.TEMPORARY, username: 'Quiet Lantern' })
+    );
     try {
       const found = await users.findOneOrFail({ where: { id: saved.id } });
       expect(found.kind).toBe(UserKind.TEMPORARY);
       expect(found.email).toBeNull();
+      expect(found.username).toBe('Quiet Lantern');
     } finally {
       await users.delete({ id: saved.id });
+    }
+  });
+
+  it('accepts two users with the same global username (plan 0018)', async () => {
+    const users = dataSource.getRepository(User);
+    const rows = await users.save([
+      users.create({ kind: UserKind.TEMPORARY, username: 'Swift Sail' }),
+      users.create({ kind: UserKind.TEMPORARY, username: 'Swift Sail' }),
+    ]);
+    try {
+      expect(rows).toHaveLength(2);
+    } finally {
+      await users.delete(rows.map((r) => r.id));
     }
   });
 });

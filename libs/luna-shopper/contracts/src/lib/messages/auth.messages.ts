@@ -1,4 +1,4 @@
-import type { UserKind } from '../enums/auth.enums';
+import type { UserKind, UsernamePropagation } from '../enums/auth.enums';
 
 /**
  * Auth service message contracts (plan 0005).
@@ -26,6 +26,10 @@ export const AUTH_PATTERNS = {
   googleLogin: 'auth.googleLogin',
   /** Delete the authenticated user's account and all personal identity data. */
   deleteAccount: 'auth.deleteAccount',
+  /** Change the caller's global username, optionally propagating to zones. */
+  setUsername: 'auth.setUsername',
+  /** Read the caller's own profile (plan 0018, section 12). */
+  getProfile: 'auth.getProfile',
 } as const;
 
 export type AuthPattern = (typeof AUTH_PATTERNS)[keyof typeof AUTH_PATTERNS];
@@ -43,6 +47,14 @@ export interface AccessTokenClaims {
 export interface AuthTokens {
   userId: string;
   kind: UserKind;
+  /**
+   * The caller's global username at the time this pair was issued (plan 0018,
+   * section 9). Deliberately part of the response body and not of
+   * {@link AccessTokenClaims}: a claim would be cached for the token's whole
+   * lifetime and could seed a freshly joined zone with a name the user has
+   * already changed.
+   */
+  username: string;
   accessToken: string;
   refreshToken: string;
 }
@@ -103,6 +115,33 @@ export interface DeleteAccountResult {
    * (the operation is idempotent, so a repeat is a clean no-op).
    */
   deleted: boolean;
+}
+
+/**
+ * Change the caller's global username (plan 0018, section 4.3). `userId` is set
+ * by the gateway from the verified token, never from the body, so a caller can
+ * only ever rename themselves.
+ */
+export interface SetUsernameRequest {
+  userId: string;
+  username: string;
+  /** Defaults to GLOBAL_ONLY when omitted. */
+  propagation?: UsernamePropagation;
+}
+
+/** Read the caller's own profile (plan 0018, section 12). */
+export interface GetProfileRequest {
+  userId: string;
+}
+
+/** The caller's own account, as `GET /v1/account/me` returns it. */
+export interface UserProfileView {
+  userId: string;
+  kind: UserKind;
+  username: string;
+  email: string | null;
+  emailVerified: boolean;
+  displayName: string | null;
 }
 
 /** A verified Google profile, resolved by the gateway's passport callback. */

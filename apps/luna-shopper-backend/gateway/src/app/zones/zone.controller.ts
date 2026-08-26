@@ -17,6 +17,7 @@ import {
   ZONE_PATTERNS,
   type AuthTokens,
   type MembershipView,
+  type UserProfileView,
   type ZonePage,
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
@@ -29,6 +30,7 @@ import {
   CreateZoneDto,
   JoinZoneDto,
   ListMyZonesQueryDto,
+  SetMembershipUsernameDto,
   SetRoleDto,
   UpdateZoneDto,
 } from './zone.dto';
@@ -37,6 +39,17 @@ import {
 interface WithMaybeToken<T> {
   tokens?: AuthTokens;
   data: T;
+}
+
+/**
+ * A resolved caller: their id, the token pair when it was minted for this
+ * request, and their global username, which is the fallback per zone name when
+ * the request body omitted one (plan 0018, section 9).
+ */
+interface ResolvedCaller {
+  userId: string;
+  username: string;
+  tokens?: AuthTokens;
 }
 
 /**
@@ -50,18 +63,40 @@ interface WithMaybeToken<T> {
 export class ZoneController {
   constructor(private readonly nats: NatsClient) {}
 
-  /** Resolves the caller, minting a temporary user when none is authenticated. */
+  /**
+   * Resolves the caller, minting a temporary user when none is authenticated, and
+   * resolves the username core should record (plan 0018, section 9).
+   *
+   * A supplied `username` wins and costs nothing extra. When it is omitted the
+   * caller's global username is used, resolved by whichever branch applies: an
+   * anonymous caller's name comes back on the `AuthTokens` from the mint that
+   * just happened, so no second call is made; an authenticated caller costs one
+   * `auth.getProfile` hop, on the two rarest operations in the product and only
+   * when the client left the field out.
+   */
   private async resolveIdentity(
-    user?: CurrentUser
-  ): Promise<{ userId: string; tokens?: AuthTokens }> {
-    if (user) {
-      return { userId: user.userId };
+    user: CurrentUser | undefined,
+    suppliedUsername?: string
+  ): Promise<ResolvedCaller> {
+    if (!user) {
+      const tokens = await this.nats.send<AuthTokens>(
+        AUTH_PATTERNS.createTemporaryUser,
+        {}
+      );
+      return {
+        userId: tokens.userId,
+        username: suppliedUsername ?? tokens.username,
+        tokens,
+      };
     }
-    const tokens = await this.nats.send<AuthTokens>(
-      AUTH_PATTERNS.createTemporaryUser,
-      {}
+    if (suppliedUsername) {
+      return { userId: user.userId, username: suppliedUsername };
+    }
+    const profile = await this.nats.send<UserProfileView>(
+      AUTH_PATTERNS.getProfile,
+      { userId: user.userId }
     );
-    return { userId: tokens.userId, tokens };
+    return { userId: user.userId, username: profile.username };
   }
 
   @Post()
@@ -71,11 +106,14 @@ export class ZoneController {
     @AuthUser() user: CurrentUser | undefined,
     @Body() dto: CreateZoneDto
   ): Promise<WithMaybeToken<ZoneView>> {
-    const { userId, tokens } = await this.resolveIdentity(user);
+    const { userId, username, tokens } = await this.resolveIdentity(
+      user,
+      dto.username
+    );
     const zone = await this.nats.send<ZoneView>(ZONE_PATTERNS.create, {
       userId,
       name: dto.name,
-      username: dto.username,
+      username,
     });
     return { tokens, data: zone };
   }
@@ -87,10 +125,13 @@ export class ZoneController {
     @AuthUser() user: CurrentUser | undefined,
     @Body() dto: JoinZoneDto
   ): Promise<WithMaybeToken<MembershipView>> {
-    const { userId, tokens } = await this.resolveIdentity(user);
+    const { userId, username, tokens } = await this.resolveIdentity(
+      user,
+      dto.username
+    );
     const membership = await this.nats.send<MembershipView>(
       ZONE_PATTERNS.join,
-      { userId, joinCode: dto.joinCode, username: dto.username }
+      { userId, joinCode: dto.joinCode, username }
     );
     return { tokens, data: membership };
   }
@@ -239,6 +280,30 @@ export class ZoneController {
       userId: user.userId,
       zoneId: id,
       membershipId,
+    });
+  }
+
+  /**
+   * Rename one membership (plan 0018, section 5): the member themselves, or an
+   * owner/admin renaming someone. Throttled with the shared rename bucket, since
+   * a public, non unique, freely changeable name makes rapid renaming a
+   * harassment pattern.
+   */
+  @Patch(':id/members/:membershipId/username')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @Throttle(THROTTLE_LIMITS.usernameChange)
+  setMembershipUsername(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Param('membershipId') membershipId: string,
+    @Body() dto: SetMembershipUsernameDto
+  ): Promise<MembershipView> {
+    return this.nats.send<MembershipView>(MEMBERSHIP_PATTERNS.setUsername, {
+      userId: user.userId,
+      zoneId: id,
+      membershipId,
+      username: dto.username,
     });
   }
 

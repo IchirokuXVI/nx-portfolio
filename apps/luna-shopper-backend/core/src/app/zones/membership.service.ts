@@ -6,10 +6,12 @@ import {
   ZoneRole,
   type MembershipActionRequest,
   type MembershipView,
+  type SetMembershipUsernameRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
   NotFoundException,
+  validateUsername,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
@@ -105,6 +107,64 @@ export class MembershipService {
     target.status = status;
     const saved = await this.memberships.save(target);
     this.emit(event, saved);
+    return toMembershipView(saved);
+  }
+
+  /**
+   * Rename one membership (plan 0018, section 5). One operation covers both the
+   * member renaming themselves in a single zone and an owner or admin renaming
+   * someone, because they are the same write with two authorization branches:
+   *
+   * - the caller may always rename their own membership, needing no role beyond
+   *   being APPROVED or PENDING in the zone;
+   * - an OWNER or ADMIN may rename any membership;
+   * - an ADMIN may not rename the OWNER, mirroring `ZoneService.setRole`;
+   * - the owner may rename anyone, themselves included;
+   * - a KICKED or BANNED membership is renamed by nobody: those rows are the
+   *   historical record admins recognise by name, and letting a banned user
+   *   rewrite theirs is a way back in unrecognised.
+   *
+   * Nothing changes globally: `users.username` is untouched, and a later global
+   * rename with MATCHING_ZONES will not match this zone unless the new name
+   * happens to equal the old global one.
+   */
+  async setUsername(
+    req: SetMembershipUsernameRequest
+  ): Promise<MembershipView> {
+    const username = validateUsername(req.username);
+    const caller = await this.authz.requireMember(req.zoneId, req.userId);
+    const target = await this.memberships.findOne({
+      where: { id: req.membershipId, zoneId: req.zoneId },
+    });
+    if (!target) {
+      throw new NotFoundException('Membership not found in this zone');
+    }
+    if (
+      target.status !== MembershipStatus.APPROVED &&
+      target.status !== MembershipStatus.PENDING
+    ) {
+      throw new ForbiddenException('That member is no longer in this zone');
+    }
+
+    const isSelf = target.id === caller.id;
+    const governs =
+      caller.role === ZoneRole.OWNER || caller.role === ZoneRole.ADMIN;
+    if (!isSelf && !governs) {
+      throw new ForbiddenException(
+        'You do not have permission for this operation'
+      );
+    }
+    if (
+      !isSelf &&
+      caller.role === ZoneRole.ADMIN &&
+      target.role === ZoneRole.OWNER
+    ) {
+      throw new ForbiddenException('Cannot rename the owner');
+    }
+
+    target.username = username;
+    const saved = await this.memberships.save(target);
+    this.emit(RealtimeEvent.MemberUsernameChanged, saved);
     return toMembershipView(saved);
   }
 

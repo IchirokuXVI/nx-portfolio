@@ -68,13 +68,27 @@ export class TokenService {
     return raw;
   }
 
-  /** Issues a full token pair for a user (used by every successful flow). */
-  async issueTokens(user: Pick<User, 'id' | 'kind'>): Promise<AuthTokens> {
+  /**
+   * Issues a full token pair for a user (used by every successful flow). The
+   * global username rides in the response body, never in the signed claims (plan
+   * 0018, section 9): every caller already has the user row loaded, so filling it
+   * costs nothing, and the client learns its own name on each sign in and refresh
+   * without a claim that would go stale for the token's whole lifetime.
+   */
+  async issueTokens(
+    user: Pick<User, 'id' | 'kind' | 'username'>
+  ): Promise<AuthTokens> {
     const [accessToken, refreshToken] = await Promise.all([
       this.signAccessToken(user),
       this.issueRefreshToken(user.id),
     ]);
-    return { userId: user.id, kind: user.kind, accessToken, refreshToken };
+    return {
+      userId: user.id,
+      kind: user.kind,
+      username: user.username,
+      accessToken,
+      refreshToken,
+    };
   }
 
   /**

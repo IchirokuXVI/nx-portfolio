@@ -5,12 +5,14 @@ import { ZonesModule } from '../zones/zones.module';
 import { AccountDeletionService } from './account-deletion.service';
 import { ProcessedEventStore } from './idempotency.store';
 import { AccountController } from './reconciliation.controller';
+import { UsernamePropagationService } from './username-propagation.service';
 import { ZoneReaperService } from './zone-reaper.service';
 
 /**
- * Account deletion + zone ownership fallback (plan 0011): the `user.deleted` saga,
- * the reconciliation query for the orphan reaper, and the zone reaper. Reuses the
- * event publisher exported by {@link ZonesModule}.
+ * The identity-event sagas and the account housekeeping: the `user.deleted` saga
+ * and zone ownership fallback (plan 0011), the `user.usernameChanged` propagation
+ * saga (plan 0018), the reconciliation query for the orphan reaper, and the zone
+ * reaper. Reuses the event publisher exported by {@link ZonesModule}.
  */
 @Module({
   imports: [
@@ -18,6 +20,11 @@ import { ZoneReaperService } from './zone-reaper.service';
     ZonesModule,
   ],
   controllers: [AccountController],
-  providers: [AccountDeletionService, ProcessedEventStore, ZoneReaperService],
+  providers: [
+    AccountDeletionService,
+    UsernamePropagationService,
+    ProcessedEventStore,
+    ZoneReaperService,
+  ],
 })
 export class AccountModule {}
