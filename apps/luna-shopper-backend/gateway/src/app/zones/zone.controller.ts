@@ -16,7 +16,10 @@ import {
   MEMBERSHIP_PATTERNS,
   ZONE_PATTERNS,
   type AuthTokens,
+  type MembershipPage,
   type MembershipView,
+  type MyZoneCounts,
+  type MyZoneView,
   type ZonePage,
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
@@ -28,6 +31,7 @@ import { NatsClient } from '../messaging/nats-client';
 import {
   CreateZoneDto,
   JoinZoneDto,
+  ListMembersQueryDto,
   ListMyZonesQueryDto,
   SetRoleDto,
   UpdateZoneDto,
@@ -104,6 +108,51 @@ export class ZoneController {
   ): Promise<ZonePage> {
     return this.nats.send<ZonePage>(ZONE_PATTERNS.listMine, {
       userId: user.userId,
+      cursor: query.cursor,
+      limit: query.limit,
+      order: query.order,
+    });
+  }
+
+  /**
+   * Declared before `:id`, or the router swallows `count` as a zone id (plan
+   * 0017, section 10). It sits under `zones` rather than on an account resource
+   * because the number is about zones.
+   */
+  @Get('count')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  countMine(@AuthUser() user: CurrentUser): Promise<MyZoneCounts> {
+    return this.nats.send<MyZoneCounts>(ZONE_PATTERNS.countsMine, {
+      userId: user.userId,
+    });
+  }
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  get(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string
+  ): Promise<MyZoneView> {
+    return this.nats.send<MyZoneView>(ZONE_PATTERNS.get, {
+      userId: user.userId,
+      zoneId: id,
+    });
+  }
+
+  @Get(':id/members')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  listMembers(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Query() query: ListMembersQueryDto
+  ): Promise<MembershipPage> {
+    return this.nats.send<MembershipPage>(MEMBERSHIP_PATTERNS.list, {
+      userId: user.userId,
+      zoneId: id,
+      statuses: query.statuses,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,

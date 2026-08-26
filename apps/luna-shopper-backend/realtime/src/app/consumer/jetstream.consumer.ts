@@ -8,8 +8,11 @@ import { context as otelContext } from '@opentelemetry/api';
 import {
   DOMAIN_EVENT_SUBJECTS,
   listRoom,
+  RealtimeEvent,
   zoneRoom,
+  zoneStaffRoom,
   type DomainEvent,
+  type ZoneCountsUpdatedPayload,
 } from '@portfolio/luna-shopper/contracts';
 import {
   beginConsumerSpan,
@@ -184,6 +187,11 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
             rooms.push(listRoom(envelope.listId));
           }
 
+          if (envelope.event === RealtimeEvent.ZoneCountsUpdated) {
+            this.fanOutZoneCounts(envelope, correlationId);
+            return;
+          }
+
           this.relay.publish({
             rooms,
             event: envelope.event,
@@ -207,6 +215,46 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     } else {
       fanOut();
     }
+  }
+
+  /**
+   * The one event that reaches two rooms with two different payloads (plan 0017,
+   * section 9).
+   *
+   * The zone room is every approved member, so publishing the counts as core
+   * sent them would hand every member exactly what section 6 withholds over
+   * REST. Core publishes the block filled, and the split happens here, because
+   * this is where room routing lives: the staff room gets it as sent, the plain
+   * zone room gets a copy with both governance fields nulled. `null` is "not
+   * your business" and `0` is "nobody is waiting", so the copy nulls rather than
+   * zeroes.
+   */
+  private fanOutZoneCounts(
+    envelope: DomainEvent,
+    correlationId?: string
+  ): void {
+    const payload = envelope.payload as ZoneCountsUpdatedPayload;
+
+    this.relay.publish({
+      rooms: [zoneStaffRoom(envelope.zoneId)],
+      event: envelope.event,
+      payload,
+      correlationId,
+    });
+
+    this.relay.publish({
+      rooms: [zoneRoom(envelope.zoneId)],
+      event: envelope.event,
+      payload: {
+        ...payload,
+        counts: {
+          ...payload.counts,
+          pendingRequestCount: null,
+          firstPendingRequesterName: null,
+        },
+      },
+      correlationId,
+    });
   }
 
   /** True when this event id was already handled, remembering it otherwise. */

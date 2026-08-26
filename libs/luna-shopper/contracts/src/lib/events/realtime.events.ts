@@ -19,6 +19,10 @@ export enum RealtimeEvent {
   MemberBanned = 'member.banned',
   MemberRoleChanged = 'member.roleChanged',
 
+  // Zone summary (plan 0017, section 9). Carries the counts a client cannot
+  // derive from the events above, chiefly the next pending requester's name.
+  ZoneCountsUpdated = 'zone.countsUpdated',
+
   // Lists / lines / comments (plan 0007)
   ListCreated = 'list.created',
   ListUpdated = 'list.updated',
@@ -64,6 +68,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.MemberKicked,
   RealtimeEvent.MemberBanned,
   RealtimeEvent.MemberRoleChanged,
+  RealtimeEvent.ZoneCountsUpdated,
   RealtimeEvent.ListCreated,
   RealtimeEvent.ListUpdated,
   RealtimeEvent.ListDeleted,

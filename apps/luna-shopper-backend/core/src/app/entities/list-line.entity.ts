@@ -14,8 +14,9 @@ import { ShoppingList } from './shopping-list.entity';
  * the last-write-wins reconciliation in 0009.
  */
 @Entity({ name: 'list_lines' })
+// Serves both line counts, total and ready (plan 0017, section 4.3).
+@Index('ix_lines_list_status', ['listId', 'status'])
 export class ListLine extends BaseEntity {
-  @Index('ix_lines_list')
   @Column({ type: 'uuid' })
   listId!: string;
 

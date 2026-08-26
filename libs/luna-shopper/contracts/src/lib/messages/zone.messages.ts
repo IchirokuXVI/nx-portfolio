@@ -22,6 +22,10 @@ export const ZONE_PATTERNS = {
   transferOwnership: 'zone.transferOwnership',
   claimOwnership: 'zone.claimOwnership',
   listMine: 'zone.listMine',
+  /** One zone with its summary, without paging to find it (plan 0017, section 3.6). */
+  get: 'zone.get',
+  /** How many zones the caller owns, joined and is waiting on (plan 0017, section 3.5). */
+  countsMine: 'zone.countsMine',
 } as const;
 
 export const MEMBERSHIP_PATTERNS = {
@@ -29,6 +33,8 @@ export const MEMBERSHIP_PATTERNS = {
   reject: 'membership.reject',
   kick: 'membership.kick',
   ban: 'membership.ban',
+  /** Read a zone's members (plan 0017, section 5). */
+  list: 'membership.list',
 } as const;
 
 /** A zone as returned to clients. */
@@ -39,6 +45,10 @@ export interface ZoneView {
   status: ZoneStatus;
   ownerUserId: string | null;
   config: Record<string, unknown>;
+  /** ISO 8601 UTC (plan 0017, section 7). */
+  createdAt: string;
+  /** ISO 8601 UTC (plan 0017, section 7). */
+  updatedAt: string;
 }
 
 /** A membership as returned to clients. */
@@ -49,12 +59,73 @@ export interface MembershipView {
   username: string;
   role: ZoneRole;
   status: MembershipStatus;
+  /** ISO 8601 UTC. When the member joined or last re-requested (plan 0017, section 7). */
+  createdAt: string;
+  /** ISO 8601 UTC (plan 0017, section 7). */
+  updatedAt: string;
+}
+
+/** The summary numbers shown on a zone card (plan 0017, section 3). */
+export interface ZoneCounts {
+  /** APPROVED memberships. Pending members are not members yet. */
+  memberCount: number;
+  /**
+   * Lists in the zone **that the caller may read** (section 3.2). Not the zone's
+   * total list count.
+   */
+  listCount: number;
+  /**
+   * PENDING memberships. `null` for a caller who is not OWNER or ADMIN of the
+   * zone: who is waiting to join is governance data (section 6).
+   */
+  pendingRequestCount: number | null;
+  /**
+   * The per zone username of the oldest PENDING membership, or `null` when there
+   * are none, or when the caller may not see governance data. Oldest by
+   * `createdAt`, tie broken by `id`, so it is stable across pages and refreshes.
+   */
+  firstPendingRequesterName: string | null;
+}
+
+/** A list as it appears in a zone's inline preview (plan 0017, section 3.3). */
+export interface ZoneListPreview {
+  id: string;
+  name: string;
+  lineCount: number;
+  readyCount: number;
 }
 
 /** A zone annotated with the caller's own membership (plan 0006, section 7). */
 export interface MyZoneView extends ZoneView {
   myRole: ZoneRole;
   myStatus: MembershipStatus;
+  /** The summary numbers, always present (plan 0017, section 3.1). */
+  counts: ZoneCounts;
+  /**
+   * At most three of the zone's lists, newest activity first, filtered exactly
+   * as `counts.listCount` is (plan 0017, section 3.3). Empty means the caller
+   * can read no list in this zone, never that the zone is empty.
+   */
+  lists: ZoneListPreview[];
+}
+
+/**
+ * The part of {@link ZoneCounts} that does not depend on who is asking, which is
+ * what a room broadcast can carry (plan 0017, section 9). `listCount` is access
+ * filtered per caller and the preview is an array, so neither belongs in an
+ * event with no single asker; a client derives `listCount` from the list
+ * created/deleted events it already receives.
+ */
+export type BroadcastZoneCounts = Omit<ZoneCounts, 'listCount'>;
+
+/**
+ * Payload of {@link RealtimeEvent.ZoneCountsUpdated} (plan 0017, section 9). The
+ * governance fields are filled only in the `zone:{id}:staff` room; the plain zone
+ * room receives the same event with both of them `null`.
+ */
+export interface ZoneCountsUpdatedPayload {
+  zoneId: string;
+  counts: BroadcastZoneCounts;
 }
 
 export interface CreateZoneRequest {
@@ -98,8 +169,39 @@ export interface ListMyZonesRequest extends PageQuery {
   userId: string;
 }
 
+export interface MyZoneCountsRequest {
+  userId: string;
+}
+
+/** How many zones the caller is in, split the way the UI groups them. */
+export interface MyZoneCounts {
+  /** Zones where the caller holds an APPROVED membership with role OWNER. */
+  owned: number;
+  /** APPROVED memberships that are not OWNER. */
+  joined: number;
+  /** PENDING memberships: zones the caller has asked to join. */
+  pending: number;
+  /** `owned + joined`, the number `zone.listMine` would return with no cursor. */
+  total: number;
+}
+
+export interface ListMembersRequest extends PageQuery {
+  userId: string;
+  zoneId: string;
+  /**
+   * Which statuses to return. Defaults to `[APPROVED]`. Any value other than
+   * APPROVED requires the caller to be OWNER or ADMIN (plan 0017, section 6).
+   */
+  statuses?: MembershipStatus[];
+}
+
 export type ZonePage = Paginated<MyZoneView>;
+export type MembershipPage = Paginated<MembershipView>;
 
 /** Fields a caller may order their zone listing by (plan 0006, section 7). */
 export const MY_ZONE_ORDERS = ['name', 'joined', 'recent'] as const;
 export type MyZoneOrder = (typeof MY_ZONE_ORDERS)[number];
+
+/** Fields a caller may order the member listing by (plan 0017, section 5). */
+export const MEMBER_ORDERS = ['joined', 'name', 'role'] as const;
+export type MemberOrder = (typeof MEMBER_ORDERS)[number];

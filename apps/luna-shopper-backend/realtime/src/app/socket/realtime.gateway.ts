@@ -12,6 +12,7 @@ import {
   listRoom,
   RealtimeClientMessage,
   zoneRoom,
+  zoneStaffRoom,
   type EditLineSignal,
   type StopEditLineSignal,
 } from '@portfolio/luna-shopper/contracts';
@@ -100,6 +101,13 @@ export class RealtimeGateway
       return { ok: false };
     }
     await client.join(zoneRoom(body.zoneId));
+    // Owners and admins also join the governance side room, which is where the
+    // join request counts arrive filled in (plan 0017, section 9). A member
+    // promoted mid session joins it on their next resubscribe or reconnect;
+    // `member.roleChanged` has already told the client its role changed.
+    if (await this.coreAccess.checkZoneStaff(userId, body.zoneId)) {
+      await client.join(zoneStaffRoom(body.zoneId));
+    }
     this.presence.joinZone(client.id, body.zoneId);
     return { ok: true };
   }
@@ -110,6 +118,7 @@ export class RealtimeGateway
     @MessageBody() body: ZoneSubscription
   ): Promise<Ack> {
     await client.leave(zoneRoom(body.zoneId));
+    await client.leave(zoneStaffRoom(body.zoneId));
     this.presence.leaveZone(client.id, body.zoneId);
     return { ok: true };
   }

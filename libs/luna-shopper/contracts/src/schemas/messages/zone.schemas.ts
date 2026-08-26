@@ -3,6 +3,7 @@ import {
   ZONE_PATTERNS,
 } from '../../lib/messages/zone.messages';
 import {
+  array,
   freeObject,
   integer,
   JsonSchema,
@@ -20,8 +21,12 @@ import { ENUM_IDS } from '../enums.schemas';
 export const ZONE_SCHEMA_IDS = {
   zoneView: schemaId('zone/ZoneView'),
   membershipView: schemaId('zone/MembershipView'),
+  zoneCounts: schemaId('zone/ZoneCounts'),
+  zoneListPreview: schemaId('zone/ZoneListPreview'),
   myZoneView: schemaId('zone/MyZoneView'),
+  myZoneCounts: schemaId('zone/MyZoneCounts'),
   zonePage: schemaId('zone/ZonePage'),
+  membershipPage: schemaId('zone/MembershipPage'),
   createRequest: schemaId('msg/zone.create/request'),
   joinRequest: schemaId('msg/zone.join/request'),
   updateRequest: schemaId('msg/zone.update/request'),
@@ -29,7 +34,19 @@ export const ZONE_SCHEMA_IDS = {
   setRoleRequest: schemaId('msg/zone.setRole/request'),
   membershipActionRequest: schemaId('msg/zone.membershipAction/request'),
   listMineRequest: schemaId('msg/zone.listMine/request'),
+  countsMineRequest: schemaId('msg/zone.countsMine/request'),
+  listMembersRequest: schemaId('msg/membership.list/request'),
 } as const;
+
+/**
+ * Timestamps every read model carries (plan 0017, section 7), so a client can
+ * read the field it is allowed to sort by.
+ */
+const timestamps = {
+  createdAt: string({ format: 'date-time' }),
+  updatedAt: string({ format: 'date-time' }),
+};
+const timestampKeys = ['createdAt', 'updatedAt'];
 
 const zoneView = object(
   ZONE_SCHEMA_IDS.zoneView,
@@ -40,8 +57,9 @@ const zoneView = object(
     status: ref(ENUM_IDS.zoneStatus),
     ownerUserId: nullableString(),
     config: freeObject(),
+    ...timestamps,
   },
-  ['id', 'name', 'joinCode', 'status', 'ownerUserId', 'config']
+  ['id', 'name', 'joinCode', 'status', 'ownerUserId', 'config', ...timestampKeys]
 );
 
 const membershipView = object(
@@ -53,8 +71,48 @@ const membershipView = object(
     username: nonEmptyString(),
     role: ref(ENUM_IDS.zoneRole),
     status: ref(ENUM_IDS.membershipStatus),
+    ...timestamps,
   },
-  ['id', 'zoneId', 'userId', 'username', 'role', 'status']
+  ['id', 'zoneId', 'userId', 'username', 'role', 'status', ...timestampKeys]
+);
+
+const zoneCounts = object(
+  ZONE_SCHEMA_IDS.zoneCounts,
+  {
+    memberCount: integer({ minimum: 0 }),
+    listCount: integer({ minimum: 0 }),
+    // Null is "not your business", 0 is "nobody is waiting" (section 6).
+    pendingRequestCount: { type: ['integer', 'null'], minimum: 0 },
+    firstPendingRequesterName: nullableString(),
+  },
+  [
+    'memberCount',
+    'listCount',
+    'pendingRequestCount',
+    'firstPendingRequesterName',
+  ]
+);
+
+const zoneListPreview = object(
+  ZONE_SCHEMA_IDS.zoneListPreview,
+  {
+    id: nonEmptyString(),
+    name: nonEmptyString(),
+    lineCount: integer({ minimum: 0 }),
+    readyCount: integer({ minimum: 0 }),
+  },
+  ['id', 'name', 'lineCount', 'readyCount']
+);
+
+const myZoneCounts = object(
+  ZONE_SCHEMA_IDS.myZoneCounts,
+  {
+    owned: integer({ minimum: 0 }),
+    joined: integer({ minimum: 0 }),
+    pending: integer({ minimum: 0 }),
+    total: integer({ minimum: 0 }),
+  },
+  ['owned', 'joined', 'pending', 'total']
 );
 
 const myZoneView = object(
@@ -66,8 +124,11 @@ const myZoneView = object(
     status: ref(ENUM_IDS.zoneStatus),
     ownerUserId: nullableString(),
     config: freeObject(),
+    ...timestamps,
     myRole: ref(ENUM_IDS.zoneRole),
     myStatus: ref(ENUM_IDS.membershipStatus),
+    counts: ref(ZONE_SCHEMA_IDS.zoneCounts),
+    lists: array(ref(ZONE_SCHEMA_IDS.zoneListPreview)),
   },
   [
     'id',
@@ -76,12 +137,19 @@ const myZoneView = object(
     'status',
     'ownerUserId',
     'config',
+    ...timestampKeys,
     'myRole',
     'myStatus',
+    'counts',
+    'lists',
   ]
 );
 
 const zonePage = paginated(ZONE_SCHEMA_IDS.zonePage, ZONE_SCHEMA_IDS.myZoneView);
+const membershipPage = paginated(
+  ZONE_SCHEMA_IDS.membershipPage,
+  ZONE_SCHEMA_IDS.membershipView
+);
 
 const createRequest = object(
   ZONE_SCHEMA_IDS.createRequest,
@@ -148,11 +216,34 @@ const listMineRequest = object(
   ['userId']
 );
 
+const countsMineRequest = object(
+  ZONE_SCHEMA_IDS.countsMineRequest,
+  { userId: nonEmptyString() },
+  ['userId']
+);
+
+const listMembersRequest = object(
+  ZONE_SCHEMA_IDS.listMembersRequest,
+  {
+    userId: nonEmptyString(),
+    zoneId: nonEmptyString(),
+    statuses: array(ref(ENUM_IDS.membershipStatus)),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId', 'zoneId']
+);
+
 export const zoneSchemas: JsonSchema[] = [
   zoneView,
   membershipView,
+  zoneCounts,
+  zoneListPreview,
   myZoneView,
+  myZoneCounts,
   zonePage,
+  membershipPage,
   createRequest,
   joinRequest,
   updateRequest,
@@ -160,6 +251,8 @@ export const zoneSchemas: JsonSchema[] = [
   setRoleRequest,
   membershipActionRequest,
   listMineRequest,
+  countsMineRequest,
+  listMembersRequest,
 ];
 
 export const zoneMessageContracts: Record<
@@ -202,6 +295,14 @@ export const zoneMessageContracts: Record<
     request: ZONE_SCHEMA_IDS.listMineRequest,
     response: ZONE_SCHEMA_IDS.zonePage,
   },
+  [ZONE_PATTERNS.get]: {
+    request: ZONE_SCHEMA_IDS.zoneIdRequest,
+    response: ZONE_SCHEMA_IDS.myZoneView,
+  },
+  [ZONE_PATTERNS.countsMine]: {
+    request: ZONE_SCHEMA_IDS.countsMineRequest,
+    response: ZONE_SCHEMA_IDS.myZoneCounts,
+  },
   [MEMBERSHIP_PATTERNS.approve]: {
     request: ZONE_SCHEMA_IDS.membershipActionRequest,
     response: ZONE_SCHEMA_IDS.membershipView,
@@ -217,5 +318,9 @@ export const zoneMessageContracts: Record<
   [MEMBERSHIP_PATTERNS.ban]: {
     request: ZONE_SCHEMA_IDS.membershipActionRequest,
     response: ZONE_SCHEMA_IDS.membershipView,
+  },
+  [MEMBERSHIP_PATTERNS.list]: {
+    request: ZONE_SCHEMA_IDS.listMembersRequest,
+    response: ZONE_SCHEMA_IDS.membershipPage,
   },
 };

@@ -12,6 +12,10 @@ import { Zone } from './zone.entity';
 @Entity({ name: 'zone_memberships' })
 @Index('uq_membership_zone_user', ['zoneId', 'userId'], { unique: true })
 @Index('uq_membership_zone_username', ['zoneId', 'username'], { unique: true })
+// The member and pending counts (plan 0017, section 4.3).
+@Index('ix_memberships_zone_status', ['zoneId', 'status'])
+// zone.countsMine and the listMine status filter (plan 0017, section 4.3).
+@Index('ix_memberships_user_status', ['userId', 'status'])
 export class ZoneMembership extends BaseEntity {
   @Column({ type: 'uuid' })
   zoneId!: string;

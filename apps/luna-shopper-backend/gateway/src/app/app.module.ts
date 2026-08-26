@@ -22,6 +22,7 @@ import {
 } from './config/app-config';
 import { GatewayListsModule } from './lists/lists.module';
 import { GatewayMergeModule } from './merge/merge.module';
+import { GatewayStatsModule } from './stats/stats.module';
 import { GatewayZonesModule } from './zones/zones.module';
 
 @Module({
@@ -81,6 +82,8 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayAccountModule,
     // Catalog endpoints — items, supermarkets, per location prices (plan 0012).
     GatewayCatalogModule,
+    // Public platform totals (plan 0017).
+    GatewayStatsModule,
   ],
   providers: [
     // The throttler guard runs globally; open endpoints opt into a named bucket.

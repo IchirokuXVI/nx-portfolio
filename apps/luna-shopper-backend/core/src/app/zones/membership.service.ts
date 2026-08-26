@@ -16,6 +16,7 @@ import { Repository } from 'typeorm';
 import { ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from './zone-authz.service';
+import { ZoneCountsService } from './zone-counts.service';
 import { toMembershipView } from './zone.mappers';
 
 /**
@@ -29,6 +30,7 @@ export class MembershipService {
     @InjectRepository(ZoneMembership)
     private readonly memberships: Repository<ZoneMembership>,
     private readonly authz: ZoneAuthzService,
+    private readonly counts: ZoneCountsService,
     private readonly events: CoreEventsPublisher
   ) {}
 
@@ -58,6 +60,9 @@ export class MembershipService {
     target.approvedByUserId = req.userId;
     const saved = await this.memberships.save(target);
     this.emit(RealtimeEvent.MemberApproved, saved);
+    // Approving the first requester makes the next one the answer to
+    // `firstPendingRequesterName`, and no other event carries that name.
+    await this.counts.emitZoneCounts(req.zoneId);
     return toMembershipView(saved);
   }
 
@@ -72,6 +77,7 @@ export class MembershipService {
       id: target.id,
       userId: target.userId,
     });
+    await this.counts.emitZoneCounts(req.zoneId);
     return { id: target.id };
   }
 
@@ -105,6 +111,7 @@ export class MembershipService {
     target.status = status;
     const saved = await this.memberships.save(target);
     this.emit(event, saved);
+    await this.counts.emitZoneCounts(req.zoneId);
     return toMembershipView(saved);
   }
 

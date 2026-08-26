@@ -15,6 +15,7 @@ import {
 import { MERGE_PATTERNS } from '../lib/messages/merge.messages';
 import { REALTIME_ACCESS_PATTERNS } from '../lib/messages/realtime.messages';
 import { RECONCILIATION_PATTERNS } from '../lib/messages/reconciliation.messages';
+import { STATS_PATTERNS } from '../lib/messages/stats.messages';
 import {
   MEMBERSHIP_PATTERNS,
   ZONE_PATTERNS,
@@ -51,6 +52,7 @@ describe('contract schemas', () => {
       ...Object.values(SUPERMARKET_LOCATION_PATTERNS),
       ...Object.values(ITEM_PATTERNS),
       ...Object.values(SUPERMARKET_ITEM_PATTERNS),
+      ...Object.values(STATS_PATTERNS),
     ];
 
     it.each(allMessageSubjects)(
@@ -100,6 +102,8 @@ describe('contract schemas', () => {
           status: 'ACTIVE',
           ownerUserId: null,
           config: {},
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
         }).valid
       ).toBe(true);
     });
@@ -118,6 +122,8 @@ describe('contract schemas', () => {
           createdByUserId: 'u',
           approvedByUserId: null,
           version: 1,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
         }).valid
       ).toBe(true);
     });
@@ -212,6 +218,140 @@ describe('contract schemas', () => {
         }).valid
       ).toBe(true);
     });
+
+    it('zone.get response carries the summary and the preview (plan 0017)', () => {
+      expect(
+        validateMessageResponse('zone.get', {
+          id: 'z',
+          name: 'Home',
+          joinCode: 'ABCD1234',
+          status: 'ACTIVE',
+          ownerUserId: 'u',
+          config: {},
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          myRole: 'OWNER',
+          myStatus: 'APPROVED',
+          counts: {
+            memberCount: 3,
+            listCount: 2,
+            pendingRequestCount: 1,
+            firstPendingRequesterName: 'Ines',
+          },
+          lists: [{ id: 'l', name: 'Groceries', lineCount: 12, readyCount: 7 }],
+        }).valid
+      ).toBe(true);
+    });
+
+    it('a zone summary may withhold governance and preview nothing (plan 0017, section 6)', () => {
+      expect(
+        validateMessageResponse('zone.get', {
+          id: 'z',
+          name: 'Home',
+          joinCode: 'ABCD1234',
+          status: 'ACTIVE',
+          ownerUserId: 'u',
+          config: {},
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          myRole: 'MEMBER',
+          myStatus: 'APPROVED',
+          counts: {
+            memberCount: 3,
+            listCount: 0,
+            pendingRequestCount: null,
+            firstPendingRequesterName: null,
+          },
+          lists: [],
+        }).valid
+      ).toBe(true);
+    });
+
+    it('zone.countsMine response (plan 0017, section 3.5)', () => {
+      expect(
+        validateMessageResponse('zone.countsMine', {
+          owned: 1,
+          joined: 2,
+          pending: 1,
+          total: 3,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('membership.list request and page (plan 0017, section 5)', () => {
+      expect(
+        validateMessageRequest('membership.list', {
+          userId: 'u',
+          zoneId: 'z',
+          statuses: ['PENDING'],
+          order: 'joined',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('membership.list', {
+          items: [
+            {
+              id: 'm',
+              zoneId: 'z',
+              userId: 'u',
+              username: 'Ines',
+              role: 'MEMBER',
+              status: 'PENDING',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          nextCursor: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('list.create response carries its line counts (plan 0017, section 3.4)', () => {
+      expect(
+        validateMessageResponse('list.create', {
+          id: 'l',
+          zoneId: 'z',
+          name: 'Groceries',
+          createdByUserId: 'u',
+          counts: { lineCount: 0, readyCount: 0 },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('zone.countsUpdated travels in the domain event envelope (plan 0017, section 9)', () => {
+      expect(
+        validateEvent('zone.countsUpdated', {
+          event: 'zone.countsUpdated',
+          eventId: 'e1',
+          zoneId: 'z',
+          payload: {
+            zoneId: 'z',
+            counts: {
+              memberCount: 3,
+              pendingRequestCount: null,
+              firstPendingRequesterName: null,
+            },
+          },
+        }).valid
+      ).toBe(true);
+    });
+
+    it('stats.identity and stats.core (plan 0017, section 8)', () => {
+      expect(validateMessageRequest('stats.identity', {}).valid).toBe(true);
+      expect(
+        validateMessageResponse('stats.identity', {
+          users: 10,
+          registeredUsers: 7,
+          temporaryUsers: 3,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('stats.core', { zones: 4, activeZones: 3 })
+          .valid
+      ).toBe(true);
+    });
   });
 
   describe('malformed payloads fail', () => {
@@ -230,6 +370,8 @@ describe('contract schemas', () => {
           status: 'FOO',
           ownerUserId: null,
           config: {},
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
         }).valid
       ).toBe(false);
     });
@@ -276,6 +418,8 @@ describe('contract schemas', () => {
           status: 'ACTIVE',
           ownerUserId: null,
           config: {},
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
         }).valid
       ).toBe(true);
     });
@@ -288,6 +432,30 @@ describe('contract schemas', () => {
           defaultUnit: 'LITER',
         }).valid
       ).toBe(false);
+    });
+
+    it('a zone summary must not omit the counts block (plan 0017)', () => {
+      expect(
+        validateMessageResponse('zone.get', {
+          id: 'z',
+          name: 'Home',
+          joinCode: 'ABCD1234',
+          status: 'ACTIVE',
+          ownerUserId: 'u',
+          config: {},
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          myRole: 'OWNER',
+          myStatus: 'APPROVED',
+          lists: [],
+        }).valid
+      ).toBe(false);
+    });
+
+    it('stats takes no arguments (plan 0017, section 8)', () => {
+      expect(validateMessageRequest('stats.core', { zoneId: 'z' }).valid).toBe(
+        false
+      );
     });
   });
 });

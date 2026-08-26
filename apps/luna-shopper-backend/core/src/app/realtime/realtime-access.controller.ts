@@ -6,9 +6,13 @@ import {
   type CheckListAccessRequest,
   type CheckZoneAccessRequest,
 } from '@portfolio/luna-shopper/contracts';
-import { DomainException } from '@portfolio/luna-shopper/platform';
+import {
+  DomainException,
+  ForbiddenException,
+} from '@portfolio/luna-shopper/platform';
 import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { managesZone } from '../zones/zone.mappers';
 
 /**
  * Membership checks the realtime service calls before adding a socket to a room
@@ -34,6 +38,27 @@ export class RealtimeAccessController {
     return this.check(() =>
       this.zoneAuthz.requireApproved(req.zoneId, req.userId)
     );
+  }
+
+  /**
+   * Gates the `zone:{id}:staff` room (plan 0017, section 9). It asks the same
+   * question the REST summary asks before filling the governance fields, from
+   * the same helper, so a socket can never see what a fetch would withhold.
+   */
+  @MessagePattern(REALTIME_ACCESS_PATTERNS.checkZoneStaff)
+  async checkZoneStaff(
+    @Payload() req: CheckZoneAccessRequest
+  ): Promise<AccessCheckResult> {
+    return this.check(async () => {
+      const membership = await this.zoneAuthz.requireApproved(
+        req.zoneId,
+        req.userId
+      );
+      if (!managesZone(membership)) {
+        throw new ForbiddenException('Not a governor of this zone');
+      }
+      return membership;
+    });
   }
 
   @MessagePattern(REALTIME_ACCESS_PATTERNS.checkList)

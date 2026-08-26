@@ -2,10 +2,12 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AUTH_PATTERNS,
+  STATS_PATTERNS,
   type AuthTokens,
   type DeleteAccountRequest,
   type DeleteAccountResult,
   type GoogleLoginRequest,
+  type IdentityStats,
   type LoginRequest,
   type RefreshRequest,
   type RegisterRequest,
@@ -13,6 +15,7 @@ import {
   type VerifyEmailRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { IdentityService } from './identity.service';
+import { StatsService } from './stats.service';
 
 /**
  * The auth service's NATS surface (plan 0005). Each handler answers one subject
@@ -23,7 +26,16 @@ import { IdentityService } from './identity.service';
  */
 @Controller()
 export class IdentityController {
-  constructor(private readonly identity: IdentityService) {}
+  constructor(
+    private readonly identity: IdentityService,
+    private readonly stats: StatsService
+  ) {}
+
+  /** Platform identity totals (plan 0017, section 8). Takes no argument. */
+  @MessagePattern(STATS_PATTERNS.identity)
+  identityStats(): Promise<IdentityStats> {
+    return this.stats.identity();
+  }
 
   @MessagePattern(AUTH_PATTERNS.createTemporaryUser)
   createTemporaryUser(): Promise<AuthTokens> {

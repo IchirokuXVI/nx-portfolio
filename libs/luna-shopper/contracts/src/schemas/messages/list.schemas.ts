@@ -20,6 +20,7 @@ import { ENUM_IDS } from '../enums.schemas';
 
 export const LIST_SCHEMA_IDS = {
   listView: schemaId('list/ListView'),
+  listCounts: schemaId('list/ListCounts'),
   listAccessEntry: schemaId('list/ListAccessEntry'),
   lineView: schemaId('list/LineView'),
   commentView: schemaId('list/CommentView'),
@@ -42,6 +43,22 @@ export const LIST_SCHEMA_IDS = {
   listCommentsRequest: schemaId('msg/comment.list/request'),
 } as const;
 
+/** Timestamps on every read model (plan 0017, section 7). */
+const timestamps = {
+  createdAt: string({ format: 'date-time' }),
+  updatedAt: string({ format: 'date-time' }),
+};
+const timestampKeys = ['createdAt', 'updatedAt'];
+
+const listCounts = object(
+  LIST_SCHEMA_IDS.listCounts,
+  {
+    lineCount: integer({ minimum: 0 }),
+    readyCount: integer({ minimum: 0 }),
+  },
+  ['lineCount', 'readyCount']
+);
+
 const listView = object(
   LIST_SCHEMA_IDS.listView,
   {
@@ -49,8 +66,10 @@ const listView = object(
     zoneId: nonEmptyString(),
     name: nonEmptyString(),
     createdByUserId: nonEmptyString(),
+    counts: ref(LIST_SCHEMA_IDS.listCounts),
+    ...timestamps,
   },
-  ['id', 'zoneId', 'name', 'createdByUserId']
+  ['id', 'zoneId', 'name', 'createdByUserId', 'counts', ...timestampKeys]
 );
 
 const listAccessEntry = object(
@@ -73,6 +92,7 @@ const lineView = object(
     createdByUserId: nonEmptyString(),
     approvedByUserId: nullableString(),
     version: integer(),
+    ...timestamps,
   },
   [
     'id',
@@ -86,6 +106,7 @@ const lineView = object(
     'createdByUserId',
     'approvedByUserId',
     'version',
+    ...timestampKeys,
   ]
 );
 
@@ -228,6 +249,7 @@ const listCommentsRequest = object(
 );
 
 export const listSchemas: JsonSchema[] = [
+  listCounts,
   listView,
   listAccessEntry,
   lineView,

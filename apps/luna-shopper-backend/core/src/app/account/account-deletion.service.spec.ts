@@ -18,29 +18,39 @@ function build(opts: {
   zones: Record<string, Partial<Zone>>;
   firstSeen?: boolean;
 }) {
+  // Every read model carries timestamps (plan 0017, section 7), so the stand in
+  // rows carry them too rather than the mappers having to tolerate their absence.
+  const stamps = { createdAt: new Date(0), updatedAt: new Date(0) };
   const zonesRepo = {
     findOne: jest.fn(async ({ where: { id } }: { where: { id: string } }) => ({
+      ...stamps,
       ...opts.zones[id],
     })),
     save: jest.fn(async (z) => z),
   };
   const membershipsRepo: MembershipRepo = {
     find: jest.fn(async () =>
-      opts.memberships.map((m) => ({ ...m }))
+      opts.memberships.map((m) => ({ ...stamps, ...m }))
     ),
     save: jest.fn(async (m) => m),
     createQueryBuilder: jest.fn(),
   };
   const events = { emit: jest.fn() };
   const store = { firstSeen: jest.fn(async () => opts.firstSeen ?? true) };
+  // Retiring a membership drops the zone's member count, so the saga tells the
+  // zone's open screens (plan 0017, section 9).
+  const zoneCounts = {
+    emitZoneCounts: jest.fn(async (_zoneId: string) => undefined),
+  };
 
   const svc = new AccountDeletionService(
     zonesRepo as never,
     membershipsRepo as never,
     events as never,
+    zoneCounts as never,
     store as never
   );
-  return { svc, zonesRepo, membershipsRepo, events, store };
+  return { svc, zonesRepo, membershipsRepo, events, store, zoneCounts };
 }
 
 describe('AccountDeletionService.handleUserDeleted', () => {
@@ -77,6 +87,26 @@ describe('AccountDeletionService.handleUserDeleted', () => {
     expect(savedMembership.username).toContain(ANONYMIZED_USERNAME_PREFIX);
     const emitted = events.emit.mock.calls.map((c) => c[0]);
     expect(emitted).toEqual([RealtimeEvent.MemberKicked]);
+  });
+
+  it('republishes the zone counts for every zone it touched (plan 0017)', async () => {
+    const { svc, zoneCounts } = build({
+      memberships: [
+        { id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
+        { id: 'm2', zoneId: 'z2', userId: 'u1', username: 'Ali' },
+      ],
+      zones: {
+        z1: { id: 'z1', ownerUserId: 'u1', status: ZoneStatus.ACTIVE },
+        z2: { id: 'z2', ownerUserId: 'other', status: ZoneStatus.ACTIVE },
+      },
+    });
+
+    await svc.handleUserDeleted('u1');
+
+    expect(zoneCounts.emitZoneCounts.mock.calls.map((c) => c[0])).toEqual([
+      'z1',
+      'z2',
+    ]);
   });
 
   it('is idempotent: a redelivery (firstSeen=false) applies nothing', async () => {
@@ -125,6 +155,7 @@ describe('AccountDeletionService.usersWithoutMemberships', () => {
       { findOne: jest.fn(), save: jest.fn() } as never,
       membershipsRepo as never,
       { emit: jest.fn() } as never,
+      { emitZoneCounts: jest.fn() } as never,
       { firstSeen: jest.fn() } as never
     );
     return svc;

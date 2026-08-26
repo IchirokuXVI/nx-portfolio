@@ -33,11 +33,28 @@ export const COMMENT_PATTERNS = {
   list: 'comment.list',
 } as const;
 
+/** The counts shown alongside a full list (plan 0017, section 3.4). */
+export interface ListCounts {
+  /** Every line, whatever its approval or item status. */
+  lineCount: number;
+  /** Lines whose `status` is `LineStatus.READY`. Drives "7 of 12 ready". */
+  readyCount: number;
+}
+
 export interface ListView {
   id: string;
   zoneId: string;
   name: string;
   createdByUserId: string;
+  /**
+   * The line totals. Field names match `ZoneListPreview` deliberately, so the
+   * frontend maps one shape whichever endpoint it came from (plan 0017, 3.4).
+   */
+  counts: ListCounts;
+  /** ISO 8601 UTC (plan 0017, section 7). */
+  createdAt: string;
+  /** ISO 8601 UTC (plan 0017, section 7). */
+  updatedAt: string;
 }
 
 export interface ListAccessEntry {
@@ -57,6 +74,10 @@ export interface LineView {
   createdByUserId: string;
   approvedByUserId: string | null;
   version: number;
+  /** ISO 8601 UTC (plan 0017, section 7). */
+  createdAt: string;
+  /** ISO 8601 UTC (plan 0017, section 7). */
+  updatedAt: string;
 }
 
 export interface CommentView {

@@ -2,15 +2,26 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   MEMBERSHIP_PATTERNS,
+  type ListMembersRequest,
   type MembershipActionRequest,
+  type MembershipPage,
   type MembershipView,
 } from '@portfolio/luna-shopper/contracts';
+import { MemberListingService } from './member-listing.service';
 import { MembershipService } from './membership.service';
 
 /** Core's membership governance NATS surface (plan 0006, section 4). */
 @Controller()
 export class MembershipController {
-  constructor(private readonly membership: MembershipService) {}
+  constructor(
+    private readonly membership: MembershipService,
+    private readonly members: MemberListingService
+  ) {}
+
+  @MessagePattern(MEMBERSHIP_PATTERNS.list)
+  list(@Payload() req: ListMembersRequest): Promise<MembershipPage> {
+    return this.members.list(req);
+  }
 
   @MessagePattern(MEMBERSHIP_PATTERNS.approve)
   approve(@Payload() req: MembershipActionRequest): Promise<MembershipView> {

@@ -95,6 +95,12 @@ export const realtimeMessageContracts: Record<
     request: REALTIME_SCHEMA_IDS.checkZoneAccessRequest,
     response: REALTIME_SCHEMA_IDS.accessCheckResult,
   },
+  // Same request shape as the plain zone check; only the answer's rule differs
+  // (OWNER/ADMIN rather than any approved member), so it reuses that schema.
+  [REALTIME_ACCESS_PATTERNS.checkZoneStaff]: {
+    request: REALTIME_SCHEMA_IDS.checkZoneAccessRequest,
+    response: REALTIME_SCHEMA_IDS.accessCheckResult,
+  },
   [REALTIME_ACCESS_PATTERNS.checkList]: {
     request: REALTIME_SCHEMA_IDS.checkListAccessRequest,
     response: REALTIME_SCHEMA_IDS.accessCheckResult,

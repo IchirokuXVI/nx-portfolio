@@ -8,6 +8,14 @@
 /** Room name prefixes. A socket joins `zone:{zoneId}` and `list:{listId}` rooms. */
 export enum RealtimeRoom {
   Zone = 'zone',
+  /**
+   * The governance side room of a zone (plan 0017, section 9): everything the
+   * plain zone room may not see, which today is who is waiting to join. Unlike
+   * the other two members this is not a bare prefix, because the zone id sits
+   * between its two segments (`zone:{zoneId}:staff`), so build the room name
+   * with `zoneStaffRoom` rather than by concatenating this value.
+   */
+  ZoneStaff = 'zone:staff',
   List = 'list',
 }
 

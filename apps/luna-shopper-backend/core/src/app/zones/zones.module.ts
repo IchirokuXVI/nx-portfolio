@@ -8,9 +8,13 @@ import {
   CoreEventsPublisher,
   NATS_EVENTS,
 } from '../events/core-events.publisher';
+import { MemberListingService } from './member-listing.service';
 import { MembershipController } from './membership.controller';
 import { MembershipService } from './membership.service';
+import { StatsController } from './stats.controller';
+import { StatsService } from './stats.service';
 import { ZoneAuthzService } from './zone-authz.service';
+import { ZoneCountsService } from './zone-counts.service';
 import { ZoneController } from './zone.controller';
 import { ZoneService } from './zone.service';
 
@@ -33,15 +37,18 @@ import { ZoneService } from './zone.service';
       },
     ]),
   ],
-  controllers: [ZoneController, MembershipController],
+  controllers: [ZoneController, MembershipController, StatsController],
   providers: [
     ZoneService,
     MembershipService,
+    MemberListingService,
     ZoneAuthzService,
+    ZoneCountsService,
+    StatsService,
     CoreEventsPublisher,
   ],
-  // Exported so the lists slice (plan 0007) reuses membership resolution and the
-  // event publisher rather than re-implementing them.
-  exports: [ZoneAuthzService, CoreEventsPublisher],
+  // Exported so the lists slice (plan 0007) reuses membership resolution, the
+  // event publisher and the zone counts rather than re-implementing them.
+  exports: [ZoneAuthzService, ZoneCountsService, CoreEventsPublisher],
 })
 export class ZonesModule {}
