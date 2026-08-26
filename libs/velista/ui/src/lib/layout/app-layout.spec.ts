@@ -2,6 +2,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import { APP_BRAND, type AppBrand } from '@portfolio/velista/models';
+import { ThemeStore } from '@portfolio/velista/platform';
 import { AppLayout } from './app-layout';
 
 const brand: AppBrand = {
@@ -39,13 +40,33 @@ describe('AppLayout', () => {
     expect(host.classList).toContain('theme-night');
   });
 
-  it('lets the brand override the theme, so a rebrand ships its palette', async () => {
-    const fixture = await createFixture({ themeClass: 'theme-day' });
+  it('follows the theme store when the choice changes', async () => {
+    const fixture = await createFixture();
     const host: HTMLElement = fixture.nativeElement;
+
+    TestBed.inject(ThemeStore).setPreference('day');
+    fixture.detectChanges();
 
     expect(host.classList).toContain('app-root');
     expect(host.classList).toContain('theme-day');
     expect(host.classList).not.toContain('theme-night');
+  });
+
+  it('lets the brand pin a theme, so a rebrand ships its palette', async () => {
+    const fixture = await createFixture({ themeClass: 'theme-dusk' });
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(host.classList).toContain('app-root');
+    expect(host.classList).toContain('theme-dusk');
+
+    // A brand that ships one palette means one palette: the preference is inert,
+    // because a `theme-day` the rebrand never defined would leave the app with
+    // primitives and no semantic layer.
+    TestBed.inject(ThemeStore).setPreference('day');
+    fixture.detectChanges();
+
+    expect(host.classList).toContain('theme-dusk');
+    expect(host.classList).not.toContain('theme-day');
   });
 
   it('renders the outlet every page mounts into', async () => {

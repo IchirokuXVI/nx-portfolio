@@ -10,6 +10,14 @@ import { APP_KEY } from '@portfolio/velista/models';
  *
  * The names describe the **role** of what is stored, never the product, so a rename
  * stays a data edit (rule N1, plan 0001).
+ *
+ * The shape is `{role}:{appKey}`, following the convention `RokuTranslator` already
+ * set with `roku-locale:{appKey}`
+ * (`libs/shared/localization/rokutranslator-angular/src/lib/locale-routing/app-locale-storage.ts:1`).
+ * Plan 0002 landed its theme key the other way round, as `{appKey}:theme`; merging the
+ * two plans is where that showed up, and one convention per app is worth more than
+ * either ordering, so the theme key moved here. Nothing had shipped, so no stored
+ * preference was orphaned.
  */
 export const StorageKeys = {
   /** The persisted token pair. See plan 0004 section 5.3 for why it is here at all. */

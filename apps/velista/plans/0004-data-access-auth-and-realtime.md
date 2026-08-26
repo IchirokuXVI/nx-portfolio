@@ -182,7 +182,7 @@ D1 depends on. `platform` is what they are allowed to share.
 | Moves to `platform` | Stays in `data-access` |
 | --- | --- |
 | `BrowserFacade` | `ApiUrl` |
-| `ThemeService` (new, `0002` section 4.5) | Every gateway client |
+| `ThemeStore` (`0002` section 4.5, moved here when the two plans merged) | Every gateway client |
 | `StorageKeys` and the storage namespace | `TokenStore` and `SessionStore` |
 | `ConnectionState` (section 8) | The realtime client |
 | `ReloadBlocker` (section 8) | The stores and the mutation choke point |
@@ -872,7 +872,7 @@ contract item 6 says this app reads its own environment surface. Velista already
 | Library | Provides |
 | --- | --- |
 | `models` | `AppApiConfig`, `APP_BASE_PATH`, `APP_BRAND`, `APP_KEY`; **the app's own domain models and enums** (`Zone`, `List`, `Line`, `Membership`, `Identity`, and the unions replacing `ZoneRole`, `MembershipStatus`, `LineStatus`, `LineApprovalStatus`, `UserKind`); the re-declared `ProblemDetails` and error codes; request body types; and the page view models |
-| `platform` | `BrowserFacade`, `ThemeService`, `ConnectionState`, `ReloadBlocker`, `StorageKeys`, `decodeJwtExpiry` |
+| `platform` | `BrowserFacade`, `ThemeStore`, `ConnectionState`, `ReloadBlocker`, `StorageKeys`, `decodeJwtExpiry` |
 | `data-access` | `ApiUrl`, `gatewayInterceptor`, `GatewayError` / `NetworkError`, **one mapper per model (rule D4)**, `TokenStore`, `SessionStore`, `Mutations`, `ZoneStore` / `ListStore` / `PresenceStore`, and one service pair per domain behind `AUTH_SERVICE`, `ZONE_SERVICE`, `LIST_SERVICE`, `REALTIME_CLIENT` |
 
 The mappers are the only files in the app that reference a contract type, and they reference

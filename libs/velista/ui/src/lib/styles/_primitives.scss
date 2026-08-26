@@ -1,0 +1,87 @@
+// Layer 1 of the token architecture (plan 0002, section 2).
+//
+// Raw values, no meaning attached. This is the only file in the app that holds a
+// literal colour, which is what makes rule T1 checkable: a component reaching for
+// a value from here instead of a semantic token is a bug, because it will not
+// follow a theme change. `token-hygiene.spec.ts` enforces that automatically.
+//
+// Primitive names describe COLOUR, never the product and never a theme, so no
+// rename can make them wrong (rule N1, and section 5.2). The palette came out of
+// a moonlight direction; that name is gone and the ramps carry no trace of it.
+//
+// Ramps a theme has to tint with (a status chip fill, a hairline, the accent glow)
+// also carry an `-rgb` companion holding the same colour as bare space separated
+// channels. `rgb(var(--app-violet-400-rgb) / 10%)` then derives the tint from the
+// same source of truth, without a second literal and without `color-mix`, so the
+// emitted CSS stays plain and needs no fallback on an older phone browser.
+
+@mixin app-primitives {
+  // Ink: the dark ramp. Cool indigo tinted, never pure black.
+  --app-ink-950-rgb: 10 12 20;
+  --app-ink-950: rgb(var(--app-ink-950-rgb));
+  --app-ink-900-rgb: 17 20 31;
+  --app-ink-900: rgb(var(--app-ink-900-rgb));
+  --app-ink-850: #161a28;
+  --app-ink-800: #1a1e2e;
+  --app-ink-700: #262b40;
+  --app-ink-600: #343a54;
+
+  // Neutral: the grey ramp. Cool tinted, never pure white on dark.
+  --app-neutral-50: #f7f8fc;
+  --app-neutral-100: #eef0f7;
+  --app-neutral-200: #dde1ed;
+  --app-neutral-300: #c2c8db;
+  --app-neutral-400: #98a0bb;
+  --app-neutral-500: #6f7899;
+  // Half a step, and it earns its place: it is the only grey that clears 4.5:1
+  // as muted text on Day without colliding with the secondary step. neutral-500
+  // manages 4.09:1 there and neutral-600 is already secondary.
+  --app-neutral-550: #616a8a;
+  --app-neutral-600: #525a78;
+
+  // Pure white. Day's raised surfaces are white rather than a tinted neutral, so
+  // a card reads as paper against the faintly cool ground. It is also the source
+  // of Night's hairlines, which are white at a low alpha rather than a flat grey.
+  --app-white-rgb: 255 255 255;
+  --app-white: rgb(var(--app-white-rgb));
+
+  // Amber: the single warm accent, and the primary action in both themes.
+  --app-amber-300: #ffd39a;
+  --app-amber-400: #ffc271;
+  --app-amber-500-rgb: 255 180 84;
+  --app-amber-500: rgb(var(--app-amber-500-rgb));
+  --app-amber-600-rgb: 232 154 53;
+  --app-amber-600: rgb(var(--app-amber-600-rgb));
+  // Text only, and only on Day: 4.9:1 on white, where amber-500 manages 1.9:1.
+  --app-amber-800: #8a5a12;
+  // One step darker again, for the hover and pressed states of a quiet action on
+  // Day, where amber-800 is already the resting colour.
+  --app-amber-900: #6d460c;
+
+  // Status ramps. The 400s carry Night, the 700s carry text on Day, and the 600s
+  // are what both themes tint from, being the mid point that reads correctly laid
+  // over either a near black or a white ground.
+  --app-mint-400-rgb: 52 211 153;
+  --app-mint-400: rgb(var(--app-mint-400-rgb));
+  --app-mint-600-rgb: 5 150 105;
+  --app-mint-600: rgb(var(--app-mint-600-rgb));
+  --app-mint-700: #047857;
+
+  --app-coral-400-rgb: 251 113 133;
+  --app-coral-400: rgb(var(--app-coral-400-rgb));
+  --app-coral-600-rgb: 225 29 72;
+  --app-coral-600: rgb(var(--app-coral-600-rgb));
+  --app-coral-700: #be123c;
+
+  --app-violet-400-rgb: 167 139 250;
+  --app-violet-400: rgb(var(--app-violet-400-rgb));
+  --app-violet-600-rgb: 124 58 237;
+  --app-violet-600: rgb(var(--app-violet-600-rgb));
+  --app-violet-700: #6d28d9;
+
+  --app-sky-400-rgb: 96 165 250;
+  --app-sky-400: rgb(var(--app-sky-400-rgb));
+  --app-sky-600-rgb: 37 99 235;
+  --app-sky-600: rgb(var(--app-sky-600-rgb));
+  --app-sky-700: #1d4ed8;
+}

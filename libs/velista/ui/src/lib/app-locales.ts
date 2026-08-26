@@ -9,9 +9,10 @@
  * These constants are deliberately unprefixed: rule N1 keeps the product name out
  * of code symbols, and the `@portfolio/velista/ui` import path already scopes them.
  *
- * `APP_KEY` now lives in `@portfolio/velista/models` and is re-exported here so this
- * import path keeps working. It moved because `platform` builds the storage namespace
- * from it and sits below `ui` in the layering (plan 0004, section 3.2).
+ * `APP_KEY` namespaces the persisted locale (`roku-locale:{appKey}`), the theme choice
+ * (plan 0002) and the session tokens (plan 0004). It now lives in `models` so the
+ * layers below the presentation layer can namespace their own storage without
+ * depending on it, and is re-exported here so this import site keeps working.
  */
 export { APP_KEY } from '@portfolio/velista/models';
 

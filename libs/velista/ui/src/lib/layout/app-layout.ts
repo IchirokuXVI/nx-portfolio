@@ -1,6 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+} from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { APP_BRAND } from '@portfolio/velista/models';
+import { ThemeStore } from '@portfolio/velista/platform';
 import { AppUiModule } from '../app-ui-module';
 
 /**
@@ -16,11 +21,8 @@ import { AppUiModule } from '../app-ui-module';
  *   in either direction. On extraction that selector moves to `:root` unchanged.
  *
  * The theme is a class on the same element that redefines the semantic layer and
- * nothing else (plan 0002, section 4). Night is the default; `AppBrand.themeClass`
- * can override it so a rebrand ships a palette along with the name.
- *
- * The token definitions themselves are plan 0002's work. This component fixes only
- * *where* they live.
+ * nothing else (plan 0002, section 4). Which class that is comes from `ThemeStore`,
+ * which resolves an explicit user choice, then the operating system, then Night.
  *
  * `AppUiModule` is imported for its providers, not for a template symbol: being the
  * parent route component, this is where the `velista` i18n namespace has to be
@@ -33,15 +35,17 @@ import { AppUiModule } from '../app-ui-module';
   styleUrl: './app-layout.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    '[class]': 'rootClass',
+    '[class]': 'rootClass()',
   },
 })
 export class AppLayout {
-  private readonly _brand = inject(APP_BRAND);
+  private readonly _theme = inject(ThemeStore);
 
   /**
-   * Bound as one string rather than a static `class` plus a binding, so the theme
-   * class and the token scope can never end up on different elements.
+   * Bound as one string rather than a static `class` plus a separate binding, so
+   * the token scope and the theme can never end up on different elements. That
+   * would leave the app with primitives and no semantic layer, and every colour
+   * resolving to nothing.
    */
-  readonly rootClass = `app-root ${this._brand.themeClass ?? 'theme-night'}`;
+  readonly rootClass = computed(() => `app-root ${this._theme.themeClass()}`);
 }
