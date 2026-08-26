@@ -90,12 +90,19 @@ they provide the token in the one place the app does not.
 ### 2.5 Why no other gate caught it
 
 - `velista-e2e/src/mount.spec.ts` asserts `.app-root` is visible under the shell.
-  That is precisely this failure, and it is the one suite that would fail on it.
-- It cannot run on this machine right now. The installed Playwright browsers are
-  build 1217 and the pinned Playwright wants 1234, so all ten tests fail at browser
-  launch before touching the app. Fix with `npx playwright install`.
+  That is precisely this failure, and it is the one suite that fails on it.
+- **It does fail.** Run on 2026-08-26 against a freshly served shell, once the
+  Playwright browsers were updated: 10 of 10 tests failed, every browser
+  (Mobile Chrome, Mobile Safari, chromium, firefox, webkit) and both locales, with
+  `element(s) not found` waiting for `.app-root` at `mount.spec.ts:24`. The app
+  renders nothing at `/en/velista` and `/es/velista`. This is the empirical
+  confirmation of section 2.3, row one.
+- The suite had been unrunnable before that: the installed browsers were build 1217
+  and the pinned Playwright wanted 1234, so every test died at browser launch. A
+  failure that looks identical in the summary and has nothing to do with the app is
+  a good way to lose a real regression, which is roughly what happened here.
 - CI runs affected e2e, but only on push to `main`. This work is on `dev`, so the
-  suite has not run against it yet.
+  suite had not run against it yet.
 
 ## 3. The fix: the app injector owns the app's services
 
@@ -261,11 +268,15 @@ production interface: a `fakeZoneStore()` double in `data-access`'s `testing/` f
 Angular substitutes a class token as happily as an interface token, so no production
 code has to change for the test to get what it wants.
 
-### 5.4 If the token is wanted anyway
+### 5.4 Decided: no token. `ZoneStore` stays concrete
 
-It is cheap and consistent with what is already here, so this is a real option rather
-than a strawman. Declare `ZoneStoreI` with the readonly signals and the two methods
-the page uses, then:
+> **User's decision, 2026-08-26.** `HomePage` keeps injecting `ZoneStore` directly.
+> Nothing in production changes. The awkwardness in the spec is addressed by the test
+> double in 5.3, which is where the problem actually was.
+
+The rest of this section is kept as the record of what was weighed, so this is not
+re-opened from scratch later. Declaring `ZoneStoreI` with the readonly signals and
+the two methods the page uses would have meant:
 
 ```ts
 export const ZONE_STORE = serviceToken<ZoneStoreI>('ZONE_STORE', () =>
@@ -273,13 +284,12 @@ export const ZONE_STORE = serviceToken<ZoneStoreI>('ZONE_STORE', () =>
 );
 ```
 
-One warning, and it is the same trap as section 2: that default factory resolves
-`ZoneStore` from the **root** injector. Once rule D5 moves `ZoneStore` into
-`appProviders`, the default would either fail or quietly build a second instance, so
-the binding has to be `provideService(ZONE_STORE, ZoneStore)` in `appProviders`, and
-the default factory has to go or throw a clear message.
-
-This is a decision for the user. It does not block anything else in this plan.
+and it carried the same trap as section 2: that default factory resolves `ZoneStore`
+from the **root** injector, so once rule D5 moves `ZoneStore` into `appProviders` the
+default would either fail or quietly build a second instance. It would have needed
+`provideService(ZONE_STORE, ZoneStore)` in `appProviders` and no usable default.
+That is a second copy of the bug this plan exists to remove, for a seam with one
+implementation, which is what settled it.
 
 ## 6. Build order
 
@@ -311,13 +321,15 @@ Section 5.4 is deliberately outside this order. It is a decision, not a task.
 - [ ] No spec in `libs/velista` declares its own `AppBrand` literal or its own
       `BrowserFacade` double.
 - [ ] `npx nx run-many --all --target=test` and `--target=lint` pass.
-- [ ] `npx nx e2e velista-e2e` passes, which needs `npx playwright install` on this
-      machine first (2.5).
+- [ ] `npx nx e2e velista-e2e` passes. It currently fails 10 of 10 on `.app-root`
+      (2.5), so this criterion is the headline one: it goes from red to green, and it
+      is the only check here that exercises the real injector topology in a real
+      browser.
 
 ## 8. Open questions
 
-1. **Does `ZONE_STORE` get created?** Section 5.4. Recommendation is no, with the
-   test seam in 5.3 instead.
+1. ~~**Does `ZONE_STORE` get created?**~~ **No, decided 2026-08-26.** `ZoneStore`
+   stays concrete; the test double in 5.3 is the fix. See 5.4.
 2. **Does rule D5 belong in `0001` rather than `0004`?** It is an extraction contract
    concern as much as a data access one, and `0001` is where the "runs under the
    shell, later runs standalone" rules live. Recorded here as `0004`'s D5, the next
