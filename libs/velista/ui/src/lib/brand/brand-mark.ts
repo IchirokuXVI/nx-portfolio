@@ -5,7 +5,7 @@ import {
   input,
   signal,
 } from '@angular/core';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { APP_BRAND } from '@portfolio/velista/models';
 
 /**

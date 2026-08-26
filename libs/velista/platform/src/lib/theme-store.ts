@@ -1,20 +1,24 @@
-import { computed, inject, Injectable, Signal, signal } from '@angular/core';
+import { computed, inject, Injectable, type Signal, signal } from '@angular/core';
 import {
   APP_BRAND,
-  APP_KEY,
-  AppTheme,
+  type AppTheme,
   appThemeClass,
-  AppThemePreference,
+  type AppThemePreference,
   isAppThemePreference,
 } from '@portfolio/velista/models';
 import { BrowserFacade } from './browser-facade';
+import { StorageKeys } from './storage-keys';
 
 /**
  * Where the user's theme choice is persisted. Namespaced by the Nx project name,
  * which is a technical identifier stable across a rename, never the product name
  * (rule N1).
+ *
+ * Defined in `StorageKeys` rather than here, so every key this app writes sits in one
+ * place and shares one convention. Re-exported because this is the name the theme
+ * tests and any settings screen already reach for.
  */
-export const THEME_STORAGE_KEY = `${APP_KEY}:theme`;
+export const THEME_STORAGE_KEY = StorageKeys.theme;
 
 /**
  * Asked as `light` rather than `dark` on purpose. `BrowserFacade.matchMedia`

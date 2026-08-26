@@ -8,6 +8,13 @@ export default [
   {
     files: ['**/*.ts'],
     rules: {
+      // Rule D4 (plan 0004, sections 4.1 and 9.3). See velista/data-access for the
+      // full note: a backend contract is only ever needed as a type, and a type-only
+      // import is erased, which is what keeps ajv out of the bundle.
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
+      ],
       '@angular-eslint/directive-selector': [
         'error',
         {

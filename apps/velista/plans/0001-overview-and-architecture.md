@@ -245,6 +245,7 @@ the interface.
 | `lists/:listId/lines/:lineId` | Line detail and comments | Authenticated, list access | later |
 | `join/:code` | Join a zone from a shared code or link | Public, adaptive | later |
 | `auth/login`, `auth/register`, `auth/verify` | Credentials flows | Public | later |
+| `auth/callback` | Consumes the token pair the backend redirects back with after Google | Public | `0004` section 5.7 |
 | `account` | Profile, upgrade a temporary account, delete | Authenticated | later |
 | `settings` | Locale, theme, density | Any | later |
 
@@ -262,29 +263,39 @@ frontend under one directory makes the eventual extraction a directory move.
 
 | Library | Type | Contents |
 | --- | --- | --- |
-| `models` | types | View models, form models, and the mapping from contract DTOs to what components consume |
-| `data-access` | services | Gateway HTTP clients, auth and token store, realtime client, offline queue, DI tokens |
+| `models` | types | The app's own domain models and enums, view models, form models, and the target of the mapping from contract DTOs (`0004` rule D4) |
+| `platform` | services | Wraps the runtime environment rather than the backend: browser facade, theme, connection state, storage. Added by `0004` section 3, which explains why `ui` needs it and cannot reach `data-access` |
+| `data-access` | services | Gateway HTTP clients, the DTO to model mappers, auth and token store, realtime client, offline queue, DI tokens |
 | `ui` | presentational | Layout shell, theme tokens, and every dumb component, plus the i18n namespace |
 | `feature-home` | routed | The home page (`0003`) |
 | `feature-zones`, `feature-lists`, `feature-auth`, `feature-account` | routed | One per area, added as their plans land |
 
-`models` and `ui` must not import `data-access`. Feature libraries compose the other three.
+`models` and `ui` must not import `data-access`. Feature libraries compose the others. The
+full layering, and the reason `platform` had to exist for this rule to be workable, is in
+`0004` section 3.
 Note that `@nx/enforce-module-boundaries` is configured permissively in this workspace
 (`onlyDependOnLibsWithTags: ['*']`), so lint will **not** catch a violation of this. It is
 a review responsibility.
 
 ### 7.1 The contracts seam
 
-The frontend imports `@portfolio/luna-shopper/contracts` for enums and message shapes, so
-that `ZoneRole`, `LineStatus`, `MembershipStatus` and friends are defined exactly once
-across the whole product. This is the reason the backend rename in plan `0014` deliberately
-left the libraries alone.
+The frontend imports `@portfolio/luna-shopper/contracts` for the message shapes, so that the
+wire format is described in exactly one place across the whole product. This is the reason
+the backend rename in plan `0014` deliberately left the libraries alone.
 
-**Import enums and types only.** Never import the NATS message patterns, the ajv schema
-registry, or anything that pulls a Node dependency into a browser bundle. The frontend
-speaks to the gateway over REST, so the NATS layer is not its business. When the app is
-extracted, `contracts` becomes a published package or a copied types file, and keeping the
-import surface to plain enums and interfaces is what keeps that cheap.
+**Import types only.** Never import the NATS message patterns, the ajv schema registry, or
+anything that pulls a Node dependency into a browser bundle. The frontend speaks to the
+gateway over REST, so the NATS layer is not its business. When the app is extracted,
+`contracts` becomes a published package or a copied types file, and keeping the import
+surface to plain interfaces is what keeps that cheap.
+
+> **Amended by `0004` rule D4 (2026-08-26).** This section originally said "import enums and
+> types only". It is now **types only**, and the import must be a literal `import type`.
+> The app declares its **own** enums in `models` and maps into them at the boundary, so
+> nothing off the wire is trusted and a backend change lands in one mapper. The practical
+> gain is that a type only import is erased at compile time, so the `ajv` the contracts
+> barrel re-exports (`contracts/src/index.ts:32`) can never reach the bundle. See `0004`
+> sections 4.1 and 9.3.
 
 ## 8. D6: data, auth, and offline posture
 
@@ -361,11 +372,10 @@ A page plan is not ready for development until its mock is approved.
 
 | Plan | Subject | Status |
 | --- | --- | --- |
-| `0001` | This document: overview and architecture | Written |
-| `0002` | Design system and theming | Written |
-| `0003` | Home page | Written, mock pending approval |
-| later | App and library scaffolding | Not written |
-| later | Data access, auth, and realtime | Not written |
+| `0001` | This document: overview and architecture, plus the app and library scaffolding | **Implemented** |
+| `0002` | Design system and theming | Written, in development |
+| `0003` | Home page | Written, mock approved 2026-08-25 |
+| `0004` | Data access, auth, and realtime | Written 2026-08-26 |
 | later | One plan per remaining page, in build order | Not written |
 
 Scaffolding is deliberately **not** plan `0002`. Nothing is generated until enough of the

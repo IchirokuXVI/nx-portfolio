@@ -1,4 +1,4 @@
-import { Route } from '@angular/router';
+import { type Route } from '@angular/router';
 import { localeCorrectionGuard } from '@portfolio/localization/rokutranslator-angular';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import { ScaffoldPlaceholder } from './scaffold-placeholder/scaffold-placeholder';

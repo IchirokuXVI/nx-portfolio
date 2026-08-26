@@ -6,7 +6,7 @@ import {
   Injectable,
   PLATFORM_ID,
   signal,
-  Signal,
+  type Signal,
 } from '@angular/core';
 
 /**

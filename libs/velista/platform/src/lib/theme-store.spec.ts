@@ -1,6 +1,6 @@
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { APP_BRAND, AppBrand } from '@portfolio/velista/models';
+import { APP_BRAND, type AppBrand } from '@portfolio/velista/models';
 import { THEME_STORAGE_KEY, ThemeStore } from './theme-store';
 
 const brand: AppBrand = {

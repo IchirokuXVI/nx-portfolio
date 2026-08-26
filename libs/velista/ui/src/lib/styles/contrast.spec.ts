@@ -1,4 +1,4 @@
-import { APP_THEMES, AppTheme } from '@portfolio/velista/models';
+import { APP_THEMES, type AppTheme } from '@portfolio/velista/models';
 import { resolve } from 'path';
 import { compile } from 'sass';
 

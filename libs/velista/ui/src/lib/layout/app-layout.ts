@@ -5,7 +5,7 @@ import {
   inject,
 } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { ThemeStore } from '@portfolio/velista/data-access';
+import { ThemeStore } from '@portfolio/velista/platform';
 import { AppUiModule } from '../app-ui-module';
 
 /**

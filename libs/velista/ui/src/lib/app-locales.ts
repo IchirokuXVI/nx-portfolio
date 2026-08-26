@@ -6,13 +6,13 @@
  * enabled subset (`APP_USABLE_LOCALES`), which drives the route-data guard and the
  * language switcher.
  *
- * `APP_KEY` namespaces the persisted locale (`roku-locale:{appKey}`) and, since
- * plan 0002, the persisted theme choice too. It now lives in `models`, so that
- * `data-access` can namespace its own storage keys without depending on the
- * presentation layer, and is re-exported here so this import site keeps working.
- *
  * These constants are deliberately unprefixed: rule N1 keeps the product name out
  * of code symbols, and the `@portfolio/velista/ui` import path already scopes them.
+ *
+ * `APP_KEY` namespaces the persisted locale (`roku-locale:{appKey}`), the theme choice
+ * (plan 0002) and the session tokens (plan 0004). It now lives in `models` so the
+ * layers below the presentation layer can namespace their own storage without
+ * depending on it, and is re-exported here so this import site keeps working.
  */
 export { APP_KEY } from '@portfolio/velista/models';
 

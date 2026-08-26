@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { APP_BRAND, AppBrand } from '@portfolio/velista/models';
+import { APP_BRAND, type AppBrand } from '@portfolio/velista/models';
 import { BrandMark } from './brand-mark';
 import { BrandWordmark } from './brand-wordmark';
 
