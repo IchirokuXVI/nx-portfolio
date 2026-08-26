@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -36,7 +36,14 @@ import {
  */
 @Component({
   selector: 'lib-landing-page',
-  imports: [RokuTranslatorPipe, AppBar, AuthActions, HomeHero, ListPreviewCard],
+  imports: [
+    RokuTranslatorPipe,
+    RouterOutlet,
+    AppBar,
+    AuthActions,
+    HomeHero,
+    ListPreviewCard,
+  ],
   templateUrl: './landing-page.html',
   styleUrl: './landing-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -44,6 +51,7 @@ import {
 export class LandingPage {
   private readonly _localeStore = inject(RokuLocaleStore);
   private readonly _route = inject(ActivatedRoute);
+  private readonly _router = inject(Router);
   private readonly _t = inject(RokuTranslatorService);
 
   /**
@@ -136,27 +144,35 @@ export class LandingPage {
   }
 
   /**
-   * Everything this page can start, and where each of them currently stops.
+   * The two ways in that need no credentials, which plan 0008 built.
    *
-   * Each of these leads somewhere `0003` puts out of scope: the join-by-code flow and
-   * the auth screens each get their own plan and their own approved mock before they
-   * are built. Creating a group is the subtle one: it needs a name, and no sheet for
-   * typing one is drawn in the approved mock, so building it here would break the
-   * project's own rule that nothing is built before its mock is approved.
+   * A navigation rather than a `routerLink` on the button, because the control is an
+   * `AuthActions` output rather than an anchor, and because the destination is a
+   * **sibling** of this route: relative to the sheet's parent, which is this page.
+   * `relativeTo` the activated route is what makes that true in both the mounted and
+   * the standalone build without either the locale segment or the mount appearing
+   * anywhere in this file (extraction contract, item 5).
+   */
+  createZone(): void {
+    void this._router.navigate(['zones', 'new'], { relativeTo: this._route });
+  }
+
+  joinZone(): void {
+    void this._router.navigate(['zones', 'join'], { relativeTo: this._route });
+  }
+
+  /**
+   * Everything else this page can start, and where each of them currently stops.
+   *
+   * The two entry actions have gone: `0008` built them. What is left leads to the
+   * credential flows, which are the next plan and have their own mock to be approved
+   * first.
    *
    * They are recorded rather than left unbound so the controls are real, focusable and
    * testable now, and so that connecting each one later is a single line here instead
    * of a hunt through templates.
    */
   readonly pendingRoutes = signal<readonly string[]>([]);
-
-  createZone(): void {
-    this._notYetRouted('zones.create');
-  }
-
-  joinZone(): void {
-    this._notYetRouted('zones.join');
-  }
 
   continueWithGoogle(): void {
     this._notYetRouted('auth.google');

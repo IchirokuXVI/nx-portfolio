@@ -1,10 +1,15 @@
 import { TestBed } from '@angular/core/testing';
-import type { MyZone } from '@portfolio/velista/models';
+import type { MyZone, Zone } from '@portfolio/velista/models';
 import { provideFakeBrowserFacade } from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import { RealtimeMemory } from '../realtime/realtime-memory';
-import { ZONE_SERVICE, type ZoneServiceI } from './zone-service';
+import {
+  ZONE_SERVICE,
+  type ZoneCreationResult,
+  type ZoneJoinResult,
+  type ZoneServiceI,
+} from './zone-service';
 import { ZoneStore } from './zone-store';
 
 function zone(overrides: Partial<MyZone> = {}): MyZone {
@@ -33,6 +38,19 @@ describe('ZoneStore', () => {
   let zones: MyZone[];
   let authenticated: boolean;
 
+  /** How many times the list was fetched, which is how a reconcile is observed. */
+  let listCalls: number;
+
+  /** When set, the list request never comes back, freezing the reconcile mid flight. */
+  let holdList: boolean;
+
+  /** What the two mutations answer, and what they were called with. */
+  let created: Zone;
+  let createResult: ZoneCreationResult | 'throw' | null;
+  let joinResult: ZoneJoinResult | 'throw' | null;
+  let createArgs: (readonly [string, string | undefined])[];
+  let joinArgs: (readonly [string, string | undefined])[];
+
   beforeEach(() => {
     zones = [
       // Owner of the first, plain member of the second. The member's null pending
@@ -52,21 +70,56 @@ describe('ZoneStore', () => {
       }),
     ];
     authenticated = true;
+    listCalls = 0;
+    holdList = false;
+    created = {
+      id: 'z-new',
+      name: 'Flat 3B',
+      joinCode: 'HK7M2QPD',
+      status: 'ACTIVE',
+      ownerUserId: 'user-me',
+    };
+    createResult = null;
+    joinResult = null;
+    createArgs = [];
+    joinArgs = [];
 
     const service: ZoneServiceI = {
-      listMyZones: async () => ({ items: zones, nextCursor: null }),
-      createZone: async () => ({ state: 'created', zone: zone() }),
-      joinZone: async () => ({
-        state: 'joined',
-        membership: {
-          id: 'm1',
-          zoneId: 'z9',
-          userId: 'user-me',
-          username: 'You',
-          role: 'MEMBER',
-          status: 'PENDING',
-        },
-      }),
+      listMyZones: async () => {
+        listCalls += 1;
+        if (holdList) {
+          // Never resolves, which is how "before the reload lands" is expressed as a
+          // test: the reconcile has been started and has not come back.
+          await new Promise(() => undefined);
+        }
+        return { items: zones, nextCursor: null };
+      },
+      createZone: async (name, username) => {
+        createArgs = [...createArgs, [name, username] as const];
+        if (createResult === 'throw') {
+          throw new Error('boom');
+        }
+        return createResult ?? { state: 'created', zone: created };
+      },
+      joinZone: async (joinCode, username) => {
+        joinArgs = [...joinArgs, [joinCode, username] as const];
+        if (joinResult === 'throw') {
+          throw new Error('boom');
+        }
+        return (
+          joinResult ?? {
+            state: 'joined',
+            membership: {
+              id: 'm1',
+              zoneId: 'z9',
+              userId: 'user-me',
+              username: 'You',
+              role: 'MEMBER',
+              status: 'PENDING',
+            },
+          }
+        );
+      },
     };
 
     TestBed.configureTestingModule({
@@ -333,6 +386,132 @@ describe('ZoneStore', () => {
       realtime.emit('zone.teleported', { id: 'z1' });
 
       expect(store.myZones()).toHaveLength(2);
+    });
+  });
+
+  describe('creating a group', () => {
+    it('puts it on screen with what is certainly true of it, before any reload', async () => {
+      // Plan 0008 section 5.5. `POST /v1/zones` answers a `Zone` and the dashboard
+      // renders a `MyZone`; the four fields in between are derivable rather than
+      // guessed for a group created one moment ago, which is what makes this safe.
+      //
+      // The reload is held open, so what is asserted is the state the person actually
+      // sees: the group is on screen while the request that confirms it is still out.
+      holdList = true;
+
+      const outcome = await store.createZone('Flat 3B');
+
+      expect(outcome).toEqual({ state: 'created', zoneId: 'z-new' });
+      const fresh = store.myZones().find((z) => z.id === 'z-new');
+      expect(fresh).toMatchObject({
+        myRole: 'OWNER',
+        myStatus: 'APPROVED',
+        lists: [],
+        counts: {
+          memberCount: 1,
+          listCount: 0,
+          // The creator is staff, so zero rather than null: they can see the number
+          // and there is nothing in it yet.
+          pendingRequestCount: 0,
+          firstPendingRequesterName: null,
+        },
+      });
+    });
+
+    it('records the way in, so the dashboard can say what just happened', async () => {
+      await store.createZone('Flat 3B');
+
+      expect(store.lastEntry()).toEqual({ kind: 'created', zoneId: 'z-new' });
+
+      store.clearLastEntry();
+      expect(store.lastEntry()).toBeNull();
+    });
+
+    it('reconciles without the page dropping back to a skeleton', async () => {
+      // `load` would move the state to `loading`, which `selectHomeState` renders as a
+      // skeleton, so the correct dashboard would be replaced by a spinner for the
+      // length of a request the person has already waited through.
+      await store.load();
+
+      await store.createZone('Flat 3B');
+
+      // Never `loading`, and the list was fetched again: the reconcile happened, it
+      // just did not announce itself as a load.
+      expect(store.state()).toBe('loaded');
+      expect(listCalls).toBe(2);
+    });
+
+    it('reports a lost guest account rather than a failure', async () => {
+      // Rule D3 refused to send. Not an error, and emphatically not a retry.
+      createResult = { state: 'guest-account-lost' };
+
+      expect(await store.createZone('Flat 3B')).toEqual({
+        state: 'guest-account-lost',
+      });
+      expect(store.lastEntry()).toBeNull();
+    });
+
+    it('hands a failure back with its error, for the page to key copy on', async () => {
+      createResult = 'throw';
+
+      const outcome = await store.createZone('Flat 3B');
+
+      expect(outcome).toEqual({
+        state: 'failed',
+        error: expect.any(Error),
+      });
+      expect(store.myZones().map((z) => z.id)).toEqual([]);
+    });
+
+    it('never sends a username the person did not type', async () => {
+      // `CreateZoneDto.username` is optional and omitting it means "call me by my
+      // global username", which is the common path (plan 0008, section 5.2).
+      await store.createZone('Flat 3B');
+
+      expect(createArgs).toEqual([['Flat 3B', undefined]]);
+    });
+  });
+
+  describe('asking to join a group', () => {
+    it('waits for the reload, because that is where the name comes from', async () => {
+      // `MembershipView` carries a `zoneId` and no name, and no endpoint turns a code
+      // into a zone (sections 5.6 and 5.7). `listMine` returns PENDING memberships
+      // with the zone row joined, so the reload is what names the group.
+      zones = [
+        ...zones,
+        zone({ id: 'z9', name: 'Casa Ferrer', myStatus: 'PENDING' }),
+      ];
+
+      const outcome = await store.joinZone('GTBN4KRW');
+
+      expect(outcome).toEqual({ state: 'joined', zoneId: 'z9' });
+      expect(store.myZones().find((z) => z.id === 'z9')?.name).toBe(
+        'Casa Ferrer'
+      );
+      expect(store.lastEntry()).toEqual({ kind: 'joined', zoneId: 'z9' });
+    });
+
+    it('reports a lost guest account rather than a failure', async () => {
+      joinResult = { state: 'guest-account-lost' };
+
+      expect(await store.joinZone('GTBN4KRW')).toEqual({
+        state: 'guest-account-lost',
+      });
+    });
+
+    it('hands a failure back with its error', async () => {
+      joinResult = 'throw';
+
+      expect(await store.joinZone('NOSUCHXX')).toEqual({
+        state: 'failed',
+        error: expect.any(Error),
+      });
+    });
+
+    it('never sends a username the person did not type', async () => {
+      await store.joinZone('GTBN4KRW');
+
+      expect(joinArgs).toEqual([['GTBN4KRW', undefined]]);
     });
   });
 

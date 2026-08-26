@@ -1,0 +1,81 @@
+@if (accountLost()) {
+  <lib-account-lost-panel (restart)="restart()" />
+} @else {
+  <lib-sheet-shell
+    (dismiss)="dismiss()"
+    [dismissible]="!submitting()"
+    labelledBy="create-zone-title"
+  >
+    <h2 class="title" id="create-zone-title">
+      {{ 'entry.createZone.title' | rokuT }}
+    </h2>
+    <p class="body">{{ 'entry.createZone.body' | rokuT }}</p>
+
+    <label class="label" for="create-zone-name">
+      {{ 'entry.createZone.label' | rokuT }}
+    </label>
+
+    <!--
+      Read only rather than disabled while the request is in flight: a disabled input
+      is removed from the accessible tree and loses focus, so the person is thrown to
+      the top of the sheet at the exact moment they are waiting to hear something.
+    -->
+    <input
+      (input)="onNameInput($event)"
+      [attr.aria-describedby]="errorKey() === null ? null : 'create-zone-error'"
+      [attr.maxlength]="maxLength"
+      [placeholder]="'entry.createZone.placeholder' | rokuT"
+      [readOnly]="submitting()"
+      [value]="name()"
+      autocomplete="off"
+      class="field"
+      id="create-zone-name"
+      type="text"
+    />
+
+    <p class="counter">{{ name().length }} / {{ maxLength }}</p>
+
+    @if (errorKey(); as key) {
+      <p class="error" id="create-zone-error" role="alert">
+        <lib-alert-icon aria-hidden="true" class="glyph" />
+        {{ key | rokuT }}
+      </p>
+    }
+
+    <!--
+      Keeps its accessible name and gains `aria-busy` rather than swapping its label
+      for a spinner alone, so what is happening is announced and not only drawn.
+    -->
+    <button
+      (click)="submit()"
+      [attr.aria-busy]="submitting()"
+      [disabled]="!canSubmit()"
+      class="primary"
+      type="button"
+    >
+      @if (submitting()) {
+        <lib-spinner-icon class="glyph" />
+        {{ 'entry.createZone.submitting' | rokuT }}
+      } @else {
+        {{ 'entry.createZone.submit' | rokuT }}
+      }
+    </button>
+
+    @if (submitting()) {
+      @if (mintingAccount()) {
+        <!-- An account appearing is something the person is told about while it
+             happens, rather than something they discover afterwards. -->
+        <p class="notice">
+          <lib-info-icon aria-hidden="true" class="glyph" />
+          {{ 'entry.createZone.mintingAccount' | rokuT }}
+        </p>
+      }
+    } @else {
+      <!-- Gone while the request is in flight: the write has already left, so
+           offering to back out of it would be a lie. -->
+      <button (click)="dismiss()" class="cancel" type="button">
+        {{ 'entry.cancel' | rokuT }}
+      </button>
+    }
+  </lib-sheet-shell>
+}

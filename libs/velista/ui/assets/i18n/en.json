@@ -26,6 +26,58 @@
       "reload": "Reload now"
     }
   },
+  "entry": {
+    "createZone": {
+      "title": "Name your group",
+      "body": "A group is the household or flatmates you share lists with. You can change the name later",
+      "label": "Group name",
+      "placeholder": "Home",
+      "submit": "Create group",
+      "submitting": "Creating",
+      "mintingAccount": "We are setting up an account on this phone so the group has an owner. You can add an email to it whenever you like"
+    },
+    "joinZone": {
+      "title": "Enter the code",
+      "body": "Whoever set the group up can find its code on the group's page",
+      "label": "Join code",
+      "hint": "Letters and numbers. Never O, I or L",
+      "submit": "Ask to join",
+      "submitting": "Asking",
+      "paste": "Paste"
+    },
+    "joinLink": {
+      "title": "Someone wants you on their list",
+      "body": "Ask to join, and whoever runs the group lets you in. You will see the group and its lists once they do",
+      "codeLabel": "The code in your link",
+      "decline": "Not now",
+      "guestNotice": "Asking makes an account on this phone. Add an email to it later so you do not lose it"
+    },
+    "invite": {
+      "title": "{{name}} is yours",
+      "body": "Send this code to the people you shop with. They enter it to ask to join",
+      "copy": "Copy code",
+      "copied": "Copied",
+      "share": "Share the link"
+    },
+    "asked": {
+      "title": "You asked to join {{name}}",
+      "body": "Whoever runs the group decides. This page updates the moment they do, and the group opens up below"
+    },
+    "cancel": "Cancel",
+    "error": {
+      "noSuchZone": "No group has that code. Check it with whoever sent it. Codes never use O, I or L",
+      "alreadyAsked": "You have already asked to join this group",
+      "notAllowed": "You cannot join this group. Ask whoever runs it",
+      "tooMany": "Too many tries. Wait a minute and try again",
+      "createClash": "Something clashed on our side. Try that again",
+      "failed": "That did not go through. Try again"
+    },
+    "accountLost": {
+      "title": "We lost the account on this phone",
+      "body": "Your groups were tied to this phone and we cannot reach them any more. You can start again, and adding an email next time means this cannot happen",
+      "restart": "Start again"
+    }
+  },
   "home": {
     "loading": "Loading your groups",
     "or": "OR",

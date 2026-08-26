@@ -203,6 +203,98 @@ export class OfflineIcon {
   );
 }
 
+/** Sharing an invite, on the card the creator lands on (plan 0008). */
+@Component({
+  selector: 'lib-share-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class ShareIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./share-icon.svg?raw')
+  );
+}
+
+/** Waiting on somebody else, which is what a pending membership is. */
+@Component({
+  selector: 'lib-clock-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class ClockIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./clock-icon.svg?raw')
+  );
+}
+
+/**
+ * The two glyphs that sit beside a sentence about what just happened: a rejection,
+ * and a quiet notice.
+ *
+ * Plan 0008 section 4.2 counts two missing icons, the share and the clock, because
+ * those are the two its new components need. These two are missing as well and the
+ * mock draws both, in the rejected state of `JoinCode.dc.html` and in the guest
+ * notices on `CreateGroup.dc.html` and `JoinLink.dc.html`. Leaving them out would
+ * build a screen the approved design does not show.
+ */
+@Component({
+  selector: 'lib-alert-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class AlertIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./alert-icon.svg?raw')
+  );
+}
+
+@Component({
+  selector: 'lib-info-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class InfoIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./info-icon.svg?raw')
+  );
+}
+
+/**
+ * A request in flight.
+ *
+ * An icon rather than a bordered circle in CSS, because the arc is artwork and this
+ * library's rule is that artwork lives in an `.svg`. Its rotation is driven by the
+ * host, so a caller decides whether it turns; under `prefers-reduced-motion` the
+ * motion tokens are zero and it simply sits still while still marking the button as
+ * busy (plan 0002, section 4.5).
+ */
+@Component({
+  selector: 'lib-spinner-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { class: 'spinning' },
+})
+export class SpinnerIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./spinner-icon.svg?raw')
+  );
+}
+
 /**
  * Google's mark, in Google's colours.
  *

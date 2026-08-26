@@ -8,6 +8,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { MyZone } from '@portfolio/velista/models';
 import { SessionStore } from '../auth/session-store';
+import { Mutations } from '../mutations';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -17,6 +18,34 @@ import { ZONE_SERVICE, type ZoneServiceI } from './zone-service';
 
 /** How the store's one load is going, which is what `0003`'s state machine reads. */
 export type ZoneLoadState = 'idle' | 'loading' | 'loaded' | 'failed';
+
+/**
+ * How one of the two ways in ended (plan 0008).
+ *
+ * Four cases and not three: `guest-account-lost` is kept apart from `failed` all the
+ * way up to the screen, because the two want opposite things from the person looking
+ * at them. A failure asks them to try again; this one must not, since trying again is
+ * how the second guest account gets minted (plan 0004, rule D3).
+ */
+export type ZoneEntryOutcome =
+  | { readonly state: 'created'; readonly zoneId: string }
+  | { readonly state: 'joined'; readonly zoneId: string }
+  | { readonly state: 'guest-account-lost' }
+  | { readonly state: 'failed'; readonly error: unknown };
+
+/**
+ * The way in the caller has just come through, for the dashboard to say something
+ * about once.
+ *
+ * It lives on the store rather than travelling in router state, because the two
+ * screens that can start it are not the screen that reports it, and the store is
+ * already the one thing above both that survives the navigation between them. Router
+ * state would work and would also survive a reload through the history entry, which
+ * is exactly wrong: an invite card is about what just happened, not about the URL.
+ */
+export type ZoneEntry =
+  | { readonly kind: 'created'; readonly zoneId: string }
+  | { readonly kind: 'joined'; readonly zoneId: string };
 
 /**
  * The caller's zones: the cache, the realtime application, and the room subscriptions.
@@ -41,18 +70,23 @@ export class ZoneStore {
   private readonly _zones = inject<ZoneServiceI>(ZONE_SERVICE);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _session = inject(SessionStore);
+  private readonly _mutations = inject(Mutations);
   private readonly _destroyRef = inject(DestroyRef);
 
   private readonly _byId = signal<ReadonlyMap<string, MyZone>>(new Map());
   private readonly _order = signal<readonly string[]>([]);
   private readonly _state = signal<ZoneLoadState>('idle');
   private readonly _error = signal<unknown>(null);
+  private readonly _lastEntry = signal<ZoneEntry | null>(null);
 
   /** Rooms currently held, so they can be released and re-joined together. */
   private readonly _rooms = new Map<string, () => void>();
 
   readonly state = this._state.asReadonly();
   readonly error = this._error.asReadonly();
+
+  /** The way in just taken, or null. Cleared by whoever renders it. */
+  readonly lastEntry = this._lastEntry.asReadonly();
 
   /** The caller's zones, in the order the server returned them. */
   readonly myZones = computed<readonly MyZone[]>(() => {
@@ -118,6 +152,118 @@ export class ZoneStore {
       current.includes(zone.id) ? current : [zone.id, ...current]
     );
     this._syncRooms();
+  }
+
+  /**
+   * Create a zone, and have the dashboard render it before the reload confirms it.
+   *
+   * `POST /v1/zones` answers a `Zone`, and the dashboard renders a `MyZone`. The four
+   * fields in between are not guessed: for a zone created one moment ago the caller is
+   * its OWNER, their membership is APPROVED, there is one member, and there are no
+   * lists and nobody waiting. Composing those and upserting is what puts the group on
+   * screen immediately, and the reconciling reload right behind it is what keeps that
+   * from being a story the client tells itself (plan 0008, section 5.5).
+   *
+   * Through `Mutations.run` like every other write in this app (rule D2), which is what
+   * keeps an offline queue a change to one file rather than to every call site. No
+   * overlay: an overlay describes a pending edit to a record that already exists, and
+   * this record does not exist anywhere until the server answers.
+   */
+  async createZone(name: string): Promise<ZoneEntryOutcome> {
+    const outcome = await this._mutations.run(null, () =>
+      this._zones.createZone(name)
+    );
+
+    if (outcome.state === 'failed') {
+      return { state: 'failed', error: outcome.error };
+    }
+
+    if (outcome.value.state === 'guest-account-lost') {
+      // Rule D3 refused to send the request, so nothing was created and nothing
+      // should be retried. See `ZoneCreationResult`.
+      return { state: 'guest-account-lost' };
+    }
+
+    const { zone } = outcome.value;
+    this.upsert({
+      ...zone,
+      myRole: 'OWNER',
+      myStatus: 'APPROVED',
+      counts: {
+        memberCount: 1,
+        listCount: 0,
+        // The creator is the owner, so they are staff and this number is theirs
+        // to see. It is zero, which is not the same as being unable to see it.
+        pendingRequestCount: 0,
+        firstPendingRequesterName: null,
+      },
+      lists: [],
+    });
+    this._lastEntry.set({ kind: 'created', zoneId: zone.id });
+
+    // Deliberately not awaited. The row on screen is already correct, so making the
+    // caller wait for the reload would buy a second spinner and nothing else.
+    void this._reconcile();
+
+    return { state: 'created', zoneId: zone.id };
+  }
+
+  /**
+   * Ask to join a zone by its code.
+   *
+   * Nothing can be composed here the way a create can: `MembershipView` carries a
+   * `zoneId` and no name, and no endpoint turns a code into a zone (section 5.7). So
+   * this reloads, and **awaits** the reload, because the list is where the group's real
+   * name comes from: core's `listMine` selects APPROVED and PENDING memberships alike
+   * and inner joins the zone row for both, so a membership that is still waiting comes
+   * back as a full `MyZoneView` (section 5.6).
+   */
+  async joinZone(joinCode: string): Promise<ZoneEntryOutcome> {
+    const outcome = await this._mutations.run(null, () =>
+      this._zones.joinZone(joinCode)
+    );
+
+    if (outcome.state === 'failed') {
+      return { state: 'failed', error: outcome.error };
+    }
+
+    if (outcome.value.state === 'guest-account-lost') {
+      return { state: 'guest-account-lost' };
+    }
+
+    const { membership } = outcome.value;
+    await this._reconcile();
+    this._lastEntry.set({ kind: 'joined', zoneId: membership.zoneId });
+
+    return { state: 'joined', zoneId: membership.zoneId };
+  }
+
+  /** The dashboard has said what just happened. It does not say it twice. */
+  clearLastEntry(): void {
+    this._lastEntry.set(null);
+  }
+
+  /**
+   * Reload after a mutation, without the page dropping back to a skeleton.
+   *
+   * `load` moves the state to `loading`, which is right on a cold start and wrong here:
+   * the cache already holds the zone that was just created, and `selectHomeState`
+   * renders `loading` as a skeleton, so reusing `load` would replace a correct
+   * dashboard with a spinner for the length of a request. A failure is swallowed for
+   * the same reason. What is on screen is not made worse by a reload that did not
+   * arrive, and the failure path that matters is the mutation's own, which the caller
+   * already holds.
+   */
+  private async _reconcile(): Promise<void> {
+    try {
+      const page = await this._zones.listMyZones();
+      this._byId.set(new Map(page.items.map((zone) => [zone.id, zone])));
+      this._order.set(page.items.map((zone) => zone.id));
+      this._state.set('loaded');
+      this._syncRooms();
+    } catch {
+      // Deliberately quiet. See above.
+    }
   }
 
   /**

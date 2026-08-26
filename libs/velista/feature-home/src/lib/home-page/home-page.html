@@ -54,6 +54,27 @@
 
     @case ('populated') {
       <div class="content">
+        <!--
+          Above everything, including the guest banner: a group of one is useless, so
+          the code to share leads. Both outcomes of plan 0008 land here rather than on
+          a screen of their own, which would have to be dismissed before the person
+          could see what they had just made.
+        -->
+        @if (entry(); as arrival) {
+          @if (arrival.kind === 'created') {
+            <lib-invite-card
+              (copyCode)="copyCode(arrival.zone.joinCode)"
+              (share)="shareCode(arrival.zone.joinCode)"
+              [copied]="codeCopied()"
+              [joinCode]="arrival.zone.joinCode"
+              [shareable]="canShare"
+              [zoneName]="arrival.zone.name"
+            />
+          } @else {
+            <lib-asked-notice [zoneName]="arrival.zone.name" />
+          }
+        }
+
         @if (page.guest) {
           <lib-guest-upgrade-banner
             (dismiss)="dismissGuestBanner()"
@@ -88,3 +109,9 @@
     }
   }
 </div>
+
+<!--
+  Where a sheet renders (plan 0008, rule E1). Outside `.page`, so the sheet is not
+  laid out between the fixed header and the fixed action bar: it covers both.
+-->
+<router-outlet></router-outlet>

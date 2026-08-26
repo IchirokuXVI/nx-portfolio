@@ -25,3 +25,10 @@
     (signInWithEmail)="signInWithEmail()"
   />
 </div>
+
+<!--
+  Where a sheet renders (plan 0008, rule E1). Outside `.page` on purpose: a sheet is
+  fixed to the viewport and covers this screen, so nesting it inside the layout that
+  pushes the entry actions into thumb reach would make it part of that layout.
+-->
+<router-outlet></router-outlet>

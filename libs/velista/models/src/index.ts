@@ -6,5 +6,6 @@ export * from './lib/app-theme';
 export * from './lib/domain';
 export * from './lib/enums';
 export * from './lib/home-view';
+export * from './lib/join-code';
 export * from './lib/problem';
 export * from './lib/requests';
