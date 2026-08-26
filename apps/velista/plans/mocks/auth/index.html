@@ -83,6 +83,9 @@
 #ab-VerifyEmail * { box-sizing: border-box; }
 #ab-VerifyEmail a { color: #ffb454; text-decoration: none; }
 #ab-VerifyEmail a:hover { color: #ffc271; }
+#ab-ResendStates * { box-sizing: border-box; }
+#ab-ResendStates a { color: #ffb454; text-decoration: none; }
+#ab-ResendStates a:hover { color: #ffc271; }
 </style>
 
 <header>
@@ -98,7 +101,7 @@
 </div>
 
 <div class="viewport">
-  <div class="canvas" id="canvas" style="width: 2350px; height: 2320px;">
+  <div class="canvas" id="canvas" style="width: 2910px; height: 2570px;">
       <figure class="board" style="left: 0px; top: 230px; width: 1330px;">
         <figcaption>Sign in</figcaption>
         <div class="frame" id="ab-SignIn" style="width: 1330px; height: 970px;">
@@ -367,6 +370,7 @@
                     <div style="flex: 1;">
                       <div style="font-size: 14px; font-weight: 650; margin-bottom: 4px;">Confirm your email</div>
                       <div style="font-size: 12.5px; line-height: 1.5; color: #98a0bb;">We sent a link to marta@example.com. You can carry on without it, but confirming keeps the account yours.</div>
+                      <div style="font-size: 12.5px; line-height: 1.5; color: #98a0bb; margin-top: 8px;">Did not get it? <span style="color: #ffb454; font-weight: 600;">Send it again</span></div>
                     </div>
                     <button type="button" style="width: 30px; height: 30px; flex: none; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Dismiss">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -586,7 +590,9 @@
                   </div>
 
                   <h1 style="margin: 0 0 12px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">That link has run out</h1>
-                  <p style="margin: 0 0 30px; font-size: 15px; line-height: 1.55; color: #98a0bb;">Confirmation links last a short while and work once. Nothing is wrong with your account: signing in and everything else works exactly the same.</p>
+                  <p style="margin: 0 0 14px; font-size: 15px; line-height: 1.55; color: #98a0bb;">Confirmation links last a short while and work once. Nothing is wrong with your account: signing in and everything else works exactly the same.</p>
+
+                  <p style="margin: 0 0 30px; font-size: 15px; line-height: 1.55; color: #98a0bb;">Still want to confirm it? <span style="color: #ffb454; font-weight: 600;">Send it again</span></p>
 
                   <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Go to my groups</button>
 
@@ -598,12 +604,85 @@
           </div>
         </div>
       </figure>
+      <figure class="board" style="left: 1920px; top: 1350px; width: 470px;">
+        <figcaption>The resend line, three states</figcaption>
+        <div class="frame" id="ab-ResendStates" style="width: 470px; height: 700px;">
+          <div style="width: 470px; height: 700px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; flex-direction: column; gap: 22px;">
+
+            <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE RESEND LINE &middot; one sentence, three states</div>
+
+            <!-- IDLE -->
+            <div style="display: flex; flex-direction: column; gap: 9px;">
+              <span style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899;">READY</span>
+              <div style="width: 350px; display: flex; gap: 11px; align-items: flex-start; padding: 15px 16px; border-radius: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" stroke="#98a0bb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2.8" y="5.2" width="18.4" height="13.6" rx="2.6"/>
+                  <path d="M3.4 6.6L12 12.6l8.6-6"/>
+                </svg>
+                <div style="flex: 1;">
+                  <div style="font-size: 14px; font-weight: 650; color: #f7f8fc; margin-bottom: 4px;">Confirm your email</div>
+                  <div style="font-size: 12.5px; line-height: 1.5; color: #98a0bb;">We sent a link to marta@example.com. You can carry on without it, but confirming keeps the account yours.</div>
+                  <div style="font-size: 12.5px; line-height: 1.5; color: #98a0bb; margin-top: 8px;">Did not get it? <span style="color: #ffb454; font-weight: 600;">Send it again</span></div>
+                </div>
+                <div style="width: 30px; height: 30px; flex: none; display: flex; align-items: center; justify-content: center;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M7 7l10 10M17 7L7 17"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- COUNTING DOWN -->
+            <div style="display: flex; flex-direction: column; gap: 9px;">
+              <span style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899;">JUST SENT &middot; counts down, then returns to READY</span>
+              <div style="width: 350px; display: flex; gap: 11px; align-items: flex-start; padding: 15px 16px; border-radius: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" stroke="#98a0bb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2.8" y="5.2" width="18.4" height="13.6" rx="2.6"/>
+                  <path d="M3.4 6.6L12 12.6l8.6-6"/>
+                </svg>
+                <div style="flex: 1;">
+                  <div style="font-size: 14px; font-weight: 650; color: #f7f8fc; margin-bottom: 4px;">Confirm your email</div>
+                  <div style="font-size: 12.5px; line-height: 1.5; color: #98a0bb;">We sent a link to marta@example.com. You can carry on without it, but confirming keeps the account yours.</div>
+                  <div style="font-size: 12.5px; line-height: 1.5; color: #34d399; margin-top: 8px;">Sent again. You can ask for another in <span style="font-variant-numeric: tabular-nums;">0:52</span>.</div>
+                </div>
+                <div style="width: 30px; height: 30px; flex: none; display: flex; align-items: center; justify-content: center;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M7 7l10 10M17 7L7 17"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- REFUSED -->
+            <div style="display: flex; flex-direction: column; gap: 9px;">
+              <span style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899;">REFUSED &middot; the server's own wait, which can be longer than a minute</span>
+              <div style="width: 350px; display: flex; gap: 11px; align-items: flex-start; padding: 15px 16px; border-radius: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" stroke="#98a0bb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2.8" y="5.2" width="18.4" height="13.6" rx="2.6"/>
+                  <path d="M3.4 6.6L12 12.6l8.6-6"/>
+                </svg>
+                <div style="flex: 1;">
+                  <div style="font-size: 14px; font-weight: 650; color: #f7f8fc; margin-bottom: 4px;">Confirm your email</div>
+                  <div style="font-size: 12.5px; line-height: 1.5; color: #98a0bb;">We sent a link to marta@example.com. You can carry on without it, but confirming keeps the account yours.</div>
+                  <div style="font-size: 12.5px; line-height: 1.5; color: #fb7185; margin-top: 8px;">Too many requests. You can ask for another in <span style="font-variant-numeric: tabular-nums;">7:31</span>.</div>
+                </div>
+                <div style="width: 30px; height: 30px; flex: none; display: flex; align-items: center; justify-content: center;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M7 7l10 10M17 7L7 17"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
       <aside class="note" style="left: 0px; top: 0px; width: 430px;"><p>Credential flows, plan 0009. The two front door buttons 0008 left recorded, plus the guest banner's action and what a confirmation link opens.</p><p>Phone only, 390x844, Night only: no new colour role, so a Day artboard would restate 0003 rather than find anything.</p><p>These are full routes, not sheets. 0008's rule is that a sheet completes one field in place; each of these is a destination with its own alternatives underneath.</p></aside>
       <aside class="note" style="left: 470px; top: 0px; width: 420px;"><p>REGISTERING SIGNS YOU IN IMMEDIATELY. identity.service register() issues tokens at the end and sends the confirmation email outside the transaction, with the comment "verification is optional".</p><p>So there is no "check your email to continue" wall, and designing one would invent a barrier the backend does not have. The second frame is the dashboard, with a dismissible nudge.</p><p>Login never checks emailVerifiedAt either.</p></aside>
       <aside class="note" style="left: 940px; top: 0px; width: 430px;"><p>A GUEST MUST NEVER BE SHOWN REGISTER. register() creates a NEW user, so a guest who used it would be signed in as somebody else and every group they made would be stranded on the account they just walked away from.</p><p>upgrade() converts the SAME user in place, keeps the userId, and therefore keeps the groups. That is why the guest banner has its own screen and its own words, and why it counts the groups back at you.</p><p>This is the email twin of rule D3 from 0004.</p></aside>
       <aside class="note" style="left: 1400px; top: 0px; width: 430px;"><p>GOOGLE IS DRAWN BUT CANNOT BE WIRED YET, for two separate backend reasons.</p><p>1. GET /v1/auth/google/callback returns AuthTokens as JSON, so a browser lands on a page of JSON instead of coming back to the app. It needs to 302 back with the pair in the URL fragment.</p><p>2. The callback sends the profile with no linkUserId, and linkUserId is the parameter that upgrades a guest in place. Without it a guest who taps Google is handed a brand new registered account and loses their groups, exactly as if they had used register.</p><p>So the button stays recorded until both land. Both are backend work the user reserved.</p></aside>
-      <aside class="note" style="left: 1920px; top: 1350px; width: 430px;"><p>ONE ERROR FOR BOTH CAUSES, on purpose. login() returns the same UnauthorizedException whether the email is unknown or the password is wrong, with the comment that this is so the response does not reveal which emails are registered.</p><p>So the screen must never say "no account with that email", and the message hangs under the pair of fields rather than under one of them.</p></aside>
-      <aside class="note" style="left: 1920px; top: 1680px; width: 430px;"><p>CONFIRMING AN EMAIL CURRENTLY BUYS NOTHING, and there is no way to ask again.</p><p>No resend endpoint exists anywhere: POST /v1/auth/verify-email only consumes a token, and the throttle bucket named verifyResend is the only trace of the intention. So the expired screen offers no "send me a new link", because there is nothing to call.</p><p>Worse for upgrade(): it sets the email but never creates a verification, so an upgraded account can never be verified at all. Recorded as backend work, not designed around.</p></aside>
+      <aside class="note" style="left: 0px; top: 2400px; width: 430px;"><p>ONE ERROR FOR BOTH CAUSES, on purpose. login() returns the same UnauthorizedException whether the email is unknown or the password is wrong, with the comment that this is so the response does not reveal which emails are registered.</p><p>So the screen must never say "no account with that email", and the message hangs under the pair of fields rather than under one of them.</p></aside>
+      <aside class="note" style="left: 2460px; top: 1350px; width: 450px;"><p>RESENDING IS PLAIN TEXT, NOT A BUTTON (user decision 2026-08-26). One sentence inside the card: amber while it can be used, then it becomes its own reply and counts down for a minute before returning.</p><p>It is deliberately quiet. Confirming is optional, so the affordance must not compete with the group actions underneath it.</p><p>THE COUNTDOWN IS THE SERVER'S NUMBER, NOT SIXTY. The refused state exists because the verifyResend bucket is 3 per 10 minutes, so the fourth ask waits far longer than a minute. A hardcoded 60 would count to zero and then fail again. The client reads retryAfterSeconds from the response BODY: enableCors sets no exposedHeaders, so a browser cannot read a Retry-After header cross origin.</p><p>Both the resend endpoint and sending a verification on upgrade are being implemented by the user.</p></aside>
   </div>
 </div>
 
@@ -612,8 +691,8 @@
   // does nothing else: these are artboards, not an editor.
   (function () {
     var canvas = document.getElementById('canvas');
-    var w = 2350;
-    var h = 2320;
+    var w = 2910;
+    var h = 2570;
     var buttons = document.querySelectorAll('.controls button');
     buttons.forEach(function (button) {
       button.addEventListener('click', function () {

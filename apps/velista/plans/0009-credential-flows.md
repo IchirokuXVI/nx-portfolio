@@ -41,6 +41,7 @@ for the reason `0008` section 2 gives.
 | `Register.dc.html` | The two field form, and the dashboard it lands on |
 | `Upgrade.dc.html` | Securing a guest account, and the dashboard afterwards |
 | `VerifyEmail.dc.html` | A confirmation link that worked, and one that did not |
+| `ResendStates.dc.html` | The resend sentence in all three of its states |
 
 ## 3. States
 
@@ -68,7 +69,10 @@ for the reason `0008` section 2 gives.
 | --- | --- | --- |
 | Working | No, described | A brief centred spinner. The token is consumed on arrival, with no button to press first |
 | Confirmed | Yes | One action, into the app |
-| Expired, used, or wrong | Yes | One screen for all three, because the server returns one error for all three. It offers no resend, because there is nothing to call. See section 5.7 |
+| Expired, used, or wrong | Yes | One screen for all three, because the server returns one error for all three. It carries the same resend sentence when the viewer is signed in. See section 5.7 |
+| Resend ready | Yes | One amber sentence inside the nudge. No button, by decision |
+| Resend just sent | Yes | The sentence answers itself and counts down, then returns to ready |
+| Resend refused | Yes | The server's own wait, which can be much longer than a minute |
 
 ## 4. Anatomy
 
@@ -235,26 +239,63 @@ criterion below.
 `AuthCallbackPage` is built now regardless, because it is inert without a fragment and
 it is where item 1 will land.
 
-### 5.7 Confirming an email currently buys nothing, and cannot be retried
+### 5.7 Resending, and why the countdown is not sixty
 
-Three facts, all verified in the source, and together they decide the whole screen:
+**The user is implementing two backend changes for this plan** (section 5.8), so unlike
+Google these are designed to be built, not deferred. This section assumes both exist.
 
-- `login()` does not check `emailVerifiedAt`, so verifying changes nothing a user can
-  observe today.
-- **There is no resend endpoint anywhere.** `POST /v1/auth/verify-email` only consumes a
-  token. The throttle bucket is named `verifyResend`, which is the sole trace of the
-  intention.
-- **`upgrade()` never creates a verification at all.** It sets `user.email` and never
-  calls `createVerification`, so an upgraded account has an unverified email and no
-  email was ever sent. It can never be verified.
+**Resending is one sentence, not a button** (user decision, 2026-08-26). Inside the
+nudge card, under the body text, in three states and no other chrome:
 
-So the expired screen offers no "send me a new link", because there is nothing to call,
-and it says plainly that the account is unaffected. `verifyEmail` returns one
-`ValidationException` for expired, consumed and unknown alike, so one screen covers all
-three honestly.
+| State | Text | Colour |
+| --- | --- | --- |
+| Ready | Did not get it? **Send it again** | The action words amber, the question muted |
+| Just sent | Sent again. You can ask for another in `0:52`. | Mint |
+| Refused | Too many requests. You can ask for another in `7:31`. | Coral |
 
-Recorded as backend work, not designed around: a resend endpoint, and a verification on
-the upgrade path.
+It is deliberately quiet. Confirming an email is optional here, so the affordance must
+not compete with the group actions below it, and a full button would say otherwise.
+After the countdown reaches zero the sentence returns to Ready.
+
+The same sentence appears on the expired link screen, and **only when the viewer is
+signed in**: resending needs to know whose email to send to, and somebody who opened the
+link on a phone that never signed in is anonymous. There, it sits under the explanation
+rather than inside a card.
+
+> **Rule C3.** The countdown is the number the server returned, never a hardcoded 60.
+
+This is the part that is easy to get wrong. The `verifyResend` throttle bucket is **three
+per ten minutes**, so the fourth ask in a window waits far longer than a minute. A
+hardcoded sixty would count down to zero, invite the tap, and fail again, which is worse
+than not offering it. So the client renders whatever wait it was told about, and the
+Refused row above is why that state is drawn at all.
+
+**The number arrives in the response body, not a header.** `main.ts` calls
+`enableCors({ origin, credentials: true })` with **no `exposedHeaders`**, so a browser
+cannot read a `Retry-After` header from this API cross origin: only the CORS safelisted
+response headers are readable, and `Retry-After` is not one of them. That matches the
+decision `0004` already recorded for the correlation id, which is in the body for the
+same reason.
+
+`ZoneStore` is not involved. The countdown is component state in the nudge and on the
+expired screen, driven by one interval that is cleared on destroy.
+
+### 5.8 What this plan needs from the backend, and what it does without
+
+Two changes are being implemented by the user, and this plan is written against them:
+
+1. **A resend endpoint**, bearer authenticated, returning the wait in the body.
+2. **`upgrade()` sends a verification**, so an upgraded account can be confirmed at all.
+
+Until they land, the frontend behaviour is defined and is not a blocker: the resend
+sentence is **not rendered**, exactly as the Google button is not rendered for a guest.
+Everything else on all five screens works. The nudge without its last sentence is the
+screen `0009` would have shipped anyway.
+
+One thing this plan does **not** work around, because nothing can: `login()` never checks
+`emailVerifiedAt`, so confirming still changes nothing observable. The nudge is honest
+about that, saying confirming keeps the account yours rather than claiming it unlocks
+anything.
 
 ## 6. Localization
 
@@ -293,12 +334,21 @@ New keys under `auth`. Rule N1 holds: no key names the product.
 | `auth.nudge.title` | Confirm your email | Confirma tu correo |
 | `auth.nudge.body` | We sent a link to {{email}}. You can carry on without it, but confirming keeps the account yours | Te hemos enviado un enlace a {{email}}. Puedes seguir sin él, pero confirmarlo mantiene la cuenta a tu nombre |
 | `auth.nudge.dismiss` | Dismiss | Descartar |
+| `auth.resend.prompt` | Did not get it? | ¿No te ha llegado? |
+| `auth.resend.action` | Send it again | Envíalo otra vez |
+| `auth.resend.promptExpired` | Still want to confirm it? | ¿Aún quieres confirmarlo? |
+| `auth.resend.sent` | Sent again. You can ask for another in {{wait}} | Enviado otra vez. Puedes pedir otro en {{wait}} |
+| `auth.resend.refused` | Too many requests. You can ask for another in {{wait}} | Demasiadas peticiones. Puedes pedir otro en {{wait}} |
 | `auth.error.badCredentials` | That email and password do not match. Check both and try again | Ese correo y esa contraseña no coinciden. Revisa los dos e inténtalo de nuevo |
 | `auth.error.emailTaken` | That email already has an account | Ese correo ya tiene una cuenta |
 | `auth.error.emailTakenAction` | Sign in instead | Entrar en su lugar |
 | `auth.error.badEmail` | That does not look like an email address | Eso no parece un correo |
 | `auth.error.shortPassword` | Passwords need at least 8 characters | Las contraseñas necesitan al menos 8 caracteres |
 | `auth.error.tooMany` | Too many tries. Wait a minute and try again | Demasiados intentos. Espera un minuto e inténtalo de nuevo |
+
+`auth.resend.sent` and `auth.resend.refused` take `{{wait}}` as an already formatted
+`m:ss` string rather than a number of seconds, so neither language has to own the
+clock format inside a translation, and neither needs a plural.
 
 `auth.upgrade.keepsafe` is a plural pair, and `0006` records that the Angular wrapper
 only learned to pass `count` after the fix in rokutranslator `0004`. Spanish agreement is
@@ -340,8 +390,13 @@ handled by writing the whole phrase per form, per `0001`.
 - [ ] A rejected sign in shows exactly one message, under both fields, and it never
       claims the email is unknown.
 - [ ] A `conflict` on register offers a link to sign in that carries the typed email.
-- [ ] `auth/verify` consumes its token on arrival with nothing to press, and the failure
-      screen offers no resend.
+- [ ] `auth/verify` consumes its token on arrival with nothing to press.
+- [ ] The resend sentence renders the wait the **server** returned, and a spec proves a
+      refusal longer than a minute counts down from that number rather than from 60.
+- [ ] The resend sentence is absent for an anonymous viewer on the expired screen, and
+      absent everywhere until the section 5.8 endpoint exists.
+- [ ] The countdown's interval is cleared on destroy, proven by a spec rather than by
+      reading the component.
 - [ ] The Google button is **not rendered at all for a guest**, and for everybody else it
       still records rather than navigates, until section 5.6 lands.
 - [ ] No `ui` component injects a service token, per rule D1.
@@ -355,7 +410,6 @@ handled by writing the whole phrase per form, per `0001`.
 - **Password reset.** There is no endpoint and no token type for it. Somebody who forgets
   their password today has no route back, which is worth saying plainly and is the most
   valuable thing the next backend plan could add.
-- **Resending a confirmation**, and verifying an upgraded account. Section 5.7.
 - **The account screen**: changing a username, deleting an account, and reading
   `GET /v1/account/me`. `SessionStore` already gets the username from the token pair, so
   nothing here needs that endpoint.

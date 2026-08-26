@@ -2,10 +2,46 @@
   "title": "Velista Credential Flows",
   "lede": "The design for plan <code>0009</code>: signing in, making an account, securing a guest account in place, and what a confirmation link opens. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
   "artboards": [
-    { "file": "SignIn.dc.html", "x": 0, "y": 0, "w": 1330, "h": 970, "title": "Sign in" },
-    { "file": "Register.dc.html", "x": 1400, "y": 0, "w": 900, "h": 970, "title": "Make an account" },
-    { "file": "Upgrade.dc.html", "x": 0, "y": 1120, "w": 900, "h": 970, "title": "Secure a guest account" },
-    { "file": "VerifyEmail.dc.html", "x": 960, "y": 1120, "w": 900, "h": 970, "title": "The confirmation link" }
+    {
+      "file": "SignIn.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1330,
+      "h": 970,
+      "title": "Sign in"
+    },
+    {
+      "file": "Register.dc.html",
+      "x": 1400,
+      "y": 0,
+      "w": 900,
+      "h": 970,
+      "title": "Make an account"
+    },
+    {
+      "file": "Upgrade.dc.html",
+      "x": 0,
+      "y": 1120,
+      "w": 900,
+      "h": 970,
+      "title": "Secure a guest account"
+    },
+    {
+      "file": "VerifyEmail.dc.html",
+      "x": 960,
+      "y": 1120,
+      "w": 900,
+      "h": 970,
+      "title": "The confirmation link"
+    },
+    {
+      "file": "ResendStates.dc.html",
+      "x": 1920,
+      "y": 1120,
+      "w": 470,
+      "h": 700,
+      "title": "The resend line, three states"
+    }
   ],
   "annotations": [
     {
@@ -38,17 +74,17 @@
     },
     {
       "id": "generic-login",
-      "x": 1920,
-      "y": 1120,
+      "x": 0,
+      "y": 2170,
       "w": 430,
       "text": "ONE ERROR FOR BOTH CAUSES, on purpose. login() returns the same UnauthorizedException whether the email is unknown or the password is wrong, with the comment that this is so the response does not reveal which emails are registered.\nSo the screen must never say \"no account with that email\", and the message hangs under the pair of fields rather than under one of them."
     },
     {
-      "id": "verification-decorative",
-      "x": 1920,
-      "y": 1450,
-      "w": 430,
-      "text": "CONFIRMING AN EMAIL CURRENTLY BUYS NOTHING, and there is no way to ask again.\nNo resend endpoint exists anywhere: POST /v1/auth/verify-email only consumes a token, and the throttle bucket named verifyResend is the only trace of the intention. So the expired screen offers no \"send me a new link\", because there is nothing to call.\nWorse for upgrade(): it sets the email but never creates a verification, so an upgraded account can never be verified at all. Recorded as backend work, not designed around."
+      "id": "verification-resend",
+      "x": 2460,
+      "y": 1120,
+      "w": 450,
+      "text": "RESENDING IS PLAIN TEXT, NOT A BUTTON (user decision 2026-08-26). One sentence inside the card: amber while it can be used, then it becomes its own reply and counts down for a minute before returning.\nIt is deliberately quiet. Confirming is optional, so the affordance must not compete with the group actions underneath it.\nTHE COUNTDOWN IS THE SERVER'S NUMBER, NOT SIXTY. The refused state exists because the verifyResend bucket is 3 per 10 minutes, so the fourth ask waits far longer than a minute. A hardcoded 60 would count to zero and then fail again. The client reads retryAfterSeconds from the response BODY: enableCors sets no exposedHeaders, so a browser cannot read a Retry-After header cross origin.\nBoth the resend endpoint and sending a verification on upgrade are being implemented by the user."
     }
   ]
 }

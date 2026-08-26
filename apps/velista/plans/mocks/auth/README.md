@@ -14,6 +14,7 @@ follows are in **`../README.md`**. Read that first.
 | `Register.dc.html` | The two field form, and the dashboard it lands on |
 | `Upgrade.dc.html` | Securing a guest account, and the dashboard afterwards |
 | `VerifyEmail.dc.html` | A confirmation link that worked, and one that did not |
+| `ResendStates.dc.html` | The resend sentence in all three of its states |
 
 Four things this design decided that are easy to undo by accident:
 
@@ -25,7 +26,9 @@ Four things this design decided that are easy to undo by accident:
 - **One rejection message, under both fields.** `login()` deliberately returns the same
   error for an unknown email and a wrong password, so the screen must never say the email
   is unknown.
-- **The expired link screen offers no resend**, because no resend endpoint exists.
+- **Resending is one sentence, not a button**, and the countdown shows the wait the
+  server returned rather than a hardcoded 60: the throttle bucket is 3 per 10 minutes,
+  so the fourth ask waits much longer than a minute.
 
 Google is drawn on the sign in screen and **cannot be wired yet**: the callback returns
 JSON instead of redirecting back with the tokens in a URL fragment, and it never passes
