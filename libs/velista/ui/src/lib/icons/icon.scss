@@ -1,0 +1,20 @@
+// Shared by every icon in this library.
+//
+// Sized by the caller through `font-size`, or by setting a width on the host.
+// Deliberately not a size input: an icon that follows its text is one less thing to
+// keep in sync, and it is what lets an icon inside a button scale with the button's
+// own type at 200% zoom without anybody remembering to pass a number.
+:host {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  color: inherit;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

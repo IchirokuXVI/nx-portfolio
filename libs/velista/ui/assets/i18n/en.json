@@ -3,5 +3,100 @@
   "vocabulary": {
     "zone": "Group",
     "zones": "Groups"
+  },
+  "zone": {
+    "role": {
+      "owner": "OWNER",
+      "admin": "ADMIN",
+      "member": "MEMBER"
+    },
+    "status": {
+      "pending": "PENDING"
+    }
+  },
+  "line": {
+    "status": {
+      "notAvailable": "NOT AVAILABLE"
+    }
+  },
+  "connection": {
+    "lost": {
+      "title": "You have lost connection",
+      "body": "Check your wifi or mobile data. This page reloads on its own as soon as you are back.",
+      "reload": "Reload now"
+    }
+  },
+  "home": {
+    "loading": "Loading your groups",
+    "or": "OR",
+    "hero": {
+      "headline": "One list. Everyone in sync.",
+      "body": "Shared shopping lists for the people you actually shop with. Changes show up on everyone's phone as they happen."
+    },
+    "preview": {
+      "listName": "Weekly shop",
+      "zoneName": "Home"
+    },
+    "action": {
+      "createZone": "Create a group",
+      "joinCode": "Join with a code",
+      "google": "Continue with Google",
+      "emailSignIn": "Sign in with email",
+      "newZone": "New group",
+      "newList": "New list",
+      "search": "Search",
+      "account": "Your account",
+      "changeLocale": "Change language"
+    },
+    "zoneExplainer": "A group is the household or flatmates you share lists with. You can start without an account.",
+    "section": {
+      "resume": "Pick up where you left off",
+      "zones": "Your groups"
+    },
+    "zone": {
+      "members_one": "{{count}} member",
+      "members_other": "{{count}} members",
+      "lists_one": "{{count}} list",
+      "lists_other": "{{count}} lists"
+    },
+    "list": {
+      "items_one": "{{count}} item",
+      "items_other": "{{count}} items"
+    },
+    "progress": {
+      "ready": "{{ready}} of {{total}} ready"
+    },
+    "presence": {
+      "shopping": "{{names}} are shopping now",
+      "shoppingCount_one": "{{count}} shopping now",
+      "shoppingCount_other": "{{count}} shopping now"
+    },
+    "guest": {
+      "title": "You are shopping as a guest",
+      "body": "This phone is the only thing holding your account. Add an email or Google to keep your groups and lists if you lose it.",
+      "secure": "Secure my account",
+      "later": "Not now"
+    },
+    "pending": {
+      "waiting": "Waiting to be let in"
+    },
+    "request": {
+      "wantsToJoin": {
+        "one": "{{name}} wants to join",
+        "many": "{{name}} and {{count}} more want to join"
+      },
+      "review": "Review"
+    },
+    "empty": {
+      "title": "No groups yet",
+      "body": "A group is the household or flatmates you share lists with. Start one, or join someone else's with their code."
+    },
+    "error": {
+      "title": "We could not load your groups",
+      "body": "Something went wrong on our side. Nothing you saved has been lost.",
+      "retry": "Try again",
+      "reference": "ref {{correlationId}}",
+      "copyReference": "Copy reference"
+    }
   }
 }

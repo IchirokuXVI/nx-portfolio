@@ -117,10 +117,23 @@ export class RokuTranslatorService implements OnDestroy {
    * @param locale Optional locale override. Defaults to the active locale held by
    *   the store. Pass it only to force a key into a specific language.
    */
-  t(key: string, ns?: string, locale?: string) {
+  /**
+   * @param values interpolation values for a key containing `{{placeholders}}`, and
+   *   the place to pass `count` so i18next selects the right plural form. The core
+   *   `RokuTranslator.t` has always taken full i18next options; this wrapper simply
+   *   did not pass any through, so a key like `"{{ready}} of {{total}} ready"`
+   *   rendered its placeholders literally.
+   */
+  t(
+    key: string,
+    ns?: string,
+    locale?: string,
+    values?: Record<string, unknown>
+  ) {
     return RokuTranslator.t(key, {
       ns: ns || this._defaultNamespace || this._namespaces[0],
       lng: locale,
+      ...values,
     });
   }
 

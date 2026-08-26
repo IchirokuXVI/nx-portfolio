@@ -155,6 +155,56 @@ $app-content-max: 480px;
   // which on a phone form is a jarring, hard to undo jump. This is a floor, so a
   // field may set a larger size but reads this one to know where the floor is.
   --app-field-font-size: var(--app-text-base);
+
+  // Icon sizes. An icon is sized by `font-size` because every one of them is 1em
+  // square, so these are a type scale for glyphs rather than a set of box sizes.
+  // Three steps only: inside a dense row, beside body text, and inside a button.
+  --app-icon-sm: 17px;
+  --app-icon-md: 20px;
+  --app-icon-lg: 30px;
+  // The mark on an empty or error panel, which is illustration rather than icon.
+  --app-icon-display: 56px;
+
+  // Round things that hold an initial: a member avatar, and the stacked avatars on
+  // the resume card. Two sizes, because a group's tile is a square and is bigger.
+  --app-avatar-sm: 22px;
+  --app-avatar-md: 24px;
+  --app-avatar-lg: 30px;
+  --app-tile-size: 38px;
+  // The ring that separates one stacked avatar from the one behind it. Not a
+  // hairline: it has to read as a gap at a glance, so it is exempt from nothing.
+  --app-avatar-ring: 2px;
+
+  // The presence dot. No artwork, so it is a token and a CSS circle rather than an
+  // icon component and an SVG file.
+  --app-dot-size: 6px;
+
+  // Rows. A list row inside a card is shorter than a standalone line row, because
+  // it is a preview of a list rather than a thing being worked on.
+  --app-list-row-height: 40px;
+  --app-preview-row-height: 38px;
+  --app-attention-row-height: 36px;
+
+  // The progress bar on the resume card.
+  --app-progress-height: 6px;
+
+  // Padding for a chip, whose vertical inset is smaller than any space step: a
+  // status pill that used --app-space-1 would be a lozenge.
+  --app-chip-padding-block: 2px;
+  // The gap between a title and the metadata line directly under it, tighter than
+  // the smallest space step because they read as one block.
+  --app-space-hair: 3px;
+
+  // Google's sign-in button, which is deliberately **not** themed. Their branding
+  // guidelines fix the surface and the mark, so this is the one surface in the app
+  // whose colours must not follow Night or Day.
+  //
+  // It is a component token rather than a primitive reached for from a component,
+  // which keeps rule T1 exactly true: components never name layer 1, and the one
+  // exception is declared here, once, where somebody looking for exceptions will
+  // find it. Both values are intentionally the same in both themes.
+  --app-google-button-bg: var(--app-neutral-50);
+  --app-google-button-fg: var(--app-ink-900);
 }
 
 /// The focus ring, as a mixin rather than as three declarations a component

@@ -48,7 +48,10 @@ export class ZoneMemory implements ZoneServiceI {
     };
   }
 
-  async createZone(name: string): Promise<ZoneCreationResult> {
+  async createZone(
+    name: string,
+    _username?: string
+  ): Promise<ZoneCreationResult> {
     const authorized = await this._tokens.authorizeOptionalAuthCall();
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
@@ -75,7 +78,7 @@ export class ZoneMemory implements ZoneServiceI {
     return { state: 'created', zone: stripMine(zone) };
   }
 
-  async joinZone(joinCode: string): Promise<ZoneJoinResult> {
+  async joinZone(joinCode: string, username?: string): Promise<ZoneJoinResult> {
     const authorized = await this._tokens.authorizeOptionalAuthCall();
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
@@ -86,7 +89,9 @@ export class ZoneMemory implements ZoneServiceI {
       id: `membership-${joinCode}`,
       zoneId: `zone-${joinCode.toLowerCase()}`,
       userId,
-      username: 'You',
+      // Absent means "use my global username", which the backend resolves. The
+      // fake has no user directory, so it stands in with a placeholder.
+      username: username ?? 'You',
       role: 'MEMBER',
       // Joining lands you pending until an owner approves, which is the state the
       // dashed card in `0003` renders.

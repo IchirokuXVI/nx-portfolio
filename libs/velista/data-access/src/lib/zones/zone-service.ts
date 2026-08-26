@@ -31,10 +31,10 @@ export interface ZoneServiceI {
    * would silently mint a **second** guest account over the top of the caller's
    * existing one. See {@link ZoneCreationResult}.
    */
-  createZone(name: string): Promise<ZoneCreationResult>;
+  createZone(name: string, username?: string): Promise<ZoneCreationResult>;
 
   /** Join a zone by its code. Same guest handshake and the same rule D3 hazard. */
-  joinZone(joinCode: string): Promise<ZoneJoinResult>;
+  joinZone(joinCode: string, username?: string): Promise<ZoneJoinResult>;
 }
 
 /**

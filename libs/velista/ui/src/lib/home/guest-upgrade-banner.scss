@@ -1,0 +1,64 @@
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding: var(--app-space-4);
+  background: var(--app-status-attention-bg);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-card-radius);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin-top: var(--app-space-2);
+}
+
+.primary,
+.quiet {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.primary {
+  flex: 1;
+  border: none;
+  background: var(--app-status-attention-fg);
+  color: var(--app-surface-ground);
+  font-weight: 600;
+}
+
+.quiet {
+  border: none;
+  background: transparent;
+  color: var(--app-text-secondary);
+  font-weight: 500;
+}

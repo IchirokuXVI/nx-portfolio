@@ -1,0 +1,57 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: var(--app-space-3) var(--app-space-5);
+  // Clears the home indicator. Without this the primary action sits under the OS
+  // gesture bar on every modern phone.
+  padding-bottom: calc(var(--app-space-5) + var(--app-safe-bottom));
+  background: var(--app-surface-ground);
+  border-top: 1px solid var(--app-border-subtle);
+}
+
+.primary,
+.secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  min-height: var(--app-button-height);
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.primary {
+  flex: 1;
+  border: none;
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font-size: var(--app-text-base);
+  font-weight: 600;
+
+  &:hover {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:active {
+    background: var(--app-action-bg-pressed);
+  }
+}
+
+.secondary {
+  width: var(--app-button-height);
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--app-border-strong);
+  color: var(--app-text-secondary);
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+}
