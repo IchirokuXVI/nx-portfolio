@@ -410,6 +410,15 @@ the member is called by their global username in that zone. This is the common p
 has never thought about names gets a consistent one everywhere, and the per zone name stays
 available for the person who actually wants to be "Mamá" in one place.
 
+This resolves a live failure, not a hypothetical one. The frontend's approved anonymous home
+state offers "Create a group" and "Join with a code" as one tap actions with no name field
+anywhere, and sending `{ name }` alone currently returns
+`400 validation_failed, username must be a string`. The product decision that failure forces is
+settled here: **the home page does not grow a name step, and the client does not invent a
+name.** The backend already generates one at identity creation (section 3.4), it is the same
+name the user will see on their own account, and it is the only option of the three that
+produces a name the user can later recognise and change in one place.
+
 `CreateZoneRequest.username` and `JoinZoneRequest.username` stay **required on the NATS
 contract**. Core must be told what to write and must not reach into auth for it, so the default
 is resolved at the gateway and core keeps receiving a concrete string. The optionality lives
@@ -511,9 +520,9 @@ request.
   pool, and existing rows are backfilled.
 - The pools are disjoint and gender correct, proven by spec, and no generated name fails
   validation.
-- `PATCH` on the account (route owned by the `GET /v1/account/me` work, see below) reaches
-  `auth.setUsername`, defaults to `GLOBAL_ONLY`, and the two propagating modes update exactly
-  the memberships section 4.2 defines.
+- `GET /v1/account/me` returns the caller's global username, so the app bar has a name to show;
+  `PATCH /v1/account/me` reaches `auth.setUsername`, defaults to `GLOBAL_ONLY`, and the two
+  propagating modes update exactly the memberships section 4.2 defines.
 - `membership.setUsername` enforces the five authorization rules in section 5.
 - `POST /v1/zones` and `POST /v1/zones/join` succeed with no `username` in the body, for both an
   authenticated and an anonymous caller, and the resulting membership carries the caller's
@@ -525,11 +534,33 @@ request.
   duplicate data is expected behaviour, not a defect).
 - `nx run-many --all --target=test|lint|build` green for the luna projects.
 
-## 12. Boundary with work reserved elsewhere
+## 12. The profile endpoint
 
-The REST surface for reading and writing the caller's own profile (`GET /v1/account/me`, and the
-`PATCH` that carries the username change) is work the repository owner has reserved. This plan
-therefore stops at the NATS contract: `auth.getProfile` and `auth.setUsername` are defined,
-implemented and tested here, and whichever gateway route eventually exposes them needs only to
-forward the verified `userId` and the body. Nothing in sections 1 through 11 depends on which
-route that is.
+There is no profile endpoint at all today. `displayName` and `email` are never returned by
+anything, and the only human readable name a client can obtain is the per zone
+`MembershipView.username`, which means the app bar's account button has no name to show and no
+way to get one. The global username fixes the data problem; this section adds the route that
+exposes it.
+
+```
+GET   /v1/account/me   -> UserProfileView          (JwtAuthGuard)
+PATCH /v1/account/me   -> UserProfileView          (JwtAuthGuard, throttled per section 6)
+```
+
+`GET` forwards the verified `userId` to `auth.getProfile`. `PATCH` takes
+`{ username, propagation? }`, forwards to `auth.setUsername`, and returns the updated profile.
+The `userId` always comes from the token and never from the body or a path parameter, matching
+`DELETE /v1/account` from 0011, which is the sibling route on the same controller.
+
+`PATCH` is the right verb rather than `PUT`: the body is a partial update of a profile whose
+other fields (`email`, `kind`, `displayName`) are not settable here.
+
+Both routes live on the existing `AccountController`, which already exists for the delete and
+already carries `JwtAuthGuard` at the class level.
+
+**Note on ownership:** the profile route was previously recorded as work the repository owner
+had reserved for themselves, which is why an earlier draft of this plan stopped at the NATS
+contract. It is planned here because the frontend now depends on it and a plan that stops short
+would leave the dependency undescribed. The NATS side (`auth.getProfile`, `auth.setUsername`) is
+self contained either way, so if the routes are implemented separately, nothing in sections 1
+through 11 changes.
