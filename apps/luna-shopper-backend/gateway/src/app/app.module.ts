@@ -6,11 +6,12 @@ import {
   MicroserviceHealthIndicator,
   type HealthIndicatorFunction,
 } from '@nestjs/terminus';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import {
   createThrottlerOptions,
   PlatformHealthModule,
   PlatformModule,
+  ProblemThrottlerGuard,
 } from '@portfolio/luna-shopper/platform';
 import { GatewayAccountModule } from './account/account.module';
 import { GatewayAuthModule } from './auth/auth.module';
@@ -86,8 +87,10 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayStatsModule,
   ],
   providers: [
-    // The throttler guard runs globally; open endpoints opt into a named bucket.
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // The throttler guard runs globally; open endpoints override the bucket's
+    // limit for themselves. The platform subclass is used rather than the
+    // library's own so a 429 carries the wait in the body (plan 0021, section 2).
+    { provide: APP_GUARD, useClass: ProblemThrottlerGuard },
   ],
 })
 export class AppModule {}

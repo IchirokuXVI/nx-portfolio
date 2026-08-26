@@ -26,6 +26,8 @@ export const AUTH_SCHEMA_IDS = {
   registerRequest: schemaId('msg/auth.register/request'),
   loginRequest: schemaId('msg/auth.login/request'),
   verifyEmailRequest: schemaId('msg/auth.verifyEmail/request'),
+  resendVerificationRequest: schemaId('msg/auth.resendVerification/request'),
+  resendVerificationResult: schemaId('auth/ResendVerificationResult'),
   refreshRequest: schemaId('msg/auth.refresh/request'),
   upgradeRequest: schemaId('msg/auth.upgrade/request'),
   googleLoginRequest: schemaId('msg/auth.googleLogin/request'),
@@ -96,6 +98,31 @@ const verifyEmailRequest = object(
   ['token']
 );
 
+const resendVerificationRequest = object(
+  AUTH_SCHEMA_IDS.resendVerificationRequest,
+  { userId: nonEmptyString(), locale: string() },
+  ['userId']
+);
+
+const resendVerificationResult = {
+  ...object(
+    AUTH_SCHEMA_IDS.resendVerificationResult,
+    {
+      retryAfterSeconds: integer({
+        minimum: 0,
+        description: 'Whole seconds before another resend is accepted.',
+      }),
+    },
+    ['retryAfterSeconds']
+  ),
+  // Carried into the published OpenAPI document (plan 0019, section 4), where a
+  // client author reads it beside the field. The warning is the point: the same
+  // field arrives on the 429 too, and the limits are enforced per gateway pod, so
+  // a fixed countdown would be wrong in both directions.
+  description:
+    'A resend was sent. `retryAfterSeconds` is how long before another is accepted; a refusal returns the same field on the error envelope with what is actually left. Count down the number you were given rather than assuming a fixed wait.',
+};
+
 const refreshRequest = object(
   AUTH_SCHEMA_IDS.refreshRequest,
   { refreshToken: nonEmptyString() },
@@ -163,6 +190,8 @@ export const authSchemas: JsonSchema[] = [
   registerRequest,
   loginRequest,
   verifyEmailRequest,
+  resendVerificationRequest,
+  resendVerificationResult,
   refreshRequest,
   upgradeRequest,
   googleLoginRequest,
@@ -190,6 +219,10 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.verifyEmail]: {
     request: AUTH_SCHEMA_IDS.verifyEmailRequest,
     response: COMMON_IDS.userIdResult,
+  },
+  [AUTH_PATTERNS.resendVerification]: {
+    request: AUTH_SCHEMA_IDS.resendVerificationRequest,
+    response: AUTH_SCHEMA_IDS.resendVerificationResult,
   },
   [AUTH_PATTERNS.refresh]: {
     request: AUTH_SCHEMA_IDS.refreshRequest,

@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { throwError, type Observable } from 'rxjs';
 import { getRequestContext } from '../context/request-context';
 import { DEFAULT_LOCALE, type SupportedLocale } from '../localization/locale';
-import { isDomainException } from './domain-exception';
+import { isDomainException, retryAfterSecondsOf } from './domain-exception';
 import { ERROR_CODES, type ErrorCode } from './error-codes';
 import {
   PROBLEM_JSON_CONTENT_TYPE,
@@ -131,12 +131,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     detail?: string;
     messageArgs?: Record<string, string | number>;
     errors?: Record<string, string[]>;
+    retryAfterSeconds?: number;
   } {
     if (isDomainException(exception)) {
       return {
         code: exception.code,
         detail: exception.message,
         messageArgs: exception.messageArgs,
+        // Lifted out of the details bag onto the envelope, so a throttled client
+        // reads the wait from the body (plan 0021, section 2).
+        retryAfterSeconds: retryAfterSecondsOf(exception),
       };
     }
     if (exception instanceof HttpException) {

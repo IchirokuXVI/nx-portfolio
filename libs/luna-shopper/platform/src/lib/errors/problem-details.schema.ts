@@ -53,6 +53,12 @@ export const PROBLEM_DETAILS_SCHEMA = {
         'Per field validation messages. Present only when `code` is `validation_failed`.',
       additionalProperties: { type: 'array', items: { type: 'string' } },
     },
+    retryAfterSeconds: {
+      type: 'integer',
+      minimum: 0,
+      description:
+        'Whole seconds to wait before retrying. Present only when `code` is `rate_limited`. Read this rather than assuming a fixed wait: the limits are enforced per gateway pod, so two requests from the same client can legitimately return different numbers.',
+    },
   },
 } as const;
 

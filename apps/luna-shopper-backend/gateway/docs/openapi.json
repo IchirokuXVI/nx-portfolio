@@ -224,6 +224,72 @@
         ]
       }
     },
+    "/v1/auth/resend-verification": {
+      "post": {
+        "operationId": "AuthController_resendVerification_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "The `auth.resendVerification` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.ResendVerificationResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/v1/auth/refresh": {
       "post": {
         "operationId": "AuthController_refresh_v1",
@@ -6675,6 +6741,21 @@
         ],
         "additionalProperties": false
       },
+      "auth.ResendVerificationResult": {
+        "type": "object",
+        "properties": {
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Whole seconds before another resend is accepted."
+          }
+        },
+        "required": [
+          "retryAfterSeconds"
+        ],
+        "additionalProperties": false,
+        "description": "A resend was sent. `retryAfterSeconds` is how long before another is accepted; a refusal returns the same field on the error envelope with what is actually left. Count down the number you were given rather than assuming a fixed wait."
+      },
       "auth.UserProfileView": {
         "type": "object",
         "properties": {
@@ -7495,6 +7576,11 @@
                 "type": "string"
               }
             }
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Whole seconds to wait before retrying. Present only when `code` is `rate_limited`. Read this rather than assuming a fixed wait: the limits are enforced per gateway pod, so two requests from the same client can legitimately return different numbers."
           }
         }
       },

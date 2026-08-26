@@ -4,6 +4,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 import type { User } from '../entities';
+import { TokenGrantService } from '../tokens/token-grant.service';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
 
@@ -78,6 +79,7 @@ function build(users: Partial<User>[] = []) {
   const service = new IdentityService(
     dataSource as never,
     tokens as never,
+    new TokenGrantService(),
     {
       hash: jest.fn(async () => 'hash'),
       verify: jest.fn(async () => true),

@@ -25,6 +25,7 @@ import { MailModule } from './mail/mail.module';
 import { PasswordService } from './password/password.service';
 import { StatsService } from './identity/stats.service';
 import { OrphanUserReaperService } from './reaper/orphan-user-reaper.service';
+import { TokenGrantService } from './tokens/token-grant.service';
 import { TokenService } from './tokens/token.service';
 import { UsernameGenerator } from './username/username-generator.service';
 
@@ -99,6 +100,7 @@ import { UsernameGenerator } from './username/username-generator.service';
     IdentityService,
     StatsService,
     TokenService,
+    TokenGrantService,
     PasswordService,
     IdentityEventsPublisher,
     UsernameGenerator,

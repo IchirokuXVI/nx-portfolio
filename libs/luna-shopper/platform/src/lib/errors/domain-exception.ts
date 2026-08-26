@@ -73,6 +73,34 @@ export class ConflictException extends DomainException {
   readonly code = ERROR_CODES.CONFLICT;
 }
 
+/**
+ * Too many attempts. Carries the wait so the client can count it down (plan 0021,
+ * section 2.2). The seconds travel in {@link DomainException.details} under
+ * {@link RETRY_AFTER_SECONDS_DETAIL}, and the exception filter lifts them onto the
+ * envelope; the class exists so the throttler guard has something to throw that
+ * the filter already knows how to render.
+ */
+export class RateLimitedException extends DomainException {
+  readonly code = ERROR_CODES.RATE_LIMITED;
+}
+
+/** The `details` key a {@link RateLimitedException} carries its wait under. */
+export const RETRY_AFTER_SECONDS_DETAIL = 'retryAfterSeconds';
+
+/**
+ * Reads a whole second wait out of a domain exception's details bag. Returns
+ * undefined for every exception that does not carry one, which is all of them
+ * except {@link RateLimitedException}.
+ */
+export function retryAfterSecondsOf(
+  exception: DomainException
+): number | undefined {
+  const value = exception.details?.[RETRY_AFTER_SECONDS_DETAIL];
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
 /** Type guard: is this a deliberately handled domain outcome? */
 export function isDomainException(error: unknown): error is DomainException {
   return error instanceof DomainException;

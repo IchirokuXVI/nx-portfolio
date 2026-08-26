@@ -4,6 +4,7 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import {
   AUTH_PATTERNS,
   type AuthTokens,
+  type ResendVerificationResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   getRequestContext,
@@ -52,13 +53,40 @@ export class AuthController {
   }
 
   @Post('verify-email')
-  @Throttle(THROTTLE_LIMITS.verifyResend)
+  // Consuming a link is not resending one, and the resend bucket used to sit here
+  // (plan 0021, section 4.3): a mail client that prefetches links, a double tap
+  // and one genuine retry could exhaust it, refusing a link that would have
+  // worked.
+  @Throttle(THROTTLE_LIMITS.verifyConsume)
   @ApiContractResponse(AUTH_PATTERNS.verifyEmail, {
     status: HttpStatus.CREATED,
   })
   @ApiProblemResponses({ body: true, membership: true })
   verifyEmail(@Body() dto: VerifyEmailDto): Promise<{ userId: string }> {
     return this.nats.send(AUTH_PATTERNS.verifyEmail, dto);
+  }
+
+  /**
+   * Resend the confirmation link (plan 0021, section 4). Bearer authenticated and
+   * bodyless: the address is the caller's own, and only a token says whose that
+   * is. The response carries the wait, so the client counts down the number the
+   * server gave it rather than a hardcoded sixty.
+   */
+  @Post('resend-verification')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @Throttle(THROTTLE_LIMITS.verifyResend)
+  @ApiContractResponse(AUTH_PATTERNS.resendVerification, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, conflict: true })
+  resendVerification(
+    @AuthUser() user: CurrentUser
+  ): Promise<ResendVerificationResult> {
+    return this.nats.send(AUTH_PATTERNS.resendVerification, {
+      userId: user.userId,
+      locale: getRequestContext()?.locale,
+    });
   }
 
   @Post('refresh')

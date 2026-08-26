@@ -30,4 +30,25 @@ describe('buildProblemDetails', () => {
     );
     expect(problem.errors).toEqual({ name: ['name should not be empty'] });
   });
+
+  it('carries the wait on a rate limit, and omits the key everywhere else', () => {
+    // The whole point of plan 0021, section 2: the number is in the body, because
+    // `Retry-After` is not CORS safelisted and a browser client cannot read it.
+    const limited = buildProblemDetails({
+      code: ERROR_CODES.RATE_LIMITED,
+      correlationId: 'c',
+      retryAfterSeconds: 42,
+    });
+
+    expect(limited.status).toBe(429);
+    expect(limited.retryAfterSeconds).toBe(42);
+
+    const notFound = buildProblemDetails({
+      code: ERROR_CODES.NOT_FOUND,
+      correlationId: 'c',
+    });
+
+    // Absent rather than null: a client checks the key, not its value.
+    expect('retryAfterSeconds' in notFound).toBe(false);
+  });
 });

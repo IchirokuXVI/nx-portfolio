@@ -41,6 +41,7 @@ export * from './lib/health/health.module';
 export * from './lib/health/readiness-state';
 
 // Rate limiting
+export * from './lib/throttling/problem-throttler.guard';
 export * from './lib/throttling/throttler-config';
 
 // Pagination

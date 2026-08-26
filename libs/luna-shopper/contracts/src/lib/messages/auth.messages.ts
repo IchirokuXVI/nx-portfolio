@@ -18,6 +18,8 @@ export const AUTH_PATTERNS = {
   login: 'auth.login',
   /** Consume an email verification token. */
   verifyEmail: 'auth.verifyEmail',
+  /** Send a fresh confirmation link to the caller's unconfirmed address. */
+  resendVerification: 'auth.resendVerification',
   /** Exchange a refresh token for a fresh token pair (rotates). */
   refresh: 'auth.refresh',
   /** Upgrade a temporary user into a registered one, in place. */
@@ -78,6 +80,28 @@ export interface LoginRequest {
 export interface VerifyEmailRequest {
   /** The raw token from the confirmation link (auth stores only its hash). */
   token: string;
+}
+
+/**
+ * Resend the confirmation link (plan 0021, section 4). `userId` is set by the
+ * gateway from the verified token, never from a body: resending needs to know
+ * whose address to send to, and only a token says that.
+ */
+export interface ResendVerificationRequest {
+  userId: string;
+  /** Locale for the confirmation email; defaults to the request locale. */
+  locale?: string;
+}
+
+/**
+ * What a resend answers with, on the success path as well as on the 429 (plan
+ * 0021, section 4.2). One field across all three states, so a client renders
+ * "you can ask for another in 0:52" from the number it was given rather than
+ * inventing a countdown of its own.
+ */
+export interface ResendVerificationResult {
+  /** Whole seconds before another resend is accepted. */
+  retryAfterSeconds: number;
 }
 
 export interface RefreshRequest {

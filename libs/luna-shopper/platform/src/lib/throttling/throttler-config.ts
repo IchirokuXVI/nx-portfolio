@@ -14,8 +14,8 @@ import {
  * strictest of them rather than only the routes that name it, and
  * `@Throttle({ [name]: {} })` does not opt a route in either: it overrides that
  * throttler's options for one handler, while the rest keep counting. With the
- * five strict buckets registered, `verify-resend` (3 per 10 minutes) governed
- * every request, health probes included.
+ * strict buckets registered, the tightest of them governed every request, health
+ * probes included.
  *
  * So the open, abusable surfaces override this single bucket's limit for
  * themselves with `@Throttle(THROTTLE_LIMITS.login)`. The values are
@@ -41,8 +41,20 @@ export const THROTTLE_LIMITS = {
   registration: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 3 } },
   /** Anonymous zone create / join. */
   anonymousZone: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 10 } },
-  /** Email verification resend. */
-  verifyResend: { [DEFAULT_BUCKET]: { ttl: minutes(10), limit: 3 } },
+  /**
+   * Email verification resend (plan 0021, section 4.2). One at a time, so the
+   * countdown the client renders means something, and so the whole of the
+   * enforcement is this bucket rather than a second limiter in the domain.
+   */
+  verifyResend: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 1 } },
+  /**
+   * Consuming a verification link (plan 0021, section 4.3). Brute forcing a 256
+   * bit single use token is not a threat worth designing around, so this exists
+   * only to make hammering pointless. Ten a minute covers every honest pattern,
+   * a mail client that prefetches links included; the resend bucket used to sit
+   * here and could refuse a link that would have worked.
+   */
+  verifyConsume: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 10 } },
   /** Join code redemption (enumeration protection). */
   joinCode: { [DEFAULT_BUCKET]: { ttl: seconds(30), limit: 5 } },
   /**
@@ -60,3 +72,22 @@ export const THROTTLE_LIMITS = {
    */
   usernameChange: { [DEFAULT_BUCKET]: { ttl: hours(1), limit: 5 } },
 } as const;
+
+/** One per route override, as {@link THROTTLE_LIMITS} publishes them. */
+export type ThrottleLimit = Record<
+  typeof DEFAULT_BUCKET,
+  { ttl: number; limit: number }
+>;
+
+/**
+ * The wait a client owes after spending a bucket, in whole seconds (plan 0021,
+ * section 4.2).
+ *
+ * A route that returns the wait in its own success body reads it from here
+ * rather than restating the number, so the bucket and the response cannot drift
+ * apart when the limit is retuned. The 429 path does not use this: a refusal
+ * carries what is actually left on the bucket, which is smaller.
+ */
+export function throttleWaitSeconds(limit: ThrottleLimit): number {
+  return Math.ceil(limit[DEFAULT_BUCKET].ttl / 1000);
+}

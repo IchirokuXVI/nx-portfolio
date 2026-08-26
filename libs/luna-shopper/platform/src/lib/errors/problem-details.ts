@@ -12,6 +12,10 @@ import type { ErrorCode } from './error-codes';
  *   one log entry.
  * - `errors` carries per field validation detail when the code is
  *   `validation_failed`.
+ * - `retryAfterSeconds` carries the wait when the code is `rate_limited`
+ *   (plan 0021, section 2). It rides in the body rather than in `Retry-After`
+ *   because that header is not CORS safelisted, so a browser client physically
+ *   cannot read it; the envelope is the one place a client has to look.
  */
 export interface ProblemDetails {
   type: string;
@@ -22,6 +26,8 @@ export interface ProblemDetails {
   message: string;
   correlationId: string;
   errors?: Record<string, string[]>;
+  /** Whole seconds to wait before retrying. Present only for `rate_limited`. */
+  retryAfterSeconds?: number;
 }
 
 /** The `Content-Type` RFC 7807 defines for these responses. */

@@ -12,6 +12,8 @@ import {
   type LoginRequest,
   type RefreshRequest,
   type RegisterRequest,
+  type ResendVerificationRequest,
+  type ResendVerificationResult,
   type SetUsernameRequest,
   type UpgradeRequest,
   type UserProfileView,
@@ -58,6 +60,13 @@ export class IdentityController {
   @MessagePattern(AUTH_PATTERNS.verifyEmail)
   verifyEmail(@Payload() req: VerifyEmailRequest): Promise<{ userId: string }> {
     return this.identity.verifyEmail(req.token);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.resendVerification)
+  resendVerification(
+    @Payload() req: ResendVerificationRequest
+  ): Promise<ResendVerificationResult> {
+    return this.identity.resendVerification(req);
   }
 
   @MessagePattern(AUTH_PATTERNS.refresh)
