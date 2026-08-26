@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 import {
   currentUrlLocale,
   settle,
@@ -29,7 +29,10 @@ test.describe('damoclesSword language switcher', () => {
     await settle(page);
 
     const locales = await usableLocales(page);
-    test.skip(locales.length < 2, 'needs at least two usable locales to switch');
+    test.skip(
+      locales.length < 2,
+      'needs at least two usable locales to switch'
+    );
 
     const from = currentUrlLocale(page);
     const to = locales.find((l) => l !== from) as string;

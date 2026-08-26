@@ -1,4 +1,5 @@
-import { expect, Page, test } from '@playwright/test';
+import { Page } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 
 /**
  * Contact page (damoclesSword) checks:

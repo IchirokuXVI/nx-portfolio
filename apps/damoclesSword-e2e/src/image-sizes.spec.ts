@@ -1,4 +1,5 @@
-import { expect, Locator, Page, test } from '@playwright/test';
+import { Locator, Page } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 import { settle } from './support/locale-helpers';
 
 /**

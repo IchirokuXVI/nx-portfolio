@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 import { findRawKeys, settle, usableLocales } from './support/locale-helpers';
 
 /**
@@ -23,9 +23,10 @@ test.describe('damoclesSword localization', () => {
     page,
   }) => {
     const locales = await discoverLocales(page);
-    expect(locales.length, 'expected at least one usable locale').toBeGreaterThan(
-      0
-    );
+    expect(
+      locales.length,
+      'expected at least one usable locale'
+    ).toBeGreaterThan(0);
 
     const signatures = new Map<string, string>();
 

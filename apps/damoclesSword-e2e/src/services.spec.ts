@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 
 /**
  * Verifies the damoclesSword Services page: all five sections render (through
