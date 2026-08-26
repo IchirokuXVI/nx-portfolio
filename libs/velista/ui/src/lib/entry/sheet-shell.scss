@@ -26,11 +26,11 @@
 // `max-block-size` plus its own scroll is what keeps the sheet a sheet when the
 // content grows: a rejected code adds a message, and Spanish runs longer than
 // English, so the panel has to be able to grow without ever pushing its primary
-// button off the screen. It is also the fallback for the keyboard: the mock draws
+// button off the screen. The keyboard itself is handled a level up: the mock draws
 // the sheet sitting above the keyboard band, which iOS Safari does on its own by
 // moving fixed elements with the visual viewport, and which Chrome on Android needs
 // `interactive-widget=resizes-content` for. That attribute belongs to the document,
-// so it is set in the app's own `index.html` and noted there for the mounted case.
+// so it is set in both `index.html` files, the shell's and this app's standalone one.
 .panel {
   position: absolute;
   inset-inline: 0;

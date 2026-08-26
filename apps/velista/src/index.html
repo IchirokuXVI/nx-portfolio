@@ -10,11 +10,9 @@
       Android resizes only the visual viewport, so an element fixed to the bottom stays
       pinned under the keyboard; iOS Safari already moves fixed elements above it.
 
-      This document is the standalone build's. While the app runs as a remote the
-      portfolio shell's `index.html` is the one that ships, and adding the attribute
-      there would change every app in the portfolio, so it is deliberately not done
-      here: the sheet's panel scrolls within itself, which keeps the button reachable
-      in the meantime.
+      This document is the standalone build's, and the portfolio shell's `index.html`
+      carries the same attribute for the mounted one. Both are needed and neither is
+      redundant: only one of the two documents ships in each mode.
     -->
     <meta
       content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
