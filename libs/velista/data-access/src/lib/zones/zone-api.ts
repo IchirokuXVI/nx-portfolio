@@ -69,13 +69,14 @@ export class ZoneApi implements ZoneServiceI {
   }
 
   /**
-   * `POST /v1/zones`, which mints a guest account when it sees no valid identity.
+   * `POST /v1/zones`, which mints a guest account when the caller presents no identity.
    *
-   * Rule D3 (plan 0004, section 5.5) is enforced **before** the request is built. The
-   * gateway's `OptionalJwtAuthGuard` swallows an expired token and falls through to
-   * anonymous, so sending one would hand the user a second guest account and orphan
-   * the groups on their first. There is no way to detect that after the fact, which is
-   * why the check cannot live in the interceptor's error path.
+   * Rule D3 (plan 0004, section 5.5) is enforced **before** the request is built.
+   * Backend plan 0020 made the gateway reject a stale token here rather than falling
+   * through to anonymous, so a slip is now a recoverable 401 instead of a silent second
+   * guest account. Refreshing first still saves that round trip, and the interceptor's
+   * error path cannot tell a lost guest identity from a signed out user, which is the
+   * distinction the caller needs.
    */
   async createZone(
     name: string,

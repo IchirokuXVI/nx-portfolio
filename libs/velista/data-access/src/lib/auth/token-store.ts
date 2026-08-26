@@ -143,12 +143,14 @@ export class TokenStore {
    * Rule D3's gate, for the two routes that mint a guest account when they see no
    * valid identity: `POST /v1/zones` and `POST /v1/zones/join`.
    *
-   * The gateway's `OptionalJwtAuthGuard` swallows token errors and falls through to
-   * anonymous (`gateway/src/app/auth/jwt-auth.guard.ts:23`), so calling either route
-   * with an expired token gives the user a **brand new guest account** while their
-   * existing groups become unreachable, since a guest has no credential to sign back
-   * in with. The app has to know the difference between "nobody is signed in" and "the
-   * guest we had is gone", because only the second one needs telling.
+   * Since backend plan 0020 the gateway's `OptionalJwtAuthGuard` answers a stale
+   * token with a 401 instead of quietly minting a second guest account, so the data
+   * loss this gate used to be the only defence against can no longer happen. The gate
+   * stays for the two things the server cannot do: it refreshes before the call rather
+   * than spending a round trip on a rejection, and it is the only place that knows the
+   * difference between "nobody is signed in" and "the guest we had is gone". A failed
+   * refresh over a `TEMPORARY` identity is the second case, and only that one needs
+   * telling.
    */
   async authorizeOptionalAuthCall(): Promise<OptionalAuthResult> {
     const before = this._tokens();
