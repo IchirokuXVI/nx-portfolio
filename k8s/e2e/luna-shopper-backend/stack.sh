@@ -8,10 +8,15 @@
 # to run the *same* thing. This script is that one thing, and the Nx targets on
 # the `luna-shopper-backend` umbrella project are thin wrappers over it:
 #
+#   nx run luna-shopper-backend:stack:bootstrap
 #   nx run luna-shopper-backend:stack:up
 #   nx run luna-shopper-backend:stack:down
 #   nx run luna-shopper-backend:test-integration:stack
 #   nx run luna-shopper-backend:e2e:stack
+#
+# Every command that starts something configures the checkout first (see
+# bootstrap_config below), so a fresh clone needs no manual .env copying and no
+# keypair ceremony: `stack:up` is the first and only command.
 #
 # Compose stays the single definition of what the infrastructure IS (plan 0015,
 # section 1): the same file backs local development, the slot harness, and both
@@ -69,6 +74,128 @@ export_service_ports() {
 
 # Services with their own database and their own committed migrations.
 MIGRATED_SERVICES=(auth core catalog)
+
+# --- configuration bootstrap ------------------------------------------------
+#
+# None of what a service needs to boot is committed: the six .env files and the
+# dev JWT keypair are all git ignored (the keypair must never be shared, and the
+# .env files are per developer). A fresh checkout therefore has none of it, and
+# the failure that produces is actively misleading rather than merely annoying.
+# With no AUTH_DB_URL the migration CLI hands `undefined` to node-postgres, which
+# falls back to its own defaults, finds this stack's auth-db on localhost:5432,
+# and dies with "SASL: client password must be a string". That reads as a
+# credentials problem for a connection string that was never set, and it only
+# gets that far because the compose stack is up and listening.
+#
+# So the commands that start things configure the checkout first, from the same
+# single definition of the defaults everything else uses: luna-slot.sh. The PR
+# workflow already calls it for exactly this reason. Slot 0 is the plain default
+# ports, which is what a developer's own machine wants.
+
+# Every file luna-slot.sh writes. The services read all six; the migrations below
+# read only their own.
+ENV_FILES=(
+  'apps/luna-shopper-backend/.env.luna-shopper-backend'
+  'apps/luna-shopper-backend/gateway/.env'
+  'apps/luna-shopper-backend/realtime/.env'
+  'apps/luna-shopper-backend/auth/.env'
+  'apps/luna-shopper-backend/core/.env'
+  'apps/luna-shopper-backend/catalog/.env'
+)
+
+# The subset `up` cannot proceed without, because each migration resolves its
+# database URL from its own service file.
+REQUIRED_ENV_FILES=(
+  'apps/luna-shopper-backend/auth/.env'
+  'apps/luna-shopper-backend/core/.env'
+  'apps/luna-shopper-backend/catalog/.env'
+)
+
+KEYPAIR="$root/apps/luna-shopper-backend/secrets/jwt.key"
+
+# luna-slot.sh sends openssl's stderr to /dev/null, so a missing openssl would
+# abort it under `set -e` with nothing printed at all. Check for it up front and
+# say what to do, rather than inheriting a silent exit.
+require_openssl() {
+  if ! command -v openssl >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+openssl is not on PATH, so the throwaway dev JWT keypair cannot be generated.
+Git for Windows ships it; on Linux install the `openssl` package. Or create the
+pair by hand from the workspace root and rerun:
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+    -out apps/luna-shopper-backend/secrets/jwt.key
+  openssl pkey -in apps/luna-shopper-backend/secrets/jwt.key -pubout \
+    -out apps/luna-shopper-backend/secrets/jwt.pub
+EOF
+    return 1
+  fi
+}
+
+bootstrap_config() {
+  local missing=() present=() file
+  for file in "${ENV_FILES[@]}"; do
+    if [[ -f "$root/$file" ]]; then
+      present+=("$file")
+    else
+      missing+=("$file")
+    fi
+  done
+
+  # A fresh checkout: there is no configuration to preserve, so write all of it.
+  # This is the case that used to fail, and it is the common one.
+  if (( ${#present[@]} == 0 )); then
+    echo "==> no service .env files found: configuring this checkout for slot 0 (the default ports)"
+    if [[ ! -f "$KEYPAIR" ]]; then
+      require_openssl || return 1
+    fi
+    bash "$here/luna-slot.sh" 0
+    return 0
+  fi
+
+  # Past this point something is already configured, and luna-slot.sh rewrites
+  # all six files, so running it now would silently discard hand edits in the
+  # ones that do exist. From here we only ever add what is absent.
+  if [[ ! -f "$KEYPAIR" ]]; then
+    require_openssl || return 1
+    echo "==> generating the missing dev JWT keypair in apps/luna-shopper-backend/secrets"
+    openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$KEYPAIR" 2>/dev/null
+    openssl pkey -in "$KEYPAIR" -pubout -out "${KEYPAIR%.key}.pub" 2>/dev/null
+  fi
+
+  if (( ${#missing[@]} == 0 )); then
+    return 0
+  fi
+
+  # Refuse only over the files this command genuinely cannot work without. A
+  # checkout that only ever serves one service is a legitimate state, so the
+  # rest are a note and not a failure.
+  local blocking=()
+  for file in "${REQUIRED_ENV_FILES[@]}"; do
+    if [[ ! -f "$root/$file" ]]; then
+      blocking+=("$file")
+    fi
+  done
+
+  if (( ${#blocking[@]} > 0 )); then
+    {
+      echo
+      echo "This checkout is partly configured, and the missing files include ones the"
+      echo "migrations need:"
+      printf '  %s\n' "${blocking[@]}"
+      echo
+      echo "Nothing was written, because luna-slot.sh rewrites all six .env files and"
+      echo "would discard whatever is in the ones you already have. Either take the slot"
+      echo "defaults for all of them:"
+      echo "  bash k8s/e2e/luna-shopper-backend/luna-slot.sh 0"
+      echo "or copy just the missing ones from their .example sibling."
+    } >&2
+    return 1
+  fi
+
+  echo "==> note: these are not configured, and this command does not need them:"
+  printf '      %s\n' "${missing[@]}"
+  echo "    copy each from its .example sibling, or run luna-slot.sh 0 to rewrite all six."
+}
 
 up() {
   echo "==> bringing the compose stack up (waiting on healthchecks)"
@@ -204,14 +331,19 @@ run_suite() {
     npx nx e2e luna-shopper-backend-e2e
 }
 
+# Configuration is a precondition of every command that starts something, so it
+# is dispatched here rather than from inside up(): a checkout that cannot be
+# configured has started nothing, and should not reach up_or_clean's teardown.
+# `down` is exempt on purpose, since tearing down needs no service config.
 case "${1:-}" in
-  up) up ;;
+  bootstrap) bootstrap_config ;;
+  up) bootstrap_config && up ;;
   down) down ;;
-  test-integration) test_integration ;;
-  e2e) e2e ;;
-  e2e-images) e2e_images ;;
+  test-integration) bootstrap_config && test_integration ;;
+  e2e) bootstrap_config && e2e ;;
+  e2e-images) bootstrap_config && e2e_images ;;
   *)
-    echo "usage: stack.sh {up | down | test-integration | e2e | e2e-images}" >&2
+    echo "usage: stack.sh {bootstrap | up | down | test-integration | e2e | e2e-images}" >&2
     exit 2
     ;;
 esac
