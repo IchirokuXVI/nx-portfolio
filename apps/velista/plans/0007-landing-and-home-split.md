@@ -320,23 +320,17 @@ keys. Three specifics so nobody stops on them.
 
 ### Shared files
 
-| File                                | This plan                                        | `0006`                                 |
-| ----------------------------------- | ------------------------------------------------ | -------------------------------------- |
-| `feature-shell/src/lib/routes.ts`   | replaces the child route with two guarded routes | adds a resolver to the parent route    |
-| `feature-shell/src/index.ts`        | exports the auth guards                          | exports the providers and the resolver |
-| `ui/assets/i18n/en.json`, `es.json` | adds five preview line keys                      | removes one hand added debug key       |
+| File                              | This plan                                        | `0006`                                 |
+| --------------------------------- | ------------------------------------------------ | -------------------------------------- |
+| `feature-shell/src/lib/routes.ts` | replaces the child route with two guarded routes | adds a resolver to the parent route    |
+| `feature-shell/src/index.ts`      | exports the auth guards                          | exports the providers and the resolver |
 
 `routes.ts` is the only one worth coordinating, since both edit the same route table.
 They touch different properties of different routes, so the merge is mechanical, but
 whoever goes second should open the file rather than trust the diff. `0006` section 8
 has the same table from the other side.
 
-### Cleanup this plan carries
-
-`home-page.ts` on `dev` currently has a debug `ngOnInit` with `console.log`s probing
-`t('app-title')`, `t('home.preview.listName')` and `t('zone.role.owner')`, plus the
-`RokuLocaleStore` injection that supports it. This plan rewrites that file, so it
-removes them rather than leaving `0006` to edit the same file for the same reason.
+`en.json` and `es.json` belong to this plan alone: `0006` changes no translation JSON.
 
 ## 9. Acceptance criteria
 
@@ -364,21 +358,21 @@ removes them rather than leaving `0006` to edit the same file for the same reaso
 
 ## 10. Files touched
 
-| File                                                                            | Change                                                                                         |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `libs/velista/feature-landing/*`                                                | **new library.** `LandingPage`, its template, its stylesheet, its spec, project scaffolding    |
-| `libs/velista/feature-home/src/lib/home-page/home-page.ts`                      | drop the anonymous branch, its imports, its handlers, `previewLines`, and the debug `ngOnInit` |
-| `libs/velista/feature-home/src/lib/home-page/home-page.html`                    | drop the `@case ('anonymous')` block, fix the app bar bindings                                 |
-| `libs/velista/feature-home/src/lib/home-page/home-page.scss`                    | move `.anonymous` and `.spacer` out                                                            |
-| `libs/velista/feature-home/src/lib/home-page/select-home-state.ts` and its spec | drop the anonymous branch and its cases                                                        |
-| `libs/velista/models/src/lib/home-view.ts`                                      | `HomeState` loses `{ kind: 'anonymous' }`                                                      |
-| `libs/velista/feature-shell/src/lib/routes.ts`                                  | two child routes with guards. **Also touched by `0006`**                                       |
-| `libs/velista/feature-shell/src/lib/auth-guards.ts`                             | **new.** `authenticatedGuard`, `anonymousOnlyGuard`                                            |
-| `libs/velista/feature-shell/src/index.ts`                                       | export the guards. **Also touched by `0006`**                                                  |
-| `libs/velista/ui/src/lib/layout/app-layout.scss`                                | `:host` fills the shell's flex row                                                             |
-| `libs/velista/ui/src/lib/home/app-bar.html` / `.ts` / `.scss`                   | remove the duplicate mark                                                                      |
-| `libs/velista/ui/assets/i18n/en.json`, `es.json`                                | five preview line keys. **Also touched by `0006`**                                             |
-| `tsconfig.base.json`                                                            | path alias for `@portfolio/velista/feature-landing`                                            |
+| File                                                                            | Change                                                                                      |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `libs/velista/feature-landing/*`                                                | **new library.** `LandingPage`, its template, its stylesheet, its spec, project scaffolding |
+| `libs/velista/feature-home/src/lib/home-page/home-page.ts`                      | drop the anonymous branch, its imports, its handlers and `previewLines`                     |
+| `libs/velista/feature-home/src/lib/home-page/home-page.html`                    | drop the `@case ('anonymous')` block, fix the app bar bindings                              |
+| `libs/velista/feature-home/src/lib/home-page/home-page.scss`                    | move `.anonymous` and `.spacer` out                                                         |
+| `libs/velista/feature-home/src/lib/home-page/select-home-state.ts` and its spec | drop the anonymous branch and its cases                                                     |
+| `libs/velista/models/src/lib/home-view.ts`                                      | `HomeState` loses `{ kind: 'anonymous' }`                                                   |
+| `libs/velista/feature-shell/src/lib/routes.ts`                                  | two child routes with guards. **Also touched by `0006`**                                    |
+| `libs/velista/feature-shell/src/lib/auth-guards.ts`                             | **new.** `authenticatedGuard`, `anonymousOnlyGuard`                                         |
+| `libs/velista/feature-shell/src/index.ts`                                       | export the guards. **Also touched by `0006`**                                               |
+| `libs/velista/ui/src/lib/layout/app-layout.scss`                                | `:host` fills the shell's flex row                                                          |
+| `libs/velista/ui/src/lib/home/app-bar.html` / `.ts` / `.scss`                   | remove the duplicate mark                                                                   |
+| `libs/velista/ui/assets/i18n/en.json`, `es.json`                                | five preview line keys                                                                      |
+| `tsconfig.base.json`                                                            | path alias for `@portfolio/velista/feature-landing`                                         |
 
 ## 11. Open questions
 

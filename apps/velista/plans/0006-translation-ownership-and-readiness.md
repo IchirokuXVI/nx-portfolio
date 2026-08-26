@@ -115,25 +115,53 @@ have to repeat it for every page ever added).
 
 ### 4.2 What it does
 
-A resolver on the `AppLayout` route in `AppShellRoutes`, awaiting the subject the
-service already exposes:
+Two pieces, and the split between them is deliberate: one **starts** the load, the
+other **waits** for it. Nothing does both, so there is no ordering to get right.
+
+**Starting.** An environment initializer, appended to the providers in section 3.2, so
+constructing the service is a consequence of creating the app injector rather than of
+whoever happens to inject it first:
+
+```ts
+// libs/velista/feature-shell/src/lib/translation-providers.ts
+export const VELISTA_TRANSLATION_PROVIDERS: Provider[] = [
+  ...provideRokuTranslator({ ... }),
+  provideEnvironmentInitializer(() => void inject(RokuTranslatorService)),
+];
+```
+
+This is the pattern `app-providers.ts` already uses for `ConnectionRecovery`, and the
+reasoning there applies here too: the service is a thing that has to be _running_, and
+nothing in a template injects it directly, so without this its construction time is an
+accident of which component renders first.
+
+**Waiting.** A resolver on the `AppLayout` route in `AppShellRoutes`:
 
 ```ts
 // libs/velista/feature-shell/src/lib/translations-ready.ts
-export const translationsReadyResolver: ResolveFn<boolean> = () => {
-  const translator = inject(RokuTranslatorService);
-  return firstValueFrom(translator.loaded$);
-};
+export const translationsReadyResolver: ResolveFn<boolean> = () => firstValueFrom(inject(RokuTranslatorService).loaded$);
 ```
 
-`loaded$` is a `ReplaySubject(1)`, so a later navigation resolves synchronously and
-this costs nothing after the first entry. Injecting the service is also what
-**constructs** it, which is what starts the load, so the resolver is the thing that
-kicks it off rather than something that races it.
+`loaded$` is a `ReplaySubject(1)`, so once it has emitted, every later navigation
+resolves from the buffer and this costs nothing at all after first entry.
 
-It goes on the same route as `localeCorrectionGuard`, and after it: that guard awaits
-`changeLocale`, so the locale is settled before anything is waited on, and there is no
-risk of loading one locale's strings and then rendering another's.
+### 4.2.1 Ordering, stated so nobody has to reason about it
+
+Three things happen in a fixed order, none of it timing dependent:
+
+1. The app injector is created (route providers on the remote entry route), and the
+   environment initializer constructs `RokuTranslatorService`, which registers the
+   namespace and starts every loader. This is the earliest point at which the app
+   exists at all.
+2. `localeCorrectionGuard` runs on the `AppLayout` route and awaits `changeLocale`.
+   Angular runs a route's `canActivate` to completion before its `resolve`, so this is
+   settled before step 3 begins.
+3. `translationsReadyResolver` awaits `loaded$`.
+
+Step 1 registers **every** configured locale eagerly, not just the active one, so step
+2 cannot land on a locale whose strings were never requested. That is existing
+behaviour in `RokuTranslatorService`, not something this plan adds, and it is the
+reason the guard and the loads do not have to be ordered against each other.
 
 ### 4.3 Why block, when `0004` already makes the pipe repaint
 
@@ -152,25 +180,96 @@ makes the opposite call for the display face and picks `font-display: swap`, and
 difference is that a fallback font is still readable words while a fallback string is
 `home.hero.headline`.
 
-### 4.4 The failure mode this introduces, and the guard on it
+### 4.4 The failure mode: `loaded$` must always settle
 
-Blocking on a promise means caring about the promise never settling.
-`RokuTranslatorService` currently does `Promise.all(promises).then(...)` with **no
-rejection path**, so one failed chunk would leave `loaded$` pending forever and this
-resolver would hang the app on a blank screen. rokutranslator `0004` Problem 3 fixes
-that at the source, and this plan **depends on it**: do not ship the resolver against a
-library version that can hang.
+Blocking on a promise means caring about whether that promise can fail to settle. Today
+it can, and this section is the whole reason rokutranslator `0004` Problem 3 is a hard
+prerequisite rather than a nicety.
 
-Belt and braces, because a blank app is the worst outcome on this list and the resolver
-is one line from being safe:
+#### The mechanism
+
+`RokuTranslatorService`'s constructor ends with:
 
 ```ts
-return Promise.race([firstValueFrom(translator.loaded$), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000))]);
+Promise.all(promises).then(() => {
+  this.loaded$.next(true);
+  this.loaded$.complete();
+});
 ```
 
-Rendering keys is bad. Rendering nothing is worse. The timeout means the worst case
-degrades to today's behaviour, which `0004`'s signal then repairs as soon as the
-strings do arrive.
+`Promise.all` rejects as soon as **any** input promise rejects. There is no `.catch`
+and no rejection handler on the chain, so on rejection the `.then` callback never runs.
+`loaded$.next` is never called, `loaded$.complete()` is never called, and the subject
+stays open with an empty buffer for the lifetime of the page. The rejection surfaces
+only as an unhandled promise rejection in the console.
+
+Today that is invisible, because nothing waits on `loaded$`: the app renders keys,
+`0004`'s signal never flips, and you get a permanently untranslated page. Once a
+resolver awaits it, the same rejection means the resolver's promise never settles, the
+router never finishes the navigation, and **no route is ever activated**. Not a slow
+app: a blank one, permanently, with no error boundary and nothing on screen to explain
+it.
+
+What can actually reject: a chunk that 404s after a deploy replaces the hashed asset a
+still-open tab is asking for, a malformed JSON file, or an `import()` rejected by the
+browser. None of these are exotic, and the first one is routine on a mutable staging
+tag.
+
+#### Why a timeout was the wrong answer
+
+An earlier draft of this plan raced the resolver against a 3 second timer, so the app
+rendered keys instead of hanging. That is removed, and it deserves an explanation
+rather than a silent deletion, because on the surface it looks like cheap insurance.
+
+It is not insurance, it is **nondeterminism**. A timeout makes the app's behaviour a
+function of wall clock time, which is the property that makes a race hard to live with:
+
+- **The outcome depends on the device and the network, not on the code.** The same
+  build renders translated text on a developer's machine and raw keys on a cheap phone
+  on supermarket 3G. Nothing in the source says which, and neither result is a bug you
+  can reproduce on demand.
+- **It cannot distinguish "failed" from "slow".** A loader that is going to succeed in
+  3.2 seconds is treated identically to one that has already rejected. It punishes the
+  case that would have worked.
+- **It makes a test suite lie.** Any test of the failure path has to either wait three
+  real seconds or fake timers, and a passing test then proves something about the timer
+  rather than about the loader.
+- **It hides the bug it is compensating for.** With the timeout in place, a library
+  that never settles produces a page that looks _almost_ right, which is exactly the
+  kind of defect that survives for months.
+
+#### The correct fix, and where it lives
+
+Make the promise always settle, at the source. rokutranslator `0004` Problem 3 changes
+the chain to `.then(() => true).catch(() => false)` before publishing, so `loaded$`
+emits exactly once in every case and carries whether the load actually succeeded. With
+that in place the resolver has nothing left to defend against: there is no code path
+where `loaded$` stays silent, so there is no reason to time it out.
+
+That gives `loaded$` a contract this plan depends on, and it is worth stating because
+`firstValueFrom` is unforgiving about the edge:
+
+> `loaded$` emits **exactly one** value and then completes, in both the success and the
+> failure case.
+
+If a future change ever completed the subject **without** emitting, `firstValueFrom`
+would reject with `EmptyError`, the resolver would reject, and the router would cancel
+the navigation. That is the same blank screen by a different route, so the contract is
+"emits then completes", never just "completes".
+
+#### Why the resolver adds no new hang risk beyond that
+
+Worth being precise, because "blocking the route on a network request" sounds worse
+than it is here. The route this resolver sits on is already lazily loaded: the router
+is already awaiting `import('@portfolio/velista/feature-shell')` and, one level down, a
+page component chunk. If chunk loading hangs rather than rejects, the app never renders
+**with or without** this resolver. The resolver does not introduce a dependency on the
+network that the route did not already have; it adds one more chunk to a wait that was
+already happening, and webpack's own `chunkLoadTimeout` bounds it in the pathological
+case.
+
+So the entire new failure surface is the rejection path described above, and `0004`
+Problem 3 closes it completely.
 
 ### 4.5 What this does not do
 
@@ -189,14 +288,10 @@ work, today, with no library change at all. It is rejected:
   is legible; sixty dotted keys at one indent level is not.
 - The library's own `LoaderFunction` type already claims to accept it.
 
-**Cleanup this plan owns.** `libs/velista/ui/assets/i18n/en.json` currently carries a
-hand added flat `"home.preview.listName"` at the top level, from debugging. It comes
-out, and it is the one thing in this plan that must not be forgotten, because it works
-and would therefore hide a regression in exactly one key.
-
-The debug `ngOnInit` and its `console.log`s in `home-page.ts` come out too, but that
-file is rewritten wholesale by `0007`, so they are listed there to avoid two plans
-editing one file for the same reason.
+So this plan changes **no** translation JSON at all. The flat `"home.preview.listName"`
+key and the `console.log` probes that produced the evidence in rokutranslator `0004`
+were scratch work and are already gone from `dev`; nothing needs cleaning up after
+them, and neither file appears in section 7.
 
 ## 6. Acceptance criteria
 
@@ -210,11 +305,14 @@ editing one file for the same reason.
    shortly after": the resolver means there is no frame with a key in it.
 4. `/es/velista` renders Spanish, and switching the locale in place still works
    (`0003` of the rokutranslator plans, unchanged by any of this).
-5. A loader that rejects does not hang the app: the page renders within the timeout,
-   with keys, and repairs itself if the strings arrive later. Testable with a source
-   whose loader rejects.
-6. The debug flat `home.preview.listName` key is gone from `en.json`, and
-   `t('home.preview.listName')` still returns "Weekly shop" from the nested branch.
+5. A loader that **rejects** still activates the route. The page renders, with keys for
+   the namespace that failed, and no timer is involved anywhere in making that happen.
+   Tested with a source whose loader rejects, asserting the route activates within the
+   same microtask queue rather than after any elapsed time.
+6. `nx build velista` produces no `Promise.race`, no `setTimeout` and no other
+   time-based fallback anywhere in the translation path. This is a criterion rather
+   than a note because it is the thing most likely to be reintroduced by somebody
+   debugging a slow load.
 7. `npx nx run-many --all --target=test` and `--target=lint` pass, and
    `npx nx build velista` succeeds.
 
@@ -225,8 +323,7 @@ editing one file for the same reason.
 | `libs/velista/ui/src/lib/translations.ts`                     | **new.** The `VELISTA_UI_TRANSLATIONS` descriptor, next to the assets  |
 | `libs/velista/ui/src/lib/translation-providers.ts`            | **deleted.** Its reasoning is preserved in the two new files, not lost |
 | `libs/velista/ui/src/index.ts`                                | export swap                                                            |
-| `libs/velista/ui/assets/i18n/en.json`                         | remove the debug flat key. **Also touched by `0007`**                  |
-| `libs/velista/feature-shell/src/lib/translation-providers.ts` | **new.** The composition                                               |
+| `libs/velista/feature-shell/src/lib/translation-providers.ts` | **new.** The composition, plus the environment initializer             |
 | `libs/velista/feature-shell/src/lib/translations-ready.ts`    | **new.** The resolver                                                  |
 | `libs/velista/feature-shell/src/lib/routes.ts`                | the resolver on the `AppLayout` route. **Also touched by `0007`**      |
 | `libs/velista/feature-shell/src/index.ts`                     | export both. **Also touched by `0007`**                                |
@@ -236,28 +333,30 @@ editing one file for the same reason.
 
 ### On rokutranslator `0004`
 
-| Needs                         | For                                            | If it is not merged yet                                                                 |
-| ----------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `TranslationSource`           | Section 3.2                                    | Declare it locally in `feature-shell` and delete it when `0004` lands. Cheap either way |
-| `loaded$` settling on failure | Section 4.4                                    | **Blocking.** Do not ship the resolver without it, or a bad chunk hangs the app         |
-| `addResourceBundle`           | Anything on screen actually reading in English | Everything in this plan is still buildable and testable. The screen stays raw keys      |
+| Needs                         | For                                            | If it is not merged yet                                                                                                                                                                                                                                                  |
+| ----------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TranslationSource`           | Section 3.2                                    | Declare it locally in `feature-shell` and delete it when `0004` lands. Cheap either way                                                                                                                                                                                  |
+| `loaded$` settling on failure | Section 4.4                                    | **Blocking, with no workaround.** The resolver awaits a promise that a rejected loader leaves pending forever, and the timeout that used to paper over it is deliberately gone. Ship the resolver against a library that can hang and one 404 is a permanently blank app |
+| `addResourceBundle`           | Anything on screen actually reading in English | Everything in this plan is still buildable and testable. The screen stays raw keys                                                                                                                                                                                       |
 
 The composition and the move can land first and be verified by unit tests. Only
-acceptance criteria 3, 4 and 6 need `0004` on disk.
+acceptance criteria 3, 4 and 5 need `0004` on disk, and **criterion 5 is the one that
+must not be waived**: it is the difference between a degraded page and no page.
 
 ### On `0007`
 
-Three shared files, all trivial, all different lines.
+Two shared files, both trivial, both different lines.
 
 | File                              | `0006`                              | `0007`                                           |
 | --------------------------------- | ----------------------------------- | ------------------------------------------------ |
 | `feature-shell/src/index.ts`      | exports the providers and resolver  | exports the auth guards                          |
 | `feature-shell/src/lib/routes.ts` | adds a resolver to the parent route | replaces the child route with two guarded routes |
-| `ui/assets/i18n/en.json`          | removes one debug key               | adds five preview line keys                      |
 
 `routes.ts` is the only one worth coordinating, since both edit the same route table.
 They touch different properties of different routes, so a merge is mechanical, but
-whoever goes second should read the file rather than trust the diff.
+whoever goes second should read the file rather than trust the diff. This plan touches
+no translation JSON at all (section 5), so `en.json` and `es.json` belong to `0007`
+alone.
 
 **Neither plan blocks the other from starting.**
 

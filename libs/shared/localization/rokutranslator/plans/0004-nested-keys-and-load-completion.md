@@ -230,6 +230,31 @@ and it carries whether the load actually succeeded. A caller that only wants to 
 has it. The `loaded` signal flips either way, because a partially loaded namespace
 still has strings worth painting.
 
+### The contract this establishes
+
+Stated explicitly, because a consumer is about to depend on it and the edge case is
+easy to reintroduce:
+
+> `loaded$` emits **exactly one** value and then completes. In every case, including
+> failure. It never completes without emitting.
+
+The second sentence is load bearing. `firstValueFrom` on an observable that completes
+empty rejects with `EmptyError`, so a subject that completed without emitting would
+turn a waiting caller's promise into a rejection rather than a value. For a router
+resolver that means a cancelled navigation and a blank page, which is the exact outcome
+this problem exists to prevent, arrived at from the other side.
+
+### Why this is blocking rather than a nicety
+
+`apps/velista/plans/0006` awaits `loaded$` in a route resolver, and it does so with
+**no timeout and no fallback**, deliberately: a timer would make the app's rendered
+output a function of wall clock time, and the app would show translated text or raw
+keys depending on the device it ran on. That plan therefore has no defence of its own
+against a promise that never settles, and this fix is the only thing standing between
+a single 404 on a translation chunk and an app that renders nothing at all, forever.
+
+Land this before, or together with, anything that waits on `loaded$`.
+
 ## API additions
 
 | Symbol                         | Where                                              | Why                                                                                                                                                                                                                                                  |
@@ -251,7 +276,9 @@ is unchanged, and an app that does not compose keeps calling it exactly as befor
 3. A **flat** dotted-key file still resolves, including a key that is not a valid
    identifier (`app-title`). This is the regression gate for the four working apps.
 4. A rejecting loader settles `loaded$` with `false` and flips `loaded` to `true`,
-   within one tick, with no unhandled rejection.
+   within one tick, with no unhandled rejection. Assert on the **emission**, not just
+   on completion: `await firstValueFrom(service.loaded$)` must resolve rather than
+   reject, which is the contract a route resolver depends on.
 5. `RokuTranslatorPipe` re-renders an `OnPush` host when a load completes: render with
    a deferred loader, assert the key, resolve the loader, `await fixture.whenStable()`,
    assert the string, with **no** `detectChanges()` forcing it.
