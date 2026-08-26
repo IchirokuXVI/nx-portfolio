@@ -5,6 +5,12 @@ import { Observable, of } from 'rxjs';
 export class RokuTranslatorTestingService {
   loaded$ = of(true);
 
+  /**
+   * Already `true`: a test has its strings the moment it renders, so nothing has to
+   * wait or re-render. The pipe reads this, so the double has to carry it.
+   */
+  readonly loaded = signal(true);
+
   readonly locale = signal('en');
   readonly locale$ = of('en');
 

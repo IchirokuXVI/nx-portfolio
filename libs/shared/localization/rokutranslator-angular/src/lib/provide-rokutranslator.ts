@@ -8,6 +8,10 @@ import {
   RokuTranslatorService,
 } from './rokutranslator-service';
 
+// Re-exported from the module that declares the provider, because a composing app
+// imports the descriptor and this function together.
+export type { TranslationSource } from './rokutranslator-service';
+
 export function provideRokuTranslator<L extends string>({
   locales = [],
   namespaces = [],

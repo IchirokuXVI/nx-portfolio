@@ -17,11 +17,45 @@ interface RokuTranslatorConfig {
   languageOnly: boolean;
 }
 
+/**
+ * The shape a translation file may take. A leaf is a string (or an array of them,
+ * which i18next reads as an indexed key), and a branch is another tree, so both
+ * conventions in this workspace are the same type: a flat file writing
+ * `"nav.home": "Home"` as a literal top-level key, and a nested file writing
+ * `{ nav: { home: "Home" } }`.
+ */
+type TranslationTree = {
+  [key: string]: string | string[] | TranslationTree;
+};
+
 type LoaderFunction = () => Promise<
-  Record<string, string> | { default: Record<string, string> }
+  TranslationTree | { default: TranslationTree }
 >;
 
 type LoadersByLocaleAndNamespace = Map<string, Map<string, LoaderFunction>>;
+
+/**
+ * `import('./en.json')` resolves to a module namespace object, not to the JSON,
+ * so the bundle a loader hands back is `{ default: {...}, ...one export per top
+ * level key }`. Unwrap it to the actual translations.
+ *
+ * Shared by both load paths on purpose. They used to carry their own copy of this
+ * check, and the two disagreeing about the shape of a loader's return value is how
+ * one of them stayed wrong for as long as it did.
+ */
+function unwrapDefault(
+  loaded: TranslationTree | { default: TranslationTree }
+): TranslationTree {
+  if (
+    'default' in loaded &&
+    typeof loaded.default === 'object' &&
+    loaded.default !== null
+  ) {
+    return loaded.default as TranslationTree;
+  }
+
+  return loaded as TranslationTree;
+}
 
 class RokuTranslator {
   private config: RokuTranslatorConfig = {
@@ -77,7 +111,7 @@ class RokuTranslator {
             namespace: string,
             callback: (
               err: Error | null,
-              translations: Record<string, string> | false
+              translations: TranslationTree | false
             ) => void
           ) => {
             const loader = this.getLocaleNamespaceLoader(language, namespace);
@@ -88,16 +122,7 @@ class RokuTranslator {
 
             loader()
               .then((translations) => {
-                let finalTranslations = translations;
-
-                if (
-                  'default' in translations &&
-                  typeof translations.default === 'object'
-                ) {
-                  finalTranslations = translations.default;
-                }
-
-                callback(null, finalTranslations as Record<string, string>);
+                callback(null, unwrapDefault(translations));
               })
               .catch((err) => {
                 callback(err, false);
@@ -320,12 +345,22 @@ class RokuTranslator {
       throw new Error('RokuTranslator not initialized. Call init() first.');
     }
 
-    const loadedTranslations = await translations();
+    const loadedTranslations = unwrapDefault(await translations());
 
-    this.i18nextInstance.addResources(
+    // `addResources` is documented for flat maps: it iterates the top level and
+    // keeps only string (or string array) values, so every object-valued branch of
+    // a nested file was dropped silently and `t('zone.role.owner')` returned the
+    // key. `addResourceBundle` with `deep` merges the tree as given.
+    //
+    // Flat files are unaffected: the bundle stores `"nav.home"` as the one top
+    // level key it is written as, and a lookup tries the joined key as well as the
+    // split path, so both shapes resolve through the same call.
+    this.i18nextInstance.addResourceBundle(
       this.formatLocale(locale),
       namespace,
-      loadedTranslations
+      loadedTranslations,
+      /* deep */ true,
+      /* overwrite */ true
     );
   }
 
@@ -344,3 +379,4 @@ class RokuTranslator {
 const rokuTranslatorInstance = new RokuTranslator();
 
 export { rokuTranslatorInstance as RokuTranslator };
+export type { TranslationTree };

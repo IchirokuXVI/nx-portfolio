@@ -4,8 +4,12 @@ import {
   InjectionToken,
   OnDestroy,
   Signal,
+  signal,
 } from '@angular/core';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
+import {
+  RokuTranslator,
+  TranslationTree,
+} from '@portfolio/localization/rokutranslator';
 import { Observable, ReplaySubject, switchMap } from 'rxjs';
 import { RokuLocaleStore } from './roku-locale-store';
 
@@ -18,24 +22,37 @@ export const ROKU_TRANSLATOR_NAMESPACES = new InjectionToken<string[]>(
 export const ROKU_TRANSLATOR_DEFAULT_NAMESPACE = new InjectionToken<string>(
   'Default namespace for RokuTranslator'
 );
-export const ROKU_TRANSLATOR_LOADER = new InjectionToken<
-  (locale: string, namespace?: string) => Promise<Record<string, string>>
->('Loader function for RokuTranslator');
+export const ROKU_TRANSLATOR_LOADER = new InjectionToken<LoaderFunction>(
+  'Loader function for RokuTranslator'
+);
 
 export type LoaderFunction<L = string> = (
   locale: L,
   namespace?: string
-) => Promise<Record<string, string> | { default: Record<string, string> }>;
+) => Promise<TranslationTree | { default: TranslationTree }>;
+
+/**
+ * One library's contribution to an app's translations: the namespace it owns, the
+ * locales it ships, and the loader that reads its own asset folder.
+ *
+ * A type and a convention rather than a behaviour. `provideRokuTranslator` is
+ * unchanged and an app that does not compose keeps calling it exactly as before;
+ * an app assembled from several libraries collects their descriptors and derives
+ * one dispatching loader from them, so each library states its own entry instead
+ * of the composition site knowing everybody's asset folders.
+ */
+export interface TranslationSource<L extends string = string> {
+  namespace: string;
+  locales: readonly L[];
+  loader: LoaderFunction<L>;
+}
 
 @Injectable()
 export class RokuTranslatorService implements OnDestroy {
   private _locales: string[] = inject(ROKU_TRANSLATOR_LOCALES);
   private _namespaces: string[] = inject(ROKU_TRANSLATOR_NAMESPACES);
   private _defaultNamespace: string = inject(ROKU_TRANSLATOR_DEFAULT_NAMESPACE);
-  private _loader: (
-    locale: string,
-    namespace?: string
-  ) => Promise<Record<string, string>> = inject(ROKU_TRANSLATOR_LOADER);
+  private _loader: LoaderFunction = inject(ROKU_TRANSLATOR_LOADER);
 
   private _store = inject(RokuLocaleStore);
 
@@ -45,7 +62,29 @@ export class RokuTranslatorService implements OnDestroy {
     ...this._namespaces,
   ];
 
+  /**
+   * Emits **exactly one** value and then completes, in every case including a
+   * failed load, and never completes without emitting. A caller that wants to
+   * *wait* for the strings (a route resolver, say) reads it with
+   * `firstValueFrom`, which rejects with `EmptyError` on an observable that
+   * completes empty, so the emission is the contract and not just the completion.
+   *
+   * The value is whether every loader actually succeeded. A caller that only asks
+   * "is it safe to render now" ignores it.
+   */
   loaded$ = new ReplaySubject<boolean>(1);
+
+  /**
+   * Flips to `true` once the loads settle, succeeded or not: a partially loaded
+   * namespace still has strings worth painting.
+   *
+   * A signal rather than only the subject above, because the pipe reads it. One
+   * write marks every OnPush view holding a `| rokuT` binding dirty exactly once,
+   * at the moment there is something new to show. Without it such a view keeps the
+   * keys it painted before the first `import()` resolved, since a promise settling
+   * inside a service marks nothing.
+   */
+  readonly loaded = signal(false);
 
   /** Active locale as a signal, delegated to the app-wide store. */
   get locale(): Signal<string> {
@@ -95,10 +134,18 @@ export class RokuTranslatorService implements OnDestroy {
       }
     }
 
-    Promise.all(promises).then(() => {
-      this.loaded$.next(true);
-      this.loaded$.complete();
-    });
+    // The catch is load bearing, not defensive: `Promise.all` has no rejection
+    // path of its own, so one loader that throws (a 404 on a chunk, malformed
+    // JSON) used to leave `loaded$` pending forever and raise an unhandled
+    // rejection. A caller that waits on it would hang on a blank screen.
+    Promise.all(promises)
+      .then(() => true)
+      .catch(() => false)
+      .then((ok) => {
+        this.loaded.set(true);
+        this.loaded$.next(ok);
+        this.loaded$.complete();
+      });
   }
 
   ngOnDestroy() {

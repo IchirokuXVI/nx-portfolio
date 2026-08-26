@@ -4,6 +4,10 @@ export { RokuLocaleStore } from './lib/roku-locale-store';
 export { RokuTranslatorModule } from './lib/rokutranslator-module';
 export { RokuTranslatorPipe } from './lib/rokutranslator-pipe';
 export { RokuTranslatorService } from './lib/rokutranslator-service';
+export type {
+  LoaderFunction,
+  TranslationSource,
+} from './lib/rokutranslator-service';
 export { provideRokuTranslatorTesting } from './lib/testing/provide-rokutranslator-testing';
 export { RokuTranslatorTestingModule } from './lib/testing/rokutranslator-testing-module';
 
