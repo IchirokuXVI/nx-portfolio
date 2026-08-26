@@ -9,7 +9,9 @@ import { APP_API_CONFIG } from '@portfolio/velista/models';
  * (plan 0001, the extraction contract, item 6). The app layer provides
  * `APP_API_CONFIG`; this is the only consumer of it in `data-access`.
  */
-@Injectable({ providedIn: 'root' })
+// Provided by the app layer, never root: rule D5, plan 0004 section 9. It reaches
+// something only the app can supply, and the app injector is a child of the root one.
+@Injectable()
 export class ApiUrl {
   private readonly _config = inject(APP_API_CONFIG);
 

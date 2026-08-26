@@ -1,14 +1,8 @@
 import { PLATFORM_ID } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { APP_BRAND, type AppBrand } from '@portfolio/velista/models';
+import { type AppBrand } from '@portfolio/velista/models';
+import { provideVelistaTesting } from './testing/velista-testing';
 import { THEME_STORAGE_KEY, ThemeStore } from './theme-store';
-
-const brand: AppBrand = {
-  name: 'Test Product',
-  shortName: 'Test',
-  wordmarkSrc: 'mark.svg',
-  iconSrc: 'icon.svg',
-};
 
 /** Stands in for jsdom's missing `matchMedia`, reporting the OS as light or not. */
 function stubPrefersLight(matches: boolean): void {
@@ -23,8 +17,11 @@ function stubPrefersLight(matches: boolean): void {
 }
 
 function createStore(override: Partial<AppBrand> = {}): ThemeStore {
+  // The real `BrowserFacade` on purpose. This spec is about how the store reads
+  // `localStorage` and `matchMedia`, so faking the facade would leave it asserting on
+  // its own stub. `provideVelistaTesting` does not replace it for exactly this reason.
   TestBed.configureTestingModule({
-    providers: [{ provide: APP_BRAND, useValue: { ...brand, ...override } }],
+    providers: [provideVelistaTesting({ brand: override })],
   });
   return TestBed.inject(ThemeStore);
 }
@@ -128,7 +125,7 @@ describe('ThemeStore', () => {
     it('resolves to Night without touching a browser global', () => {
       TestBed.configureTestingModule({
         providers: [
-          { provide: APP_BRAND, useValue: brand },
+          provideVelistaTesting(),
           { provide: PLATFORM_ID, useValue: 'server' },
         ],
       });

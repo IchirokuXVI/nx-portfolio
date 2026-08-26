@@ -10,9 +10,13 @@ import {
 import { TestBed } from '@angular/core/testing';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import { APP_API_CONFIG, type SessionTokens } from '@portfolio/velista/models';
-import { BrowserFacade, ConnectionState } from '@portfolio/velista/platform';
+import {
+  ConnectionState,
+  provideFakeBrowserFacade,
+} from '@portfolio/velista/platform';
 import { anonymous } from './auth/http-context';
 import { TokenStore } from './auth/token-store';
+import { VELISTA_DATA_ACCESS_PROVIDERS } from './data-access-providers';
 import { GatewayError, NetworkError } from './errors';
 import { gatewayInterceptor } from './gateway-interceptor';
 
@@ -77,15 +81,10 @@ describe('gatewayInterceptor', () => {
           provide: RokuTranslatorService,
           useValue: { getLocale: () => 'es' },
         },
-        {
-          provide: BrowserFacade,
-          useValue: {
-            onLine: () => true,
-            readStorage: (k: string) => storage.get(k) ?? null,
-            writeStorage: (k: string, v: string) => void storage.set(k, v),
-            removeStorage: (k: string) => void storage.delete(k),
-          },
-        },
+        provideFakeBrowserFacade(storage),
+        // Rule D5: these read `APP_API_CONFIG`, so the app injector owns them and a
+        // spec has to install them the same way the app does.
+        ...VELISTA_DATA_ACCESS_PROVIDERS,
       ],
     });
 

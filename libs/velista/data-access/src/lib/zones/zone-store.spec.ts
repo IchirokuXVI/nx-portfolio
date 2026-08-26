@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import type { MyZone } from '@portfolio/velista/models';
-import { BrowserFacade } from '@portfolio/velista/platform';
+import { provideFakeBrowserFacade } from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import { RealtimeMemory } from '../realtime/realtime-memory';
@@ -71,12 +71,14 @@ describe('ZoneStore', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        // Listed explicitly: `ZoneStore` is no longer `providedIn: 'root'` (rule D5),
+        // because it has to resolve `ZONE_SERVICE` in the injector where the app binds
+        // it rather than in the root injector, where it would silently get the
+        // in-memory default instead.
+        ZoneStore,
         { provide: ZONE_SERVICE, useValue: service },
         { provide: REALTIME_CLIENT, useExisting: RealtimeMemory },
-        {
-          provide: BrowserFacade,
-          useValue: { onLine: () => true, isBrowser: true },
-        },
+        provideFakeBrowserFacade(),
         {
           provide: SessionStore,
           useValue: {
@@ -113,6 +115,7 @@ describe('ZoneStore', () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
         providers: [
+          ZoneStore,
           {
             provide: ZONE_SERVICE,
             useValue: {
@@ -122,10 +125,7 @@ describe('ZoneStore', () => {
             },
           },
           { provide: REALTIME_CLIENT, useExisting: RealtimeMemory },
-          {
-            provide: BrowserFacade,
-            useValue: { onLine: () => true, isBrowser: true },
-          },
+          provideFakeBrowserFacade(),
           {
             provide: SessionStore,
             useValue: { isAuthenticated: () => true, userId: () => 'user-me' },

@@ -172,6 +172,46 @@ A second, narrower assertion is worth having next to it: resolve each service th
 provides and assert it comes back, so a service added later without the rule in 3.1
 fails immediately with a readable message rather than in a rendering test.
 
+> **What was built.** `apps/velista/src/app/app-providers.spec.ts`, which builds the
+> child injector with `createEnvironmentInjector(appProviders, ...)` exactly as the
+> router does and names each service. The router-driven variant was not built: it drags
+> in the locale guard and the translation loader for no extra coverage of the thing this
+> is guarding, and the e2e already covers the full stack. The narrower version fails on
+> every row of 2.3.
+
+### 3.5 The second one, found by fixing the first
+
+Fixing the injector scope made the app render far enough to hit a second, independent
+provider placement bug that had been hidden behind it the whole time:
+
+```
+NG0201: No provider found for `RokuTranslatorService`. Source: Route: .
+```
+
+`AppUiModule` registered the translation namespace with
+`RokuTranslatorModule.withConfig(...)`, and `AppLayout` imported it, on the reasoning
+written in that file: *as the parent route component it passes them down to every
+page.* It does not. A standalone component's imported NgModule contributes its
+providers to **that component's own injector**, and a page reached by `loadComponent`
+on a child route is not created against it: the router gives a routed component the
+route's environment injector. So `AppLayout` could use the `| rokuT` pipe and every
+page below it could not.
+
+Nobody saw it because `AppLayout` threw on `APP_BRAND` first, so no page below it had
+ever rendered.
+
+The fix is the same shape as the rest of this plan. The providers moved to
+`VELISTA_TRANSLATION_PROVIDERS`, exported from `velista/ui` so the loader still sits
+beside the asset folder it dynamically imports, and installed by `appProviders`.
+`AppUiModule` keeps the plain `RokuTranslatorModule` for the pipe, which is all a
+template needed from it.
+
+**Worth generalising, because it is the same mistake in a different costume:** "a
+parent provides for its children" is true of the **injector** tree and only sometimes
+true of the **component** tree. A route's providers reach every page below it. A
+standalone component's imports reach that component. Neither `providedIn: 'root'` nor
+a component `imports` is a way to supply a lazily loaded route.
+
 ## 4. Finding 2: one place to declare what tests provide
 
 ### 4.1 What the duplication looks like now
@@ -189,7 +229,13 @@ and the tests disagree about where providers live without anyone noticing.
 
 ### 4.2 The shape: an exported function, not a jest global
 
-Add `libs/velista/testing`, aliased `@portfolio/velista/testing`, exporting:
+> **Changed during implementation.** This section originally proposed a new
+> `libs/velista/testing`. It does not exist, and section 4.3 explains why. The helpers
+> ship from the libraries they belong to instead, which is what this workspace already
+> does with `RokuTranslatorTestingModule`. Everything below about the **shape** stands.
+
+The helpers live in `libs/velista/platform/src/lib/testing/velista-testing.ts`,
+exported from `@portfolio/velista/platform`:
 
 - `TEST_BRAND`, one `AppBrand` fixture, deliberately **not** named Velista, so a spec
   that accidentally asserts the real product name fails (rule N1 keeps earning its
@@ -208,31 +254,48 @@ calling a function is immune to that, reads at the point of use, and does not ma
 every spec in the project pay for providers it does not want. It is also the only
 version that survives someone reaching for `resetTestingModule` again later.
 
-### 4.3 Where it sits in the graph
+### 4.3 Where it sits in the graph, and why there is no `velista/testing` library
 
-`velista/testing` depends on `models` and `platform` only. That keeps it usable from
-`data-access`, `ui` and `feature-home` specs with no cycle in the project graph, since
-none of those are dependencies of it.
+A separate library cannot work, and finding out why is what changed 4.2.
 
-- `platform`'s own specs keep their local doubles. They are testing `platform`, so a
-  local fake is the right answer there anyway, and importing a lib that depends on
-  `platform` from `platform` would be a cycle.
-- Domain doubles that need `data-access` types (`ZoneServiceI`, `SessionStore`) go in
-  `data-access` under its own `testing/` folder and are exported from its `index.ts`.
-  `feature-home` already depends on `data-access`, so there is no cycle, and the
-  double lives beside the interface it implements.
+To type a `BrowserFacade` double, `velista/testing` would have to depend on
+`platform`. But `platform`'s own specs want these helpers too: `theme-store.spec.ts`
+needs `APP_BRAND` and, after rule D5, needs `ThemeStore` provided. `platform`
+importing a library that imports `platform` is a cycle in the project graph. The
+helpers would then be available to every velista library **except** one that needs
+them, which is the tell that the boundary is in the wrong place.
 
-Nothing in any `src` imports the testing lib, so it is never bundled.
+They live in `platform` instead, which every other velista library already depends on,
+so they reach every spec with no cycle anywhere:
 
-Per the workspace note on asset typings, the new project's `tsconfig.*.json` needs
-`types/**/*.d.ts` in `include` like every other leaf project here.
+- `platform` exports `TEST_BRAND`, `TEST_API_CONFIG`, `provideVelistaTesting()`,
+  `fakeBrowserFacade()` and `provideFakeBrowserFacade()`.
+- `data-access` exports the doubles that need its own types, `fakeZoneStore()` and
+  `fakeSessionStore()` with their provider wrappers, from
+  `src/lib/testing/store-doubles.ts`. `feature-home` already depends on `data-access`,
+  so there is no cycle and each double sits beside the thing it stands in for.
+
+Nothing under any `src` imports these files, so they are never bundled. It also means
+no new project, no new tsconfig and no new path alias, which is a real saving for two
+small modules.
+
+**`provideVelistaTesting` deliberately does not fake `BrowserFacade`.**
+`theme-store.spec.ts` and `browser-facade.spec.ts` test against the real one, and a
+helper that silently replaced it would leave those specs asserting on a stub. The
+double is asked for explicitly, which is one extra line in the specs that want it and
+correctness for the ones that do not.
 
 ### 4.4 What gets rewritten
 
-`theme-store.spec.ts`, `brand-rename.spec.ts`, `app-layout.spec.ts` and
-`home-page.spec.ts` drop their local brand literals and their `BrowserFacade` doubles
-in favour of the shared ones. This is the step that makes 4.1 true rather than
-aspirational, so it is part of this plan, not a follow up.
+`theme-store.spec.ts`, `app-layout.spec.ts` and `home-page.spec.ts` drop their local
+brand literals; `home-page.spec.ts`, `zone-store.spec.ts`, `zone-api.spec.ts` and
+`gateway-interceptor.spec.ts` drop their hand written `BrowserFacade` doubles. This is
+the step that makes 4.1 true rather than aspirational, so it is part of this plan and
+not a follow up.
+
+`brand-rename.spec.ts` keeps its `AppBrand` literal, and should. Its second brand is
+not duplication, it is the subject of the test: the whole spec is the rename rehearsal
+required by plan `0002`, and a rename needs two brands to be a rename.
 
 ## 5. Finding 3: `HomePage` injects `ZoneStore` directly
 
@@ -293,38 +356,53 @@ implementation, which is what settled it.
 
 ## 6. Build order
 
-1. **Write the failing test first** (3.4). It must fail with NG0201 on `APP_BRAND`
-   before anything is fixed, otherwise it is not testing what it claims to.
-2. Apply rule D5 to `ThemeStore` and confirm the spec's failure moves to
-   `APP_API_CONFIG` or `HttpClient`. Watching the error walk down the table in 2.3 is
-   the cheapest confirmation that the diagnosis is complete.
-3. Apply D5 to the rest of 3.2, and swap `provideAppInitializer` for
+1. [x] **Write the failing test first** (3.4). It failed with exactly the predicted
+   error, and the trace was more useful than expected:
+   `ZoneStore -> ZONE_SERVICE -> ZoneMemory -> TokenStore -> ApiUrl -> APP_API_CONFIG`
+   is the silent fallback of 2.3 row three, printed by Angular itself.
+2. [x] Apply rule D5 to `ThemeStore`, and watch the failure walk down the table.
+3. [x] Apply D5 to the rest of 3.2, and swap `provideAppInitializer` for
    `provideEnvironmentInitializer` (3.3).
-4. Add the service resolution assertions (3.4, second paragraph).
-5. Add `libs/velista/testing` and rewrite the four specs onto it (section 4).
-6. Add the `ZoneStore` double and lift `home-page.spec.ts` off
+4. [x] Add the service resolution assertions (3.4, second paragraph).
+5. [x] Add the shared test providers and rewrite the specs onto them (section 4).
+6. [x] Add the `ZoneStore` double and lift `home-page.spec.ts` off
    `TestBed.inject(ZoneStore).load()` (5.3).
-7. Record rule D5 in `0004` section 9 so the inventory table and the rule live
-   together.
+7. [x] Record rule D5 in `0004`, as its new section 9.0, so the inventory table and
+   the rule live together.
 
 Section 5.4 is deliberately outside this order. It is a decision, not a task.
 
+**One discovery worth recording**: `ZoneMemory` had to move under D5 as well, which
+3.2 did not anticipate. It injects `TokenStore` to answer as the current caller, so it
+reaches `ApiUrl` and therefore `APP_API_CONFIG`. That breaks the workspace convention
+that a service token's in-memory default resolves with no setup at all
+(`nx-portfolio-angular-developer`, non negotiable 2) for this app only. The convention
+assumes a memory implementation depends on nothing, which stops being true the moment
+it has to know who is asking.
+
 ## 7. Acceptance criteria
 
-- [ ] `/en/velista` renders under the shell. This is currently false.
-- [ ] The app's zones come from `ZoneApi`, not `ZoneMemory`, when the app runs under
-      the shell. Assert it, do not eyeball it: the failure mode is silent.
-- [ ] `gatewayInterceptor` runs on requests made by `ZoneApi`.
-- [ ] `ConnectionRecovery` is constructed when the app mounts.
-- [ ] The integration spec in 3.4 fails if any app provider is moved back to a place
-      a root scoped service cannot see.
-- [ ] No spec in `libs/velista` declares its own `AppBrand` literal or its own
-      `BrowserFacade` double.
-- [ ] `npx nx run-many --all --target=test` and `--target=lint` pass.
-- [ ] `npx nx e2e velista-e2e` passes. It currently fails 10 of 10 on `.app-root`
-      (2.5), so this criterion is the headline one: it goes from red to green, and it
-      is the only check here that exercises the real injector topology in a real
-      browser.
+- [x] `/en/velista` renders under the shell. Verified in a real browser: the layout,
+      the app bar, the hero and every card render, with **no console errors at all**,
+      where before the page was empty.
+- [x] The app's zones come from `ZoneApi`, not `ZoneMemory`, when the app runs under
+      the shell. Asserted, not eyeballed: the failure mode is silent.
+- [x] `gatewayInterceptor` runs on requests made by `ZoneApi`. `HttpClient` and
+      `ZoneApi` now resolve in the same injector, which is what that depends on.
+- [x] `ConnectionRecovery` is constructed when the app mounts.
+- [x] The topology spec fails if any app provider is moved back to a place a root
+      scoped service cannot see.
+- [x] No spec in `libs/velista` declares its own `AppBrand` literal or its own
+      `BrowserFacade` double, except `brand-rename.spec.ts`, whose second brand is the
+      subject of the test (4.4).
+- [x] `nx run-many --target=test` and `--target=lint` pass for every velista project:
+      270 tests. Workspace-wide, the only failure is
+      `luna-shopper-backend-gateway`'s committed `openapi.json` being stale, which is
+      unrelated to this plan and predates it.
+- [ ] **`npx nx e2e velista-e2e` still fails, for two reasons that are not this plan.**
+      The injector failure it used to fail on is gone: `.app-root` is visible, the URL
+      assertion passes, and the `<h1>` exists. It now fails on the last assertion only.
+      See section 9.
 
 ## 8. Open questions
 
@@ -344,3 +422,53 @@ Section 5.4 is deliberately outside this order. It is a decision, not a task.
    the first remote in this workspace that needs app level providers at all, which is
    why it is the first to meet this. Nothing to audit, but the next remote that grows
    an app layer inherits rule D5 along with the pattern.
+
+## 9. Left open: velista renders its translation keys raw
+
+Not caused by this plan, not fixed by it, and only visible **because** of it: until the
+injector was fixed the page rendered nothing, so nobody could see that its text was
+wrong. It is the last thing between `velista-e2e` and green, and it needs its own plan.
+
+The e2e's final assertion is:
+
+```ts
+await expect(page.getByRole('heading', { level: 1 })).toHaveText('Velista');
+```
+
+and it now resolves a real `<h1>` containing `home.hero.headline`, the raw key.
+
+**Two separate problems are tangled here, and both need a decision.**
+
+1. **The keys do not resolve.** Every `| rokuT` binding on the page renders its key.
+2. **The assertion is stale anyway.** That `<h1>` is the home hero, whose `en.json`
+   value is "One list. Everyone in sync.", not "Velista". The spec was written against
+   an earlier layout whose `<h1>` was the app title. Even with translations working it
+   would fail, so it needs rewriting whatever the answer to (1) is. It should probably
+   assert that the heading is **not** a raw key, which is what its own comment says it
+   is for, rather than pinning one piece of copy.
+
+What was ruled out, so the next person does not repeat it:
+
+- **Not the loader.** Both chunks are fetched and return 200:
+  `libs_velista_ui_assets_i18n_en_json.js` and the `es` one, from the remote on 4205.
+- **Not change detection.** Clicking empty space and clicking a real in-page button
+  both leave the key on screen, so it is not an OnPush view that was never marked.
+- **Not provider placement.** There is no `NG0201` any more, and no console error of
+  any kind. `RokuTranslatorService` resolves and its constructor runs.
+- **Not `keySeparator`.** It is never configured anywhere in the localization library,
+  so i18next's default `'.'` applies and nested lookup is supported.
+
+What is still worth checking, in the order the evidence favours:
+
+- **Which `RokuTranslator` instance the remote registers into versus queries.** The
+  shell's module federation config forces `singleton: true` for the lib named
+  `@portfolio/localization/roku-translator`, but the real path alias is
+  `@portfolio/localization/rokutranslator`, **with no hyphen**
+  (`apps/shell/module-federation.config.ts` against `tsconfig.base.json`). That rule
+  has therefore never matched anything. It is a genuine bug on its own terms and worth
+  fixing regardless of whether it turns out to cause this one.
+- **The shape of the JSON.** velista's `en.json` is nested (`home.hero.headline` is
+  three levels of object). `damoclesSword` and `landingV2`, which both render
+  translated text under the same shell right now, use flat keys with literal dots
+  (`"nav.home": "..."`). velista is the only app in the workspace whose translation
+  files are nested, which makes it the only one exercising that path.

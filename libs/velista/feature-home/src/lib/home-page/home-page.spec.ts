@@ -2,25 +2,18 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
-  SessionStore,
-  ZONE_SERVICE,
-  ZoneStore,
-  type ZoneServiceI,
+  fakeZoneStore,
+  provideFakeSessionStore,
+  provideFakeZoneStore,
+  type FakeIdentity,
 } from '@portfolio/velista/data-access';
+import type { MyZone } from '@portfolio/velista/models';
 import {
-  APP_BRAND,
-  type AppBrand,
-  type MyZone,
-} from '@portfolio/velista/models';
-import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
+  provideFakeBrowserFacade,
+  provideVelistaTesting,
+  StorageKeys,
+} from '@portfolio/velista/platform';
 import { HomePage } from './home-page';
-
-const brand: AppBrand = {
-  name: 'Test Product',
-  shortName: 'Test',
-  wordmarkSrc: 'mark.svg',
-  iconSrc: 'icon.svg',
-};
 
 function zone(overrides: Partial<MyZone> = {}): MyZone {
   return {
@@ -43,82 +36,48 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
 }
 
 interface Options {
-  identity?: 'anonymous' | 'TEMPORARY' | 'REGISTERED';
+  identity?: FakeIdentity;
   zones?: readonly MyZone[];
   fails?: boolean;
   storage?: Map<string, string>;
 }
 
+/**
+ * Renders the page in one of `0003`'s states.
+ *
+ * The page is given a `ZoneStore` that is **already** in the state under test, rather
+ * than a data layer wired up to arrive there. That is what makes every test below a
+ * page test: it changes one thing about the world and asserts on the DOM.
+ *
+ * This used to build a whole `ZoneServiceI`, a whole `SessionStore` and then call
+ * `TestBed.inject(ZoneStore).load()` to get a promise it could await, because
+ * `HomePage`'s constructor starts the load itself and discards the promise. That meant
+ * every render fetched twice, and the thing being awaited was not the load the page
+ * was waiting on. Neither problem exists here: the store needs no loading, so there is
+ * nothing to await and nothing to fetch twice.
+ */
 async function render(
   options: Options = {}
 ): Promise<ComponentFixture<HomePage>> {
   // Lets one test render twice, which the guest banner comparison needs.
   TestBed.resetTestingModule();
 
-  const identity = options.identity ?? 'REGISTERED';
-  const storage = options.storage ?? new Map<string, string>();
-
-  const service: ZoneServiceI = {
-    listMyZones: async () => {
-      if (options.fails) {
-        throw new Error('boom');
-      }
-      return { items: options.zones ?? [zone()], nextCursor: null };
-    },
-    createZone: async () => ({ state: 'created', zone: zone() }),
-    joinZone: async () => ({
-      state: 'joined',
-      membership: {
-        id: 'm1',
-        zoneId: 'z1',
-        userId: 'u1',
-        username: 'You',
-        role: 'MEMBER',
-        status: 'PENDING',
-      },
-    }),
-  };
+  const store = options.fails
+    ? fakeZoneStore({ state: 'failed', error: new Error('boom') })
+    : fakeZoneStore({ zones: options.zones ?? [zone()], state: 'loaded' });
 
   await TestBed.configureTestingModule({
     imports: [HomePage, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideRouter([]),
-      { provide: APP_BRAND, useValue: brand },
-      { provide: ZONE_SERVICE, useValue: service },
-      {
-        provide: BrowserFacade,
-        useValue: {
-          isBrowser: true,
-          onLine: () => true,
-          window: null,
-          readStorage: (key: string) => storage.get(key) ?? null,
-          writeStorage: (key: string, value: string) =>
-            void storage.set(key, value),
-          removeStorage: (key: string) => void storage.delete(key),
-        },
-      },
-      {
-        provide: SessionStore,
-        useValue: {
-          identity: () =>
-            identity === 'anonymous'
-              ? { kind: 'anonymous' }
-              : { kind: identity, userId: 'u1', username: 'Dani' },
-          isAuthenticated: () => identity !== 'anonymous',
-          isGuest: () => identity === 'TEMPORARY',
-          userId: () => (identity === 'anonymous' ? null : 'u1'),
-          username: () => (identity === 'anonymous' ? null : 'Dani'),
-        },
-      },
+      provideVelistaTesting(),
+      provideFakeBrowserFacade(options.storage),
+      provideFakeZoneStore(store),
+      provideFakeSessionStore(options.identity ?? 'REGISTERED'),
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(HomePage);
-  fixture.detectChanges();
-
-  // The store's load is a promise, so let it settle before asserting on anything
-  // other than the loading state.
-  await TestBed.inject(ZoneStore).load();
   fixture.detectChanges();
 
   return fixture;

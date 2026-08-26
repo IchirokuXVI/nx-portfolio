@@ -1,14 +1,17 @@
 import { NgModule } from '@angular/core';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
-import { APP_AVAILABLE_LOCALES } from './app-locales';
 
 /**
- * Registers this app's translation namespace and re-exports the `| rokuT` pipe.
+ * Re-exports the `| rokuT` pipe, and nothing else.
  *
- * Importing this module is what puts the namespace providers in a component's
- * injector, which is why `AppLayout` imports it: as the parent route component it
- * passes them down to every page. Presentational components are added to
- * `components` as the page plans introduce them.
+ * It used to register the namespace providers too, on the reasoning that `AppLayout`
+ * imports it and, as the parent route component, "passes them down to every page".
+ * That is not how a standalone component's imported modules work: those providers go
+ * into that component's own injector, and a page reached by `loadComponent` on a child
+ * route is created against the **route's** injector instead, so it never saw them.
+ * They now live in `VELISTA_TRANSLATION_PROVIDERS`, installed by the app injector,
+ * which is the injector that really does sit above every page. Presentational
+ * components are added to `components` as the page plans introduce them.
  *
  * The namespace is `velista` — the Nx project name, matching the `titleNs` the
  * shell's route data hands to its title strategy.
@@ -28,15 +31,16 @@ import { APP_AVAILABLE_LOCALES } from './app-locales';
  */
 const components: never[] = [];
 
+/**
+ * Note the plain `RokuTranslatorModule` rather than `withConfig`. The namespace
+ * **providers** moved to `VELISTA_TRANSLATION_PROVIDERS`, which the app injector
+ * installs, because a module imported by a standalone component provides only that
+ * component's own injector and not the lazily loaded pages below it. See
+ * `translation-providers.ts` for the failure that caused. What is left here is the
+ * `| rokuT` pipe, which is all a template actually needs from this import.
+ */
 @NgModule({
-  imports: [
-    RokuTranslatorModule.withConfig({
-      locales: APP_AVAILABLE_LOCALES,
-      defaultNamespace: 'velista',
-      loader: (locale) => import(`../../assets/i18n/${locale}.json`),
-    }),
-    ...components,
-  ],
+  imports: [RokuTranslatorModule, ...components],
   exports: [RokuTranslatorModule, ...components],
   declarations: [],
   providers: [],

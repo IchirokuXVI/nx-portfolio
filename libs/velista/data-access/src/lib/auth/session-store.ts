@@ -13,7 +13,9 @@ import { TokenStore } from './token-store';
  * what closes plan 0004 section 11 item 2: there is now a name to show without asking
  * for one.
  */
-@Injectable({ providedIn: 'root' })
+// Provided by the app layer, never root: rule D5, plan 0004 section 9. It reaches
+// something only the app can supply, and the app injector is a child of the root one.
+@Injectable()
 export class SessionStore {
   private readonly _tokens = inject(TokenStore);
 

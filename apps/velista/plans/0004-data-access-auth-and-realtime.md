@@ -867,6 +867,64 @@ export const ZONE_SERVICE = serviceToken<ZoneServiceI>(
 contract item 6 says this app reads its own environment surface. Velista already has
 `ApiUrl` for exactly this. An API implementation injects `ApiUrl`.
 
+### 9.0 Rule D5: the app injector owns the app's services
+
+> **Rule D5. A service that depends, directly or transitively, on anything the app
+> layer provides must be provided by the app layer too. It may not be
+> `providedIn: 'root'`.**
+
+Added by plan `0005`, after the whole of this section turned out to be inert at
+runtime. It is short, and the reason it is not obvious is worth keeping.
+
+`providedIn: 'root'` is not a fallback, it is a statement about **where the service
+lives**: there is one of me and I live at the top. Under module federation the top is
+the **shell's** injector. This app is lazy loaded into it, so everything `appProviders`
+supplies necessarily sits in a child injector below. Angular creates a root scoped
+service in the root injector and resolves that instance's own dependencies from there,
+so it cannot see anything below it. Lookup only ever walks up.
+
+What that cost, before it was found:
+
+- `ThemeStore` could not see `APP_BRAND`, so `AppLayout` threw `NG0201` and the app
+  rendered nothing at all under the shell.
+- `ApiUrl` could not see `APP_API_CONFIG`.
+- `ZoneStore` resolved `ZONE_SERVICE` in the root injector, found the token's own
+  default, and quietly served `ZoneMemory` while `provideService(ZONE_SERVICE, ZoneApi)`
+  sat in `appProviders` doing nothing. This is the dangerous one: it fails silently and
+  looks like working software with the wrong data in it.
+- `provideAppInitializer` never ran, so `ConnectionRecovery` was never constructed.
+  `APP_INITIALIZER` is read once by `ApplicationInitStatus` at bootstrap from the root
+  injector, and nothing ever asks a route injector for it. Use
+  `provideEnvironmentInitializer`, which runs when the injector it is declared on is
+  created, and is therefore correct in both the mounted and the standalone case.
+
+**The counter-example that makes it click:** `BrandMark` injects `APP_BRAND` and always
+worked. It is a component, created in the view, whose environment injector *is* the
+route injector, so its lookup starts where the token actually is. Same token, same app.
+The only difference is where the instance is created.
+
+**The same mistake wearing a different costume.** `providedIn: 'root'` is not the only
+way to put a provider somewhere the consumer cannot reach. `AppUiModule` registered the
+translation namespace and `AppLayout` imported it, on the reasoning that a parent route
+component passes its providers down to every page. A standalone component's imported
+NgModule provides **that component's injector**, and a page reached by `loadComponent`
+on a child route is created against the route's environment injector instead, so it
+never saw them. The namespace now ships as `VELISTA_TRANSLATION_PROVIDERS` and is
+installed by `appProviders`. Generally: a route's providers reach every page below it,
+a component's `imports` reach that component, and neither `providedIn: 'root'` nor a
+component `imports` is a way to supply a lazily loaded route.
+
+Each library owns the list of services the app must install, `VELISTA_PLATFORM_PROVIDERS`
+and `VELISTA_DATA_ACCESS_PROVIDERS`, and `appProviders` spreads them. A service that
+moves is added in one place, and the app and every spec pick it up from the same place.
+`apps/velista/src/app/app-providers.spec.ts` builds the child injector exactly as the
+router does and asks it for each one by name, so a service added later without this rule
+fails there immediately rather than in a rendering test.
+
+Still `providedIn: 'root'`, correctly: `BrowserFacade`, `ConnectionState`,
+`ReloadBlocker`, `Mutations`, `RealtimeMemory`. None of them reaches an app supplied
+value, so they lose nothing by being shared and keep zero setup in tests.
+
 ### 9.1 The inventory
 
 | Library | Provides |

@@ -34,7 +34,9 @@ export type ZoneLoadState = 'idle' | 'loading' | 'loaded' | 'failed';
  * shaped like the domain and lives here. Conflating the two is the most likely way this
  * design gets misbuilt.
  */
-@Injectable({ providedIn: 'root' })
+// Provided by the app layer, never root: rule D5, plan 0004 section 9. It reaches
+// something only the app can supply, and the app injector is a child of the root one.
+@Injectable()
 export class ZoneStore {
   private readonly _zones = inject<ZoneServiceI>(ZONE_SERVICE);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);

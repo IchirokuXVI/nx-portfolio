@@ -20,7 +20,9 @@ import { ApiUrl } from './api-url';
  * reports into lives in `platform` so that `ui` can render the blocking screen without
  * importing `data-access` (plan 0004, section 3.2).
  */
-@Injectable({ providedIn: 'root' })
+// Provided by the app layer, never root: rule D5, plan 0004 section 9. It reaches
+// something only the app can supply, and the app injector is a child of the root one.
+@Injectable()
 export class ConnectionRecovery {
   private readonly _http = inject(HttpClient);
   private readonly _urls = inject(ApiUrl);

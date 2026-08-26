@@ -51,7 +51,9 @@ const PREFERS_LIGHT = '(prefers-color-scheme: light)';
  * there rather than throwing, and it matters that it happens at construction
  * rather than on first render, so the first paint is already the right theme.
  */
-@Injectable({ providedIn: 'root' })
+// Provided by the app layer, never root: rule D5, plan 0004 section 9. It reaches
+// something only the app can supply, and the app injector is a child of the root one.
+@Injectable()
 export class ThemeStore {
   /**
    * What the user asked for. `system` is the absence of a choice and is the

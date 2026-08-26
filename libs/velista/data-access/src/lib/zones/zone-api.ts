@@ -30,7 +30,9 @@ import type {
  * `@portfolio/shared/environments`, which describes the **portfolio's** backend, and
  * extraction contract item 6 says this app reads its own environment surface.
  */
-@Injectable({ providedIn: 'root' })
+// Provided by the app layer, never root: rule D5, plan 0004 section 9. It reaches
+// something only the app can supply, and the app injector is a child of the root one.
+@Injectable()
 export class ZoneApi implements ZoneServiceI {
   private readonly _http = inject(HttpClient);
   private readonly _urls = inject(ApiUrl);

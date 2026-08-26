@@ -1,26 +1,16 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import { APP_BRAND, type AppBrand } from '@portfolio/velista/models';
-import { ThemeStore } from '@portfolio/velista/platform';
+import { type AppBrand } from '@portfolio/velista/models';
+import { provideVelistaTesting, ThemeStore } from '@portfolio/velista/platform';
 import { AppLayout } from './app-layout';
-
-const brand: AppBrand = {
-  name: 'Test Product',
-  shortName: 'Test',
-  wordmarkSrc: 'mark.svg',
-  iconSrc: 'icon.svg',
-};
 
 async function createFixture(
   override: Partial<AppBrand> = {}
 ): Promise<ComponentFixture<AppLayout>> {
   await TestBed.configureTestingModule({
     imports: [AppLayout, RokuTranslatorTestingModule.forTesting()],
-    providers: [
-      provideRouter([]),
-      { provide: APP_BRAND, useValue: { ...brand, ...override } },
-    ],
+    providers: [provideRouter([]), provideVelistaTesting({ brand: override })],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(AppLayout);

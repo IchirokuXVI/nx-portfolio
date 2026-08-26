@@ -47,7 +47,9 @@ export type OptionalAuthResult =
  * mid session. `0003` loads zones and opens a realtime connection on the same tick, so
  * this is not a rare race.
  */
-@Injectable({ providedIn: 'root' })
+// Provided by the app layer, never root: rule D5, plan 0004 section 9. It reaches
+// something only the app can supply, and the app injector is a child of the root one.
+@Injectable()
 export class TokenStore {
   private readonly _browser = inject(BrowserFacade);
   private readonly _http = inject(HttpClient);

@@ -26,7 +26,9 @@ import type {
  * not of the transport: if the memory implementation quietly succeeded where the HTTP
  * one reports `guest-account-lost`, the state would only ever be seen in production.
  */
-@Injectable({ providedIn: 'root' })
+// Provided by the app layer, never root: rule D5, plan 0004 section 9. It reaches
+// something only the app can supply, and the app injector is a child of the root one.
+@Injectable()
 export class ZoneMemory implements ZoneServiceI {
   private readonly _tokens = inject(TokenStore);
   private readonly _zones = signal<readonly MyZone[]>(SEED_ZONES);

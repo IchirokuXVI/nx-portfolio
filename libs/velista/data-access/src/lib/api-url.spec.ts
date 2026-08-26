@@ -6,8 +6,13 @@ describe('ApiUrl', () => {
   let urls: ApiUrl;
 
   beforeEach(() => {
+    // `ApiUrl` is listed explicitly because it is not `providedIn: 'root'` any more
+    // (rule D5): it reads `APP_API_CONFIG`, which only the app layer can supply.
+    // The origins here are literals rather than the shared fixture because this spec
+    // is about how a base URL and a path are joined, so seeing both ends helps.
     TestBed.configureTestingModule({
       providers: [
+        ApiUrl,
         {
           provide: APP_API_CONFIG,
           useValue: {
