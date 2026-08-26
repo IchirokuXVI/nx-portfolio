@@ -1,4 +1,10 @@
-import { computed, inject, Injectable, type Signal, signal } from '@angular/core';
+import {
+  computed,
+  inject,
+  Injectable,
+  type Signal,
+  signal,
+} from '@angular/core';
 import {
   APP_BRAND,
   type AppTheme,

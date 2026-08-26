@@ -5,8 +5,13 @@ import {
   inject,
 } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { ThemeStore } from '@portfolio/velista/platform';
+import {
+  ConnectionState,
+  ReloadBlocker,
+  ThemeStore,
+} from '@portfolio/velista/platform';
 import { AppUiModule } from '../app-ui-module';
+import { ConnectionLost } from '../home/state-panels';
 
 /**
  * The app's own root. Every route in this app renders inside it.
@@ -30,7 +35,7 @@ import { AppUiModule } from '../app-ui-module';
  */
 @Component({
   selector: 'lib-app-layout',
-  imports: [AppUiModule, RouterOutlet],
+  imports: [AppUiModule, RouterOutlet, ConnectionLost],
   templateUrl: './app-layout.html',
   styleUrl: './app-layout.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -40,6 +45,28 @@ import { AppUiModule } from '../app-ui-module';
 })
 export class AppLayout {
   private readonly _theme = inject(ThemeStore);
+  private readonly _connection = inject(ConnectionState);
+  private readonly _reload = inject(ReloadBlocker);
+
+  /**
+   * Whether to cover the page with the connection screen.
+   *
+   * Read from `platform`, not from `data-access`: rule D1 forbids this library from
+   * importing the latter, and resolving that is exactly why `platform` exists
+   * (plan 0004, section 3).
+   */
+  readonly offline = this._connection.offline;
+
+  /**
+   * The quiet "Reload now" button.
+   *
+   * Goes through `ReloadBlocker` and bypasses nothing. Somebody tapping it has not
+   * stopped caring about the half-typed field behind the screen, and with no offline
+   * queue in this phase that text is gone for good if the reload wins the race.
+   */
+  reloadNow(): void {
+    this._reload.reloadWhenIdle();
+  }
 
   /**
    * Bound as one string rather than a static `class` plus a separate binding, so

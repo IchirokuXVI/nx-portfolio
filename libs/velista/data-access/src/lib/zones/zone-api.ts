@@ -73,7 +73,10 @@ export class ZoneApi implements ZoneServiceI {
    * the groups on their first. There is no way to detect that after the fact, which is
    * why the check cannot live in the interceptor's error path.
    */
-  async createZone(name: string): Promise<ZoneCreationResult> {
+  async createZone(
+    name: string,
+    username?: string
+  ): Promise<ZoneCreationResult> {
     const authorized = await this._tokens.authorizeOptionalAuthCall();
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
@@ -82,7 +85,11 @@ export class ZoneApi implements ZoneServiceI {
     const body = await firstValueFrom(
       this._http.post<unknown>(
         this._urls.gateway('/v1/zones'),
-        { name },
+        // `username` is omitted rather than sent empty when the caller has no
+        // per-zone name in mind: the backend fills it from their global username,
+        // and the validation pipe runs with `forbidNonWhitelisted`, so a stray
+        // `undefined` is not something to be casual about.
+        username === undefined ? { name } : { name, username },
         { context: operation('zones.create') }
       )
     );
@@ -100,7 +107,7 @@ export class ZoneApi implements ZoneServiceI {
   }
 
   /** `POST /v1/zones/join`. Same handshake and the same rule D3 gate. */
-  async joinZone(joinCode: string): Promise<ZoneJoinResult> {
+  async joinZone(joinCode: string, username?: string): Promise<ZoneJoinResult> {
     const authorized = await this._tokens.authorizeOptionalAuthCall();
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
@@ -109,7 +116,7 @@ export class ZoneApi implements ZoneServiceI {
     const body = await firstValueFrom(
       this._http.post<unknown>(
         this._urls.gateway('/v1/zones/join'),
-        { joinCode },
+        username === undefined ? { joinCode } : { joinCode, username },
         { context: operation('zones.join') }
       )
     );

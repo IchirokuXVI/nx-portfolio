@@ -35,7 +35,8 @@ export function resolveDesiredLocale(params: {
   defaultLocale?: string;
 }): string {
   const supported = params.supportedLocales.map((l) => fmt(l));
-  const isSupported = (locale: string) => !!locale && supported.includes(locale);
+  const isSupported = (locale: string) =>
+    !!locale && supported.includes(locale);
 
   const url = fmt(params.urlLocale);
   if (isSupported(url)) {

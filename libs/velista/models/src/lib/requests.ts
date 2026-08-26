@@ -13,12 +13,27 @@ import type { LineStatus, ListRole, ZoneRole } from './enums';
  * come from the wire, request bodies go to it, and a mapped object is never sent back.
  */
 
+/**
+ * `username` is the name the **other members of that zone** see on this person.
+ *
+ * Optional, and normally omitted. The backend defaults it to the caller's global
+ * username when it is absent (confirmed by the user, 2026-08-26; the field was
+ * required until then, and `POST /v1/zones` rejected a body without it with a 400).
+ * Sending nothing is therefore the right default, and it is what keeps `0003`'s
+ * anonymous entry actions to the single tap the approved mock draws, with no name
+ * step in front of them.
+ *
+ * It stays on the type because a later screen may well want to let someone use a
+ * different name in a particular group.
+ */
 export interface CreateZoneRequest {
   readonly name: string;
+  readonly username?: string;
 }
 
 export interface JoinZoneRequest {
   readonly joinCode: string;
+  readonly username?: string;
 }
 
 export interface UpdateZoneRequest {

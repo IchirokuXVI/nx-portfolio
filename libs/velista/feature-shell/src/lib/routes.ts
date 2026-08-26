@@ -1,7 +1,6 @@
 import { type Route } from '@angular/router';
 import { localeCorrectionGuard } from '@portfolio/localization/rokutranslator-angular';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
-import { ScaffoldPlaceholder } from './scaffold-placeholder/scaffold-placeholder';
 import { APP_USABLE_LOCALES } from './usable-locales';
 
 /**
@@ -33,10 +32,17 @@ export const AppShellRoutes: Route[] = [
     },
     children: [
       {
-        // Home. Replaced by feature-home when plan 0003 is built; the placeholder
-        // exists so the mount point is real and testable from day one.
+        // Home (plan 0003). Public, and adaptive by authentication state rather
+        // than guarded: the anonymous screen is a designed front door, not a
+        // signed-out fallback, so there is nothing here to redirect away from.
+        //
+        // Lazy, so the shell's initial payload carries the layout and the locale
+        // guard but not the page. It is the only route today, which makes the split
+        // look pointless; it stops looking pointless the moment the second one lands,
+        // and adding it later means revisiting every route instead of one.
         path: '',
-        component: ScaffoldPlaceholder,
+        loadComponent: () =>
+          import('@portfolio/velista/feature-home').then((m) => m.HomePage),
       },
     ],
   },

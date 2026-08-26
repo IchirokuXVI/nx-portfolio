@@ -1,0 +1,40 @@
+<header [class.bordered]="bordered()" class="bar">
+  <div class="lockup">
+    <lib-brand-mark class="mark" />
+    <lib-brand-wordmark class="wordmark" />
+  </div>
+
+  @if (signedIn()) {
+    <div class="actions">
+      <button
+        (click)="openSearch.emit()"
+        [attr.aria-label]="'home.action.search' | rokuT"
+        class="icon-button"
+        type="button"
+      >
+        <lib-search-icon class="glyph" />
+      </button>
+
+      <button
+        (click)="account.emit()"
+        [attr.aria-label]="'home.action.account' | rokuT"
+        class="icon-button"
+        type="button"
+      >
+        <span aria-hidden="true" class="avatar">{{
+          accountInitial() ?? '·'
+        }}</span>
+      </button>
+    </div>
+  } @else {
+    <button
+      (click)="changeLocale.emit()"
+      [attr.aria-label]="'home.action.changeLocale' | rokuT"
+      class="locale"
+      type="button"
+    >
+      <span aria-hidden="true">{{ locale() }}</span>
+      <lib-chevron-down-icon class="chevron" />
+    </button>
+  }
+</header>

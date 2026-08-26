@@ -1,0 +1,229 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+}
+
+// A group the caller cannot open yet: pending approval, or being torn down. Dashed
+// rather than dimmed, because dimming reads as "disabled by us" and this is "not
+// ready yet".
+.inert {
+  border-style: dashed;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  width: 100%;
+  text-align: start;
+}
+
+.head-button {
+  padding: 0;
+  background: transparent;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+    border-radius: var(--app-radius-md);
+  }
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--app-tile-size);
+  height: var(--app-tile-size);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-overlay);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-base);
+  font-weight: 600;
+}
+
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-width: 0;
+}
+
+// The name truncates; the badge beside it never shrinks. A long group name must not
+// push the badge, or the Review action below, off a 320px screen.
+.name {
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: var(--app-chip-padding-block) var(--app-space-2);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.badge-owner {
+  border-color: var(--app-status-attention-border);
+  background: var(--app-status-attention-bg);
+  color: var(--app-status-attention-fg);
+}
+
+.badge-pending {
+  border-color: var(--app-status-neutral-border);
+  background: var(--app-status-neutral-bg);
+  color: var(--app-status-neutral-fg);
+}
+
+.counts {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.chevron {
+  flex-shrink: 0;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.waiting {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.attention {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-height: var(--app-attention-row-height);
+  padding: 0 var(--app-space-3);
+  background: var(--app-status-attention-bg);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-radius-md);
+}
+
+.attention-glyph {
+  flex-shrink: 0;
+  font-size: var(--app-icon-sm);
+  color: var(--app-status-attention-fg);
+}
+
+.attention-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+  color: var(--app-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review {
+  flex-shrink: 0;
+  min-height: var(--app-touch-target);
+  padding: 0 var(--app-space-2);
+  background: transparent;
+  border: none;
+  color: var(--app-status-attention-fg);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+    border-radius: var(--app-radius-sm);
+  }
+}
+
+.lists {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list-item + .list-item .list-row,
+.list-item:first-child .list-row {
+  border-top: 1px solid var(--app-border-subtle);
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  width: 100%;
+  min-height: var(--app-list-row-height);
+  padding: 0;
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+    border-radius: var(--app-radius-sm);
+  }
+}
+
+.list-glyph {
+  flex-shrink: 0;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+.list-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-progress {
+  flex-shrink: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-status-success-fg);
+}
+
+.list-meta {
+  flex-shrink: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}

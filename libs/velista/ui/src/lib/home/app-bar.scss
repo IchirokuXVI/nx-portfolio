@@ -1,0 +1,91 @@
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4) var(--app-space-5) var(--app-space-3);
+}
+
+// The signed-in header sits on a divider; the anonymous one is deliberately airy,
+// because that screen is mostly whitespace and a rule across the top closes it in.
+.bordered {
+  border-bottom: 1px solid var(--app-border-subtle);
+}
+
+.lockup {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-width: 0;
+}
+
+// The mark is sized by font-size, so both halves of the lockup scale together at
+// 200% zoom without either being pinned to a pixel value.
+.mark {
+  font-size: var(--app-icon-lg);
+  color: var(--app-action-bg);
+}
+
+.wordmark {
+  font-size: var(--app-text-xl);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+}
+
+.icon-button,
+.locale {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--app-text-secondary);
+  font: inherit;
+  cursor: pointer;
+
+  // Plan 0003 section 7: every control is at least 44 by 44, the icon buttons in
+  // the app bar included.
+  min-width: var(--app-touch-target);
+  min-height: var(--app-touch-target);
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+    border-radius: var(--app-radius-md);
+  }
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--app-avatar-lg);
+  height: var(--app-avatar-lg);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-overlay);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+}
+
+.locale {
+  gap: var(--app-space-2);
+  padding: 0 var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+}
+
+.chevron {
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}

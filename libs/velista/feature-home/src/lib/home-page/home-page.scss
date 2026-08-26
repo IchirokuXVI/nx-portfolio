@@ -1,0 +1,94 @@
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100%;
+}
+
+// The signed-in screen scrolls its content between a fixed header and a fixed action
+// bar. The anonymous screen does not scroll at all: it is deliberately one screen,
+// on the theory that the entry actions matter more than persuasion (plan 0003,
+// open question 3).
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+  flex: 1;
+  padding: var(--app-space-5) var(--app-space-5) var(--app-space-6);
+  overflow-y: auto;
+}
+
+.spacer {
+  flex: 1;
+  min-block-size: var(--app-space-6);
+}
+
+.zones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.zones-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+}
+
+.section-label {
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.new-zone,
+.empty-primary,
+.empty-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--app-touch-target);
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.new-zone {
+  padding: 0 var(--app-space-2);
+  background: transparent;
+  border: none;
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+
+.empty-primary {
+  min-block-size: var(--app-button-height);
+  border: none;
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font-size: var(--app-text-base);
+  font-weight: 600;
+}
+
+.empty-secondary {
+  min-block-size: var(--app-button-height);
+  background: transparent;
+  border: 1px solid var(--app-border-strong);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-base);
+  font-weight: 500;
+}

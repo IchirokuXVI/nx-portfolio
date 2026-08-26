@@ -1,0 +1,146 @@
+<!--
+  The card is a <div>, not a button, because it contains its own controls. Its header
+  is the tap target when the zone is open-able, and the list rows below are siblings of
+  that target rather than children of it (plan 0003, section 7).
+-->
+<div [class.inert]="!zone().tappable" class="card">
+  @if (zone().tappable) {
+    <button
+      (click)="open.emit(zone().id)"
+      class="head head-button"
+      type="button"
+    >
+      <ng-container *ngTemplateOutlet="head" />
+      <lib-chevron-right-icon class="chevron" />
+    </button>
+  } @else {
+    <!--
+      Not tappable: a pending membership has nothing to show yet, and a zone that is
+      MARKED_FOR_DELETION or carries a status this build does not know gets the same
+      plain, non-tappable treatment. Plan 0003 open question 2 asks only that the page
+      not break on it, and a card that cannot be opened is how that is honoured.
+    -->
+    <div class="head">
+      <ng-container *ngTemplateOutlet="head" />
+    </div>
+  }
+
+  @if (zone().waitingOn; as owner) {
+    <p class="waiting">
+      {{ 'home.pending.waiting' | rokuT: { name: owner } }}
+    </p>
+  }
+
+  @if (zone().joinRequests; as requests) {
+    <div class="attention">
+      <lib-member-add-icon class="attention-glyph" />
+
+      <!--
+        Two keys, never one with a suffix appended. The verb agrees with the count in
+        English ("wants" / "want") and differently again in Spanish, and the count
+        excludes the person already named (plan 0003, section 4.1).
+      -->
+      <span class="attention-text">
+        @if (requests.othersCount === 0) {
+          {{
+            'home.request.wantsToJoin.one' | rokuT: { name: requests.firstName }
+          }}
+        } @else {
+          {{
+            'home.request.wantsToJoin.many'
+              | rokuT: { name: requests.firstName, count: requests.othersCount }
+          }}
+        }
+      </span>
+
+      <button
+        (click)="reviewRequests.emit(zone().id)"
+        class="review"
+        type="button"
+      >
+        {{ 'home.request.review' | rokuT }}
+      </button>
+    </div>
+  }
+
+  @if (zone().lists.length > 0) {
+    <ul class="lists">
+      @for (list of zone().lists; track list.id) {
+        <li class="list-item">
+          <button
+            (click)="openList.emit(list.id)"
+            class="list-row"
+            type="button"
+          >
+            <lib-list-lines-icon class="list-glyph" />
+            <span class="list-name">{{ list.name }}</span>
+
+            @if (
+              list.readyCount !== undefined && list.lineCount !== undefined
+            ) {
+              <span class="list-progress">{{
+                'home.progress.ready'
+                  | rokuT: { ready: list.readyCount, total: list.lineCount }
+              }}</span>
+            } @else if (list.lineCount !== undefined) {
+              <span class="list-meta">{{
+                'home.list.items' | rokuT: { count: list.lineCount }
+              }}</span>
+            }
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</div>
+
+<ng-template #head>
+  <span aria-hidden="true" class="tile">{{ zone().initial }}</span>
+
+  <span class="titles">
+    <span class="name-row">
+      <span class="name">{{ zone().name }}</span>
+
+      <!--
+        Keys are written out rather than built by concatenating the enum value onto a
+        prefix. A key assembled at runtime cannot be found by grepping the source,
+        which is how a translator's tooling and the next developer both find them.
+      -->
+      @if (zone().membership === 'PENDING') {
+        <span class="badge badge-pending">{{
+          'zone.status.pending' | rokuT
+        }}</span>
+      } @else {
+        @switch (zone().role) {
+          @case ('OWNER') {
+            <span class="badge badge-owner">{{
+              'zone.role.owner' | rokuT
+            }}</span>
+          }
+          @case ('ADMIN') {
+            <span class="badge">{{ 'zone.role.admin' | rokuT }}</span>
+          }
+          @default {
+            <span class="badge">{{ 'zone.role.member' | rokuT }}</span>
+          }
+        }
+      }
+    </span>
+
+    @if (zone().memberCount !== undefined || zone().listCount !== undefined) {
+      <span class="counts">
+        @if (zone().memberCount !== undefined) {
+          {{ 'home.zone.members' | rokuT: { count: zone().memberCount } }}
+        }
+        @if (
+          zone().memberCount !== undefined && zone().listCount !== undefined
+        ) {
+          <span aria-hidden="true"> &middot; </span>
+        }
+        @if (zone().listCount !== undefined) {
+          {{ 'home.zone.lists' | rokuT: { count: zone().listCount } }}
+        }
+      </span>
+    }
+  </span>
+</ng-template>

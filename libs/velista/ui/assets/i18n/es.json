@@ -3,5 +3,100 @@
   "vocabulary": {
     "zone": "Grupo",
     "zones": "Grupos"
+  },
+  "zone": {
+    "role": {
+      "owner": "PROPIETARIO",
+      "admin": "ADMIN",
+      "member": "MIEMBRO"
+    },
+    "status": {
+      "pending": "PENDIENTE"
+    }
+  },
+  "line": {
+    "status": {
+      "notAvailable": "NO DISPONIBLE"
+    }
+  },
+  "connection": {
+    "lost": {
+      "title": "Te has quedado sin conexión",
+      "body": "Comprueba tu wifi o tus datos móviles. Esta página se recargará sola en cuanto vuelvas a tener conexión.",
+      "reload": "Recargar ahora"
+    }
+  },
+  "home": {
+    "loading": "Cargando tus grupos",
+    "or": "O",
+    "hero": {
+      "headline": "Una lista. Todos al día.",
+      "body": "Listas de la compra compartidas con la gente con la que compras de verdad. Los cambios aparecen en el móvil de todos al instante."
+    },
+    "preview": {
+      "listName": "Compra semanal",
+      "zoneName": "Casa"
+    },
+    "action": {
+      "createZone": "Crear un grupo",
+      "joinCode": "Unirse con un código",
+      "google": "Continuar con Google",
+      "emailSignIn": "Entrar con correo",
+      "newZone": "Nuevo grupo",
+      "newList": "Nueva lista",
+      "search": "Buscar",
+      "account": "Tu cuenta",
+      "changeLocale": "Cambiar idioma"
+    },
+    "zoneExplainer": "Un grupo es la casa o los compañeros de piso con quienes compartes listas. Puedes empezar sin cuenta.",
+    "section": {
+      "resume": "Sigue donde lo dejaste",
+      "zones": "Tus grupos"
+    },
+    "zone": {
+      "members_one": "{{count}} miembro",
+      "members_other": "{{count}} miembros",
+      "lists_one": "{{count}} lista",
+      "lists_other": "{{count}} listas"
+    },
+    "list": {
+      "items_one": "{{count}} artículo",
+      "items_other": "{{count}} artículos"
+    },
+    "progress": {
+      "ready": "{{ready}} de {{total}} listos"
+    },
+    "presence": {
+      "shopping": "{{names}} están comprando ahora",
+      "shoppingCount_one": "{{count}} comprando ahora",
+      "shoppingCount_other": "{{count}} comprando ahora"
+    },
+    "guest": {
+      "title": "Estás comprando como invitado",
+      "body": "Este móvil es lo único que guarda tu cuenta. Añade un correo o Google para no perder tus grupos y tus listas si lo pierdes.",
+      "secure": "Proteger mi cuenta",
+      "later": "Ahora no"
+    },
+    "pending": {
+      "waiting": "Esperando a que te dejen entrar"
+    },
+    "request": {
+      "wantsToJoin": {
+        "one": "{{name}} quiere unirse",
+        "many": "{{name}} y {{count}} más quieren unirse"
+      },
+      "review": "Revisar"
+    },
+    "empty": {
+      "title": "Todavía no tienes grupos",
+      "body": "Un grupo es la casa o los compañeros de piso con quienes compartes listas. Crea uno o únete al de alguien con su código."
+    },
+    "error": {
+      "title": "No hemos podido cargar tus grupos",
+      "body": "Algo ha ido mal por nuestra parte. No se ha perdido nada de lo que guardaste.",
+      "retry": "Reintentar",
+      "reference": "ref {{correlationId}}",
+      "copyReference": "Copiar referencia"
+    }
   }
 }

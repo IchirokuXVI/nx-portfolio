@@ -1,0 +1,110 @@
+@let page = state();
+
+<div [class.anonymous]="page.kind === 'anonymous'" class="page">
+  <lib-app-bar
+    (account)="account()"
+    (changeLocale)="changeLocale()"
+    (openSearch)="search()"
+    [accountInitial]="accountInitial()"
+    [bordered]="page.kind !== 'anonymous'"
+    [signedIn]="page.kind !== 'anonymous'"
+  />
+
+  @switch (page.kind) {
+    @case ('anonymous') {
+      <lib-home-hero />
+
+      <lib-list-preview-card
+        [lines]="previewLines"
+        [listName]="'home.preview.listName' | rokuT"
+        [shoppingNow]="2"
+        [zoneName]="'home.preview.zoneName' | rokuT"
+      />
+
+      <div class="spacer"></div>
+
+      <lib-auth-actions
+        (continueWithGoogle)="continueWithGoogle()"
+        (createZone)="createZone()"
+        (joinZone)="joinZone()"
+        (signInWithEmail)="signInWithEmail()"
+      />
+    }
+
+    @case ('loading') {
+      <div class="content">
+        <lib-zone-skeleton [count]="2" />
+      </div>
+    }
+
+    @case ('error') {
+      <div class="content">
+        <lib-error-state
+          (copyReference)="copyReference($event)"
+          (retry)="retry()"
+          [body]="'home.error.body' | rokuT"
+          [correlationId]="page.correlationId"
+          [title]="'home.error.title' | rokuT"
+        />
+      </div>
+    }
+
+    @case ('empty') {
+      <div class="content">
+        @if (page.guest) {
+          <lib-guest-upgrade-banner
+            (dismiss)="dismissGuestBanner()"
+            (secure)="secureAccount()"
+          />
+        }
+
+        <lib-empty-state
+          [body]="'home.empty.body' | rokuT"
+          [title]="'home.empty.title' | rokuT"
+        >
+          <button (click)="createZone()" class="empty-primary" type="button">
+            {{ 'home.action.createZone' | rokuT }}
+          </button>
+          <button (click)="joinZone()" class="empty-secondary" type="button">
+            {{ 'home.action.joinCode' | rokuT }}
+          </button>
+        </lib-empty-state>
+      </div>
+    }
+
+    @case ('populated') {
+      <div class="content">
+        @if (page.guest) {
+          <lib-guest-upgrade-banner
+            (dismiss)="dismissGuestBanner()"
+            (secure)="secureAccount()"
+          />
+        }
+
+        @if (page.resume; as resume) {
+          <lib-resume-list-card (open)="openList($event)" [list]="resume" />
+        }
+
+        <section class="zones">
+          <div class="zones-head">
+            <h2 class="section-label">{{ 'home.section.zones' | rokuT }}</h2>
+            <button (click)="createZone()" class="new-zone" type="button">
+              {{ 'home.action.newZone' | rokuT }}
+            </button>
+          </div>
+
+          @for (zone of page.zones; track zone.id) {
+            <lib-zone-card
+              (open)="openZone($event)"
+              (openList)="openList($event)"
+              (reviewRequests)="reviewRequests($event)"
+              [zone]="zone"
+            />
+          }
+        </section>
+      </div>
+
+      <lib-bottom-action-bar (joinZone)="joinZone()" (newList)="newList()" />
+    }
+  }
+</div>
