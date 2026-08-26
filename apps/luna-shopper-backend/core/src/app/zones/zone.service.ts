@@ -10,7 +10,10 @@ import {
   type ListMyZonesRequest,
   type MembershipActionRequest,
   type MembershipView,
+  type MyZoneCounts,
+  type MyZoneCountsRequest,
   type MyZoneOrder,
+  type MyZoneView,
   type SetRoleRequest,
   type UpdateZoneRequest,
   type ZoneIdRequest,
@@ -36,6 +39,13 @@ import { Zone, ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { generateJoinCode } from './join-code';
 import { ZoneAuthzService } from './zone-authz.service';
+import { ZoneCountsService } from './zone-counts.service';
+import {
+  readZoneCounts,
+  readZoneListsPreview,
+  type SummaryRow,
+} from './zone-summary.reader';
+import { selectZoneSummary } from './zone-summary.sql';
 import { toMembershipView, toMyZoneView, toZoneView } from './zone.mappers';
 
 /** Postgres unique-violation error code, raised on a username/join-code clash. */
@@ -55,6 +65,7 @@ export class ZoneService {
     @InjectRepository(ZoneMembership)
     private readonly memberships: Repository<ZoneMembership>,
     private readonly authz: ZoneAuthzService,
+    private readonly counts: ZoneCountsService,
     private readonly events: CoreEventsPublisher
   ) {}
 
@@ -133,6 +144,7 @@ export class ZoneService {
       existing.username = req.username;
       const saved = await this.saveHandlingUsername(existing);
       this.emitMember(RealtimeEvent.MemberJoined, saved);
+      await this.counts.emitZoneCounts(zone.id);
       return toMembershipView(saved);
     }
 
@@ -146,6 +158,7 @@ export class ZoneService {
       })
     );
     this.emitMember(RealtimeEvent.MemberJoined, saved);
+    await this.counts.emitZoneCounts(zone.id);
     return toMembershipView(saved);
   }
 
@@ -305,22 +318,28 @@ export class ZoneService {
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as MyZoneCursor | undefined;
 
-    const qb = this.memberships
-      .createQueryBuilder('m')
-      .innerJoinAndSelect('m.zone', 'z')
-      .where('m."userId" = :userId', { userId: req.userId })
-      .andWhere('m.status IN (:...statuses)', {
-        statuses: [MembershipStatus.APPROVED, MembershipStatus.PENDING],
-      })
-      .take(limit + 1);
+    const qb = selectZoneSummary(
+      this.memberships
+        .createQueryBuilder('m')
+        .innerJoinAndSelect('m.zone', 'z')
+        .where('m."userId" = :userId', { userId: req.userId })
+        .andWhere('m.status IN (:...statuses)', {
+          statuses: [MembershipStatus.APPROVED, MembershipStatus.PENDING],
+        })
+        .take(limit + 1)
+    );
 
     this.applyOrder(qb, order, cursor);
 
-    const memberships = await qb.getMany();
+    // The summary arrives as raw columns beside the entities, so this reads the
+    // page with `getRawAndEntities` rather than `getMany` (plan 0017, 4.4). The
+    // raw rows are keyed by membership id rather than trusted to be positional.
+    const { entities: memberships, raw } = await qb.getRawAndEntities();
+    const summaries = this.indexSummaries(raw);
     const hasMore = memberships.length > limit;
     const page = memberships.slice(0, limit);
 
-    const items = page.map((m) => toMyZoneView(m.zone, m));
+    const items = page.map((m) => this.toSummaryView(m, summaries.get(m.id)));
     const last = page[page.length - 1];
     const nextCursor =
       hasMore && last
@@ -332,6 +351,93 @@ export class ZoneService {
         : null;
 
     return { items, nextCursor };
+  }
+
+  /**
+   * One zone with its summary (plan 0017, section 3.6), so a detail screen does
+   * not have to page through `listMine` to find its own numbers. A PENDING
+   * applicant may see the zone's name and status, and the query gives them an
+   * empty preview and a `listCount` of zero because they hold no membership
+   * through which to have list access.
+   */
+  async get(req: ZoneIdRequest): Promise<MyZoneView> {
+    const qb = selectZoneSummary(
+      this.memberships
+        .createQueryBuilder('m')
+        .innerJoinAndSelect('m.zone', 'z')
+        .where('m."userId" = :userId', { userId: req.userId })
+        .andWhere('m."zoneId" = :zoneId', { zoneId: req.zoneId })
+        .andWhere('m.status IN (:...statuses)', {
+          statuses: [MembershipStatus.APPROVED, MembershipStatus.PENDING],
+        })
+    );
+
+    const { entities, raw } = await qb.getRawAndEntities();
+    const membership = entities[0];
+    if (!membership) {
+      // Deliberately not "forbidden": a caller with no membership must not be
+      // able to tell an existing zone from a missing one.
+      throw new NotFoundException('Zone not found');
+    }
+    return this.toSummaryView(
+      membership,
+      this.indexSummaries(raw).get(membership.id)
+    );
+  }
+
+  /**
+   * How many zones the caller owns, joined, and is waiting on (plan 0017,
+   * section 3.5). `total` excludes `pending` on purpose: a zone the caller has
+   * merely asked to join is not one of their zones, so a header never claims a
+   * zone they cannot open.
+   */
+  async countsMine(req: MyZoneCountsRequest): Promise<MyZoneCounts> {
+    const row = await this.memberships
+      .createQueryBuilder('m')
+      .select(
+        `count(*) FILTER (WHERE m.status = :approved AND m.role = :owner)::int`,
+        'owned'
+      )
+      .addSelect(
+        `count(*) FILTER (WHERE m.status = :approved AND m.role <> :owner)::int`,
+        'joined'
+      )
+      .addSelect(`count(*) FILTER (WHERE m.status = :pending)::int`, 'pending')
+      .where('m."userId" = :userId', { userId: req.userId })
+      .setParameters({
+        approved: MembershipStatus.APPROVED,
+        pending: MembershipStatus.PENDING,
+        owner: ZoneRole.OWNER,
+      })
+      .getRawOne<{ owned: number; joined: number; pending: number }>();
+
+    const owned = row?.owned ?? 0;
+    const joined = row?.joined ?? 0;
+    return { owned, joined, pending: row?.pending ?? 0, total: owned + joined };
+  }
+
+  /** Keys the raw summary rows by membership id (`m_id` in the raw result). */
+  private indexSummaries(raw: unknown[]): Map<string, SummaryRow> {
+    const byId = new Map<string, SummaryRow>();
+    for (const row of raw as Record<string, unknown>[]) {
+      const id = row['m_id'];
+      if (typeof id === 'string') {
+        byId.set(id, row);
+      }
+    }
+    return byId;
+  }
+
+  private toSummaryView(
+    membership: ZoneMembership,
+    row: SummaryRow
+  ): MyZoneView {
+    return toMyZoneView(
+      membership.zone,
+      membership,
+      readZoneCounts(row),
+      readZoneListsPreview(row)
+    );
   }
 
   private resolveOrder(order?: string): MyZoneOrder {

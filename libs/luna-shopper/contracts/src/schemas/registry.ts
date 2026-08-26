@@ -24,6 +24,7 @@ import {
   realtimeMessageContracts,
   realtimeSchemas,
 } from './messages/realtime.schemas';
+import { statsMessageContracts, statsSchemas } from './messages/stats.schemas';
 import { zoneMessageContracts, zoneSchemas } from './messages/zone.schemas';
 
 export interface MessageContract {
@@ -40,6 +41,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...mergeMessageContracts,
   ...realtimeMessageContracts,
   ...catalogMessageContracts,
+  ...statsMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -59,6 +61,7 @@ export const allSchemas: JsonSchema[] = [
   ...mergeSchemas,
   ...realtimeSchemas,
   ...catalogSchemas,
+  ...statsSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
 ];

@@ -23,6 +23,7 @@ import { IdentityController } from './identity/identity.controller';
 import { IdentityService } from './identity/identity.service';
 import { MailModule } from './mail/mail.module';
 import { PasswordService } from './password/password.service';
+import { StatsService } from './identity/stats.service';
 import { OrphanUserReaperService } from './reaper/orphan-user-reaper.service';
 import { TokenService } from './tokens/token.service';
 
@@ -95,6 +96,7 @@ import { TokenService } from './tokens/token.service';
   controllers: [IdentityController],
   providers: [
     IdentityService,
+    StatsService,
     TokenService,
     PasswordService,
     IdentityEventsPublisher,

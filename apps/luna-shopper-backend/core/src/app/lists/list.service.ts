@@ -4,6 +4,7 @@ import {
   ListRole,
   RealtimeEvent,
   ZoneRole,
+  type ListCounts,
   type CreateListRequest,
   type ListIdRequest,
   type ListListsRequest,
@@ -22,8 +23,13 @@ import { DataSource, Repository, type SelectQueryBuilder } from 'typeorm';
 import { ListAccess, ShoppingList } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { ZoneCountsService } from '../zones/zone-counts.service';
+import {
+  LIST_COUNTS_COLUMN,
+  LIST_COUNTS_SQL,
+} from '../zones/zone-summary.sql';
 import { ListAccessService } from './list-access.service';
-import { toListView } from './list.mappers';
+import { EMPTY_LIST_COUNTS, toListView } from './list.mappers';
 
 interface ListCursor {
   order: ListOrder;
@@ -41,8 +47,23 @@ export class ListService {
     private readonly access: Repository<ListAccess>,
     private readonly authz: ZoneAuthzService,
     private readonly listAccess: ListAccessService,
+    private readonly zoneCounts: ZoneCountsService,
     private readonly events: CoreEventsPublisher
   ) {}
+
+  /**
+   * The line totals for one list (plan 0017, section 3.4), from the same
+   * aggregate the zone preview uses. Needed by the single list mutations, which
+   * return a `ListView` without having run a listing query.
+   */
+  private async countsFor(listId: string): Promise<ListCounts> {
+    const row = await this.lists
+      .createQueryBuilder('l')
+      .select(LIST_COUNTS_SQL, LIST_COUNTS_COLUMN)
+      .where('l.id = :listId', { listId })
+      .getRawOne<Record<string, ListCounts | null>>();
+    return row?.[LIST_COUNTS_COLUMN] ?? EMPTY_LIST_COUNTS;
+  }
 
   /**
    * Create a list (plan 0007, section 2): any approved member of the zone. The
@@ -69,8 +90,10 @@ export class ListService {
       return list;
     });
 
-    const view = toListView(list);
+    // A list with no lines yet, so its counts are known without a query.
+    const view = toListView(list, EMPTY_LIST_COUNTS);
     this.events.emit(RealtimeEvent.ListCreated, req.zoneId, view, view.id);
+    await this.zoneCounts.emitZoneCounts(req.zoneId);
     return view;
   }
 
@@ -118,7 +141,10 @@ export class ListService {
     if (req.name !== undefined) {
       list.name = req.name;
     }
-    const view = toListView(await this.lists.save(list));
+    const view = toListView(
+      await this.lists.save(list),
+      await this.countsFor(req.listId)
+    );
     this.events.emit(RealtimeEvent.ListUpdated, list.zoneId, view, view.id);
     return view;
   }
@@ -135,6 +161,7 @@ export class ListService {
       },
       req.listId
     );
+    await this.zoneCounts.emitZoneCounts(list.zoneId);
     return { id: req.listId };
   }
 
@@ -153,6 +180,7 @@ export class ListService {
 
     const qb = this.lists
       .createQueryBuilder('l')
+      .addSelect(LIST_COUNTS_SQL, LIST_COUNTS_COLUMN)
       .where('l."zoneId" = :zoneId', { zoneId: req.zoneId })
       .take(limit + 1);
 
@@ -168,10 +196,15 @@ export class ListService {
 
     this.applyOrder(qb, order, cursor);
 
-    const rows = await qb.getMany();
+    // The counts ride this query as a raw column, so the page costs one round
+    // trip whatever its size (plan 0017, section 4.2).
+    const { entities: rows, raw } = await qb.getRawAndEntities();
+    const countsById = this.indexCounts(raw);
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
-    const items = page.map(toListView);
+    const items = page.map((list) =>
+      toListView(list, countsById.get(list.id) ?? EMPTY_LIST_COUNTS)
+    );
     const last = page[page.length - 1];
     const nextCursor =
       hasMore && last
@@ -183,6 +216,19 @@ export class ListService {
         : null;
 
     return { items, nextCursor };
+  }
+
+  /** Keys the raw count rows by list id (`l_id` in the raw result). */
+  private indexCounts(raw: unknown[]): Map<string, ListCounts> {
+    const byId = new Map<string, ListCounts>();
+    for (const row of raw as Record<string, unknown>[]) {
+      const id = row['l_id'];
+      const counts = row[LIST_COUNTS_COLUMN] as ListCounts | null | undefined;
+      if (typeof id === 'string' && counts) {
+        byId.set(id, counts);
+      }
+    }
+    return byId;
   }
 
   private resolveOrder(order?: string): ListOrder {

@@ -7,6 +7,9 @@ import {
   type ListMyZonesRequest,
   type MembershipActionRequest,
   type MembershipView,
+  type MyZoneCounts,
+  type MyZoneCountsRequest,
+  type MyZoneView,
   type SetRoleRequest,
   type UpdateZoneRequest,
   type ZoneIdRequest,
@@ -69,5 +72,15 @@ export class ZoneController {
   @MessagePattern(ZONE_PATTERNS.listMine)
   listMine(@Payload() req: ListMyZonesRequest): Promise<ZonePage> {
     return this.zones.listMine(req);
+  }
+
+  @MessagePattern(ZONE_PATTERNS.get)
+  get(@Payload() req: ZoneIdRequest): Promise<MyZoneView> {
+    return this.zones.get(req);
+  }
+
+  @MessagePattern(ZONE_PATTERNS.countsMine)
+  countsMine(@Payload() req: MyZoneCountsRequest): Promise<MyZoneCounts> {
+    return this.zones.countsMine(req);
   }
 }

@@ -9,6 +9,7 @@ import { runOnce } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { Zone, ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { ZoneCountsService } from '../zones/zone-counts.service';
 import { toMembershipView, toZoneView } from '../zones/zone.mappers';
 import { anonymizedUsername } from './anonymize';
 import { ProcessedEventStore } from './idempotency.store';
@@ -28,6 +29,7 @@ export class AccountDeletionService {
     @InjectRepository(ZoneMembership)
     private readonly memberships: Repository<ZoneMembership>,
     private readonly events: CoreEventsPublisher,
+    private readonly zoneCounts: ZoneCountsService,
     private readonly store: ProcessedEventStore
   ) {}
 
@@ -68,6 +70,9 @@ export class AccountDeletionService {
         membership.zoneId,
         toMembershipView(saved)
       );
+      // The member count drops with no user action at all, so the zone's open
+      // screens need telling (plan 0017, section 9).
+      await this.zoneCounts.emitZoneCounts(membership.zoneId);
     }
   }
 

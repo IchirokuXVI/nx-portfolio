@@ -36,6 +36,16 @@ export class CoreAccessClient {
     return this.check(REALTIME_ACCESS_PATTERNS.checkZone, req);
   }
 
+  /**
+   * Whether the caller governs the zone, which gates the `zone:{id}:staff` room
+   * (plan 0017, section 9). Core answers from the same rule that decides whether
+   * a REST summary fills the governance fields.
+   */
+  checkZoneStaff(userId: string, zoneId: string): Promise<boolean> {
+    const req: CheckZoneAccessRequest = { userId, zoneId };
+    return this.check(REALTIME_ACCESS_PATTERNS.checkZoneStaff, req);
+  }
+
   checkList(userId: string, listId: string): Promise<boolean> {
     const req: CheckListAccessRequest = { userId, listId };
     return this.check(REALTIME_ACCESS_PATTERNS.checkList, req);

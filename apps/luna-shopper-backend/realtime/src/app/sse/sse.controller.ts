@@ -9,6 +9,7 @@ import {
 import {
   listRoom,
   zoneRoom,
+  zoneStaffRoom,
   type AccessTokenClaims,
 } from '@portfolio/luna-shopper/contracts';
 import { ForbiddenException } from '@portfolio/luna-shopper/platform';
@@ -36,14 +37,28 @@ export class SseController {
     private readonly relay: EventRelayService
   ) {}
 
+  /**
+   * The zone stream also carries the governance side room when the caller
+   * governs the zone (plan 0017, section 9), so an owner watching over SSE sees
+   * the same join request counts an owner on a socket does. Plan 0009's
+   * guarantee is that the two transports deliver identical payloads, and a
+   * transport that silently dropped a room would break it.
+   */
   @Sse('zones/:id/stream')
   zoneStream(
     @Param('id') zoneId: string,
     @Req() req: Request,
     @Query('token') token?: string
   ): Observable<MessageEvent> {
-    return this.authorizedStream(req, token, zoneRoom(zoneId), (userId) =>
-      this.coreAccess.checkZone(userId, zoneId)
+    return this.authorizedStream(
+      req,
+      token,
+      [zoneRoom(zoneId)],
+      (userId) => this.coreAccess.checkZone(userId, zoneId),
+      async (userId) =>
+        (await this.coreAccess.checkZoneStaff(userId, zoneId))
+          ? [zoneStaffRoom(zoneId)]
+          : []
     );
   }
 
@@ -53,7 +68,7 @@ export class SseController {
     @Req() req: Request,
     @Query('token') token?: string
   ): Observable<MessageEvent> {
-    return this.authorizedStream(req, token, listRoom(listId), (userId) =>
+    return this.authorizedStream(req, token, [listRoom(listId)], (userId) =>
       this.coreAccess.checkList(userId, listId)
     );
   }
@@ -66,13 +81,19 @@ export class SseController {
   private authorizedStream(
     req: Request,
     queryToken: string | undefined,
-    room: string,
-    check: (userId: string) => Promise<boolean>
+    rooms: string[],
+    check: (userId: string) => Promise<boolean>,
+    extraRooms?: (userId: string) => Promise<string[]>
   ): Observable<MessageEvent> {
     return defer(() => this.authorize(req, queryToken, check)).pipe(
-      switchMap(() =>
+      switchMap(async (claims) =>
+        extraRooms ? [...rooms, ...(await extraRooms(claims.sub))] : rooms
+      ),
+      switchMap((subscribed) =>
         this.relay.stream$.pipe(
-          filter((message) => message.rooms.includes(room)),
+          filter((message) =>
+            message.rooms.some((room) => subscribed.includes(room))
+          ),
           map((message) => ({
             type: message.event,
             data: message.payload as string | object,

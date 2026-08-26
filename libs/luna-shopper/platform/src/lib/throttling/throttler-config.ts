@@ -44,4 +44,11 @@ export const THROTTLE_LIMITS = {
   verifyResend: { [DEFAULT_BUCKET]: { ttl: minutes(10), limit: 3 } },
   /** Join code redemption (enumeration protection). */
   joinCode: { [DEFAULT_BUCKET]: { ttl: seconds(30), limit: 5 } },
+  /**
+   * The public platform totals (plan 0017, section 8.2). Tighter than the
+   * default because an unauthenticated endpoint is the cheapest thing to hammer,
+   * and loose enough that a real visitor never meets it: the gateway serves this
+   * from a 60 second cache, so a client polling faster than this gains nothing.
+   */
+  publicStats: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 30 } },
 } as const;

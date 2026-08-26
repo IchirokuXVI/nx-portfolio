@@ -1,7 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ZoneRole } from '@portfolio/luna-shopper/contracts';
-import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import {
+  MEMBER_ORDERS,
+  MembershipStatus,
+  ZoneRole,
+} from '@portfolio/luna-shopper/contracts';
+import { PageQueryDto } from '@portfolio/luna-shopper/platform';
+import { Transform } from 'class-transformer';
+import {
+  IsArray,
   IsEnum,
   IsIn,
   IsObject,
@@ -69,4 +75,30 @@ export class ListMyZonesQueryDto extends PageQueryDto {
   @IsOptional()
   @IsIn(['name', 'joined', 'recent'])
   order?: string;
+}
+
+/**
+ * Cursor, order and status filter for a zone's member listing (plan 0017,
+ * section 5). `statuses` accepts a repeated or comma separated query parameter;
+ * anything other than APPROVED is refused by core unless the caller governs the
+ * zone, and that refusal belongs there rather than here (section 6).
+ */
+export class ListMembersQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({ enum: MEMBER_ORDERS })
+  @IsOptional()
+  @IsIn([...MEMBER_ORDERS])
+  order?: string;
+
+  @ApiPropertyOptional({
+    enum: MembershipStatus,
+    isArray: true,
+    description: 'Defaults to APPROVED. Other values need owner or admin.',
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value
+  )
+  @IsArray()
+  @IsEnum(MembershipStatus, { each: true })
+  statuses?: MembershipStatus[];
 }

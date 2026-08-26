@@ -13,6 +13,15 @@ export function zoneRoom(zoneId: string): string {
   return `${RealtimeRoom.Zone}:${zoneId}`;
 }
 
+/**
+ * Builds the `zone:{zoneId}:staff` room name (plan 0017, section 9): the same
+ * zone, restricted to the owners and admins who may see governance data. It is
+ * derived from {@link zoneRoom} so the two can never drift apart.
+ */
+export function zoneStaffRoom(zoneId: string): string {
+  return `${zoneRoom(zoneId)}:staff`;
+}
+
 /** Builds the `list:{listId}` room name. */
 export function listRoom(listId: string): string {
   return `${RealtimeRoom.List}:${listId}`;
@@ -27,6 +36,12 @@ export function listRoom(listId: string): string {
  */
 export const REALTIME_ACCESS_PATTERNS = {
   checkZone: 'realtime.checkZoneAccess',
+  /**
+   * Gates the `zone:{zoneId}:staff` room (plan 0017, section 9): core answers
+   * yes only for an APPROVED OWNER or ADMIN, which is the same rule that decides
+   * whether the governance fields are filled over REST.
+   */
+  checkZoneStaff: 'realtime.checkZoneStaffAccess',
   checkList: 'realtime.checkListAccess',
 } as const;
 
