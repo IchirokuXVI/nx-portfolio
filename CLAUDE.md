@@ -80,7 +80,7 @@ The shell's top-level route is `:locale` (e.g. `/en/damoclesSword/...`), handled
 
 - Namespaces are registered per-locale via lazy `LoaderFunction`s (`addNamespace`/`addTranslations`), so each remote can contribute its own translation JSON (see `libs/damoclesSword/ui/assets/i18n/*.json`) without the shell knowing about it upfront.
 - `libs/shared/localization/rokutranslator-angular` wraps it for Angular (service, pipe, `provideRokuTranslator`).
-- In module federation config, `@portfolio/localization/rokutranslator` is forced `singleton: true, strictVersion: true` across shell and all remotes — every micro-frontend must share the exact same instance or locale state fragments across app boundaries. Keep this in mind if a dependency bump changes this package.
+- In module federation config, `@portfolio/localization/rokutranslator` is forced `singleton: true` across the shell and all remotes — every micro-frontend must share the exact same instance or locale state fragments across app boundaries. The rule lives in **one** file, `module-federation.shared.ts` at the workspace root, which all six configs import; a `shared` callback only governs its own build, so declaring it in the host alone does nothing for the remotes. Do not add `strictVersion`: staging deploys only the affected remotes, so a version bump would leave a mixed fleet, and strict enforcement turns that ordinary window into a blank page. Read that file before editing the list — an earlier version of this rule named a library that did not exist and therefore never applied once, and `rokutranslator-angular` cannot be added the same way (Nx passes it under its project name, which nothing imports).
 
 ### Library layout
 

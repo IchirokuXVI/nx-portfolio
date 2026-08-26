@@ -435,8 +435,15 @@ it has to know who is asking.
 > is kept as written because the eliminations in it are the useful part: they are the
 > paths somebody would otherwise search again.
 >
-> The hyphen mismatch in the shell's module federation config is **not** fixed and is
-> still a genuine bug on its own terms. It did not cause this one.
+> The hyphen mismatch in the shell's module federation config **is now fixed** as well.
+> It did not cause this one, and it was a genuine bug on its own terms: the rule named
+> `@portfolio/localization/roku-translator`, which does not exist, so it had never
+> matched anything. Fixing it turned up two further faults the bullet below could not
+> have known about. A `shared` callback governs only its own build, so the rule was
+> also in one config instead of six; and Nx applies the callback's return by
+> assignment, so the obvious repair would have replaced the `requiredVersion` Nx had
+> worked out rather than adding to it. The rule now lives in one file,
+> `module-federation.shared.ts`, which every config imports.
 
 Not caused by this plan, not fixed by it, and only visible **because** of it: until the
 injector was fixed the page rendered nothing, so nobody could see that its text was
