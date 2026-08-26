@@ -22,9 +22,10 @@ import type {
 /**
  * Zones, over HTTP.
  *
- * Bound at the app injector with `provideService(ZONE_SERVICE, ZoneApi)`. The token's
- * default stays the in-memory implementation so tests and a backend-less run keep
- * working (plan 0004, section 9).
+ * **The default behind `ZONE_SERVICE`**, and still bound explicitly at the app injector
+ * with `provideService(ZONE_SERVICE, ZoneApi)`, because it needs the `HttpClient` the
+ * app configures and that only exists in the app's injector. Anything wanting the fake
+ * asks for `ZoneMemory` by name (plan 0004, section 9).
  *
  * Injects `ApiUrl`, not `ApiConsumer`: the shared helper resolves URLs from
  * `@portfolio/shared/environments`, which describes the **portfolio's** backend, and

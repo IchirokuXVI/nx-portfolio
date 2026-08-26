@@ -7,7 +7,7 @@ import type {
   Page,
   Zone,
 } from '@portfolio/velista/models';
-import { ZoneMemory } from './zone-memory';
+import { ZoneApi } from './zone-api';
 
 /**
  * What a caller can do with zones.
@@ -54,7 +54,24 @@ export type ZoneJoinResult =
   | { readonly state: 'joined'; readonly membership: Membership }
   | { readonly state: 'guest-account-lost' };
 
-/** Inject this, typed as the interface, never a concrete class. */
+/**
+ * Inject this, typed as the interface, never a concrete class.
+ *
+ * **The default is the real gateway**, and that is a deliberate reversal of the
+ * workspace convention that a service token defaults to its in-memory implementation.
+ *
+ * The convention exists so a lib runs with no backend and a spec needs no setup. It
+ * assumes the memory implementation is the safe answer when nobody chose. Here it was
+ * the opposite: `ZoneStore` resolved this token in an injector the app's
+ * `provideService(ZONE_SERVICE, ZoneApi)` never reached, silently got `ZoneMemory`, and
+ * the app served invented data while looking like it was talking to the backend. A
+ * wrong default that works is worse than one that fails, because nothing tells you.
+ *
+ * So the default is the implementation the running app actually wants, and anything
+ * that wants the fake has to say so: `{ provide: ZONE_SERVICE, useExisting: ZoneMemory }`.
+ * A test that forgets now gets a loud failure reaching for `HttpClient` instead of
+ * quietly passing against fixtures.
+ */
 export const ZONE_SERVICE = serviceToken<ZoneServiceI>('ZONE_SERVICE', () =>
-  inject(ZoneMemory)
+  inject(ZoneApi)
 );

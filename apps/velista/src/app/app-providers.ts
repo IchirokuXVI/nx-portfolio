@@ -86,10 +86,10 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // pipe while every lazily loaded page under it threw. See `translation-providers.ts`.
   ...VELISTA_TRANSLATION_PROVIDERS,
 
-  // The real gateway, bound here at the **app** injector rather than by changing
-  // the token's default (plan 0004, section 9). The default stays the in-memory
-  // implementation, so every test and every backend-less run keeps working while
-  // the running app talks to the real thing.
+  // The real gateway. This is also the token's own default now, so the binding is a
+  // statement of intent rather than an override, but it is **not** redundant:
+  // `ZoneApi` needs the `HttpClient` configured a few lines above, which only exists
+  // in this injector, so the token has to resolve here rather than at the root.
   //
   // `useExisting` needs `ZoneApi` itself to be resolvable in this injector, which is
   // why the class is listed too. It is here rather than in the library's array

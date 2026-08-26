@@ -15,7 +15,12 @@ import type {
 } from './zone-service';
 
 /**
- * Zones, in memory. The default behind `ZONE_SERVICE`.
+ * Zones, in memory. Asked for by name, never a default.
+ *
+ * `ZONE_SERVICE` defaults to `ZoneApi` instead, deliberately: this used to be the
+ * default and the app got it by accident, serving invented data while looking like it
+ * was talking to the backend. A caller that wants fixtures now says so, with
+ * `{ provide: ZONE_SERVICE, useExisting: ZoneMemory }`.
  *
  * It serves the same shape the gateway does, counts and list previews included, so the
  * app runs and every test passes with no backend at all (plan 0004, section 9.2). That

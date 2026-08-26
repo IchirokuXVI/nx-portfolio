@@ -19,9 +19,10 @@ import { ZoneStore } from './zones/zone-store';
  *   root it would resolve the token's own default instead and quietly serve in-memory
  *   data while the app looked like it was talking to the backend. That was the real
  *   bug, and it is the one that would have survived longest unnoticed.
- * - `ZoneMemory` is the in-memory implementation and by rights would stay root scoped,
- *   which is the workspace convention for a service token's default. It cannot, only
- *   because it injects `TokenStore` to answer as the current caller.
+ * - `ZoneMemory` is the in-memory implementation and by rights would stay root scoped.
+ *   It cannot, because it injects `TokenStore` to answer as the current caller, and
+ *   `TokenStore` reaches `APP_API_CONFIG`. It is no longer any token's default, so it
+ *   is only here for the specs and backend-less runs that ask for it by name.
  *
  * `ZoneApi` and `ConnectionRecovery` are deliberately **not** here. Both are the app's
  * choice rather than the library's: one says this deployment talks to a real gateway,

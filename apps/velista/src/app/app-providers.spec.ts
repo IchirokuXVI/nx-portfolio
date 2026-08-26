@@ -1,3 +1,4 @@
+import { HttpClient } from '@angular/common/http';
 import {
   APP_INITIALIZER,
   createEnvironmentInjector,
@@ -78,7 +79,7 @@ describe('appProviders, resolved the way the router resolves them', () => {
     expect(routeInjector().get(type as Type<unknown>)).toBeInstanceOf(type);
   });
 
-  it('binds ZONE_SERVICE to the real gateway, not the in-memory default', () => {
+  it('resolves ZONE_SERVICE to the real gateway', () => {
     // The silent failure. `provideService(ZONE_SERVICE, ZoneApi)` was already in
     // `appProviders` before this plan and it did nothing: `ZoneStore` was created in
     // the root injector, so it resolved the token's default factory and quietly used
@@ -94,6 +95,27 @@ describe('appProviders, resolved the way the router resolves them', () => {
     // constructible, which is what row two of the plan's table was about.
     expect(routeInjector().get(ApiUrl).gateway('/v1/zones')).toMatch(
       /^https?:\/\/.+\/v1\/zones$/
+    );
+  });
+
+  it('cannot serve HttpClient to a root scoped service, which is why ZoneApi is not one', () => {
+    // The question this answers: why can `damoclesSword` keep every data-access service
+    // `providedIn: 'root'` while velista cannot?
+    //
+    // Not because services inject each other. Root scoped services injecting other root
+    // scoped services is fine, and that is all damoclesSword does. It is because velista's
+    // services reach things only the **app** provides, and `provideHttpClient` is one of
+    // them. The interceptor chain, the fetch backend and `gatewayInterceptor` all come
+    // from that call, and it lives on this route.
+    //
+    // A root scoped `ZoneApi` would be created in the root injector and would resolve
+    // `HttpClient` from there, which is a different `HttpClient` with none of velista's
+    // configuration. This asserts the two are genuinely different objects, because that
+    // is the failure: not a crash, a silent one where no request carries an auth header.
+    const injector = routeInjector();
+
+    expect(injector.get(HttpClient)).not.toBe(
+      TestBed.inject(EnvironmentInjector).get(HttpClient)
     );
   });
 
