@@ -1,0 +1,214 @@
+import { HttpClient } from '@angular/common/http';
+import { inject, Injectable, signal } from '@angular/core';
+import type { SessionTokens } from '@portfolio/velista/models';
+import {
+  BrowserFacade,
+  isAccessTokenExpired,
+  StorageKeys,
+} from '@portfolio/velista/platform';
+import { firstValueFrom } from 'rxjs';
+import { ApiUrl } from '../api-url';
+import { toSessionTokens } from '../mapping/mappers';
+import { anonymous } from './http-context';
+
+/**
+ * What rule D3's gate found. `guest-account-lost` is the one that needs a screen: the
+ * user had a guest account, its refresh token is spent or revoked, and creating a new
+ * zone now would silently give them a second account instead of their groups.
+ */
+export type OptionalAuthResult =
+  | { readonly state: 'authenticated'; readonly accessToken: string }
+  | { readonly state: 'anonymous' }
+  | { readonly state: 'guest-account-lost' };
+
+/**
+ * Holds the token pair, persists it, and owns refreshing it.
+ *
+ * ## Why the pair is in `localStorage`, and what that costs
+ *
+ * For a temporary user the refresh token **is** the account: plan 0001 D6 says "a
+ * temporary user's token is the only proof of their identity, so losing it loses their
+ * data". Memory or `sessionStorage` would delete a guest's groups when they close the
+ * tab, which destroys the "start without an account" flow the whole home page is built
+ * around.
+ *
+ * The cost is real and is recorded rather than hidden: a token in `localStorage` is
+ * readable by any script that achieves XSS on this origin, and today that origin is
+ * the entire portfolio. What keeps it acceptable is that this app renders no user
+ * supplied HTML and never uses `innerHTML`, and that `0003`'s guest banner exists to
+ * move people off this footing. The correct long term fix is an httpOnly refresh
+ * cookie, which is a backend change (plan 0004, section 11).
+ *
+ * ## Why refresh is single flight
+ *
+ * The backend rotates refresh tokens and revokes the presented one
+ * (`auth/src/app/tokens/token.service.ts:85`). Two requests refreshing concurrently
+ * means the second presents a token the first just revoked, and the user is signed out
+ * mid session. `0003` loads zones and opens a realtime connection on the same tick, so
+ * this is not a rare race.
+ */
+@Injectable({ providedIn: 'root' })
+export class TokenStore {
+  private readonly _browser = inject(BrowserFacade);
+  private readonly _http = inject(HttpClient);
+  private readonly _urls = inject(ApiUrl);
+
+  private readonly _tokens = signal<SessionTokens | null>(null);
+
+  /** The current pair, or null when anonymous. */
+  readonly tokens = this._tokens.asReadonly();
+
+  /** The one refresh in flight, shared by every caller that needs a fresh token. */
+  private _refreshing: Promise<SessionTokens | null> | null = null;
+
+  constructor() {
+    this._tokens.set(this._restore());
+  }
+
+  /** Persist a new pair. Called after sign in, refresh, and the guest handshake. */
+  set(tokens: SessionTokens): void {
+    this._tokens.set(tokens);
+    this._browser.writeStorage(StorageKeys.session, JSON.stringify(tokens));
+  }
+
+  /** Drop the session entirely. The app is anonymous afterwards. */
+  clear(): void {
+    this._tokens.set(null);
+    this._browser.removeStorage(StorageKeys.session);
+  }
+
+  /**
+   * The stored access token if it is usable right now, otherwise `null`.
+   *
+   * Synchronous on purpose. The overwhelmingly common case is a valid token, and
+   * routing that through a promise would push every single request in the app onto a
+   * microtask for no reason. A `null` here means either no session or one that needs
+   * refreshing, which {@link hasSession} distinguishes.
+   */
+  accessTokenIfFresh(): string | null {
+    const current = this._tokens();
+    if (current === null || isAccessTokenExpired(current.accessToken)) {
+      return null;
+    }
+
+    return current.accessToken;
+  }
+
+  /** Whether a pair is held at all, whatever state the access token is in. */
+  hasSession(): boolean {
+    return this._tokens() !== null;
+  }
+
+  /**
+   * An access token that is valid now, refreshing first if the stored one has expired
+   * or is close enough that a request could arrive after it lapses.
+   *
+   * Returns `null` when there is no session, or when the refresh failed. A `null` here
+   * is the signal that the user is anonymous, and **rule D3 makes it load bearing**:
+   * the optional-auth routes must not be called with a stale token, because the
+   * gateway would treat it as anonymous and silently mint a second guest account
+   * (plan 0004, section 5.5).
+   */
+  async ensureFreshToken(): Promise<string | null> {
+    const current = this._tokens();
+    if (current === null) {
+      return null;
+    }
+
+    if (!isAccessTokenExpired(current.accessToken)) {
+      return current.accessToken;
+    }
+
+    const refreshed = await this.refresh();
+    return refreshed?.accessToken ?? null;
+  }
+
+  /**
+   * Force a refresh, sharing one in-flight request between all callers.
+   *
+   * On failure the session is cleared, because a rejected refresh token cannot be
+   * retried: it is single use, so a failure means it is spent or revoked either way.
+   */
+  refresh(): Promise<SessionTokens | null> {
+    this._refreshing ??= this._performRefresh().finally(() => {
+      this._refreshing = null;
+    });
+
+    return this._refreshing;
+  }
+
+  /**
+   * Rule D3's gate, for the two routes that mint a guest account when they see no
+   * valid identity: `POST /v1/zones` and `POST /v1/zones/join`.
+   *
+   * The gateway's `OptionalJwtAuthGuard` swallows token errors and falls through to
+   * anonymous (`gateway/src/app/auth/jwt-auth.guard.ts:23`), so calling either route
+   * with an expired token gives the user a **brand new guest account** while their
+   * existing groups become unreachable, since a guest has no credential to sign back
+   * in with. The app has to know the difference between "nobody is signed in" and "the
+   * guest we had is gone", because only the second one needs telling.
+   */
+  async authorizeOptionalAuthCall(): Promise<OptionalAuthResult> {
+    const before = this._tokens();
+    if (before === null) {
+      return { state: 'anonymous' };
+    }
+
+    const token = await this.ensureFreshToken();
+    if (token !== null) {
+      return { state: 'authenticated', accessToken: token };
+    }
+
+    return before.kind === 'TEMPORARY'
+      ? { state: 'guest-account-lost' }
+      : { state: 'anonymous' };
+  }
+
+  private async _performRefresh(): Promise<SessionTokens | null> {
+    const current = this._tokens();
+    if (current === null) {
+      return null;
+    }
+
+    try {
+      const body = await firstValueFrom(
+        this._http.post<unknown>(
+          this._urls.gateway('/v1/auth/refresh'),
+          { refreshToken: current.refreshToken },
+          { context: anonymous('auth.refresh') }
+        )
+      );
+
+      const tokens = toSessionTokens(body);
+      if (tokens === null) {
+        this.clear();
+        return null;
+      }
+
+      this.set(tokens);
+      return tokens;
+    } catch {
+      // Includes a network failure, which is indistinguishable here from a revoked
+      // token. Clearing is the safe reading: a stale pair kept around would be sent
+      // to an optional-auth route later and mint a duplicate guest account.
+      this.clear();
+      return null;
+    }
+  }
+
+  private _restore(): SessionTokens | null {
+    const stored = this._browser.readStorage(StorageKeys.session);
+    if (stored === null) {
+      return null;
+    }
+
+    try {
+      // Rule D4 applies to storage too. What was written days ago by an older build
+      // is as untrusted as a response body, and it is the input most likely to be
+      // stale in shape.
+      return toSessionTokens(JSON.parse(stored));
+    } catch {
+      return null;
+    }
+  }
+}
