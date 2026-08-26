@@ -16,13 +16,47 @@ import { APP_USABLE_LOCALES } from './usable-locales';
  * does not match.
  *
  * The route table from plan 0001, section 6.2, is filled in as each page plan
- * lands — `zones/:zoneId`, `lists/:listId`, `join/:code`, `auth/*`, `account`,
- * `settings`. Paths keep the word `zones` even though the interface says group
+ * lands — `zones/:zoneId`, `lists/:listId`, `auth/*`, `account`, `settings` are
+ * what is left. Paths keep the word `zones` even though the interface says group
  * (rule N2): the translation layer renames the word, the code never does.
  *
  * The export is named for its role, not for the product, so a rename stays a data
  * edit (rule N1); the `@portfolio/velista/feature-shell` path already scopes it.
  */
+/**
+ * The two sheets, as children of whichever page they cover (plan 0008, rule E1).
+ *
+ * They are routes rather than a signal toggling a template branch, and the reason
+ * that decides it is the Android back button: nothing was pushed onto the history
+ * stack by a signal, so back would close the **app** rather than the sheet. As routes
+ * the page beneath stays mounted and keeps its scroll, and the strings `LandingPage`
+ * and `HomePage` were recording in `pendingRoutes` become one `routerLink` each.
+ *
+ * Both pages offer both actions, so this is one function called twice rather than four
+ * entries written out: the two copies must not be able to drift, and the only thing
+ * that differs between them is where Cancel goes back to.
+ *
+ * `zones` and not the word the interface uses, per rule N2 (plan 0001).
+ */
+function entrySheetRoutes(returnTo: 'landing' | 'home'): Route[] {
+  return [
+    {
+      path: 'zones/new',
+      data: { returnTo },
+      loadComponent: () =>
+        import('@portfolio/velista/feature-entry').then(
+          (m) => m.CreateGroupSheet
+        ),
+    },
+    {
+      path: 'zones/join',
+      data: { returnTo },
+      loadComponent: () =>
+        import('@portfolio/velista/feature-entry').then((m) => m.JoinCodeSheet),
+    },
+  ];
+}
+
 export const AppShellRoutes: Route[] = [
   {
     path: '',
@@ -57,24 +91,17 @@ export const AppShellRoutes: Route[] = [
       supportedLocales: APP_USABLE_LOCALES,
       defaultLocale: APP_DEFAULT_LOCALE,
     },
+    // **Every route with a non empty path comes before the `''` front door**, and a
+    // spec fails the moment that stops being true (plan 0008, section 4.1.1).
+    //
+    // Giving the front door children turned it from a terminal route into a prefix.
+    // Its path is `''`, so it consumes no segments and then offers `zones/new` to
+    // whatever is left, which is the same shape `0001` section 6.1 documents in the
+    // shell: an empty path route swallows the segments meant for its siblings. The
+    // order makes the question moot, and it is cheaper to assert once than to test
+    // every route against every other. `zones/:zoneId`, when it lands, would be
+    // shadowed by `zones/new` if it were ever appended after this.
     children: [
-      {
-        // The front door (plans 0003 and 0007). A designed screen for somebody with
-        // no account, not a signed-out fallback, which is why it sits at the mount:
-        // that is the URL a home screen shortcut is installed against.
-        //
-        // Guarded rather than adaptive. `0003` rendered both screens from one
-        // component and let a `@switch` decide, which made "a signed in user never
-        // sees the front door" a fact about a template instead of a property of the
-        // route. As a redirect it is checkable, and the signed in user still reaches
-        // their groups in one navigation.
-        path: '',
-        canActivate: [anonymousOnlyGuard],
-        loadComponent: () =>
-          import('@portfolio/velista/feature-landing').then(
-            (m) => m.LandingPage
-          ),
-      },
       {
         // The dashboard (plan 0003). Its guard also carries what `selectHomeState`'s
         // anonymous branch used to, and earlier: nothing here is constructed, and no
@@ -88,6 +115,35 @@ export const AppShellRoutes: Route[] = [
         canActivate: [authenticatedGuard],
         loadComponent: () =>
           import('@portfolio/velista/feature-home').then((m) => m.HomePage),
+        children: [...entrySheetRoutes('home')],
+      },
+      {
+        // A cold arrival on somebody else's invite link, and the one way in that is
+        // not a sheet: there is no page underneath to cover (plan 0008, section 4.1).
+        // Public, because the whole point is that the recipient has no account.
+        path: 'join/:code',
+        loadComponent: () =>
+          import('@portfolio/velista/feature-entry').then((m) => m.JoinLinkPage),
+      },
+      {
+        // The front door (plans 0003 and 0007). A designed screen for somebody with
+        // no account, not a signed-out fallback, which is why it sits at the mount:
+        // that is the URL a home screen shortcut is installed against.
+        //
+        // Guarded rather than adaptive. `0003` rendered both screens from one
+        // component and let a `@switch` decide, which made "a signed in user never
+        // sees the front door" a fact about a template instead of a property of the
+        // route. As a redirect it is checkable, and the signed in user still reaches
+        // their groups in one navigation.
+        //
+        // Last, and the only empty path here. See the note on `children` above.
+        path: '',
+        canActivate: [anonymousOnlyGuard],
+        loadComponent: () =>
+          import('@portfolio/velista/feature-landing').then(
+            (m) => m.LandingPage
+          ),
+        children: [...entrySheetRoutes('landing')],
       },
     ],
   },

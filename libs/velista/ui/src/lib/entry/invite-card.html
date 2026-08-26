@@ -1,0 +1,43 @@
+<section class="card">
+  <!--
+    The whole phrase carries the name rather than a noun glued to a frame, so the
+    Spanish reads as Spanish rather than as a template with a word dropped in
+    (plan 0001, the gender rule).
+  -->
+  <h2 class="title">
+    {{ 'entry.invite.title' | rokuT: { name: zoneName() } }}
+  </h2>
+  <p class="body">{{ 'entry.invite.body' | rokuT }}</p>
+
+  <div class="code-row">
+    <!-- Selectable, because reading a code out loud and typing it into another
+         phone is how most of these actually travel. -->
+    <p class="code">{{ joinCode() }}</p>
+
+    <button
+      (click)="copyCode.emit()"
+      [attr.aria-label]="'entry.invite.copy' | rokuT"
+      class="copy"
+      type="button"
+    >
+      <lib-copy-icon class="glyph" />
+    </button>
+  </div>
+
+  @if (shareable()) {
+    <button (click)="share.emit()" class="share" type="button">
+      <lib-share-icon class="glyph" />
+      {{ 'entry.invite.share' | rokuT }}
+    </button>
+  }
+
+  <!--
+    Always in the DOM, empty until there is something to say: a live region added to
+    the page at the moment it gains content is often not announced at all.
+  -->
+  <p aria-live="polite" class="copied">
+    @if (copied()) {
+      {{ 'entry.invite.copied' | rokuT }}
+    }
+  </p>
+</section>

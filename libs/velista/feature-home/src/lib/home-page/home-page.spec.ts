@@ -1,11 +1,14 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   fakeZoneStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
   type FakeIdentity,
+  type FakeZoneStore,
+  type ZoneEntry,
+  ZoneStore,
 } from '@portfolio/velista/data-access';
 import type { MyZone } from '@portfolio/velista/models';
 import {
@@ -40,6 +43,8 @@ interface Options {
   zones?: readonly MyZone[];
   fails?: boolean;
   storage?: Map<string, string>;
+  /** The way in the person has just come through (plan 0008, section 3.3). */
+  lastEntry?: ZoneEntry | null;
 }
 
 /**
@@ -64,7 +69,11 @@ async function render(
 
   const store = options.fails
     ? fakeZoneStore({ state: 'failed', error: new Error('boom') })
-    : fakeZoneStore({ zones: options.zones ?? [zone()], state: 'loaded' });
+    : fakeZoneStore({
+        zones: options.zones ?? [zone()],
+        state: 'loaded',
+        lastEntry: options.lastEntry ?? null,
+      });
 
   await TestBed.configureTestingModule({
     imports: [HomePage, RokuTranslatorTestingModule.forTesting()],
@@ -281,22 +290,94 @@ describe('HomePage', () => {
     });
   });
 
+  describe('after a way in', () => {
+    it('leads with the code to share, because a group of one is useless', async () => {
+      const fixture = await render({
+        zones: [zone({ id: 'z-new', name: 'Flat 3B', joinCode: 'HK7M2QPD' })],
+        lastEntry: { kind: 'created', zoneId: 'z-new' },
+      });
+
+      expect(query(fixture, 'lib-invite-card')?.textContent).toContain(
+        'HK7M2QPD'
+      );
+      expect(query(fixture, 'lib-asked-notice')).toBeNull();
+    });
+
+    it('says the ask has gone in, and names the group the reload brought back', async () => {
+      // `MembershipView` carries no name, so this sentence is only sayable after the
+      // reload (plan 0008, section 5.6).
+      const fixture = await render({
+        zones: [
+          zone({ id: 'z9', name: 'Casa Ferrer', myStatus: 'PENDING' }),
+        ],
+        lastEntry: { kind: 'joined', zoneId: 'z9' },
+      });
+
+      expect(query(fixture, 'lib-asked-notice')).not.toBeNull();
+      expect(query(fixture, 'lib-invite-card')).toBeNull();
+    });
+
+    it('says nothing until the group it is about is actually there', async () => {
+      // A panel that names a group renders a blank name if it draws too early, which
+      // is worse than drawing a moment later.
+      const fixture = await render({
+        zones: [zone()],
+        lastEntry: { kind: 'joined', zoneId: 'not-loaded-yet' },
+      });
+
+      expect(query(fixture, 'lib-asked-notice')).toBeNull();
+    });
+
+    it('says nothing at all on an ordinary visit', async () => {
+      const fixture = await render();
+
+      expect(query(fixture, 'lib-invite-card')).toBeNull();
+      expect(query(fixture, 'lib-asked-notice')).toBeNull();
+    });
+
+    it('forgets the arrival when the page goes away, so it is shown once', async () => {
+      const fixture = await render({
+        zones: [zone({ id: 'z-new' })],
+        lastEntry: { kind: 'created', zoneId: 'z-new' },
+      });
+      const store = TestBed.inject(ZoneStore) as unknown as FakeZoneStore;
+
+      fixture.destroy();
+
+      expect(store.lastEntry()).toBeNull();
+    });
+  });
+
   describe('wiring', () => {
-    it('records where each entry action is meant to go', async () => {
-      // The destinations do not exist yet, but which button points at which one is
-      // already worth locking down.
+    it('sends each entry action to its sheet, as a sibling route', async () => {
+      // What this used to assert was a recorded string, because the destinations did
+      // not exist. Plan 0008 built them, so it asserts the navigation itself. The
+      // paths are relative on purpose: neither the locale segment nor the app's mount
+      // may appear in a page (extraction contract, item 5).
+      const fixture = await render({ zones: [] });
+      const router = TestBed.inject(Router);
+      const navigate = jest
+        .spyOn(router, 'navigate')
+        .mockResolvedValue(true as never);
+
+      (query(fixture, '.empty-primary') as HTMLButtonElement).click();
+      (query(fixture, '.empty-secondary') as HTMLButtonElement).click();
+
+      expect(navigate.mock.calls.map(([commands]) => commands)).toEqual([
+        ['zones', 'new'],
+        ['zones', 'join'],
+      ]);
+      expect(navigate.mock.calls[0]?.[1]?.relativeTo).toBe(
+        TestBed.inject(ActivatedRoute)
+      );
+    });
+
+    it('has an outlet for the sheet to render into', async () => {
+      // Rule E1: the sheets are child routes, so the page beneath stays mounted and
+      // keeps its scroll. Without an outlet the route would match and draw nothing.
       const fixture = await render({ zones: [] });
 
-      const buttons = [
-        query(fixture, '.empty-primary'),
-        query(fixture, '.empty-secondary'),
-      ] as HTMLButtonElement[];
-      buttons.forEach((button) => button.click());
-
-      expect(fixture.componentInstance.pendingRoutes()).toEqual([
-        'zones.create',
-        'zones.join',
-      ]);
+      expect(query(fixture, 'router-outlet')).not.toBeNull();
     });
   });
 });

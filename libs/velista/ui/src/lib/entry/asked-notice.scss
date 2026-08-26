@@ -1,0 +1,47 @@
+:host {
+  display: block;
+}
+
+// Centred and quiet, unlike the invite card beside it in the other outcome. Waiting
+// is not an action, so it does not get the action colour or the loud border.
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--app-space-7) var(--app-space-6);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-icon-display);
+  block-size: var(--app-icon-display);
+  margin-block-end: var(--app-space-5);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-muted);
+}
+
+.glyph {
+  font-size: var(--app-icon-lg);
+}
+
+.title {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}

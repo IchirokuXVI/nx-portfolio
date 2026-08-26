@@ -1,0 +1,57 @@
+@use '../styles/tokens' as tokens;
+
+// Covers whatever it was opened from, including the sheet, which is the point: the
+// sheet's primary button must not be reachable from here.
+.blocking {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--app-space-7);
+  background: var(--app-surface-ground);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-inline-size: tokens.$app-content-max;
+}
+
+.mark {
+  font-size: var(--app-icon-display);
+  margin-block-end: var(--app-space-6);
+  color: var(--app-status-danger-fg);
+}
+
+.title {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0 0 var(--app-space-7);
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.action {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  cursor: pointer;
+
+  @include tokens.app-focus-ring;
+}

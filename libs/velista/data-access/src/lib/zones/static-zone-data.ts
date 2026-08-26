@@ -1,4 +1,4 @@
-import type { MyZone } from '@portfolio/velista/models';
+import type { MyZone, Zone } from '@portfolio/velista/models';
 
 /**
  * Seed data for the in-memory zone service.
@@ -25,7 +25,7 @@ export const SEED_ZONES: readonly MyZone[] = [
   {
     id: 'zone-flat',
     name: 'Flat 3B',
-    joinCode: 'FLAT3B',
+    joinCode: 'HK7M2QPD',
     status: 'ACTIVE',
     ownerUserId: 'user-me',
     myRole: 'OWNER',
@@ -51,7 +51,7 @@ export const SEED_ZONES: readonly MyZone[] = [
   {
     id: 'zone-parents',
     name: "Mum and Dad's",
-    joinCode: 'PARENT',
+    joinCode: 'RQ4TBVCN',
     status: 'ACTIVE',
     ownerUserId: 'user-mum',
     myRole: 'MEMBER',
@@ -78,7 +78,7 @@ export const SEED_ZONES: readonly MyZone[] = [
     // Long enough to check truncation against the role badge at 320px, which plan
     // 0003 section 6 calls out as needing checking in Spanish too.
     name: 'Wednesday climbing crew',
-    joinCode: 'CLIMB7',
+    joinCode: 'M3XKPFHD',
     status: 'ACTIVE',
     ownerUserId: 'user-sam',
     myRole: 'MEMBER',
@@ -98,7 +98,7 @@ export const SEED_ZONES: readonly MyZone[] = [
   {
     id: 'zone-old-houseshare',
     name: 'Old houseshare',
-    joinCode: 'OLDHSE',
+    joinCode: 'W9NPTCZR',
     // The owner deleted their account. Plan 0003 open question 2: render it as a
     // plain, non tappable card and do not crash. That is the whole requirement.
     status: 'MARKED_FOR_DELETION',
@@ -119,3 +119,43 @@ export const SEED_ZONES: readonly MyZone[] = [
 
 /** The user the seed data belongs to, so the memory service can answer consistently. */
 export const SEED_USER_ID = 'user-me';
+
+/**
+ * A zone the seeded caller is **not** in, so asking to join one can succeed.
+ *
+ * Every zone in `SEED_ZONES` is one they already belong to, which is the right seed for
+ * the dashboard and the wrong one for the join sheet: without this, the only outcomes
+ * reachable without a backend would be the failures.
+ *
+ * A plain `Zone`, because that is all a stranger to it can know. Its name arrives on
+ * the reload after the ask, which is the exact behaviour plan 0008 section 5.6 says the
+ * screen must not pretend to have earlier.
+ */
+export const SEED_JOINABLE_ZONE: Zone = {
+  id: 'zone-ferrer',
+  name: 'Casa Ferrer',
+  joinCode: 'GTBN4KRW',
+  status: 'ACTIVE',
+  ownerUserId: 'user-nuria',
+};
+
+/**
+ * Codes that make each row of plan 0008 section 5.4 reachable with no gateway running.
+ *
+ * The acceptance criterion asks that every one of those messages be verified against
+ * `ZoneMemory` rather than a live backend, and a fake that can only succeed cannot do
+ * that. Each of these is a real code shape, so the field accepts them and the sheet is
+ * exercised exactly as a real one would be.
+ */
+export const SEED_JOIN_CODES = {
+  /** Succeeds, and lands PENDING. */
+  joinable: SEED_JOINABLE_ZONE.joinCode,
+  /** A zone the caller already belongs to, so asking again is a `conflict`. */
+  alreadyIn: 'HK7M2QPD',
+  /** A zone the caller has already asked to join, which is the same `conflict`. */
+  alreadyAsked: 'M3XKPFHD',
+  /** A membership that was BANNED, which the gateway answers `forbidden`. */
+  banned: 'BNDXQ7VM',
+  /** The eleventh attempt in a minute. */
+  rateLimited: 'TMNY83WK',
+} as const;

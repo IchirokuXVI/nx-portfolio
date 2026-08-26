@@ -1,7 +1,12 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type { Identity, MyZone, UserKind } from '@portfolio/velista/models';
 import { SessionStore } from '../auth/session-store';
-import { ZoneStore, type ZoneLoadState } from '../zones/zone-store';
+import {
+  ZoneStore,
+  type ZoneEntry,
+  type ZoneEntryOutcome,
+  type ZoneLoadState,
+} from '../zones/zone-store';
 
 /**
  * Stand-ins for the two stores a page container injects.
@@ -41,7 +46,27 @@ export interface FakeZoneStateOptions {
   readonly state?: ZoneLoadState;
   readonly error?: unknown;
   readonly staleZoneIds?: ReadonlySet<string>;
+  /** The way in just taken, which is what the dashboard reports once (plan 0008). */
+  readonly lastEntry?: ZoneEntry | null;
+  /**
+   * What the two mutations answer.
+   *
+   * A function, so one fake can answer differently per call, which is what a sheet
+   * spec that fixes a rejected code and asks again needs. The default succeeds.
+   *
+   * It may answer with a promise, and a promise that never settles is how a spec puts
+   * a sheet into its submitting state and leaves it there: that state is defined by a
+   * request being out, so anything else would be simulating it rather than reaching it.
+   */
+  readonly respond?: (
+    call: ZoneMutationCall
+  ) => ZoneEntryOutcome | Promise<ZoneEntryOutcome>;
 }
+
+/** One recorded call to a faked mutation. */
+export type ZoneMutationCall =
+  | { readonly method: 'createZone'; readonly name: string }
+  | { readonly method: 'joinZone'; readonly joinCode: string };
 
 /**
  * A `ZoneStore` that is simply in the state you asked for.
@@ -55,20 +80,56 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
   const state = signal<ZoneLoadState>(options.state ?? 'loaded');
   const error = signal<unknown>(options.error ?? null);
   const loads = signal(0);
+  const lastEntry = signal<ZoneEntry | null>(options.lastEntry ?? null);
+
+  /** Every mutation asked for, in order, so a spec can assert what was sent. */
+  const calls: {
+    method: 'createZone' | 'joinZone';
+    name?: string;
+    joinCode?: string;
+  }[] = [];
+
+  const respond =
+    options.respond ??
+    ((call: ZoneMutationCall): ZoneEntryOutcome =>
+      call.method === 'createZone'
+        ? { state: 'created', zoneId: 'zone-new' }
+        : { state: 'joined', zoneId: 'zone-joined' });
 
   return {
     myZones: zones.asReadonly(),
     state: state.asReadonly(),
     error: error.asReadonly(),
     staleZoneIds: computed(() => options.staleZoneIds ?? new Set<string>()),
+    lastEntry: lastEntry.asReadonly(),
 
     /** How many times the page asked for a load. Starts at one after a render. */
     loadCount: loads.asReadonly(),
+
+    /** What the page asked the store to write. */
+    mutations: calls as readonly {
+      readonly method: 'createZone' | 'joinZone';
+      readonly name?: string;
+      readonly joinCode?: string;
+    }[],
 
     load: async () => {
       loads.update((count) => count + 1);
     },
     upsert: (zone: MyZone) => zones.update((current) => [zone, ...current]),
+
+    createZone: async (name: string): Promise<ZoneEntryOutcome> => {
+      calls.push({ method: 'createZone', name });
+      return respond({ method: 'createZone', name });
+    },
+    joinZone: async (joinCode: string): Promise<ZoneEntryOutcome> => {
+      calls.push({ method: 'joinZone', joinCode });
+      return respond({ method: 'joinZone', joinCode });
+    },
+    clearLastEntry: () => lastEntry.set(null),
+
+    /** Put a page into the state it would be in straight after a way in. */
+    setLastEntry: (entry: ZoneEntry | null) => lastEntry.set(entry),
 
     /** Move the store while a fixture is mounted, to test a live update. */
     set: (next: readonly MyZone[]) => zones.set(next),

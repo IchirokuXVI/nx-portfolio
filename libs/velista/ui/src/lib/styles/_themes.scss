@@ -130,6 +130,15 @@ $app-status-line: 26%;
     inset 0 1px 0 0 rgb(var(--app-white-rgb) / 6%),
     0 8px 24px rgb(var(--app-ink-950-rgb) / 55%);
 
+  // What a sheet lays over the page it covers, and the shadow that lifts its edge
+  // off it (plan 0008, rule E1). Heavy enough that the page beneath reads as
+  // context rather than as something still being offered: on a near black ground
+  // a light scrim would be invisible and the sheet would look like part of the
+  // page. The shadow is separate from `--app-elevation-2` because it throws
+  // upward, which nothing else in the app does.
+  --app-scrim: rgb(var(--app-ink-950-rgb) / 74%);
+  --app-sheet-shadow: 0 -18px 40px rgb(var(--app-ink-950-rgb) / 42%);
+
   @include app-status(
     var(--app-mint-400),
     var(--app-mint-400-rgb),
@@ -188,6 +197,11 @@ $app-status-line: 26%;
   --app-elevation-2:
     0 2px 4px rgb(var(--app-ink-900-rgb) / 5%),
     0 12px 28px rgb(var(--app-ink-900-rgb) / 10%);
+
+  // Lighter than Night's, because on a light page the sheet is already separated
+  // by its own shadow and a 74% scrim would read as the lights going out.
+  --app-scrim: rgb(var(--app-ink-900-rgb) / 42%);
+  --app-sheet-shadow: 0 -12px 32px rgb(var(--app-ink-900-rgb) / 16%);
 
   @include app-status(
     // The 700s, not the 400s. A bright ramp that carries Night is close to

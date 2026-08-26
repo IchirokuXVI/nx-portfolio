@@ -1,0 +1,62 @@
+@if (accountLost()) {
+  <lib-account-lost-panel (restart)="restart()" />
+} @else {
+  <div class="page">
+    <!-- The wordmark, and nothing else in the header. Somebody arriving here has
+         never seen the product and the first thing they should learn is its name. -->
+    <header class="head"><lib-brand-wordmark /></header>
+
+    <main class="content">
+      <span aria-hidden="true" class="mark">
+        <lib-member-add-icon class="mark-glyph" />
+      </span>
+
+      <h1 class="title">{{ 'entry.joinLink.title' | rokuT }}</h1>
+      <p class="body">{{ 'entry.joinLink.body' | rokuT }}</p>
+
+      @if (usable) {
+        <section class="code-card">
+          <h2 class="code-label">{{ 'entry.joinLink.codeLabel' | rokuT }}</h2>
+          <p class="code">{{ code }}</p>
+        </section>
+      }
+
+      @if (errorKey(); as key) {
+        <!-- Under the card rather than under a field, because there is no field.
+             The message set is the join sheet's, unchanged. -->
+        <p class="error" role="alert">
+          <lib-alert-icon aria-hidden="true" class="glyph" />
+          {{ key | rokuT }}
+        </p>
+      }
+
+      @if (usable) {
+        <button
+          (click)="submit()"
+          [attr.aria-busy]="submitting()"
+          [disabled]="!canSubmit()"
+          class="primary"
+          type="button"
+        >
+          @if (submitting()) {
+            <lib-spinner-icon class="glyph" />
+            {{ 'entry.joinZone.submitting' | rokuT }}
+          } @else {
+            {{ 'entry.joinZone.submit' | rokuT }}
+          }
+        </button>
+      }
+
+      <button (click)="decline()" class="decline" type="button">
+        {{ 'entry.joinLink.decline' | rokuT }}
+      </button>
+
+      @if (mintingAccount()) {
+        <p class="notice">
+          <lib-info-icon aria-hidden="true" class="glyph" />
+          {{ 'entry.joinLink.guestNotice' | rokuT }}
+        </p>
+      }
+    </main>
+  </div>
+}

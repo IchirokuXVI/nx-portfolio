@@ -195,6 +195,29 @@ $app-content-max: 480px;
   // the smallest space step because they read as one block.
   --app-space-hair: 3px;
 
+  // The bottom sheet (plan 0008, rule E1). Its colours are a theme's job and live
+  // in `_themes.scss`; its geometry is not, and is the same in both.
+  //
+  // The radius is a little larger than `--app-radius-xl` on purpose: a sheet's top
+  // corners are the largest curve in the app, and matching a card here would make
+  // the panel read as a card that happened to be at the bottom of the screen.
+  --app-sheet-radius: 22px;
+  --app-sheet-handle-width: 38px;
+  --app-sheet-handle-height: 4px;
+  // How far a sheet is allowed to grow before it scrolls inside itself. Anything
+  // taller than this stops being a sheet over a page and becomes a page.
+  --app-sheet-max-height: 86svh;
+
+  // A join code, which is read aloud and typed character by character. The tracking
+  // is what makes that possible and is the whole reason it is not body type: a
+  // monospace run at normal tracking reads as one word rather than eight letters.
+  --app-code-tracking: 0.2em;
+  --app-code-size: 21px;
+  --app-code-size-lg: 26px;
+  // Taller than a button, because the field holds the tracked-out code and a 52px
+  // box crowds it. The paste button beside it matches, so the row squares off.
+  --app-code-field-height: 56px;
+
   // Google's sign-in button, which is deliberately **not** themed. Their branding
   // guidelines fix the surface and the mark, so this is the one surface in the app
   // whose colours must not follow Night or Day.

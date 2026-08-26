@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -41,6 +41,7 @@ interface Options {
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<LandingPage>;
   store: FakeLocaleStore;
+  router: { navigate: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
@@ -51,11 +52,18 @@ async function render(options: Options = {}): Promise<{
     },
   };
 
+  // A double rather than `provideRouter([])`, because what is being asserted is the
+  // destination this page asks for, not what the router does with it. The real table
+  // lives in `feature-shell`, which this library must not import, so a real router
+  // here could only be given an empty table and would answer "no route matched".
+  const router = { navigate: jest.fn().mockResolvedValue(true) };
+
   await TestBed.configureTestingModule({
     imports: [LandingPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting(),
       { provide: RokuLocaleStore, useValue: store },
+      { provide: Router, useValue: router },
       {
         provide: ActivatedRoute,
         useValue: { parent: options.withParent === false ? null : parent },
@@ -66,7 +74,7 @@ async function render(options: Options = {}): Promise<{
   const fixture = TestBed.createComponent(LandingPage);
   fixture.detectChanges();
 
-  return { fixture, store };
+  return { fixture, store, router };
 }
 
 function query(fixture: ComponentFixture<LandingPage>, selector: string) {
@@ -193,23 +201,47 @@ describe('LandingPage', () => {
   });
 
   describe('wiring', () => {
-    it('records where each entry action is meant to go', async () => {
-      // The destinations do not exist yet, but which button points at which one is
-      // already worth locking down.
+    it('sends the two built entry actions to their sheets', async () => {
+      // Relative paths, so neither the locale segment nor the app's mount appears in
+      // a page (extraction contract, item 5), and the same two lines are correct in
+      // the standalone build.
+      const { fixture, router } = await render();
+
+      const buttons = queryAll(
+        fixture,
+        'lib-auth-actions button'
+      ) as HTMLButtonElement[];
+      buttons[0]?.click();
+      buttons[1]?.click();
+
+      expect(router.navigate.mock.calls.map(([commands]) => commands)).toEqual([
+        ['zones', 'new'],
+        ['zones', 'join'],
+      ]);
+    });
+
+    it('still only records where the credential flows are meant to go', async () => {
+      // Google and email are the next plan's, and the recording is what will make
+      // connecting them one line each.
       const { fixture } = await render();
 
       const buttons = queryAll(
         fixture,
         'lib-auth-actions button'
       ) as HTMLButtonElement[];
-      buttons.forEach((button) => button.click());
+      buttons[2]?.click();
+      buttons[3]?.click();
 
       expect(fixture.componentInstance.pendingRoutes()).toEqual([
-        'zones.create',
-        'zones.join',
         'auth.google',
         'auth.login',
       ]);
+    });
+
+    it('has an outlet for the sheet to render into', async () => {
+      const { fixture } = await render();
+
+      expect(query(fixture, 'router-outlet')).not.toBeNull();
     });
   });
 });

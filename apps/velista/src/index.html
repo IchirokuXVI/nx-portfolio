@@ -4,7 +4,22 @@
     <meta charset="utf-8" />
     <title>velista</title>
     <base href="/" />
-    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <!--
+      `interactive-widget=resizes-content` is what keeps a bottom sheet's primary
+      button above the on-screen keyboard (plan 0008, section 7). Without it Chrome on
+      Android resizes only the visual viewport, so an element fixed to the bottom stays
+      pinned under the keyboard; iOS Safari already moves fixed elements above it.
+
+      This document is the standalone build's. While the app runs as a remote the
+      portfolio shell's `index.html` is the one that ships, and adding the attribute
+      there would change every app in the portfolio, so it is deliberately not done
+      here: the sheet's panel scrolls within itself, which keeps the button reachable
+      in the meantime.
+    -->
+    <meta
+      content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
+      name="viewport"
+    />
     <link href="favicon.ico" rel="icon" type="image/x-icon" />
   </head>
   <body>

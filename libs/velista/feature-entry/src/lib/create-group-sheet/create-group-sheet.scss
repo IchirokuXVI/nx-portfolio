@@ -1,0 +1,10 @@
+@use '../sheet-body' as sheet;
+
+// The sheet is fixed to the viewport, so this host contributes no layout of its own.
+// It exists to carry the styles of the content it projects into `SheetShell`, which
+// under emulated encapsulation is this component's markup and not the shell's.
+:host {
+  display: contents;
+}
+
+@include sheet.sheet-body;

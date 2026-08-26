@@ -1,0 +1,24 @@
+@use '../sheet-body' as sheet;
+
+:host {
+  display: contents;
+}
+
+@include sheet.sheet-body;
+
+// The hint and the counter share a line under the field, which is what makes the
+// counter free: it sits in space the hint was not using.
+.meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  margin-block-start: var(--app-space-3);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.counter {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}

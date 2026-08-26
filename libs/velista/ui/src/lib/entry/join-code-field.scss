@@ -1,0 +1,70 @@
+@use '../styles/tokens' as tokens;
+
+:host {
+  display: block;
+}
+
+.row {
+  display: flex;
+  gap: var(--app-space-4);
+}
+
+// The code is set in the mono face and tracked well out, so it reads as eight
+// separate characters rather than as one unfamiliar word. That is the whole reason
+// this is not an ordinary text field.
+.field {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: var(--app-code-field-height);
+  padding-inline: var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font-family: var(--app-font-mono);
+  font-size: var(--app-code-size);
+  letter-spacing: var(--app-code-tracking);
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  &:focus {
+    border-color: var(--app-action-bg);
+  }
+
+  // The field's own border carries the rejection as well as the message under it,
+  // because the two are read in different orders: the border is seen first and the
+  // message answers it. Colour is never the only signal, which is what the message
+  // and `aria-invalid` are for.
+  &.invalid {
+    border-color: var(--app-status-danger-fg);
+  }
+
+  @include tokens.app-focus-ring;
+}
+
+.paste {
+  flex: none;
+  inline-size: var(--app-code-field-height);
+  block-size: var(--app-code-field-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  @include tokens.app-focus-ring;
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+}

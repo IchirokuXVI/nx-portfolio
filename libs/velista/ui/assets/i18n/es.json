@@ -26,6 +26,58 @@
       "reload": "Recargar ahora"
     }
   },
+  "entry": {
+    "createZone": {
+      "title": "Ponle nombre al grupo",
+      "body": "Un grupo son los de tu casa o tus compañeros de piso. Puedes cambiar el nombre después",
+      "label": "Nombre del grupo",
+      "placeholder": "Casa",
+      "submit": "Crear grupo",
+      "submitting": "Creando",
+      "mintingAccount": "Estamos creando una cuenta en este teléfono para que el grupo tenga dueño. Puedes añadirle un correo cuando quieras"
+    },
+    "joinZone": {
+      "title": "Escribe el código",
+      "body": "Quien creó el grupo puede ver el código en la página del grupo",
+      "label": "Código de invitación",
+      "hint": "Letras y números. Nunca O, I ni L",
+      "submit": "Pedir entrar",
+      "submitting": "Enviando",
+      "paste": "Pegar"
+    },
+    "joinLink": {
+      "title": "Alguien te quiere en su lista",
+      "body": "Pide entrar y quien lleva el grupo te dejará pasar. Verás el grupo y sus listas en cuanto lo haga",
+      "codeLabel": "El código de tu enlace",
+      "decline": "Ahora no",
+      "guestNotice": "Al pedir entrar se crea una cuenta en este teléfono. Añádele un correo después para no perderla"
+    },
+    "invite": {
+      "title": "{{name}} es tuyo",
+      "body": "Envía este código a quien compre contigo. Lo escriben para pedir entrar",
+      "copy": "Copiar código",
+      "copied": "Copiado",
+      "share": "Compartir el enlace"
+    },
+    "asked": {
+      "title": "Has pedido entrar en {{name}}",
+      "body": "Quien lleva el grupo decide. Esta página se actualiza en cuanto lo haga y el grupo se abrirá aquí abajo"
+    },
+    "cancel": "Cancelar",
+    "error": {
+      "noSuchZone": "Ningún grupo tiene ese código. Compruébalo con quien te lo envió. Los códigos nunca llevan O, I ni L",
+      "alreadyAsked": "Ya has pedido entrar en este grupo",
+      "notAllowed": "No puedes entrar en este grupo. Habla con quien lo lleva",
+      "tooMany": "Demasiados intentos. Espera un minuto e inténtalo de nuevo",
+      "createClash": "Algo ha chocado por nuestra parte. Inténtalo otra vez",
+      "failed": "No se ha podido enviar. Inténtalo de nuevo"
+    },
+    "accountLost": {
+      "title": "Hemos perdido la cuenta de este teléfono",
+      "body": "Tus grupos estaban ligados a este teléfono y ya no podemos acceder a ellos. Puedes empezar de nuevo, y si añades un correo la próxima vez esto no volverá a pasar",
+      "restart": "Empezar de nuevo"
+    }
+  },
   "home": {
     "loading": "Cargando tus grupos",
     "or": "O",

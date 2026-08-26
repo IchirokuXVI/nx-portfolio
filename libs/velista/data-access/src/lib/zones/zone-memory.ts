@@ -1,13 +1,21 @@
 import { inject, Injectable, signal } from '@angular/core';
-import type {
-  Membership,
-  MyZone,
-  MyZoneOrder,
-  Page,
-  Zone,
+import {
+  JOIN_CODE_ALPHABET,
+  JOIN_CODE_LENGTH,
+  type Membership,
+  type MyZone,
+  type MyZoneOrder,
+  type Page,
+  type Zone,
 } from '@portfolio/velista/models';
 import { TokenStore } from '../auth/token-store';
-import { SEED_USER_ID, SEED_ZONES } from './static-zone-data';
+import { GatewayError } from '../errors';
+import {
+  SEED_JOIN_CODES,
+  SEED_JOINABLE_ZONE,
+  SEED_USER_ID,
+  SEED_ZONES,
+} from './static-zone-data';
 import type {
   ZoneCreationResult,
   ZoneJoinResult,
@@ -87,16 +95,75 @@ export class ZoneMemory implements ZoneServiceI {
     return { state: 'created', zone: stripMine(zone) };
   }
 
+  /**
+   * Ask to join by code, including every way that can fail.
+   *
+   * The failures are the point. Plan 0008 keys its copy on the error **code plus the
+   * operation**, and its acceptance criterion asks that each of those messages be
+   * verified here rather than against a live gateway, which a fake that could only
+   * succeed would make impossible. The codes that produce each one are named in
+   * `SEED_JOIN_CODES`, and each is a real code shape, so the field accepts them and the
+   * sheet is driven exactly as it would be by a person typing.
+   *
+   * The mapping mirrors what core actually does, which is what makes it worth
+   * asserting against: only one thing in the backend produces each of these on this
+   * route (section 5.4). A KICKED membership is deliberately absent, because it is not
+   * a failure there either: core moves it back to PENDING and the ask succeeds.
+   */
   async joinZone(joinCode: string, username?: string): Promise<ZoneJoinResult> {
     const authorized = await this._tokens.authorizeOptionalAuthCall();
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
     }
 
+    const code = joinCode.toUpperCase();
+
+    if (code === SEED_JOIN_CODES.rateLimited) {
+      throw memoryFailure('rate_limited', 429);
+    }
+    if (code === SEED_JOIN_CODES.banned) {
+      throw memoryFailure('forbidden', 403);
+    }
+
+    const mine = this._zones().find((zone) => zone.joinCode === code);
+    if (mine !== undefined) {
+      // Already APPROVED here, or already waiting. One code, one message, because
+      // the person cannot act differently on the two.
+      throw memoryFailure('conflict', 409);
+    }
+
+    if (code !== SEED_JOINABLE_ZONE.joinCode) {
+      throw memoryFailure('not_found', 404);
+    }
+
     const userId = this._tokens.tokens()?.userId ?? SEED_USER_ID;
+
+    // The zone joins the caller's list immediately, still PENDING, because that is
+    // what the real `listMine` returns for a membership that is waiting: it selects
+    // APPROVED and PENDING alike and inner joins the zone row for both. That is also
+    // where the group's name comes from, and the fake would be misleading if the name
+    // appeared any earlier than the reload (section 5.6).
+    this._zones.update((current) => [
+      {
+        ...SEED_JOINABLE_ZONE,
+        myRole: 'MEMBER',
+        myStatus: 'PENDING',
+        counts: {
+          memberCount: 3,
+          // A pending member may read nothing here yet, and zero says exactly that.
+          listCount: 0,
+          // Not staff, so the backend does not tell them who is waiting.
+          pendingRequestCount: null,
+          firstPendingRequesterName: null,
+        },
+        lists: [],
+      },
+      ...current,
+    ]);
+
     const membership: Membership = {
-      id: `membership-${joinCode}`,
-      zoneId: `zone-${joinCode.toLowerCase()}`,
+      id: `membership-${code}`,
+      zoneId: SEED_JOINABLE_ZONE.id,
       userId,
       // Absent means "use my global username", which the backend resolves. The
       // fake has no user directory, so it stands in with a placeholder.
@@ -138,10 +205,28 @@ function stripMine(zone: MyZone): Zone {
 }
 
 function randomJoinCode(): string {
-  // No I, O, 0 or 1: this is a code people read aloud and type on a phone.
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   return Array.from(
-    { length: 6 },
-    () => alphabet[Math.floor(Math.random() * alphabet.length)]
+    { length: JOIN_CODE_LENGTH },
+    () =>
+      JOIN_CODE_ALPHABET[Math.floor(Math.random() * JOIN_CODE_ALPHABET.length)]
   ).join('');
+}
+
+/**
+ * A failure shaped like one the interceptor would have built.
+ *
+ * The correlation id is real in structure and local in origin, which is honest: there
+ * was no request, so there is no server reference to quote. Anything rendering one is
+ * being exercised with the same type it will see in production.
+ */
+function memoryFailure(
+  code: GatewayError['code'],
+  status: number
+): GatewayError {
+  return new GatewayError({
+    code,
+    status,
+    correlationId: `memory-${Math.random().toString(36).slice(2, 10)}`,
+    detail: 'produced by ZoneMemory, no request was sent',
+  });
 }
