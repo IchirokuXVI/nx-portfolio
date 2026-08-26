@@ -126,6 +126,22 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `landing`, `odontog
   `> **Status: backlog. Not scheduled for development.**` blockquote, so the file says
   so on its own and not only by where it sits.
 
+## Luna Shopper backend
+
+- **The committed OpenAPI document must always be current.** Any change to a gateway route, a
+  request or response DTO, an error code, or a contract schema in `libs/luna-shopper/contracts`
+  can change `apps/luna-shopper-backend/gateway/docs/openapi.json`. Regenerate it and commit the
+  diff **before** finishing a change or opening a PR:
+
+  ```sh
+  npx nx run luna-shopper-backend-gateway:openapi
+  ```
+
+- The gateway's own test suite fails when that file is stale (`openapi-document.spec.ts`), and PR
+  checks run it through `nx affected -t lint test`, so a forgotten regeneration is a red PR rather
+  than silent drift. Never work around that failure by editing `openapi.json` by hand: it is
+  generated output, and the generator is the only thing allowed to write it.
+
 ## Git workflow
 
 - **Never push code.** Commit locally only, unless the user explicitly asks for a push. Even when a push is explicitly requested, confirm with the user before running it — a prior "yes" does not carry forward to later pushes.
