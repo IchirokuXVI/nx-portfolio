@@ -1,0 +1,60 @@
+// What the two credential fields share.
+//
+// A mixin rather than a third component, because the only thing `EmailField` and
+// `PasswordField` have in common is a box and a label: one of them holds a reveal
+// button and a rule line and the other holds neither, so a shared component would take
+// both as inputs and be a form framework by the end of it (the same reasoning
+// `_sheet-body.scss` records in `feature-entry`).
+//
+// Both live in this library, so `@use '../styles/tokens'` reaches the design system
+// and each component still gets its own encapsulated CSS.
+
+@use '../styles/tokens' as tokens;
+
+/// The uppercase label above a field. Small, tracked out, and never the only thing
+/// naming the input: it is a real `<label for>`, so it names it to a screen reader too.
+@mixin field-label {
+  display: block;
+  margin-block-end: var(--app-space-3);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+/// The box itself.
+///
+/// Rule T3: never under 16px. iOS Safari zooms the viewport when a focused input is
+/// smaller, and on a two field form that throws the primary button off the screen at
+/// the exact moment it is about to be tapped.
+@mixin field-box {
+  inline-size: 100%;
+  block-size: var(--app-button-height);
+  padding-inline: var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-field-font-size);
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  &:focus {
+    border-color: var(--app-action-bg);
+  }
+
+  @include tokens.app-focus-ring;
+}
+
+/// The rejected treatment.
+///
+/// The border carries it as well as the message beside it, because the two are read in
+/// different orders: the border is seen first and the message answers it. Colour is
+/// never the only signal, which is what the message and `aria-invalid` are for.
+@mixin field-invalid {
+  border-color: var(--app-status-danger-fg);
+}

@@ -9,13 +9,13 @@ import {
 import { SessionStore } from '@portfolio/velista/data-access';
 
 /**
- * Which of the two pages a visitor belongs on (plan 0007, section 2.1).
+ * Which page a visitor belongs on (plan 0007, section 2.1, and plan 0009, rule C1).
  *
- * Authentication decides **where you are**, not what a template renders. Both guards
- * return a `UrlTree` rather than `false`, so the router navigates before either
+ * Authentication decides **where you are**, not what a template renders. Every guard
+ * here returns a `UrlTree` rather than `false`, so the router navigates before any
  * component is created and there is no frame of the wrong page: the same mechanism
  * `localeCorrectionGuard` already uses on the parent route. Parent guards resolve
- * first, so the locale is settled before either of these runs.
+ * first, so the locale is settled before any of these runs.
  *
  * `feature-shell` may import `@portfolio/velista/data-access`: rule D1 (plan 0004)
  * forbids that of `ui`, and this is not `ui`. `SessionStore` is provided on the app
@@ -25,6 +25,9 @@ import { SessionStore } from '@portfolio/velista/data-access';
 
 /** The dashboard's path, relative to the app's mount. */
 const HOME_PATH = 'home';
+
+/** The segment every credential screen sits under, and the one a redirect strips. */
+const AUTH_PATH = 'auth';
 
 /**
  * Builds a sibling URL out of the one the guard was handed.
@@ -58,6 +61,11 @@ function retarget(
  * A signed in visitor is sent onward to the dashboard in one navigation, which is what
  * keeps `0003`'s reasoning intact: the product is launched from a phone home screen and
  * a returning user should not have to navigate past a marketing page.
+ *
+ * It also covers `auth/login` and `auth/register` (plan 0009, section 4.2), and on
+ * register that is **rule C2 enforced at the route**: a guest who filled in the
+ * register form would get a valid new account and silently lose every group on the one
+ * they already had.
  */
 export const anonymousOnlyGuard: CanActivateFn = (_route, state) => {
   if (!inject(SessionStore).isAuthenticated()) {
@@ -65,7 +73,7 @@ export const anonymousOnlyGuard: CanActivateFn = (_route, state) => {
   }
 
   return retarget(state.url, (segments) => [
-    ...segments,
+    ...withoutAuthTail(segments),
     new UrlSegment(HOME_PATH, {}),
   ]);
 };
@@ -90,3 +98,42 @@ export const authenticatedGuard: CanActivateFn = (_route, state) => {
       : segments;
   });
 };
+
+/**
+ * The upgrade screen, for the one person it is for and nobody else.
+ *
+ * **Rule C1 (plan 0009, section 4.2), and it is a safety rule rather than tidiness.**
+ * `auth/upgrade` converts the caller's existing user in place and keeps their `userId`,
+ * so it is the only path that keeps a guest's groups, while `auth/register` creates a
+ * new user row. This guard and `anonymousOnlyGuard` are one decision taken from
+ * opposite ends: whichever of the two screens a guest reaches, they end up on this one.
+ *
+ * Anybody else here is either anonymous, with no account to upgrade, or already
+ * registered, in which case `upgrade()` refuses anyway. Neither belongs on a form that
+ * cannot succeed, so each goes where the rest of the app already sends them.
+ */
+export const guestOnlyGuard: CanActivateFn = (_route, state) => {
+  const session = inject(SessionStore);
+  if (session.isGuest()) {
+    return true;
+  }
+
+  const home = session.isAuthenticated();
+  return retarget(state.url, (segments) => {
+    const base = withoutAuthTail(segments);
+    return home ? [...base, new UrlSegment(HOME_PATH, {})] : base;
+  });
+};
+
+/**
+ * Drops `auth/<screen>` off the end of a URL, leaving the app's own mount.
+ *
+ * The credential screens are two segments deep where the dashboard is one, so a
+ * redirect away from one cannot be built by appending or by dropping a single segment.
+ * Working from the `auth` segment rather than from a count is what keeps this correct
+ * if a third screen is ever nested deeper.
+ */
+function withoutAuthTail(segments: UrlSegment[]): UrlSegment[] {
+  const authAt = segments.findIndex((segment) => segment.path === AUTH_PATH);
+  return authAt === -1 ? segments : segments.slice(0, authAt);
+}

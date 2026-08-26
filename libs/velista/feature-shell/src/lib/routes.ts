@@ -1,7 +1,11 @@
 import { type Route } from '@angular/router';
 import { localeCorrectionGuard } from '@portfolio/localization/rokutranslator-angular';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
-import { anonymousOnlyGuard, authenticatedGuard } from './auth-guards';
+import {
+  anonymousOnlyGuard,
+  authenticatedGuard,
+  guestOnlyGuard,
+} from './auth-guards';
 import { VELISTA_TRANSLATION_PROVIDERS } from './translation-providers';
 import { translationsReadyResolver } from './translations-ready';
 import { APP_USABLE_LOCALES } from './usable-locales';
@@ -116,6 +120,52 @@ export const AppShellRoutes: Route[] = [
         loadComponent: () =>
           import('@portfolio/velista/feature-home').then((m) => m.HomePage),
         children: [...entrySheetRoutes('home')],
+      },
+      // The credential flows (plan 0009). Routes and not sheets, because none of them
+      // completes one field in place over a page that keeps its context: each has two
+      // fields, its own alternative path at the bottom, and in two cases a Google
+      // button, so each is a destination (section 4.1).
+      //
+      // The guards are rule C1, and between them they are the whole of rule C2: a
+      // guest is barred from `register`, where a valid form would silently strand
+      // every group they have, and steered to `upgrade`, which is the only path that
+      // keeps them. Which person may see which screen is a property of the route,
+      // where it is tested, rather than a branch in a template.
+      {
+        path: 'auth/login',
+        canActivate: [anonymousOnlyGuard],
+        loadComponent: () =>
+          import('@portfolio/velista/feature-auth').then((m) => m.SignInPage),
+      },
+      {
+        path: 'auth/register',
+        canActivate: [anonymousOnlyGuard],
+        loadComponent: () =>
+          import('@portfolio/velista/feature-auth').then((m) => m.RegisterPage),
+      },
+      {
+        path: 'auth/upgrade',
+        canActivate: [guestOnlyGuard],
+        loadComponent: () =>
+          import('@portfolio/velista/feature-auth').then((m) => m.UpgradePage),
+      },
+      {
+        // Public, and it has to be: a confirmation link is opened wherever the mail
+        // app happens to be, which is often a phone that has never signed in.
+        path: 'auth/verify',
+        loadComponent: () =>
+          import('@portfolio/velista/feature-auth').then(
+            (m) => m.VerifyEmailPage
+          ),
+      },
+      {
+        // Public, and inert until the gateway redirects here with the pair in the URL
+        // fragment instead of answering JSON (section 5.6).
+        path: 'auth/callback',
+        loadComponent: () =>
+          import('@portfolio/velista/feature-auth').then(
+            (m) => m.AuthCallbackPage
+          ),
       },
       {
         // A cold arrival on somebody else's invite link, and the one way in that is

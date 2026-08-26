@@ -1,0 +1,8 @@
+@use '../credential-form' as credential;
+
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+@include credential.credential-form;

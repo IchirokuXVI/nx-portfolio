@@ -26,6 +26,71 @@
       "reload": "Recargar ahora"
     }
   },
+  "auth": {
+    "back": "Atrás",
+    "signIn": {
+      "title": "Hola de nuevo",
+      "body": "Entra y tus grupos te acompañan, en cualquier teléfono",
+      "submit": "Entrar",
+      "newHere": "¿Es tu primera vez?",
+      "createAccount": "Crear una cuenta"
+    },
+    "register": {
+      "title": "Crea una cuenta",
+      "body": "Para que tus listas no dependan de un solo teléfono",
+      "submit": "Crear cuenta",
+      "haveOne": "¿Ya tienes una?"
+    },
+    "upgrade": {
+      "title": "Conserva lo que tienes",
+      "body": "Añade un correo y una contraseña a la cuenta que ya está en este teléfono. Nada se mueve y nada se pierde",
+      "keepsafe_one": "Tu grupo y todo lo que hay dentro se quedan donde están. Es la misma cuenta, con una forma de volver a entrar",
+      "keepsafe_other": "Tus {{count}} grupos y todo lo que hay dentro se quedan donde están. Es la misma cuenta, con una forma de volver a entrar",
+      "submit": "Proteger mi cuenta",
+      "later": "Ahora no",
+      "done": "Tu cuenta está protegida. Entra desde donde quieras con {{email}}"
+    },
+    "field": {
+      "email": "Correo",
+      "password": "Contraseña",
+      "emailPlaceholder": "tu@ejemplo.com",
+      "passwordPlaceholder": "Tu contraseña",
+      "passwordRule": "Al menos 8 caracteres",
+      "showPassword": "Mostrar contraseña",
+      "hidePassword": "Ocultar contraseña"
+    },
+    "verify": {
+      "working": "Confirmando tu correo",
+      "confirmedTitle": "Correo confirmado",
+      "confirmedBody": "{{email}} es tuyo. Puedes entrar con él desde cualquier teléfono",
+      "confirmedBodyNoEmail": "Tu correo está confirmado. Puedes entrar con él desde cualquier teléfono",
+      "expiredTitle": "Ese enlace ha caducado",
+      "expiredBody": "Los enlaces de confirmación duran poco y sirven una vez. Tu cuenta está bien: entrar y todo lo demás funciona igual",
+      "toGroups": "Ir a mis grupos"
+    },
+    "nudge": {
+      "title": "Confirma tu correo",
+      "body": "Te hemos enviado un enlace a {{email}}. Puedes seguir sin él, pero confirmarlo mantiene la cuenta a tu nombre",
+      "dismiss": "Descartar"
+    },
+    "resend": {
+      "prompt": "¿No te ha llegado?",
+      "promptExpired": "¿Aún quieres confirmarlo?",
+      "action": "Envíalo otra vez",
+      "sent": "Enviado otra vez. Puedes pedir otro en {{wait}}",
+      "sentNoWait": "Enviado otra vez. Dale un minuto para que llegue",
+      "refused": "Demasiadas peticiones. Puedes pedir otro en {{wait}}",
+      "refusedNoWait": "Demasiadas peticiones. Inténtalo dentro de un rato"
+    },
+    "error": {
+      "badCredentials": "Ese correo y esa contraseña no coinciden. Revisa los dos e inténtalo de nuevo",
+      "emailTaken": "Ese correo ya tiene una cuenta",
+      "emailTakenAction": "Entrar en su lugar",
+      "badEmail": "Eso no parece un correo",
+      "shortPassword": "Las contraseñas necesitan al menos 8 caracteres",
+      "tooMany": "Demasiados intentos. Espera un minuto e inténtalo de nuevo"
+    }
+  },
   "entry": {
     "createZone": {
       "title": "Ponle nombre al grupo",

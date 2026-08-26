@@ -1,5 +1,7 @@
 import type { Provider } from '@angular/core';
 import { ApiUrl } from './api-url';
+import { AccountNotice } from './auth/account-notice';
+import { AuthMemory } from './auth/auth-memory';
 import { SessionStore } from './auth/session-store';
 import { TokenStore } from './auth/token-store';
 import { ConnectionRecovery } from './connection-recovery';
@@ -30,15 +32,23 @@ import { ZoneStore } from './zones/zone-store';
  * it is the app's decision, made by the environment initializer in `appProviders`.
  * Separating those two is what stops the app file from having to name the class twice.
  *
- * `ZoneApi` is deliberately **not** here. Choosing to talk to a real gateway is the
- * app's call, and `appProviders` binds it to `ZONE_SERVICE` with `useClass`, which
- * provides it in the same breath.
+ * `ZoneApi` and `AuthApi` are deliberately **not** here. Choosing to talk to a real
+ * gateway is the app's call, and `appProviders` binds each to its token with
+ * `useClass`, which provides it in the same breath.
+ *
+ * `AccountNotice` (plan 0009) joins for the same reason `ZoneStore` did, one step
+ * milder: it injects nothing, so root would work, but it is shared between the auth
+ * screens and the dashboard and every service those pages share is installed here.
+ * `AuthMemory` joins for `ZoneMemory`'s reason exactly, and no other: it reaches
+ * `TokenStore`, and it is nobody's default.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
   TokenStore,
   SessionStore,
+  AccountNotice,
   ConnectionRecovery,
+  AuthMemory,
   ZoneMemory,
   ZoneStore,
 ];

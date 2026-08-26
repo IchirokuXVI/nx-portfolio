@@ -10,7 +10,11 @@ import {
   provideFakeSessionStore,
   type FakeIdentity,
 } from '@portfolio/velista/data-access';
-import { anonymousOnlyGuard, authenticatedGuard } from './auth-guards';
+import {
+  anonymousOnlyGuard,
+  authenticatedGuard,
+  guestOnlyGuard,
+} from './auth-guards';
 
 /**
  * Plan 0007's acceptance criteria 2, 3 and 5, asserted on the **redirect** rather than
@@ -67,6 +71,71 @@ describe('authenticatedGuard', () => {
     expect(run(authenticatedGuard, 'anonymous', '/en/velista/home')).toBe(
       '/en/velista'
     );
+  });
+});
+
+/**
+ * Rule C1 (plan 0009, section 4.2), which is the plan's safety rule rather than a
+ * tidiness one.
+ *
+ * `register()` creates a **new** user row and `upgrade()` converts the caller in place
+ * and keeps their `userId`. Memberships are keyed by that id, so a guest who reached
+ * the register screen would fill in a perfectly valid form, land on an empty dashboard,
+ * and have no way back to groups now owned by an account whose only credential was the
+ * token that call just replaced. Nothing would warn them, which is exactly why this is
+ * asserted on the redirect and not left to a template.
+ */
+describe('rule C1: who may see which credential screen', () => {
+  it('bars a guest from register and sends them to the dashboard', () => {
+    // From where the guest banner takes them to upgrade instead.
+    expect(run(anonymousOnlyGuard, 'TEMPORARY', '/en/velista/auth/register')).toBe(
+      '/en/velista/home'
+    );
+  });
+
+  it('bars a registered user from register too', () => {
+    expect(
+      run(anonymousOnlyGuard, 'REGISTERED', '/en/velista/auth/register')
+    ).toBe('/en/velista/home');
+  });
+
+  it('lets somebody with no account onto register and sign in', () => {
+    expect(run(anonymousOnlyGuard, 'anonymous', '/en/velista/auth/register')).toBe(
+      true
+    );
+    expect(run(anonymousOnlyGuard, 'anonymous', '/en/velista/auth/login')).toBe(
+      true
+    );
+  });
+
+  it('lets a guest, and only a guest, onto upgrade', () => {
+    expect(run(guestOnlyGuard, 'TEMPORARY', '/en/velista/auth/upgrade')).toBe(
+      true
+    );
+  });
+
+  it('sends a registered user off upgrade to their dashboard', () => {
+    // `upgrade()` refuses anybody whose kind is not TEMPORARY, so this form could
+    // never succeed for them.
+    expect(run(guestOnlyGuard, 'REGISTERED', '/en/velista/auth/upgrade')).toBe(
+      '/en/velista/home'
+    );
+  });
+
+  it('sends somebody with no account off upgrade to the front door', () => {
+    // There is no account on this phone to attach an email to.
+    expect(run(guestOnlyGuard, 'anonymous', '/en/velista/auth/upgrade')).toBe(
+      '/en/velista'
+    );
+  });
+
+  it('strips the whole auth tail rather than one segment', () => {
+    // The credential screens are two segments deep where the dashboard is one, so a
+    // redirect built by dropping a single segment would land on `/auth`.
+    expect(run(guestOnlyGuard, 'REGISTERED', '/es/velista/auth/upgrade')).toBe(
+      '/es/velista/home'
+    );
+    expect(run(guestOnlyGuard, 'anonymous', '/en/auth/upgrade')).toBe('/en');
   });
 });
 

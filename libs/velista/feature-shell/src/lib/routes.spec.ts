@@ -93,4 +93,84 @@ describe('AppShellRoutes', () => {
       ).toBe(true);
     });
   });
+
+  describe('the credential flows', () => {
+    const AUTH_PATHS = [
+      'auth/login',
+      'auth/register',
+      'auth/upgrade',
+      'auth/verify',
+      'auth/callback',
+    ];
+
+    it('declares all five, before the front door', () => {
+      // The `''` ordering assertion above covers this for the table as a whole. This
+      // one names the five, so removing one is a failure rather than a shorter list
+      // that still happens to be ordered.
+      const paths = pages.map((route) => route.path);
+
+      for (const path of AUTH_PATHS) {
+        expect(paths).toContain(path);
+        expect(paths.indexOf(path)).toBeLessThan(paths.indexOf(''));
+      }
+    });
+
+    it('guards register and sign in against anybody who is signed in', () => {
+      // Rule C2 at the route: a guest filling in the register form would silently
+      // strand every group they have.
+      expect(pages.find((r) => r.path === 'auth/login')?.canActivate)
+        .toHaveLength(1);
+      expect(pages.find((r) => r.path === 'auth/register')?.canActivate)
+        .toHaveLength(1);
+    });
+
+    it('guards upgrade, and guards it differently', () => {
+      // Rule C1. The two guards are not the same function, which is the whole point:
+      // whichever of the two screens a guest reaches, they end up on upgrade.
+      const register = pages.find((r) => r.path === 'auth/register');
+      const upgrade = pages.find((r) => r.path === 'auth/upgrade');
+
+      expect(upgrade?.canActivate).toHaveLength(1);
+      expect(upgrade?.canActivate?.[0]).not.toBe(register?.canActivate?.[0]);
+    });
+
+    it('leaves the two public ones public', () => {
+      // A confirmation link is opened wherever the mail app happens to be, which is
+      // often a phone that has never signed in, and the OAuth callback lands before
+      // there is a session at all.
+      expect(
+        pages.find((r) => r.path === 'auth/verify')?.canActivate
+      ).toBeUndefined();
+      expect(
+        pages.find((r) => r.path === 'auth/callback')?.canActivate
+      ).toBeUndefined();
+    });
+
+    it('gives none of them children, because none of them is a sheet', () => {
+      for (const path of AUTH_PATHS) {
+        expect(pages.find((route) => route.path === path)?.children)
+          .toBeUndefined();
+      }
+    });
+
+    it('keeps them lazy', () => {
+      for (const path of AUTH_PATHS) {
+        expect(
+          pages.find((route) => route.path === path)?.loadComponent
+        ).toBeDefined();
+      }
+    });
+  });
+
+  describe('the ways in, still', () => {
+    it('keeps every page lazy after plan 0009 added five', () => {
+      // The shell's initial payload carries the layout and the locale guard, and a
+      // visitor downloads the one screen they are shown.
+      const everyRoute = [...pages, ...sheetsOf(''), ...sheetsOf('home')];
+
+      expect(
+        everyRoute.every((route) => route.loadComponent !== undefined)
+      ).toBe(true);
+    });
+  });
 });

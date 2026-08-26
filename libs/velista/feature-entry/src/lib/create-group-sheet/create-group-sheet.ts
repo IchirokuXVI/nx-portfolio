@@ -16,6 +16,7 @@ import {
   ZoneStore,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
+import { appPath } from '@portfolio/velista/platform';
 import {
   AccountLostPanel,
   AlertIcon,
@@ -24,7 +25,7 @@ import {
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { entryErrorKey } from '../entry-error-copy';
-import { appPath, returnPath, type EntryReturnTo } from '../entry-urls';
+import { returnPath, type EntryReturnTo } from '../entry-urls';
 
 /** The gateway's own limit on a zone name, so the field cannot overrun it. */
 const NAME_MAX_LENGTH = 80;

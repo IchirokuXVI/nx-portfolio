@@ -1,0 +1,24 @@
+<label [attr.for]="fieldId()" class="label">{{ label() }}</label>
+
+<!--
+  `autocapitalize` and `autocorrect` are off because an address is not a sentence, and
+  a phone that tries to help turns marta@ into Marta@ and then into a 400 the person
+  cannot see the cause of.
+-->
+<input
+  (input)="onInput($event)"
+  [attr.aria-describedby]="describedBy()"
+  [attr.aria-invalid]="invalid()"
+  [class.invalid]="invalid()"
+  [id]="fieldId()"
+  [placeholder]="placeholder()"
+  [readOnly]="readOnly()"
+  [value]="value()"
+  autocapitalize="off"
+  autocomplete="email"
+  autocorrect="off"
+  class="field"
+  inputmode="email"
+  spellcheck="false"
+  type="email"
+/>

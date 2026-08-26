@@ -1,0 +1,35 @@
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+.working {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 100%;
+  color: var(--app-text-secondary);
+}
+
+.spinner {
+  font-size: var(--app-icon-lg);
+}
+
+// Announced but not drawn. The spinner turns for anybody looking; this is what the
+// same moment sounds like, and it is why the spinner itself is `aria-hidden` like
+// every other icon in the app.
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.resend {
+  margin-block-start: calc(-1 * var(--app-space-4));
+  margin-block-end: var(--app-space-7);
+}

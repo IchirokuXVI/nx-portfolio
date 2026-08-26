@@ -99,6 +99,16 @@ export interface RefreshRequest {
   readonly refreshToken: string;
 }
 
+/**
+ * Consuming a confirmation link.
+ *
+ * The token is the raw one out of the email's query string. The server stores only a
+ * hash of it, so this is the one moment it exists anywhere the client can see.
+ */
+export interface VerifyEmailRequest {
+  readonly token: string;
+}
+
 /** Converting a guest in place. The user id comes from the token, never the body. */
 export interface UpgradeRequest {
   readonly email: string;

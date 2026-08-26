@@ -162,24 +162,31 @@ export class LandingPage {
   }
 
   /**
-   * Everything else this page can start, and where each of them currently stops.
+   * Signing in, which plan 0009 built.
    *
-   * The two entry actions have gone: `0008` built them. What is left leads to the
-   * credential flows, which are the next plan and have their own mock to be approved
-   * first.
+   * A sibling of this route rather than a child, because it is a destination and not a
+   * sheet: `relativeTo` this page's own route, which is the app's mount, so neither the
+   * locale segment nor the mount is written down here (extraction contract, item 5).
+   */
+  signInWithEmail(): void {
+    void this._router.navigate(['auth', 'login'], { relativeTo: this._route });
+  }
+
+  /**
+   * Google, which is the one control on this page still recorded rather than routed.
    *
-   * They are recorded rather than left unbound so the controls are real, focusable and
-   * testable now, and so that connecting each one later is a single line here instead
-   * of a hunt through templates.
+   * Not a frontend limitation: `GoogleController.callback` answers JSON rather than
+   * redirecting into the app, and it never passes `linkUserId`, so it would mint a
+   * fresh registered user for a caller who already has one. Both are gateway changes
+   * (plan 0009, section 5.6). `auth/callback` is built and waiting for the first.
+   *
+   * Recorded rather than left unbound so the control is real, focusable and testable
+   * now, and so that connecting it later is a single line here.
    */
   readonly pendingRoutes = signal<readonly string[]>([]);
 
   continueWithGoogle(): void {
     this._notYetRouted('auth.google');
-  }
-
-  signInWithEmail(): void {
-    this._notYetRouted('auth.login');
   }
 
   /**

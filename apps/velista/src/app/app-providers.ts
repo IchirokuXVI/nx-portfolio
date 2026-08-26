@@ -11,6 +11,8 @@ import {
 } from '@angular/core';
 import { provideService } from '@portfolio/shared/data-access';
 import {
+  AUTH_SERVICE,
+  AuthApi,
   ConnectionRecovery,
   gatewayInterceptor,
   VELISTA_DATA_ACCESS_PROVIDERS,
@@ -95,6 +97,11 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // as binding it, the second is an alias to one provided elsewhere. Under rule D5
   // `ZoneApi` provides itself nowhere, so an alias would have nothing to point at.
   provideService(ZONE_SERVICE, ZoneApi),
+
+  // The credential flows (plan 0009), bound here for exactly the reasons above:
+  // `AuthApi` needs this injector's `HttpClient`, and the token's default being the
+  // same class does not provide it.
+  provideService(AUTH_SERVICE, AuthApi),
 
   // Start the connection listener. Nothing injects it, so without this nothing would
   // ever construct it: it is a listener, not a dependency. It probes the backend while

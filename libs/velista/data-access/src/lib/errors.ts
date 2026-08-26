@@ -23,6 +23,13 @@ export class GatewayError extends Error {
   readonly serverMessage?: string;
   /** Field keys for a `validation_failed`. Used for its keys, not its strings. */
   readonly fieldErrors?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * The wait the server asked for on a `rate_limited`, in seconds, when it named one.
+   *
+   * Undefined means it did not, which is not the same as zero and must never be
+   * rendered as a countdown from an invented number (plan 0009, rule C3).
+   */
+  readonly retryAfterSeconds?: number;
 
   constructor(init: {
     code: ErrorCode;
@@ -31,6 +38,7 @@ export class GatewayError extends Error {
     detail?: string;
     serverMessage?: string;
     fieldErrors?: Readonly<Record<string, readonly string[]>>;
+    retryAfterSeconds?: number;
   }) {
     // The message is for a stack trace and a log, not for a user. Every user-facing
     // string is chosen by the page from `code`.
@@ -42,6 +50,7 @@ export class GatewayError extends Error {
     this.detail = init.detail;
     this.serverMessage = init.serverMessage;
     this.fieldErrors = init.fieldErrors;
+    this.retryAfterSeconds = init.retryAfterSeconds;
   }
 }
 
@@ -87,6 +96,7 @@ export function toGatewayError(
     detail: problem?.detail,
     serverMessage: problem?.message,
     fieldErrors: problem?.errors,
+    retryAfterSeconds: problem?.retryAfterSeconds,
   });
 }
 
@@ -105,7 +115,21 @@ function asProblemDetails(body: unknown): Partial<ProblemDetails> | null {
     detail: typeof body['detail'] === 'string' ? body['detail'] : undefined,
     message: typeof body['message'] === 'string' ? body['message'] : undefined,
     errors: asFieldErrors(body['errors']),
+    retryAfterSeconds: asWaitSeconds(body['retryAfterSeconds']),
   };
+}
+
+/**
+ * The server's own wait, or `undefined`.
+ *
+ * Rule D4 applies with unusual force here: this number is rendered as a clock the user
+ * watches count down, so a string, a negative, or a `NaN` has to become "we were not
+ * told" rather than something the countdown tries to display.
+ */
+function asWaitSeconds(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.ceil(value)
+    : undefined;
 }
 
 function asFieldErrors(
