@@ -41,6 +41,12 @@ export const ERROR_CATALOG: Record<
     en: 'Too many requests. Please slow down and try again shortly.',
     es: 'Demasiadas solicitudes. Reduce el ritmo e inténtalo de nuevo en breve.',
   },
+  // Phrased as a statement about the deployment rather than about the caller,
+  // because the caller did nothing wrong (plan 0026, section 3.1).
+  [ERROR_CODES.NOT_CONFIGURED]: {
+    en: 'That sign in method is not available on this server.',
+    es: 'Ese método de inicio de sesión no está disponible en este servidor.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

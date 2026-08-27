@@ -30,7 +30,7 @@
 #     closest to production, but needs hosts-file entries (admin).
 
 # Use the locally built dev images without reaching for a registry.
-productionImageTag: dev
+imageTag: dev
 appImagePullPolicy: IfNotPresent
 
 # Port mode exposes each app directly, so the routing layer is not needed at all:
@@ -41,27 +41,20 @@ gateway:
 metallb:
   enabled: false
 
-staging:
-  enabled: false
-
 # `lbPort` turns each app's Service into a LoadBalancer on that port (see
 # templates/apps/service.yaml.tpl). The remote ports must match the MFE_REMOTE_URLS
 # baked into the shell (see the header). The shell's own port is free to change — it
 # does not bake its own URL.
 apps:
   - name: shell
-    env: production
     image: nx-portfolio/shell
     lbPort: 80
   - name: odontogram
-    env: production
     image: nx-portfolio/odontogram
     lbPort: 8082
   - name: damoclessword
-    env: production
     image: nx-portfolio/damoclessword
     lbPort: 8083
   - name: landingv2
-    env: production
     image: nx-portfolio/landingv2
     lbPort: 8084

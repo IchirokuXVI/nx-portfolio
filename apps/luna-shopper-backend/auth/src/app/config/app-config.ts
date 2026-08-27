@@ -46,13 +46,30 @@ export const authValidationSchema = Joi.object({
   ACCESS_TOKEN_TTL: Joi.string().default('15m'),
   REFRESH_TOKEN_TTL: Joi.string().default('30d'),
 
-  // Google OAuth (login with Google).
-  GOOGLE_CLIENT_ID: Joi.string().required(),
-  GOOGLE_CLIENT_SECRET: Joi.string().required(),
-  GOOGLE_CALLBACK_URL: Joi.string().uri().required(),
+  // Google OAuth (login with Google). Optional, and mirroring the gateway's
+  // schema exactly (plan 0026, section 3.2).
+  //
+  // These were `.required()` with no `.allow('')`, and Joi rejects an empty
+  // string for a required string. The chart ships `googleClientId: ''`, so the
+  // auth pod failed validation and died during boot — in exactly the deployment
+  // the gateway was carefully written to support. The chart's own comment claimed
+  // an unset client id left boot unaffected, which was true of the gateway and
+  // false here; nothing had ever booted this stack in a cluster to notice.
+  GOOGLE_CLIENT_ID: Joi.string().allow('').default(''),
+  GOOGLE_CLIENT_SECRET: Joi.string().allow('').default(''),
+  GOOGLE_CALLBACK_URL: Joi.string().uri().allow('').default(''),
 
   // SMTP for the confirmation email. Submission port over TLS (587/465).
-  SMTP_HOST: Joi.string().required(),
+  //
+  // Optional for the same reason and by the same mechanism (section 3.4), but
+  // the decision behind it is different rather than copied. Google sign in is one
+  // way in among several; email is load bearing, because without it
+  // `POST /v1/auth/register` accepts a signup whose confirmation link is never
+  // sent and the account is unreachable. So an unset SMTP host does not silently
+  // degrade: registration answers `not_configured`, which makes an SMTP-less
+  // staging cluster a supported configuration for everything except the signup
+  // flow. Give staging real credentials before using it to exercise that flow.
+  SMTP_HOST: Joi.string().allow('').default(''),
   SMTP_PORT: Joi.number().port().default(587),
   SMTP_USER: Joi.string().allow('').default(''),
   SMTP_PASS: Joi.string().allow('').default(''),
@@ -97,6 +114,12 @@ export interface AuthConfig {
     clientId: string;
     clientSecret: string;
     callbackUrl: string;
+    /**
+     * All three set and non empty. The same definition the gateway derives, so
+     * the two services agree on what "configured" means instead of each deciding
+     * for itself (plan 0026, section 3.2).
+     */
+    enabled: boolean;
   };
   smtp: {
     host: string;
@@ -106,6 +129,12 @@ export interface AuthConfig {
     from: string;
     verifyBaseUrl: string;
     resetBaseUrl: string;
+    /**
+     * An SMTP host is set, so mail can actually be delivered. The flows that
+     * depend on a delivered email (registration, resend, password reset) answer
+     * `not_configured` rather than accepting a request whose email never arrives.
+     */
+    enabled: boolean;
   };
   reaper: {
     enabled: boolean;
@@ -136,18 +165,24 @@ export const authConfiguration = registerAs(
       refreshTokenTtl: process.env.REFRESH_TOKEN_TTL as string,
     },
     google: {
-      clientId: process.env.GOOGLE_CLIENT_ID as string,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-      callbackUrl: process.env.GOOGLE_CALLBACK_URL as string,
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+      callbackUrl: process.env.GOOGLE_CALLBACK_URL ?? '',
+      enabled: Boolean(
+        process.env.GOOGLE_CLIENT_ID &&
+        process.env.GOOGLE_CLIENT_SECRET &&
+        process.env.GOOGLE_CALLBACK_URL
+      ),
     },
     smtp: {
-      host: process.env.SMTP_HOST as string,
+      host: process.env.SMTP_HOST ?? '',
       port: Number(process.env.SMTP_PORT),
       user: process.env.SMTP_USER ?? '',
       pass: process.env.SMTP_PASS ?? '',
       from: process.env.MAIL_FROM as string,
       verifyBaseUrl: process.env.MAIL_VERIFY_BASE_URL as string,
       resetBaseUrl: process.env.MAIL_RESET_BASE_URL as string,
+      enabled: Boolean(process.env.SMTP_HOST),
     },
     reaper: {
       enabled: process.env.ORPHAN_REAPER_ENABLED !== 'false',

@@ -16,6 +16,14 @@ export const ERROR_CODES = {
   NOT_FOUND: 'not_found',
   CONFLICT: 'conflict',
   RATE_LIMITED: 'rate_limited',
+  /**
+   * The deployment does not have this feature configured (plan 0026).
+   *
+   * A statement about the server, not about the caller: Google sign in with no
+   * OAuth credentials, or registration with no SMTP host. Distinct from the
+   * others because the caller did nothing wrong and retrying will not help.
+   */
+  NOT_CONFIGURED: 'not_configured',
   INTERNAL: 'internal',
 } as const;
 
@@ -33,5 +41,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ERROR_CODES.CONFLICT]: HttpStatus.CONFLICT,
   [ERROR_CODES.RATE_LIMITED]: HttpStatus.TOO_MANY_REQUESTS,
+  // 501 rather than 503 or 404. 503 says "try again later", which is wrong for a
+  // deployment that will never have Google. 404 says the route does not exist,
+  // which contradicts keeping it in the published document. 501 is exactly "this
+  // server does not implement that", which is the truth.
+  [ERROR_CODES.NOT_CONFIGURED]: HttpStatus.NOT_IMPLEMENTED,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

@@ -1,19 +1,27 @@
 {{- if and .Values.lunaShopperBackend.enabled .Values.lunaShopperBackend.migrations.enabled }}
 {{- $root := . }}
 {{- $ls := .Values.lunaShopperBackend }}
+{{- $cfgName := "luna-shopper-backend-config" }}
+{{- $secName := "luna-shopper-backend-secrets" }}
+{{- $tag := $root.Values.imageTag }}
 {{- range $ls.services }}
 {{- if or (eq .role "auth") (eq .role "core") (eq .role "catalog") }}
-{{- if or (ne .env "staging") $root.Values.staging.enabled }}
-{{- $tag := $root.Values.productionImageTag }}
-{{- if eq .env "staging" }}{{- $tag = $root.Values.stagingImageTag }}{{- end }}
-{{- $cfgName := printf "luna-shopper-backend-config-%s" .env }}
-{{- $secName := printf "luna-shopper-backend-secrets-%s" .env }}
 ---
 # Database migrations on deploy (plan 0002, section 5 and 6). A Helm pre upgrade
 # hook runs this service's migrations against its database before the new pods
 # roll, so schema changes ship with the image that needs them and never run on
 # app boot. Migrations are expand/contract (backward compatible), so old pods
 # keep working against the new schema during the rollout.
+#
+# The command is `node migrate.js`, a second webpack entry point emitted beside
+# main.js (plan 0027, section 2.1). It imports an explicit ordered migrations
+# array rather than resolving a filesystem glob, because webpack cannot follow a
+# glob and a bundled build would otherwise find zero migrations, run cleanly,
+# apply nothing, and report success.
+#
+# `--wait` on the upgrade (plan 0003) is what makes a failure here matter: the
+# Job is a hook, so a migration that exhausts backoffLimit fails the upgrade
+# before any new pod takes traffic.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -43,8 +51,7 @@ spec:
           image: {{ .image }}:{{ $tag }}
           command: {{ toYaml $ls.migrations.command | nindent 12 }}
           env:
-            {{- include "lunaShopperBackend.env" (dict "svc" . "cfg" $cfgName "sec" $secName "env" .env "tag" $tag) | nindent 12 }}
-{{- end }}
+            {{- include "lunaShopperBackend.env" (dict "svc" . "cfg" $cfgName "sec" $secName "env" $root.Values.environment "tag" $tag) | nindent 12 }}
 {{- end }}
 {{- end }}
 {{- end }}

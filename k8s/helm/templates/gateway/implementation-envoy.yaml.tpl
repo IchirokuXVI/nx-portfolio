@@ -29,7 +29,7 @@
 {{- if and .Values.gateway.enabled .Values.lunaShopperBackend.enabled }}
 {{- if eq .Values.gateway.className "eg" }}
 {{- range .Values.lunaShopperBackend.services }}
-{{- if and .routed .websocket (or (ne .env "staging") $.Values.staging.enabled) }}
+{{- if and .routed .websocket }}
 ---
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy

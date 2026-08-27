@@ -10,6 +10,21 @@ FROM ${TARGET_REGISTRY}nx-portfolio/builder:${BUILDER_TAG} AS builder
 ARG NODE_ENV=development
 ENV NODE_ENV=$NODE_ENV
 ARG NX_APP
+
+# The backend this image talks to (plan 0014). velista is the only frontend in the
+# workspace with a backend, so it is the only one whose image is not environment
+# agnostic. Both are baked into the bundle at build time by a DefinePlugin in
+# webpack.prod.config.ts, exactly as the shell bakes MFE_BASE_URL, so the staging
+# and production images differ only in two strings rather than in build semantics.
+#
+# The ARG/ENV pair is what carries them: `forwardEnv` in project.json puts them on
+# the docker build as arguments, and only an ENV makes them visible to the webpack
+# process below. With neither set the DefinePlugin's production defaults apply.
+ARG LUNA_GATEWAY_URL
+ARG LUNA_REALTIME_URL
+ENV LUNA_GATEWAY_URL=$LUNA_GATEWAY_URL
+ENV LUNA_REALTIME_URL=$LUNA_REALTIME_URL
+
 RUN npx nx build ${NX_APP} --configuration=${NODE_ENV}
 
 # Use the local-http-server image as the base for serving the app

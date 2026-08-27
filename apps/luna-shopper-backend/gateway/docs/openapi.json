@@ -603,6 +603,16 @@
                 }
               }
             }
+          },
+          "501": {
+            "description": "`not_configured` — That sign in method is not available on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -635,6 +645,16 @@
           },
           "500": {
             "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`not_configured` — That sign in method is not available on this server.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7814,6 +7834,7 @@
               "not_found",
               "conflict",
               "rate_limited",
+              "not_configured",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

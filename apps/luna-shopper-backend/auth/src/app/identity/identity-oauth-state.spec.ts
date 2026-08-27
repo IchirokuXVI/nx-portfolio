@@ -96,7 +96,14 @@ function build() {
     {} as never,
     {} as never,
     new UsernameGenerator(),
-    { getOrThrow: () => ({ smtp: {} }) } as never
+    {
+      getOrThrow: () => ({
+        // Configured, which is what every spec here exercises. The
+        // unconfigured path is its own spec (plan 0026).
+        smtp: { enabled: true },
+        google: { enabled: true },
+      }),
+    } as never
   );
   return { service, stores };
 }

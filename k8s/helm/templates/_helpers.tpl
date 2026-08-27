@@ -60,3 +60,33 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+The public hostname for one `apps` or `lunaShopperBackend.services` entry.
+
+Both lists are environment agnostic (plan 0002): an entry carries a `hostPrefix`
+label, and the environment supplies the `baseDomain` it sits under. An empty
+prefix is the domain root, which is where the shell lives. So the lists are
+identical in both clusters and the domain is the only thing that moves.
+
+`host` on the entry wins when set. That is the escape hatch the local values
+files use, where the hostnames (portfolio.localhost, localhost) do not follow the
+prefix-under-a-domain pattern the two clusters do.
+
+Call with a dict:
+  (dict "item" <entry> "root" $)
+*/}}
+{{- define "charts.host" -}}
+{{- $item := .item -}}
+{{- $root := .root -}}
+{{- if $item.host -}}
+{{- $item.host -}}
+{{- else -}}
+{{- $base := required "baseDomain is not set. Pass an environment values file (values.production.yaml or values.staging.yaml) alongside values.yaml, or set an explicit `host` on every apps/services entry." $root.Values.baseDomain -}}
+{{- if $item.hostPrefix -}}
+{{- printf "%s.%s" $item.hostPrefix $base -}}
+{{- else -}}
+{{- $base -}}
+{{- end -}}
+{{- end -}}
+{{- end }}

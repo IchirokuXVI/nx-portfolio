@@ -1,0 +1,55 @@
+# Staging (plan 0002).
+#
+#   helm upgrade nx-portfolio k8s/helm --namespace nx-portfolio \
+#     --values k8s/helm/values.yaml --values k8s/helm/values.staging.yaml
+#
+# This is passed by .github/workflows/docker-ci.yml against the staging VPS,
+# which is a different machine from production reached through
+# SSH_DEPLOY_HOST_STAGING. Two clusters, two releases, one chart.
+#
+# Compare against values.production.yaml: same keys, staging's answers. A key in
+# one and not the other should be a decision, not an accident.
+
+baseDomain: staging.ichirokuxvi.com
+environment: staging
+
+# ---------------------------------------------------------------------------
+# The staging VPS address. MUST be set to the new machine's IP before the first
+# staging deploy, and the five `*.staging.ichirokuxvi.com` DNS records moved to
+# it beforehand (plan 0002, section 4).
+#
+# Order matters: cert-manager requests a certificate per Gateway listener as soon
+# as the chart applies, and Let's Encrypt rate limits FAILED validations far more
+# tightly than successful issuances. Deploying before DNS moves burns that quota
+# on challenges that cannot succeed. Lower the TTL on the five records a day
+# ahead so the cutover is quick.
+#
+# Left empty rather than guessed: the chart fails the render with a message
+# naming this file, which is a better failure than a LoadBalancer sitting
+# <pending> forever with everything else looking healthy.
+# ---------------------------------------------------------------------------
+ipAddress: ''
+
+# Staging tracks the mutable tag CI overwrites on every push to main. The deploy
+# rolls the changed deployments so they re-pull it.
+imageTag: staging
+
+lunaShopperBackend:
+  config:
+    logLevel: debug
+    # Both origins while both are live, exactly as production.
+    corsOrigins: https://staging.ichirokuxvi.com,https://velista.staging.ichirokuxvi.com
+    authJwtKid: staging-1
+    googleCallbackUrl: https://api.staging.ichirokuxvi.com/v1/auth/google/callback
+    appBaseUrl: https://velista.staging.ichirokuxvi.com/{locale}
+    mailFrom: Luna Shopper (staging) <no-reply@staging.ichirokuxvi.com>
+    mailVerifyBaseUrl: https://staging.ichirokuxvi.com/verify-email
+    mailResetBaseUrl: https://staging.ichirokuxvi.com/reset-password
+    # Staging is the natural place to switch tracing on first, once a collector
+    # lands in the cluster. Off until then, same as production.
+
+  # No backups in staging. It is disposable by design, and a restore drill is
+  # rehearsed here by restoring a PRODUCTION dump into it (plan 0005, section 6),
+  # which needs no CronJob of its own.
+  backups:
+    enabled: false

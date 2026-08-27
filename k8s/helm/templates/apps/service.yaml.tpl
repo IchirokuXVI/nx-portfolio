@@ -1,5 +1,4 @@
 {{- range .Values.apps }}
-{{- if or (ne .env "staging") $.Values.staging.enabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -17,5 +16,4 @@ spec:
   ports:
     - port: {{ .lbPort | default 80 }}
       targetPort: 80
-{{- end }}
 {{- end }}

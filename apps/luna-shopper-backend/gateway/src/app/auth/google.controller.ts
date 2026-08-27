@@ -32,6 +32,7 @@ import { AuthUser } from './current-user.decorator';
 import {
   GoogleAuthGuard,
   GoogleCallbackGuard,
+  GoogleConfiguredGuard,
   stateOf,
 } from './google-auth.guard';
 import { OptionalJwtAuthGuard } from './jwt-auth.guard';
@@ -83,13 +84,15 @@ export function errorCodeOf(error: unknown): ErrorCode {
 export class GoogleController {
   private readonly logger = new Logger(GoogleController.name);
   private readonly appBaseUrl: string;
+  private readonly googleEnabled: boolean;
 
   constructor(
     private readonly nats: NatsClient,
     configService: ConfigService
   ) {
-    this.appBaseUrl =
-      configService.getOrThrow<GatewayConfig>('gateway').appBaseUrl;
+    const config = configService.getOrThrow<GatewayConfig>('gateway');
+    this.appBaseUrl = config.appBaseUrl;
+    this.googleEnabled = config.google.enabled;
   }
 
   /**
@@ -102,15 +105,18 @@ export class GoogleController {
    * mint a state carrying nobody, sail through the Google flow, and land on a
    * fresh account with every zone they own orphaned behind the old identity.
    */
+  // GoogleConfiguredGuard first: minting a state for a flow that cannot proceed
+  // is the same error one step earlier, and answering it here is what lets the
+  // frontend hide the button before the user clicks it (plan 0026, section 3.3).
   @Post('state')
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(GoogleConfiguredGuard, OptionalJwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiContractResponse(AUTH_PATTERNS.mintOAuthState, {
     status: HttpStatus.CREATED,
     description:
       'An opaque, single use state valid for ten minutes. Pass it as the `state` query parameter when navigating to `GET /v1/auth/google`.',
   })
-  @ApiProblemResponses({ auth: true })
+  @ApiProblemResponses({ auth: true, notConfigured: true })
   mintState(@AuthUser() user?: CurrentUser): Promise<MintOAuthStateResult> {
     return this.nats.send(AUTH_PATTERNS.mintOAuthState, {
       // From the verified token or not at all. A body could name somebody else,
@@ -120,14 +126,17 @@ export class GoogleController {
     });
   }
 
+  // Ordered: with Google unset there is no passport strategy registered under
+  // `'google'`, so GoogleAuthGuard would throw `Unknown authentication strategy`
+  // and the filter would render a 500. GoogleConfiguredGuard answers 501 first.
   @Get()
-  @UseGuards(GoogleAuthGuard)
+  @UseGuards(GoogleConfiguredGuard, GoogleAuthGuard)
   // The guard answers with a redirect before the handler runs, so what a client
   // sees is a `Location` header, not a payload.
   @ApiFoundResponse({
     description: "Redirects to Google's consent screen.",
   })
-  @ApiProblemResponses()
+  @ApiProblemResponses({ notConfigured: true })
   // The guard triggers the redirect to Google; this body never runs.
   start(): void {
     return;
@@ -166,10 +175,26 @@ export class GoogleController {
     @Req() req: { user?: GoogleProfile; query?: Record<string, unknown> }
   ): Promise<{ url: string; statusCode: number }> {
     if (!req.user) {
-      // The passport dance resolved no profile: a refused consent, a bad code, or
-      // Google being unreachable. The callback guard turned all three into this
-      // rather than into an error page on this origin. There is no state to read
-      // a locale from yet, so the app is met in the default language.
+      // Two ways to get here, and they deserve different codes.
+      //
+      // With Google unconfigured the callback guard skipped the dance entirely
+      // (plan 0026), so the honest answer is the same `not_configured` the other
+      // two routes give as a 501 — reported here as a fragment instead, because
+      // this route answers with a redirect and never with an error page on this
+      // origin.
+      if (!this.googleEnabled) {
+        this.logger.warn(
+          'Google callback reached, but Google is not configured'
+        );
+        return this.redirect(undefined, {
+          error: ERROR_CODES.NOT_CONFIGURED,
+        });
+      }
+      // Otherwise the passport dance resolved no profile: a refused consent, a
+      // bad code, or Google being unreachable. The callback guard turned all
+      // three into this rather than into an error page on this origin. There is
+      // no state to read a locale from yet, so the app is met in the default
+      // language.
       this.logger.warn('Google sign in did not complete: no profile resolved');
       return this.redirect(undefined, { error: ERROR_CODES.UNAUTHORIZED });
     }

@@ -28,6 +28,12 @@ export interface ProblemResponseOptions {
    * default; pass `false` for the handful that carry `@SkipThrottle()`.
    */
   throttled?: boolean;
+  /**
+   * The route depends on a feature the deployment may not have configured, so it
+   * can answer 501 (plan 0026). The routes stay in the document in every
+   * environment; this is what says the document is honest about them.
+   */
+  notConfigured?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -73,6 +79,9 @@ export function ApiProblemResponses(
   }
   if (options.conflict) {
     codes.push(ERROR_CODES.CONFLICT);
+  }
+  if (options.notConfigured) {
+    codes.push(ERROR_CODES.NOT_CONFIGURED);
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);

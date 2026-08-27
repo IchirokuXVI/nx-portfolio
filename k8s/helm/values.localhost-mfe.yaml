@@ -27,7 +27,7 @@
 # mfe.localhost), which mirrors production most literally but needs hosts entries.
 
 # Use the locally built dev images without reaching for a registry.
-productionImageTag: dev
+imageTag: dev
 appImagePullPolicy: IfNotPresent
 
 # Route through the gateway, but with self signed certificates: the hosts have no
@@ -51,27 +51,20 @@ gateway:
 metallb:
   enabled: false
 
-staging:
-  enabled: false
-
 apps:
   - name: shell
-    env: production
     image: nx-portfolio/shell
     host: localhost
     path: /
   - name: odontogram
-    env: production
     image: nx-portfolio/odontogram
     host: localhost
     path: /mfe/odontogram
   - name: damoclessword
-    env: production
     image: nx-portfolio/damoclessword
     host: localhost
     path: /mfe/damoclesSword
   - name: landingv2
-    env: production
     image: nx-portfolio/landingv2
     host: localhost
     path: /mfe/landingV2

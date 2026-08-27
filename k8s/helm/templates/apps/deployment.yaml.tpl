@@ -1,7 +1,4 @@
 {{- range .Values.apps }}
-{{- if or (ne .env "staging") $.Values.staging.enabled }}
-{{- $tag := $.Values.productionImageTag }}
-{{- if eq .env "staging" }}{{- $tag = $.Values.stagingImageTag }}{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -20,7 +17,7 @@ spec:
     spec:
       containers:
         - name: {{ .name }}
-          image: {{ .image }}:{{ $tag }}
+          image: {{ .image }}:{{ $.Values.imageTag }}
           imagePullPolicy: {{ $.Values.appImagePullPolicy }}
           ports:
             - containerPort: 80
@@ -31,5 +28,4 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
-{{- end }}
 {{- end }}

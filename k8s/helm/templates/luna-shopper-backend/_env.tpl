@@ -9,7 +9,12 @@ Secret.
 
 Call with a dict:
   (dict "svc" <service> "cfg" <configMapName> "sec" <secretName>
-        "env" <production|staging> "tag" <imageTag>)
+        "env" <environment label> "tag" <imageTag>)
+
+`env` is now a telemetry label read from .Values.environment rather than a
+dimension the chart branches on: this release is one environment (plan 0002), so
+there is one ConfigMap and one Secret and nothing here has to choose between
+them.
 */}}
 {{- define "lunaShopperBackend.env" -}}
 {{- $svc := .svc -}}
@@ -32,9 +37,9 @@ Call with a dict:
       key: LOG_LEVEL
 # Telemetry (plan 0016, section 7). The identity is per pod and comes from the
 # release, so one image still serves both environments: the service name is the
-# role rather than the deployment name (a staging pod is the same service, told
-# apart by deployment.environment), and the version is the image tag already
-# being deployed. The switches come from the per environment ConfigMap and are
+# role rather than the deployment name (which is now identical in both clusters
+# anyway; the two are told apart by deployment.environment alone), and the
+# version is the image tag already being deployed. The switches come from the per environment ConfigMap and are
 # off by default, because there is no collector in the cluster yet (section 8).
 - name: OTEL_SERVICE_NAME
   value: {{ printf "luna-shopper-backend-%s" $svc.role | quote }}

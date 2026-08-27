@@ -40,6 +40,12 @@ jobs:
       # overrides the base derived tuple. Per remote overrides win over the base, so
       # the other three are unaffected and stay unlisted.
       PROD_MFE_REMOTE_URLS: velista=https://velista.ichirokuxvi.com
+      # Which backend the production velista image talks to (velista plan 0014).
+      # Ignored by every app except velista, exactly as MFE_BASE_URL is ignored by
+      # every app except the shell. Note `rt.` for realtime: the chart routes it on
+      # its own host, and environment.prod.ts used to name `api.` for both.
+      PROD_LUNA_GATEWAY_URL: https://api.ichirokuxvi.com
+      PROD_LUNA_REALTIME_URL: https://rt.ichirokuxvi.com
 
     steps:
       - name: Checkout repository
@@ -130,6 +136,8 @@ jobs:
           DOCKER_IMAGE_TAG: ${{ steps.version.outputs.version }},latest
           MFE_BASE_URL: ${{ env.PROD_MFE_BASE_URL }}
           MFE_REMOTE_URLS: ${{ env.PROD_MFE_REMOTE_URLS }}
+          LUNA_GATEWAY_URL: ${{ env.PROD_LUNA_GATEWAY_URL }}
+          LUNA_REALTIME_URL: ${{ env.PROD_LUNA_REALTIME_URL }}
         run: |
           apps_tobuild=$(npx nx show projects --type "app" --with-target build:docker | paste -sd, -)
           npx nx run-many -t build:docker --configuration production --projects $apps_tobuild
@@ -139,11 +147,46 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
 
-      - name: Sync chart and deploy production release
+      # SSH_DEPLOY_HOST stays the production VPS. Staging moved to its own host
+      # under SSH_DEPLOY_HOST_STAGING (k8s plan 0002, section 3); adding a secret
+      # rather than renaming both is what keeps this workflow — the one that is
+      # currently working — untouched by the split.
+      - name: Sync chart to the production host
         run: |
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
             ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
 
+      # Reject a deploy that cannot possibly work in seconds, rather than
+      # diagnosing it in minutes from a crashloop (k8s plan 0006, section 3).
+      - name: Preflight the production Secrets
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
+            "bash /root/k8s/bootstrap/provision-release.sh --check --env production"
+
+      - name: Deploy production release
+        run: |
           ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
             "bash /root/k8s/helm/deploy-release.sh '${{ steps.version.outputs.version }}'"
+
+      # Events are the part that matters and the part people forget:
+      # ImagePullBackOff, a PVC that cannot bind, and a failing readiness probe all
+      # announce themselves there and nowhere else (k8s plan 0003, section 3.4).
+      - name: Diagnose the failed release
+        if: failure()
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
+            "bash -s" << 'EOF'
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            kubectl -n nx-portfolio get pods -o wide || true
+            kubectl -n nx-portfolio get events --sort-by=.lastTimestamp | tail -40 || true
+            for p in $(kubectl -n nx-portfolio get pods \
+                  --field-selector=status.phase!=Running -o name 2>/dev/null); do
+              echo "::group::$p"
+              kubectl -n nx-portfolio describe "$p" | tail -30 || true
+              kubectl -n nx-portfolio logs "$p" --tail=50 --all-containers || true
+              echo "::endgroup::"
+            done
+          EOF

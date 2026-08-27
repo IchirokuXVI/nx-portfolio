@@ -6,8 +6,8 @@ as one release. The same chart runs in three shapes:
 
 | Environment | Driven by | Notes |
 | --- | --- | --- |
-| **Production** | `helm/values.yaml` | Public cluster (k3s + MetalLB), TLS via Let's Encrypt, host/path routing through the Gateway API. Deployed by CI. |
-| **Staging** | `helm/values.yaml` (`staging.enabled`) | Same release/namespace, its own hostnames. |
+| **Production** | `helm/values.yaml` + `helm/values.production.yaml` | Public cluster (k3s + MetalLB), TLS via Let's Encrypt, host/path routing through the Gateway API. Deployed by `release.yml`. |
+| **Staging** | `helm/values.yaml` + `helm/values.staging.yaml` | Its **own** VPS and its own cluster (plan 0002), not a second half of the production release. Same chart, same resource names, different `baseDomain`. Deployed by `docker-ci.yml`. |
 | **Local** | `helm/values.yaml` + a `values.localhost*.yaml` overlay | Docker Desktop Kubernetes, locally built `:dev` images, no registry, no admin. |
 
 Routing is the Kubernetes **Gateway API**, served by **Envoy Gateway**, with
@@ -213,7 +213,7 @@ gates the deploy. To run it yourself:
 
 ```sh
 echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
-docker login ghcr.io                                   # the images are private
+docker login ghcr.io                                   # only if a package is still private
 docker compose -f e2e/compose.yml up -d --pull always
 E2E_BASE_URL=https://staging.ichirokuxvi.com \
   npx playwright test -c apps/damoclesSword-e2e/playwright.config.ts --project=chromium

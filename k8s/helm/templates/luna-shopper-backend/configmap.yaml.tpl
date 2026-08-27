@@ -1,12 +1,15 @@
 {{- if .Values.lunaShopperBackend.enabled }}
-{{- range $env, $cfg := .Values.lunaShopperBackend.config }}
-{{- if or (ne $env "staging") $.Values.staging.enabled }}
+{{- $cfg := .Values.lunaShopperBackend.config }}
 ---
+# One ConfigMap, because this release is one environment (plan 0002). The
+# `range $env, $cfg :=` loop that rendered a production and a staging copy side
+# by side is gone with the `env` dimension, and so is the `-production` /
+# `-staging` suffix on the name: each cluster holds one.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: luna-shopper-backend-config-{{ $env }}
-  namespace: {{ $.Values.namespace }}
+  name: luna-shopper-backend-config
+  namespace: {{ .Values.namespace }}
 data:
   NATS_URL: {{ $cfg.natsUrl | quote }}
   LOG_LEVEL: {{ $cfg.logLevel | quote }}
@@ -14,14 +17,14 @@ data:
   AUTH_JWT_KID: {{ $cfg.authJwtKid | quote }}
   ACCESS_TOKEN_TTL: {{ $cfg.accessTokenTtl | quote }}
   REFRESH_TOKEN_TTL: {{ $cfg.refreshTokenTtl | quote }}
-  GOOGLE_CLIENT_ID: {{ $cfg.googleClientId | quote }}
-  GOOGLE_CALLBACK_URL: {{ $cfg.googleCallbackUrl | quote }}
+  GOOGLE_CLIENT_ID: {{ $cfg.googleClientId | default "" | quote }}
+  GOOGLE_CALLBACK_URL: {{ $cfg.googleCallbackUrl | default "" | quote }}
   # Where the Google callback sends the browser back to (plan 0023, section 3.4).
   # The redirect is built from this and never from anything the client supplied.
   APP_BASE_URL: {{ $cfg.appBaseUrl | default "" | quote }}
-  SMTP_HOST: {{ $cfg.smtpHost | quote }}
+  SMTP_HOST: {{ $cfg.smtpHost | default "" | quote }}
   SMTP_PORT: {{ $cfg.smtpPort | quote }}
-  SMTP_USER: {{ $cfg.smtpUser | quote }}
+  SMTP_USER: {{ $cfg.smtpUser | default "" | quote }}
   MAIL_FROM: {{ $cfg.mailFrom | quote }}
   MAIL_VERIFY_BASE_URL: {{ $cfg.mailVerifyBaseUrl | quote }}
   MAIL_RESET_BASE_URL: {{ $cfg.mailResetBaseUrl | quote }}
@@ -41,6 +44,4 @@ data:
   # `default` cannot express that, because it would turn an intentional `false`
   # back into `true`.
   METRICS_ENABLED: {{ if hasKey $cfg "metricsEnabled" }}{{ $cfg.metricsEnabled | quote }}{{ else }}"true"{{ end }}
-{{- end }}
-{{- end }}
 {{- end }}

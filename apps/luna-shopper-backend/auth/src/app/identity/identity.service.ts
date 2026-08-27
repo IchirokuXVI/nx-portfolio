@@ -26,6 +26,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
+  NotConfiguredException,
   NotFoundException,
   THROTTLE_LIMITS,
   throttleWaitSeconds,
@@ -116,6 +117,33 @@ export class IdentityService {
   }
 
   /**
+   * Refuse a flow that depends on a delivered email when no SMTP host is set
+   * (plan 0026, section 3.4).
+   *
+   * The alternative is worse than an error: registration would accept the signup,
+   * write the user, and never send the confirmation link, leaving an account
+   * nobody can reach. Answering `not_configured` says what is true about the
+   * deployment instead.
+   */
+  private requireMail(): void {
+    if (!this.config.smtp.enabled) {
+      throw new NotConfiguredException('No SMTP host is configured');
+    }
+  }
+
+  /**
+   * Refuse a Google flow when the OAuth credentials are unset (plan 0026,
+   * section 3.2). The gateway rejects the interactive routes before they get
+   * this far; this covers the broker patterns directly, so the answer is the
+   * same whichever way the call arrives.
+   */
+  private requireGoogle(): void {
+    if (!this.config.google.enabled) {
+      throw new NotConfiguredException('Google sign in is not configured');
+    }
+  }
+
+  /**
    * Mint a temporary identity (plan 0005, section 4.1). Called by the gateway
    * only when a client actually creates or joins a zone, so a browsing visitor
    * leaves no account behind.
@@ -134,6 +162,9 @@ export class IdentityService {
 
   /** Email + password registration (plan 0005, section 4.2). */
   async register(req: RegisterRequest): Promise<AuthTokens> {
+    // Before the write, not after: an account created here is unreachable
+    // without the confirmation mail.
+    this.requireMail();
     if (!req.email || !req.password) {
       throw new ValidationException('Email and password are required');
     }
@@ -293,6 +324,7 @@ export class IdentityService {
   async resendVerification(
     req: ResendVerificationRequest
   ): Promise<ResendVerificationResult> {
+    this.requireMail();
     const { email, rawVerificationToken } = await this.dataSource.transaction(
       async (manager) => {
         const user = await manager
@@ -340,6 +372,10 @@ export class IdentityService {
    * account gets nothing.
    */
   async forgotPassword(req: ForgotPasswordRequest): Promise<RetryAfterResult> {
+    // The deliberate non disclosure below (never say whether an address has an
+    // account) does not apply to this refusal: it is about the server, not about
+    // the address, so it leaks nothing and answering it uniformly is right.
+    this.requireMail();
     const email = this.normalizeEmail(req.email ?? '');
     const outcome = await this.dataSource.transaction(async (manager) => {
       const user = email
@@ -488,6 +524,15 @@ export class IdentityService {
    * confirmation link, the way registration does.
    */
   async upgrade(req: UpgradeRequest): Promise<AuthTokens> {
+    // Which requirement applies follows the branch, because the two branches
+    // need different things: a Google upgrade needs the OAuth credentials and
+    // sends no mail (the address is already verified), while a typed address
+    // needs a confirmation link and therefore an SMTP host.
+    if (req.google) {
+      this.requireGoogle();
+    } else {
+      this.requireMail();
+    }
     const { user, email, rawVerificationToken } =
       await this.dataSource.transaction(async (manager) => {
         const user = await manager
@@ -734,6 +779,9 @@ export class IdentityService {
 
   /** Google login: find, link, or create (plan 0005, section 4.4). */
   async googleLogin(req: GoogleLoginRequest): Promise<AuthTokens> {
+    // Refuse rather than attempt a lookup against credentials this deployment
+    // does not have (plan 0026, section 3.2).
+    this.requireGoogle();
     const identity = await this.dataSource
       .getRepository(OAuthIdentity)
       .findOne({
