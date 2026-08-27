@@ -148,12 +148,11 @@ export class ZoneStore {
   );
 
   /**
-   * Rooms currently held, so they can be released and re-joined together.
+   * Rooms currently held, so they can be released and re-joined on a change.
    *
    * The staff flag is stored alongside the release, because a subscription held under
-   * one role is the wrong subscription under another and the only way to swap it is to
-   * leave and rejoin. Keeping only the release function is what let a demoted admin go
-   * on holding a staff room the server had begun refusing.
+   * one role is the wrong subscription under another, and this map is the only record
+   * of which one this store asked for.
    */
   private readonly _rooms = new Map<
     string,
@@ -198,15 +197,15 @@ export class ZoneStore {
     });
   });
 
-  /** Zones whose realtime room the server refused, so their data is not live. */
-  readonly staleZoneIds = computed(() => {
-    const refused = this._realtime.refusedRooms();
-    return new Set(
-      [...refused]
-        .filter((room) => room.startsWith('zone:'))
-        .map((room) => room.slice('zone:'.length))
-    );
-  });
+  /**
+   * Zones whose realtime room the server refused, so their data is not live.
+   *
+   * A pass-through: the client answers zone ids and this is the name the rest of the
+   * app knows them by. It used to strip a `zone:` prefix off room names, which was
+   * wrong for the one room it most needed to be right about — `zone:abc:staff` strips
+   * to `abc:staff`, a zone id matching nothing, so the entry could never clear.
+   */
+  readonly staleZoneIds = computed(() => this._realtime.refusedZones());
 
   constructor() {
     this._realtime.events
@@ -566,20 +565,24 @@ export class ZoneStore {
         // A non-null `pendingRequestCount` is also the backend's answer to "is this
         // caller staff", and it was what decided this until `0010`. The two disagree
         // for exactly as long as it matters: `member.roleChanged` updates `myRole`
-        // immediately and leaves the counts alone, so a just demoted admin would go on
-        // asking for a room the server now refuses. A refusal feeds `staleZoneIds`,
-        // which `0003` renders as "this group is not live", so the cost of reading the
-        // stale fact is a permanent and untrue stale badge.
+        // immediately and leaves the counts alone, and `myRole` is the one that is
+        // right straight away.
+        //
+        // The rule used to carry a second justification, that a demoted admin asking
+        // for a refused staff room raises a permanent false stale badge. That one is
+        // void: the server answers `zone.subscribe` with `{ ok: true }` whether or not
+        // the staff join happened, so a staff room cannot be refused at all (plan
+        // 0016, section 3.2). The reason above stands on its own and is enough.
         zone.myRole === 'OWNER' || zone.myRole === 'ADMIN',
       ])
     );
 
     for (const [zoneId, held] of this._rooms) {
       // Released when the zone is gone, and also when the caller's **standing** in it
-      // changed: a subscription held under the old role is the wrong subscription, and
-      // the only way to swap it is to leave and rejoin. Without this second test a
-      // demoted admin keeps a staff room the server now refuses, which surfaces as a
-      // permanent and untrue stale badge on the group (rule G3).
+      // changed: a subscription held under the old role is the wrong subscription. The
+      // client turns that release-and-reacquire into a bare re-subscribe with no gap,
+      // because the staff intent rides on the zone subscription rather than being a
+      // room of its own.
       if (!wanted.has(zoneId) || wanted.get(zoneId) !== held.isStaff) {
         held.release();
         this._rooms.delete(zoneId);
@@ -588,17 +591,9 @@ export class ZoneStore {
 
     for (const [zoneId, isStaff] of wanted) {
       if (!this._rooms.has(zoneId)) {
-        const leaveZone = this._realtime.subscribeZone(zoneId);
-        const leaveStaff = isStaff
-          ? this._realtime.subscribeZoneStaff(zoneId)
-          : null;
-
         this._rooms.set(zoneId, {
           isStaff,
-          release: () => {
-            leaveZone();
-            leaveStaff?.();
-          },
+          release: this._realtime.subscribeZone(zoneId, { staff: isStaff }),
         });
       }
     }

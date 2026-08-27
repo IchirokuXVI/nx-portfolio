@@ -4,6 +4,28 @@ import type { Observable } from 'rxjs';
 import type { RealtimeEvent } from './realtime-events';
 import { RealtimeMemory } from './realtime-memory';
 
+/** What a zone subscription asks for beyond the plain room. */
+export interface RealtimeSubscribeOptions {
+  /**
+   * Also ask for the zone's governance side room, `zone:{id}:staff`.
+   *
+   * **Not a room of its own**, which is the whole reason this is an option rather
+   * than a method. The server joins it inside its `zone.subscribe` handler when the
+   * caller is an OWNER or ADMIN (`realtime.gateway.ts:107-109`), leaves it inside
+   * `zone.unsubscribe` (`:121`), and publishes no message that touches it alone. So
+   * it is an intent carried on the zone subscription, and the transport unions the
+   * intents of every holder of that zone.
+   *
+   * It once was a method, `subscribeZoneStaff`, with its own refcount and its own
+   * release. Against a real socket that is unsound: the first holder of the zone to
+   * release emits `zone.unsubscribe`, which leaves both rooms, and every other holder
+   * is then out of a room its refcount still says it is in. Looking live while being
+   * stale is the worst outcome this layer has, so the shape that can produce it is
+   * gone rather than deprecated.
+   */
+  readonly staff?: boolean;
+}
+
 /**
  * The live connection, behind an interface so the transport can be swapped.
  *
@@ -39,31 +61,61 @@ export interface RealtimeClientI {
    * on reconnect, because rooms are per connection and server side: forgetting that
    * produces an app that works until the first network blip and then goes quietly
    * stale, which is the exact failure this layer exists to prevent.
-   */
-  subscribeZone(zoneId: string): () => void;
-
-  /**
-   * Join a zone's **staff** room, `zone:{id}:staff`, refcounted like the rest.
    *
-   * The only room that carries the governance fields on a counts broadcast: who is
-   * waiting to join is not sent to the plain zone room at all. The server refuses it
-   * for a caller who is not OWNER or ADMIN, which surfaces through
-   * {@link refusedRooms} like any other refusal.
+   * There is **one refcount per zone** whatever each holder's staff intent, and the
+   * effective intent is the OR of the live holders'. A change in it re-issues
+   * `zone.subscribe` with no unsubscribe in between: the handler is idempotent for the
+   * plain room and re-runs the staff check, so a re-subscribe is the promotion and
+   * demotion mechanism the server already expects. Unsubscribing first would open a
+   * window in which the caller receives nothing.
    */
-  subscribeZoneStaff(zoneId: string): () => void;
+  subscribeZone(zoneId: string, options?: RealtimeSubscribeOptions): () => void;
 
   /** Join a list room, refcounted. See {@link subscribeZone}. */
   subscribeList(listId: string): () => void;
 
   /**
-   * Zones whose subscription the server refused.
+   * Zones whose subscription the server refused, by **zone id**.
    *
-   * A `{ ok: false }` acknowledgement is not retried: it means the server declined,
-   * usually on authorization. It is surfaced because a zone whose room was refused
-   * will silently never update, and looking live while being stale is worse than
-   * looking broken.
+   * A `{ ok: false }` acknowledgement is not retried on the same connection: it means
+   * core says the caller is not in the zone, and asking again gets the same answer. It
+   * is surfaced because a zone whose room was refused will silently never update, and
+   * looking live while being stale is worse than looking broken. Every latch clears on
+   * the next `connect`, because authorization can change between connections.
+   *
+   * A timeout is **not** a refusal and never lands here. The server's subscribe costs
+   * a round trip to core, so a slow answer is ordinary; it leaves the room unjoined
+   * and the next reconcile retries it. Latching one would paint a permanent "not live"
+   * badge on a group that was merely slow, which is the false version of the exact
+   * signal this set exists to give.
+   *
+   * Zone ids, not room names. The two ends of this used to disagree about which string
+   * it held, and stripping a `zone:` prefix off `zone:abc:staff` yields `abc:staff`,
+   * a zone id that matches nothing and so can never clear.
    */
-  readonly refusedRooms: Signal<ReadonlySet<string>>;
+  readonly refusedZones: Signal<ReadonlySet<string>>;
+
+  /**
+   * Payloads that arrived under a known event name and did not map, counted by name.
+   *
+   * Rule D4 says a bad payload is dropped and counted (plan 0004, section 6.5), and
+   * for a while only the dropping was implemented. A silent drop is the one realtime
+   * failure with no symptom at all: the app does not break, it just stops being live
+   * for one kind of change. This counter is the only thing that would ever reveal a
+   * backend payload change, so it is on the interface rather than on the transport
+   * alone, where nothing holding the token could read it.
+   */
+  readonly droppedEvents: Signal<ReadonlyMap<string, number>>;
+
+  /**
+   * Clear {@link degraded} and try to connect again.
+   *
+   * The way out of a latched degraded state. Without it, `degraded` is a state a user
+   * enters and cannot leave, which is a user permanently and invisibly stale. The
+   * transport also re-arms itself on an identity change and on the window regaining
+   * the network; this is the same door with a handle on it.
+   */
+  retry(): void;
 }
 
 /**

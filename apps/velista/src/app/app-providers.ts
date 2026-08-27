@@ -26,6 +26,8 @@ import {
   ListApi,
   MEMBERSHIP_SERVICE,
   MembershipApi,
+  REALTIME_CLIENT,
+  RealtimeSocket,
   VELISTA_DATA_ACCESS_PROVIDERS,
   ZONE_SERVICE,
   ZoneApi,
@@ -154,6 +156,20 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // reaches this injector's `HttpClient`, so the token's default resolving at the root
   // would not work.
   provideService(ACCOUNT_SERVICE, AccountApi),
+
+  // The live connection (plan 0016). Bound here for the same reason as every line
+  // above: talking to a real server is the app's call, and `RealtimeSocket` reaches
+  // `ApiUrl`, `TokenStore` and `SessionStore`, which exist only in this injector.
+  //
+  // Deliberately **not** in `VELISTA_DATA_ACCESS_PROVIDERS`. `RealtimeMemory` stays the
+  // token's default, so every spec and every run without a backend keeps working with
+  // no change at all, and the fake and the transport are chosen in exactly the same
+  // place as every other real transport.
+  //
+  // No initializer, unlike `ConnectionRecovery` below. `ZoneStore` injects
+  // `REALTIME_CLIENT`, so this is constructed when the store is, and its constructor
+  // effect on `isAuthenticated()` starts the lifecycle from there.
+  provideService(REALTIME_CLIENT, RealtimeSocket),
 
   // Start the connection listener. Nothing injects it, so without this nothing would
   // ever construct it: it is a listener, not a dependency. It probes the backend while

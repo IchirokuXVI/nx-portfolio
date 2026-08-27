@@ -132,8 +132,15 @@ export class MembersPage {
     return username === null ? null : initialOf(username);
   });
 
-  /** The staff room, held while this screen is open and released with it (rule G3). */
-  private _leaveStaffRoom: (() => void) | null = null;
+  /**
+   * The staff subscription, held while this screen is open and released with it.
+   *
+   * The zone id is kept beside the release, and not as an ornament: this screen is
+   * reused across groups, so without it a move from one group to the next went on
+   * holding the first group's subscription and never took one on the second.
+   */
+  private _staffRoom: { readonly zoneId: string; readonly release: () => void } | null =
+    null;
 
   readonly state = computed<MembersState>(() => {
     if (this._failure() !== null && this._rows().length === 0) {
@@ -458,24 +465,36 @@ export class MembersPage {
     }
   );
 
-  /** Rule G3. Joined for staff, released for everybody else and on destroy. */
+  /**
+   * Rule G3. Subscribed with the staff intent for staff, released for everybody else
+   * and on destroy.
+   *
+   * A subscription to the zone carrying `staff: true`, not a subscription to a staff
+   * room: the server has no message that joins or leaves `zone:{id}:staff` on its own
+   * (plan 0016, section 3.2). So this takes a refcount on the plain zone room too,
+   * which it always needed and was getting only because `ZoneStore` happened to hold
+   * one for every visible group. A group opened by deep link is not one of those until
+   * the dashboard has loaded.
+   */
   private _syncStaffRoom(zoneId: string): void {
     const zone = this._zones.zoneById(zoneId);
     const wanted = canSeePendingRequests(zone?.myRole ?? 'MEMBER');
 
-    if (!wanted) {
+    if (this._staffRoom !== null && (!wanted || this._staffRoom.zoneId !== zoneId)) {
       this._releaseStaffRoom();
-      return;
     }
 
-    if (this._leaveStaffRoom === null) {
-      this._leaveStaffRoom = this._realtime.subscribeZoneStaff(zoneId);
+    if (wanted && this._staffRoom === null) {
+      this._staffRoom = {
+        zoneId,
+        release: this._realtime.subscribeZone(zoneId, { staff: true }),
+      };
     }
   }
 
   private _releaseStaffRoom(): void {
-    this._leaveStaffRoom?.();
-    this._leaveStaffRoom = null;
+    this._staffRoom?.release();
+    this._staffRoom = null;
   }
 
   private _nameOf(membershipId: string): string {
