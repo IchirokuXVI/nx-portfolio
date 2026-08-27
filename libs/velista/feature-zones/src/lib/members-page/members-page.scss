@@ -14,6 +14,10 @@
   @include zone-page.back;
 }
 
+.back-glyph {
+  @include zone-page.back-glyph;
+}
+
 // Visually hidden, and never `display: none`: a region that is not rendered is not
 // announced. This is how a row leaving is reported to somebody who cannot see it.
 .live {

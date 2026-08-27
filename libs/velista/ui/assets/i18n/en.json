@@ -226,6 +226,7 @@
       "body": "Send this code to the people you shop with. They enter it to ask to join",
       "copy": "Copy code",
       "copied": "Copied",
+      "newCode": "This is your new code. The old one has stopped working",
       "share": "Share the link"
     },
     "asked": {

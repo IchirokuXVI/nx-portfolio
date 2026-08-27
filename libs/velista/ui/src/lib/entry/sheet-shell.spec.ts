@@ -113,6 +113,82 @@ describe('SheetShell', () => {
       expect(fixture.componentInstance.dismissals()).toBe(1);
     });
 
+    it('closes at once when there is no motion to wait for', async () => {
+      // Which is jsdom, where no stylesheet is loaded, and equally a real browser
+      // under `prefers-reduced-motion`, where the token is `0ms`. One code path.
+      const fixture = await render();
+
+      (query(fixture, '.scrim') as HTMLButtonElement).click();
+
+      expect(query(fixture, '.panel')?.classList.contains('closing')).toBe(
+        false
+      );
+      expect(fixture.componentInstance.dismissals()).toBe(1);
+    });
+
+    it('lets the panel fall before it asks to close', async () => {
+      jest.useFakeTimers();
+      try {
+        const fixture = await render();
+        const shell = fixture.debugElement.children[0]
+          .componentInstance as SheetShell;
+
+        // The token is what the shell times itself by, and jsdom resolves it to
+        // nothing, so the duration is handed over directly instead.
+        jest
+          .spyOn(
+            shell as unknown as { _motionDuration(): number },
+            '_motionDuration'
+          )
+          .mockReturnValue(200);
+
+        (query(fixture, '.scrim') as HTMLButtonElement).click();
+        fixture.detectChanges();
+
+        expect(query(fixture, '.panel')?.classList.contains('closing')).toBe(
+          true
+        );
+        expect(fixture.componentInstance.dismissals()).toBe(0);
+
+        jest.advanceTimersByTime(200);
+
+        expect(fixture.componentInstance.dismissals()).toBe(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('cannot be closed twice while it is falling', async () => {
+      // The scrim is disabled for the same reason, so this covers the keyboard path
+      // that the disabled attribute does not.
+      jest.useFakeTimers();
+      try {
+        const fixture = await render();
+        const shell = fixture.debugElement.children[0]
+          .componentInstance as SheetShell;
+        jest
+          .spyOn(
+            shell as unknown as { _motionDuration(): number },
+            '_motionDuration'
+          )
+          .mockReturnValue(200);
+
+        shell.requestDismiss();
+        shell.requestDismiss();
+        fixture.detectChanges();
+
+        expect((query(fixture, '.scrim') as HTMLButtonElement).disabled).toBe(
+          true
+        );
+
+        jest.advanceTimersByTime(200);
+
+        expect(fixture.componentInstance.dismissals()).toBe(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('refuses both while a mutation is in flight', async () => {
       // The request has already gone. Closing would leave the person unable to see
       // what happened to a group that may well now exist (plan 0008, section 3.1).

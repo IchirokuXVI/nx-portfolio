@@ -1,9 +1,27 @@
+<lib-app-bar [accountInitial]="accountInitial()" [signedIn]="true" />
+
 <main class="page">
-  <button (click)="back()" class="back" type="button">
-    {{ 'zone.detail.back' | rokuT }}
+  <!-- The string moves to the accessible name, so nothing is lost for a screen
+       reader when the label becomes a glyph. -->
+  <button
+    (click)="back()"
+    [attr.aria-label]="'zone.detail.back' | rokuT"
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
   </button>
 
   @let current = state();
+
+  <!--
+    Outside the state union, so the screen is named during the skeleton and during an
+    error as well as after it has loaded. `title()` falls back to the plain label when
+    there is no cached group name to say "Members of" about.
+  -->
+  @let heading = title();
+
+  <h1 class="title">{{ heading.key | rokuT: { name: heading.name } }}</h1>
 
   <!--
     A row that leaves announces why, through one polite live region on the screen, so
@@ -27,10 +45,6 @@
   } @else if (current.kind === 'loading') {
     <lib-row-skeleton [count]="4" labelKey="zone.members.loading" />
   } @else {
-    <h1 class="title">
-      {{ 'zone.members.title' | rokuT: { name: current.groupName } }}
-    </h1>
-
     @if (errorKey(); as key) {
       <p class="error" role="alert">{{ key | rokuT }}</p>
     }

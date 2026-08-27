@@ -226,6 +226,7 @@
       "body": "Envía este código a quien compre contigo. Lo escriben para pedir entrar",
       "copy": "Copiar código",
       "copied": "Copiado",
+      "newCode": "Este es tu nuevo código. El anterior ya no funciona",
       "share": "Compartir el enlace"
     },
     "asked": {

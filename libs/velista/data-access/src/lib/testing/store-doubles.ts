@@ -87,6 +87,9 @@ export interface FakeZoneStateOptions {
   /** A zone the caller has just lost, for the page that has to leave and say why. */
   readonly departure?: ZoneDeparture | null;
 
+  /** The zone whose join code was just replaced, which the group page says once. */
+  readonly lastCodeChange?: string | null;
+
   /** How the single-zone load is going. Defaults to `loaded` for every seeded zone. */
   readonly zoneState?: ZoneLoadState;
 
@@ -129,6 +132,7 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
   const loads = signal(0);
   const lastEntry = signal<ZoneEntry | null>(options.lastEntry ?? null);
   const departure = signal<ZoneDeparture | null>(options.departure ?? null);
+  const lastCodeChange = signal<string | null>(options.lastCodeChange ?? null);
 
   /**
    * How the load of each individual zone is going (plan 0010).
@@ -224,6 +228,12 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
     /** Drive a live removal or deletion at a page that is already mounted. */
     setDeparture: (next: ZoneDeparture | null) => departure.set(next),
 
+    lastCodeChange: lastCodeChange.asReadonly(),
+    clearLastCodeChange: () => lastCodeChange.set(null),
+
+    /** Put a page into the state it would be in straight after a new code. */
+    setLastCodeChange: (zoneId: string | null) => lastCodeChange.set(zoneId),
+
     /**
      * Reads one zone, and writes what it read back into the cache.
      *
@@ -255,8 +265,15 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
 
     renameZone: async (zoneId: string, name: string) =>
       record({ method: 'renameZone', zoneId, name }),
-    regenerateJoinCode: async (zoneId: string) =>
-      record({ method: 'regenerateJoinCode', zoneId }),
+    // Records the change on success, as the real store does, so a spec that drives
+    // the sheet sees what the page behind it would actually be handed.
+    regenerateJoinCode: async (zoneId: string) => {
+      const outcome = record({ method: 'regenerateJoinCode', zoneId });
+      if (outcome.state === 'succeeded') {
+        lastCodeChange.set(zoneId);
+      }
+      return outcome;
+    },
     deleteZone: async (zoneId: string) =>
       record({ method: 'deleteZone', zoneId }),
     claimOwnership: async (zoneId: string) =>

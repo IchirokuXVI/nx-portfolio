@@ -359,6 +359,49 @@ describe('GroupPage', () => {
     });
   });
 
+  describe('after a new join code', () => {
+    it('says the code is new, once, and takes the notice off the store', async () => {
+      // Landing on a card that quietly holds a different six characters is not the
+      // same as being told the code is new.
+      const { fixture, zones } = await render();
+
+      zones.setLastCodeChange(ZONE_ID);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.codeIsNew()).toBe(true);
+      // Cleared, so navigating away and back does not say it a second time.
+      expect(zones.lastCodeChange()).toBeNull();
+      expect(
+        (fixture.nativeElement as HTMLElement)
+          .querySelector('lib-invite-card')
+          ?.textContent?.includes('entry.invite.newCode')
+      ).toBe(true);
+    });
+
+    it('says nothing when the code that changed belongs to another group', async () => {
+      const { fixture, zones } = await render();
+
+      zones.setLastCodeChange('a-different-zone');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.codeIsNew()).toBe(false);
+    });
+
+    it('shows the back control as a caret, not as the word Back', async () => {
+      const { fixture } = await render();
+      const back = (fixture.nativeElement as HTMLElement).querySelector(
+        '.back'
+      );
+
+      expect(back?.getAttribute('aria-label')).toBe('zone.detail.back');
+      expect(back?.querySelector('lib-chevron-left-icon')).not.toBeNull();
+      expect(back?.textContent?.trim()).toBe('');
+    });
+  });
+
   describe('the ways out', () => {
     it('opens the members screen as a child route', async () => {
       const { fixture, router } = await render();

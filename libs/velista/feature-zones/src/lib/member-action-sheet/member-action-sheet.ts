@@ -22,6 +22,7 @@ import {
 } from '@portfolio/velista/models';
 import { appPath } from '@portfolio/velista/platform';
 import { ConfirmSheet, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
+import { MemberListRefresh } from '../member-list-refresh';
 import { membershipIdOf, zoneIdOf } from '../route-params';
 import { shouldRefetch, zoneErrorKey } from '../zone-error-copy';
 
@@ -56,6 +57,7 @@ export class MemberActionSheet {
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+  private readonly _refresh = inject(MemberListRefresh);
 
   readonly zoneId = zoneIdOf(this._route);
   readonly membershipId = membershipIdOf(this._route);
@@ -168,8 +170,11 @@ export class MemberActionSheet {
 
     try {
       await send();
-      // Back to the members screen, which re-reads on arrival, so the row this was
-      // about is gone or renamed by the time it is on screen.
+      // The members screen is still alive underneath: rule E1 makes this sheet a
+      // child of its route, so it never left and has no arrival to re-read on. This
+      // is the only thing that tells it a row changed. Recorded before the dismissal
+      // so the re-read is already in flight while the panel is falling.
+      this._refresh.record();
       await this.dismiss();
     } catch (error) {
       this.errorKey.set(zoneErrorKey(error, operation));

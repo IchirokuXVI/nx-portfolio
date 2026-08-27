@@ -49,10 +49,23 @@
   // simply there (plan 0002, section 4.5). No fade on the scrim, which would dim
   // the page twice.
   animation: sheet-rise var(--app-motion-base) var(--app-motion-ease);
+
+  // The fall, played while the shell holds the navigation back. `forwards`, so the
+  // panel stays down for the frames between the animation ending and the route
+  // change landing.
+  &.closing {
+    animation: sheet-fall var(--app-motion-base) var(--app-motion-ease) forwards;
+  }
 }
 
 @keyframes sheet-rise {
   from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-fall {
+  to {
     transform: translateY(100%);
   }
 }

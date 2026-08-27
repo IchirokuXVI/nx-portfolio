@@ -16,6 +16,12 @@
 //   Action     --app-action-bg | -bg-hover | -bg-pressed | -fg | -quiet-fg
 //   Status     --app-status-{success,danger,attention,info,neutral}-{fg,bg,border}
 //   Elevation  --app-elevation-1 | -2
+//   Ambient    --app-ambient-glow
+//
+// `Ambient` is a background image rather than a colour, and it is `none` on Day:
+// the ramps that read as warmth on near black read as a stain on white. It is
+// still a role both themes define, so a component can use it without asking which
+// theme is on.
 //
 // There is deliberately no `warning` role (section 4.4): an amber brand action and
 // an amber warning are hard to tell apart, and on a shopping list row that
@@ -216,6 +222,14 @@ $app-content-max: 480px;
   // How far a sheet is allowed to grow before it scrolls inside itself. Anything
   // taller than this stops being a sheet over a page and becomes a page.
   --app-sheet-max-height: 86svh;
+
+  // The ambient glow's geometry, which is theme independent the way the sheet's is:
+  // Day paints nothing there, but where it would be painted is the same. The values
+  // are `Main.dc.html`'s, which draws it as a 360 circle bleeding off the top right
+  // corner, so most of it is outside the page and what shows is one soft quarter.
+  --app-glow-size: 360px;
+  --app-glow-inset-block-start: -150px;
+  --app-glow-inset-inline-end: -110px;
 
   // A join code, which is read aloud and typed character by character. The tracking
   // is what makes that possible and is the whole reason it is not body type: a

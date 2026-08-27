@@ -1,4 +1,4 @@
-<section class="card">
+<section [class.is-new]="isNew()" class="card">
   <!--
     The whole phrase carries the name rather than a noun glued to a frame, so the
     Spanish reads as Spanish rather than as a template with a word dropped in
@@ -34,10 +34,15 @@
   <!--
     Always in the DOM, empty until there is something to say: a live region added to
     the page at the moment it gains content is often not announced at all.
+
+    One region and not two, for the same reason. A copy said just now is the more
+    recent news, so it wins over the notice that the code is new.
   -->
   <p aria-live="polite" class="copied">
     @if (copied()) {
       {{ 'entry.invite.copied' | rokuT }}
+    } @else if (isNew()) {
+      {{ 'entry.invite.newCode' | rokuT }}
     }
   </p>
 </section>

@@ -6,6 +6,7 @@ import {
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 
 /**
@@ -68,6 +69,17 @@ export class SheetShell {
 
   readonly dismiss = output<void>();
 
+  /**
+   * Set while the panel is falling, between the gesture and the navigation.
+   *
+   * The exit animation has nowhere else to live. Rule E1 makes a sheet a route, so
+   * `dismiss` is a navigation and the router destroys this component before a frame
+   * of an exit animation could be drawn. So the shell delays the navigation rather
+   * than the destruction: the panel falls first, and `dismiss` is emitted when it
+   * has landed.
+   */
+  readonly closing = signal(false);
+
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   /** Whatever had focus when the sheet opened, so it can be handed back. */
@@ -86,12 +98,54 @@ export class SheetShell {
     });
   }
 
-  /** Escape, and a tap on the scrim. Both are the same gesture as the back button. */
+  /**
+   * Escape, and a tap on the scrim. Both are the same gesture as the back button.
+   *
+   * Guarded on `closing` as well as on `dismissible`, so a second gesture during the
+   * fall cannot queue a second navigation.
+   */
   requestDismiss(): void {
-    if (this.dismissible()) {
-      this._returnFocusTo?.focus();
-      this.dismiss.emit();
+    if (!this.dismissible() || this.closing()) {
+      return;
     }
+
+    const duration = this._motionDuration();
+    this._returnFocusTo?.focus();
+
+    if (duration === 0) {
+      this.dismiss.emit();
+      return;
+    }
+
+    this.closing.set(true);
+    this._host.nativeElement.ownerDocument.defaultView?.setTimeout(
+      () => this.dismiss.emit(),
+      duration
+    );
+  }
+
+  /**
+   * `--app-motion-base` in ms, or 0 when there is no stylesheet to read it from.
+   *
+   * Reading the token rather than holding a number here buys two things. Under
+   * `prefers-reduced-motion` the token is already `0ms`, so the sheet closes at once
+   * with no second code path to keep in step. And in jsdom no stylesheet is loaded,
+   * so the property resolves to an empty string, the parse fails, the duration is
+   * zero and `dismiss` is emitted synchronously: a spec never has to know about the
+   * timer.
+   */
+  private _motionDuration(): number {
+    const view = this._host.nativeElement.ownerDocument.defaultView;
+    if (view === null) {
+      return 0;
+    }
+
+    const raw = view
+      .getComputedStyle(this._host.nativeElement)
+      .getPropertyValue('--app-motion-base');
+    const ms = Number.parseFloat(raw);
+
+    return Number.isFinite(ms) ? ms : 0;
   }
 
   /**

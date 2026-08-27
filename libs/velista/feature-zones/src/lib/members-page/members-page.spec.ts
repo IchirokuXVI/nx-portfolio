@@ -20,6 +20,7 @@ import {
 import type { Membership, MyZone, ZoneRole } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
+import { MemberListRefresh } from '../member-list-refresh';
 import { MembersPage } from './members-page';
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
@@ -81,6 +82,8 @@ const SEED: readonly Membership[] = [
 interface Options {
   readonly myRole?: ZoneRole;
   readonly members?: readonly Membership[];
+  /** A cold deep link, where nothing put this group in the cache first. */
+  readonly noZoneCached?: boolean;
   readonly rejectWith?: Parameters<
     typeof fakeMembershipService
   >[0] extends infer O
@@ -99,7 +102,10 @@ async function render(options: Options = {}): Promise<{
 }> {
   TestBed.resetTestingModule();
 
-  const zones = fakeZoneStore({ zones: [zone(options.myRole ?? 'OWNER')] });
+  const zones = fakeZoneStore({
+    zones:
+      options.noZoneCached === true ? [] : [zone(options.myRole ?? 'OWNER')],
+  });
   const members = fakeMembershipService({
     members: options.members ?? SEED,
     rejectWith: options.rejectWith,
@@ -190,6 +196,82 @@ describe('MembersPage', () => {
       const { members } = await render({ myRole: 'MEMBER' });
 
       expect(members.calls[0]).toMatchObject({ statuses: ['APPROVED'] });
+    });
+  });
+
+  describe('when a sheet over it changes a row', () => {
+    it('re-lists when the token is bumped', async () => {
+      // Rule E1 makes the action sheets children of this route, so this screen is
+      // alive the whole time one is over it and has no arrival to re-read on. The
+      // token is the only thing that tells it a row changed.
+      const { fixture, members } = await render();
+      const before = members.calls.filter(
+        (call) => call.method === 'listMembers'
+      ).length;
+
+      TestBed.inject(MemberListRefresh).record();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(
+        members.calls.filter((call) => call.method === 'listMembers')
+      ).toHaveLength(before + 1);
+    });
+
+    it('asks for nothing while the token stands still', async () => {
+      // Which is what a cancelled sheet leaves behind. The alternative this replaced,
+      // an outlet's `deactivate`, could not tell the two apart and cost a page of
+      // members on every dismissal.
+      const { fixture, members } = await render();
+      const before = members.calls.filter(
+        (call) => call.method === 'listMembers'
+      ).length;
+
+      for (let round = 0; round < 3; round += 1) {
+        fixture.detectChanges();
+        await fixture.whenStable();
+      }
+
+      expect(
+        members.calls.filter((call) => call.method === 'listMembers')
+      ).toHaveLength(before);
+    });
+  });
+
+  describe('the screen around the rows', () => {
+    it('opens with the app bar, like the group page it was opened from', async () => {
+      const { fixture } = await render();
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('lib-app-bar')
+      ).not.toBeNull();
+    });
+
+    it('is titled before the rows are there', async () => {
+      // The `h1` used to live inside the loaded branch, so the screen had no name at
+      // all while it was loading and while it was failing.
+      const { fixture } = await render();
+
+      expect(text(fixture)).toContain('zone.members.title');
+    });
+
+    it('says plain Members when no group name is cached', async () => {
+      // A cold deep link. "Members of " with a hole in it is worse than the label.
+      const { fixture } = await render({ noZoneCached: true });
+
+      expect(text(fixture)).toContain('zone.detail.members');
+      expect(text(fixture)).not.toContain('zone.members.title');
+    });
+
+    it('shows the back control as a caret, not as the word Back', async () => {
+      const { fixture } = await render();
+      const back = (fixture.nativeElement as HTMLElement).querySelector(
+        '.back'
+      );
+
+      expect(back?.getAttribute('aria-label')).toBe('zone.detail.back');
+      expect(back?.querySelector('lib-chevron-left-icon')).not.toBeNull();
+      expect(back?.textContent?.trim()).toBe('');
     });
   });
 
