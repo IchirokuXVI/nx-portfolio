@@ -240,8 +240,8 @@ the interface.
 | --- | --- | --- | --- |
 | `''` | The front door | Public, anonymous only | `0003`, `0007` |
 | `home` | The dashboard | Authenticated | `0003`, `0007` |
-| `zones/:zoneId` | Group detail, its lists | Authenticated, zone member | later |
-| `zones/:zoneId/members` | Members and roles | Authenticated, manager | later |
+| `zones/:zoneId` | Group detail, its lists | Authenticated, zone member | `0010` |
+| `zones/:zoneId/members` | Members and roles | Authenticated, zone member; governance is staff only | `0010` |
 | `lists/:listId` | Shopping list, the main screen | Authenticated, list access | later |
 | `lists/:listId/lines/:lineId` | Line detail and comments | Authenticated, list access | later |
 | `zones/new`, `home/zones/new` | Name a group, as a sheet over the page beneath | Public / authenticated | `0008` |
@@ -386,12 +386,15 @@ A page plan is not ready for development until its mock is approved.
 | `0007` | Splitting the front door from the dashboard | **Implemented** |
 | `0008` | The way in: creating a group, and joining with a code | Written 2026-08-26, **mock approved** |
 | `0009` | Credentials: signing in, registering, and keeping a guest account | Written 2026-08-26, mock awaiting approval |
+| `0010` | The group: its lists, and the people in it | Written 2026-08-27, **mock not drawn** |
 | later | One plan per remaining page, in build order | Not written |
 
 The route table in section 6.2 is the build order that remains. `0008` and `0009`
 together finish the front door: once both are built, every control drawn on the
 anonymous screen leads somewhere real, and what is left is the product itself, group
-detail and then the shopping list.
+detail and then the shopping list. `0010` is the first half of that: it makes every
+group on the dashboard tappable and gives a join request somewhere to be answered,
+which is what `0008` could produce and could not resolve.
 
 Scaffolding is deliberately **not** plan `0002`. Nothing is generated until enough of the
 design is settled that the shape of the libraries is known, which is the point of doing
