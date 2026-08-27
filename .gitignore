@@ -76,3 +76,7 @@ Thumbs.db
 .claude/settings.local.json
 .nx/polygraph
 .nx/self-healing
+
+# The live ddclient config carries a Cloudflare API token that can rewrite every
+# record in the zone. Only the .example next to it is committed.
+docker/ddns/config/

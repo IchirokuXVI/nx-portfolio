@@ -1,0 +1,57 @@
+## ddclient configuration for the ichirokuxvi.com zone on Cloudflare.
+##
+## Copy this file to config/ddclient.conf and put the real API token in it. That
+## path is gitignored, because the token below is a credential that can rewrite
+## every DNS record in the zone.
+##
+##   mkdir -p docker/ddns/config
+##   cp docker/ddns/ddclient.conf.example docker/ddns/config/ddclient.conf
+##
+## The file must not be world readable or ddclient refuses to start:
+##   chmod 600 docker/ddns/config/ddclient.conf
+
+# Check every 5 minutes. A domestic address usually survives days at a time, so
+# this is far more often than it needs to be, and it costs one HTTPS request.
+daemon=300
+syslog=yes
+pid=/var/run/ddclient.pid
+ssl=yes
+
+## How the current public address is discovered.
+##
+## Cloudflare's own trace endpoint is used rather than a local interface lookup,
+## because the machine sits behind NAT: every local interface holds a private
+## address, and the address that has to reach the DNS record is the one the
+## router presents to the internet. Asking a remote service is the only way to
+## learn it from in here.
+##
+## web-skip tells ddclient where the address starts in the response body: the
+## endpoint returns several `key=value` lines and the wanted one is `ip=`.
+use=web
+web=https://cloudflare.com/cdn-cgi/trace
+web-skip='ip='
+
+## The Cloudflare zone and the records inside it.
+##
+## No `login=` line: with an API token, ddclient expects the token in `password`
+## and no username at all. Setting a username here is the usual reason a token
+## that works with curl fails in ddclient.
+##
+## The token needs Zone:DNS:Edit and Zone:Zone:Read, scoped to this one zone.
+## Create it at Cloudflare, My Profile, API Tokens, Create Token, "Edit zone DNS".
+## Do not use a Global API Key: it carries the whole account, and this container
+## only ever needs to rewrite five records in one zone.
+##
+## ttl=60 is the shortest Cloudflare accepts on a free plan, which keeps the
+## window where the world still holds the old address down to a minute. Use
+## ttl=1 to mean "automatic" instead if 60 is ever rejected.
+##
+## Every record below is one that k8s/helm/values.production.yaml serves:
+## the shell at the apex, the micro-frontend host, velista's own origin, and the
+## backend's gateway and realtime hosts. Staging is deliberately absent: it is
+## not running during this window.
+protocol=cloudflare, \
+zone=ichirokuxvi.com, \
+ttl=60, \
+password='PUT_THE_CLOUDFLARE_API_TOKEN_HERE' \
+ichirokuxvi.com,mfe.ichirokuxvi.com,velista.ichirokuxvi.com,api.ichirokuxvi.com,rt.ichirokuxvi.com

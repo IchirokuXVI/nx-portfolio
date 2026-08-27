@@ -1,0 +1,48 @@
+# Dynamic DNS for the ichirokuxvi.com zone, for the window where production runs
+# on a home connection instead of a VPS.
+#
+# The public IP of a domestic line changes without warning, and every
+# ichirokuxvi.com record has to follow it or the site is simply gone. ddclient
+# polls the current address and rewrites the Cloudflare records when it moves.
+#
+# This is a temporary measure by intent. Delete the stack once production is back
+# on a host with a static address, and point the records at that address by hand.
+#
+# The compose project name is pinned so this can never be confused with, or
+# cleaned up alongside, the development stacks. luna-slot owns the project names
+# `luna-shopper-backend` (slot 0, your own development) and `luna-slot<N>`
+# (parallel worktrees); this one shares nothing with either, so a
+# `docker compose down` in a worktree cannot take the DNS updater with it.
+name: nx-portfolio-ddns
+
+services:
+  ddclient:
+    container_name: nx-portfolio-ddns
+    image: lscr.io/linuxserver/ddclient:latest
+    restart: unless-stopped
+
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Madrid
+
+    volumes:
+      # ddclient.conf holds the Cloudflare API token, so it is gitignored and
+      # created from ddclient.conf.example. The image wants to own this
+      # directory, which is why the directory is mounted rather than the single
+      # file. The cache file ddclient keeps here is what stops a restart from
+      # re-pushing an address Cloudflare already holds; losing it is harmless,
+      # the next run just sends one redundant update.
+      - ./config:/config
+
+    # Host networking is deliberately not used. ddclient only makes outbound
+    # calls, so it needs no published port, and the address it reports comes from
+    # Cloudflare's trace endpoint rather than from any local interface. That also
+    # means it reports the right answer from inside a container, behind NAT,
+    # which a local interface lookup would not.
+
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
