@@ -314,7 +314,7 @@ describe('GroupPage', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista/home');
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
     });
 
     it('ignores a departure from a different group', async () => {

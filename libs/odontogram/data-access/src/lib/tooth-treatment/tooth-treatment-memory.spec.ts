@@ -14,7 +14,7 @@ import { runSharedTreatmentServiceTests } from './tooth-treatment-service.shared
 function serviceFactory() {
   TestBed.configureTestingModule({
     imports: [],
-    providers: [],
+    providers: [ToothTreatmentMemory],
   });
 
   const service = TestBed.inject(ToothTreatmentMemory);

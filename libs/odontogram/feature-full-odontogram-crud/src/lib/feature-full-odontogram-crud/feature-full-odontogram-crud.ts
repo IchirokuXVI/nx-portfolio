@@ -39,8 +39,9 @@ import { forkJoin, ReplaySubject, tap } from 'rxjs';
 })
 export class OdontogramFeatureFullOdontogramCrud implements OnInit {
   private _treatmentServ: TreatmentServiceI = inject(TREATMENT_SERVICE);
-  private _toothTreatmentServ: ToothTreatmentServiceI =
-    inject(TOOTH_TREATMENT_SERVICE);
+  private _toothTreatmentServ: ToothTreatmentServiceI = inject(
+    TOOTH_TREATMENT_SERVICE
+  );
   private _odontogramServ: OdontogramServiceI = inject(ODONTOGRAM_SERVICE);
   private _dialog = inject(MatDialog);
   private _injector = inject(Injector);

@@ -19,13 +19,21 @@ import type { ModuleFederationConfig } from '@nx/module-federation';
  * anything, and six copies of a rule is how a rule drifts. Hence one file, next to
  * `tsconfig.base.json` where the alias it names actually lives.
  *
- * ## Why this library
+ * ## Why this library, and what changed about the reason
  *
- * `rokutranslator` holds the i18next instance and the active locale as module state
- * behind a singleton export. Two copies means two locales: the shell switches language
- * and a remote carries on in the old one, or a remote registers its namespace into a
- * store nothing else reads. The failure is quiet, because each half of the app looks
- * correct on its own.
+ * It used to hold the i18next instance and the active locale as module state behind a
+ * singleton export, so two copies meant two locales: the shell switched language and a
+ * remote carried on in the old one. That is no longer true, and getting the correction
+ * backwards costs roughly 40KB of i18next per remote, so it is worth stating plainly.
+ *
+ * **"Stop being a singleton" and "stop being shared" are different changes, and plan
+ * 0005 made only the first.** Module federation shares a *module*. That module used to
+ * export a pre made instance, so sharing it shared the instance; it exports only a
+ * class now, holds no mutable state, and sharing it means every remote downloads one
+ * copy of the code while each still calls `new` for itself.
+ *
+ * So this entry stays, and what changed is its status: it stopped being load bearing
+ * for correctness and became a plain deduplication win.
  *
  * ## What Nx already does, and what this adds
  *
@@ -58,8 +66,12 @@ import type { ModuleFederationConfig } from '@nx/module-federation';
  * failure, and this workspace deploys remotes **independently**: staging builds only the
  * affected micro-frontends and restarts only those deployments. A version bump on this
  * library would then leave a mixed fleet, and strict enforcement turns that ordinary
- * window into a blank page. `singleton: true` already gives the guarantee that matters,
- * one instance, and still reports a mismatch loudly enough to act on.
+ * window into a blank page.
+ *
+ * With no shared mutable state left, a mixed fleet has stopped being a correctness
+ * problem at all: two versions of a stateless class in one page is two copies of some
+ * code, not two locales. That closes a standing hazard rather than opening a case for
+ * strictness.
  */
 const SINGLETON_LIBRARIES = ['@portfolio/localization/rokutranslator'];
 
@@ -87,11 +99,15 @@ const SINGLETON_LIBRARIES = ['@portfolio/localization/rokutranslator'];
  * import path, which is the supported route for something Nx did not discover under the
  * name its callers use.
  *
- * Not sharing it is survivable, which is why this is a note and not a task. Every copy
- * of `RokuLocaleStore` subscribes to the same shared `RokuTranslator` core and every
- * write goes through it, so the copies stay in step. That is a property of the current
- * implementation rather than a guarantee: if this library ever grows module level state
- * of its own, it needs the `additionalShared` treatment before it does.
+ * Not sharing it is survivable, and the reason has changed. It used to survive because
+ * every duplicated copy of `RokuLocaleStore` subscribed to the same shared core, so the
+ * copies stayed in step. That reason expired with plan 0005 D5: the store is no longer
+ * `providedIn: 'root'`, it is provided by `provideRokuTranslator` next to the translator
+ * it watches, and each app has exactly one of each. A duplicated class is now simply a
+ * duplicated class, with no instance anybody resolves twice.
+ *
+ * The standing caveat holds: this library still carries no module level state, and if it
+ * ever grows some it needs the `additionalShared` treatment before it does.
  */
 export const sharedSingletons: ModuleFederationConfig['shared'] = (
   lib,

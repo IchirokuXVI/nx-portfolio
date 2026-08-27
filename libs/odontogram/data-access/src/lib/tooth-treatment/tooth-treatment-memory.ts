@@ -10,7 +10,7 @@ import {
   ToothTreatmentServiceI,
 } from './tooth-treatment-service';
 
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class ToothTreatmentMemory implements ToothTreatmentServiceI {
   private _toothTreatments: Map<string, ToothTreatment>;
   private _inMemoryFilter = new InMemoryFilter<

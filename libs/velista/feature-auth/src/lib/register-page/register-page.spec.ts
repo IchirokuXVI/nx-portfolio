@@ -264,7 +264,9 @@ describe('RegisterPage', () => {
 
       (query(fixture, 'lib-google-option button') as HTMLButtonElement).click();
 
-      expect(fixture.componentInstance.pendingRoutes()).toEqual(['auth.google']);
+      expect(fixture.componentInstance.pendingRoutes()).toEqual([
+        'auth.google',
+      ]);
     });
   });
 });

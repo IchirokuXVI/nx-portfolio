@@ -1,10 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
-import {
-  toSessionTokens,
-  TokenStore,
-} from '@portfolio/velista/data-access';
+import { TokenStore, toSessionTokens } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
 import { appPath } from '@portfolio/velista/platform';
 import { SpinnerIcon } from '@portfolio/velista/ui';
@@ -43,9 +40,7 @@ import { SpinnerIcon } from '@portfolio/velista/ui';
 @Component({
   selector: 'lib-auth-callback-page',
   imports: [SpinnerIcon],
-  template: `
-    <div class="working"><lib-spinner-icon class="spinner" /></div>
-  `,
+  template: ` <div class="working"><lib-spinner-icon class="spinner" /></div> `,
   styleUrl: './auth-callback-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -64,9 +59,7 @@ export class AuthCallbackPage {
     const tokens = this._fragmentTokens();
 
     if (tokens === null) {
-      await this._router.navigateByUrl(
-        appPath(this._locale(), this._basePath)
-      );
+      await this._router.navigateByUrl(appPath(this._locale(), this._basePath));
       return;
     }
 

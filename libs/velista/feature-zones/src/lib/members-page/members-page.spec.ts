@@ -333,7 +333,7 @@ describe('MembersPage', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista/home');
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
     });
   });
 });

@@ -218,9 +218,9 @@ jobs:
             affected_e2e=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$all_e2e" | paste -sd, -)
           fi
 
-          # landing-e2e / odontogram-e2e are excluded (pre-existing tsconfig/spec
-          # breakage; see k8s/README.md).
-          affected_e2e=$(echo "$affected_e2e" | tr ',' '\n' | sed '/^$/d' | grep -vE '^(landing-e2e|odontogram-e2e)$' | paste -sd, -)
+          # odontogram-e2e is excluded (pre-existing tsconfig/spec breakage; see
+          # k8s/README.md).
+          affected_e2e=$(echo "$affected_e2e" | tr ',' '\n' | sed '/^$/d' | grep -vE '^(odontogram-e2e)$' | paste -sd, -)
 
           echo "projects=$affected_e2e" >> "$GITHUB_OUTPUT"
           echo "Affected e2e projects: $affected_e2e"

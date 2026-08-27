@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  signal,
+} from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import { LandingV2UiModule } from '../landing-v2-ui-module';
@@ -16,10 +21,13 @@ import { LandingV2UiModule } from '../landing-v2-ui-module';
  * landing-v2/feature-shell's routes.ts), so the outlet instantiates each page
  * itself and no content-projection machinery is needed.
  *
- * Imports LandingV2UiModule for the same reason LandingV2Wrapper and
- * ProjectPage do: its `RokuTranslatorModule.withConfig()` providers must land
- * in *this* component's injector so the header/footer `| rokuT` pipes resolve.
- * Being a parent route, those providers are also inherited by the child pages.
+ * Imports LandingV2UiModule for its components, and for the `| rokuT` pipe the
+ * header and footer use. It used to be imported for the module's
+ * `RokuTranslatorModule.withConfig()` **providers** as well, which had to land in
+ * this component's injector for those pipes to resolve at all. Those providers moved
+ * to the app injector (plan 0005 D11), which really does sit above every page rather
+ * than only above the ones that remembered to import the module, so this import is
+ * now about declarations and nothing else.
  *
  * Header and footer are gated on `compReady` (the i18n namespace having
  * loaded) so their pure `| rokuT` pipes never render frozen on a raw key —

@@ -1,23 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { Layout } from './layout';
-
-// Layout imports LandingV2UiModule (for its RokuTranslatorModule.withConfig
-// providers), so it wires up the *real* RokuTranslatorService — mock the
-// underlying singleton it drives, mirroring landing-v2-wrapper.spec.ts. The
-// header's LanguageSwitch + brand home link also read getLocale() statically.
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-      changeLocale: jest.fn(),
-      addNamespace: jest.fn(),
-      addTranslations: jest.fn(),
-      removeNamespace: jest.fn(),
-    },
-  };
-});
 
 describe('Layout', () => {
   let component: Layout;
@@ -26,7 +10,7 @@ describe('Layout', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [Layout],
-      providers: [provideRouter([])],
+      providers: [provideRouter([]), provideRokuTranslatorTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Layout);

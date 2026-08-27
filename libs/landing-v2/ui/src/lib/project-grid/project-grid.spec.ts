@@ -43,9 +43,7 @@ describe('ProjectGrid', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(
-      host.querySelectorAll('lib-landing-v2-project-card').length
-    ).toBe(3);
+    expect(host.querySelectorAll('lib-landing-v2-project-card').length).toBe(3);
     expect(host.querySelector('.project-grid__title')?.textContent).not.toMatch(
       /\d+\s*\/\s*\d+/
     );

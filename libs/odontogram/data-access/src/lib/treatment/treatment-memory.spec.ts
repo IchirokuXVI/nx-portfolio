@@ -13,7 +13,7 @@ import { runSharedTreatmentServiceTests } from './treatment-service.shared-spec'
 function serviceFactory() {
   TestBed.configureTestingModule({
     imports: [],
-    providers: [],
+    providers: [TreatmentMemory],
   });
 
   const service = TestBed.inject(TreatmentMemory);

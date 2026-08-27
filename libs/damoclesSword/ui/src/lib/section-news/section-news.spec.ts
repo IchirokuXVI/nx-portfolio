@@ -1,16 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { DAMOCLES_DATA_ACCESS_PROVIDERS } from '@portfolio/damoclesSword/data-access';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { SectionNews } from './section-news';
-
-// The component reads the active locale from the RokuTranslator singleton in
-// `ngOnInit`; stub it to `en` so the news service returns the mocked list.
-jest.mock('@portfolio/localization/rokutranslator', () => ({
-  RokuTranslator: {
-    getLocale: jest.fn().mockReturnValue('en'),
-    onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-  },
-}));
 
 describe('SectionNews', () => {
   let component: SectionNews;
@@ -19,7 +11,13 @@ describe('SectionNews', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [SectionNews],
-      providers: [provideRokuTranslatorTesting(), provideRouter([])],
+      providers: [
+        // The data-access services stopped being `providedIn: 'root'` when the
+        // app took ownership of its providers (plan 0005 D5).
+        ...DAMOCLES_DATA_ACCESS_PROVIDERS,
+        provideRokuTranslatorTesting(),
+        provideRouter([]),
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SectionNews);

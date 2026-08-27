@@ -1,19 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { LANDING_V2_DATA_ACCESS_PROVIDERS } from '@portfolio/landing-v2/data-access';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { Landing } from './landing';
-
-// Landing renders the Hero, whose `| rokuT` pipes read the translator; mock
-// the singleton so it resolves in isolation, mirroring project-page.spec.ts.
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-      changeLocale: jest.fn(),
-    },
-  };
-});
 
 describe('Landing', () => {
   let component: Landing;
@@ -22,7 +11,11 @@ describe('Landing', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [Landing],
-      providers: [provideRokuTranslatorTesting(), provideRouter([])],
+      providers: [
+        provideRokuTranslatorTesting(),
+        provideRouter([]),
+        ...LANDING_V2_DATA_ACCESS_PROVIDERS,
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Landing);

@@ -125,7 +125,7 @@ describe('LandingPage', () => {
 
   describe('the language control', () => {
     it('labels itself with the locale actually in use', async () => {
-      // It used to read `EN` on `/es/velista`, because `AppBar.locale` defaulted to
+      // It used to read `EN` on `/velista/es`, because `AppBar.locale` defaulted to
       // that string and no template ever bound it.
       const { fixture } = await render({ locale: 'es' });
 
@@ -251,7 +251,9 @@ describe('LandingPage', () => {
       ) as HTMLButtonElement[];
       buttons[2]?.click();
 
-      expect(fixture.componentInstance.pendingRoutes()).toEqual(['auth.google']);
+      expect(fixture.componentInstance.pendingRoutes()).toEqual([
+        'auth.google',
+      ]);
     });
 
     it('has an outlet for the sheet to render into', async () => {

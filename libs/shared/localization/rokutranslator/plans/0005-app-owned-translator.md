@@ -2,9 +2,25 @@
 
 ## Implementation status
 
-Not started. This plan is the **contract**; `apps/shell/plans/0003-app-owned-locale-routing.md`
-is the migration that consumes it, and `apps/velista/plans/backlog/0001-own-origin-and-pwa.md`
-is blocked on both. Write the library first, migrate the apps second.
+Done, and consumed by `apps/shell/plans/0003-app-owned-locale-routing.md`, which is
+now done too. `apps/velista/plans/backlog/0001-own-origin-and-pwa.md` is unblocked.
+
+Two corrections the implementation made to this plan, both recorded in the decisions
+they belong to:
+
+- **D3 was half right.** `i18next.use(...).createInstance(...)` does assign the backend
+  to the module level default instance, as diagnosed. Fixing only that still left the
+  lazy path dead: passing `resources` at init tells i18next the languages are bundled
+  and turns the backend off even when one is registered. It needs `use()` on the
+  created instance **and** `partialBundledLanguages`, because this library uses both
+  paths. Measured with a scratch spec before the fix.
+- **The mount cannot reach the guard through DI** (D7). `APP_MOUNT_PATH` exists and is
+  what the locale switcher reads, but a guard resolves against the closest environment
+  injector Angular has created by the preactivation phase, and a route's own
+  `providers` injector is not reliably one of them. The guard reads its whole
+  configuration from route `data` instead, deepest definition winning, which also
+  splits it along the ownership line: the app's entry route states the mount, the
+  feature library's table states the locales.
 
 ## Goal
 

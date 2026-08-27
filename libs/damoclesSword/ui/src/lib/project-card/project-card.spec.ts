@@ -64,9 +64,9 @@ describe('ProjectCard', () => {
       expect(host.querySelector('.card-title')?.textContent?.trim()).toBe(
         'STARLIT: ASCENSION'
       );
-      expect(host.querySelector('.card-main-content')?.textContent?.trim()).toBe(
-        'An already-translated description.'
-      );
+      expect(
+        host.querySelector('.card-main-content')?.textContent?.trim()
+      ).toBe('An already-translated description.');
     });
 
     it('does not render the right column when there are no addons', () => {
@@ -175,10 +175,7 @@ describe('ProjectCard', () => {
    * variables are overridable on the host element.
    */
   describe('themeable css variables', () => {
-    const scss = readFileSync(
-      join(__dirname, 'project-card.scss'),
-      'utf-8'
-    );
+    const scss = readFileSync(join(__dirname, 'project-card.scss'), 'utf-8');
 
     it('drives the card background from the --card-bg custom property with a fallback', () => {
       expect(scss).toMatch(/background-color:\s*var\(\s*--card-bg\s*,/);

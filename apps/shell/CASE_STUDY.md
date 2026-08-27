@@ -84,8 +84,8 @@ deliberate: the point is to demonstrate what I can do.
 
 **Q: The shell is the only host. How does it declare and lazy-load remotes (the `damoclesSword/Routes` alias trick)?**
 A: _(Compiled from the code rather than a spoken answer.)_ The shell is the only app
-whose `module-federation.config.ts` lists `remotes: ['landing', 'odontogram',
-'damoclesSword', 'landingV2']`. Each remote exposes a single entry, `./Routes`, pointing
+whose `module-federation.config.ts` lists `remotes: ['odontogram', 'damoclesSword',
+'landingV2', 'velista']`. Each remote exposes a single entry, `./Routes`, pointing
 at its `entry.routes.ts`. A TypeScript path alias in `tsconfig.base.json` (for example
 `odontogram/Routes`) lets the shell import that exposed module as if it were local:
 

@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
+  APP_MOUNT_PATH,
   RokuLocaleStore,
   RokuTranslatorPipe,
   RokuTranslatorService,
@@ -50,6 +51,7 @@ import {
 })
 export class LandingPage {
   private readonly _localeStore = inject(RokuLocaleStore);
+  private readonly _mountPath = inject(APP_MOUNT_PATH);
   private readonly _route = inject(ActivatedRoute);
   private readonly _router = inject(Router);
   private readonly _t = inject(RokuTranslatorService);
@@ -140,7 +142,10 @@ export class LandingPage {
    * navigation. Nothing new is needed in the localization library for this.
    */
   switchLocale(locale: string): void {
-    void this._localeStore.switchAppLocale(APP_KEY, locale);
+    // The mount is passed because the locale sits *below* it now: rewriting index 0
+    // would replace `velista` itself and send the visitor to `/en/en`. Read from DI
+    // rather than written down, so the standalone build (mount `''`) needs no branch.
+    void this._localeStore.switchAppLocale(APP_KEY, locale, this._mountPath);
   }
 
   /**

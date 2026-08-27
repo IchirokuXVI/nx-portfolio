@@ -15,7 +15,6 @@ export default composePlugins(async (config) => {
     {
       ...mfeConfig,
       remotes: [
-        ['landing', `${mfeBaseUrl}/landing`],
         ['odontogram', `${mfeBaseUrl}/odontogram`],
         ['damoclesSword', `${mfeBaseUrl}/damoclesSword`],
         ['landingV2', `${mfeBaseUrl}/landingV2`],

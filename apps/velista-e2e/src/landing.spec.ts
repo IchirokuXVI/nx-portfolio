@@ -26,7 +26,7 @@ test.describe('velista landing page', () => {
   test('renders translated English, with no key left on screen', async ({
     page,
   }) => {
-    await page.goto('/en/velista');
+    await page.goto('/velista/en');
 
     await expect(page.locator('.app-root')).toBeVisible();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(
@@ -42,7 +42,7 @@ test.describe('velista landing page', () => {
   test('renders Spanish at /es, including the invented preview list', async ({
     page,
   }) => {
-    await page.goto('/es/velista');
+    await page.goto('/velista/es');
 
     const text = await appText(page);
 
@@ -55,7 +55,7 @@ test.describe('velista landing page', () => {
   test('the language control opens, and switches the locale in place', async ({
     page,
   }) => {
-    await page.goto('/en/velista');
+    await page.goto('/velista/en');
 
     const trigger = page.locator('.locale');
 
@@ -85,7 +85,7 @@ test.describe('velista landing page', () => {
   test('the menu closes on an outside click and on Escape', async ({
     page,
   }) => {
-    await page.goto('/en/velista');
+    await page.goto('/velista/en');
 
     const trigger = page.locator('.locale');
 
@@ -105,7 +105,7 @@ test.describe('velista landing page', () => {
   }) => {
     // Plan 0007 criterion 2: an anonymous visitor asking for the dashboard is sent
     // back to the front door, and the locale segment survives the redirect.
-    await page.goto('/es/velista/home');
+    await page.goto('/velista/es/home');
 
     await expect(page).toHaveURL(/\/es\/velista\/?$/);
   });
@@ -115,7 +115,7 @@ test.describe('velista landing page', () => {
     // filling the shell's flex row, so a 480px column was centred inside a 480px
     // box pinned to the left edge.
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/en/velista');
+    await page.goto('/velista/en');
 
     const measured = await page.locator('.app-main').boundingBox();
 

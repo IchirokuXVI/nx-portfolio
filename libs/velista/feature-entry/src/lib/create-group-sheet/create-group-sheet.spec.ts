@@ -133,7 +133,7 @@ describe('CreateGroupSheet', () => {
       (query(fixture, '.primary') as HTMLButtonElement).click();
       await fixture.whenStable();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista/home');
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
     });
 
     it('tells a guest that an account is being made, while it happens', async () => {
@@ -260,7 +260,7 @@ describe('CreateGroupSheet', () => {
 
       (query(fixture, '.action') as HTMLButtonElement).click();
       expect(tokens.clear).toHaveBeenCalled();
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista');
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en');
     });
   });
 
@@ -270,7 +270,7 @@ describe('CreateGroupSheet', () => {
 
       (query(fixture, '.cancel') as HTMLButtonElement).click();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista');
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en');
     });
 
     it('goes back to the dashboard when it was opened over that', async () => {
@@ -278,7 +278,7 @@ describe('CreateGroupSheet', () => {
 
       (query(fixture, '.cancel') as HTMLButtonElement).click();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista/home');
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
     });
   });
 });

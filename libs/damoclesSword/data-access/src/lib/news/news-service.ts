@@ -12,7 +12,6 @@ export interface NewsServiceI {
  * DI token for the news service, defaulting to the in-memory implementation.
  * Inject this instead of a concrete class.
  */
-export const NEWS_SERVICE = serviceToken<NewsServiceI>(
-  'NEWS_SERVICE',
-  () => inject(NewsMemory)
+export const NEWS_SERVICE = serviceToken<NewsServiceI>('NEWS_SERVICE', () =>
+  inject(NewsMemory)
 );

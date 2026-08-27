@@ -12,7 +12,6 @@ export interface AssetServiceI {
  * DI token for the asset resolver, defaulting to the in-memory implementation.
  * Inject this instead of the concrete `AssetMemory`.
  */
-export const ASSET_SERVICE = serviceToken<AssetServiceI>(
-  'ASSET_SERVICE',
-  () => inject(AssetMemory)
+export const ASSET_SERVICE = serviceToken<AssetServiceI>('ASSET_SERVICE', () =>
+  inject(AssetMemory)
 );

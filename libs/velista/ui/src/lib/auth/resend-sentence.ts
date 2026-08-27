@@ -74,9 +74,9 @@ export class ResendSentence {
    * expired link screen it went out long ago and the question is whether the person
    * still wants to confirm at all.
    */
-  readonly promptKey = input<'auth.resend.prompt' | 'auth.resend.promptExpired'>(
-    'auth.resend.prompt'
-  );
+  readonly promptKey = input<
+    'auth.resend.prompt' | 'auth.resend.promptExpired'
+  >('auth.resend.prompt');
 
   readonly resend = output<void>();
 

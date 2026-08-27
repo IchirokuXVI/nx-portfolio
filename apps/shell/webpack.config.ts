@@ -47,10 +47,10 @@ export default composePlugins(async (config) => {
       })
     : mfeBaseUrl
     ? ([
-        ['landing', `${mfeBaseUrl}/landing`],
         ['odontogram', `${mfeBaseUrl}/odontogram`],
         ['damoclesSword', `${mfeBaseUrl}/damoclesSword`],
         ['landingV2', `${mfeBaseUrl}/landingV2`],
+        ['velista', `${mfeBaseUrl}/velista`],
       ] as [string, string][])
     : mfeConfig.remotes;
 

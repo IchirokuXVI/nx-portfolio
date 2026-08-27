@@ -47,7 +47,9 @@ export class ProjectCard {
   );
 
   /** The live app is this very site, so "View project" is disabled. */
-  readonly isCurrentSite = computed(() => this.project().isCurrentSite ?? false);
+  readonly isCurrentSite = computed(
+    () => this.project().isCurrentSite ?? false
+  );
 
   /** Generic placeholder initial for image-less projects. */
   readonly initial = computed(() =>

@@ -16,7 +16,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import {
   RokuTranslatorPipe,
   RokuTranslatorService,
@@ -184,6 +183,9 @@ export class ToothTreatmentDetailedForm {
   }
 
   t(s: string) {
-    return RokuTranslator.t(s);
+    // Through the service, which reads the app's own translator. It was the module
+    // global, which is gone with the singleton (plan 0005 D1); the service was
+    // already injected a few lines up for everything else this component reads.
+    return this._translateServ.t(s);
   }
 }

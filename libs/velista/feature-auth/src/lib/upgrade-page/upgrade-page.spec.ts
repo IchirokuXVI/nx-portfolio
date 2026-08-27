@@ -156,7 +156,9 @@ describe('UpgradePage', () => {
     // upgrade keeps the userId the memberships hang off, so the cache that was correct
     // before the form is still correct after it. Had this been a register, the same
     // cache would now belong to a different account.
-    const { fixture, zones } = await render({ zones: [zone('z1'), zone('z2')] });
+    const { fixture, zones } = await render({
+      zones: [zone('z1'), zone('z2')],
+    });
 
     const before = zones.myZones();
     expect(before.map((group) => group.id)).toEqual(['z1', 'z2']);
@@ -173,7 +175,9 @@ describe('UpgradePage', () => {
 
     // The testing translator answers with the key, so this asserts the key that was
     // chosen rather than the sentence. `count` is what picks `_one` from `_other`.
-    expect(fixture.componentInstance.keepsafe()).toContain('auth.upgrade.keepsafe');
+    expect(fixture.componentInstance.keepsafe()).toContain(
+      'auth.upgrade.keepsafe'
+    );
   });
 
   it('lands on the dashboard and leaves the address for the notice', async () => {

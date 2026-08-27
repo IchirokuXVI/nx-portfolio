@@ -13,9 +13,7 @@ import { PROJECT_TRANSLATIONS } from './static-project-translation-data';
  * Projects never leave the client, so this is the permanent source; a server-backed
  * {@link ./project-service#ProjectServiceI} is only needed if that changes.
  */
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable()
 export class ProjectMemory implements ProjectServiceI {
   private readonly _assets = inject(ASSET_SERVICE);
   private _projects = PROJECTS;

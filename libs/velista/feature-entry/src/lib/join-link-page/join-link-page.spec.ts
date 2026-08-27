@@ -149,7 +149,7 @@ describe('JoinLinkPage', () => {
       (query(fixture, '.primary') as HTMLButtonElement).click();
       await fixture.whenStable();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista/home');
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
     });
 
     it('renders the same message set, under the card rather than a field', async () => {
@@ -186,7 +186,7 @@ describe('JoinLinkPage', () => {
 
       (query(fixture, '.action') as HTMLButtonElement).click();
       expect(tokens.clear).toHaveBeenCalled();
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista');
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en');
     });
   });
 
@@ -196,7 +196,7 @@ describe('JoinLinkPage', () => {
 
       (query(fixture, '.decline') as HTMLButtonElement).click();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista');
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en');
     });
   });
 });

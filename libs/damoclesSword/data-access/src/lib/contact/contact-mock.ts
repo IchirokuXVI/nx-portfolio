@@ -11,9 +11,7 @@ import { ContactServiceI } from './contact-service';
  * `odontogram/data-access`'s `OdontogramApi`) once the endpoint exists — no
  * consumer changes required.
  */
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable()
 export class ContactMock implements ContactServiceI {
   send(message: ContactMessage): Observable<ContactMessage> {
     return of(message).pipe(delay(600));

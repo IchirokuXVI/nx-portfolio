@@ -44,32 +44,32 @@ function run(guard: Guard, identity: FakeIdentity, url: string): string | true {
 
 describe('anonymousOnlyGuard', () => {
   it('lets somebody with no account onto the front door', () => {
-    expect(run(anonymousOnlyGuard, 'anonymous', '/en/velista')).toBe(true);
+    expect(run(anonymousOnlyGuard, 'anonymous', '/velista/en')).toBe(true);
   });
 
   it('sends a signed in visitor straight to their dashboard', () => {
     // One navigation, which is what keeps plan 0003's reasoning intact: the app is
     // launched from a phone home screen and a returning user should not have to
     // navigate past a marketing page.
-    expect(run(authenticatedGuard, 'REGISTERED', '/en/velista/home')).toBe(
+    expect(run(authenticatedGuard, 'REGISTERED', '/velista/en/home')).toBe(
       true
     );
-    expect(run(anonymousOnlyGuard, 'REGISTERED', '/en/velista')).toBe(
-      '/en/velista/home'
+    expect(run(anonymousOnlyGuard, 'REGISTERED', '/velista/en')).toBe(
+      '/velista/en/home'
     );
   });
 
   it('treats a guest as signed in, because a guest has a real account', () => {
-    expect(run(anonymousOnlyGuard, 'TEMPORARY', '/en/velista')).toBe(
-      '/en/velista/home'
+    expect(run(anonymousOnlyGuard, 'TEMPORARY', '/velista/en')).toBe(
+      '/velista/en/home'
     );
   });
 });
 
 describe('authenticatedGuard', () => {
   it('sends somebody with no account back to the front door', () => {
-    expect(run(authenticatedGuard, 'anonymous', '/en/velista/home')).toBe(
-      '/en/velista'
+    expect(run(authenticatedGuard, 'anonymous', '/velista/en/home')).toBe(
+      '/velista/en'
     );
   });
 });
@@ -88,28 +88,28 @@ describe('authenticatedGuard', () => {
 describe('rule C1: who may see which credential screen', () => {
   it('bars a guest from register and sends them to the dashboard', () => {
     // From where the guest banner takes them to upgrade instead.
-    expect(run(anonymousOnlyGuard, 'TEMPORARY', '/en/velista/auth/register')).toBe(
-      '/en/velista/home'
-    );
+    expect(
+      run(anonymousOnlyGuard, 'TEMPORARY', '/velista/en/auth/register')
+    ).toBe('/velista/en/home');
   });
 
   it('bars a registered user from register too', () => {
     expect(
-      run(anonymousOnlyGuard, 'REGISTERED', '/en/velista/auth/register')
-    ).toBe('/en/velista/home');
+      run(anonymousOnlyGuard, 'REGISTERED', '/velista/en/auth/register')
+    ).toBe('/velista/en/home');
   });
 
   it('lets somebody with no account onto register and sign in', () => {
-    expect(run(anonymousOnlyGuard, 'anonymous', '/en/velista/auth/register')).toBe(
-      true
-    );
-    expect(run(anonymousOnlyGuard, 'anonymous', '/en/velista/auth/login')).toBe(
+    expect(
+      run(anonymousOnlyGuard, 'anonymous', '/velista/en/auth/register')
+    ).toBe(true);
+    expect(run(anonymousOnlyGuard, 'anonymous', '/velista/en/auth/login')).toBe(
       true
     );
   });
 
   it('lets a guest, and only a guest, onto upgrade', () => {
-    expect(run(guestOnlyGuard, 'TEMPORARY', '/en/velista/auth/upgrade')).toBe(
+    expect(run(guestOnlyGuard, 'TEMPORARY', '/velista/en/auth/upgrade')).toBe(
       true
     );
   });
@@ -117,23 +117,23 @@ describe('rule C1: who may see which credential screen', () => {
   it('sends a registered user off upgrade to their dashboard', () => {
     // `upgrade()` refuses anybody whose kind is not TEMPORARY, so this form could
     // never succeed for them.
-    expect(run(guestOnlyGuard, 'REGISTERED', '/en/velista/auth/upgrade')).toBe(
-      '/en/velista/home'
+    expect(run(guestOnlyGuard, 'REGISTERED', '/velista/en/auth/upgrade')).toBe(
+      '/velista/en/home'
     );
   });
 
   it('sends somebody with no account off upgrade to the front door', () => {
     // There is no account on this phone to attach an email to.
-    expect(run(guestOnlyGuard, 'anonymous', '/en/velista/auth/upgrade')).toBe(
-      '/en/velista'
+    expect(run(guestOnlyGuard, 'anonymous', '/velista/en/auth/upgrade')).toBe(
+      '/velista/en'
     );
   });
 
   it('strips the whole auth tail rather than one segment', () => {
     // The credential screens are two segments deep where the dashboard is one, so a
     // redirect built by dropping a single segment would land on `/auth`.
-    expect(run(guestOnlyGuard, 'REGISTERED', '/es/velista/auth/upgrade')).toBe(
-      '/es/velista/home'
+    expect(run(guestOnlyGuard, 'REGISTERED', '/velista/es/auth/upgrade')).toBe(
+      '/velista/es/home'
     );
     expect(run(guestOnlyGuard, 'anonymous', '/en/auth/upgrade')).toBe('/en');
   });
@@ -141,11 +141,11 @@ describe('rule C1: who may see which credential screen', () => {
 
 describe('the redirect targets', () => {
   it('carries the locale segment through untouched', () => {
-    expect(run(authenticatedGuard, 'anonymous', '/es/velista/home')).toBe(
-      '/es/velista'
+    expect(run(authenticatedGuard, 'anonymous', '/velista/es/home')).toBe(
+      '/velista/es'
     );
-    expect(run(anonymousOnlyGuard, 'REGISTERED', '/es/velista')).toBe(
-      '/es/velista/home'
+    expect(run(anonymousOnlyGuard, 'REGISTERED', '/velista/es')).toBe(
+      '/velista/es/home'
     );
   });
 

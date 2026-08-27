@@ -20,6 +20,7 @@ function serviceFactory() {
       provideHttpClient(),
       provideHttpClientTesting(),
       OwnApiUrlResolver,
+      OdontogramApi,
     ],
   });
 

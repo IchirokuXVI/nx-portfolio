@@ -7,7 +7,9 @@ describe('InfoFactMemory', () => {
   let service: InfoFactMemory;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    // Named explicitly: the in-memory services stopped being `providedIn: 'root'`
+    // when the app took ownership of its providers (plan 0005 D5).
+    TestBed.configureTestingModule({ providers: [InfoFactMemory] });
     service = TestBed.inject(InfoFactMemory);
   });
 

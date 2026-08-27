@@ -1,3 +1,4 @@
+export * from './lib/data-access-providers';
 export * from './lib/odontogram/odontogram-api';
 export * from './lib/odontogram/odontogram-memory';
 export * from './lib/odontogram/odontogram-service';

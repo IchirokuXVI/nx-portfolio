@@ -3,10 +3,10 @@
 A personal portfolio built as an **Angular module-federation micro-frontend system** inside an [Nx](https://nx.dev) monorepo, shipped with a custom Nx Docker build/push toolchain and deployed to a **k3s** cluster via **Helm**.
 
 - **`shell`** — host application. Owns the router and lazy-loads the remotes at runtime.
-- **`landing`, `odontogram`, `damoclesSword`** — remote micro-frontends, each exposing its routes via `./Routes` (module federation). They render **only through the shell**: a remote served on its own port shows a blank page (see note below).
+- **`odontogram`, `damoclesSword`, `landingV2`, `velista`** — remote micro-frontends, each exposing its routes via `./Routes` (module federation). They render **only through the shell**: a remote served on its own port shows a blank page (see note below).
 - **`apps/docker/*`** — non-Angular Nx "app" projects that wrap a Dockerfile (`builder`, `reverse-proxy`, `certbot`, `local-http-server`).
 - **`tools/docker`** — custom Nx plugin (`@portfolio/docker`) providing the `build`/`push` executors behind every `build:docker` target.
-- **`libs/<scope>/*`** — libraries grouped by scope (`shared`, `damoclesSword`, `landing`, `odontogram`).
+- **`libs/<scope>/*`** — libraries grouped by scope (`shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`).
 - **`k8s/`** — Kubernetes manifests + the Helm chart deployed by CI.
 
 For architecture and coding conventions see [`CLAUDE.md`](./CLAUDE.md).
@@ -16,7 +16,7 @@ For architecture and coding conventions see [`CLAUDE.md`](./CLAUDE.md).
 Everything runs through Nx (`npx nx ...`); there are no top-level npm scripts.
 
 ```sh
-npx nx serve shell           # host + its dev remotes (odontogram, landing)
+npx nx serve shell           # host + its dev remotes (odontogram, landingV2)
 npx nx serve damoclesSword   # a single remote standalone
 npx nx build shell           # production build (default configuration)
 
@@ -168,9 +168,10 @@ From `values.apps`:
 | App             | Host                  | Path             |
 | --------------- | --------------------- | ---------------- |
 | `shell`         | `ichirokuxvi.com`     | `/`              |
-| `landing`       | `mfe.ichirokuxvi.com` | `/landing`       |
 | `odontogram`    | `mfe.ichirokuxvi.com` | `/odontogram`    |
 | `damoclessword` | `mfe.ichirokuxvi.com` | `/damoclesSword` |
+| `landingv2`     | `mfe.ichirokuxvi.com` | `/landingV2`     |
+| `velista`       | `mfe.ichirokuxvi.com` | `/velista`       |
 
 DNS for both hosts must point at `46.62.204.230`.
 

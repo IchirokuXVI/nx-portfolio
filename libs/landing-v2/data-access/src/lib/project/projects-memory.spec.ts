@@ -8,7 +8,7 @@ describe('ProjectMemory', () => {
   let service: ProjectMemory;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    TestBed.configureTestingModule({ providers: [ProjectMemory] });
     service = TestBed.inject(ProjectMemory);
   });
 

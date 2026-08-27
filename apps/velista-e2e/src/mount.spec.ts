@@ -13,10 +13,10 @@ import { expect, test } from '@playwright/test';
  */
 test.describe('velista mounts under the shell', () => {
   for (const locale of ['en', 'es']) {
-    test(`/${locale}/velista resolves to this app, not landingV2`, async ({
+    test(`/velista/${locale} resolves to this app, not landingV2`, async ({
       page,
     }) => {
-      await page.goto(`/${locale}/velista`);
+      await page.goto(`/velista/${locale}`);
 
       // The app's own root: the element carrying its theme token scope. Nothing
       // else in the portfolio renders it, so seeing it proves the right remote
@@ -24,10 +24,10 @@ test.describe('velista mounts under the shell', () => {
       await expect(page.locator('.app-root')).toBeVisible();
 
       // Still on the route we asked for — no not-found, no locale rewrite.
-      await expect(page).toHaveURL(new RegExp(`/${locale}/velista/?$`));
+      await expect(page).toHaveURL(new RegExp(`/velista/${locale}/?$`));
 
-      // The i18n namespace resolved through the shared RokuTranslator singleton
-      // rather than rendering the raw key.
+      // The i18n namespace resolved through this app's own RokuTranslator rather
+      // than rendering the raw key.
       //
       // Asserted as "not a key" rather than by pinning one sentence. This used to
       // expect the literal 'Velista', written when the `<h1>` was the app title;

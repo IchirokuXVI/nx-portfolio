@@ -7,10 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 An Nx monorepo hosting a personal portfolio built as an Angular **module-federation** micro-frontend system, plus a custom Nx docker build/deploy toolchain and Kubernetes/Helm deployment config.
 
 - `shell` — the host application. Owns the router and mounts remotes at runtime.
-- `landing`, `odontogram`, `damoclesSword` — remote micro-frontend apps, each exposing routes via `./Routes` (module federation).
+- `odontogram`, `damoclesSword`, `landingV2`, `velista` — remote micro-frontend apps, each exposing routes via `./Routes` (module federation).
 - `apps/docker/*` — non-Angular Nx "app" projects (builder, local-http-server) that just wrap a Dockerfile; tagged `type:static-docker` or `type:dynamic-docker` and driven by CI (see below).
 - `tools/docker` — a custom Nx plugin (`@portfolio/docker`) providing the `build` and `push` executors used by every app's `build:docker` target, plus an `application` generator for scaffolding a Dockerfile into a new app.
-- `libs/<scope>/*` — Nx libraries grouped by micro-frontend scope (`damoclesSword`, `landing`, `odontogram`) plus `shared`, following the `data-access` / `feature-*` / `ui` / `models` naming convention.
+- `libs/<scope>/*` — Nx libraries grouped by micro-frontend scope (`damoclesSword`, `odontogram`, `landing-v2`, `velista`) plus `shared`, following the `data-access` / `feature-*` / `ui` / `models` naming convention.
 - `k8s/helm` — Helm chart deployed via CI to a k3s cluster. Routing is the Gateway API (`Gateway` + one `HTTPRoute` per app); the data plane is provisioned by Envoy Gateway in its own namespace, not declared by the chart.
 - `k8s/bootstrap` — one-off per-cluster install of the Gateway API CRDs, Envoy Gateway, cert-manager and a ClusterIssuer (`install.sh` / `install.ps1`). Deliberately outside the chart, so the chart names the implementation only through `gateway.className`.
 
@@ -19,13 +19,13 @@ An Nx monorepo hosting a personal portfolio built as an Angular **module-federat
 Run everything through Nx (`npx nx ...`); there are no top-level `package.json` scripts.
 
 ```sh
-# Serve the shell with its dev remotes (odontogram, landing) — damoclesSword is served separately
+# Serve the shell with its dev remotes — damoclesSword is served separately
 npx nx serve shell
 
 # Serve a single remote directly (each depends on shell:serve via `dependsOn`)
 npx nx serve damoclesSword
 npx nx serve odontogram
-npx nx serve landing
+npx nx serve landingV2
 
 # Production build (all apps default to the `production` build configuration)
 npx nx build shell
@@ -42,7 +42,7 @@ npx nx run-many --all --target=test
 npx nx run-many --all --target=lint
 npx nx run-many --all --target=build
 
-# e2e (shell/landing/odontogram/damoclesSword-e2e use Cypress or Playwright per project)
+# e2e (shell/odontogram/damoclesSword/landingV2/velista-e2e use Cypress or Playwright per project)
 npx nx e2e <project>-e2e
 
 # Run a target across every affected project (mirrors CI)
@@ -62,29 +62,38 @@ There are no top-level `package.json` scripts — run everything through Nx, eit
 
 ### Module federation topology
 
-`shell` is the only app with `serve-static`/`serve` acting as host; its `module-federation.config.ts` declares `remotes: ['landing', 'odontogram', 'damoclesSword']`. Each remote's own `module-federation.config.ts` exposes `./Routes` from `src/app/remote-entry/entry.routes.ts`. Path aliases like `damoclesSword/Routes` (defined in `tsconfig.base.json`) let the shell lazy-load a remote's routes as if they were a local module:
+`shell` is the only app with `serve-static`/`serve` acting as host; its `module-federation.config.ts` declares `remotes: ['odontogram', 'damoclesSword', 'landingV2', 'velista']`. Each remote's own `module-federation.config.ts` exposes `./Routes` from `src/app/remote-entry/entry.routes.ts`. Path aliases like `damoclesSword/Routes` (defined in `tsconfig.base.json`) let the shell lazy-load a remote's routes as if they were a local module:
 
 ```ts
 loadChildren: () => import('damoclesSword/Routes').then((m) => m.remoteRoutes);
 ```
 
-**Remotes render only through the shell — a remote served on its own port shows a blank page.** Each remote's `bootstrap.ts` bootstraps its `RemoteEntry` / `RemoteEntryComponent` as the root, and that component has an **empty template with no `<router-outlet>`** (`apps/<remote>/src/app/remote-entry/entry.ts`). The router still matches routes, but there is no outlet to render them into, so hitting e.g. `http://localhost:4203` directly yields ~200 bytes of empty host element. This is intentional: it stops users (and tests) from reaching a remote through its own port, where the shell's global styles and singleton-`RokuTranslator` locale config are absent and the page renders differently from production. The shell supplies the outlet (and the locale/theme context) when it lazy-loads the remote, so **always develop and test remotes through the shell** (`npx nx serve <remote>` still boots the shell via `dependsOn`, so use the shell URL like `/<locale>/<remote>`, not the remote's own port). Consequently e2e projects point at the shell, not the remote's port.
+**Remotes render only through the shell — a remote served on its own port shows a blank page.** Each remote's `bootstrap.ts` bootstraps its `RemoteEntry` / `RemoteEntryComponent` as the root, and that component has an **empty template with no `<router-outlet>`** (`apps/<remote>/src/app/remote-entry/entry.ts`). The router still matches routes, but there is no outlet to render them into, so hitting e.g. `http://localhost:4203` directly yields ~200 bytes of empty host element. This is intentional: it stops users (and tests) from reaching a remote through its own port, where the shell's global styles are absent and the page renders differently from production. The shell supplies the outlet (and the locale/theme context) when it lazy-loads the remote, so **always develop and test remotes through the shell** (`npx nx serve <remote>` still boots the shell via `dependsOn`, so use the shell URL like `/<remote>/<locale>`, not the remote's own port). Consequently e2e projects point at the shell, not the remote's port.
 
-### Locale-first routing
+### App-owned locale routing
 
-The shell's top-level route is `:locale` (e.g. `/en/damoclesSword/...`), handled by `LocaleWrapperComponent` (`apps/shell/src/app/locale-wrapper-component.ts`). It keeps the URL's locale segment in sync with `RokuTranslator`'s active locale by watching route params and rewriting the URL (full navigation, not just router state) when they diverge. Each remote that needs its own locale-aware layer follows the same pattern (see `libs/damoclesSword/feature-shell`).
+**`/{mount}/{locale}/{rest}`, for every app, in both run modes.** `/damoclesSword/en/about`, `/odontogram/es`, `/velista/en/home`. `landingV2` mounts at the empty path, so its mount contributes no segment and the rule degenerates to `/{locale}/{rest}` — the same rule, not an exception. In a standalone build the mount is also empty, which is what makes extracting an app cheap: its route table is always "locale, then my routes", relative to wherever it happens to be mounted.
+
+The shell owns no `:locale` route and no translator. Each app installs `localeGuard` (from `rokutranslator-angular`) on its own parent route, configured from route `data` (`appKey`, `supportedLocales`, `defaultLocale`) plus the mount, which the app's `entry.routes.ts` states as `data.mountPath`. The guard establishes one invariant before anything below it renders: **the segment immediately after the mount is a supported, canonical locale.** It never declines a URL and never routes to a not-found page — an app's own 404 is localized, so no page can be drawn until the language is settled. Its four cases (adopt / rewrite `en-US` to `en` / replace an unsupported locale / insert a missing one) are `resolveLocaleSegments`, which is pure and carries the tests.
+
+Two consequences worth knowing before editing a route table:
+
+- **An app's parent route needs a child that always matches** (a trailing `**`). A parent with `children` matches only if one of them matches the remainder, so with `:locale` as the only child a locale-less URL fails to match the branch at all and the guard that would *insert* the locale never runs.
+- **The mount must reach the guard through route `data`, not DI.** A guard resolves against the closest environment injector Angular has created by the preactivation phase, and a route's own `providers` injector is not reliably one of them, so `inject(APP_MOUNT_PATH)` there returns the token's default. The token is what the *locale switcher* reads, where a component injector has no such problem.
+
+In the shell's `app.routes.ts`, **every mounted app comes before the empty-path `landingV2` entry**; an empty-path route with `loadChildren` is not terminal and would otherwise swallow its siblings. `app.routes.spec.ts` asserts it.
 
 ### Localization: RokuTranslator
 
-`libs/shared/localization/rokutranslator` is a hand-rolled i18next wrapper (singleton instance exported as `RokuTranslator`) — not a generic i18n library pulled from npm. Key points:
+`libs/shared/localization/rokutranslator` is a hand-rolled i18next wrapper (the `RokuTranslator` **class**) — not a generic i18n library pulled from npm. **There is one instance per app, not one per page**: `provideRokuTranslator` creates it, binds it to the `ROKU_TRANSLATOR` token and provides the `RokuLocaleStore` beside it, so two apps reachable in one session hold independent locales. Resolving either from an injector with no `provideRokuTranslator` above it is an error, by design. Key points:
 
-- Namespaces are registered per-locale via lazy `LoaderFunction`s (`addNamespace`/`addTranslations`), so each remote can contribute its own translation JSON (see `libs/damoclesSword/ui/assets/i18n/*.json`) without the shell knowing about it upfront.
+- Namespaces are registered per-locale via lazy `LoaderFunction`s (`addNamespace`/`addTranslations`), so each library can contribute its own translation JSON (see `libs/damoclesSword/ui/assets/i18n/*.json`) without the app knowing where its assets live. A library that ships assets exports a `TranslationSource` descriptor next to them; the **app** (`apps/<app>/src/app/translation-providers.ts`) lists the descriptors and calls `composeTranslationLoader` — composition belongs to the app, and the app is the only place `app-providers.ts` can import from without crossing a library boundary by relative path.
 - `libs/shared/localization/rokutranslator-angular` wraps it for Angular (service, pipe, `provideRokuTranslator`).
-- In module federation config, `@portfolio/localization/rokutranslator` is forced `singleton: true` across the shell and all remotes — every micro-frontend must share the exact same instance or locale state fragments across app boundaries. The rule lives in **one** file, `module-federation.shared.ts` at the workspace root, which all six configs import; a `shared` callback only governs its own build, so declaring it in the host alone does nothing for the remotes. Do not add `strictVersion`: staging deploys only the affected remotes, so a version bump would leave a mixed fleet, and strict enforcement turns that ordinary window into a blank page. Read that file before editing the list — an earlier version of this rule named a library that did not exist and therefore never applied once, and `rokutranslator-angular` cannot be added the same way (Nx passes it under its project name, which nothing imports).
+- In module federation config, `@portfolio/localization/rokutranslator` is forced `singleton: true` across the shell and all remotes. This is a **deduplication win, not a correctness rule**: the module exports a stateless class, so sharing it means one copy of i18next rather than one locale. (It was load-bearing when the module exported a pre-made instance.) The rule lives in **one** file, `module-federation.shared.ts` at the workspace root, which all six configs import; a `shared` callback only governs its own build, so declaring it in the host alone does nothing for the remotes. Do not add `strictVersion`: staging deploys only the affected remotes, so a version bump would leave a mixed fleet, and strict enforcement turns that ordinary window into a blank page. Read that file before editing the list — an earlier version of this rule named a library that did not exist and therefore never applied once, and `rokutranslator-angular` cannot be added the same way (Nx passes it under its project name, which nothing imports).
 
 ### Library layout
 
-Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `landing`, `odontogram`. Within a scope, libraries follow Nx's convention: `data-access` (API/services), `feature-*` (routed feature libs / remote entry points), `ui` (presentational components + static assets), `models` / `models-localization` (types, and per-domain translation keys). Import via the `@portfolio/<scope>/<lib>` TS path aliases in `tsconfig.base.json` — do not use relative paths across library boundaries.
+Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`. Within a scope, libraries follow Nx's convention: `data-access` (API/services), `feature-*` (routed feature libs / remote entry points), `ui` (presentational components + static assets), `models` / `models-localization` (types, and per-domain translation keys). Import via the `@portfolio/<scope>/<lib>` TS path aliases in `tsconfig.base.json` — do not use relative paths across library boundaries.
 
 `@nx/enforce-module-boundaries` is configured permissively (`onlyDependOnLibsWithTags: ['*']`) — there's no hard tag-based dependency firewall today, so don't rely on lint to catch cross-scope layering mistakes.
 

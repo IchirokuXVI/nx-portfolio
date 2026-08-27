@@ -13,9 +13,7 @@ import { PROJECTS_TRANSLATIONS } from './static-projects-translation-data';
  * and builds `appLink`/`detailLink` from the locale-independent slugs — the
  * same convention as {@link ../info-fact/info-facts-memory}.
  */
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable()
 export class ProjectMemory implements ProjectServiceI {
   private _projects = PROJECTS;
   private _projectsTranslations = PROJECTS_TRANSLATIONS;
