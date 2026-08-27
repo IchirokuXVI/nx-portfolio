@@ -20,6 +20,10 @@ export const AUTH_PATTERNS = {
   verifyEmail: 'auth.verifyEmail',
   /** Send a fresh confirmation link to the caller's unconfirmed address. */
   resendVerification: 'auth.resendVerification',
+  /** Ask for a password reset link, by address, with no session. */
+  forgotPassword: 'auth.forgotPassword',
+  /** Spend a reset link: set the new password and sign in. */
+  resetPassword: 'auth.resetPassword',
   /** Exchange a refresh token for a fresh token pair (rotates). */
   refresh: 'auth.refresh',
   /** Upgrade a temporary user into a registered one, in place. */
@@ -94,14 +98,44 @@ export interface ResendVerificationRequest {
 }
 
 /**
- * What a resend answers with, on the success path as well as on the 429 (plan
- * 0021, section 4.2). One field across all three states, so a client renders
- * "you can ask for another in 0:52" from the number it was given rather than
- * inventing a countdown of its own.
+ * What a throttled mail sending route answers with, on the success path as well
+ * as on the 429 (plan 0021, section 4.2). One field across all three states, so
+ * a client renders "you can ask for another in 0:52" from the number it was
+ * given rather than inventing a countdown of its own.
+ *
+ * Shared by the confirmation resend and the password reset request (plan 0022,
+ * section 5): the two answer the same question and a second identical interface
+ * would only invite the two to drift.
  */
-export interface ResendVerificationResult {
-  /** Whole seconds before another resend is accepted. */
+export interface RetryAfterResult {
+  /** Whole seconds before another request of this kind is accepted. */
   retryAfterSeconds: number;
+}
+
+/** {@link RetryAfterResult}, under the name the resend route has always used. */
+export type ResendVerificationResult = RetryAfterResult;
+
+/**
+ * Ask for a password reset link (plan 0022, section 2). There is no session, so
+ * the address comes from the body. The reply is the same whatever the address
+ * turns out to be, which is the whole point of section 2.1.
+ */
+export interface ForgotPasswordRequest {
+  email: string;
+  /** Locale for the reset email; defaults to the request locale. */
+  locale?: string;
+}
+
+/**
+ * Spend a reset link (plan 0022, section 3). Answers with {@link AuthTokens}:
+ * whoever holds a live reset token has already proved control of the mailbox and
+ * has just chosen the password, so sending them to a sign in form withholds
+ * nothing from an attacker and costs a real user a form.
+ */
+export interface ResetPasswordRequest {
+  /** The raw token from the reset link (auth stores only its hash). */
+  token: string;
+  password: string;
 }
 
 export interface RefreshRequest {

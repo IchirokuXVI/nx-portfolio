@@ -5,6 +5,7 @@ import {
   AUTH_PATTERNS,
   type AuthTokens,
   type ResendVerificationResult,
+  type RetryAfterResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   getRequestContext,
@@ -13,9 +14,11 @@ import {
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
+  ForgotPasswordDto,
   LoginDto,
   RefreshDto,
   RegisterDto,
+  ResetPasswordDto,
   UpgradeDto,
   VerifyEmailDto,
 } from './auth.dto';
@@ -87,6 +90,41 @@ export class AuthController {
       userId: user.userId,
       locale: getRequestContext()?.locale,
     });
+  }
+
+  /**
+   * Ask for a password reset link (plan 0022, section 2). Unauthenticated, and
+   * deliberately incurious: the answer is the same for an address with an
+   * account, an address with none and an address that signs in with Google, so a
+   * caller cannot use it to learn which addresses are registered.
+   */
+  @Post('forgot-password')
+  @Throttle(THROTTLE_LIMITS.passwordReset)
+  @ApiContractResponse(AUTH_PATTERNS.forgotPassword, {
+    status: HttpStatus.CREATED,
+    description:
+      'Accepted. This says nothing about whether the address has an account: tell the user that if it does, a link is on its way, and never claim delivery.',
+  })
+  @ApiProblemResponses({ body: true })
+  forgotPassword(@Body() dto: ForgotPasswordDto): Promise<RetryAfterResult> {
+    return this.nats.send(AUTH_PATTERNS.forgotPassword, {
+      ...dto,
+      locale: getRequestContext()?.locale,
+    });
+  }
+
+  /**
+   * Spend a reset link (plan 0022, section 3). Answers with a token pair, so the
+   * user lands signed in rather than at a sign in form asking for the password
+   * they chose eight seconds ago.
+   */
+  @Post('reset-password')
+  @ApiContractResponse(AUTH_PATTERNS.resetPassword, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  resetPassword(@Body() dto: ResetPasswordDto): Promise<AuthTokens> {
+    return this.nats.send(AUTH_PATTERNS.resetPassword, dto);
   }
 
   @Post('refresh')

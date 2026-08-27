@@ -215,6 +215,7 @@ lunaShopperBackend:
       smtpUser: ''
       mailFrom: Luna Shopper <no-reply@ichirokuxvi.com>
       mailVerifyBaseUrl: https://ichirokuxvi.com/verify-email
+      mailResetBaseUrl: https://ichirokuxvi.com/reset-password
       # Comma-separated user ids allowed to write the catalog (plan 0012). Set to
       # the app owner's registered user id; empty means no one can write.
       platformAdminUserIds: ''
@@ -244,6 +245,7 @@ lunaShopperBackend:
       smtpUser: ''
       mailFrom: Luna Shopper (staging) <no-reply@staging.ichirokuxvi.com>
       mailVerifyBaseUrl: https://staging.ichirokuxvi.com/verify-email
+      mailResetBaseUrl: https://staging.ichirokuxvi.com/reset-password
       platformAdminUserIds: ''
       # Telemetry (plan 0016). Same posture as production; staging is the natural
       # place to switch tracing on first once a collector lands.

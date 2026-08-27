@@ -55,6 +55,15 @@ export const THROTTLE_LIMITS = {
    * here and could refuse a link that would have worked.
    */
   verifyConsume: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 10 } },
+  /**
+   * Asking for a password reset link (plan 0022, section 2.2). One a minute, the
+   * same shape as the resend and for the same reason: the whole of the
+   * enforcement is this bucket, so `retryAfterSeconds` can be read from it rather
+   * than restated. It keys on the caller's IP, which is what makes it a limit on
+   * hammering the endpoint rather than a limit on filling one person's inbox; a
+   * per address limit is the answer to that, and section 9 leaves it unbuilt.
+   */
+  passwordReset: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 1 } },
   /** Join code redemption (enumeration protection). */
   joinCode: { [DEFAULT_BUCKET]: { ttl: seconds(30), limit: 5 } },
   /**

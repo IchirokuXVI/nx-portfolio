@@ -44,6 +44,33 @@ export class VerifyEmailDto {
   token!: string;
 }
 
+/**
+ * Ask for a password reset link (plan 0022, section 2). The address is all there
+ * is: the caller has no session, which is the situation this endpoint exists for.
+ */
+export class ForgotPasswordDto {
+  @ApiProperty({ format: 'email' })
+  @IsEmail()
+  email!: string;
+}
+
+/**
+ * Spend a reset link (plan 0022, section 3). The password rules are the ones
+ * registration enforces, stated here rather than shared, so a client reads the
+ * same bounds in the same place for both.
+ */
+export class ResetPasswordDto {
+  @ApiProperty()
+  @IsString()
+  token!: string;
+
+  @ApiProperty({ minLength: 8, maxLength: 200 })
+  @IsString()
+  @MinLength(8)
+  @MaxLength(200)
+  password!: string;
+}
+
 /** Exchange a refresh token for a fresh pair (plan 0005, section 3). */
 export class RefreshDto {
   @ApiProperty()

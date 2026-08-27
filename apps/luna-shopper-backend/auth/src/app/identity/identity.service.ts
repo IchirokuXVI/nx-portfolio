@@ -7,12 +7,15 @@ import {
   type AuthTokens,
   type DeleteAccountRequest,
   type DeleteAccountResult,
+  type ForgotPasswordRequest,
   type GetProfileRequest,
   type GoogleLoginRequest,
   type LoginRequest,
   type RegisterRequest,
   type ResendVerificationRequest,
   type ResendVerificationResult,
+  type ResetPasswordRequest,
+  type RetryAfterResult,
   type SetUsernameRequest,
   type UpgradeRequest,
   type UserProfileView,
@@ -33,6 +36,7 @@ import {
   Credential,
   EmailVerification,
   OAuthIdentity,
+  PasswordReset,
   User,
 } from '../entities';
 import { IdentityEventsPublisher } from '../events/identity-events.publisher';
@@ -47,6 +51,19 @@ const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** The message every failed consume answers with, whatever actually went wrong. */
 const INVALID_VERIFICATION = 'Invalid or expired verification link';
+
+/**
+ * How long a reset link lives (plan 0022, section 1). One hour: long enough to
+ * survive a mail queue and a walk to a laptop, short enough that a link sitting
+ * in an unattended inbox stops being a key by lunchtime.
+ */
+const RESET_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * The one answer an unknown, expired or already spent reset token gets. Telling
+ * them apart would tell an attacker which of their guesses was once real.
+ */
+const INVALID_RESET = 'Invalid or expired password reset link';
 
 /**
  * The identity domain (plan 0005, section 4). Every way a user comes to exist
@@ -284,6 +301,147 @@ export class IdentityService {
     return {
       retryAfterSeconds: throttleWaitSeconds(THROTTLE_LIMITS.verifyResend),
     };
+  }
+
+  /**
+   * Ask for a password reset link (plan 0022, section 2).
+   *
+   * Every address gets the same answer: the same body, the same wait, and as
+   * close to the same work as this can manage. An unknown address is not a 404
+   * and a Google account is not a conflict, because `login()` already refuses to
+   * say which addresses are registered and an endpoint that answered differently
+   * here would hand back the enumeration oracle that decision exists to close.
+   *
+   * The difference lives only in the inbox of somebody who already controls the
+   * address: a password account gets a link, a Google account gets the mail that
+   * tells them which button signs them in (section 2.3), and an address with no
+   * account gets nothing.
+   */
+  async forgotPassword(req: ForgotPasswordRequest): Promise<RetryAfterResult> {
+    const email = this.normalizeEmail(req.email ?? '');
+    const outcome = await this.dataSource.transaction(async (manager) => {
+      const user = email
+        ? await manager.getRepository(User).findOne({ where: { email } })
+        : null;
+      if (!user) {
+        return null;
+      }
+      const credential = await manager
+        .getRepository(Credential)
+        .findOne({ where: { userId: user.id } });
+      if (!credential) {
+        // No password to reset. Section 2.3: they still hear back, because
+        // silence is indistinguishable from a lost mail and they would only ask
+        // again.
+        return { google: true as const, rawToken: null };
+      }
+      return {
+        google: false as const,
+        rawToken: await this.grants.issue(
+          manager,
+          PasswordReset,
+          { userId: user.id },
+          RESET_TTL_MS
+        ),
+      };
+    });
+
+    // Outside the transaction, as registration sends its confirmation: a send
+    // failure must not roll back a grant the user may still receive by another
+    // route, and the global logger records it.
+    try {
+      if (outcome?.google) {
+        await this.mail.sendGoogleAccountEmail(email, req.locale);
+      } else if (outcome?.rawToken) {
+        await this.mail.sendPasswordResetEmail(
+          email,
+          outcome.rawToken,
+          this.config.smtp.resetBaseUrl,
+          req.locale
+        );
+      }
+    } catch {
+      // Swallowed for the reason the confirmation send is: the response is the
+      // same either way, and it has to be.
+    }
+
+    // The same number for everyone, including the address with no account. A
+    // shorter wait for the cases that send nothing would answer the question the
+    // rest of this method refuses to answer.
+    return {
+      retryAfterSeconds: throttleWaitSeconds(THROTTLE_LIMITS.passwordReset),
+    };
+  }
+
+  /**
+   * Spend a reset link (plan 0022, section 3). Writes the new password, revokes
+   * every session that existed before this call, marks the address verified if it
+   * was not, and signs the caller in.
+   *
+   * All of it happens in the transaction that consumes the token, so a failure
+   * leaves no half reset account. The new pair is issued after the transaction
+   * commits, which is also after the revoke, so the person resetting keeps the
+   * session this call gives them and whoever else held one does not.
+   */
+  async resetPassword(req: ResetPasswordRequest): Promise<AuthTokens> {
+    const passwordHash = await this.passwords.hash(req.password ?? '');
+
+    const { user, confirmed } = await this.dataSource.transaction(
+      async (manager) => {
+        const record = await this.grants.consume(
+          manager,
+          PasswordReset,
+          req.token ?? '',
+          INVALID_RESET
+        );
+        const user = await manager
+          .getRepository(User)
+          .findOne({ where: { id: record.userId } });
+        if (!user) {
+          // The cascade takes outstanding grants with a deleted user, so this is
+          // unreachable in practice; it answers with the token error rather than
+          // a 500 if it ever is reached.
+          throw new ValidationException(INVALID_RESET);
+        }
+
+        const credential = await manager
+          .getRepository(Credential)
+          .findOne({ where: { userId: user.id } });
+        await manager.getRepository(Credential).save(
+          credential
+            ? { ...credential, passwordHash }
+            : // Unreachable by section 2.3, which never issues a token to an
+              // account with no credential row. Creating one is the harmless
+              // branch: they proved control of the mailbox to get here.
+              manager
+                .getRepository(Credential)
+                .create({ userId: user.id, passwordHash })
+        );
+
+        // Following a link sent to the address is the same evidence the
+        // confirmation flow accepts, and a strictly stronger action than
+        // clicking a confirmation link. Leaving it unverified would leave a nudge
+        // on screen asking for proof already given.
+        const confirmed = !user.emailVerifiedAt;
+        if (confirmed) {
+          user.emailVerifiedAt = new Date();
+          await manager
+            .getRepository(User)
+            .update({ id: user.id }, { emailVerifiedAt: user.emailVerifiedAt });
+        }
+
+        await this.tokens.revokeAllForUser(user.id, manager);
+        return { user, confirmed };
+      }
+    );
+
+    // The same announcement `verifyEmail` makes, because the same thing happened:
+    // whether the address was confirmed by a confirmation link or by a reset one,
+    // a consumer that tracks verified addresses learns of it exactly once.
+    if (confirmed) {
+      this.events.userEmailVerified({ userId: user.id });
+    }
+    return this.tokens.issueTokens(user);
   }
 
   /** Exchange a refresh token for a fresh pair (plan 0005, section 3). */

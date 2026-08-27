@@ -27,7 +27,9 @@ export const AUTH_SCHEMA_IDS = {
   loginRequest: schemaId('msg/auth.login/request'),
   verifyEmailRequest: schemaId('msg/auth.verifyEmail/request'),
   resendVerificationRequest: schemaId('msg/auth.resendVerification/request'),
-  resendVerificationResult: schemaId('auth/ResendVerificationResult'),
+  retryAfterResult: schemaId('auth/RetryAfterResult'),
+  forgotPasswordRequest: schemaId('msg/auth.forgotPassword/request'),
+  resetPasswordRequest: schemaId('msg/auth.resetPassword/request'),
   refreshRequest: schemaId('msg/auth.refresh/request'),
   upgradeRequest: schemaId('msg/auth.upgrade/request'),
   googleLoginRequest: schemaId('msg/auth.googleLogin/request'),
@@ -104,13 +106,14 @@ const resendVerificationRequest = object(
   ['userId']
 );
 
-const resendVerificationResult = {
+const retryAfterResult = {
   ...object(
-    AUTH_SCHEMA_IDS.resendVerificationResult,
+    AUTH_SCHEMA_IDS.retryAfterResult,
     {
       retryAfterSeconds: integer({
         minimum: 0,
-        description: 'Whole seconds before another resend is accepted.',
+        description:
+          'Whole seconds before another request of this kind is accepted.',
       }),
     },
     ['retryAfterSeconds']
@@ -120,8 +123,20 @@ const resendVerificationResult = {
   // field arrives on the 429 too, and the limits are enforced per gateway pod, so
   // a fixed countdown would be wrong in both directions.
   description:
-    'A resend was sent. `retryAfterSeconds` is how long before another is accepted; a refusal returns the same field on the error envelope with what is actually left. Count down the number you were given rather than assuming a fixed wait.',
+    'The request was accepted. `retryAfterSeconds` is how long before another is accepted; a refusal returns the same field on the error envelope with what is actually left. Count down the number you were given rather than assuming a fixed wait.',
 };
+
+const forgotPasswordRequest = object(
+  AUTH_SCHEMA_IDS.forgotPasswordRequest,
+  { email: string({ format: 'email' }), locale: string() },
+  ['email']
+);
+
+const resetPasswordRequest = object(
+  AUTH_SCHEMA_IDS.resetPasswordRequest,
+  { token: nonEmptyString(), password: nonEmptyString() },
+  ['token', 'password']
+);
 
 const refreshRequest = object(
   AUTH_SCHEMA_IDS.refreshRequest,
@@ -191,7 +206,9 @@ export const authSchemas: JsonSchema[] = [
   loginRequest,
   verifyEmailRequest,
   resendVerificationRequest,
-  resendVerificationResult,
+  retryAfterResult,
+  forgotPasswordRequest,
+  resetPasswordRequest,
   refreshRequest,
   upgradeRequest,
   googleLoginRequest,
@@ -222,7 +239,18 @@ export const authMessageContracts: Record<
   },
   [AUTH_PATTERNS.resendVerification]: {
     request: AUTH_SCHEMA_IDS.resendVerificationRequest,
-    response: AUTH_SCHEMA_IDS.resendVerificationResult,
+    response: AUTH_SCHEMA_IDS.retryAfterResult,
+  },
+  [AUTH_PATTERNS.forgotPassword]: {
+    request: AUTH_SCHEMA_IDS.forgotPasswordRequest,
+    // The same shape the resend answers with, and the same number: a request for
+    // an address with no account sends nothing and still waits, because a shorter
+    // wait would answer the question section 2.1 refuses to answer.
+    response: AUTH_SCHEMA_IDS.retryAfterResult,
+  },
+  [AUTH_PATTERNS.resetPassword]: {
+    request: AUTH_SCHEMA_IDS.resetPasswordRequest,
+    response: AUTH_SCHEMA_IDS.authTokens,
   },
   [AUTH_PATTERNS.refresh]: {
     request: AUTH_SCHEMA_IDS.refreshRequest,

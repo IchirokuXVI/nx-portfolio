@@ -20,6 +20,8 @@ describe('auth contracts', () => {
     expect(AUTH_PATTERNS.login).toBe('auth.login');
     expect(AUTH_PATTERNS.refresh).toBe('auth.refresh');
     expect(AUTH_PATTERNS.upgrade).toBe('auth.upgrade');
+    expect(AUTH_PATTERNS.forgotPassword).toBe('auth.forgotPassword');
+    expect(AUTH_PATTERNS.resetPassword).toBe('auth.resetPassword');
   });
 
   it('pins the identity event names', () => {

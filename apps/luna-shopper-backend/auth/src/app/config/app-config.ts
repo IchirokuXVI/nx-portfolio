@@ -15,11 +15,11 @@ import { readKey } from './read-key';
  * secret and SMTP password arrive at runtime and are validated on boot. `PORT`
  * is the small HTTP health port; the service's real surface is the NATS broker.
  *
- * GOOGLE_CALLBACK_URL and MAIL_VERIFY_BASE_URL are explicit on purpose: the
- * OAuth callback must exactly match a URI pre-registered with Google (and the
- * request Host header is untrusted), and the verification link lives in an email
- * pointing at the frontend (a different origin than this API), so neither can be
- * derived from the incoming request's host.
+ * GOOGLE_CALLBACK_URL, MAIL_VERIFY_BASE_URL and MAIL_RESET_BASE_URL are explicit
+ * on purpose: the OAuth callback must exactly match a URI pre-registered with
+ * Google (and the request Host header is untrusted), and the verification and
+ * reset links live in emails pointing at the frontend (a different origin than
+ * this API), so none of them can be derived from the incoming request's host.
  */
 export const LOG_LEVELS = [
   'fatal',
@@ -58,6 +58,7 @@ export const authValidationSchema = Joi.object({
   SMTP_PASS: Joi.string().allow('').default(''),
   MAIL_FROM: Joi.string().required(),
   MAIL_VERIFY_BASE_URL: Joi.string().uri().required(),
+  MAIL_RESET_BASE_URL: Joi.string().uri().required(),
 
   // Orphan temporary-user reaper (plan 0011, section 3). Deletes temporary users
   // with no zone membership after a grace period; core is the authority on
@@ -104,6 +105,7 @@ export interface AuthConfig {
     pass: string;
     from: string;
     verifyBaseUrl: string;
+    resetBaseUrl: string;
   };
   reaper: {
     enabled: boolean;
@@ -145,6 +147,7 @@ export const authConfiguration = registerAs(
       pass: process.env.SMTP_PASS ?? '',
       from: process.env.MAIL_FROM as string,
       verifyBaseUrl: process.env.MAIL_VERIFY_BASE_URL as string,
+      resetBaseUrl: process.env.MAIL_RESET_BASE_URL as string,
     },
     reaper: {
       enabled: process.env.ORPHAN_REAPER_ENABLED !== 'false',

@@ -1,6 +1,7 @@
 import { Credential } from './credential.entity';
 import { EmailVerification } from './email-verification.entity';
 import { OAuthIdentity } from './oauth-identity.entity';
+import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
 import { User } from './user.entity';
 
@@ -8,6 +9,7 @@ export { BaseEntity } from './base.entity';
 export { Credential } from './credential.entity';
 export { EmailVerification } from './email-verification.entity';
 export { OAuthIdentity } from './oauth-identity.entity';
+export { PasswordReset } from './password-reset.entity';
 export { RefreshToken } from './refresh-token.entity';
 export { User } from './user.entity';
 
@@ -17,5 +19,6 @@ export const AUTH_ENTITIES = [
   Credential,
   OAuthIdentity,
   EmailVerification,
+  PasswordReset,
   RefreshToken,
 ];

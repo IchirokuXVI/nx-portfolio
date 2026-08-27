@@ -6,6 +6,7 @@ import {
   type AuthTokens,
   type DeleteAccountRequest,
   type DeleteAccountResult,
+  type ForgotPasswordRequest,
   type GetProfileRequest,
   type GoogleLoginRequest,
   type IdentityStats,
@@ -14,6 +15,8 @@ import {
   type RegisterRequest,
   type ResendVerificationRequest,
   type ResendVerificationResult,
+  type ResetPasswordRequest,
+  type RetryAfterResult,
   type SetUsernameRequest,
   type UpgradeRequest,
   type UserProfileView,
@@ -67,6 +70,18 @@ export class IdentityController {
     @Payload() req: ResendVerificationRequest
   ): Promise<ResendVerificationResult> {
     return this.identity.resendVerification(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.forgotPassword)
+  forgotPassword(
+    @Payload() req: ForgotPasswordRequest
+  ): Promise<RetryAfterResult> {
+    return this.identity.forgotPassword(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.resetPassword)
+  resetPassword(@Payload() req: ResetPasswordRequest): Promise<AuthTokens> {
+    return this.identity.resetPassword(req);
   }
 
   @MessagePattern(AUTH_PATTERNS.refresh)

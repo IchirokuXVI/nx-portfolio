@@ -5,7 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import type { AuthTokens } from '@portfolio/luna-shopper/contracts';
 import { UnauthorizedException } from '@portfolio/luna-shopper/platform';
 import { createHash, randomBytes } from 'node:crypto';
-import { Repository } from 'typeorm';
+import { IsNull, Repository, type EntityManager } from 'typeorm';
 import type { AuthConfig } from '../config/app-config';
 import { RefreshToken, type User } from '../entities';
 import { parseDurationMs } from './duration';
@@ -89,6 +89,34 @@ export class TokenService {
       accessToken,
       refreshToken,
     };
+  }
+
+  /**
+   * Revokes every live refresh token a user holds (plan 0022, section 3.2).
+   *
+   * A password reset is usually somebody saying another person has their
+   * password, so leaving that person's sessions alive means the reset changed
+   * nothing for up to a refresh lifetime. The caller issues its own pair *after*
+   * this, so the person doing the resetting stays signed in and everybody else
+   * does not; doing it the other way round is the mistake this ordering exists to
+   * avoid.
+   *
+   * Already revoked rows are left alone, so the update touches only what is live.
+   * A `manager` joins the caller's transaction, so a reset that fails half way
+   * does not leave a user signed out of everything with their old password still
+   * working.
+   */
+  async revokeAllForUser(
+    userId: string,
+    manager?: EntityManager
+  ): Promise<void> {
+    const repository = manager
+      ? manager.getRepository(RefreshToken)
+      : this.refreshTokens;
+    await repository.update(
+      { userId, revokedAt: IsNull() },
+      { revokedAt: new Date() }
+    );
   }
 
   /**

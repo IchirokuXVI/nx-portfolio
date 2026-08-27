@@ -148,6 +148,7 @@ SMTP_USER=
 SMTP_PASS=
 MAIL_FROM=Luna Shopper <no-reply@luna.localhost>
 MAIL_VERIFY_BASE_URL=http://localhost:4200/verify-email
+MAIL_RESET_BASE_URL=http://localhost:4200/reset-password
 GOOGLE_CLIENT_ID=your-dev-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-dev-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:$gateway/auth/google/callback

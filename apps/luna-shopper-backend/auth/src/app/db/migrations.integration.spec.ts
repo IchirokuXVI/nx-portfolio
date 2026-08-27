@@ -43,6 +43,7 @@ describeIntegration('auth schema (real Postgres)', () => {
       'credentials',
       'oauth_identities',
       'email_verifications',
+      'password_resets',
       'refresh_tokens',
     ]) {
       expect(names.has(table)).toBe(true);
