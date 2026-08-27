@@ -30,6 +30,7 @@ import {
   AppBrand,
 } from '@portfolio/velista/models';
 import { VELISTA_PLATFORM_PROVIDERS } from '@portfolio/velista/platform';
+import { VELISTA_TRANSLATION_PROVIDERS } from '../../../../libs/velista/feature-shell/src/lib/translation-providers';
 import { environment } from '../environments/environment';
 
 /**
@@ -73,6 +74,7 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   { provide: APP_BASE_PATH, useValue: '/velista' },
   // The app's own backend configuration, not the portfolio's (item 6).
   { provide: APP_API_CONFIG, useValue: environment.api },
+  ...VELISTA_TRANSLATION_PROVIDERS,
 
   // HTTP, with the one interceptor that decides every outgoing header
   // (plan 0004, section 4.3). `withFetch` because the standalone phase wants it

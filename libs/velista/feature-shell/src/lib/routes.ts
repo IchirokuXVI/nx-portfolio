@@ -1,13 +1,15 @@
+import { inject } from '@angular/core';
 import { type Route } from '@angular/router';
-import { localeCorrectionGuard } from '@portfolio/localization/rokutranslator-angular';
+import {
+  localeCorrectionGuard,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import {
   anonymousOnlyGuard,
   authenticatedGuard,
   guestOnlyGuard,
 } from './auth-guards';
-import { VELISTA_TRANSLATION_PROVIDERS } from './translation-providers';
-import { translationsReadyResolver } from './translations-ready';
 import { APP_USABLE_LOCALES } from './usable-locales';
 import { zoneIdGuard, zoneMemberGuard, zoneStaffGuard } from './zone-guards';
 
@@ -109,14 +111,13 @@ export const AppShellRoutes: Route[] = [
     // It also makes the two run modes identical here. The mounted app and the
     // standalone bootstrap both enter through this table, so neither has to
     // remember to install these separately.
-    providers: [...VELISTA_TRANSLATION_PROVIDERS],
     canActivate: [localeCorrectionGuard],
     // No page of this app is created until its strings have arrived (plan 0006,
     // section 4). On the parent, so it is decided once for the app rather than
     // repeated by every page ever added, and after the locale guard: Angular runs a
     // route's `canActivate` to completion before its `resolve`, so the locale is
     // already settled and this can only ever wait for the language it will render.
-    resolve: { translationsReady: translationsReadyResolver },
+    resolve: { translationsReady: () => inject(RokuTranslatorService).loaded$ },
     data: {
       appKey: APP_KEY,
       supportedLocales: APP_USABLE_LOCALES,
