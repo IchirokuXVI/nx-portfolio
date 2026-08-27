@@ -30,7 +30,7 @@ import {
   OwnerlessPanel,
   RowSkeleton,
 } from '@portfolio/velista/ui';
-import { zoneIdOf } from '../route-params';
+import { zoneIdOf } from '@portfolio/velista/platform';
 import { selectGroupState } from '../select-group-state';
 import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
 
@@ -311,15 +311,27 @@ export class GroupPage {
   }
 
   /**
-   * The list screen, which does not exist yet.
+   * The list screen, which now exists (plan 0012).
    *
-   * Recorded rather than left unbound, exactly as `HomePage` does it, so the rows are
-   * real, focusable and testable now and connecting them later is one line here.
+   * This was a `pendingRoutes` recorder until the list page landed, which is the
+   * pattern `HomePage` uses for a destination that has not been built: the rows stay
+   * real, focusable and testable, and connecting them is one line. This is that line.
    */
-  readonly pendingRoutes = signal<readonly string[]>([]);
-
   openList(listId: string): void {
-    this.pendingRoutes.update((current) => [...current, `lists/${listId}`]);
+    // Built with `appPath` rather than relatively, like `back()` above: the list page
+    // is a sibling of this route and not a child of it, so a relative navigation would
+    // have to climb out first and would then be a fact about this route's depth rather
+    // than about where the list lives.
+    void this._router.navigateByUrl(
+      appPath(
+        this._locale(),
+        this._basePath,
+        'zones',
+        this.zoneId(),
+        'lists',
+        listId
+      )
+    );
   }
 
   /**

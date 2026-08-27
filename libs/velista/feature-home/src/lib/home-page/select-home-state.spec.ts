@@ -250,11 +250,12 @@ describe('selectHomeState', () => {
 
   describe('the resume card', () => {
     it('resolves the remembered list against the loaded zones', () => {
-      const state = select({ resumeListId: 'l1' });
+      const state = select({ resumeListId: 'z1/l1' });
 
       expect(state).toMatchObject({
         resume: {
           listId: 'l1',
+          zoneId: 'z1',
           listName: 'Weekly shop',
           zoneName: 'Flat 3B',
           lineCount: 12,
@@ -270,7 +271,24 @@ describe('selectHomeState', () => {
     it('is absent when the remembered list is no longer reachable', () => {
       // After being removed from a group. Offering a card that leads to a 403 is
       // worse than offering none.
-      expect(select({ resumeListId: 'gone' })).toMatchObject({ resume: null });
+      expect(select({ resumeListId: 'z1/gone' })).toMatchObject({
+        resume: null,
+      });
+    });
+
+    // Plan 0012 changed the stored value's shape from `listId` to `zoneId/listId`,
+    // because the list route needs both and there is no `GET /v1/lists/:id` to resolve
+    // an id on its own. A device that still holds the old form must not break: it is
+    // read as a list id with no zone and the card simply does not render, which is a
+    // missing card once rather than a navigation to nowhere (section 4.1).
+    it('declines a value stored before the zone was part of it', () => {
+      expect(select({ resumeListId: 'l1' })).toMatchObject({ resume: null });
+    });
+
+    it('is absent when the zone remembered is not the one holding the list', () => {
+      expect(select({ resumeListId: 'z-other/l1' })).toMatchObject({
+        resume: null,
+      });
     });
   });
 });

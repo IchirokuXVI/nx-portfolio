@@ -10,7 +10,7 @@
     One tap target for the whole card, with the chevron as decoration inside it rather
     than a control of its own (plan 0003, section 7).
   -->
-  <button (click)="open.emit(list().listId)" class="card" type="button">
+  <button (click)="open.emit({ zoneId: list().zoneId, listId: list().listId })" class="card" type="button">
     <div class="head">
       <div class="titles">
         <span class="list-name">{{ list().listName }}</span>

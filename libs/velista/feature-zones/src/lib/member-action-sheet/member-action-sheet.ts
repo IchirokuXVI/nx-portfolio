@@ -23,7 +23,7 @@ import {
 import { appPath } from '@portfolio/velista/platform';
 import { ConfirmSheet, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import { MemberListRefresh } from '../member-list-refresh';
-import { membershipIdOf, zoneIdOf } from '../route-params';
+import { membershipIdOf, zoneIdOf } from '@portfolio/velista/platform';
 import { shouldRefetch, zoneErrorKey } from '../zone-error-copy';
 
 /** The four actions that need something in front of them before they happen. */

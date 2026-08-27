@@ -1,0 +1,54 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-height: var(--app-member-row-height);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fixed {
+  flex-shrink: 0;
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+.choices {
+  display: flex;
+  flex-shrink: 0;
+  background: var(--app-surface-sunken);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+  overflow: hidden;
+}
+
+// The short label is what fits across 390. The long phrase is the accessible name, on
+// the element, so the two never have to agree on width.
+.choice {
+  min-height: var(--app-touch-target);
+  padding: 0 var(--app-space-3);
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.choice.selected {
+  background: var(--app-action-bg);
+  color: var(--app-text-on-action);
+}

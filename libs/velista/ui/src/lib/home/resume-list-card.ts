@@ -30,8 +30,13 @@ import { ChevronRightIcon } from '../icons/icons';
 export class ResumeListCard {
   readonly list = input.required<ResumeListVm>();
 
-  /** Emits the list id. The container decides where that goes. */
-  readonly open = output<string>();
+  /**
+   * Emits both ids. The container decides where that goes.
+   *
+   * The zone as well as the list, for `ZoneCard.openList`'s reason: the list route is
+   * `zones/:zoneId/lists/:listId` and an id on its own resolves nothing.
+   */
+  readonly open = output<{ zoneId: string; listId: string }>();
 
   /** Percentage ready, or null when the counts have not arrived. */
   readonly progress = computed(() => {

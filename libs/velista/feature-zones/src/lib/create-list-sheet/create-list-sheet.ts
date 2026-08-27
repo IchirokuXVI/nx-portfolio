@@ -14,7 +14,7 @@ import { ListStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, LIST_NAME_MAX_LENGTH } from '@portfolio/velista/models';
 import { appPath } from '@portfolio/velista/platform';
 import { SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
-import { zoneIdOf } from '../route-params';
+import { zoneIdOf } from '@portfolio/velista/platform';
 import { zoneErrorKey } from '../zone-error-copy';
 
 /**

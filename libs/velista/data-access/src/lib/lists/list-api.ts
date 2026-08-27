@@ -1,14 +1,22 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
+  ListAccessEntry,
   ListOrder,
   Page,
+  SetListAccessRequest,
   ShoppingListSummary,
+  UpdateListRequest,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
-import { toPage, toShoppingListSummary } from '../mapping/mappers';
+import {
+  toDeletedId,
+  toListAccessEntries,
+  toPage,
+  toShoppingListSummary,
+} from '../mapping/mappers';
 import { required } from '../mapping/required';
 import type { ListServiceI } from './list-service';
 
@@ -61,8 +69,76 @@ export class ListApi implements ListServiceI {
     return required(toShoppingListSummary(body), 'lists.create');
   }
 
+  async updateList(
+    listId: string,
+    name: string
+  ): Promise<ShoppingListSummary> {
+    const request: UpdateListRequest = { name };
+
+    const body = await firstValueFrom(
+      this._http.patch<unknown>(this._list(listId), request, {
+        context: operation('lists.update'),
+      })
+    );
+
+    return required(toShoppingListSummary(body), 'lists.update');
+  }
+
+  async deleteList(listId: string): Promise<string> {
+    const body = await firstValueFrom(
+      this._http.delete<unknown>(this._list(listId), {
+        context: operation('lists.delete'),
+      })
+    );
+
+    return toDeletedId(body) ?? listId;
+  }
+
+  async setListAccess(
+    listId: string,
+    entries: readonly ListAccessEntry[]
+  ): Promise<ShoppingListSummary> {
+    const request: SetListAccessRequest = {
+      entries: entries.map((entry) => ({
+        membershipId: entry.membershipId,
+        role: entry.role,
+      })),
+    };
+
+    const body = await firstValueFrom(
+      this._http.put<unknown>(`${this._list(listId)}/access`, request, {
+        context: operation('lists.setAccess'),
+      })
+    );
+
+    return required(toShoppingListSummary(body), 'lists.setAccess');
+  }
+
+  /**
+   * Who can read and write this list.
+   *
+   * Written against the route section 5.6 asks for and **not reachable today**:
+   * `LIST_ACCESS_READABLE` is false, so nothing calls it and the share sheet is not
+   * offered. It is here rather than absent because the shape is already decided (the
+   * same `entries` the PUT accepts) and writing it now is what makes the endpoint
+   * landing a one line flag change instead of a new feature.
+   */
+  async getListAccess(listId: string): Promise<readonly ListAccessEntry[]> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(`${this._list(listId)}/access`, {
+        context: operation('lists.getAccess'),
+      })
+    );
+
+    return toListAccessEntries(body);
+  }
+
   private _lists(zoneId: string): string {
     return this._urls.gateway(`/v1/zones/${zoneId}/lists`);
+  }
+
+  private _list(listId: string): string {
+    return this._urls.gateway(`/v1/lists/${listId}`);
   }
 }
 

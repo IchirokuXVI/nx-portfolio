@@ -1,0 +1,112 @@
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!submitting()"
+  #shell
+  labelledBy="list-settings-title"
+>
+  <h2 class="title" id="list-settings-title">
+    {{ 'list.settings.title' | rokuT }}
+  </h2>
+
+  @if (!confirmingDelete()) {
+    <label class="label" for="list-settings-name">
+      {{ 'list.settings.name' | rokuT }}
+    </label>
+    <input
+      (input)="onNameInput($event)"
+      [attr.maxlength]="maxLength"
+      [value]="name()"
+      autocomplete="off"
+      class="field"
+      id="list-settings-name"
+      type="text"
+    />
+
+    <button
+      (click)="rename()"
+      [attr.aria-busy]="submitting()"
+      [disabled]="!canSave()"
+      class="primary"
+      type="button"
+    >
+      @if (submitting()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ 'list.settings.save' | rokuT }}</span>
+    </button>
+
+    <!--
+      Built, tested, and **not offered** until `GET /v1/lists/:id/access` exists. The
+      PUT replaces the whole access set, so a sheet that cannot read the current set can
+      only guess at it, and a wrong guess silently takes away somebody else's access
+      rather than failing loudly (section 5.5).
+    -->
+    @if (shareAvailable) {
+      <h3 class="section">{{ 'list.settings.share' | rokuT }}</h3>
+
+      <ul class="share">
+        @for (member of shareRows(); track member.membershipId) {
+          <li class="share-item">
+            <lib-share-row (changed)="changeAccess($event)" [member]="member" />
+          </li>
+        }
+      </ul>
+
+      <button
+        (click)="saveAccess()"
+        [disabled]="submitting()"
+        class="secondary"
+        type="button"
+      >
+        {{ 'list.settings.save' | rokuT }}
+      </button>
+    }
+
+    <button (click)="startDelete()" class="danger" type="button">
+      {{ 'list.settings.delete' | rokuT }}
+    </button>
+  } @else {
+    <p class="body">
+      {{ 'list.confirm.deleteList.body' | rokuT }}
+    </p>
+
+    <!--
+      Friction proportional to what is lost, which is `0010`'s rule: a list with lines
+      needs its name typed, and an empty one does not, because an empty list loses
+      nothing and the ceremony would be theatre.
+    -->
+    @if (needsTypedName()) {
+      <label class="label" for="list-settings-confirm">
+        {{ 'list.confirm.deleteList.typeName' | rokuT }}
+      </label>
+      <input
+        (input)="onTypedNameInput($event)"
+        [value]="typedName()"
+        autocomplete="off"
+        class="field"
+        id="list-settings-confirm"
+        type="text"
+      />
+    }
+
+    <button
+      (click)="confirmDelete()"
+      [attr.aria-busy]="submitting()"
+      [disabled]="!canDelete() || submitting()"
+      class="danger"
+      type="button"
+    >
+      {{ 'list.confirm.deleteList.action' | rokuT }}
+    </button>
+  }
+
+  @if (errorKey(); as key) {
+    <p class="error" role="alert">{{ key | rokuT }}</p>
+  }
+
+  @if (!submitting()) {
+    <button (click)="shell.requestDismiss()" class="cancel" type="button">
+      {{ 'entry.cancel' | rokuT }}
+    </button>
+  }
+</lib-sheet-shell>

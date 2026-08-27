@@ -55,6 +55,37 @@ export const zoneIdGuard: CanMatchFn = (
 };
 
 /**
+ * **Rule L1 (plan 0012, section 4.1): `lists/:listId` matches only a UUID.**
+ *
+ * Rule G1 exactly, one level deeper, with the same fix and the same reason for
+ * `canMatch` rather than `canActivate`. `lists/new` is already a child of
+ * `zones/:zoneId` (plan 0010, section 4.2), so a `lists/:listId` declared beside it is
+ * offered `/lists/new` first, matches it with `listId` set to the string `new`, and
+ * wins. The create sheet becomes unreachable and the person who tapped Start a list
+ * gets a list page firing `GET /v1/lists/new/lines`.
+ *
+ * A false `canMatch` makes the router carry on to the next route, which is the fall
+ * through this needs: `lists/new` is declined here and reaches `CreateListSheet`.
+ *
+ * Ordering cannot fix it either, for `zoneIdGuard`'s reason: the create sheet has to
+ * stay a child of the page it covers or rule E1 is gone.
+ */
+export const listIdGuard: CanMatchFn = (
+  _route: Route,
+  segments: UrlSegment[]
+) => {
+  // The list page is a **sibling** of `zones/:zoneId` and not a child of it: it is its
+  // own destination, and a child would render inside the group page's outlet. So its
+  // route matches all four segments itself and the list id is the fourth of
+  // `zones` / id / `lists` / id, not the second.
+  //
+  // Read positionally rather than from a param map, because at `canMatch` time the
+  // route has not been matched and there are no params. `zoneIdGuard` runs beside this
+  // one and checks the zone half, so each guard states one thing.
+  return UUID.test(segments[3]?.path ?? '');
+};
+
+/**
  * The sheets over the group page, for the people who may actually use them.
  *
  * **Rule C1 (plan 0009) applied to a different kind of permission**: which person may

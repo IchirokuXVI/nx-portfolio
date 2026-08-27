@@ -1,0 +1,67 @@
+<header class="header">
+  <div class="titles">
+    <!--
+      The name, or a skeleton while a cold arrival is still finding it. Arriving from
+      the group page, `ListStore` has it cached and this is filled on the first frame,
+      which is the common path (rule L2).
+    -->
+    @if (header().listName !== null) {
+      <h1 class="name">{{ header().listName }}</h1>
+    } @else {
+      <span aria-hidden="true" class="name-skeleton"></span>
+    }
+
+    @if (header().zoneName !== null) {
+      <p class="in-group">
+        {{ 'list.header.inGroup' | rokuT: { name: header().zoneName } }}
+      </p>
+    }
+  </div>
+
+  @if (hasMenu()) {
+    <div class="header-actions">
+      <!--
+        Reorder is a **mode**, entered from here, and it is offered only once every
+        page of lines has arrived: `line.reorder` renumbers exactly the lines it names,
+        so reordering a half read list collides two lines onto one position (rule L4).
+      -->
+      @if (canReorder()) {
+        <button (click)="startReorder.emit()" class="header-action" type="button">
+          {{ 'list.reorder.enter' | rokuT }}
+        </button>
+      }
+
+      <button (click)="openSettings.emit()" class="header-action" type="button">
+        {{ 'list.settings.title' | rokuT }}
+      </button>
+    </div>
+  }
+</header>
+
+<!--
+  "7 of 12 ready", with the bar underneath. The text is the accessible version and the
+  bar is `aria-hidden`, because a progressbar role here would announce a number the
+  sentence beside it already gives in words.
+-->
+<p class="progress-line">
+  {{
+    'list.header.ready'
+      | rokuT: { ready: header().readyCount, total: header().lineCount }
+  }}
+</p>
+
+<div aria-hidden="true" class="progress">
+  <span [style.inline-size.%]="percent()" class="progress-fill"></span>
+</div>
+
+<!--
+  The list is not live: its room was refused or the connection dropped, so what is on
+  screen is correct and will not update itself. Drawn exactly as `0010` draws it on a
+  group, because the situation is the same one.
+-->
+@if (!header().live) {
+  <p class="stale">
+    <lib-offline-icon class="stale-glyph" />
+    <span>{{ 'list.header.notLive' | rokuT }}</span>
+  </p>
+}

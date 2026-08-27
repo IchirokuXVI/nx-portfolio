@@ -195,6 +195,12 @@ $app-content-max: 480px;
   // token rather than a reuse of --app-line-row-height, which happens to be the same
   // number today and is about a shopping line.
   --app-member-row-height: 56px;
+  // The edge on the leading side of a line waiting for approval (plan 0012,
+  // section 3.4). Not a hairline and deliberately not exempt from the pixel rule: it
+  // has to read as a coloured bar at arm's length in a supermarket, which is a
+  // different job from separating two surfaces, so it gets a token of its own rather
+  // than a number in one stylesheet.
+  --app-line-accent-width: 3px;
   // A row menu wide enough for its longest item on one line. "Hacer miembro normal"
   // and "Remove and block" both have to fit without wrapping, and a menu that resized
   // itself per row would shift under the finger between one row and the next.

@@ -1,0 +1,58 @@
+@use '../list-page';
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+// The column scrolls and the composer below it does not, which is what makes the
+// field reachable with a thumb no matter how long the list is.
+.page {
+  @include list-page.page;
+}
+
+.back {
+  @include list-page.back;
+}
+
+.back-glyph {
+  @include list-page.back-glyph;
+}
+
+.state {
+  padding: var(--app-space-7) var(--app-space-5);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  text-align: center;
+}
+
+.state-title {
+  margin: 0 0 var(--app-space-2);
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.state-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.state-action {
+  @include list-page.quiet-action;
+
+  margin-block-start: var(--app-space-4);
+}
+
+// Ends the mode. Full width and prominent, because while it is on screen it is the
+// only thing the person is trying to do.
+.reorder-done {
+  @include list-page.primary-action;
+
+  align-self: stretch;
+}

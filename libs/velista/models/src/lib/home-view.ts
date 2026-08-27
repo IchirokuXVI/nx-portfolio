@@ -68,6 +68,14 @@ export interface ZoneCardVm {
 /** The resume card: the fastest path back into the list someone was using. */
 export interface ResumeListVm {
   readonly listId: string;
+  /**
+   * The zone the list is in, because the list page is `zones/:zoneId/lists/:listId`.
+   *
+   * There is no `GET /v1/lists/:id`, so an id on its own resolves nothing: not the
+   * name, not the zone, not the caller's role in it. Rule L1 puts the zone in the URL
+   * and this card is one of the places that has to supply it (plan 0012, section 4.1).
+   */
+  readonly zoneId: string;
   readonly listName: string;
   readonly zoneName: string;
   readonly lineCount?: number;

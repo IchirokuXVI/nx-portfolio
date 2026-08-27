@@ -29,3 +29,35 @@ export const LIST_NAME_MAX_LENGTH = 120;
  */
 export const USERNAME_MIN_LENGTH = 2;
 export const USERNAME_MAX_LENGTH = 40;
+
+/**
+ * `AddLineDto.content` and `UpdateLineDto.content`.
+ *
+ * The counter appears only near the cap rather than always, because a running character
+ * count under a field somebody is typing a shopping item into is noise for the 350
+ * characters before it could possibly matter (plan 0012, section 4.8).
+ */
+export const LINE_CONTENT_MAX_LENGTH = 400;
+export const LINE_CONTENT_COUNTER_FROM = 350;
+
+/** `AddLineDto.quantity`. The stepper simply cannot be driven past either end. */
+export const LINE_QUANTITY_MIN = 1;
+export const LINE_QUANTITY_MAX = 100000;
+
+/**
+ * `AddCommentDto.body`.
+ *
+ * Longer than a line, because a line is a thing to buy and a comment is a sentence
+ * about one.
+ */
+export const COMMENT_BODY_MAX_LENGTH = 2000;
+
+/**
+ * What the list page asks for in one request.
+ *
+ * The gateway's `MAX_PAGE_SIZE`, and asking for all of it is what makes reordering
+ * available on the first frame: rule L4 refuses to reorder a list the client has not
+ * finished reading, and a shopping list with more than a hundred lines is not the case
+ * this product is for (plan 0012, section 4.5).
+ */
+export const LINES_PAGE_SIZE = 100;

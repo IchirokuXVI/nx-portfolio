@@ -505,3 +505,84 @@ export class WarningIcon {
       import('./warning-icon.svg?raw')
   );
 }
+
+/**
+ * A filled circle with a tick knocked out of it: a line that has been got.
+ *
+ * Filled rather than outlined, and that is the whole point of it existing beside
+ * `CheckOutlineIcon`. On a row the state control is read at a glance in a moving hand,
+ * so the difference between done and not done is a difference in **weight**, which
+ * survives being seen badly. The knockout uses the raised surface rather than
+ * `currentColor`, because the tick has to punch through whatever colour the ring takes.
+ */
+@Component({
+  selector: 'lib-check-filled-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class CheckFilledIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./check-filled-icon.svg?raw')
+  );
+}
+
+/**
+ * A circle with a stroke through it: on the list, and not in the shop.
+ *
+ * Distinct from `XCircleIcon`, which is a cross and reads as a failure or a dismissal.
+ * Nothing has failed here and nobody has cancelled anything: the item is still wanted
+ * and the shop did not have it, which is a third thing and gets a third shape
+ * (section 3.4).
+ */
+@Component({
+  selector: 'lib-slash-circle-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class SlashCircleIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./slash-circle-icon.svg?raw')
+  );
+}
+
+/** A speech bubble, for the comment count and the sheet it opens. */
+@Component({
+  selector: 'lib-comment-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class CommentIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./comment-icon.svg?raw')
+  );
+}
+
+/**
+ * Two columns of dots: the grip a row is dragged by in reorder mode.
+ *
+ * It is a **focusable button** and not decoration, because up and down on it move the
+ * row. A grip that only answered a pointer would put the manual order out of reach of
+ * anybody without a working one (section 7).
+ */
+@Component({
+  selector: 'lib-grip-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class GripIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./grip-icon.svg?raw')
+  );
+}

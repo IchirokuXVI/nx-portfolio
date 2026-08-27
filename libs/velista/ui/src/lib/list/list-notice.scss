@@ -1,0 +1,9 @@
+.notice {
+  margin: 0 0 var(--app-space-3);
+  padding: var(--app-space-2) var(--app-space-3);
+  background: var(--app-status-neutral-bg);
+  border: 1px solid var(--app-status-neutral-border);
+  border-radius: var(--app-radius-sm);
+  font-size: var(--app-text-2xs);
+  color: var(--app-status-neutral-fg);
+}

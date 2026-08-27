@@ -5,6 +5,5 @@ export * from './lib/member-action-sheet/member-action-sheet';
 export * from './lib/member-actions';
 export * from './lib/member-list-refresh';
 export * from './lib/members-page/members-page';
-export * from './lib/route-params';
 export * from './lib/select-group-state';
 export * from './lib/zone-error-copy';

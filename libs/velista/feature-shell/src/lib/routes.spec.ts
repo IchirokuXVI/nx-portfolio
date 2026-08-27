@@ -255,6 +255,64 @@ describe('AppShellRoutes', () => {
       );
     });
 
+    /**
+     * Rule L1 (plan 0012, section 4.1), which is rule G1 one level deeper.
+     *
+     * `lists/new` is already a child of `zones/:zoneId`, so `zones/:zoneId/lists/:listId`
+     * declared beside it is offered `/lists/new` first and matches it with `listId` set
+     * to the string `new`. Same trap, same fix, same reason for `canMatch`.
+     */
+    describe('the list page', () => {
+      const listPath = 'zones/:zoneId/lists/:listId';
+
+      it('is declared before the group page it is a prefix of', () => {
+        // `zones/:zoneId` would otherwise match `/zones/<uuid>/lists/<uuid>` with two
+        // segments left over, and this route would never be reached.
+        const paths = pages.map((route) => route.path);
+
+        expect(paths).toContain(listPath);
+        expect(paths.indexOf(listPath)).toBeLessThan(paths.indexOf(groupPath));
+        expect(paths.indexOf(listPath)).toBeLessThan(paths.indexOf(''));
+      });
+
+      it('declines a non UUID list segment with canMatch', () => {
+        // Two guards, one per id. `canMatch` and not `canActivate`, because a declined
+        // match has to carry on to the next route rather than abort the navigation.
+        expect(routeAt(listPath)?.canMatch).toHaveLength(2);
+        expect(routeAt(listPath)?.canActivate).toHaveLength(1);
+      });
+
+      it('still leaves /zones/<uuid>/lists/new to the create sheet', () => {
+        expect(
+          routeAt(groupPath)?.children?.map((route) => route.path)
+        ).toContain('lists/new');
+      });
+
+      it('offers the four sheets over it, as routes rather than flags', () => {
+        // Rule E1: each covers the page without losing it, and Android's back button
+        // has to dismiss it. Ticking a line off is deliberately not among them.
+        expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual([
+          'lines/:lineId/edit',
+          'lines/:lineId/comments',
+          'lines/:lineId/confirm/delete',
+          'settings',
+        ]);
+      });
+
+      it('guards none of the sheets, because write access is not knowable', () => {
+        // There is no `GET /v1/lists/:id/access` and `ListView` carries no role for the
+        // caller, so whether somebody may write is not decidable before a write is
+        // attempted (section 5.5). The page decides what to draw; core decides what is
+        // allowed, on every request.
+        const sheets = routeAt(listPath)?.children ?? [];
+
+        expect(sheets).toHaveLength(4);
+        for (const sheet of sheets) {
+          expect(sheet.canActivate).toBeUndefined();
+        }
+      });
+    });
+
     it('declares one confirm route per member action, with the action in data', () => {
       // One component and four entries, so `data` is something this spec can assert
       // about; an action parsed out of the URL inside the component would not be.

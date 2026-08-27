@@ -4,9 +4,13 @@ import { AccountNotice } from './auth/account-notice';
 import { AuthMemory } from './auth/auth-memory';
 import { SessionStore } from './auth/session-store';
 import { TokenStore } from './auth/token-store';
+import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
+import { LineMemory } from './lines/line-memory';
+import { LineStore } from './lines/line-store';
 import { ListMemory } from './lists/list-memory';
 import { ListStore } from './lists/list-store';
+import { MemberNames } from './memberships/member-names';
 import { MembershipMemory } from './memberships/membership-memory';
 import { ZoneMemory } from './zones/zone-memory';
 import { ZoneStore } from './zones/zone-store';
@@ -54,6 +58,14 @@ import { ZoneStore } from './zones/zone-store';
  * `ListApi` and `MembershipApi` are deliberately **not** here, matching `ZoneApi` and
  * `AuthApi`: choosing to talk to a real gateway is the app's call, and `appProviders`
  * binds each to its token with `useClass`, which provides it in the same breath.
+ *
+ * `LineStore` (plan 0012) joins for `ListStore`'s reason, and `MemberNames` for the
+ * same one: it resolves `MEMBERSHIP_SERVICE`, so at the root it would quietly serve
+ * fixture names beside real comments. `LineMemory` and `CommentMemory` are here for
+ * `ZoneMemory`'s reason, with a wrinkle worth knowing: neither injects anything at all,
+ * so root scope would work for both, and they are listed here anyway so that every fake
+ * in this library is installed in one place rather than two. `LineApi` and `CommentApi`
+ * stay out, like every other real transport.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
@@ -67,4 +79,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ListMemory,
   ListStore,
   MembershipMemory,
+  LineMemory,
+  LineStore,
+  CommentMemory,
+  MemberNames,
 ];

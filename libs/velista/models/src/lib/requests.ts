@@ -1,4 +1,9 @@
-import type { LineStatus, ListRole, ZoneRole } from './enums';
+import type {
+  LineApprovalStatus,
+  LineStatus,
+  ListRole,
+  ZoneRole,
+} from './enums';
 
 /**
  * Request bodies, declared explicitly rather than derived from a model.
@@ -72,8 +77,17 @@ export interface SetLineStatusRequest {
   readonly status: LineStatus;
 }
 
+/**
+ * Deciding a suggested line.
+ *
+ * The status itself and **not** a boolean. `SetApprovalDto` takes `approvalStatus`, so
+ * an `{ approved: true }` body is rejected by the whitelist before it reaches core.
+ * The three way enum is also what the screen actually needs: staff can put a turned
+ * down line back, which is a third outcome rather than the negation of a second
+ * (plan 0012, section 3.4).
+ */
 export interface SetLineApprovalRequest {
-  readonly approved: boolean;
+  readonly approvalStatus: LineApprovalStatus;
 }
 
 export interface ReorderLinesRequest {

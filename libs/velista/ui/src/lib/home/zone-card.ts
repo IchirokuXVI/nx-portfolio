@@ -44,6 +44,16 @@ export class ZoneCard {
   readonly zone = input.required<ZoneCardVm>();
 
   readonly open = output<string>();
-  readonly openList = output<string>();
+
+  /**
+   * Emits **both** ids, because the list route needs both.
+   *
+   * `zones/:zoneId/lists/:listId` is rule L1 (plan 0012, section 4.1) and it is not
+   * decoration: there is no `GET /v1/lists/:id`, so a list id on its own resolves
+   * nothing. This card already knows the zone it is drawing, so it says so rather than
+   * making the container look it up from the id it was handed.
+   */
+  readonly openList = output<{ zoneId: string; listId: string }>();
+
   readonly reviewRequests = output<string>();
 }

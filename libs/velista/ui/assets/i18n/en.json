@@ -336,5 +336,112 @@
       "reference": "ref {{correlationId}}",
       "copyReference": "Copy reference"
     }
+  },
+  "list": {
+    "header": {
+      "inGroup": "in {{name}}",
+      "ready": "{{ready}} of {{total}} ready",
+      "notLive": "Not updating right now",
+      "back": "Back to the group"
+    },
+    "add": {
+      "placeholder": "Add something",
+      "action": "Add",
+      "quantity": "How many",
+      "more": "One more",
+      "fewer": "One fewer"
+    },
+    "empty": {
+      "title": "Nothing on this list yet",
+      "body": "Write the first thing and everyone here sees it"
+    },
+    "readOnly": {
+      "notice": "You can read this list, not change it"
+    },
+    "line": {
+      "awaitingApproval": "Waiting for approval",
+      "rejected": "Turned down",
+      "notAvailable": "Not in the shop",
+      "approve": "Add it",
+      "reject": "Not this",
+      "restore": "Put it back",
+      "markNotAvailable": "Mark as not in the shop",
+      "markPending": "Put it back on the list",
+      "edit": "Change this",
+      "comments": "What people said",
+      "delete": "Take off the list",
+      "menuFor": "More for {{name}}",
+      "overwritten": "{{name}} changed this while you were editing",
+      "overwrittenBySomeone": "Somebody else changed this while you were editing",
+      "failed": "That did not save. Tap to try again",
+      "move": "Move",
+      "movedTo": "Moved to position {{position}} of {{total}}"
+    },
+    "reorder": {
+      "enter": "Put them in order",
+      "title": "Put them in order",
+      "body": "Drag by the grip. Ticking off is off while you are in here",
+      "done": "Done",
+      "started": "Putting them in order. Ticking off is off",
+      "ended": "Finished putting them in order",
+      "moveUp": "Move {{name}} up",
+      "moveDown": "Move {{name}} down"
+    },
+    "edit": {
+      "title": "Change this line",
+      "content": "What is it",
+      "save": "Save"
+    },
+    "confirm": {
+      "deleteLine": {
+        "title": "Take {{name}} off the list?",
+        "body": "It goes for everyone, along with anything said about it",
+        "action": "Take it off"
+      },
+      "deleteList": {
+        "title": "Delete {{name}}?",
+        "body": "Every line on it goes, for everyone in the group. This cannot be undone",
+        "typeName": "Type the list's name to confirm",
+        "action": "Delete this list"
+      }
+    },
+    "comments": {
+      "title": "About {{name}}",
+      "placeholder": "Say something about this",
+      "send": "Send",
+      "empty": "Nothing said about this yet",
+      "someone": "Someone in the group",
+      "loading": "Loading what people said"
+    },
+    "settings": {
+      "title": "List settings",
+      "name": "List name",
+      "save": "Save",
+      "share": "Who can use this list",
+      "delete": "Delete this list",
+      "accessFor": "What {{name}} can do with this list",
+      "access": {
+        "none": "No access",
+        "reader": "Can read",
+        "writer": "Can add and tick off",
+        "always": "Always has access",
+        "shortNone": "None",
+        "shortReader": "Read",
+        "shortWriter": "Add & tick",
+        "creator": "Started this list",
+        "staffNote": "Admins can open every list"
+      }
+    },
+    "gone": {
+      "deleted": "That list was deleted",
+      "unshared": "That list is no longer shared with you"
+    },
+    "error": {
+      "notAvailable": "This list is not available to you. It may have been deleted, or it may no longer be shared with you",
+      "readOnly": "You can read this list, not change it",
+      "roleChanged": "Your role in this group changed",
+      "tooFast": "Slow down for a moment and try again",
+      "failed": "That did not work. Try again in a moment"
+    }
   }
 }

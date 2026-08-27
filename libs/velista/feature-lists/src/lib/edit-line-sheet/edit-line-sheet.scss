@@ -1,0 +1,22 @@
+@use '../sheet-form';
+
+@include sheet-form.sheet-form;
+
+// The quantity sits beside its label rather than under it: the stepper is small and a
+// label on its own line above it would leave the sheet with a lot of vertical air for
+// one number.
+.quantity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  margin-block-start: var(--app-space-5);
+
+  .label {
+    margin-block-end: 0;
+  }
+}
+
+.spinning {
+  font-size: var(--app-icon-sm);
+}

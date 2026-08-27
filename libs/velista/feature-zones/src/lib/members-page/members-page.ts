@@ -38,7 +38,7 @@ import {
 } from '@portfolio/velista/ui';
 import { canSeePendingRequests, memberActionsFor } from '../member-actions';
 import { MemberListRefresh } from '../member-list-refresh';
-import { zoneIdOf } from '../route-params';
+import { zoneIdOf } from '@portfolio/velista/platform';
 import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
 
 /**
