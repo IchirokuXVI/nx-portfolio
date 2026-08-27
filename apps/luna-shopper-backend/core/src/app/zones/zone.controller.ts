@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ZONE_PATTERNS,
   type CreateZoneRequest,
+  type GetZoneByCodeRequest,
   type JoinZoneRequest,
   type ListMyZonesRequest,
   type MembershipActionRequest,
@@ -12,6 +13,7 @@ import {
   type MyZoneView,
   type SetRoleRequest,
   type UpdateZoneRequest,
+  type ZoneByCodeView,
   type ZoneIdRequest,
   type ZonePage,
   type ZoneView,
@@ -35,6 +37,12 @@ export class ZoneController {
   @MessagePattern(ZONE_PATTERNS.join)
   join(@Payload() req: JoinZoneRequest): Promise<MembershipView> {
     return this.zones.join(req);
+  }
+
+  /** The only zone message with no `userId`: the route behind it is public. */
+  @MessagePattern(ZONE_PATTERNS.getByCode)
+  getByCode(@Payload() req: GetZoneByCodeRequest): Promise<ZoneByCodeView> {
+    return this.zones.getByCode(req);
   }
 
   @MessagePattern(ZONE_PATTERNS.update)

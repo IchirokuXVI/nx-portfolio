@@ -77,12 +77,20 @@ export function governanceFields(
     : { pendingRequestCount: null, firstPendingRequesterName: null };
 }
 
-/** Maps a zone plus the caller's membership to the annotated "my zone" view. */
+/**
+ * Maps a zone plus the caller's membership to the annotated "my zone" view.
+ *
+ * `ownerUsername` passes through ungated (plan 0024, section 2.4): it is a
+ * public, freely chosen handle rather than the person's real name, and naming
+ * the approver is the whole point of the waiting card. The governance fields
+ * beside it stay gated, which is the combination the pending screen needs.
+ */
 export function toMyZoneView(
   zone: Zone,
   membership: SummaryViewer,
   counts: ZoneCounts,
-  lists: ZoneListPreview[]
+  lists: ZoneListPreview[],
+  ownerUsername: string | null
 ): MyZoneView {
   return {
     ...toZoneView(zone),
@@ -90,5 +98,6 @@ export function toMyZoneView(
     myStatus: membership.status,
     counts: { ...counts, ...governanceFields(counts, managesZone(membership)) },
     lists,
+    ownerUsername,
   };
 }

@@ -16,6 +16,11 @@ export interface ProblemResponseOptions {
   membership?: boolean;
   /** The route takes a request body, so validation can reject it with a 400. */
   body?: boolean;
+  /**
+   * The route can answer 404 without ever answering 403, which `membership`
+   * cannot express: a public lookup has no membership to be forbidden by.
+   */
+  notFound?: boolean;
   /** The route can collide with the current state (a 409). */
   conflict?: boolean;
   /**
@@ -62,6 +67,9 @@ export function ApiProblemResponses(
   }
   if (options.membership) {
     codes.push(ERROR_CODES.FORBIDDEN, ERROR_CODES.NOT_FOUND);
+  }
+  if (options.notFound && !options.membership) {
+    codes.push(ERROR_CODES.NOT_FOUND);
   }
   if (options.conflict) {
     codes.push(ERROR_CODES.CONFLICT);

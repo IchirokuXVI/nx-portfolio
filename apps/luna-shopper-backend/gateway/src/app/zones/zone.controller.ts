@@ -22,6 +22,7 @@ import {
   type MyZoneCounts,
   type MyZoneView,
   type UserProfileView,
+  type ZoneByCodeView,
   type ZonePage,
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
@@ -186,6 +187,34 @@ export class ZoneController {
   countMine(@AuthUser() user: CurrentUser): Promise<MyZoneCounts> {
     return this.nats.send<MyZoneCounts>(ZONE_PATTERNS.countsMine, {
       userId: user.userId,
+    });
+  }
+
+  /**
+   * Preview the group behind a join code (plan 0024, section 1), so the join
+   * sheet can name it before anybody commits to joining it.
+   *
+   * Public, like the platform stats and for the same reason: the caller pasting
+   * a code has not signed in yet. It carries the join code bucket rather than the
+   * default one, because an unauthenticated lookup leaves no membership row and
+   * nothing for an owner to notice, which makes it a cheaper enumeration oracle
+   * than the join route it sits beside. Two fields is the other half of that
+   * answer: a successful guess yields a group name and a number, never a way in.
+   *
+   * Declared above `:id` with the other static routes. This particular pair
+   * would not collide, since `by-code/:code` has two segments, but a future
+   * single segment sibling declared below `:id` would be swallowed silently.
+   */
+  @Get('by-code/:code')
+  @Throttle(THROTTLE_LIMITS.joinCode)
+  @ApiContractResponse(ZONE_PATTERNS.getByCode, {
+    description:
+      'The group behind the code. A code that never existed and one whose zone is no longer active are the same 404.',
+  })
+  @ApiProblemResponses({ notFound: true })
+  getByCode(@Param('code') code: string): Promise<ZoneByCodeView> {
+    return this.nats.send<ZoneByCodeView>(ZONE_PATTERNS.getByCode, {
+      joinCode: code,
     });
   }
 

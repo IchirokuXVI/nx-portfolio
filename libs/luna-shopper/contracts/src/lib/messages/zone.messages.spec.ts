@@ -17,6 +17,7 @@ describe('zone contracts', () => {
     expect(ZONE_PATTERNS.create).toBe('zone.create');
     expect(ZONE_PATTERNS.join).toBe('zone.join');
     expect(ZONE_PATTERNS.listMine).toBe('zone.listMine');
+    expect(ZONE_PATTERNS.getByCode).toBe('zone.getByCode');
     expect(MEMBERSHIP_PATTERNS.approve).toBe('membership.approve');
     expect(MEMBERSHIP_PATTERNS.ban).toBe('membership.ban');
   });

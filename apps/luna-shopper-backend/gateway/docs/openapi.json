@@ -959,6 +959,66 @@
         ]
       }
     },
+    "/v1/zones/by-code/{code}": {
+      "get": {
+        "operationId": "ZoneController_getByCode_v1",
+        "parameters": [
+          {
+            "name": "code",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The group behind the code. A code that never existed and one whose zone is no longer active are the same 404.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/zone.ZoneByCodeView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "zones"
+        ]
+      }
+    },
     "/v1/zones/{id}": {
       "get": {
         "operationId": "ZoneController_get_v1",
@@ -8031,6 +8091,12 @@
             "items": {
               "$ref": "#/components/schemas/zone.ZoneListPreview"
             }
+          },
+          "ownerUsername": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -8045,7 +8111,26 @@
           "myRole",
           "myStatus",
           "counts",
-          "lists"
+          "lists",
+          "ownerUsername"
+        ],
+        "additionalProperties": false
+      },
+      "zone.ZoneByCodeView": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "memberCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "name",
+          "memberCount"
         ],
         "additionalProperties": false
       },

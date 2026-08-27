@@ -54,6 +54,7 @@ describeIntegration('zone summary (real Postgres)', () => {
     applicant: randomUUID(),
     laterApplicant: randomUUID(),
   };
+  let joinCode = '';
   let ownerMembershipId = '';
   let readerMembershipId = '';
   let groceriesId = '';
@@ -110,6 +111,7 @@ describeIntegration('zone summary (real Postgres)', () => {
       })
     );
     ids.zone = zone.id;
+    joinCode = zone.joinCode;
 
     const membershipRepo = dataSource.getRepository(ZoneMembership);
     const make = (
@@ -306,7 +308,10 @@ describeIntegration('zone summary (real Postgres)', () => {
   describe('access filtering (plan 0017, section 3.2)', () => {
     it('gives two members of one zone different counts and different previews', async () => {
       const asOwner = await zones.get({ userId: ids.owner, zoneId: ids.zone });
-      const asReader = await zones.get({ userId: ids.reader, zoneId: ids.zone });
+      const asReader = await zones.get({
+        userId: ids.reader,
+        zoneId: ids.zone,
+      });
       const asStranger = await zones.get({
         userId: ids.stranger,
         zoneId: ids.zone,
@@ -357,9 +362,7 @@ describeIntegration('zone summary (real Postgres)', () => {
         ids.applicant,
       ]) {
         const view = await zones.get({ userId, zoneId: ids.zone });
-        expect(view.lists.length).toBe(
-          Math.min(view.counts.listCount, 3)
-        );
+        expect(view.lists.length).toBe(Math.min(view.counts.listCount, 3));
         for (const preview of view.lists) {
           const readable = await naive(
             `SELECT count(*) FROM "shopping_lists" WHERE id = $1 AND "zoneId" = $2`,
@@ -510,9 +513,9 @@ describeIntegration('zone summary (real Postgres)', () => {
       const after = await zones.get({ userId: ids.owner, zoneId: ids.zone });
 
       expect(after.createdAt).toBe(before.createdAt);
-      expect(
-        new Date(after.updatedAt).getTime()
-      ).toBeGreaterThanOrEqual(new Date(before.updatedAt).getTime());
+      expect(new Date(after.updatedAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(before.updatedAt).getTime()
+      );
     });
   });
 
@@ -585,9 +588,140 @@ describeIntegration('zone summary (real Postgres)', () => {
         });
 
         const paged = [...first.items, ...second.items].map((m) => m.id);
-        expect(paged).toEqual(all.items.slice(0, paged.length).map((m) => m.id));
+        expect(paged).toEqual(
+          all.items.slice(0, paged.length).map((m) => m.id)
+        );
         expect(new Set(paged).size).toBe(paged.length);
       }
+    });
+  });
+
+  describe('the owner name (plan 0024, section 2)', () => {
+    /**
+     * This one has to be here rather than in the mocked suite. The subquery
+     * reaches Postgres through a raw `addSelect`, where TypeORM does not rewrite
+     * `alias.property`, so an unquoted `zoneId` would arrive as `zoneid` and
+     * fail at runtime with "column does not exist" (section 2.3). A mocked
+     * repository never runs the SQL and so never sees it.
+     */
+    it('names the owner through both get and listMine', async () => {
+      const view = await zones.get({ userId: ids.reader, zoneId: ids.zone });
+      expect(view.ownerUsername).toBe('Owner');
+
+      const page = await zones.listMine({ userId: ids.reader });
+      expect(page.items.find((z) => z.id === ids.zone)?.ownerUsername).toBe(
+        'Owner'
+      );
+    });
+
+    it('names the approver to a pending applicant, with no governance counts', async () => {
+      // The combination the waiting card needs: "Waiting for Owner to let you
+      // in", and still nothing about who else is queued behind them.
+      const view = await zones.get({ userId: ids.applicant, zoneId: ids.zone });
+
+      expect(view.myStatus).toBe(MembershipStatus.PENDING);
+      expect(view.ownerUsername).toBe('Owner');
+      expect(view.counts.pendingRequestCount).toBeNull();
+      expect(view.counts.firstPendingRequesterName).toBeNull();
+    });
+
+    it('is null for a zone that lost its owner', async () => {
+      // The shape plan 0011 leaves behind when an owner deletes their account:
+      // no ownerUserId, no OWNER membership, an admin still in the room.
+      const admin = randomUUID();
+      const zoneRepo = dataSource.getRepository(Zone);
+      const orphan = await zoneRepo.save(
+        zoneRepo.create({
+          name: 'Orphaned Zone',
+          joinCode: `ORP${Date.now()}`.slice(0, 16),
+          status: ZoneStatus.MARKED_FOR_DELETION,
+          ownerUserId: null,
+          config: {},
+        })
+      );
+      try {
+        const membershipRepo = dataSource.getRepository(ZoneMembership);
+        await membershipRepo.save(
+          membershipRepo.create({
+            zoneId: orphan.id,
+            userId: admin,
+            username: 'Admin',
+            role: ZoneRole.ADMIN,
+            status: MembershipStatus.APPROVED,
+          })
+        );
+
+        const view = await zones.get({ userId: admin, zoneId: orphan.id });
+        expect(view.ownerUsername).toBeNull();
+        // The card's name free string is the correct rendering here, and the
+        // rest of the summary still answers.
+        expect(view.counts.memberCount).toBe(1);
+      } finally {
+        await zoneRepo.delete({ id: orphan.id });
+      }
+    });
+
+    it('ignores an owner whose membership is not approved', async () => {
+      const repo = dataSource.getRepository(ZoneMembership);
+      await repo.update(
+        { zoneId: ids.zone, userId: ids.owner },
+        { status: MembershipStatus.KICKED }
+      );
+      try {
+        const view = await zones.get({ userId: ids.reader, zoneId: ids.zone });
+        expect(view.ownerUsername).toBeNull();
+      } finally {
+        await repo.update(
+          { zoneId: ids.zone, userId: ids.owner },
+          { status: MembershipStatus.APPROVED }
+        );
+      }
+    });
+  });
+
+  describe('zone.getByCode (plan 0024, section 1)', () => {
+    it('resolves an active code to its name and approved member count', async () => {
+      const view = await zones.getByCode({ joinCode });
+
+      expect(view).toEqual({ name: 'Summary Zone', memberCount: 4 });
+      expect(view.memberCount).toBe(
+        await naive(
+          `SELECT count(*) FROM "zone_memberships" WHERE "zoneId" = $1 AND "status" = 'APPROVED'`,
+          [ids.zone]
+        )
+      );
+    });
+
+    it('refuses an archived zone and an unknown code identically', async () => {
+      const zoneRepo = dataSource.getRepository(Zone);
+      await zoneRepo.update(
+        { id: ids.zone },
+        { status: ZoneStatus.MARKED_FOR_DELETION }
+      );
+      try {
+        const archived = await zones
+          .getByCode({ joinCode })
+          .catch((error: Error) => error.message);
+        const unknown = await zones
+          .getByCode({ joinCode: 'NEVEREXISTED' })
+          .catch((error: Error) => error.message);
+
+        // A code that used to work must look exactly like one that never did.
+        expect(archived).toBe(unknown);
+      } finally {
+        await zoneRepo.update({ id: ids.zone }, { status: ZoneStatus.ACTIVE });
+      }
+    });
+
+    it('does not count a pending applicant as a member', async () => {
+      // Two applicants are waiting on this zone throughout the suite, and the
+      // number a join sheet shows must be the people actually in the group.
+      const view = await zones.getByCode({ joinCode });
+      const everyone = await naive(
+        `SELECT count(*) FROM "zone_memberships" WHERE "zoneId" = $1`,
+        [ids.zone]
+      );
+      expect(view.memberCount).toBeLessThan(everyone);
     });
   });
 
@@ -626,6 +760,26 @@ describeIntegration('zone summary (real Postgres)', () => {
       expect(byName.get('ix_memberships_zone_pending_created')).toContain(
         `'PENDING'`
       );
+    });
+
+    /**
+     * Statistics and a visibility map, without which the plans below are not
+     * reproducible.
+     *
+     * A freshly inserted table has neither, so every index whose leading column
+     * is `zoneId` costs the planner the same and it picks between them
+     * arbitrarily. That is not hypothetical: plan 0018 added
+     * `ix_membership_zone_username` on `("zoneId", username)`, which leads with
+     * the same column as `ix_memberships_zone_status`, and the member counts
+     * plan started coming back naming the username index for no reason a reader
+     * could see. Analyzing gives the planner the row counts to tell them apart,
+     * and vacuuming sets the visibility map that makes an index only scan
+     * possible, which is how the covering index wins on merit rather than on a
+     * tie break.
+     */
+    beforeAll(async () => {
+      await dataSource.query('VACUUM ANALYZE "zone_memberships"');
+      await dataSource.query('VACUUM ANALYZE "shopping_lists"');
     });
 
     /**
@@ -670,6 +824,13 @@ describeIntegration('zone summary (real Postgres)', () => {
         [ids.zone]
       );
       expect(text).toContain('ix_memberships_zone_status');
+      // Index ONLY, which is the whole reason this index and not the one on
+      // `("zoneId", username)`: both can find the zone's rows, and only this
+      // one carries the `status` the counts filter on, so the heap is never
+      // touched. An index scan here would mean the index stopped covering.
+      expect(text).toContain(
+        'Index Only Scan using ix_memberships_zone_status'
+      );
     });
 
     it('backs the preview ordering with the zone/updatedAt index', async () => {

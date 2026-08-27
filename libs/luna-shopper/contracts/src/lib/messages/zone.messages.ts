@@ -24,6 +24,12 @@ export const ZONE_PATTERNS = {
   listMine: 'zone.listMine',
   /** One zone with its summary, without paging to find it (plan 0017, section 3.6). */
   get: 'zone.get',
+  /**
+   * Resolve a join code to the group behind it (plan 0024, section 1), so a join
+   * sheet can name the group before anybody commits to it. Read only: it creates
+   * no membership and tells the zone's owner nothing.
+   */
+  getByCode: 'zone.getByCode',
   /** How many zones the caller owns, joined and is waiting on (plan 0017, section 3.5). */
   countsMine: 'zone.countsMine',
 } as const;
@@ -51,6 +57,22 @@ export interface ZoneView {
   createdAt: string;
   /** ISO 8601 UTC (plan 0017, section 7). */
   updatedAt: string;
+}
+
+/**
+ * What an unauthenticated caller learns from a join code (plan 0024, section 1.2).
+ *
+ * Deliberately two fields. This is an unauthenticated lookup keyed on a low
+ * entropy secret, so it answers the question the join sheet asks and nothing
+ * else: no id, no status, no owner, no created date and no echo of the code. The
+ * id in particular is withheld because joining is by code, so no client needs
+ * it, and withholding it means a scraped code cannot become a stable handle for
+ * the zone.
+ */
+export interface ZoneByCodeView {
+  name: string;
+  /** APPROVED memberships, the same number {@link ZoneCounts} reports. */
+  memberCount: number;
 }
 
 /** A membership as returned to clients. */
@@ -109,6 +131,15 @@ export interface MyZoneView extends ZoneView {
    * can read no list in this zone, never that the zone is empty.
    */
   lists: ZoneListPreview[];
+  /**
+   * The owner's per zone name, or null when the zone has no owner (plan 0024,
+   * section 2). It is here rather than on {@link ZoneView} because the mutation
+   * endpoints return that one and would pay for a subquery none of them reads.
+   *
+   * Null is a real case: an owner who deletes their account leaves the zone
+   * unowned (plan 0011), and the waiting card renders its name free string then.
+   */
+  ownerUsername: string | null;
 }
 
 /**
@@ -140,6 +171,11 @@ export interface CreateZoneRequest {
   userId: string;
   name: string;
   username: string;
+}
+
+/** Look up the zone behind a join code (plan 0024, section 1). No `userId`: the route is public. */
+export interface GetZoneByCodeRequest {
+  joinCode: string;
 }
 
 export interface JoinZoneRequest {

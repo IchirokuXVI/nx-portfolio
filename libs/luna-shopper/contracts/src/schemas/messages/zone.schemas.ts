@@ -20,6 +20,7 @@ import { ENUM_IDS } from '../enums.schemas';
 
 export const ZONE_SCHEMA_IDS = {
   zoneView: schemaId('zone/ZoneView'),
+  zoneByCodeView: schemaId('zone/ZoneByCodeView'),
   membershipView: schemaId('zone/MembershipView'),
   zoneCounts: schemaId('zone/ZoneCounts'),
   zoneListPreview: schemaId('zone/ZoneListPreview'),
@@ -29,6 +30,7 @@ export const ZONE_SCHEMA_IDS = {
   membershipPage: schemaId('zone/MembershipPage'),
   createRequest: schemaId('msg/zone.create/request'),
   joinRequest: schemaId('msg/zone.join/request'),
+  getByCodeRequest: schemaId('msg/zone.getByCode/request'),
   updateRequest: schemaId('msg/zone.update/request'),
   zoneIdRequest: schemaId('msg/zone.zoneId/request'),
   setRoleRequest: schemaId('msg/zone.setRole/request'),
@@ -60,7 +62,29 @@ const zoneView = object(
     config: freeObject(),
     ...timestamps,
   },
-  ['id', 'name', 'joinCode', 'status', 'ownerUserId', 'config', ...timestampKeys]
+  [
+    'id',
+    'name',
+    'joinCode',
+    'status',
+    'ownerUserId',
+    'config',
+    ...timestampKeys,
+  ]
+);
+
+/**
+ * Exactly two fields, and `additionalProperties` is already false everywhere
+ * `object` builds (plan 0024, section 1.2): nothing about the zone may leak into
+ * an unauthenticated answer by being added to a neighbouring view.
+ */
+const zoneByCodeView = object(
+  ZONE_SCHEMA_IDS.zoneByCodeView,
+  {
+    name: nonEmptyString(),
+    memberCount: integer({ minimum: 0 }),
+  },
+  ['name', 'memberCount']
 );
 
 const membershipView = object(
@@ -130,6 +154,7 @@ const myZoneView = object(
     myStatus: ref(ENUM_IDS.membershipStatus),
     counts: ref(ZONE_SCHEMA_IDS.zoneCounts),
     lists: array(ref(ZONE_SCHEMA_IDS.zoneListPreview)),
+    ownerUsername: nullableString(),
   },
   [
     'id',
@@ -143,10 +168,14 @@ const myZoneView = object(
     'myStatus',
     'counts',
     'lists',
+    'ownerUsername',
   ]
 );
 
-const zonePage = paginated(ZONE_SCHEMA_IDS.zonePage, ZONE_SCHEMA_IDS.myZoneView);
+const zonePage = paginated(
+  ZONE_SCHEMA_IDS.zonePage,
+  ZONE_SCHEMA_IDS.myZoneView
+);
 const membershipPage = paginated(
   ZONE_SCHEMA_IDS.membershipPage,
   ZONE_SCHEMA_IDS.membershipView
@@ -170,6 +199,12 @@ const joinRequest = object(
     username: nonEmptyString(),
   },
   ['userId', 'joinCode', 'username']
+);
+
+const getByCodeRequest = object(
+  ZONE_SCHEMA_IDS.getByCodeRequest,
+  { joinCode: nonEmptyString() },
+  ['joinCode']
 );
 
 const updateRequest = object(
@@ -253,6 +288,7 @@ const setMembershipUsernameRequest = object(
 
 export const zoneSchemas: JsonSchema[] = [
   zoneView,
+  zoneByCodeView,
   membershipView,
   zoneCounts,
   zoneListPreview,
@@ -262,6 +298,7 @@ export const zoneSchemas: JsonSchema[] = [
   membershipPage,
   createRequest,
   joinRequest,
+  getByCodeRequest,
   updateRequest,
   zoneIdRequest,
   setRoleRequest,
@@ -283,6 +320,10 @@ export const zoneMessageContracts: Record<
   [ZONE_PATTERNS.join]: {
     request: ZONE_SCHEMA_IDS.joinRequest,
     response: ZONE_SCHEMA_IDS.membershipView,
+  },
+  [ZONE_PATTERNS.getByCode]: {
+    request: ZONE_SCHEMA_IDS.getByCodeRequest,
+    response: ZONE_SCHEMA_IDS.zoneByCodeView,
   },
   [ZONE_PATTERNS.update]: {
     request: ZONE_SCHEMA_IDS.updateRequest,
