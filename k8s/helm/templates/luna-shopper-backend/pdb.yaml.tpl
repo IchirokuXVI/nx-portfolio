@@ -12,8 +12,10 @@
   Rendering nothing rather than switching to `maxUnavailable: 1`: a budget that
   permits every disruption constrains nothing, and an object that exists but
   means nothing is worse than an absent one, because the next reader has to work
-  out that it is inert. When a socket.io Redis adapter lands and replicaCount
-  goes back to 2, this condition turns the PDBs back on with no further edit.
+  out that it is inert.
+
+  As of plan 0028 the adapter has landed and replicaCount is 2, so this condition
+  renders the budgets again with no edit here, which is what it was written for.
 */}}
 {{- if gt (int $ls.replicaCount) 1 }}
 {{- range $ls.services }}

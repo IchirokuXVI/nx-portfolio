@@ -55,6 +55,15 @@ them.
       key: {{ $key }}
 {{- end }}
 {{- if or (eq $svc.role "gateway") (eq $svc.role "realtime") }}
+# Redis (plan 0028). Only these two roles receive it, and both **require** it:
+# realtime is incorrect at more than one replica without the backplane, and a
+# gateway that starts with no working rate limiter is the outcome section 5
+# refuses. auth, core and catalog hold no shared state and are not given it.
+- name: REDIS_URL
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: REDIS_URL
 - name: CORS_ORIGINS
   valueFrom:
     configMapKeyRef:

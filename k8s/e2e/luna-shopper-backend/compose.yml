@@ -16,8 +16,9 @@
 #
 # There are two separate Postgres instances on purpose: auth and core each own a
 # private database and never share one, so the "no shared database" rule holds
-# even locally. Redis is intentionally absent for now (plan 0001, 2.4); it joins
-# this stack when the cache/backplane is introduced.
+# even locally. Redis is here as of plan 0028, and it is the cache, the presence
+# store and the socket backplane; the services are only correct at more than one
+# replica because it exists.
 
 # The project name (container/network/volume namespace) is overridable so that
 # several git worktrees can each run a fully isolated copy of this stack at the
@@ -169,6 +170,43 @@ services:
           'CMD-SHELL',
           'wget --spider -q http://127.0.0.1:8222/healthz || exit 1',
         ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Cache, presence store and socket backplane (plan 0028). It holds the
+  # socket.io adapter's channels, the relay channel, presence, the throttle
+  # counters, the JetStream dedupe window and the access check cache.
+  #
+  # No volume, deliberately: everything in it is either ephemeral by nature or
+  # reconstructible, so Redis restarting empty is a brief loosening of rate
+  # limits and a presence resync rather than data loss. The cluster template
+  # makes the same choice, and this stack exists to have the same shape.
+  #
+  # `maxmemory-policy volatile-lru` matches the cluster too: every key this plan
+  # defines carries a TTL, and restricting eviction to those means pressure can
+  # never drop a key that was meant to be held.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      [
+        'redis-server',
+        '--maxmemory',
+        '128mb',
+        '--maxmemory-policy',
+        'volatile-lru',
+        '--save',
+        '',
+        '--appendonly',
+        'no',
+      ]
+    ports:
+      - '${LUNA_REDIS_PORT:-6379}:6379'
+    # Same reasoning as the NATS check above: `up --wait` must not call Redis
+    # started before it can answer, or a service races it at boot.
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 10

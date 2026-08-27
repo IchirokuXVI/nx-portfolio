@@ -1,5 +1,8 @@
 import { registerAs } from '@nestjs/config';
-import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
+import {
+  redisValidationSchema,
+  telemetryValidationSchema,
+} from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
 import { readKey } from './read-key';
 
@@ -60,6 +63,13 @@ const appBaseUrl = Joi.string().custom((value: string, helpers) => {
 export const gatewayValidationSchema = Joi.object({
   PORT: Joi.number().port().default(3000),
   NATS_URL: Joi.string().required(),
+
+  // Redis (plan 0028). Required, not optional, and section 5 is where that was
+  // decided: the throttler stores its counters here and fails **closed**, so a
+  // gateway that started without it would be an open registration and password
+  // reset endpoint that looked perfectly healthy. Failing at boot is the loud
+  // version of a failure that is otherwise entirely silent.
+  ...redisValidationSchema,
   AUTH_JWT_PUBLIC_KEY: Joi.string(),
   AUTH_JWT_PUBLIC_KEY_FILE: Joi.string(),
   CORS_ORIGINS: Joi.string().allow('').default(''),
@@ -105,6 +115,7 @@ export const gatewayValidationSchema = Joi.object({
 export interface GatewayConfig {
   port: number;
   natsUrl: string;
+  redisUrl: string;
   authJwtPublicKey: string;
   corsOrigins: string[];
   /**
@@ -132,6 +143,7 @@ export const gatewayConfiguration = registerAs(
   (): GatewayConfig => ({
     port: Number(process.env.PORT),
     natsUrl: process.env.NATS_URL as string,
+    redisUrl: process.env.REDIS_URL as string,
     authJwtPublicKey: readKey(
       process.env.AUTH_JWT_PUBLIC_KEY,
       process.env.AUTH_JWT_PUBLIC_KEY_FILE

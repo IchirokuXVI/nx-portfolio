@@ -32,14 +32,59 @@ const FILLED: ZoneCountsUpdatedPayload = {
   },
 };
 
-function deliver(envelope: DomainEvent): RelayMessage[] {
-  const relay = new EventRelayService();
+/**
+ * A relay wired to a Redis double that loops a publish straight back into this
+ * pod's own subscription, which is what the real one does (plan 0028, section
+ * 2.3): the publisher receives its own message through the channel rather than
+ * being fed locally.
+ */
+async function loopbackRelay(): Promise<EventRelayService> {
+  let deliver: ((channel: string, raw: string) => void) | undefined;
+  const redis = {
+    duplicate: () => ({
+      on: (event: string, handler: (channel: string, raw: string) => void) => {
+        if (event === 'message') {
+          deliver = handler;
+        }
+      },
+      subscribe: jest.fn().mockResolvedValue(1),
+      unsubscribe: jest.fn().mockResolvedValue(1),
+    }),
+    client: {
+      publish: jest.fn(async (channel: string, raw: string) => {
+        deliver?.(channel, raw);
+        return 1;
+      }),
+    },
+  } as never;
+
+  const relay = new EventRelayService(redis, {
+    warn: jest.fn(),
+    error: jest.fn(),
+  } as never);
+  await relay.onModuleInit();
+  return relay;
+}
+
+async function deliver(envelope: DomainEvent): Promise<RelayMessage[]> {
+  const relay = await loopbackRelay();
   const published: RelayMessage[] = [];
   relay.stream$.subscribe((message) => published.push(message));
+
+  // The dedupe claim is a Redis round trip since plan 0028, section 2.5. `'OK'`
+  // is the reply that means "you are the first to see this event id"; `null`
+  // would mean a redelivery, which is asserted separately.
+  const redis = {
+    client: { set: jest.fn().mockResolvedValue('OK') },
+  } as never;
 
   const consumer = new JetStreamConsumer(
     {} as never,
     relay,
+    redis,
+    // The access cache invalidation runs before every fan out (plan 0028,
+    // section 2.6); it is asserted in access-cache.spec.ts, not here.
+    { invalidateZone: jest.fn(), invalidateList: jest.fn() } as never,
     { warn: jest.fn(), error: jest.fn(), log: jest.fn() } as never
   );
 
@@ -49,7 +94,9 @@ function deliver(envelope: DomainEvent): RelayMessage[] {
     data: codec.encode({ pattern: envelope.event, data: envelope }),
     headers: undefined,
   };
-  (consumer as unknown as { handle: (m: unknown) => void }).handle(message);
+  await (
+    consumer as unknown as { handle: (m: unknown) => Promise<void> }
+  ).handle(message);
   return published;
 }
 
@@ -67,8 +114,8 @@ describe('zone.countsUpdated fan out', () => {
     expect(DOMAIN_EVENT_SUBJECTS).toContain(RealtimeEvent.ZoneCountsUpdated);
   });
 
-  it('fills the governance fields in the staff room', () => {
-    const staff = deliver(countsEvent()).find((m) =>
+  it('fills the governance fields in the staff room', async () => {
+    const staff = (await deliver(countsEvent())).find((m) =>
       m.rooms.includes(zoneStaffRoom(ZONE_ID))
     );
 
@@ -78,8 +125,8 @@ describe('zone.countsUpdated fan out', () => {
     expect(counts.firstPendingRequesterName).toBe('Ines');
   });
 
-  it('nulls the governance fields in the plain zone room', () => {
-    const plain = deliver(countsEvent()).find((m) =>
+  it('nulls the governance fields in the plain zone room', async () => {
+    const plain = (await deliver(countsEvent())).find((m) =>
       m.rooms.includes(zoneRoom(ZONE_ID))
     );
 
@@ -93,23 +140,23 @@ describe('zone.countsUpdated fan out', () => {
     expect(counts.memberCount).toBe(3);
   });
 
-  it('never puts the filled payload in the plain zone room', () => {
-    for (const message of deliver(countsEvent())) {
+  it('never puts the filled payload in the plain zone room', async () => {
+    for (const message of await deliver(countsEvent())) {
       if (message.rooms.includes(zoneRoom(ZONE_ID))) {
         expect(JSON.stringify(message.payload)).not.toContain('Ines');
       }
     }
   });
 
-  it('reaches both rooms and nothing else', () => {
-    const rooms = deliver(countsEvent()).flatMap((m) => m.rooms);
+  it('reaches both rooms and nothing else', async () => {
+    const rooms = (await deliver(countsEvent())).flatMap((m) => m.rooms);
     expect(new Set(rooms)).toEqual(
       new Set([zoneRoom(ZONE_ID), zoneStaffRoom(ZONE_ID)])
     );
   });
 
-  it('leaves every other zone event on the plain room alone', () => {
-    const published = deliver({
+  it('leaves every other zone event on the plain room alone', async () => {
+    const published = await deliver({
       event: RealtimeEvent.MemberApproved,
       eventId: 'e-member',
       zoneId: ZONE_ID,

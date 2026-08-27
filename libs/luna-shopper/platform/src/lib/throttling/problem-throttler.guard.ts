@@ -18,10 +18,13 @@ import {
  * It lives beside `throttler-config.ts` rather than in the gateway because any
  * service that grows an HTTP surface wants the same answer.
  *
- * The number is honest about what it measures and no more: the throttler's
- * storage is in memory per process and its tracker is the client IP, so with more
- * than one gateway replica a bucket is per pod and per IP (section 2.4). A client
- * renders what it was given rather than assuming a fixed wait.
+ * The number is honest about what it measures and no more. Since plan 0028 the
+ * storage is Redis, so a bucket is now per IP across the whole fleet rather than
+ * per pod and per IP, and the wait handed back is the remaining window rather
+ * than a freshly minted one. This guard needed no change for either: it reads
+ * `timeToExpire` and `timeToBlockExpire` off whatever storage is configured,
+ * which is what made the storage swap a one line change in the gateway. A client
+ * still renders what it was given rather than assuming a fixed wait.
  */
 @Injectable()
 export class ProblemThrottlerGuard extends ThrottlerGuard {

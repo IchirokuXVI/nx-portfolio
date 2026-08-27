@@ -18,6 +18,7 @@ import {
   beginConsumerSpan,
   readCorrelationFromHeaders,
   recordFanoutLatency,
+  RedisService,
   runWithRequestContext,
 } from '@portfolio/luna-shopper/platform';
 import {
@@ -33,8 +34,11 @@ import {
 } from 'nats';
 import { Logger } from 'nestjs-pino';
 import type { RealtimeConfig } from '../config/app-config';
+import { CoreAccessClient } from '../messaging/core-access.client';
 import {
-  DEDUPE_WINDOW,
+  ACCESS_INVALIDATING_EVENTS,
+  DEDUPE_KEY_PREFIX,
+  DEDUPE_WINDOW_SECONDS,
   EVENT_CONSUMER_NAME,
   EVENT_STREAM_NAME,
 } from '../realtime/constants';
@@ -66,7 +70,6 @@ interface NatsEventPacket {
 @Injectable()
 export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
   private readonly codec = JSONCodec<NatsEventPacket>();
-  private readonly seen = new Map<string, true>();
   private connection?: NatsConnection;
   private messages?: ConsumerMessages;
   private draining = false;
@@ -74,6 +77,8 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
   constructor(
     private readonly config: ConfigService,
     private readonly relay: EventRelayService,
+    private readonly redis: RedisService,
+    private readonly coreAccess: CoreAccessClient,
     private readonly logger: Logger
   ) {}
 
@@ -139,7 +144,10 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     this.messages = await consumer.consume();
     try {
       for await (const message of this.messages) {
-        this.handle(message);
+        // Awaited, so the dedupe claim settles before the next message is
+        // handled and before this one is acked. It also keeps the fan out in
+        // stream order, which the synchronous version got for free.
+        await this.handle(message);
         message.ack();
       }
     } catch (err) {
@@ -149,7 +157,7 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
-  private handle(message: JsMsg): void {
+  private async handle(message: JsMsg): Promise<void> {
     let envelope: DomainEvent;
     try {
       envelope = this.codec.decode(message.data).data;
@@ -160,9 +168,14 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
       return;
     }
 
-    if (this.isDuplicate(envelope.eventId)) {
+    if (await this.isDuplicate(envelope.eventId)) {
       return;
     }
+
+    // Before the fan out, not after (plan 0028, section 2.6). A member kicked in
+    // this event must not be answered from cache by a subscribe that arrives in
+    // the same tick as the push telling them they were kicked.
+    await this.invalidateAccessCache(envelope);
 
     const correlationId = readCorrelationFromHeaders(message.headers);
 
@@ -257,18 +270,69 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     });
   }
 
-  /** True when this event id was already handled, remembering it otherwise. */
-  private isDuplicate(eventId: string): boolean {
-    if (this.seen.has(eventId)) {
-      return true;
+  /**
+   * Drop the cached access answers this event invalidates (plan 0028, section
+   * 2.6).
+   *
+   * This is the half of the access cache that makes it acceptable at all. The
+   * cache buys a revocation delay, and section 2.6 is explicit that the delay is
+   * not tolerable on its own and that the invalidation ships in the same change
+   * rather than as a follow up. The realtime service already consumes every one
+   * of these events for the fan out, so this costs one `DEL` on an event that
+   * was going to be handled anyway.
+   *
+   * Every event in {@link ACCESS_INVALIDATING_EVENTS} drops the zone's entries.
+   * That set is deliberately generous: it is cheaper to re ask core than to
+   * reason, per payload, about exactly whose access an event moved, and being
+   * wrong in that reasoning means a revoked member keeps hearing a room.
+   *
+   * Any event carrying a `listId` also drops that list's entries. `list.deleted`
+   * and `list.accessChanged` are the ones that matter, and including the rest
+   * costs a `DEL` on a key that is about to be rebuilt anyway.
+   */
+  private async invalidateAccessCache(envelope: DomainEvent): Promise<void> {
+    const invalidatesZone = ACCESS_INVALIDATING_EVENTS.has(envelope.event);
+
+    if (invalidatesZone) {
+      await this.coreAccess.invalidateZone(envelope.zoneId);
     }
-    this.seen.set(eventId, true);
-    if (this.seen.size > DEDUPE_WINDOW) {
-      const oldest = this.seen.keys().next().value;
-      if (oldest !== undefined) {
-        this.seen.delete(oldest);
-      }
+    if (envelope.listId) {
+      await this.coreAccess.invalidateList(envelope.listId);
     }
-    return false;
+  }
+
+  /**
+   * True when this event id was already handled, claiming it otherwise (plan
+   * 0028, section 2.5).
+   *
+   * `SET key 1 NX EX window` is the whole of it: the reply tells the caller
+   * whether it was the first delivery, in one atomic round trip, so two pods
+   * handed the same redelivery cannot both conclude they were first. The window
+   * is a TTL rather than the count of ids this used to keep in memory.
+   *
+   * **Fails open.** With no answer from Redis the event is treated as new and
+   * fanned out. Between publishing an event twice and dropping it entirely, the
+   * duplicate is the recoverable one: clients render the same update again,
+   * where a dropped event leaves a list stale until the next mutation. The
+   * silent version of this failure is the one that costs something.
+   */
+  private async isDuplicate(eventId: string): Promise<boolean> {
+    const key = `${DEDUPE_KEY_PREFIX}:${eventId}`;
+    try {
+      const claimed = await this.redis.client.set(
+        key,
+        1,
+        'EX',
+        DEDUPE_WINDOW_SECONDS,
+        'NX'
+      );
+      return claimed === null;
+    } catch (err) {
+      this.logger.warn(
+        { err, eventId },
+        'realtime dedupe check failed, treating the event as new'
+      );
+      return false;
+    }
   }
 }

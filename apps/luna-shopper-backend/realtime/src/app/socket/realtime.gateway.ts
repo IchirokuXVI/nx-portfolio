@@ -47,7 +47,29 @@ interface Ack {
  * own hostname in every deployed environment (plan 0002); browser origin control
  * lives there, not in the socket server.
  */
-@WebSocketGateway({ cors: { origin: true, credentials: true } })
+/**
+ * **WebSocket only, no long polling** (plan 0028, section 2.1, decided at step 6).
+ *
+ * At more than one replica the two transports need different things. The
+ * WebSocket transport is one connection to one pod and needs nothing: the Redis
+ * adapter carries the room bookkeeping. HTTP long polling is several requests
+ * per handshake that must all land on the same pod, which means session affinity
+ * on the Service and its HTTPRoute.
+ *
+ * The choice is made here rather than left to be discovered from a support
+ * report, and it is to drop polling. The SSE endpoints already exist as the
+ * read only fallback for a client behind a proxy that blocks WebSocket, so
+ * affinity would be infrastructure bought for a case that is already served, and
+ * affinity has its own cost: it pins a client to a pod across a rollout.
+ *
+ * The consequence for the client: `socket.io-client` must be constructed with
+ * `transports: ['websocket']` too. Its default is to open with polling and
+ * upgrade, and against this server that first request is refused.
+ */
+@WebSocketGateway({
+  transports: ['websocket'],
+  cors: { origin: true, credentials: true },
+})
 export class RealtimeGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
 {
@@ -61,11 +83,21 @@ export class RealtimeGateway
     private readonly logger: Logger
   ) {}
 
-  /** Fan every relay message out to the rooms it targets. */
+  /**
+   * Fan every relay message out to the rooms it targets, **on this pod only**.
+   *
+   * `server.local.to(room)` rather than `server.to(room)`, and the difference is
+   * the whole of plan 0028 section 2.3. Every pod already received this message
+   * on its own relay subscription, so every pod is about to emit it. A plain
+   * `.to()` would ask the socket.io Redis adapter to carry the same event across
+   * the pod boundary a second time, and each client would receive it once per
+   * replica. The event crosses once, through the relay channel; the emit is
+   * local.
+   */
   onModuleInit(): void {
     this.relay.stream$.subscribe((message) => {
       for (const room of message.rooms) {
-        this.server.to(room).emit(message.event, message.payload);
+        this.server.local.to(room).emit(message.event, message.payload);
       }
       if (message.correlationId) {
         this.logger.debug(
@@ -87,8 +119,8 @@ export class RealtimeGateway
     }
   }
 
-  handleDisconnect(client: Socket): void {
-    this.presence.disconnect(client.id);
+  async handleDisconnect(client: Socket): Promise<void> {
+    await this.presence.disconnect(client.id);
   }
 
   @SubscribeMessage(RealtimeClientMessage.SubscribeZone)
@@ -108,7 +140,7 @@ export class RealtimeGateway
     if (await this.coreAccess.checkZoneStaff(userId, body.zoneId)) {
       await client.join(zoneStaffRoom(body.zoneId));
     }
-    this.presence.joinZone(client.id, body.zoneId);
+    await this.presence.joinZone(client.id, body.zoneId);
     return { ok: true };
   }
 
@@ -119,7 +151,7 @@ export class RealtimeGateway
   ): Promise<Ack> {
     await client.leave(zoneRoom(body.zoneId));
     await client.leave(zoneStaffRoom(body.zoneId));
-    this.presence.leaveZone(client.id, body.zoneId);
+    await this.presence.leaveZone(client.id, body.zoneId);
     return { ok: true };
   }
 
@@ -142,51 +174,51 @@ export class RealtimeGateway
     @MessageBody() body: ListSubscription
   ): Promise<Ack> {
     await client.leave(listRoom(body.listId));
-    this.presence.unviewList(client.id, body.listId);
+    await this.presence.unviewList(client.id, body.listId);
     return { ok: true };
   }
 
   @SubscribeMessage(RealtimeClientMessage.ViewList)
-  viewList(
+  async viewList(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: ListSubscription
-  ): Ack {
+  ): Promise<Ack> {
     // Presence intents trust the room membership established at subscribe time,
     // so no extra core round-trip is needed to accept them.
     if (!client.rooms.has(listRoom(body.listId))) {
       return { ok: false };
     }
-    this.presence.viewList(client.id, body.listId);
+    await this.presence.viewList(client.id, body.listId);
     return { ok: true };
   }
 
   @SubscribeMessage(RealtimeClientMessage.UnviewList)
-  unviewList(
+  async unviewList(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: ListSubscription
-  ): Ack {
-    this.presence.unviewList(client.id, body.listId);
+  ): Promise<Ack> {
+    await this.presence.unviewList(client.id, body.listId);
     return { ok: true };
   }
 
   @SubscribeMessage(RealtimeClientMessage.EditLine)
-  editLine(
+  async editLine(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: EditLineSignal
-  ): Ack {
+  ): Promise<Ack> {
     if (!client.rooms.has(listRoom(body.listId))) {
       return { ok: false };
     }
-    this.presence.editLine(client.id, body.listId, body.lineId);
+    await this.presence.editLine(client.id, body.listId, body.lineId);
     return { ok: true };
   }
 
   @SubscribeMessage(RealtimeClientMessage.StopEditLine)
-  stopEditLine(
+  async stopEditLine(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: StopEditLineSignal
-  ): Ack {
-    this.presence.stopEditLine(client.id, body.listId);
+  ): Promise<Ack> {
+    await this.presence.stopEditLine(client.id, body.listId);
     return { ok: true };
   }
 

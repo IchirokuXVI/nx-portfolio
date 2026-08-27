@@ -7,6 +7,7 @@ import {
   type Provider,
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   HealthCheck,
   HealthCheckService,
@@ -45,6 +46,18 @@ const HEAP_LIMIT_BYTES = 512 * 1024 * 1024;
 // own shape rather than anything the contracts library describes. Excluding them
 // is what lets "every documented route has a contract backed response" be an
 // unconditional assertion instead of one with an exemption list.
+// Excluded from the throttler, for the same reason `/metrics` is, and since plan
+// 0028 for a second and much sharper one.
+//
+// A probe every ten seconds must never spend a rate limit bucket. That was
+// merely tidy while the counters were in memory and generous. It became load
+// bearing when the throttler moved to Redis and started failing **closed**
+// (section 5): without this, a Redis outage would answer every readiness probe
+// with a 429, every gateway pod would go unready at once, and an outage the plan
+// deliberately chose to survive as "the API refuses over limit requests" would
+// instead be "the API has no endpoints". Liveness would keep the pods alive to
+// serve traffic no longer routed to them.
+@SkipThrottle()
 @ApiExcludeController()
 @Controller('health')
 export class HealthController {

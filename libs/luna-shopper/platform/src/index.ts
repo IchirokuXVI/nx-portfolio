@@ -40,8 +40,16 @@ export * from './lib/validation/validation-pipe';
 export * from './lib/health/health.module';
 export * from './lib/health/readiness-state';
 
+// Redis (plan 0028): the one client, its connection options and the health
+// indicator. The cache, presence, throttler storage and socket backplane all
+// build on this rather than constructing their own ioredis.
+export * from './lib/redis/redis.module';
+export * from './lib/redis/redis.options';
+export * from './lib/redis/redis.service';
+
 // Rate limiting
 export * from './lib/throttling/problem-throttler.guard';
+export * from './lib/throttling/redis-throttler.storage';
 export * from './lib/throttling/throttler-config';
 
 // Pagination
