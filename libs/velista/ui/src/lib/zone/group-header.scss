@@ -1,0 +1,147 @@
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-width: 0;
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--app-icon-display);
+  height: var(--app-icon-display);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface-overlay);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xl);
+  font-weight: 600;
+}
+
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  flex: 1;
+  min-width: 0;
+}
+
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-width: 0;
+}
+
+// The name truncates and the chip beside it never shrinks, so a long group name
+// cannot push the role off a narrow screen. Two lines rather than one would be worse
+// here than on the card: this is the page title, and it sits above everything.
+.name {
+  margin: 0;
+  font-size: var(--app-text-xl);
+  font-weight: 600;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counts {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.stale {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.stale-glyph {
+  flex-shrink: 0;
+  font-size: var(--app-icon-sm);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  overflow: hidden;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  width: 100%;
+  min-height: var(--app-control-height);
+  padding: var(--app-space-3) var(--app-space-4);
+  background: transparent;
+  border: none;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  & + & {
+    border-top: 1px solid var(--app-border-subtle);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.action-glyph {
+  flex-shrink: 0;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.action-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// How many people are waiting. Attention rather than danger: somebody wants a
+// decision, and nothing has gone wrong.
+.pip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: var(--app-avatar-sm);
+  padding: 0 var(--app-space-2);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-status-attention-bg);
+  border: 1px solid var(--app-status-attention-border);
+  color: var(--app-status-attention-fg);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+}
+
+.action-chevron {
+  flex-shrink: 0;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}

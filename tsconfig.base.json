@@ -132,6 +132,9 @@
         "./libs/velista/data-access/src/index.ts"
       ],
       "@portfolio/velista/ui": ["./libs/velista/ui/src/index.ts"],
+      "@portfolio/velista/feature-zones": [
+        "./libs/velista/feature-zones/src/index.ts"
+      ],
       "@portfolio/velista/feature-shell": [
         "./libs/velista/feature-shell/src/index.ts"
       ]

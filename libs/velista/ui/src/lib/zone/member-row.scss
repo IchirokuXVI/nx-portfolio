@@ -1,0 +1,154 @@
+:host {
+  display: block;
+}
+
+// The row whose menu is open sits above the rows after it in document order, which
+// would otherwise paint over the panel. See the host binding that sets this class.
+:host(.menu-open) {
+  position: relative;
+  z-index: 1;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-height: var(--app-member-row-height);
+  padding: 0 var(--app-space-2) 0 var(--app-space-4);
+}
+
+// A row mid-write dims its content and keeps its height, so the list does not jump
+// under a thumb that is about to tap the row below.
+.row[aria-busy='true'] .body,
+.row[aria-busy='true'] .avatar {
+  opacity: 0.55;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--app-avatar-lg);
+  height: var(--app-avatar-lg);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-overlay);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+
+.body {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.name-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// "You", so somebody can find their own row in a long list. Deliberately quiet: it is
+// orientation, not a status.
+.you {
+  flex-shrink: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.role {
+  flex-shrink: 0;
+}
+
+.menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+// 44 square inside a 56 tall row (section 7). The icon is smaller than the target on
+// purpose: the target is what a thumb needs and the glyph is what an eye needs.
+.trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+    border-radius: var(--app-radius-sm);
+  }
+}
+
+.trigger-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.menu {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 100%;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: var(--app-menu-min-width);
+  margin: 0;
+  padding: var(--app-space-2);
+  list-style: none;
+  background: var(--app-surface-overlay);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-md);
+  box-shadow: var(--app-elevation-2);
+}
+
+.item {
+  display: block;
+  width: 100%;
+  min-height: var(--app-control-height);
+  padding: 0 var(--app-space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--app-radius-sm);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  text-align: start;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// Coral, and never coral alone: "Remove and block" says what it does in its own
+// words, so the meaning survives without the colour (section 7).
+.destructive {
+  color: var(--app-status-danger-fg);
+}

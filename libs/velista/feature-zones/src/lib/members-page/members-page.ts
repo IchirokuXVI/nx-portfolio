@@ -1,0 +1,421 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
+import {
+  RokuLocaleStore,
+  RokuTranslatorPipe,
+} from '@portfolio/localization/rokutranslator-angular';
+import {
+  MEMBERSHIP_SERVICE,
+  REALTIME_CLIENT,
+  SessionStore,
+  ZoneStore,
+  type MembershipServiceI,
+  type RealtimeClientI,
+} from '@portfolio/velista/data-access';
+import {
+  APP_BASE_PATH,
+  type MemberAction,
+  type Membership,
+  type MembersState,
+} from '@portfolio/velista/models';
+import { appPath } from '@portfolio/velista/platform';
+import {
+  ErrorState,
+  MemberRow,
+  PendingRequestRow,
+  RowSkeleton,
+} from '@portfolio/velista/ui';
+import { canSeePendingRequests, memberActionsFor } from '../member-actions';
+import { zoneIdOf } from '../route-params';
+import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
+
+/**
+ * Who is in the group, and where a request to join finally gets an answer.
+ *
+ * This screen is why `0010` is one plan and not two. `0008` built both ways into a
+ * group and said plainly that it could produce a pending membership and could not
+ * resolve one, so an app built to the plans before this one had people standing in a
+ * queue that nothing could serve.
+ *
+ * ## The members list is page state, not store state
+ *
+ * There is no `MembershipStore`, deliberately. A store is shaped like the domain and
+ * survives navigation; this is a cursor paged list scoped to one screen, which is what
+ * plan 0004 calls a page facade. Holding it here means leaving the screen throws it
+ * away, which is right: coming back should show who is in the group **now**.
+ *
+ * The counts are the exception, and they belong to the zone rather than to this list,
+ * so approving somebody tells `ZoneStore` and the group page's member count moves
+ * without a reload.
+ *
+ * ## Rule G3
+ *
+ * The staff room is joined only when `myRole` says the caller is staff. The server
+ * refuses it otherwise, a refusal feeds `staleZoneIds`, and `0003` renders that as
+ * "this group is not live" — so subscribing unconditionally would put a permanent and
+ * untrue stale badge on every group where the caller is an ordinary member
+ * (section 5.3).
+ */
+@Component({
+  selector: 'lib-members-page',
+  imports: [
+    RokuTranslatorPipe,
+    RouterOutlet,
+    ErrorState,
+    MemberRow,
+    PendingRequestRow,
+    RowSkeleton,
+  ],
+  templateUrl: './members-page.html',
+  styleUrl: './members-page.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class MembersPage {
+  private readonly _zones = inject(ZoneStore);
+  private readonly _members = inject<MembershipServiceI>(MEMBERSHIP_SERVICE);
+  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
+  private readonly _session = inject(SessionStore);
+  private readonly _router = inject(Router);
+  private readonly _route = inject(ActivatedRoute);
+  private readonly _locale = inject(RokuLocaleStore).locale;
+  private readonly _basePath = inject(APP_BASE_PATH);
+
+  readonly zoneId = zoneIdOf(this._route);
+
+  private readonly _rows = signal<readonly Membership[]>([]);
+  private readonly _loading = signal(true);
+  private readonly _loadingMore = signal(false);
+  private readonly _failure = signal<unknown>(null);
+  private readonly _cursor = signal<string | null>(null);
+
+  /** Rows with a write in flight, so only those go busy and the screen stays usable. */
+  private readonly _busy = signal<ReadonlySet<string>>(new Set());
+
+  /** What the live region announces, so a row leaving is not silent (section 7). */
+  readonly announcement = signal<{ key: string; name: string } | null>(null);
+
+  /** A failure's copy, as a key. Null for the one failure that must say nothing. */
+  readonly errorKey = signal<string | null>(null);
+
+  /** The staff room, held while this screen is open and released with it (rule G3). */
+  private _leaveStaffRoom: (() => void) | null = null;
+
+  readonly state = computed<MembersState>(() => {
+    if (this._failure() !== null && this._rows().length === 0) {
+      return {
+        kind: 'error',
+        correlationId: correlationIdOf(this._failure()),
+      };
+    }
+
+    if (this._loading()) {
+      return { kind: 'loading' };
+    }
+
+    const zone = this._zones.zoneById(this.zoneId());
+    const myRole = zone?.myRole ?? 'MEMBER';
+    const myUserId = this._session.userId();
+    const busy = this._busy();
+    const rows = this._rows();
+
+    return {
+      kind: 'loaded',
+      groupName: zone?.name ?? '',
+      // Absent, not an empty state with a message: a group with nobody waiting should
+      // show no section at all (section 3.4).
+      pending: rows
+        .filter((row) => row.status === 'PENDING')
+        .map((row) => ({
+          membershipId: row.id,
+          name: row.username,
+          initial: initialOf(row.username),
+          busy: busy.has(row.id),
+        })),
+      members: rows
+        .filter((row) => row.status === 'APPROVED')
+        .map((row) => ({
+          membershipId: row.id,
+          userId: row.userId,
+          name: row.username,
+          initial: initialOf(row.username),
+          role: row.role,
+          isYou: myUserId !== null && row.userId === myUserId,
+          // The whole of section 5.4, in one pure function. An empty list means the
+          // row has no menu at all rather than a disabled one.
+          actions: memberActionsFor({
+            myRole,
+            myUserId,
+            member: { userId: row.userId, role: row.role },
+          }),
+          busy: busy.has(row.id),
+        })),
+      hasMore: this._cursor() !== null,
+      loadingMore: this._loadingMore(),
+    };
+  });
+
+  constructor() {
+    effect(() => {
+      const id = this.zoneId();
+      // The zone may not be cached on a deep link, and `myRole` is what decides both
+      // which statuses may be asked for and whether the staff room is joined.
+      void this._zones.loadZone(id);
+      void this._load(id);
+      this._syncStaffRoom(id);
+    });
+
+    // A group the caller was removed from, or that was deleted, while this screen was
+    // open. Same answer as the group page: leave for the dashboard with a notice.
+    effect(() => {
+      const departure = this._zones.departure();
+      if (departure === null || departure.zoneId !== this.zoneId()) {
+        return;
+      }
+
+      this._zones.clearDeparture();
+      void this._router.navigateByUrl(
+        appPath(this._locale(), this._basePath, 'home')
+      );
+    });
+
+    inject(DestroyRef).onDestroy(() => this._releaseStaffRoom());
+  }
+
+  /** Back to the group, which is where this screen was opened from. */
+  async back(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'zones', this.zoneId())
+    );
+  }
+
+  /**
+   * Let somebody in.
+   *
+   * The one write on this screen with a **silent** failure. `validation_failed` means
+   * the membership is no longer PENDING, which means another admin answered first.
+   * Two admins on the same queue is the normal case, and the one who was half a second
+   * slower has done nothing wrong: the row leaves, which is what the realtime event
+   * was about to do anyway, and nothing is said (section 5.6).
+   */
+  async approve(membershipId: string): Promise<void> {
+    await this._answer(membershipId, 'approved', (zoneId) =>
+      this._members.approve(zoneId, membershipId)
+    );
+  }
+
+  async reject(membershipId: string): Promise<void> {
+    await this._answer(membershipId, 'rejected', (zoneId) =>
+      this._members.reject(zoneId, membershipId)
+    );
+  }
+
+  /**
+   * A row menu's choice.
+   *
+   * The three that take something away go through a confirm sheet, and renaming needs
+   * a field, so all four are routes over this page (rule E1). A role change is neither:
+   * it is one tap, it is reversible by the same person in the same menu, and putting a
+   * sheet in front of it would be friction for its own sake (section 5.7).
+   */
+  async act(event: {
+    action: MemberAction;
+    membershipId: string;
+  }): Promise<void> {
+    if (event.action === 'makeAdmin' || event.action === 'makeMember') {
+      await this._setRole(
+        event.membershipId,
+        event.action === 'makeAdmin' ? 'ADMIN' : 'MEMBER'
+      );
+      return;
+    }
+
+    // The name travels in router state so the sheet's title can say it without a
+    // second request for something already on screen. A deep link carries none, and
+    // the sheet is written to read correctly without it.
+    void this._router.navigate([event.membershipId, 'confirm', event.action], {
+      relativeTo: this._route,
+      state: { name: this._nameOf(event.membershipId) },
+    });
+  }
+
+  /** Another page of members. Rare, and the screen still has to do it. */
+  async loadMore(): Promise<void> {
+    const cursor = this._cursor();
+    if (cursor === null || this._loadingMore()) {
+      return;
+    }
+
+    this._loadingMore.set(true);
+    try {
+      const page = await this._members.listMembers(this.zoneId(), {
+        cursor,
+        statuses: this._statuses(),
+      });
+      this._rows.update((current) => [...current, ...page.items]);
+      this._cursor.set(page.nextCursor);
+    } catch (error) {
+      this.errorKey.set(zoneErrorKey(error, 'zone.read'));
+    } finally {
+      this._loadingMore.set(false);
+    }
+  }
+
+  retry(): void {
+    void this._load(this.zoneId());
+  }
+
+  /** A sheet finished. Re-read, because it changed a row this screen is showing. */
+  refresh(): void {
+    void this._load(this.zoneId());
+  }
+
+  private async _answer(
+    membershipId: string,
+    change: 'approved' | 'rejected',
+    send: (zoneId: string) => Promise<unknown>
+  ): Promise<void> {
+    const zoneId = this.zoneId();
+    const name = this._nameOf(membershipId);
+    this._setBusy(membershipId, true);
+    this.errorKey.set(null);
+
+    try {
+      await send(zoneId);
+      this._zones.recordMembershipChange(zoneId, change);
+      this.announcement.set({
+        key:
+          change === 'approved'
+            ? 'zone.members.approved'
+            : 'zone.members.rejected',
+        name,
+      });
+      // Re-read rather than patching in place: approving moves a row from one section
+      // to the other, and the server is the thing that knows what the row looks like
+      // afterwards.
+      await this._load(zoneId);
+    } catch (error) {
+      const key = zoneErrorKey(error, 'member.answer');
+      if (key === null) {
+        // Somebody else answered first. The row goes, and nothing is said.
+        await this._load(zoneId);
+        return;
+      }
+
+      this.errorKey.set(key);
+    } finally {
+      this._setBusy(membershipId, false);
+    }
+  }
+
+  private async _setRole(
+    membershipId: string,
+    role: 'ADMIN' | 'MEMBER'
+  ): Promise<void> {
+    const zoneId = this.zoneId();
+    this._setBusy(membershipId, true);
+    this.errorKey.set(null);
+
+    try {
+      const updated = await this._members.setRole(zoneId, membershipId, role);
+      this._rows.update((current) =>
+        current.map((row) => (row.id === membershipId ? updated : row))
+      );
+    } catch (error) {
+      this.errorKey.set(zoneErrorKey(error, 'member.govern'));
+      // The caller's own role may be what changed. Re-reading the zone is what puts
+      // every control drawn from `myRole` back in step with what the server allows.
+      void this._zones.loadZone(zoneId);
+    } finally {
+      this._setBusy(membershipId, false);
+    }
+  }
+
+  private async _load(zoneId: string): Promise<void> {
+    this._loading.set(this._rows().length === 0);
+    this._failure.set(null);
+
+    try {
+      const page = await this._members.listMembers(zoneId, {
+        statuses: this._statuses(),
+      });
+      this._rows.set(page.items);
+      this._cursor.set(page.nextCursor);
+    } catch (error) {
+      this._failure.set(error);
+      this.errorKey.set(zoneErrorKey(error, 'zone.read'));
+    } finally {
+      this._loading.set(false);
+    }
+  }
+
+  /**
+   * Which statuses to ask for.
+   *
+   * **Rule G2.** Anything other than APPROVED is staff only, and asking for it as an
+   * ordinary member is a `forbidden` rather than an empty page, so this reads `myRole`
+   * instead of finding out by being refused.
+   */
+  private _statuses(): readonly Membership['status'][] {
+    const zone = this._zones.zoneById(this.zoneId());
+    return canSeePendingRequests(zone?.myRole ?? 'MEMBER')
+      ? ['APPROVED', 'PENDING']
+      : ['APPROVED'];
+  }
+
+  /** Rule G3. Joined for staff, released for everybody else and on destroy. */
+  private _syncStaffRoom(zoneId: string): void {
+    const zone = this._zones.zoneById(zoneId);
+    const wanted = canSeePendingRequests(zone?.myRole ?? 'MEMBER');
+
+    if (!wanted) {
+      this._releaseStaffRoom();
+      return;
+    }
+
+    if (this._leaveStaffRoom === null) {
+      this._leaveStaffRoom = this._realtime.subscribeZoneStaff(zoneId);
+    }
+  }
+
+  private _releaseStaffRoom(): void {
+    this._leaveStaffRoom?.();
+    this._leaveStaffRoom = null;
+  }
+
+  private _nameOf(membershipId: string): string {
+    return this._rows().find((row) => row.id === membershipId)?.username ?? '';
+  }
+
+  private _setBusy(membershipId: string, busy: boolean): void {
+    this._busy.update((current) => {
+      const next = new Set(current);
+      if (busy) {
+        next.add(membershipId);
+      } else {
+        next.delete(membershipId);
+      }
+      return next;
+    });
+  }
+}
+
+/**
+ * The letter in a member's avatar.
+ *
+ * Code points rather than a slice, because slicing cuts a surrogate pair in half and a
+ * name that starts with an emoji would render the replacement character.
+ */
+function initialOf(name: string): string {
+  const trimmed = name.trim();
+  return trimmed === ''
+    ? ''
+    : (Array.from(trimmed)[0] ?? '').toLocaleUpperCase();
+}

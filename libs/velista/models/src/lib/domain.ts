@@ -120,6 +120,20 @@ export interface ShoppingList {
 }
 
 /**
+ * A shopping list with the two counts every screen that lists them renders.
+ *
+ * `ListView` nests them under `counts` and `ZoneListPreview` carries them flat, which
+ * is the one place the two wire shapes differ; the field names inside are identical on
+ * purpose, so one mapper reads both (backend plan 0017, section 3.4). That difference
+ * is absorbed by the mapper and never reaches here: a list is a list whichever endpoint
+ * it arrived from.
+ */
+export interface ShoppingListSummary extends ShoppingList {
+  readonly lineCount: number;
+  readonly readyCount: number;
+}
+
+/**
  * One line on a list.
  *
  * `version` is the only concurrency handle the product has: the backend is last write

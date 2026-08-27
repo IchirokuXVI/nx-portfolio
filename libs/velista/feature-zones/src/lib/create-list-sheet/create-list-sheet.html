@@ -1,0 +1,47 @@
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!submitting()"
+  labelledBy="create-list-title"
+>
+  <h2 class="title" id="create-list-title">
+    {{ 'zone.newList.title' | rokuT }}
+  </h2>
+  <p class="body">{{ 'zone.newList.body' | rokuT }}</p>
+
+  <label class="label" for="create-list-name">
+    {{ 'zone.newList.label' | rokuT }}
+  </label>
+  <input
+    (input)="onNameInput($event)"
+    [attr.maxlength]="maxLength"
+    [placeholder]="'zone.newList.placeholder' | rokuT"
+    [value]="name()"
+    autocomplete="off"
+    class="field"
+    id="create-list-name"
+    type="text"
+  />
+
+  @if (errorKey(); as key) {
+    <p class="error" role="alert">{{ key | rokuT }}</p>
+  }
+
+  <button
+    (click)="submit()"
+    [attr.aria-busy]="submitting()"
+    [disabled]="!canSubmit()"
+    class="primary"
+    type="button"
+  >
+    @if (submitting()) {
+      <lib-spinner-icon class="spinning" />
+    }
+    <span>{{ 'zone.newList.submit' | rokuT }}</span>
+  </button>
+
+  @if (!submitting()) {
+    <button (click)="dismiss()" class="cancel" type="button">
+      {{ 'entry.cancel' | rokuT }}
+    </button>
+  }
+</lib-sheet-shell>

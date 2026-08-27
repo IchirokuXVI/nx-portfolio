@@ -1,0 +1,58 @@
+<header class="header">
+  <div class="identity">
+    <span aria-hidden="true" class="tile">{{ group().initial }}</span>
+
+    <div class="titles">
+      <div class="name-row">
+        <h1 class="name">{{ group().name }}</h1>
+        <lib-role-chip [role]="group().role" />
+      </div>
+
+      <p class="counts">
+        {{ 'home.zone.members' | rokuT: { count: group().memberCount } }}
+      </p>
+    </div>
+  </div>
+
+  <!--
+    The group is not live: its realtime room was refused, so what is on screen is
+    correct and will not update itself. `0003` already renders this treatment on the
+    dashboard, and the wording is the same because the situation is.
+  -->
+  @if (group().stale) {
+    <p class="stale">
+      <lib-offline-icon class="stale-glyph" />
+      <span>{{ 'zone.detail.stale' | rokuT }}</span>
+    </p>
+  }
+
+  <nav class="actions">
+    <!--
+      Members is a route and not a sheet: it has its own scroll, its own paging and
+      its own deep link, which is what makes it a destination (section 4.2).
+    -->
+    <button (click)="openMembers.emit()" class="action" type="button">
+      <lib-person-icon class="action-glyph" />
+      <span class="action-label">{{ 'zone.detail.members' | rokuT }}</span>
+
+      <!--
+        The number, and the **only** thing on this screen a non-null count decides.
+        Which controls exist is decided by `isStaff` below, from `myRole`, because the
+        two facts arrive on different events and a stale count must never leave an
+        action on screen for somebody who may no longer take it (rule G2).
+      -->
+      @if (group().pendingRequestCount; as waiting) {
+        <span class="pip">{{ waiting }}</span>
+      }
+
+      <lib-chevron-right-icon class="action-chevron" />
+    </button>
+
+    @if (group().isStaff) {
+      <button (click)="openSettings.emit()" class="action" type="button">
+        <span class="action-label">{{ 'zone.detail.settings' | rokuT }}</span>
+        <lib-chevron-right-icon class="action-chevron" />
+      </button>
+    }
+  </nav>
+</header>

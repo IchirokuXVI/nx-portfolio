@@ -22,6 +22,7 @@ import {
   type PresenceUser,
   type SessionTokens,
   type ShoppingList,
+  type ShoppingListSummary,
   type UserProfile,
   type Zone,
   type ZoneCounts,
@@ -133,7 +134,41 @@ function toZoneCounts(raw: unknown): ZoneCounts {
   };
 }
 
-function toListPreview(raw: unknown): ListPreview | null {
+/**
+ * The line totals, from either of the two shapes that carry them.
+ *
+ * `ZoneListPreview` (inside `MyZoneView`) puts `lineCount` and `readyCount` at the top
+ * level; `ListView` (from `GET /v1/zones/:id/lists`) nests the same two names under
+ * `counts`. The **names** match deliberately so that one client shape serves both
+ * (backend plan 0017, section 3.4), and this is the one function that has to know where
+ * they sit. Everything above it reads a list the same way whichever call it came from.
+ */
+function readListCounts(raw: Record<string, unknown>): {
+  lineCount: number;
+  readyCount: number;
+} {
+  const nested = raw['counts'];
+  const source = isRecord(nested) ? nested : raw;
+
+  const lineCount = numOr(source['lineCount'], 0);
+  const readyCount = numOr(source['readyCount'], 0);
+
+  return {
+    lineCount,
+    // "7 of 5 ready" is worse than a slightly wrong number: it reads as a bug and
+    // costs the user their trust in every other count on the page.
+    readyCount: Math.min(readyCount, lineCount),
+  };
+}
+
+/**
+ * From `ZoneListPreview` **or** `ListView`.
+ *
+ * One mapper for both, which is what the contract's matching field names were for. The
+ * group page's rows and the zone card's previews are the same row, so they are the same
+ * model (plan 0010, section 5.1).
+ */
+export function toListPreview(raw: unknown): ListPreview | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -143,17 +178,28 @@ function toListPreview(raw: unknown): ListPreview | null {
     return null;
   }
 
-  const lineCount = numOr(raw['lineCount'], 0);
-  const readyCount = numOr(raw['readyCount'], 0);
-
   return {
     id,
     name: strOr(raw['name'], ''),
-    lineCount,
-    // "7 of 5 ready" is worse than a slightly wrong number: it reads as a bug and
-    // costs the user their trust in every other count on the page.
-    readyCount: Math.min(readyCount, lineCount),
+    ...readListCounts(raw),
   };
+}
+
+/**
+ * From `ListView`, with its counts.
+ *
+ * What `ListStore` holds. It is `toShoppingList` plus the two numbers rather than a
+ * separate parse, so a rename of a field on the wire breaks one place.
+ */
+export function toShoppingListSummary(
+  raw: unknown
+): ShoppingListSummary | null {
+  const list = toShoppingList(raw);
+  if (list === null || !isRecord(raw)) {
+    return null;
+  }
+
+  return { ...list, ...readListCounts(raw) };
 }
 
 /** From `MembershipView`. Also arrives on every `member.*` realtime event. */

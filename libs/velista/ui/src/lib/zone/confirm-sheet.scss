@@ -1,0 +1,130 @@
+// Written out rather than shared with `feature-entry`'s `_sheet-body` mixin: Sass
+// resolves `@use` against the filesystem rather than against this workspace's
+// TypeScript path aliases, so a mixin cannot cross a library boundary without adding
+// an include path to every build. That mixin also covers a form, and this is a
+// decision with at most one field in it.
+
+@mixin focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.title {
+  margin: 0 0 var(--app-space-hair);
+  font-size: var(--app-text-xl);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0 0 var(--app-space-5);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.error {
+  margin: 0 0 var(--app-space-5);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
+.label {
+  display: block;
+  margin-block-end: var(--app-space-3);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+// Rule T3: never under 16px. iOS Safari zooms the viewport when a focused input is
+// smaller, which on a sheet like this throws the button off screen at the exact
+// moment it is about to be tapped.
+.field {
+  inline-size: 100%;
+  block-size: var(--app-button-height);
+  padding-inline: var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-field-font-size);
+
+  &:focus {
+    border-color: var(--app-action-bg);
+  }
+
+  @include focus-ring;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.primary {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  margin-block-start: var(--app-space-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-3);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--app-action-bg-hover);
+  }
+
+  // Dimmed rather than greyed, so it still reads as the action it will become once
+  // the name has been typed.
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include focus-ring;
+}
+
+// Coral, and never coral alone: the label on this button always says what it does
+// ("Remove and block", "Delete"), so the meaning survives without the colour.
+.destructive {
+  background: var(--app-status-danger-fg);
+  color: var(--app-text-on-action);
+
+  &:hover:not(:disabled) {
+    background: var(--app-status-danger-fg);
+    filter: brightness(1.08);
+  }
+}
+
+// A full height row rather than a small word, so it is a 44px target like everything
+// else (plan 0008, section 7).
+.cancel {
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin-block-start: var(--app-space-2);
+  border: none;
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+
+  @include focus-ring;
+}

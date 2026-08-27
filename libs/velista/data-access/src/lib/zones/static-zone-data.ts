@@ -96,6 +96,48 @@ export const SEED_ZONES: readonly MyZone[] = [
     lists: [],
   },
   {
+    id: 'zone-lab',
+    name: 'El Laboratorio',
+    joinCode: 'JT8QRMVP',
+    status: 'ACTIVE',
+    ownerUserId: 'user-sam',
+    // An **admin**, which is the third governance view and the one most easily got
+    // wrong: an admin may remove and ban, and may not promote anybody or touch the
+    // owner's row at all (plan 0010, section 5.4).
+    myRole: 'ADMIN',
+    myStatus: 'APPROVED',
+    counts: {
+      memberCount: 5,
+      // Five members and nothing this caller may read. Section 3.2's second state,
+      // which must **not** say "No lists yet": the group is not empty, it simply has
+      // shared nothing with them. Without a seed like this the state is unreachable
+      // without a backend, and it is the one most likely to be built wrong.
+      listCount: 0,
+      pendingRequestCount: 1,
+      firstPendingRequesterName: 'Eva',
+    },
+    lists: [],
+  },
+  {
+    id: 'zone-rescue',
+    name: 'Casa del Puerto',
+    joinCode: 'PVR2NKQT',
+    // Its owner deleted their account. An ADMIN, and only an admin, may take it on,
+    // which is the only action anywhere in the product that gets a zone out of this
+    // state (plan 0010, section 3.5). This caller is that admin.
+    status: 'MARKED_FOR_DELETION',
+    ownerUserId: null,
+    myRole: 'ADMIN',
+    myStatus: 'APPROVED',
+    counts: {
+      memberCount: 2,
+      listCount: 0,
+      pendingRequestCount: 0,
+      firstPendingRequesterName: null,
+    },
+    lists: [],
+  },
+  {
     id: 'zone-old-houseshare',
     name: 'Old houseshare',
     joinCode: 'W9NPTCZR',

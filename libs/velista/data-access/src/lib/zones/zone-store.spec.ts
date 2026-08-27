@@ -51,6 +51,11 @@ describe('ZoneStore', () => {
   let createArgs: (readonly [string, string | undefined])[];
   let joinArgs: (readonly [string, string | undefined])[];
 
+  /** Plan 0010: which zones were fetched one at a time, and what was written. */
+  let getCalls: string[];
+  let getResult: 'throw' | null;
+  let writeArgs: (readonly [string, string])[];
+
   beforeEach(() => {
     zones = [
       // Owner of the first, plain member of the second. The member's null pending
@@ -83,6 +88,9 @@ describe('ZoneStore', () => {
     joinResult = null;
     createArgs = [];
     joinArgs = [];
+    getCalls = [];
+    getResult = null;
+    writeArgs = [];
 
     const service: ZoneServiceI = {
       listMyZones: async () => {
@@ -120,7 +128,56 @@ describe('ZoneStore', () => {
           }
         );
       },
+
+      // Plan 0010. The group page reads one zone and writes to it, and each write
+      // answers whatever the server would have: the store patches its cache from the
+      // **answer** rather than from what was asked for, so a double that echoed the
+      // request would hide a bug rather than expose one.
+      getZone: async (zoneId) => {
+        getCalls = [...getCalls, zoneId];
+        if (getResult === 'throw') {
+          throw new Error('boom');
+        }
+
+        const found = zones.find((candidate) => candidate.id === zoneId);
+        if (found === undefined) {
+          throw new Error(`no such zone ${zoneId}`);
+        }
+        return found;
+      },
+      renameZone: async (zoneId, name) => {
+        writeArgs = [...writeArgs, ['renameZone', zoneId] as const];
+        return { ...stripMine(zoneId), name };
+      },
+      regenerateJoinCode: async (zoneId) => {
+        writeArgs = [...writeArgs, ['regenerateJoinCode', zoneId] as const];
+        return { ...stripMine(zoneId), joinCode: 'NEWCODE1' };
+      },
+      deleteZone: async (zoneId) => {
+        writeArgs = [...writeArgs, ['deleteZone', zoneId] as const];
+        return zoneId;
+      },
+      claimOwnership: async (zoneId) => {
+        writeArgs = [...writeArgs, ['claimOwnership', zoneId] as const];
+        return {
+          ...stripMine(zoneId),
+          status: 'ACTIVE' as const,
+          ownerUserId: 'user-me',
+        };
+      },
     };
+
+    /** The plain `Zone` half of a seeded zone, which is what a write answers. */
+    function stripMine(zoneId: string): Zone {
+      const found = zones.find((candidate) => candidate.id === zoneId);
+      return {
+        id: zoneId,
+        name: found?.name ?? '',
+        joinCode: found?.joinCode ?? '',
+        status: found?.status ?? 'ACTIVE',
+        ownerUserId: found?.ownerUserId ?? null,
+      };
+    }
 
     TestBed.configureTestingModule({
       providers: [
@@ -524,6 +581,284 @@ describe('ZoneStore', () => {
 
       expect(store.staleZoneIds().has('z2')).toBe(true);
       expect(store.staleZoneIds().has('z1')).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------- plan 0010
+
+  describe('loading one zone', () => {
+    it('fetches it and puts it in the cache', async () => {
+      await store.loadZone('z1');
+
+      expect(getCalls).toEqual(['z1']);
+      expect(store.zoneById('z1')?.name).toBe('Flat 3B');
+      expect(store.zoneState().get('z1')).toBe('loaded');
+    });
+
+    it('is loading, not loaded, when nothing is cached to draw', async () => {
+      getResult = 'throw';
+
+      await store.loadZone('z1');
+
+      // No cached header to fall back on, so the failure is the whole screen.
+      expect(store.zoneState().get('z1')).toBe('failed');
+    });
+
+    it('leaves a cached zone alone when the refetch fails', async () => {
+      // A background reconcile that did not arrive must not replace a correct group
+      // with an error panel: being briefly out of date is the better failure.
+      await store.load();
+      getResult = 'throw';
+
+      await store.loadZone('z1');
+
+      expect(store.zoneState().get('z1')).toBe('loaded');
+      expect(store.zoneById('z1')?.name).toBe('Flat 3B');
+    });
+  });
+
+  describe('rule G3, the staff room', () => {
+    it('follows myRole rather than the counts', async () => {
+      // The two disagree for exactly as long as it matters. A just demoted admin's
+      // counts still say staff, and asking for a room the server now refuses would
+      // put a permanent stale badge on the group (section 5.3).
+      zones = [
+        zone({
+          myRole: 'MEMBER',
+          counts: {
+            memberCount: 3,
+            listCount: 2,
+            // Stale, and deliberately non-null: this is what the old rule read.
+            pendingRequestCount: 2,
+            firstPendingRequesterName: 'Ines',
+          },
+        }),
+      ];
+
+      await store.load();
+
+      expect([...realtime.rooms.keys()]).toContain('zone:z1');
+      expect([...realtime.rooms.keys()]).not.toContain('zone:z1:staff');
+    });
+
+    it('leaves the staff room when the caller is demoted', async () => {
+      await store.load();
+      expect([...realtime.rooms.keys()]).toContain('zone:z1:staff');
+
+      realtime.emit('member.roleChanged', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'Dani',
+        role: 'MEMBER',
+        status: 'APPROVED',
+      });
+
+      expect([...realtime.rooms.keys()]).not.toContain('zone:z1:staff');
+      expect([...realtime.rooms.keys()]).toContain('zone:z1');
+    });
+  });
+
+  describe('losing a group while a page is open on it', () => {
+    it('records a removal, so the page can leave and say why', async () => {
+      await store.load();
+
+      realtime.emit('member.kicked', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'Dani',
+        role: 'MEMBER',
+        status: 'KICKED',
+      });
+
+      expect(store.departure()).toEqual({ zoneId: 'z1', reason: 'kicked' });
+      expect(store.zoneById('z1')).toBeUndefined();
+    });
+
+    it('keeps a ban apart from a removal', async () => {
+      await store.load();
+
+      realtime.emit('member.banned', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'Dani',
+        role: 'MEMBER',
+        status: 'BANNED',
+      });
+
+      expect(store.departure()?.reason).toBe('banned');
+    });
+
+    it('records a deletion', async () => {
+      await store.load();
+
+      realtime.emit('zone.deleted', { id: 'z1', zoneId: 'z1' });
+
+      expect(store.departure()).toEqual({ zoneId: 'z1', reason: 'deleted' });
+    });
+
+    it('says nothing about a zone the caller never held', async () => {
+      await store.load();
+
+      realtime.emit('zone.deleted', { id: 'z9', zoneId: 'z9' });
+
+      expect(store.departure()).toBeNull();
+    });
+
+    it('records nothing for a role change, which must not navigate', async () => {
+      await store.load();
+
+      realtime.emit('member.roleChanged', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'Dani',
+        role: 'ADMIN',
+        status: 'APPROVED',
+      });
+
+      expect(store.departure()).toBeNull();
+      expect(store.zoneById('z1')?.myRole).toBe('ADMIN');
+    });
+  });
+
+  describe('the governance writes', () => {
+    it('patches the cache from the server answer, not from the request', async () => {
+      await store.load();
+
+      expect(await store.renameZone('z1', 'Flat 3C')).toEqual({
+        state: 'succeeded',
+      });
+      expect(writeArgs).toEqual([['renameZone', 'z1']]);
+      expect(store.zoneById('z1')?.name).toBe('Flat 3C');
+    });
+
+    it('updates the join code in place, with no refetch', async () => {
+      // The acceptance criterion: the invite card on this page and on the dashboard
+      // both pick it up from the store rather than from a reload.
+      await store.load();
+
+      await store.regenerateJoinCode('z1');
+
+      expect(store.zoneById('z1')?.joinCode).toBe('NEWCODE1');
+      expect(listCalls).toBe(1);
+    });
+
+    it('removes a deleted group from the cache without recording a departure', async () => {
+      // They did this. Being told what you just chose is noise.
+      await store.load();
+
+      expect(await store.deleteZone('z1')).toEqual({ state: 'succeeded' });
+      expect(store.zoneById('z1')).toBeUndefined();
+      expect(store.departure()).toBeNull();
+    });
+
+    it('makes the claimer the owner, which the ZoneView cannot say', async () => {
+      zones = [
+        zone({
+          status: 'MARKED_FOR_DELETION',
+          ownerUserId: null,
+          myRole: 'ADMIN',
+        }),
+      ];
+      await store.load();
+
+      await store.claimOwnership('z1');
+
+      expect(store.zoneById('z1')).toMatchObject({
+        myRole: 'OWNER',
+        status: 'ACTIVE',
+        ownerUserId: 'user-me',
+      });
+    });
+  });
+
+  describe('recordMembershipChange', () => {
+    it('moves the member count and the waiting count on an approval', async () => {
+      zones = [
+        zone({
+          counts: {
+            memberCount: 3,
+            listCount: 2,
+            pendingRequestCount: 2,
+            firstPendingRequesterName: 'Ines',
+          },
+        }),
+      ];
+      await store.load();
+
+      store.recordMembershipChange('z1', 'approved');
+
+      expect(store.zoneById('z1')?.counts).toMatchObject({
+        memberCount: 4,
+        pendingRequestCount: 1,
+        // The named requester may be the one just answered and the store cannot tell,
+        // so it is cleared rather than left stale.
+        firstPendingRequesterName: null,
+      });
+    });
+
+    it('moves only the waiting count on a rejection', async () => {
+      zones = [
+        zone({
+          counts: {
+            memberCount: 3,
+            listCount: 2,
+            pendingRequestCount: 2,
+            firstPendingRequesterName: 'Ines',
+          },
+        }),
+      ];
+      await store.load();
+
+      store.recordMembershipChange('z1', 'rejected');
+
+      expect(store.zoneById('z1')?.counts).toMatchObject({
+        memberCount: 3,
+        pendingRequestCount: 1,
+      });
+    });
+
+    it('leaves a null waiting count null, because it is a permission', async () => {
+      // Turning it into a number because something happened would invent a
+      // permission the caller does not have (section 4.3).
+      await store.load();
+
+      store.recordMembershipChange('z2', 'approved');
+
+      expect(store.zoneById('z2')?.counts.pendingRequestCount).toBeNull();
+    });
+
+    it('drops the member count when somebody is removed', async () => {
+      await store.load();
+
+      store.recordMembershipChange('z1', 'removed');
+
+      expect(store.zoneById('z1')?.counts.memberCount).toBe(2);
+    });
+
+    it('never takes a count below zero', async () => {
+      zones = [
+        zone({
+          counts: {
+            memberCount: 0,
+            listCount: 0,
+            pendingRequestCount: 0,
+            firstPendingRequesterName: null,
+          },
+        }),
+      ];
+      await store.load();
+
+      store.recordMembershipChange('z1', 'removed');
+      store.recordMembershipChange('z1', 'rejected');
+
+      expect(store.zoneById('z1')?.counts).toMatchObject({
+        memberCount: 0,
+        pendingRequestCount: 0,
+      });
     });
   });
 });

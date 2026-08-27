@@ -47,8 +47,9 @@ describe('AppShellRoutes', () => {
       // The front door's own guard is `anonymousOnlyGuard`; neither sheet adds one,
       // because a person with no account is exactly who these two are for.
       expect(front?.canActivate).toHaveLength(1);
-      expect(sheetsOf('').every((route) => route.canActivate === undefined))
-        .toBe(true);
+      expect(
+        sheetsOf('').every((route) => route.canActivate === undefined)
+      ).toBe(true);
     });
 
     it('offers the same two over the dashboard', () => {
@@ -67,10 +68,9 @@ describe('AppShellRoutes', () => {
         'landing',
         'landing',
       ]);
-      expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual([
-        'home',
-        'home',
-      ]);
+      expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual(
+        ['home', 'home']
+      );
     });
 
     it('keeps the shared link page public and full screen', () => {
@@ -118,10 +118,12 @@ describe('AppShellRoutes', () => {
     it('guards register and sign in against anybody who is signed in', () => {
       // Rule C2 at the route: a guest filling in the register form would silently
       // strand every group they have.
-      expect(pages.find((r) => r.path === 'auth/login')?.canActivate)
-        .toHaveLength(1);
-      expect(pages.find((r) => r.path === 'auth/register')?.canActivate)
-        .toHaveLength(1);
+      expect(
+        pages.find((r) => r.path === 'auth/login')?.canActivate
+      ).toHaveLength(1);
+      expect(
+        pages.find((r) => r.path === 'auth/register')?.canActivate
+      ).toHaveLength(1);
     });
 
     it('guards upgrade, and guards it differently', () => {
@@ -148,8 +150,9 @@ describe('AppShellRoutes', () => {
 
     it('gives none of them children, because none of them is a sheet', () => {
       for (const path of AUTH_PATHS) {
-        expect(pages.find((route) => route.path === path)?.children)
-          .toBeUndefined();
+        expect(
+          pages.find((route) => route.path === path)?.children
+        ).toBeUndefined();
       }
     });
 
@@ -171,6 +174,116 @@ describe('AppShellRoutes', () => {
       expect(
         everyRoute.every((route) => route.loadComponent !== undefined)
       ).toBe(true);
+    });
+  });
+
+  /**
+   * Plan 0010, rule G1, and the ordering trap it exists to defuse.
+   *
+   * `zones/new` and `zones/join` are children of `''` and of `home`, and `''` is
+   * declared last. A `zones/:zoneId` added in the obvious place is therefore offered
+   * `/zones/new` first, matches it with `zoneId` set to the string `new`, and makes
+   * the create sheet unreachable. Reordering cannot fix it, so the parameterised route
+   * declines a non-UUID instead.
+   */
+  describe('the group page', () => {
+    const groupPath = 'zones/:zoneId';
+    const membersPath = 'zones/:zoneId/members';
+
+    function routeAt(path: string): Route | undefined {
+      return pages.find((route) => route.path === path);
+    }
+
+    it('declares both group routes, before the empty front door', () => {
+      const paths = pages.map((route) => route.path);
+
+      expect(paths).toContain(groupPath);
+      expect(paths).toContain(membersPath);
+      expect(paths.indexOf(groupPath)).toBeLessThan(paths.indexOf(''));
+      expect(paths.indexOf(membersPath)).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('puts the more specific members route before the general one', () => {
+      // Habit rather than necessity: a route with children absent and segments left
+      // over does not match anyway. It is the ordering that stays correct when
+      // somebody later gives the group page more children.
+      const paths = pages.map((route) => route.path);
+
+      expect(paths.indexOf(membersPath)).toBeLessThan(paths.indexOf(groupPath));
+    });
+
+    it('guards both with canMatch, not canActivate', () => {
+      // The distinction is the whole mechanism: a false `canActivate` aborts the
+      // navigation, while a false `canMatch` carries on to the next route.
+      expect(routeAt(groupPath)?.canMatch).toHaveLength(1);
+      expect(routeAt(membersPath)?.canMatch).toHaveLength(1);
+    });
+
+    it('still leaves /zones/new to the front door', () => {
+      // The half of rule G1 that `0008` predicted by name. The sheets stay children
+      // of the pages they cover, and `''` stays last; the guard is what lets both.
+      expect(sheetsOf('').map((route) => route.path)).toContain('zones/new');
+    });
+
+    it('offers the new list sheet and the settings sheet over the group', () => {
+      expect(routeAt(groupPath)?.children?.map((route) => route.path)).toEqual([
+        'lists/new',
+        'settings',
+      ]);
+    });
+
+    it('guards the new list sheet as a member and settings as staff', () => {
+      // Any approved member may start a list (section 5.5), so demanding staff there
+      // would hide a control that works.
+      const children = routeAt(groupPath)?.children ?? [];
+
+      expect(children[0]?.canActivate).toHaveLength(1);
+      expect(children[1]?.canActivate).toHaveLength(1);
+      expect(children[0]?.canActivate?.[0]).not.toBe(
+        children[1]?.canActivate?.[0]
+      );
+    });
+
+    it('declares one confirm route per member action, with the action in data', () => {
+      // One component and four entries, so `data` is something this spec can assert
+      // about; an action parsed out of the URL inside the component would not be.
+      const confirms = routeAt(membersPath)?.children ?? [];
+
+      expect(confirms.map((route) => route.data?.['action'])).toEqual([
+        'remove',
+        'ban',
+        'transfer',
+        'rename',
+      ]);
+      expect(confirms.map((route) => route.path)).toEqual([
+        ':membershipId/confirm/remove',
+        ':membershipId/confirm/ban',
+        ':membershipId/confirm/transfer',
+        ':membershipId/confirm/rename',
+      ]);
+    });
+
+    it('guards renaming as a member and the other three as staff', () => {
+      // Renaming is the one an ordinary member may reach, on their own row.
+      const confirms = routeAt(membersPath)?.children ?? [];
+      const guards = confirms.map((route) => route.canActivate?.[0]);
+
+      expect(guards[0]).toBe(guards[1]);
+      expect(guards[1]).toBe(guards[2]);
+      expect(guards[3]).not.toBe(guards[0]);
+    });
+
+    it('keeps every one of them lazy', () => {
+      const added = [
+        routeAt(groupPath),
+        routeAt(membersPath),
+        ...(routeAt(groupPath)?.children ?? []),
+        ...(routeAt(membersPath)?.children ?? []),
+      ];
+
+      expect(added.every((route) => route?.loadComponent !== undefined)).toBe(
+        true
+      );
     });
   });
 });

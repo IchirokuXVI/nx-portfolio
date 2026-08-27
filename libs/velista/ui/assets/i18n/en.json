@@ -6,12 +6,116 @@
   },
   "zone": {
     "role": {
-      "owner": "OWNER",
-      "admin": "ADMIN",
-      "member": "MEMBER"
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Member"
     },
     "status": {
       "pending": "PENDING"
+    },
+    "detail": {
+      "back": "Back",
+      "loading": "Loading this group",
+      "lists": "Lists",
+      "members": "Members",
+      "newList": "New list",
+      "settings": "Group settings",
+      "stale": "Not updating live right now",
+      "empty": {
+        "title": "No lists yet",
+        "body": "Start one and everyone here can shop from it"
+      },
+      "noAccess": {
+        "title": "Nothing shared with you yet",
+        "body": "This group has lists, and none of them are shared with you. Ask someone here to add you, or start your own"
+      },
+      "pending": {
+        "title": "Waiting to be let in",
+        "body": "Whoever runs the group decides. The lists appear here as soon as they do"
+      },
+      "gone": {
+        "kicked": "You are no longer in that group",
+        "deleted": "That group was deleted"
+      }
+    },
+    "ownerless": {
+      "title": "This group has no owner",
+      "body": "Whoever set it up deleted their account. It will be deleted unless an admin takes it on",
+      "claim": "Take this group on",
+      "askAdmin": "Ask an admin here to take it on"
+    },
+    "members": {
+      "title": "Members of {{name}}",
+      "loading": "Loading the members",
+      "requests": "Waiting to join",
+      "approve": "Let in",
+      "reject": "Turn down",
+      "remove": "Remove from group",
+      "ban": "Remove and block",
+      "makeAdmin": "Make admin",
+      "makeMember": "Make an ordinary member",
+      "transfer": "Hand the group over",
+      "rename": "Change name here",
+      "you": "You",
+      "menuFor": "More options for {{name}}",
+      "more": "Show more",
+      "approved": "{{name}} is in the group",
+      "rejected": "{{name}} was turned down"
+    },
+    "confirm": {
+      "remove": {
+        "title": "Remove {{name}}?",
+        "body": "They lose this group and its lists. They can ask to join again with the code",
+        "action": "Remove from group"
+      },
+      "ban": {
+        "title": "Remove and block {{name}}?",
+        "body": "They lose this group and cannot ask to join again, even with the code",
+        "action": "Remove and block"
+      },
+      "transfer": {
+        "title": "Hand the group to {{name}}?",
+        "body": "They become the owner and you become an admin. Only they can hand it back",
+        "action": "Hand it over"
+      },
+      "regenerate": {
+        "title": "Make a new code?",
+        "body": "The old code stops working, so anyone you already sent it to will need the new one",
+        "action": "Make a new code"
+      },
+      "delete": {
+        "title": "Delete {{name}}?",
+        "body": "Every list in this group goes, for everyone in it. This cannot be undone",
+        "typeName": "Type the group's name to confirm",
+        "action": "Delete this group"
+      },
+      "rename": {
+        "title": "Change name here",
+        "body": "This is the name the other people in this group see. It changes nothing anywhere else",
+        "label": "Name in this group",
+        "action": "Save"
+      }
+    },
+    "settings": {
+      "title": "Group settings",
+      "rename": "Group name",
+      "save": "Save",
+      "regenerate": "Make a new join code",
+      "delete": "Delete this group"
+    },
+    "newList": {
+      "title": "Name the list",
+      "body": "Anyone in this group can start a list. You can rename it later",
+      "label": "List name",
+      "placeholder": "Weekly shop",
+      "submit": "Create list"
+    },
+    "error": {
+      "notAvailable": "This group is not available to you. It may have been deleted, or you may have been removed",
+      "roleChanged": "Your role in this group changed",
+      "alreadyClaimed": "Somebody else has already taken this group on",
+      "tooManyRenames": "Too many changes. Wait a minute and try again",
+      "failed": "That did not go through. Try again"
     }
   },
   "line": {
