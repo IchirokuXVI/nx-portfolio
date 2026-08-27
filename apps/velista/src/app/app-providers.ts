@@ -54,10 +54,11 @@ const brand: AppBrand = {
  *
  * Attached in **two** places, and both are needed. The shell never runs this
  * remote's `bootstrapApplication`, it only loads the exposed `./Routes`, so
- * providers that live solely in `appConfig` would be missing in the one mode the
- * app actually runs in today. `entry.routes.ts` therefore attaches these to the
- * exposed route, and `appConfig` attaches them again for the standalone bootstrap
- * that the extraction phase will use.
+ * providers that live solely in `appConfig` would be missing in the mode the app
+ * runs in under the portfolio. `appRootRoute` therefore spreads these onto the route
+ * it builds, which is what both `entry.routes.ts` and `app.routes.ts` mount, and
+ * `appConfig` attaches them again for the standalone bootstrap on velista's own
+ * origin (plan 0013).
  *
  * **This injector is a child of the root one, and that is the whole reason rule D5
  * exists** (plan 0004, section 9; plan 0005). Under the shell the root injector belongs
@@ -69,14 +70,17 @@ const brand: AppBrand = {
  */
 export const appProviders: (Provider | EnvironmentProviders)[] = [
   { provide: APP_BRAND, useValue: brand },
-  // Where the app is mounted while it runs as a remote of the portfolio shell.
-  // The standalone build provides '' and nothing else changes (extraction
-  // contract, item 5).
-  { provide: APP_BASE_PATH, useValue: '/velista' },
-  // The same value, under the name the localization layer knows it by, so the locale
-  // switcher rewrites the segment *after* the mount rather than the mount itself
-  // (plan 0005 D7). `useExisting` rather than a second literal: one mount, written
-  // once, and a rename can only ever move both.
+  // The mount itself is **not** here. It is the one value the two run modes disagree
+  // about — `/velista` under the shell, `''` on velista's own origin — and a list
+  // shared by both cannot hold it. `appRootRoute(mount)` binds `APP_BASE_PATH`
+  // alongside this list, from the argument it was given (plan 0013 D2).
+  //
+  // This alias stays, because it costs nothing and follows for free: `useExisting`
+  // resolves at injection time, in the same injector the route builds, so it picks up
+  // whichever mount that route was created with. The localization layer knows the
+  // value by this name, and the locale switcher reads it to rewrite the segment
+  // *after* the mount rather than the mount itself (plan 0005 D7). One mount, written
+  // once, and now written once per mode instead of once per file.
   { provide: APP_MOUNT_PATH, useExisting: APP_BASE_PATH },
   // The app's own backend configuration, not the portfolio's (item 6).
   { provide: APP_API_CONFIG, useValue: environment.api },

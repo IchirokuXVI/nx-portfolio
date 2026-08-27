@@ -17,11 +17,7 @@ import {
   ZoneMemory,
   ZoneStore,
 } from '@portfolio/velista/data-access';
-import {
-  APP_API_CONFIG,
-  APP_BASE_PATH,
-  APP_BRAND,
-} from '@portfolio/velista/models';
+import { APP_API_CONFIG, APP_BRAND } from '@portfolio/velista/models';
 import { ThemeStore } from '@portfolio/velista/platform';
 import { appProviders } from './app-providers';
 
@@ -32,7 +28,7 @@ import { appProviders } from './app-providers';
  * `TestBed.configureTestingModule`, which puts them in the **testing environment
  * injector**. That injector carries the `root` scope, so a `providedIn: 'root'`
  * service can see them. Production does not look like that: the shell owns the root
- * injector, and `entry.routes.ts` hands `appProviders` to a **route**, which the
+ * injector, and `appRootRoute` hands `appProviders` to a **route**, which the
  * router turns into a child `EnvironmentInjector` scoped `environment` and nothing
  * else. A root scoped service is created in the root injector and resolves its own
  * dependencies from there, so it cannot see anything the route provided.
@@ -57,10 +53,12 @@ describe('appProviders, resolved the way the router resolves them', () => {
     );
   }
 
+  // `APP_BASE_PATH` is deliberately absent. It is the one value the two run modes
+  // disagree about, so it moved onto `appRootRoute`, and `app-root-route.spec.ts`
+  // asserts it for both mounts rather than this file asserting it for neither.
   it.each([
     ['APP_BRAND', APP_BRAND],
     ['APP_API_CONFIG', APP_API_CONFIG],
-    ['APP_BASE_PATH', APP_BASE_PATH],
   ])('resolves the app level token %s', (_name, token) => {
     expect(routeInjector().get(token)).toBeDefined();
   });
