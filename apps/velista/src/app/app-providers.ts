@@ -15,6 +15,10 @@ import {
   AuthApi,
   ConnectionRecovery,
   gatewayInterceptor,
+  LIST_SERVICE,
+  ListApi,
+  MEMBERSHIP_SERVICE,
+  MembershipApi,
   VELISTA_DATA_ACCESS_PROVIDERS,
   ZONE_SERVICE,
   ZoneApi,
@@ -102,6 +106,12 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // `AuthApi` needs this injector's `HttpClient`, and the token's default being the
   // same class does not provide it.
   provideService(AUTH_SERVICE, AuthApi),
+
+  // The group and its people (plan 0010). Same reasoning a third and fourth time:
+  // each reaches this injector's `HttpClient`, so each has to be provided here rather
+  // than resolved from its token's default at the root.
+  provideService(LIST_SERVICE, ListApi),
+  provideService(MEMBERSHIP_SERVICE, MembershipApi),
 
   // Start the connection listener. Nothing injects it, so without this nothing would
   // ever construct it: it is a listener, not a dependency. It probes the backend while

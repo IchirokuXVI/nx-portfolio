@@ -447,3 +447,61 @@ export class GoogleIcon {
       import('./google-icon.svg?raw')
   );
 }
+
+/** A person, for the members link and for a row with no letter to draw. */
+@Component({
+  selector: 'lib-person-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PersonIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./person-icon.svg?raw')
+  );
+}
+
+/**
+ * The row menu's button.
+ *
+ * Three dots and no text, which is the one shape a control here is allowed to take
+ * without a label: the button carries an `aria-label` naming the person whose row it
+ * belongs to, so a screen reader hears "More options for Marta" rather than "button"
+ * repeated down a list (plan 0010, section 7).
+ */
+@Component({
+  selector: 'lib-ellipsis-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class EllipsisIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./ellipsis-icon.svg?raw')
+  );
+}
+
+/**
+ * A warning triangle, for a group whose owner has gone.
+ *
+ * Distinct from `AlertIcon`, which is a circled cross and reads as a failure. Nothing
+ * has failed here: something will happen unless somebody acts, which is a different
+ * thing to say and deserves a different shape (section 3.5).
+ */
+@Component({
+  selector: 'lib-warning-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class WarningIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./warning-icon.svg?raw')
+  );
+}

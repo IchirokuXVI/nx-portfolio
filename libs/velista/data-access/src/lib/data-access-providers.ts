@@ -5,6 +5,9 @@ import { AuthMemory } from './auth/auth-memory';
 import { SessionStore } from './auth/session-store';
 import { TokenStore } from './auth/token-store';
 import { ConnectionRecovery } from './connection-recovery';
+import { ListMemory } from './lists/list-memory';
+import { ListStore } from './lists/list-store';
+import { MembershipMemory } from './memberships/membership-memory';
 import { ZoneMemory } from './zones/zone-memory';
 import { ZoneStore } from './zones/zone-store';
 
@@ -41,6 +44,16 @@ import { ZoneStore } from './zones/zone-store';
  * screens and the dashboard and every service those pages share is installed here.
  * `AuthMemory` joins for `ZoneMemory`'s reason exactly, and no other: it reaches
  * `TokenStore`, and it is nobody's default.
+ *
+ * `ListStore` (plan 0010) joins for `ZoneStore`'s reason exactly: it resolves
+ * `LIST_SERVICE`, and at the root it would get that token's own default instead of
+ * whatever the app bound. `ListMemory` and `MembershipMemory` join for `ZoneMemory`'s:
+ * both reach `TokenStore`, and neither is any token's default, so they are here for the
+ * specs and backend-less runs that ask for them by name.
+ *
+ * `ListApi` and `MembershipApi` are deliberately **not** here, matching `ZoneApi` and
+ * `AuthApi`: choosing to talk to a real gateway is the app's call, and `appProviders`
+ * binds each to its token with `useClass`, which provides it in the same breath.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
@@ -51,4 +64,7 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   AuthMemory,
   ZoneMemory,
   ZoneStore,
+  ListMemory,
+  ListStore,
+  MembershipMemory,
 ];

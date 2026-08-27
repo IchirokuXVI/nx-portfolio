@@ -6,7 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import type { MyZone } from '@portfolio/velista/models';
+import type { MyZone, Zone } from '@portfolio/velista/models';
 import { SessionStore } from '../auth/session-store';
 import { Mutations } from '../mutations';
 import {
@@ -48,6 +48,36 @@ export type ZoneEntry =
   | { readonly kind: 'joined'; readonly zoneId: string };
 
 /**
+ * A zone the caller has just lost, and why.
+ *
+ * Three events take somebody out of a zone while they are looking at it, and the page
+ * has to leave for the dashboard on all three. They are kept apart because the copy
+ * differs and because one of them is not about them at all: being removed is something
+ * that happened **to** them, while a deletion is somebody with the right to do it doing
+ * it. Neither is an error, and neither may render as one (plan 0010, section 3.5).
+ *
+ * It lives on the store rather than travelling in router state for `ZoneEntry`'s
+ * reason: the screen that learns of it is not always the screen that reports it, and
+ * the store is the one thing above both that survives the navigation between them.
+ */
+export interface ZoneDeparture {
+  readonly zoneId: string;
+  readonly reason: 'kicked' | 'banned' | 'deleted';
+}
+
+/**
+ * How a governance write ended.
+ *
+ * `MutationOutcome`'s three cases collapsed to two, deliberately: none of these
+ * records carries a concurrency version, so `overwritten` cannot arise for any of them
+ * (plan 0004, section 7.2). A type that admitted it would be asking every caller to
+ * handle a state that cannot happen.
+ */
+export type ZoneWriteOutcome =
+  | { readonly state: 'succeeded' }
+  | { readonly state: 'failed'; readonly error: unknown };
+
+/**
  * The caller's zones: the cache, the realtime application, and the room subscriptions.
  *
  * ## Why this is in `data-access` and not in `feature-home`
@@ -78,15 +108,44 @@ export class ZoneStore {
   private readonly _state = signal<ZoneLoadState>('idle');
   private readonly _error = signal<unknown>(null);
   private readonly _lastEntry = signal<ZoneEntry | null>(null);
+  private readonly _departure = signal<ZoneDeparture | null>(null);
 
-  /** Rooms currently held, so they can be released and re-joined together. */
-  private readonly _rooms = new Map<string, () => void>();
+  /**
+   * How the load of one specific zone is going, keyed by id.
+   *
+   * Separate from `_state`, which is the dashboard's one load. A group page opened by
+   * deep link is loading while the dashboard's own state is still `idle`, and folding
+   * the two would make each screen's skeleton depend on whether the other had been
+   * visited.
+   */
+  private readonly _zoneState = signal<ReadonlyMap<string, ZoneLoadState>>(
+    new Map()
+  );
+
+  /**
+   * Rooms currently held, so they can be released and re-joined together.
+   *
+   * The staff flag is stored alongside the release, because a subscription held under
+   * one role is the wrong subscription under another and the only way to swap it is to
+   * leave and rejoin. Keeping only the release function is what let a demoted admin go
+   * on holding a staff room the server had begun refusing.
+   */
+  private readonly _rooms = new Map<
+    string,
+    { readonly isStaff: boolean; readonly release: () => void }
+  >();
 
   readonly state = this._state.asReadonly();
   readonly error = this._error.asReadonly();
 
   /** The way in just taken, or null. Cleared by whoever renders it. */
   readonly lastEntry = this._lastEntry.asReadonly();
+
+  /** The zone just lost, or null. Cleared by whoever reports it. */
+  readonly departure = this._departure.asReadonly();
+
+  /** How the load of one particular zone is going, for the group page's skeleton. */
+  readonly zoneState = this._zoneState.asReadonly();
 
   /** The caller's zones, in the order the server returned them. */
   readonly myZones = computed<readonly MyZone[]>(() => {
@@ -243,6 +302,170 @@ export class ZoneStore {
     this._lastEntry.set(null);
   }
 
+  /** One zone out of the cache, or undefined when it has not been loaded. */
+  zoneById(zoneId: string): MyZone | undefined {
+    return this._byId().get(zoneId);
+  }
+
+  /**
+   * Load one zone.
+   *
+   * The group page calls this on open **even when the zone is already cached**, and
+   * that is deliberate rather than wasteful: the cached copy came from the dashboard's
+   * list, which is a page of summaries that may be minutes old, and the header it
+   * renders from it is what makes the screen appear instantly. The refetch reconciles
+   * behind that, which is why the state stays out of `loading` when there is already
+   * something to draw.
+   */
+  async loadZone(zoneId: string): Promise<void> {
+    const cached = this.zoneById(zoneId);
+    this._setZoneState(zoneId, cached === undefined ? 'loading' : 'loaded');
+    this._error.set(null);
+
+    try {
+      this.upsert(await this._zones.getZone(zoneId));
+      this._setZoneState(zoneId, 'loaded');
+    } catch (error) {
+      this._error.set(error);
+      // A refetch that failed over a zone already on screen leaves the screen alone.
+      // The cached header is still the best thing available, and replacing a correct
+      // group with an error panel because a background reconcile failed is worse than
+      // being briefly out of date.
+      this._setZoneState(zoneId, cached === undefined ? 'failed' : 'loaded');
+    }
+  }
+
+  /** The page has reported the departure. It does not report it twice. */
+  clearDeparture(): void {
+    this._departure.set(null);
+  }
+
+  /**
+   * Rename a group. OWNER or ADMIN.
+   *
+   * Every governance write below has the same three-line shape and the same reasons
+   * for it: through `Mutations.run` (rule D2), the cache patched from the **server's**
+   * answer rather than from what was asked for, and a `failed` outcome returned rather
+   * than swallowed, because the component that failed is the one that has to say so.
+   */
+  async renameZone(zoneId: string, name: string): Promise<ZoneWriteOutcome> {
+    return this._write(() => this._zones.renameZone(zoneId, name));
+  }
+
+  /** Mint a new join code. The old one stops working for everybody it was sent to. */
+  async regenerateJoinCode(zoneId: string): Promise<ZoneWriteOutcome> {
+    return this._write(() => this._zones.regenerateJoinCode(zoneId));
+  }
+
+  /**
+   * Take on an ownerless group. ADMIN only, and only while nobody owns it.
+   *
+   * The caller becomes the owner and the zone returns to ACTIVE, so `myRole` is
+   * updated here as well as the zone's own fields: the server's `ZoneView` says who
+   * owns it now and cannot say what that makes the caller.
+   */
+  async claimOwnership(zoneId: string): Promise<ZoneWriteOutcome> {
+    const outcome = await this._write(() => this._zones.claimOwnership(zoneId));
+
+    if (outcome.state === 'succeeded') {
+      this._patch(zoneId, (zone) => ({ ...zone, myRole: 'OWNER' }));
+      this._syncRooms();
+    }
+
+    return outcome;
+  }
+
+  /**
+   * Delete a group. OWNER only, and there is no undo anywhere in the product.
+   *
+   * The zone is removed from the cache on success rather than waiting for the
+   * `zone.deleted` broadcast, so the dashboard behind is already correct when the
+   * caller lands back on it. No departure is recorded: they did this, and being told
+   * what they just chose is noise.
+   */
+  async deleteZone(zoneId: string): Promise<ZoneWriteOutcome> {
+    const outcome = await this._mutations.run(null, () =>
+      this._zones.deleteZone(zoneId)
+    );
+
+    if (outcome.state === 'failed') {
+      return { state: 'failed', error: outcome.error };
+    }
+
+    this._remove(zoneId);
+    return { state: 'succeeded' };
+  }
+
+  /**
+   * Keep a zone's counts honest after a membership changed **from this device**.
+   *
+   * The server broadcasts `zone.countsUpdated` with authoritative numbers a moment
+   * later, and that is what the counts ultimately come from. This exists because "a
+   * moment later" is not what an acceptance criterion asks for: approving somebody has
+   * to move the member count immediately, with no reload, and the person who tapped it
+   * is looking straight at the number.
+   *
+   * Deliberately a small, named, one-way nudge rather than a general "set the counts"
+   * seam. Nothing outside this store may decide what a count is; a caller may only say
+   * what it just did, and the store works out what that means.
+   */
+  recordMembershipChange(
+    zoneId: string,
+    change: 'approved' | 'rejected' | 'removed'
+  ): void {
+    this._patch(zoneId, (zone) => {
+      const pending = zone.counts.pendingRequestCount;
+
+      return {
+        ...zone,
+        counts: {
+          ...zone.counts,
+          memberCount: Math.max(
+            0,
+            zone.counts.memberCount +
+              (change === 'approved' ? 1 : 0) -
+              (change === 'removed' ? 1 : 0)
+          ),
+          // A null stays null. It means "you may not see this", and turning it into a
+          // number because something happened would invent a permission (section 4.3).
+          pendingRequestCount:
+            pending === null || change === 'removed'
+              ? pending
+              : Math.max(0, pending - 1),
+          // The named requester may well be the one just answered, and the store
+          // cannot tell. Clearing it is the honest option: the next broadcast or load
+          // supplies the new oldest, and a stale name on a card is worse than none.
+          firstPendingRequesterName:
+            change === 'removed' ? zone.counts.firstPendingRequesterName : null,
+        },
+      };
+    });
+  }
+
+  /** The shared shape of every governance write. See {@link renameZone}. */
+  private async _write(send: () => Promise<Zone>): Promise<ZoneWriteOutcome> {
+    const outcome = await this._mutations.run(null, send);
+
+    if (outcome.state === 'failed') {
+      return { state: 'failed', error: outcome.error };
+    }
+
+    const zone = outcome.value;
+    this._patch(zone.id, (current) => ({
+      ...current,
+      name: zone.name,
+      joinCode: zone.joinCode,
+      status: zone.status,
+      ownerUserId: zone.ownerUserId,
+    }));
+
+    return { state: 'succeeded' };
+  }
+
+  private _setZoneState(zoneId: string, state: ZoneLoadState): void {
+    this._zoneState.update((current) => new Map(current).set(zoneId, state));
+  }
+
   /**
    * Reload after a mutation, without the page dropping back to a skeleton.
    *
@@ -284,15 +507,26 @@ export class ZoneStore {
         // row would go stale until the next full load, which is the one number on the
         // card that most wants to be live.
         //
-        // Non-null pendingRequestCount is the backend's own answer to "is this caller
-        // staff", so asking it here cannot disagree with what the server will allow.
-        zone.counts.pendingRequestCount !== null,
+        // **Rule G3 (plan 0010, section 5.3): from `myRole`, never from the counts.**
+        // A non-null `pendingRequestCount` is also the backend's answer to "is this
+        // caller staff", and it was what decided this until `0010`. The two disagree
+        // for exactly as long as it matters: `member.roleChanged` updates `myRole`
+        // immediately and leaves the counts alone, so a just demoted admin would go on
+        // asking for a room the server now refuses. A refusal feeds `staleZoneIds`,
+        // which `0003` renders as "this group is not live", so the cost of reading the
+        // stale fact is a permanent and untrue stale badge.
+        zone.myRole === 'OWNER' || zone.myRole === 'ADMIN',
       ])
     );
 
-    for (const [zoneId, release] of this._rooms) {
-      if (!wanted.has(zoneId)) {
-        release();
+    for (const [zoneId, held] of this._rooms) {
+      // Released when the zone is gone, and also when the caller's **standing** in it
+      // changed: a subscription held under the old role is the wrong subscription, and
+      // the only way to swap it is to leave and rejoin. Without this second test a
+      // demoted admin keeps a staff room the server now refuses, which surfaces as a
+      // permanent and untrue stale badge on the group (rule G3).
+      if (!wanted.has(zoneId) || wanted.get(zoneId) !== held.isStaff) {
+        held.release();
         this._rooms.delete(zoneId);
       }
     }
@@ -304,17 +538,20 @@ export class ZoneStore {
           ? this._realtime.subscribeZoneStaff(zoneId)
           : null;
 
-        this._rooms.set(zoneId, () => {
-          leaveZone();
-          leaveStaff?.();
+        this._rooms.set(zoneId, {
+          isStaff,
+          release: () => {
+            leaveZone();
+            leaveStaff?.();
+          },
         });
       }
     }
   }
 
   private _releaseRooms(): void {
-    for (const release of this._rooms.values()) {
-      release();
+    for (const held of this._rooms.values()) {
+      held.release();
     }
     this._rooms.clear();
   }
@@ -342,6 +579,12 @@ export class ZoneStore {
       }
 
       case 'zone.deleted': {
+        // Recorded before the removal, so a page open on this zone has something to
+        // report when its own lookup comes back empty. Only for a zone the caller
+        // actually held: an event for one they never loaded is not news.
+        if (this._byId().has(event.zoneId)) {
+          this._departure.set({ zoneId: event.zoneId, reason: 'deleted' });
+        }
         this._remove(event.zoneId);
         break;
       }
@@ -380,6 +623,18 @@ export class ZoneStore {
         ) {
           // The caller is no longer in this zone. Removing it is what makes the card
           // disappear without a refresh, which is an acceptance criterion in `0003`.
+          //
+          // The departure is recorded as well, because `0010` opens a page **on** this
+          // zone: the dashboard only needs the card gone, while a group page has to
+          // leave and say why. Kicked and banned are kept apart here even though the
+          // copy is currently the same for both, since the difference is real and the
+          // event is the only place it is known.
+          if (this._byId().has(membership.zoneId)) {
+            this._departure.set({
+              zoneId: membership.zoneId,
+              reason: membership.status === 'BANNED' ? 'banned' : 'kicked',
+            });
+          }
           this._remove(membership.zoneId);
           break;
         }
@@ -389,6 +644,15 @@ export class ZoneStore {
             ? { ...zone, myRole: membership.role, myStatus: membership.status }
             : zone
         );
+
+        if (isMe) {
+          // **Rule G3.** The staff room follows `myRole`, and this is the event that
+          // changes it. Without re-syncing here, a just promoted owner would not
+          // receive the governance counts until the next full load, and a just
+          // demoted admin would keep asking for a room the server now refuses, which
+          // surfaces as a permanent and untrue "not live" badge on the group.
+          this._syncRooms();
+        }
         break;
       }
 
@@ -456,9 +720,9 @@ export class ZoneStore {
     });
     this._order.update((current) => current.filter((id) => id !== zoneId));
 
-    const release = this._rooms.get(zoneId);
-    if (release !== undefined) {
-      release();
+    const held = this._rooms.get(zoneId);
+    if (held !== undefined) {
+      held.release();
       this._rooms.delete(zoneId);
     }
   }

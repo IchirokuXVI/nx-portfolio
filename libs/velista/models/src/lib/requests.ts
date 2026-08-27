@@ -140,3 +140,19 @@ export type LineOrder = (typeof LINE_ORDERS)[number];
 /** Orders the list endpoints accept. */
 export const LIST_ORDERS = ['name', 'created', 'updated'] as const;
 export type ListOrder = (typeof LIST_ORDERS)[number];
+
+/**
+ * Renaming somebody inside one zone.
+ *
+ * Its own type rather than a reuse of anything on `Membership`, because this is the
+ * direction rule D4 does not apply in: the body names the one field the route accepts,
+ * and the gateway's pipe runs with `forbidNonWhitelisted`, so sending a mapped
+ * membership would be a 400 rather than a shortcut.
+ */
+export interface SetUsernameRequest {
+  readonly username: string;
+}
+
+/** Orders `GET /v1/zones/:id/members` accepts. Anything else is rejected by the DTO. */
+export const MEMBER_ORDERS = ['joined', 'name', 'role'] as const;
+export type MemberOrder = (typeof MEMBER_ORDERS)[number];

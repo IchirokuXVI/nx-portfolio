@@ -154,9 +154,10 @@ export class HomePage {
    * starts a way in is not the screen that reports it, and the store is the one thing
    * above both that survives the navigation between them.
    */
-  readonly entry = computed<
-    { kind: 'created' | 'joined'; zone: MyZone } | null
-  >(() => {
+  readonly entry = computed<{
+    kind: 'created' | 'joined';
+    zone: MyZone;
+  } | null>(() => {
     const last = this._zoneStore.lastEntry();
     if (last === null) {
       return null;
@@ -302,7 +303,6 @@ export class HomePage {
       .catch(() => undefined);
   }
 
-
   retry(): void {
     void this._zoneStore.load();
   }
@@ -360,12 +360,36 @@ export class HomePage {
   }
 
   /**
+   * Open a group (plan 0010).
+   *
+   * `['..', 'zones', id]` because this page's own path is `home`, so the group page is
+   * its **sibling** rather than its child, exactly as the credential screens are. The
+   * two entry sheets are children and use a bare relative path. Neither the locale nor
+   * the mount is written down either way (extraction contract, item 5).
+   */
+  openZone(zoneId: string): void {
+    void this._router.navigate(['..', 'zones', zoneId], {
+      relativeTo: this._route,
+    });
+  }
+
+  /**
+   * Answer the people waiting to join, which was the deepest dead end in the product:
+   * `0008` could produce a pending membership and nothing could resolve one.
+   */
+  reviewRequests(zoneId: string): void {
+    void this._router.navigate(['..', 'zones', zoneId, 'members'], {
+      relativeTo: this._route,
+    });
+  }
+
+  /**
    * Everything else this page can start, and where each of them currently stops.
    *
-   * Each of these leads somewhere `0003` puts out of scope: zone detail, list detail
-   * and the account screen each get their own plan and their own approved mock before
-   * they are built. The two entry actions have gone because `0008` built them, and
-   * securing an account has gone because `0009` did.
+   * What is left leads to the shopping list, which is the next plan, and to the account
+   * screen, which is later still. The two entry actions have gone because `0008` built
+   * them, securing an account because `0009` did, and opening a group and reviewing its
+   * requests because `0010` did.
    *
    * They are recorded rather than left unbound so the controls are real, focusable and
    * testable now, and so that connecting each one later is a single line here instead
@@ -373,16 +397,8 @@ export class HomePage {
    */
   readonly pendingRoutes = signal<readonly string[]>([]);
 
-  openZone(zoneId: string): void {
-    this._notYetRouted(`zones/${zoneId}`);
-  }
-
   openList(listId: string): void {
     this._notYetRouted(`lists/${listId}`);
-  }
-
-  reviewRequests(zoneId: string): void {
-    this._notYetRouted(`zones/${zoneId}/members`);
   }
 
   newList(): void {

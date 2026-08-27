@@ -1,0 +1,82 @@
+// Attention rather than danger. Nothing has gone wrong and nobody has done anything
+// destructive: a group is unowned and something will happen unless somebody acts.
+// Coral here would read as a failure the reader had caused.
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--app-space-3);
+  padding: var(--app-space-7) var(--app-space-5);
+  background: var(--app-status-attention-bg);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-card-radius);
+}
+
+.glyph {
+  font-size: var(--app-icon-lg);
+  color: var(--app-status-attention-fg);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
+// For everybody who is not an admin. A sentence and not a disabled button: there is
+// no action for them to be shown greyed out, and pretending otherwise would suggest
+// the app is withholding something it could give.
+.hint {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.primary {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  margin-block-start: var(--app-space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-3);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}

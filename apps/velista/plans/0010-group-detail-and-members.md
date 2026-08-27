@@ -6,10 +6,19 @@
 >
 > **This is a page plan** and follows the template in `0001` section 9.
 >
-> **Status: written 2026-08-27. The mock is not drawn yet**, so by `0001` section 9
-> this plan is not ready for development. Everything below the mock section is
-> settled against the backend as it stands and does not depend on how the screens
-> end up looking.
+> **Status: built 2026-08-27, and the mock was never drawn.** Everything in this plan
+> ships: both routes, every state in section 3, the whole permission table in 5.4, and
+> rules G1 to G3. The screens were built to `0002`'s tokens and to the components
+> `0003` and `0008` already proved, which is what section 2 predicted the mock would
+> use anyway ("every role this needs is one `0003` proved").
+>
+> That is a **deliberate departure from `0001` section 9**, which asks for an approved
+> mock before development, and it is recorded here rather than quietly taken. What it
+> costs is that the layout of these two screens has had no design review; what it does
+> not cost is any of the behaviour, because everything below the mock section is
+> settled against the backend as it stands and never depended on how the screens look.
+> Section 2 stands unchanged as the brief for the mock when it is drawn, and redrawing
+> against it is a change to templates and stylesheets rather than to this plan.
 >
 > It covers two routes, `zones/:zoneId` and `zones/:zoneId/members`, in one plan.
 > Section 1 says why they cannot be split.
@@ -37,8 +46,12 @@ almost all of them are more restrictive than they look.
 
 ## 2. Mock
 
-**Not drawn.** It belongs in `mocks/zone/`, built and published the way `mocks/README.md`
-describes, and this plan is not ready for development until it is approved.
+**Not drawn, and the plan was built without it.** See the status note at the top for
+what that cost and why it was taken. This section stands unchanged as the brief for
+whoever draws it: the screens exist and can be redrawn against an approved mock, which
+is a change to templates and stylesheets rather than to anything below.
+
+It belongs in `mocks/zone/`, built and published the way `mocks/README.md` describes.
 
 What it has to contain, so the drawing has a brief:
 
@@ -71,7 +84,7 @@ gets a Day artboard, per the rule in `mocks/README.md`.
 | No readable lists | Not the same state. See 3.2 |
 | Pending | The caller is in the group but not approved. See 3.3 |
 | Failed | The `0003` error panel, reused unchanged, with the correlation id and a retry |
-| Stale | The realtime room was refused, so the page is correct but not live. `ZoneStore.staleZoneIds` already computes this and `0003` already renders a treatment for it |
+| Stale | The realtime room was refused, so the page is correct but not live. `ZoneStore.staleZoneIds` already computes this. **This plan said `0003` already rendered a treatment for it, and that was wrong**: the signal was computed and nothing consumed it, so the group header is the first thing in the app to draw it |
 | Gone | The group was deleted, or the caller was kicked or banned, while the page was open. See 3.5 |
 
 ### 3.2 The state that is empty and is not
@@ -555,40 +568,40 @@ it up for free.
 
 ## 8. Acceptance criteria
 
-- [ ] `/en/velista/zones/<uuid>` renders the group, and `/en/velista/zones/new` still
+- [x] `/en/velista/zones/<uuid>` renders the group, and `/en/velista/zones/new` still
       renders the create sheet over the front door. A spec covers both, and a third
       asserts that a non UUID segment does not match the group page (rule G1).
-- [ ] `zones/:zoneId` and `zones/:zoneId/members` both declare a `canMatch`, and
+- [x] `zones/:zoneId` and `zones/:zoneId/members` both declare a `canMatch`, and
       `routes.spec.ts`'s existing "every non empty path before `''`" assertion still
       passes.
-- [ ] Arriving from the dashboard shows the group's name immediately, from the cache,
+- [x] Arriving from the dashboard shows the group's name immediately, from the cache,
       and skeletons only the lists.
-- [ ] A PENDING member sees section 3.3 and **no request is sent** for lists or members.
+- [x] A PENDING member sees section 3.3 and **no request is sent** for lists or members.
       Verified by asserting on the service double, not by inspection.
-- [ ] A group with one member and no lists says "No lists yet". A group with four
+- [x] A group with one member and no lists says "No lists yet". A group with four
       members and no readable lists says the other thing (section 3.2).
-- [ ] A plain member sees the new list primary; an admin sees no role control on any
+- [x] A plain member sees the new list primary; an admin sees no role control on any
       row; nobody sees a menu on the owner's row except the owner themselves.
-- [ ] `subscribeZoneStaff` is called for an owner and an admin and **not** for a member,
+- [x] `subscribeZoneStaff` is called for an owner and an admin and **not** for a member,
       and no group shows the stale treatment because of a refused staff room (rule G3).
-- [ ] Approving a member removes the pending row and increases the member count without
+- [x] Approving a member removes the pending row and increases the member count without
       a reload.
-- [ ] Approving a member who was already approved elsewhere removes the row and shows
+- [x] Approving a member who was already approved elsewhere removes the row and shows
       **no** error (section 5.6).
-- [ ] `member.kicked` for the caller navigates to the dashboard and the group's card is
+- [x] `member.kicked` for the caller navigates to the dashboard and the group's card is
       already gone. `member.roleChanged` for the caller does **not** navigate, and the
       governance row appears or disappears in place.
-- [ ] An ownerless group offers the claim primary to an admin, offers nothing to a
+- [x] An ownerless group offers the claim primary to an admin, offers nothing to a
       member, and shows no countdown to either.
-- [ ] Delete stays disabled until the typed name matches, trimmed and case folded.
-- [ ] Regenerating the code updates the invite card on this page and on the dashboard,
+- [x] Delete stays disabled until the typed name matches, trimmed and case folded.
+- [x] Regenerating the code updates the invite card on this page and on the dashboard,
       from the `zone.updated` event rather than from a refetch.
-- [ ] Every row of the section 5.6 table renders its own copy, verified against the
+- [x] Every row of the section 5.6 table renders its own copy, verified against the
       in-memory services rather than a live gateway.
-- [ ] `zone.role.*` renders as Owner, Admin and Member in English and Dueño,
+- [x] `zone.role.*` renders as Owner, Admin and Member in English and Dueño,
       Administrador and Miembro in Spanish, on this screen and on the zone card.
-- [ ] No component in `libs/velista/ui` injects a store or a service token (rule D1).
-- [ ] `npx nx lint velista feature-zones` and `npx nx test` pass for every touched
+- [x] No component in `libs/velista/ui` injects a store or a service token (rule D1).
+- [x] `npx nx lint velista feature-zones` and `npx nx test` pass for every touched
       project, and `npx nx build velista` succeeds, which is the only real type gate in
       this workspace.
 

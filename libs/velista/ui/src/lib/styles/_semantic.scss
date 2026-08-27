@@ -184,6 +184,15 @@ $app-content-max: 480px;
   --app-list-row-height: 40px;
   --app-preview-row-height: 38px;
   --app-attention-row-height: 36px;
+  // A member row is a whole row about a person rather than a preview, and it has to
+  // hold a 44 square menu button with air around it (plan 0010, section 7). Its own
+  // token rather than a reuse of --app-line-row-height, which happens to be the same
+  // number today and is about a shopping line.
+  --app-member-row-height: 56px;
+  // A row menu wide enough for its longest item on one line. "Hacer miembro normal"
+  // and "Remove and block" both have to fit without wrapping, and a menu that resized
+  // itself per row would shift under the finger between one row and the next.
+  --app-menu-min-width: 200px;
 
   // The progress bar on the resume card.
   --app-progress-height: 6px;

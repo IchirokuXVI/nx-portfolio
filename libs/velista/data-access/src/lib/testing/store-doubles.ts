@@ -1,8 +1,11 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
   Identity,
+  Membership,
+  MembershipStatus,
   MyZone,
   SessionTokens,
+  ShoppingListSummary,
   UserKind,
 } from '@portfolio/velista/models';
 import { AccountNotice } from '../auth/account-notice';
@@ -13,11 +16,18 @@ import {
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
+import { ListStore, type ListLoadState } from '../lists/list-store';
+import {
+  MEMBERSHIP_SERVICE,
+  type MembershipServiceI,
+} from '../memberships/membership-service';
 import {
   ZoneStore,
+  type ZoneDeparture,
   type ZoneEntry,
   type ZoneEntryOutcome,
   type ZoneLoadState,
+  type ZoneWriteOutcome,
 } from '../zones/zone-store';
 
 /**
@@ -73,12 +83,37 @@ export interface FakeZoneStateOptions {
   readonly respond?: (
     call: ZoneMutationCall
   ) => ZoneEntryOutcome | Promise<ZoneEntryOutcome>;
+
+  /** A zone the caller has just lost, for the page that has to leave and say why. */
+  readonly departure?: ZoneDeparture | null;
+
+  /** How the single-zone load is going. Defaults to `loaded` for every seeded zone. */
+  readonly zoneState?: ZoneLoadState;
+
+  /** What a governance write answers. The default succeeds. */
+  readonly respondToWrite?: (call: ZoneWriteCall) => ZoneWriteOutcome;
 }
 
 /** One recorded call to a faked mutation. */
 export type ZoneMutationCall =
   | { readonly method: 'createZone'; readonly name: string }
   | { readonly method: 'joinZone'; readonly joinCode: string };
+
+/** One recorded governance write, or a count nudge that followed one (plan 0010). */
+export type ZoneWriteCall =
+  | {
+      readonly method: 'renameZone';
+      readonly zoneId: string;
+      readonly name: string;
+    }
+  | { readonly method: 'regenerateJoinCode'; readonly zoneId: string }
+  | { readonly method: 'deleteZone'; readonly zoneId: string }
+  | { readonly method: 'claimOwnership'; readonly zoneId: string }
+  | {
+      readonly method: 'recordMembershipChange';
+      readonly zoneId: string;
+      readonly change: 'approved' | 'rejected' | 'removed';
+    };
 
 /**
  * A `ZoneStore` that is simply in the state you asked for.
@@ -93,6 +128,28 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
   const error = signal<unknown>(options.error ?? null);
   const loads = signal(0);
   const lastEntry = signal<ZoneEntry | null>(options.lastEntry ?? null);
+  const departure = signal<ZoneDeparture | null>(options.departure ?? null);
+
+  /**
+   * How the load of each individual zone is going (plan 0010).
+   *
+   * Defaults to `loaded` for every zone the fake was seeded with, and to whatever
+   * `zoneState` names otherwise, so a spec that just wants a group on screen says
+   * nothing and a spec about a cold deep link says `{ zoneState: 'loading' }`.
+   */
+  const zoneStates = signal<ReadonlyMap<string, ZoneLoadState>>(
+    new Map(
+      (options.zones ?? []).map((zone) => [
+        zone.id,
+        options.zoneState ?? 'loaded',
+      ])
+    )
+  );
+
+  /** Every governance write asked for, in order, so a spec can assert what was sent. */
+  const writes: ZoneWriteCall[] = [];
+
+  const writeOutcome = options.respondToWrite;
 
   /** Every mutation asked for, in order, so a spec can assert what was sent. */
   const calls: {
@@ -107,6 +164,12 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
       call.method === 'createZone'
         ? { state: 'created', zoneId: 'zone-new' }
         : { state: 'joined', zoneId: 'zone-joined' });
+
+  /** Records a governance write and answers however the spec asked. */
+  function record(call: ZoneWriteCall): ZoneWriteOutcome {
+    writes.push(call);
+    return writeOutcome?.(call) ?? { state: 'succeeded' };
+  }
 
   return {
     myZones: zones.asReadonly(),
@@ -142,6 +205,48 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
 
     /** Put a page into the state it would be in straight after a way in. */
     setLastEntry: (entry: ZoneEntry | null) => lastEntry.set(entry),
+
+    // ---------------------------------------------------------- plan 0010
+    //
+    // The group page and the members screen read one zone rather than the list, and
+    // both write to it. The same argument as above applies twice over: driving the
+    // real store to "an admin looking at an ownerless group" means a service, a
+    // session, a realtime client and four calls, and the page spec is not about any
+    // of that.
+
+    zoneById: (zoneId: string) => zones().find((zone) => zone.id === zoneId),
+
+    zoneState: zoneStates.asReadonly(),
+
+    departure: departure.asReadonly(),
+    clearDeparture: () => departure.set(null),
+
+    /** Drive a live removal or deletion at a page that is already mounted. */
+    setDeparture: (next: ZoneDeparture | null) => departure.set(next),
+
+    loadZone: async (zoneId: string) => {
+      loads.update((count) => count + 1);
+      zoneStates.update((current) => new Map(current).set(zoneId, 'loaded'));
+    },
+
+    /** What the page asked the store to write to the zone itself. */
+    writes: writes as readonly ZoneWriteCall[],
+
+    renameZone: async (zoneId: string, name: string) =>
+      record({ method: 'renameZone', zoneId, name }),
+    regenerateJoinCode: async (zoneId: string) =>
+      record({ method: 'regenerateJoinCode', zoneId }),
+    deleteZone: async (zoneId: string) =>
+      record({ method: 'deleteZone', zoneId }),
+    claimOwnership: async (zoneId: string) =>
+      record({ method: 'claimOwnership', zoneId }),
+
+    recordMembershipChange: (
+      zoneId: string,
+      change: 'approved' | 'rejected' | 'removed'
+    ) => {
+      writes.push({ method: 'recordMembershipChange', zoneId, change });
+    },
 
     /** Move the store while a fixture is mounted, to test a live update. */
     set: (next: readonly MyZone[]) => zones.set(next),
@@ -304,6 +409,243 @@ export function provideFakeAuthService(
   service: FakeAuthService = fakeAuthService()
 ): Provider {
   return { provide: AUTH_SERVICE, useValue: service };
+}
+
+/** How a faked `ListStore` should present one zone. */
+export interface FakeListStateOptions {
+  readonly lists?: readonly ShoppingListSummary[];
+  readonly state?: ListLoadState;
+  readonly error?: unknown;
+}
+
+/**
+ * A `ListStore` that is simply in the state you asked for.
+ *
+ * `fakeZoneStore`'s reasoning, applied to the second store the group page injects. The
+ * real one resolves `LIST_SERVICE`, subscribes to a realtime client and keys its cache
+ * by zone, and a page spec that used it would be building all three to get three rows
+ * on screen.
+ *
+ * `loadCount` is what an acceptance criterion actually turns on: a caller whose
+ * membership is still PENDING must cause **no** request for the lists, and asserting
+ * on the double is the only way to prove a request was not made (section 3.3).
+ */
+export function fakeListStore(options: FakeListStateOptions = {}) {
+  const lists = signal<readonly ShoppingListSummary[]>(options.lists ?? []);
+  const state = signal<ListLoadState>(options.state ?? 'loaded');
+  const error = signal<unknown>(options.error ?? null);
+  const loads = signal(0);
+
+  const created: { zoneId: string; name: string }[] = [];
+
+  return {
+    /** How many times a page asked for this zone's lists. Starts at zero. */
+    loadCount: loads.asReadonly(),
+
+    /** Every list this page asked to create. */
+    creations: created as readonly {
+      readonly zoneId: string;
+      readonly name: string;
+    }[],
+
+    listsIn: () => lists(),
+    stateOf: () => state(),
+    errorOf: () => error(),
+    forZone: () =>
+      computed(() => ({
+        lists: lists(),
+        state: state(),
+        error: error(),
+      })),
+
+    load: async () => {
+      loads.update((count) => count + 1);
+    },
+    refresh: async () => {
+      loads.update((count) => count + 1);
+    },
+
+    createList: async (zoneId: string, name: string) => {
+      created.push({ zoneId, name });
+      const list: ShoppingListSummary = {
+        id: 'list-new',
+        zoneId,
+        name,
+        createdByUserId: 'u1',
+        lineCount: 0,
+        readyCount: 0,
+      };
+      lists.update((current) => [list, ...current]);
+      return { state: 'created' as const, list };
+    },
+
+    /** Move the store while a fixture is mounted, to test a live update. */
+    set: (next: readonly ShoppingListSummary[]) => lists.set(next),
+    setState: (next: ListLoadState, cause: unknown = null) => {
+      state.set(next);
+      error.set(cause);
+    },
+  };
+}
+
+export type FakeListStore = ReturnType<typeof fakeListStore>;
+
+/** {@link fakeListStore} bound to the real token. */
+export function provideFakeListStore(store: FakeListStore): Provider {
+  return { provide: ListStore, useValue: store };
+}
+
+/** One recorded call to a faked membership service. */
+export interface MembershipCall {
+  readonly method:
+    | 'listMembers'
+    | 'approve'
+    | 'reject'
+    | 'kick'
+    | 'ban'
+    | 'setRole'
+    | 'transferOwnership'
+    | 'setUsername';
+  readonly zoneId: string;
+  readonly membershipId?: string;
+  /** What `listMembers` was asked for, which is where rule G2 is observable. */
+  readonly statuses?: readonly MembershipStatus[];
+  readonly role?: string;
+  readonly username?: string;
+}
+
+/** What a faked membership service does when asked. */
+export interface FakeMembershipOptions {
+  readonly members?: readonly Membership[];
+  readonly nextCursor?: string | null;
+  /** What each method throws, if anything. Keyed by method, so one fake covers a screen. */
+  readonly rejectWith?: Partial<Record<MembershipCall['method'], unknown>>;
+}
+
+/**
+ * A `MembershipServiceI` that records what it was asked and answers without a transport.
+ *
+ * The `statuses` it recorded is the interesting part: rule G2 says an ordinary member
+ * must not ask for the pending ones, because the server answers `forbidden` rather than
+ * an empty page. That is a property of the **request**, so it can only be asserted on
+ * the double.
+ */
+export function fakeMembershipService(options: FakeMembershipOptions = {}) {
+  const members = signal<readonly Membership[]>(options.members ?? []);
+  const calls: MembershipCall[] = [];
+
+  function refuseIfAsked(method: MembershipCall['method']): void {
+    const rejection = options.rejectWith?.[method];
+    if (rejection !== undefined) {
+      throw rejection;
+    }
+  }
+
+  function patch(
+    membershipId: string,
+    changes: Partial<Membership>
+  ): Membership {
+    const existing = members().find((member) => member.id === membershipId);
+    const updated: Membership = {
+      id: membershipId,
+      zoneId: existing?.zoneId ?? 'zone-1',
+      userId: existing?.userId ?? 'u-other',
+      username: existing?.username ?? '',
+      role: existing?.role ?? 'MEMBER',
+      status: existing?.status ?? 'APPROVED',
+      ...changes,
+    };
+
+    members.update((current) =>
+      current.map((member) => (member.id === membershipId ? updated : member))
+    );
+    return updated;
+  }
+
+  const service: MembershipServiceI = {
+    listMembers: async (zoneId, listOptions) => {
+      calls.push({
+        method: 'listMembers',
+        zoneId,
+        statuses: listOptions?.statuses,
+      });
+      refuseIfAsked('listMembers');
+
+      const statuses = listOptions?.statuses ?? ['APPROVED'];
+      return {
+        items: members().filter((member) => statuses.includes(member.status)),
+        nextCursor: options.nextCursor ?? null,
+      };
+    },
+
+    approve: async (zoneId, membershipId) => {
+      calls.push({ method: 'approve', zoneId, membershipId });
+      refuseIfAsked('approve');
+      return patch(membershipId, { status: 'APPROVED' });
+    },
+
+    reject: async (zoneId, membershipId) => {
+      calls.push({ method: 'reject', zoneId, membershipId });
+      refuseIfAsked('reject');
+      members.update((current) =>
+        current.filter((member) => member.id !== membershipId)
+      );
+      return membershipId;
+    },
+
+    kick: async (zoneId, membershipId) => {
+      calls.push({ method: 'kick', zoneId, membershipId });
+      refuseIfAsked('kick');
+      return patch(membershipId, { status: 'KICKED' });
+    },
+
+    ban: async (zoneId, membershipId) => {
+      calls.push({ method: 'ban', zoneId, membershipId });
+      refuseIfAsked('ban');
+      return patch(membershipId, { status: 'BANNED' });
+    },
+
+    setRole: async (zoneId, membershipId, role) => {
+      calls.push({ method: 'setRole', zoneId, membershipId, role });
+      refuseIfAsked('setRole');
+      return patch(membershipId, { role });
+    },
+
+    transferOwnership: async (zoneId, membershipId) => {
+      calls.push({ method: 'transferOwnership', zoneId, membershipId });
+      refuseIfAsked('transferOwnership');
+      return {
+        id: zoneId,
+        name: 'Flat 3B',
+        joinCode: 'HK7M2QPD',
+        status: 'ACTIVE',
+        ownerUserId: 'u-other',
+      };
+    },
+
+    setUsername: async (zoneId, membershipId, username) => {
+      calls.push({ method: 'setUsername', zoneId, membershipId, username });
+      refuseIfAsked('setUsername');
+      return patch(membershipId, { username });
+    },
+  };
+
+  return {
+    ...service,
+    /** Everything the screen asked for, in order. */
+    calls: calls as readonly MembershipCall[],
+    /** What the fake currently holds. */
+    members: () => members(),
+  };
+}
+
+export type FakeMembershipService = ReturnType<typeof fakeMembershipService>;
+
+/** {@link fakeMembershipService} bound to the real token. */
+export function provideFakeMembershipService(
+  service: FakeMembershipService
+): Provider {
+  return { provide: MEMBERSHIP_SERVICE, useValue: service };
 }
 
 /**

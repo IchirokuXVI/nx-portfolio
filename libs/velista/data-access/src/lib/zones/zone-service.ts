@@ -35,6 +35,46 @@ export interface ZoneServiceI {
 
   /** Join a zone by its code. Same guest handshake and the same rule D3 hazard. */
   joinZone(joinCode: string, username?: string): Promise<ZoneJoinResult>;
+
+  /**
+   * One zone, with the caller's standing in it (`GET /v1/zones/:id`).
+   *
+   * Answers the same `MyZoneView` the dashboard's list does, counts and list previews
+   * included, so the group page's header needs no model of its own.
+   *
+   * Refused with `forbidden` for a membership that is still PENDING and with
+   * `not_found` for somebody who is not a member at all. The second is deliberate on
+   * core's side: a stranger must not be able to tell an existing zone from a missing
+   * one by the status code (plan 0010, section 5.6).
+   */
+  getZone(zoneId: string): Promise<MyZone>;
+
+  /** Rename it (`PATCH /v1/zones/:id`). OWNER or ADMIN. */
+  renameZone(zoneId: string, name: string): Promise<Zone>;
+
+  /**
+   * Mint a new join code (`POST /v1/zones/:id/regenerate-code`). OWNER or ADMIN.
+   *
+   * Not destructive to data and destructive to every invite already sent, which is
+   * invisible unless the copy says so. Hence a confirm (section 5.7).
+   */
+  regenerateJoinCode(zoneId: string): Promise<Zone>;
+
+  /**
+   * Delete it (`DELETE /v1/zones/:id`). **OWNER only**, and there is no undo anywhere
+   * in the product. Answers the deleted id.
+   */
+  deleteZone(zoneId: string): Promise<string>;
+
+  /**
+   * Take on a zone whose owner deleted their account
+   * (`POST /v1/zones/:id/claim-ownership`).
+   *
+   * **ADMIN only, and only while `ownerUserId` is null.** It is the one action in the
+   * whole product that gets a zone out of `MARKED_FOR_DELETION`, which is why the
+   * group page has to offer it: nothing else anywhere does (section 3.5).
+   */
+  claimOwnership(zoneId: string): Promise<Zone>;
 }
 
 /**

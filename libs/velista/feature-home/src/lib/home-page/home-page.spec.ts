@@ -9,10 +9,10 @@ import {
   provideFakeSessionStore,
   provideFakeZoneStore,
   VERIFY_RESEND_AVAILABLE,
+  ZoneStore,
   type FakeIdentity,
   type FakeZoneStore,
   type ZoneEntry,
-  ZoneStore,
 } from '@portfolio/velista/data-access';
 import type { MyZone } from '@portfolio/velista/models';
 import {
@@ -334,10 +334,7 @@ describe('HomePage', () => {
       });
 
       (
-        query(
-          fixture,
-          'lib-confirm-email-nudge button'
-        ) as HTMLButtonElement
+        query(fixture, 'lib-confirm-email-nudge button') as HTMLButtonElement
       ).click();
       fixture.detectChanges();
 
@@ -433,9 +430,7 @@ describe('HomePage', () => {
       // `MembershipView` carries no name, so this sentence is only sayable after the
       // reload (plan 0008, section 5.6).
       const fixture = await render({
-        zones: [
-          zone({ id: 'z9', name: 'Casa Ferrer', myStatus: 'PENDING' }),
-        ],
+        zones: [zone({ id: 'z9', name: 'Casa Ferrer', myStatus: 'PENDING' })],
         lastEntry: { kind: 'joined', zoneId: 'z9' },
       });
 
@@ -504,6 +499,65 @@ describe('HomePage', () => {
       const fixture = await render({ zones: [] });
 
       expect(query(fixture, 'router-outlet')).not.toBeNull();
+    });
+  });
+
+  describe('the group card, once plan 0010 gave it somewhere to go', () => {
+    /** Spies on `navigate` and hands back the calls it recorded. */
+    function watchNavigation(): jest.SpyInstance {
+      return jest
+        .spyOn(TestBed.inject(Router), 'navigate')
+        .mockResolvedValue(true as never);
+    }
+
+    it('opens the group as a sibling route', async () => {
+      // Every card on this page used to be a dead end, recorded in `pendingRoutes`.
+      // `['..', 'zones', id]` because this page's own path is `home`, so the group
+      // page is its sibling; neither the locale nor the mount is written down
+      // (extraction contract, item 5).
+      const fixture = await render({ zones: [zone({ id: 'z1' })] });
+      const navigate = watchNavigation();
+
+      fixture.componentInstance.openZone('z1');
+
+      expect(navigate).toHaveBeenCalledWith(
+        ['..', 'zones', 'z1'],
+        expect.objectContaining({ relativeTo: TestBed.inject(ActivatedRoute) })
+      );
+    });
+
+    it('sends Review to the members screen', async () => {
+      // The deepest dead end in the product until now: `0008` could produce a
+      // pending membership and nothing anywhere could resolve one.
+      const fixture = await render({ zones: [zone({ id: 'z1' })] });
+      const navigate = watchNavigation();
+
+      fixture.componentInstance.reviewRequests('z1');
+
+      expect(navigate).toHaveBeenCalledWith(
+        ['..', 'zones', 'z1', 'members'],
+        expect.objectContaining({ relativeTo: TestBed.inject(ActivatedRoute) })
+      );
+    });
+
+    it('records nothing as unbuilt for either of them any more', async () => {
+      const fixture = await render({ zones: [zone({ id: 'z1' })] });
+      watchNavigation();
+
+      fixture.componentInstance.openZone('z1');
+      fixture.componentInstance.reviewRequests('z1');
+
+      expect(fixture.componentInstance.pendingRoutes()).toEqual([]);
+    });
+
+    it('still records the list screen, which is the next plan', async () => {
+      const fixture = await render({ zones: [zone({ id: 'z1' })] });
+
+      fixture.componentInstance.openList('list-1');
+
+      expect(fixture.componentInstance.pendingRoutes()).toEqual([
+        'lists/list-1',
+      ]);
     });
   });
 });

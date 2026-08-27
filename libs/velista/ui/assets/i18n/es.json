@@ -6,12 +6,116 @@
   },
   "zone": {
     "role": {
-      "owner": "PROPIETARIO",
-      "admin": "ADMIN",
-      "member": "MIEMBRO"
+      "owner": "Dueño",
+      "admin": "Administrador",
+      "member": "Miembro"
     },
     "status": {
       "pending": "PENDIENTE"
+    },
+    "detail": {
+      "back": "Atrás",
+      "loading": "Cargando el grupo",
+      "lists": "Listas",
+      "members": "Miembros",
+      "newList": "Nueva lista",
+      "settings": "Ajustes del grupo",
+      "stale": "Ahora mismo no se actualiza en directo",
+      "empty": {
+        "title": "Todavía no hay listas",
+        "body": "Empieza una y todos los del grupo podrán comprar con ella"
+      },
+      "noAccess": {
+        "title": "Aún no han compartido nada contigo",
+        "body": "Este grupo tiene listas y ninguna está compartida contigo. Pide que te añadan o empieza la tuya"
+      },
+      "pending": {
+        "title": "Esperando a que te dejen entrar",
+        "body": "Quien lleva el grupo decide. Las listas aparecerán aquí en cuanto lo haga"
+      },
+      "gone": {
+        "kicked": "Ya no estás en ese grupo",
+        "deleted": "Ese grupo se ha eliminado"
+      }
+    },
+    "ownerless": {
+      "title": "Este grupo no tiene dueño",
+      "body": "Quien lo creó eliminó su cuenta. Se borrará a menos que un administrador se haga cargo",
+      "claim": "Hacerme cargo del grupo",
+      "askAdmin": "Pide a un administrador del grupo que se haga cargo"
+    },
+    "members": {
+      "title": "Miembros de {{name}}",
+      "loading": "Cargando los miembros",
+      "requests": "Esperando entrar",
+      "approve": "Dejar entrar",
+      "reject": "Rechazar",
+      "remove": "Sacar del grupo",
+      "ban": "Sacar y bloquear",
+      "makeAdmin": "Hacer administrador",
+      "makeMember": "Hacer miembro normal",
+      "transfer": "Ceder el grupo",
+      "rename": "Cambiar el nombre aquí",
+      "you": "Tú",
+      "menuFor": "Más opciones para {{name}}",
+      "more": "Ver más",
+      "approved": "{{name}} ya está en el grupo",
+      "rejected": "Has rechazado a {{name}}"
+    },
+    "confirm": {
+      "remove": {
+        "title": "¿Sacar a {{name}} del grupo?",
+        "body": "Perderá este grupo y sus listas. Podrá pedir entrar otra vez con el código",
+        "action": "Sacar del grupo"
+      },
+      "ban": {
+        "title": "¿Sacar y bloquear a {{name}}?",
+        "body": "Perderá este grupo y no podrá volver a pedir entrar, ni con el código",
+        "action": "Sacar y bloquear"
+      },
+      "transfer": {
+        "title": "¿Ceder el grupo a {{name}}?",
+        "body": "Pasará a ser el dueño y tú administrador. Solo esa persona podrá devolvértelo",
+        "action": "Ceder el grupo"
+      },
+      "regenerate": {
+        "title": "¿Crear un código nuevo?",
+        "body": "El código antiguo dejará de funcionar, así que quien ya lo tenga necesitará el nuevo",
+        "action": "Crear un código nuevo"
+      },
+      "delete": {
+        "title": "¿Eliminar {{name}}?",
+        "body": "Se irán todas las listas del grupo, para todos sus miembros. Esto no se puede deshacer",
+        "typeName": "Escribe el nombre del grupo para confirmar",
+        "action": "Eliminar el grupo"
+      },
+      "rename": {
+        "title": "Cambiar el nombre aquí",
+        "body": "Es el nombre que ven las demás personas de este grupo. No cambia nada en ningún otro sitio",
+        "label": "Nombre en este grupo",
+        "action": "Guardar"
+      }
+    },
+    "settings": {
+      "title": "Ajustes del grupo",
+      "rename": "Nombre del grupo",
+      "save": "Guardar",
+      "regenerate": "Crear un código de acceso nuevo",
+      "delete": "Eliminar el grupo"
+    },
+    "newList": {
+      "title": "Ponle nombre a la lista",
+      "body": "Cualquiera del grupo puede empezar una lista. Podrás cambiarle el nombre después",
+      "label": "Nombre de la lista",
+      "placeholder": "Compra semanal",
+      "submit": "Crear lista"
+    },
+    "error": {
+      "notAvailable": "Este grupo no está disponible para ti. Puede que se haya eliminado o que te hayan sacado",
+      "roleChanged": "Tu papel en este grupo ha cambiado",
+      "alreadyClaimed": "Otra persona ya se ha hecho cargo del grupo",
+      "tooManyRenames": "Demasiados cambios. Espera un minuto e inténtalo de nuevo",
+      "failed": "No se ha podido. Inténtalo otra vez"
     }
   },
   "line": {

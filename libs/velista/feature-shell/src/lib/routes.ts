@@ -9,6 +9,7 @@ import {
 import { VELISTA_TRANSLATION_PROVIDERS } from './translation-providers';
 import { translationsReadyResolver } from './translations-ready';
 import { APP_USABLE_LOCALES } from './usable-locales';
+import { zoneIdGuard, zoneMemberGuard, zoneStaffGuard } from './zone-guards';
 
 /**
  * This app's route table. The shell lazy-loads it through `velista/Routes`.
@@ -59,6 +60,32 @@ function entrySheetRoutes(returnTo: 'landing' | 'home'): Route[] {
         import('@portfolio/velista/feature-entry').then((m) => m.JoinCodeSheet),
     },
   ];
+}
+
+/**
+ * The four confirm sheets over a member's row (plan 0010, section 4.2).
+ *
+ * One component and four entries rather than four components: everything except the
+ * copy and the request is identical. And four entries rather than one that reads the
+ * action out of the URL, because a route's `data` is something `routes.spec.ts` can
+ * assert about, while a segment parsed inside a component is not.
+ *
+ * All four are children of the members screen, so the sheet covers the row it is about
+ * and the back button dismisses it (rule E1, plan 0008).
+ */
+function memberActionRoutes(): Route[] {
+  return (['remove', 'ban', 'transfer', 'rename'] as const).map((action) => ({
+    path: `:membershipId/confirm/${action}`,
+    data: { action },
+    // Renaming is the one an ordinary member may reach, on their own row, so it is
+    // guarded as a member rather than as staff (section 5.4). The other three are
+    // staff only, and core refuses everybody else regardless of what is drawn.
+    canActivate: [action === 'rename' ? zoneMemberGuard : zoneStaffGuard],
+    loadComponent: () =>
+      import('@portfolio/velista/feature-zones').then(
+        (m) => m.MemberActionSheet
+      ),
+  }));
 }
 
 export const AppShellRoutes: Route[] = [
@@ -167,13 +194,61 @@ export const AppShellRoutes: Route[] = [
             (m) => m.AuthCallbackPage
           ),
       },
+      // The group and its people (plan 0010). Both carry `zoneIdGuard`, which is
+      // **rule G1**: a `canMatch` that declines any segment that is not a UUID, so
+      // `/zones/new` falls through to the front door's create sheet instead of being
+      // swallowed by `:zoneId`. See `zone-guards.ts` for why reordering cannot do it.
+      //
+      // `members` is declared before `zones/:zoneId` out of habit rather than
+      // necessity: a route whose children are absent and whose segments are left over
+      // does not match anyway, but the specific before the general is the ordering
+      // that stays correct when somebody later gives the group page more children.
+      {
+        path: 'zones/:zoneId/members',
+        canMatch: [zoneIdGuard],
+        canActivate: [authenticatedGuard],
+        loadComponent: () =>
+          import('@portfolio/velista/feature-zones').then((m) => m.MembersPage),
+        children: [...memberActionRoutes()],
+      },
+      {
+        path: 'zones/:zoneId',
+        canMatch: [zoneIdGuard],
+        canActivate: [authenticatedGuard],
+        loadComponent: () =>
+          import('@portfolio/velista/feature-zones').then((m) => m.GroupPage),
+        children: [
+          {
+            // Any approved member may start a list, which is why this is the member
+            // guard and not the staff one (section 5.5).
+            path: 'lists/new',
+            canActivate: [zoneMemberGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-zones').then(
+                (m) => m.CreateListSheet
+              ),
+          },
+          {
+            // Rename, regenerate the code, delete. Staff, and delete is owner only,
+            // which the sheet itself decides from `myRole` (rule G2).
+            path: 'settings',
+            canActivate: [zoneStaffGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-zones').then(
+                (m) => m.GroupSettingsSheet
+              ),
+          },
+        ],
+      },
       {
         // A cold arrival on somebody else's invite link, and the one way in that is
         // not a sheet: there is no page underneath to cover (plan 0008, section 4.1).
         // Public, because the whole point is that the recipient has no account.
         path: 'join/:code',
         loadComponent: () =>
-          import('@portfolio/velista/feature-entry').then((m) => m.JoinLinkPage),
+          import('@portfolio/velista/feature-entry').then(
+            (m) => m.JoinLinkPage
+          ),
       },
       {
         // The front door (plans 0003 and 0007). A designed screen for somebody with

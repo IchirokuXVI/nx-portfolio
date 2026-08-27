@@ -1,0 +1,106 @@
+<!--
+  A confirm covers the settings sheet rather than replacing it, so cancelling puts the
+  person back exactly where they were rather than on the group page.
+-->
+@if (pending() === 'regenerate') {
+  <lib-confirm-sheet
+    (confirm)="regenerate()"
+    (dismiss)="cancelPending()"
+    [body]="'zone.confirm.regenerate.body' | rokuT"
+    [busy]="busy()"
+    [confirmLabel]="'zone.confirm.regenerate.action' | rokuT"
+    [errorKey]="errorKey()"
+    [title]="'zone.confirm.regenerate.title' | rokuT"
+    titleId="confirm-regenerate-title"
+  />
+} @else if (pending() === 'delete') {
+  <!--
+    The one place in the app that asks for something to be typed. `confirmWith` is
+    what turns an ordinary destructive confirm into one, and it is a mode on the
+    shared component precisely so nothing else grows one by imitation (section 5.7).
+  -->
+  <lib-confirm-sheet
+    (confirm)="remove()"
+    (dismiss)="cancelPending()"
+    [body]="'zone.confirm.delete.body' | rokuT"
+    [busy]="busy()"
+    [confirmLabel]="'zone.confirm.delete.action' | rokuT"
+    [confirmWith]="groupName()"
+    [confirmWithLabel]="'zone.confirm.delete.typeName' | rokuT"
+    [destructive]="true"
+    [errorKey]="errorKey()"
+    [title]="'zone.confirm.delete.title' | rokuT: { name: groupName() }"
+    titleId="confirm-delete-title"
+  />
+} @else {
+  <lib-sheet-shell
+    (dismiss)="dismiss()"
+    [dismissible]="!busy()"
+    labelledBy="group-settings-title"
+  >
+    <h2 class="title" id="group-settings-title">
+      {{ 'zone.settings.title' | rokuT }}
+    </h2>
+
+    <label class="label" for="group-settings-name">
+      {{ 'zone.settings.rename' | rokuT }}
+    </label>
+    <input
+      (input)="onNameInput($event)"
+      [attr.maxlength]="maxLength"
+      [disabled]="busy()"
+      [value]="name()"
+      autocomplete="off"
+      class="field"
+      id="group-settings-name"
+      type="text"
+    />
+
+    @if (errorKey(); as key) {
+      <p class="error" role="alert">{{ key | rokuT }}</p>
+    }
+
+    <button
+      (click)="save()"
+      [attr.aria-busy]="busy()"
+      [disabled]="!canSave()"
+      class="primary"
+      type="button"
+    >
+      @if (busy()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ 'zone.settings.save' | rokuT }}</span>
+    </button>
+
+    <button
+      (click)="pending.set('regenerate')"
+      [disabled]="busy()"
+      class="secondary"
+      type="button"
+    >
+      {{ 'zone.settings.regenerate' | rokuT }}
+    </button>
+
+    <!--
+      Owner only, from `myRole` (rule G2). An admin does not see it, because core
+      refuses them anyway and a control that cannot work is worse than none.
+    -->
+    @if (isOwner()) {
+      <button
+        (click)="pending.set('delete')"
+        [disabled]="busy()"
+        class="danger"
+        type="button"
+      >
+        {{ 'zone.settings.delete' | rokuT }}
+      </button>
+    }
+
+    @if (!busy()) {
+      <button (click)="dismiss()" class="cancel" type="button">
+        {{ 'entry.cancel' | rokuT }}
+      </button>
+    }
+  </lib-sheet-shell>
+}

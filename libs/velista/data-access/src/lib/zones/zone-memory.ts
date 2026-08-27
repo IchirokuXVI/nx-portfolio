@@ -46,6 +46,16 @@ export class ZoneMemory implements ZoneServiceI {
   private readonly _tokens = inject(TokenStore);
   private readonly _zones = signal<readonly MyZone[]>(SEED_ZONES);
 
+  /**
+   * What the fake currently holds.
+   *
+   * Exposed so `MembershipMemory` can resolve the caller's role from the same place
+   * the real gateway resolves it, which is the caller's membership rather than a fact
+   * either fake remembers separately. Two fakes that could disagree about somebody's
+   * role would make the permission table testable and wrong.
+   */
+  readonly zones = this._zones.asReadonly();
+
   async listMyZones(options?: {
     cursor?: string;
     limit?: number;
@@ -177,9 +187,117 @@ export class ZoneMemory implements ZoneServiceI {
     return { state: 'joined', membership };
   }
 
+  /**
+   * One zone, and the two ways it can be refused.
+   *
+   * `not_found` for a zone the caller is not in, which is what core answers a stranger
+   * rather than `forbidden`: the two must stay indistinguishable, or the status code
+   * tells somebody whether a zone they cannot see exists. `forbidden` for a PENDING
+   * membership, which is the request section 3.3 exists to stop being made at all.
+   */
+  async getZone(zoneId: string): Promise<MyZone> {
+    const zone = this._zones().find((candidate) => candidate.id === zoneId);
+    if (zone === undefined) {
+      throw memoryFailure('not_found', 404);
+    }
+    if (zone.myStatus !== 'APPROVED') {
+      throw memoryFailure('forbidden', 403);
+    }
+
+    return zone;
+  }
+
+  async renameZone(zoneId: string, name: string): Promise<Zone> {
+    const zone = this._staffZone(zoneId);
+    return this._patch(zone.id, { name });
+  }
+
+  async regenerateJoinCode(zoneId: string): Promise<Zone> {
+    const zone = this._staffZone(zoneId);
+    return this._patch(zone.id, { joinCode: randomJoinCode() });
+  }
+
+  async deleteZone(zoneId: string): Promise<string> {
+    const zone = this._requireZone(zoneId);
+    if (zone.myRole !== 'OWNER') {
+      // Delete is owner only, and an admin reaching it means the caller's role
+      // changed underneath the button they pressed (section 5.6).
+      throw memoryFailure('forbidden', 403);
+    }
+
+    this._zones.update((current) =>
+      current.filter((candidate) => candidate.id !== zoneId)
+    );
+    return zoneId;
+  }
+
+  /**
+   * Take on an ownerless zone.
+   *
+   * Three refusals, and each is a row of section 5.6: `forbidden` for anybody who is
+   * not an admin, `conflict` for a zone somebody else already claimed, and
+   * `not_found` for one the caller is not in. Claiming twice is what reaches the
+   * conflict, which is exactly the race the copy is written for.
+   */
+  async claimOwnership(zoneId: string): Promise<Zone> {
+    const zone = this._requireZone(zoneId);
+
+    if (zone.myRole !== 'ADMIN') {
+      throw memoryFailure('forbidden', 403);
+    }
+    if (zone.ownerUserId !== null) {
+      throw memoryFailure('conflict', 409);
+    }
+
+    return this._patch(zone.id, {
+      ownerUserId: this._tokens.tokens()?.userId ?? SEED_USER_ID,
+      status: 'ACTIVE',
+      myRole: 'OWNER',
+    });
+  }
+
   /** Test and development seam: replace the seeded zones outright. */
   setZones(zones: readonly MyZone[]): void {
     this._zones.set(zones);
+  }
+
+  private _requireZone(zoneId: string): MyZone {
+    const zone = this._zones().find((candidate) => candidate.id === zoneId);
+    if (zone === undefined) {
+      throw memoryFailure('not_found', 404);
+    }
+
+    return zone;
+  }
+
+  /** The zone, if the caller is staff in it. `forbidden` otherwise (rule G2). */
+  private _staffZone(zoneId: string): MyZone {
+    const zone = this._requireZone(zoneId);
+    if (zone.myRole === 'MEMBER') {
+      throw memoryFailure('forbidden', 403);
+    }
+
+    return zone;
+  }
+
+  private _patch(zoneId: string, changes: Partial<MyZone>): Zone {
+    let updated: MyZone | null = null;
+
+    this._zones.update((current) =>
+      current.map((candidate) => {
+        if (candidate.id !== zoneId) {
+          return candidate;
+        }
+
+        updated = { ...candidate, ...changes };
+        return updated;
+      })
+    );
+
+    // `_requireZone` ran first in every caller, so the zone is there. Falling back
+    // rather than asserting keeps the fake from being the only thing in the app that
+    // can throw a `TypeError`.
+    return stripMine(updated ?? this._requireZone(zoneId));
   }
 }
 

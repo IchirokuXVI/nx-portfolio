@@ -1,0 +1,88 @@
+<main class="page">
+  <button (click)="back()" class="back" type="button">
+    {{ 'zone.detail.back' | rokuT }}
+  </button>
+
+  @let current = state();
+
+  <!--
+    A row that leaves announces why, through one polite live region on the screen, so
+    somebody who cannot see the animation is told the request was answered (section 7).
+    It is outside the `@if` so it is never torn down and recreated: a live region that
+    appears at the same moment as its text is often not announced at all.
+  -->
+  <p aria-live="polite" class="live" role="status">
+    @if (announcement(); as said) {
+      {{ said.key | rokuT: { name: said.name } }}
+    }
+  </p>
+
+  @if (current.kind === 'error') {
+    <lib-error-state
+      (retry)="retry()"
+      [body]="'home.error.body' | rokuT"
+      [correlationId]="current.correlationId"
+      [title]="'zone.error.notAvailable' | rokuT"
+    />
+  } @else if (current.kind === 'loading') {
+    <lib-row-skeleton [count]="4" labelKey="zone.members.loading" />
+  } @else {
+    <h1 class="title">
+      {{ 'zone.members.title' | rokuT: { name: current.groupName } }}
+    </h1>
+
+    @if (errorKey(); as key) {
+      <p class="error" role="alert">{{ key | rokuT }}</p>
+    }
+
+    <!--
+      The pending section is a landmark labelled by its heading, so a screen reader
+      user can jump straight to the thing they opened this screen for. Absent
+      entirely when nobody is waiting, rather than an empty state with a message.
+    -->
+    @if (current.pending.length > 0) {
+      <section aria-labelledby="pending-heading" class="pending">
+        <h2 class="section-title" id="pending-heading">
+          {{ 'zone.members.requests' | rokuT }}
+        </h2>
+
+        @for (request of current.pending; track request.membershipId) {
+          <lib-pending-request-row
+            (approve)="approve($event)"
+            (reject)="reject($event)"
+            [request]="request"
+          />
+        }
+      </section>
+    }
+
+    <section aria-labelledby="members-heading" class="members">
+      <h2 class="section-title" id="members-heading">
+        {{ 'zone.detail.members' | rokuT }}
+      </h2>
+
+      <ul class="rows">
+        @for (member of current.members; track member.membershipId) {
+          <li class="row-item">
+            <lib-member-row (act)="act($event)" [member]="member" />
+          </li>
+        }
+      </ul>
+
+      @if (current.hasMore) {
+        <button
+          (click)="loadMore()"
+          [attr.aria-busy]="current.loadingMore"
+          [disabled]="current.loadingMore"
+          class="quiet more"
+          type="button"
+        >
+          {{ 'zone.members.more' | rokuT }}
+        </button>
+      }
+    </section>
+  }
+</main>
+
+<!-- The confirm sheets, as children of the row they are about (rule E1). -->
+<router-outlet />

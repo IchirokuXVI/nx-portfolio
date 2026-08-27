@@ -1,11 +1,17 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import type { MyZone, MyZoneOrder, Page } from '@portfolio/velista/models';
+import type {
+  MyZone,
+  MyZoneOrder,
+  Page,
+  Zone,
+} from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
 import { TokenStore } from '../auth/token-store';
 import {
+  toDeletedId,
   toMembership,
   toMyZone,
   toPage,
@@ -13,6 +19,7 @@ import {
   toZone,
 } from '../mapping/mappers';
 import { isRecord } from '../mapping/primitives';
+import { required } from '../mapping/required';
 import type {
   ZoneCreationResult,
   ZoneJoinResult,
@@ -134,6 +141,74 @@ export class ZoneApi implements ZoneServiceI {
     }
 
     return { state: 'joined', membership };
+  }
+
+  /** `GET /v1/zones/:id`. The group page's header, counts and list previews. */
+  async getZone(zoneId: string): Promise<MyZone> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(this._urls.gateway(`/v1/zones/${zoneId}`), {
+        context: operation('zones.get'),
+      })
+    );
+
+    return required(toMyZone(body), 'zones.get');
+  }
+
+  /** `PATCH /v1/zones/:id`, sending only `name`: the pipe forbids anything else. */
+  async renameZone(zoneId: string, name: string): Promise<Zone> {
+    const body = await firstValueFrom(
+      this._http.patch<unknown>(
+        this._urls.gateway(`/v1/zones/${zoneId}`),
+        { name },
+        { context: operation('zones.rename') }
+      )
+    );
+
+    return required(toZone(body), 'zones.rename');
+  }
+
+  /** `POST /v1/zones/:id/regenerate-code`. */
+  async regenerateJoinCode(zoneId: string): Promise<Zone> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway(`/v1/zones/${zoneId}/regenerate-code`),
+        {},
+        { context: operation('zones.regenerateCode') }
+      )
+    );
+
+    return required(toZone(body), 'zones.regenerateCode');
+  }
+
+  /**
+   * `DELETE /v1/zones/:id`.
+   *
+   * Falls back to the id it was asked to delete when the acknowledgement is
+   * unreadable. Unlike a create, there is nothing here that could have gone to the
+   * wrong record: a 2xx means this zone is gone, so refusing to say so over a
+   * malformed body would leave a deleted group on screen.
+   */
+  async deleteZone(zoneId: string): Promise<string> {
+    const body = await firstValueFrom(
+      this._http.delete<unknown>(this._urls.gateway(`/v1/zones/${zoneId}`), {
+        context: operation('zones.delete'),
+      })
+    );
+
+    return toDeletedId(body) ?? zoneId;
+  }
+
+  /** `POST /v1/zones/:id/claim-ownership`. ADMIN only, and only while unowned. */
+  async claimOwnership(zoneId: string): Promise<Zone> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway(`/v1/zones/${zoneId}/claim-ownership`),
+        {},
+        { context: operation('zones.claimOwnership') }
+      )
+    );
+
+    return required(toZone(body), 'zones.claimOwnership');
   }
 
   /**

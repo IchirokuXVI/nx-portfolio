@@ -1,0 +1,339 @@
+import { signal } from '@angular/core';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import {
+  RokuLocaleStore,
+  RokuTranslatorTestingModule,
+} from '@portfolio/localization/rokutranslator-angular';
+import {
+  fakeMembershipService,
+  fakeZoneStore,
+  GatewayError,
+  provideFakeMembershipService,
+  provideFakeSessionStore,
+  provideFakeZoneStore,
+  REALTIME_CLIENT,
+  RealtimeMemory,
+  type FakeMembershipService,
+  type FakeZoneStore,
+} from '@portfolio/velista/data-access';
+import type { Membership, MyZone, ZoneRole } from '@portfolio/velista/models';
+import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { of } from 'rxjs';
+import { MembersPage } from './members-page';
+
+const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
+const ME = 'u1';
+
+function zone(myRole: ZoneRole = 'OWNER'): MyZone {
+  return {
+    id: ZONE_ID,
+    name: 'Flat 3B',
+    joinCode: 'HK7M2QPD',
+    status: 'ACTIVE',
+    ownerUserId: ME,
+    myRole,
+    myStatus: 'APPROVED',
+    counts: {
+      memberCount: 3,
+      listCount: 2,
+      pendingRequestCount: myRole === 'MEMBER' ? null : 1,
+      firstPendingRequesterName: myRole === 'MEMBER' ? null : 'Ines',
+    },
+    lists: [],
+  };
+}
+
+function member(
+  id: string,
+  username: string,
+  role: ZoneRole,
+  userId = `u-${id}`
+): Membership {
+  return {
+    id,
+    zoneId: ZONE_ID,
+    userId,
+    username,
+    role,
+    status: 'APPROVED',
+  };
+}
+
+function waiting(id: string, username: string): Membership {
+  return {
+    id,
+    zoneId: ZONE_ID,
+    userId: `u-${id}`,
+    username,
+    role: 'MEMBER',
+    status: 'PENDING',
+  };
+}
+
+const SEED: readonly Membership[] = [
+  member('m-me', 'Dani', 'OWNER', ME),
+  member('m-toni', 'Toni', 'ADMIN'),
+  member('m-marta', 'Marta', 'MEMBER'),
+  waiting('m-ines', 'Ines'),
+];
+
+interface Options {
+  readonly myRole?: ZoneRole;
+  readonly members?: readonly Membership[];
+  readonly rejectWith?: Parameters<
+    typeof fakeMembershipService
+  >[0] extends infer O
+    ? O extends { rejectWith?: infer R }
+      ? R
+      : never
+    : never;
+}
+
+async function render(options: Options = {}): Promise<{
+  fixture: ComponentFixture<MembersPage>;
+  zones: FakeZoneStore;
+  members: FakeMembershipService;
+  realtime: RealtimeMemory;
+  router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
+}> {
+  TestBed.resetTestingModule();
+
+  const zones = fakeZoneStore({ zones: [zone(options.myRole ?? 'OWNER')] });
+  const members = fakeMembershipService({
+    members: options.members ?? SEED,
+    rejectWith: options.rejectWith,
+  });
+  const realtime = new RealtimeMemory();
+  const router = {
+    navigate: jest.fn().mockResolvedValue(true),
+    navigateByUrl: jest.fn().mockResolvedValue(true),
+  };
+
+  const map = convertToParamMap({ zoneId: ZONE_ID });
+
+  await TestBed.configureTestingModule({
+    imports: [MembersPage, RokuTranslatorTestingModule.forTesting()],
+    providers: [
+      provideVelistaTesting({ basePath: '/velista' }),
+      provideFakeZoneStore(zones),
+      provideFakeMembershipService(members),
+      provideFakeSessionStore('REGISTERED', { userId: ME }),
+      { provide: REALTIME_CLIENT, useValue: realtime },
+      { provide: Router, useValue: router },
+      { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          paramMap: of(map),
+          snapshot: { paramMap: map, parent: null, data: {} },
+          parent: null,
+        },
+      },
+    ],
+  }).compileComponents();
+
+  const fixture = TestBed.createComponent(MembersPage);
+  fixture.detectChanges();
+  await fixture.whenStable();
+  fixture.detectChanges();
+
+  return { fixture, zones, members, realtime, router };
+}
+
+function text(fixture: ComponentFixture<MembersPage>): string {
+  return (fixture.nativeElement as HTMLElement).textContent ?? '';
+}
+
+function all(fixture: ComponentFixture<MembersPage>, selector: string) {
+  return Array.from(
+    (fixture.nativeElement as HTMLElement).querySelectorAll(selector)
+  );
+}
+
+function failure(code: GatewayError['code'], status: number): GatewayError {
+  return new GatewayError({ code, status, correlationId: 'ref-1' });
+}
+
+describe('MembersPage', () => {
+  describe('what it asks for, and rule G2', () => {
+    it('asks for the pending memberships as staff', async () => {
+      const { members } = await render({ myRole: 'ADMIN' });
+
+      expect(members.calls[0]).toMatchObject({
+        method: 'listMembers',
+        statuses: ['APPROVED', 'PENDING'],
+      });
+    });
+
+    it('asks only for the approved ones as an ordinary member', async () => {
+      // Any status other than APPROVED is staff only, and asking for it as a member
+      // is a `forbidden` rather than an empty page. The screen decides from `myRole`
+      // instead of finding out by being refused (section 5.4).
+      const { members } = await render({ myRole: 'MEMBER' });
+
+      expect(members.calls[0]).toMatchObject({ statuses: ['APPROVED'] });
+    });
+  });
+
+  describe('rule G3, the staff room', () => {
+    it('joins it for an owner and for an admin', async () => {
+      for (const role of ['OWNER', 'ADMIN'] as const) {
+        const { realtime } = await render({ myRole: role });
+
+        expect(realtime.rooms.has(`zone:${ZONE_ID}:staff`)).toBe(true);
+      }
+    });
+
+    it('does not join it for a plain member', async () => {
+      // The server refuses the room, a refusal feeds `staleZoneIds`, and `0003`
+      // renders that as "this group is not live". Subscribing unconditionally would
+      // put a permanent and untrue stale badge on every group where the caller is an
+      // ordinary member (section 5.3).
+      const { realtime } = await render({ myRole: 'MEMBER' });
+
+      expect(realtime.rooms.has(`zone:${ZONE_ID}:staff`)).toBe(false);
+      expect(realtime.refusedRooms().size).toBe(0);
+    });
+
+    it('releases it when the screen is destroyed', async () => {
+      const { fixture, realtime } = await render({ myRole: 'OWNER' });
+
+      fixture.destroy();
+
+      expect(realtime.rooms.has(`zone:${ZONE_ID}:staff`)).toBe(false);
+    });
+  });
+
+  describe('the pending section', () => {
+    it('lists whoever is waiting, above the members', async () => {
+      const { fixture } = await render();
+
+      expect(text(fixture)).toContain('Ines');
+      expect(all(fixture, 'lib-pending-request-row')).toHaveLength(1);
+    });
+
+    it('is absent entirely when nobody is waiting', async () => {
+      // Absent, not an empty state with a message (section 3.4).
+      const { fixture } = await render({
+        members: SEED.filter((row) => row.status !== 'PENDING'),
+      });
+
+      expect(all(fixture, 'lib-pending-request-row')).toHaveLength(0);
+      expect(text(fixture)).not.toContain('zone.members.requests');
+    });
+
+    it('is absent for an ordinary member', async () => {
+      const { fixture } = await render({ myRole: 'MEMBER' });
+
+      expect(all(fixture, 'lib-pending-request-row')).toHaveLength(0);
+    });
+  });
+
+  describe('answering a request', () => {
+    it('approves and moves the member count without a reload', async () => {
+      const { fixture, members, zones } = await render();
+
+      await fixture.componentInstance.approve('m-ines');
+      fixture.detectChanges();
+
+      expect(members.calls).toContainEqual(
+        expect.objectContaining({ method: 'approve', membershipId: 'm-ines' })
+      );
+      expect(zones.writes).toContainEqual({
+        method: 'recordMembershipChange',
+        zoneId: ZONE_ID,
+        change: 'approved',
+      });
+      expect(all(fixture, 'lib-pending-request-row')).toHaveLength(0);
+    });
+
+    it('says nothing when somebody else answered first', async () => {
+      // The row leaves, quietly. Two admins on the same queue is the normal case, and
+      // the one who was half a second slower has done nothing wrong (section 5.6).
+      const { fixture } = await render({
+        rejectWith: { approve: failure('validation_failed', 400) },
+      });
+
+      await fixture.componentInstance.approve('m-ines');
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.errorKey()).toBeNull();
+      expect(text(fixture)).not.toContain('zone.error');
+    });
+
+    it('does report a failure that is not somebody else winning', async () => {
+      const { fixture } = await render({
+        rejectWith: { approve: failure('forbidden', 403) },
+      });
+
+      await fixture.componentInstance.approve('m-ines');
+
+      expect(fixture.componentInstance.errorKey()).toBe(
+        'zone.error.roleChanged'
+      );
+    });
+
+    it('announces the answer, so a row leaving is not silent', async () => {
+      const { fixture } = await render();
+
+      await fixture.componentInstance.approve('m-ines');
+
+      expect(fixture.componentInstance.announcement()).toEqual({
+        key: 'zone.members.approved',
+        name: 'Ines',
+      });
+    });
+  });
+
+  describe('the row menus', () => {
+    it('gives an owner a menu on everybody but shows no role control to an admin', async () => {
+      const asAdmin = await render({ myRole: 'ADMIN' });
+
+      expect(text(asAdmin.fixture)).not.toContain('zone.members.makeAdmin');
+      expect(text(asAdmin.fixture)).not.toContain('zone.members.transfer');
+    });
+
+    it('changes a role in place, with no confirm in front of it', async () => {
+      const { fixture, members, router } = await render();
+
+      await fixture.componentInstance.act({
+        action: 'makeAdmin',
+        membershipId: 'm-marta',
+      });
+
+      expect(members.calls).toContainEqual(
+        expect.objectContaining({ method: 'setRole', role: 'ADMIN' })
+      );
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('opens a confirm route for the three that take something away', async () => {
+      const { fixture, router } = await render();
+
+      for (const action of ['remove', 'ban', 'transfer'] as const) {
+        await fixture.componentInstance.act({
+          action,
+          membershipId: 'm-marta',
+        });
+
+        expect(router.navigate).toHaveBeenCalledWith(
+          ['m-marta', 'confirm', action],
+          expect.objectContaining({ state: { name: 'Marta' } })
+        );
+      }
+    });
+  });
+
+  describe('when the caller loses the group while looking at it', () => {
+    it('leaves for the dashboard', async () => {
+      const { fixture, zones, router } = await render();
+
+      zones.setDeparture({ zoneId: ZONE_ID, reason: 'banned' });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista/home');
+    });
+  });
+});
