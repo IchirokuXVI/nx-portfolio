@@ -9,6 +9,7 @@ import {
   type EnvironmentProviders,
   type Provider,
 } from '@angular/core';
+import { APP_MOUNT_PATH } from '@portfolio/localization/rokutranslator-angular';
 import { provideService } from '@portfolio/shared/data-access';
 import {
   AUTH_SERVICE,
@@ -30,14 +31,8 @@ import {
   AppBrand,
 } from '@portfolio/velista/models';
 import { VELISTA_PLATFORM_PROVIDERS } from '@portfolio/velista/platform';
-// Deep relative import, and the rule it silences is a real one. See the note on
-// `VELISTA_TRANSLATION_PROVIDERS` below for why the barrel cannot be used here, and
-// rokutranslator plan 0005, D9, for the fix: move `translation-providers.ts` out of a
-// lazily loaded library so every app can import it normally. Suppressed rather than
-// worked around, so the debt is visible to lint's next reader instead of only to git.
-// eslint-disable-next-line @nx/enforce-module-boundaries
-import { VELISTA_TRANSLATION_PROVIDERS } from '../../../../libs/velista/feature-shell/src/lib/translation-providers';
 import { environment } from '../environments/environment';
+import { VELISTA_TRANSLATION_PROVIDERS } from './translation-providers';
 
 /**
  * Product identity, as **values** in one place (rule N1, plan 0001). A rename is a
@@ -78,6 +73,11 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // The standalone build provides '' and nothing else changes (extraction
   // contract, item 5).
   { provide: APP_BASE_PATH, useValue: '/velista' },
+  // The same value, under the name the localization layer knows it by, so the locale
+  // switcher rewrites the segment *after* the mount rather than the mount itself
+  // (plan 0005 D7). `useExisting` rather than a second literal: one mount, written
+  // once, and a rename can only ever move both.
+  { provide: APP_MOUNT_PATH, useExisting: APP_BASE_PATH },
   // The app's own backend configuration, not the portfolio's (item 6).
   { provide: APP_API_CONFIG, useValue: environment.api },
 
@@ -96,15 +96,12 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // is what actually decides this, not position in the array, but a reader who moves
   // it below has no way to tell the constraint exists.
   //
-  // The import reaches into `feature-shell` by path instead of through
-  // `@portfolio/velista/feature-shell`, and both halves of that are deliberate.
-  // `entry.routes.ts` lazy-loads that library, so a static import of its barrel is
-  // `@nx/enforce-module-boundaries`' "static imports of lazy-loaded libraries are
-  // forbidden", and it would pull the whole library into the remote's entry chunk
-  // besides. Naming the one file keeps the chunk to that file and its dependencies.
-  // It is still a relative import across a library boundary, which CLAUDE.md
-  // otherwise forbids; the honest fix is to move `translation-providers.ts` out of a
-  // lazy-loaded library, and that is the locale routing plan's job, not this file's.
+  // The import is an ordinary local one now. It used to reach into `feature-shell` by
+  // relative path, with an `@nx/enforce-module-boundaries` suppression, because that
+  // library is lazy-loaded and a static import of its barrel is forbidden (and would
+  // pull the whole library into the entry chunk besides). Plan 0005 D11 moved the file
+  // into the app, which is the only place this line can import from without either
+  // problem, and the suppression came out with it.
   ...VELISTA_TRANSLATION_PROVIDERS,
 
   // HTTP, with the one interceptor that decides every outgoing header

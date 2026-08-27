@@ -13,10 +13,7 @@ import { ResendSentence, type ResendState } from './resend-sentence';
 @Component({
   imports: [ResendSentence],
   template: `
-    <lib-resend-sentence
-      [state]="state()"
-      [waitSeconds]="waitSeconds()"
-    />
+    <lib-resend-sentence [state]="state()" [waitSeconds]="waitSeconds()" />
   `,
 })
 class Host {

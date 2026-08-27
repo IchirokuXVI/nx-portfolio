@@ -5,9 +5,9 @@ import {
   type Provider,
 } from '@angular/core';
 import {
+  composeTranslationLoader,
   provideRokuTranslator,
   RokuTranslatorService,
-  type LoaderFunction,
   type TranslationSource,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -17,7 +17,7 @@ import {
 
 /**
  * Every library that ships translation assets, in the layer that already knows which
- * libraries the app is made of (plan 0006, section 3).
+ * libraries the app is made of (plan 0006 section 3, moved here by plan 0005 D11).
  *
  * Adding a second one is a single entry here. `ui` owns the loader because a relative
  * `import()` has to be written beside the folder it reads; what it does not own is the
@@ -30,35 +30,17 @@ const sources: readonly TranslationSource[] = [VELISTA_UI_TRANSLATIONS];
 const defaultNamespace = VELISTA_UI_TRANSLATIONS.namespace;
 
 /**
- * Turns a list of descriptors into the one loader `provideRokuTranslator` takes.
- *
- * The library accepts a single loader for every namespace and passes the one it wants
- * as the second argument, so composing several libraries means dispatching on it.
- * `odontogram` already hand rolls this shape inline; what is new is that the branches
- * are derived from the descriptors instead of written out at the composition site.
- *
- * An unknown namespace falls back to the first source rather than throwing. The
- * library only ever asks for namespaces it was configured with, and those come from
- * this same list, so the fallback is unreachable in practice. It exists because the
- * alternative is a rejected promise, and a rejected loader is the one thing the
- * `translationsReady` resolver in `routes.ts` would rather never see.
- *
- * Exported so the routing can be tested with fake sources rather than by loading this
- * app's real asset files, which is what makes "adding a library is one entry" an
- * assertion instead of a claim.
- */
-export function composeTranslationLoader(
-  from: readonly TranslationSource[]
-): LoaderFunction {
-  return (locale, namespace) =>
-    (from.find((source) => source.namespace === namespace) ?? from[0]).loader(
-      locale,
-      namespace
-    );
-}
-
-/**
  * The app's translations, as providers the **app injector** installs.
+ *
+ * ## Why this file is in the app rather than in `feature-shell`
+ *
+ * It was in `feature-shell` because plan 0006 installed these providers from the route
+ * table, and the route table lives there. Plan 0005 D9 moved the providers to the app
+ * injector and the file did not follow, which left `app-providers.ts` reaching into a
+ * lazily loaded library by relative path, suppressing `@nx/enforce-module-boundaries`
+ * to do it. The docblock below already argued for the move: which namespaces an app has
+ * is composition and belongs to the app's entry point. `feature-shell` was never the
+ * intended home, it was the reachable one. The suppression is gone with the import.
  *
  * ## Why they are not on `AppUiModule`
  *

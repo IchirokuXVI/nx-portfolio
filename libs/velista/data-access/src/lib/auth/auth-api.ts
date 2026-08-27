@@ -152,7 +152,10 @@ export class AuthApi implements AuthServiceI {
       if (error instanceof GatewayError && error.code === 'rate_limited') {
         // Not a failure to report as one: the person asked too soon, the screen has a
         // sentence for it, and the only thing it needs is the number.
-        return { state: 'refused', waitSeconds: error.retryAfterSeconds ?? null };
+        return {
+          state: 'refused',
+          waitSeconds: error.retryAfterSeconds ?? null,
+        };
       }
 
       return { state: 'failed', error };

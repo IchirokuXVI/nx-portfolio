@@ -86,12 +86,14 @@ describe('SignInPage', () => {
       expect(primary.disabled).toBe(true);
 
       fill(fixture, 'marta@example.com', '');
-      expect((query(fixture, 'button.primary') as HTMLButtonElement).disabled)
-        .toBe(true);
+      expect(
+        (query(fixture, 'button.primary') as HTMLButtonElement).disabled
+      ).toBe(true);
 
       fill(fixture, 'marta@example.com', 'password123');
-      expect((query(fixture, 'button.primary') as HTMLButtonElement).disabled)
-        .toBe(false);
+      expect(
+        (query(fixture, 'button.primary') as HTMLButtonElement).disabled
+      ).toBe(false);
     });
 
     it('signs in and goes to the dashboard', async () => {
@@ -206,7 +208,9 @@ describe('SignInPage', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(document.activeElement).toBe(query(fixture, 'input[type="email"]'));
+      expect(document.activeElement).toBe(
+        query(fixture, 'input[type="email"]')
+      );
     });
 
     it('lets the person try again', async () => {
@@ -219,8 +223,9 @@ describe('SignInPage', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect((query(fixture, 'button.primary') as HTMLButtonElement).disabled)
-        .toBe(false);
+      expect(
+        (query(fixture, 'button.primary') as HTMLButtonElement).disabled
+      ).toBe(false);
     });
 
     it('says something that does not guess when the request never arrived', async () => {
@@ -264,7 +269,9 @@ describe('SignInPage', () => {
 
       (query(fixture, 'lib-google-option button') as HTMLButtonElement).click();
 
-      expect(fixture.componentInstance.pendingRoutes()).toEqual(['auth.google']);
+      expect(fixture.componentInstance.pendingRoutes()).toEqual([
+        'auth.google',
+      ]);
       expect(router.navigateByUrl).not.toHaveBeenCalled();
     });
 

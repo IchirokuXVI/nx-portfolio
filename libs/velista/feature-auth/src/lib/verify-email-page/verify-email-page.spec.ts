@@ -38,7 +38,9 @@ async function render(options: Options = {}) {
         provide: ActivatedRoute,
         useValue: {
           snapshot: {
-            queryParamMap: { get: (key: string) => (key === 'token' ? token : null) },
+            queryParamMap: {
+              get: (key: string) => (key === 'token' ? token : null),
+            },
           },
         },
       },
@@ -76,9 +78,7 @@ describe('VerifyEmailPage', () => {
     it('spends the token on arrival, with nothing to press', async () => {
       const { fixture, auth } = await render({ token: 'abc123' });
 
-      expect(auth.calls).toEqual([
-        { method: 'verifyEmail', token: 'abc123' },
-      ]);
+      expect(auth.calls).toEqual([{ method: 'verifyEmail', token: 'abc123' }]);
       // The only button on the confirmed screen is the way onward, and it was not
       // needed to get here.
       expect(fixture.componentInstance.state()).toBe('confirmed');

@@ -120,7 +120,7 @@ describe('JoinCodeSheet', () => {
 
     it('takes the code out of a pasted share link', async () => {
       const { fixture, store } = await render({
-        clipboard: 'https://velista.example/en/velista/join/HK7M2QPD',
+        clipboard: 'https://velista.example/velista/en/join/HK7M2QPD',
       });
 
       (query(fixture, '.paste') as HTMLButtonElement).click();
@@ -162,7 +162,7 @@ describe('JoinCodeSheet', () => {
       (query(fixture, '.primary') as HTMLButtonElement).click();
       await fixture.whenStable();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/velista/home');
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
     });
 
     it('never names the group, because nothing can resolve a code to one', async () => {

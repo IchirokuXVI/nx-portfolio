@@ -12,8 +12,8 @@ import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-an
 import { APP_API_CONFIG } from '@portfolio/velista/models';
 import { provideFakeBrowserFacade } from '@portfolio/velista/platform';
 import { VELISTA_DATA_ACCESS_PROVIDERS } from '../data-access-providers';
-import { gatewayInterceptor } from '../gateway-interceptor';
 import { GatewayError } from '../errors';
+import { gatewayInterceptor } from '../gateway-interceptor';
 import { AuthApi } from './auth-api';
 import { TokenStore } from './token-store';
 
@@ -194,7 +194,9 @@ describe('AuthApi', () => {
       // Confirming an email is not a session. Minting one from a link in an inbox
       // would be the client inventing an identity.
       const result = api.verifyEmail('raw-token');
-      httpMock.expectOne(`${GATEWAY}/v1/auth/verify-email`).flush({ userId: 'u1' });
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/verify-email`)
+        .flush({ userId: 'u1' });
       await result;
 
       expect(tokens.tokens()).toBeNull();
@@ -298,9 +300,7 @@ describe('AuthApi', () => {
       // A half stored session is worse than none: the app would look signed in and
       // fail every request afterwards.
       const result = api.login('marta@example.com', 'password123');
-      httpMock
-        .expectOne(`${GATEWAY}/v1/auth/login`)
-        .flush({ userId: 'u1' });
+      httpMock.expectOne(`${GATEWAY}/v1/auth/login`).flush({ userId: 'u1' });
 
       await expect(result).rejects.toThrow();
       expect(tokens.tokens()).toBeNull();

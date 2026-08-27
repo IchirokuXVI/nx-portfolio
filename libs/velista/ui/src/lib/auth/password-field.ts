@@ -82,9 +82,7 @@ export class PasswordField {
    * Drives a tick and a colour beside the sentence, never an error: a password that is
    * six characters long while it is being typed is not wrong, it is unfinished.
    */
-  readonly ruleMet = computed(
-    () => this.value().length >= PASSWORD_MIN_LENGTH
-  );
+  readonly ruleMet = computed(() => this.value().length >= PASSWORD_MIN_LENGTH);
 
   toggleReveal(): void {
     this.revealed.update((current) => !current);

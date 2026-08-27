@@ -75,7 +75,9 @@ export class SignInPage {
    * The whole point of that offer is that the person does not type the address a
    * second time, so arriving without it filled in would make the link decorative.
    */
-  readonly email = signal(this._route.snapshot.queryParamMap.get('email') ?? '');
+  readonly email = signal(
+    this._route.snapshot.queryParamMap.get('email') ?? ''
+  );
   readonly password = signal('');
 
   readonly submitting = signal(false);

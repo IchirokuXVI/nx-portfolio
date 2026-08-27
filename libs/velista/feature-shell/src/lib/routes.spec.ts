@@ -1,8 +1,19 @@
 import type { Route } from '@angular/router';
 import { AppShellRoutes } from './routes';
 
-/** Everything below the app's layout route, which is where the pages live. */
-const pages: readonly Route[] = AppShellRoutes[0]?.children ?? [];
+/**
+ * Everything below the app's layout route, which is where the pages live.
+ *
+ * Two levels down rather than one since plan 0003: the top route carries the locale
+ * guard and is componentless, and `:locale` below it carries `AppLayout` and the
+ * pages. Reached by path rather than by index so the sibling `**` that keeps the
+ * guard reachable cannot be mistaken for the layout.
+ */
+const localeRoute: Route | undefined = AppShellRoutes[0]?.children?.find(
+  (route) => route.path === ':locale'
+);
+
+const pages: readonly Route[] = localeRoute?.children ?? [];
 
 /** A page's own children, which today means the two sheets it offers. */
 function sheetsOf(path: string): readonly Route[] {

@@ -1,9 +1,11 @@
 import { inject } from '@angular/core';
 import { type Route } from '@angular/router';
 import {
-  localeCorrectionGuard,
+  localeGuard,
+  localizedTitle,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
+import { NotFoundComponent } from '@portfolio/shared/ui';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import {
   anonymousOnlyGuard,
@@ -18,9 +20,9 @@ import { zoneIdGuard, zoneMemberGuard, zoneStaffGuard } from './zone-guards';
  *
  * Every page renders inside `AppLayout`, the parent route that owns the app's own
  * chrome and its theme token scope (plan 0001, the extraction contract, items 1
- * and 4). `localeCorrectionGuard` validates the shell's `:locale` segment against
- * the set this app supports and corrects the URL with a router navigation when it
- * does not match.
+ * and 4). `localeGuard` owns the locale segment below this app's mount: it settles a
+ * supported, canonical locale before anything here renders, inserting one when the URL
+ * carries none and replacing one this app does not support (plan 0005 D6).
  *
  * The route table from plan 0001, section 6.2, is filled in as each page plan
  * lands — `zones/:zoneId`, `lists/:listId`, `auth/*`, `account`, `settings` are
@@ -92,8 +94,15 @@ function memberActionRoutes(): Route[] {
 
 export const AppShellRoutes: Route[] = [
   {
+    /**
+     * The app's mount, and the guard that settles its locale (plan 0003).
+     *
+     * `AppLayout` moves down to the `:locale` child so the chrome renders *after*
+     * the language it displays has been decided. This route is componentless and
+     * exists to carry the guard, the title and the readiness resolve, which are
+     * decided once for the app rather than repeated by every page ever added.
+     */
     path: '',
-    component: AppLayout,
     // The app's translations are **not** installed here any more. They moved up to
     // `app-providers.ts`, because `gatewayInterceptor` injects `RokuTranslatorService`
     // for its `Accept-Language` header and a functional interceptor resolves from the
@@ -105,7 +114,7 @@ export const AppShellRoutes: Route[] = [
     // every page, and the mounted app and the standalone bootstrap get them the same
     // way, since both enter through `app-providers.ts`. Only the injector changed, and
     // it moved in the direction that has more above it rather than less.
-    canActivate: [localeCorrectionGuard],
+    canActivate: [localeGuard],
     // No page of this app is created until its strings have arrived (plan 0006,
     // section 4). On the parent, so it is decided once for the app rather than
     // repeated by every page ever added, and after the locale guard: Angular runs a
@@ -121,6 +130,10 @@ export const AppShellRoutes: Route[] = [
     // determinism for a build that renders text on a fast machine and keys on a slow
     // one, with nothing in the source saying which. Being a `ReplaySubject(1)`, every
     // navigation after the first resolves from the buffer and costs nothing.
+    // This app's own title, from this app's own translator (plan 0005 D10). The
+    // shell used to set it through a `titleNs` in its route data naming velista's
+    // namespace; with a translator per app the shell has none to look it up in.
+    title: localizedTitle('app-title'),
     resolve: { translationsReady: () => inject(RokuTranslatorService).loaded$ },
     data: {
       appKey: APP_KEY,
@@ -139,141 +152,181 @@ export const AppShellRoutes: Route[] = [
     // shadowed by `zones/new` if it were ever appended after this.
     children: [
       {
-        // The dashboard (plan 0003). Its guard also carries what `selectHomeState`'s
-        // anonymous branch used to, and earlier: nothing here is constructed, and no
-        // request is fired, on behalf of somebody who is not signed in.
-        //
-        // Both routes stay lazy, so the shell's initial payload carries the layout and
-        // the locale guard but neither page, and a visitor downloads the one screen
-        // they are actually shown. That was the split's whole point and it only starts
-        // paying once there are two of them, which there now are.
-        path: 'home',
-        canActivate: [authenticatedGuard],
-        loadComponent: () =>
-          import('@portfolio/velista/feature-home').then((m) => m.HomePage),
-        children: [...entrySheetRoutes('home')],
-      },
-      // The credential flows (plan 0009). Routes and not sheets, because none of them
-      // completes one field in place over a page that keeps its context: each has two
-      // fields, its own alternative path at the bottom, and in two cases a Google
-      // button, so each is a destination (section 4.1).
-      //
-      // The guards are rule C1, and between them they are the whole of rule C2: a
-      // guest is barred from `register`, where a valid form would silently strand
-      // every group they have, and steered to `upgrade`, which is the only path that
-      // keeps them. Which person may see which screen is a property of the route,
-      // where it is tested, rather than a branch in a template.
-      {
-        path: 'auth/login',
-        canActivate: [anonymousOnlyGuard],
-        loadComponent: () =>
-          import('@portfolio/velista/feature-auth').then((m) => m.SignInPage),
-      },
-      {
-        path: 'auth/register',
-        canActivate: [anonymousOnlyGuard],
-        loadComponent: () =>
-          import('@portfolio/velista/feature-auth').then((m) => m.RegisterPage),
-      },
-      {
-        path: 'auth/upgrade',
-        canActivate: [guestOnlyGuard],
-        loadComponent: () =>
-          import('@portfolio/velista/feature-auth').then((m) => m.UpgradePage),
-      },
-      {
-        // Public, and it has to be: a confirmation link is opened wherever the mail
-        // app happens to be, which is often a phone that has never signed in.
-        path: 'auth/verify',
-        loadComponent: () =>
-          import('@portfolio/velista/feature-auth').then(
-            (m) => m.VerifyEmailPage
-          ),
-      },
-      {
-        // Public, and inert until the gateway redirects here with the pair in the URL
-        // fragment instead of answering JSON (section 5.6).
-        path: 'auth/callback',
-        loadComponent: () =>
-          import('@portfolio/velista/feature-auth').then(
-            (m) => m.AuthCallbackPage
-          ),
-      },
-      // The group and its people (plan 0010). Both carry `zoneIdGuard`, which is
-      // **rule G1**: a `canMatch` that declines any segment that is not a UUID, so
-      // `/zones/new` falls through to the front door's create sheet instead of being
-      // swallowed by `:zoneId`. See `zone-guards.ts` for why reordering cannot do it.
-      //
-      // `members` is declared before `zones/:zoneId` out of habit rather than
-      // necessity: a route whose children are absent and whose segments are left over
-      // does not match anyway, but the specific before the general is the ordering
-      // that stays correct when somebody later gives the group page more children.
-      {
-        path: 'zones/:zoneId/members',
-        canMatch: [zoneIdGuard],
-        canActivate: [authenticatedGuard],
-        loadComponent: () =>
-          import('@portfolio/velista/feature-zones').then((m) => m.MembersPage),
-        children: [...memberActionRoutes()],
-      },
-      {
-        path: 'zones/:zoneId',
-        canMatch: [zoneIdGuard],
-        canActivate: [authenticatedGuard],
-        loadComponent: () =>
-          import('@portfolio/velista/feature-zones').then((m) => m.GroupPage),
+        /**
+         * The locale, which this app now owns rather than inheriting from a
+         * `:locale` route the shell kept on everybody's behalf.
+         *
+         * `AppLayout` hangs here rather than on the parent so the chrome is created
+         * below the guard, in the language the guard just settled.
+         */
+        path: ':locale',
+        component: AppLayout,
         children: [
           {
-            // Any approved member may start a list, which is why this is the member
-            // guard and not the staff one (section 5.5).
-            path: 'lists/new',
-            canActivate: [zoneMemberGuard],
+            // The dashboard (plan 0003). Its guard also carries what `selectHomeState`'s
+            // anonymous branch used to, and earlier: nothing here is constructed, and no
+            // request is fired, on behalf of somebody who is not signed in.
+            //
+            // Both routes stay lazy, so the shell's initial payload carries the layout and
+            // the locale guard but neither page, and a visitor downloads the one screen
+            // they are actually shown. That was the split's whole point and it only starts
+            // paying once there are two of them, which there now are.
+            path: 'home',
+            canActivate: [authenticatedGuard],
             loadComponent: () =>
-              import('@portfolio/velista/feature-zones').then(
-                (m) => m.CreateListSheet
+              import('@portfolio/velista/feature-home').then((m) => m.HomePage),
+            children: [...entrySheetRoutes('home')],
+          },
+          // The credential flows (plan 0009). Routes and not sheets, because none of them
+          // completes one field in place over a page that keeps its context: each has two
+          // fields, its own alternative path at the bottom, and in two cases a Google
+          // button, so each is a destination (section 4.1).
+          //
+          // The guards are rule C1, and between them they are the whole of rule C2: a
+          // guest is barred from `register`, where a valid form would silently strand
+          // every group they have, and steered to `upgrade`, which is the only path that
+          // keeps them. Which person may see which screen is a property of the route,
+          // where it is tested, rather than a branch in a template.
+          {
+            path: 'auth/login',
+            canActivate: [anonymousOnlyGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.SignInPage
               ),
           },
           {
-            // Rename, regenerate the code, delete. Staff, and delete is owner only,
-            // which the sheet itself decides from `myRole` (rule G2).
-            path: 'settings',
-            canActivate: [zoneStaffGuard],
+            path: 'auth/register',
+            canActivate: [anonymousOnlyGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.RegisterPage
+              ),
+          },
+          {
+            path: 'auth/upgrade',
+            canActivate: [guestOnlyGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.UpgradePage
+              ),
+          },
+          {
+            // Public, and it has to be: a confirmation link is opened wherever the mail
+            // app happens to be, which is often a phone that has never signed in.
+            path: 'auth/verify',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.VerifyEmailPage
+              ),
+          },
+          {
+            // Public, and inert until the gateway redirects here with the pair in the URL
+            // fragment instead of answering JSON (section 5.6).
+            path: 'auth/callback',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-auth').then(
+                (m) => m.AuthCallbackPage
+              ),
+          },
+          // The group and its people (plan 0010). Both carry `zoneIdGuard`, which is
+          // **rule G1**: a `canMatch` that declines any segment that is not a UUID, so
+          // `/zones/new` falls through to the front door's create sheet instead of being
+          // swallowed by `:zoneId`. See `zone-guards.ts` for why reordering cannot do it.
+          //
+          // `members` is declared before `zones/:zoneId` out of habit rather than
+          // necessity: a route whose children are absent and whose segments are left over
+          // does not match anyway, but the specific before the general is the ordering
+          // that stays correct when somebody later gives the group page more children.
+          {
+            path: 'zones/:zoneId/members',
+            canMatch: [zoneIdGuard],
+            canActivate: [authenticatedGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-zones').then(
-                (m) => m.GroupSettingsSheet
+                (m) => m.MembersPage
               ),
+            children: [...memberActionRoutes()],
+          },
+          {
+            path: 'zones/:zoneId',
+            canMatch: [zoneIdGuard],
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-zones').then(
+                (m) => m.GroupPage
+              ),
+            children: [
+              {
+                // Any approved member may start a list, which is why this is the member
+                // guard and not the staff one (section 5.5).
+                path: 'lists/new',
+                canActivate: [zoneMemberGuard],
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-zones').then(
+                    (m) => m.CreateListSheet
+                  ),
+              },
+              {
+                // Rename, regenerate the code, delete. Staff, and delete is owner only,
+                // which the sheet itself decides from `myRole` (rule G2).
+                path: 'settings',
+                canActivate: [zoneStaffGuard],
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-zones').then(
+                    (m) => m.GroupSettingsSheet
+                  ),
+              },
+            ],
+          },
+          {
+            // A cold arrival on somebody else's invite link, and the one way in that is
+            // not a sheet: there is no page underneath to cover (plan 0008, section 4.1).
+            // Public, because the whole point is that the recipient has no account.
+            path: 'join/:code',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-entry').then(
+                (m) => m.JoinLinkPage
+              ),
+          },
+          {
+            // The front door (plans 0003 and 0007). A designed screen for somebody with
+            // no account, not a signed-out fallback, which is why it sits at the mount:
+            // that is the URL a home screen shortcut is installed against.
+            //
+            // Guarded rather than adaptive. `0003` rendered both screens from one
+            // component and let a `@switch` decide, which made "a signed in user never
+            // sees the front door" a fact about a template instead of a property of the
+            // route. As a redirect it is checkable, and the signed in user still reaches
+            // their groups in one navigation.
+            //
+            // Last, and the only empty path here. See the note on `children` above.
+            path: '',
+            canActivate: [anonymousOnlyGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-landing').then(
+                (m) => m.LandingPage
+              ),
+            children: [...entrySheetRoutes('landing')],
           },
         ],
       },
       {
-        // A cold arrival on somebody else's invite link, and the one way in that is
-        // not a sheet: there is no page underneath to cover (plan 0008, section 4.1).
-        // Public, because the whole point is that the recipient has no account.
-        path: 'join/:code',
-        loadComponent: () =>
-          import('@portfolio/velista/feature-entry').then(
-            (m) => m.JoinLinkPage
-          ),
-      },
-      {
-        // The front door (plans 0003 and 0007). A designed screen for somebody with
-        // no account, not a signed-out fallback, which is why it sits at the mount:
-        // that is the URL a home screen shortcut is installed against.
-        //
-        // Guarded rather than adaptive. `0003` rendered both screens from one
-        // component and let a `@switch` decide, which made "a signed in user never
-        // sees the front door" a fact about a template instead of a property of the
-        // route. As a redirect it is checkable, and the signed in user still reaches
-        // their groups in one navigation.
-        //
-        // Last, and the only empty path here. See the note on `children` above.
-        path: '',
-        canActivate: [anonymousOnlyGuard],
-        loadComponent: () =>
-          import('@portfolio/velista/feature-landing').then(
-            (m) => m.LandingPage
-          ),
-        children: [...entrySheetRoutes('landing')],
+        /**
+         * **Load bearing, and not merely a 404.** The guard above only runs when
+         * this parent route matches, and a parent with `children` matches only if
+         * one of them matches the remainder. With `:locale` as the only child, any
+         * URL without a locale segment failed to match the whole branch, Angular
+         * fell through to the shell's routes, and this app's guard, the one whose
+         * job is to *insert* the missing locale, never ran at all.
+         *
+         * So the app claims every path below its mount and the guard settles the
+         * locale for all of them. Anything still here afterwards carries a
+         * supported canonical locale and simply is not a route, which is this
+         * app's own 404, drawn in a language the visitor can read.
+         */
+        path: '**',
+        component: NotFoundComponent,
       },
     ],
   },
