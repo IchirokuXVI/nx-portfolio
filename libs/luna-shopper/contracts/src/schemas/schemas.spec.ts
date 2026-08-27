@@ -329,6 +329,7 @@ describe('contract schemas', () => {
             firstPendingRequesterName: 'Ines',
           },
           lists: [{ id: 'l', name: 'Groceries', lineCount: 12, readyCount: 7 }],
+          ownerUsername: 'Marc',
         }).valid
       ).toBe(true);
     });
@@ -353,6 +354,71 @@ describe('contract schemas', () => {
             firstPendingRequesterName: null,
           },
           lists: [],
+          ownerUsername: 'Marc',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('a pending applicant is named the approver but no governance (plan 0024, section 2)', () => {
+      // The combination the waiting card needs, and the one a careless
+      // authorization change is most likely to break in either direction.
+      expect(
+        validateMessageResponse('zone.get', {
+          id: 'z',
+          name: 'Flat 3B',
+          joinCode: 'ABCD1234',
+          status: 'ACTIVE',
+          ownerUserId: 'u',
+          config: {},
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          myRole: 'MEMBER',
+          myStatus: 'PENDING',
+          counts: {
+            memberCount: 3,
+            listCount: 0,
+            pendingRequestCount: null,
+            firstPendingRequesterName: null,
+          },
+          lists: [],
+          ownerUsername: 'Marc',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('a zone that lost its owner has no owner name (plan 0024, section 2.2)', () => {
+      expect(
+        validateMessageResponse('zone.get', {
+          id: 'z',
+          name: 'Home',
+          joinCode: 'ABCD1234',
+          status: 'ACTIVE',
+          ownerUserId: null,
+          config: {},
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          myRole: 'ADMIN',
+          myStatus: 'APPROVED',
+          counts: {
+            memberCount: 3,
+            listCount: 0,
+            pendingRequestCount: 0,
+            firstPendingRequesterName: null,
+          },
+          lists: [],
+          ownerUsername: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('zone.getByCode request and response (plan 0024, section 1.2)', () => {
+      expect(
+        validateMessageRequest('zone.getByCode', { joinCode: 'ABCD1234' }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('zone.getByCode', {
+          name: 'Flat 3B',
+          memberCount: 4,
         }).valid
       ).toBe(true);
     });
@@ -537,6 +603,52 @@ describe('contract schemas', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
           myRole: 'OWNER',
           myStatus: 'APPROVED',
+          lists: [],
+        }).valid
+      ).toBe(false);
+    });
+
+    it('the by code preview may not carry the zone id (plan 0024, section 1.2)', () => {
+      // The schema is the enforcement of "exactly two fields": an id would turn
+      // a scraped code into a stable handle for the zone.
+      expect(
+        validateMessageResponse('zone.getByCode', {
+          id: 'z',
+          name: 'Flat 3B',
+          memberCount: 4,
+        }).valid
+      ).toBe(false);
+      // ...and neither may it echo the code back, or name the owner.
+      for (const leak of [{ joinCode: 'ABCD1234' }, { ownerUserId: 'u' }]) {
+        expect(
+          validateMessageResponse('zone.getByCode', {
+            name: 'Flat 3B',
+            memberCount: 4,
+            ...leak,
+          }).valid
+        ).toBe(false);
+      }
+    });
+
+    it('a zone summary must carry the owner name, even as null (plan 0024)', () => {
+      expect(
+        validateMessageResponse('zone.get', {
+          id: 'z',
+          name: 'Home',
+          joinCode: 'ABCD1234',
+          status: 'ACTIVE',
+          ownerUserId: 'u',
+          config: {},
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          myRole: 'OWNER',
+          myStatus: 'APPROVED',
+          counts: {
+            memberCount: 1,
+            listCount: 0,
+            pendingRequestCount: 0,
+            firstPendingRequesterName: null,
+          },
           lists: [],
         }).valid
       ).toBe(false);

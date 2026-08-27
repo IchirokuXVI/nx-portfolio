@@ -6,6 +6,7 @@ import {
   ZoneRole,
   ZoneStatus,
   type CreateZoneRequest,
+  type GetZoneByCodeRequest,
   type JoinZoneRequest,
   type ListMyZonesRequest,
   type MembershipActionRequest,
@@ -16,6 +17,7 @@ import {
   type MyZoneView,
   type SetRoleRequest,
   type UpdateZoneRequest,
+  type ZoneByCodeView,
   type ZoneIdRequest,
   type ZonePage,
   type ZoneView,
@@ -43,6 +45,7 @@ import { ZoneCountsService } from './zone-counts.service';
 import {
   readZoneCounts,
   readZoneListsPreview,
+  readZoneOwnerUsername,
   type SummaryRow,
 } from './zone-summary.reader';
 import { selectZoneSummary } from './zone-summary.sql';
@@ -50,6 +53,14 @@ import { toMembershipView, toMyZoneView, toZoneView } from './zone.mappers';
 
 /** Postgres unique-violation error code, raised on a join-code clash. */
 const PG_UNIQUE_VIOLATION = '23505';
+
+/**
+ * One message for every way a join code fails to resolve (plan 0024, section
+ * 1.2). A code that never existed and a code whose zone was archived must be
+ * indistinguishable, or the lookup becomes a way to tell "wrong code" from "code
+ * that used to work".
+ */
+const NO_ZONE_FOR_CODE = 'No active zone for that join code';
 
 interface MyZoneCursor {
   order: MyZoneOrder;
@@ -126,7 +137,7 @@ export class ZoneService {
       where: { joinCode: req.joinCode, status: ZoneStatus.ACTIVE },
     });
     if (!zone) {
-      throw new NotFoundException('No active zone for that join code');
+      throw new NotFoundException(NO_ZONE_FOR_CODE);
     }
 
     const existing = await this.authz.resolve(zone.id, req.userId);
@@ -161,6 +172,30 @@ export class ZoneService {
     this.emitMember(RealtimeEvent.MemberJoined, saved);
     await this.counts.emitZoneCounts(zone.id);
     return toMembershipView(saved);
+  }
+
+  /**
+   * Resolve a join code to the group behind it (plan 0024, section 1), so a join
+   * sheet can say which group somebody is about to ask to join.
+   *
+   * Public and read only. It performs the same lookup {@link join} opens with,
+   * writes nothing, and returns two fields: naming the group is what the screen
+   * needs, and a scraped code should not become a stable handle for the zone. The
+   * gateway throttles it with the join code bucket, since an unauthenticated
+   * lookup is a cheaper enumeration oracle than joining, which at least leaves a
+   * membership row an owner can see.
+   */
+  async getByCode(req: GetZoneByCodeRequest): Promise<ZoneByCodeView> {
+    const zone = await this.zones.findOne({
+      where: { joinCode: req.joinCode, status: ZoneStatus.ACTIVE },
+    });
+    if (!zone) {
+      throw new NotFoundException(NO_ZONE_FOR_CODE);
+    }
+    const memberCount = await this.memberships.count({
+      where: { zoneId: zone.id, status: MembershipStatus.APPROVED },
+    });
+    return { name: zone.name, memberCount };
   }
 
   /** Edit the zone name/config (plan 0006, section 4): owner or admin. */
@@ -422,7 +457,8 @@ export class ZoneService {
       membership.zone,
       membership,
       readZoneCounts(row),
-      readZoneListsPreview(row)
+      readZoneListsPreview(row),
+      readZoneOwnerUsername(row)
     );
   }
 

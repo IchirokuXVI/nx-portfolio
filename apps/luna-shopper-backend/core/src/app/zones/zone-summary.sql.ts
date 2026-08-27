@@ -79,6 +79,26 @@ const ZONE_FIRST_PENDING_SQL = `(
   LIMIT 1
 )`;
 
+/**
+ * The owner's per zone name, or null (plan 0024, section 2.3). Core holds this
+ * without asking auth: the owner's membership row carries the same per zone
+ * `username` every other member has, written on create and maintained by plan
+ * 0018's rename flows.
+ *
+ * Identified by role rather than by ordering, which makes it simpler than the
+ * first pending lookup above. `LIMIT 1` is belt and braces: one APPROVED OWNER
+ * per zone is an invariant of create and transfer, not a constraint Postgres
+ * enforces, and a scalar subquery must return one row whatever the data does.
+ */
+const ZONE_OWNER_USERNAME_SQL = `(
+  SELECT m4.username
+  FROM "zone_memberships" m4
+  WHERE m4."zoneId" = z.id
+    AND m4.role = 'OWNER'
+    AND m4.status = 'APPROVED'
+  LIMIT 1
+)`;
+
 /** Lists the caller may read, counted. Same predicate as the preview below. */
 const ZONE_LIST_COUNT_SQL = `(
   SELECT count(*)::int
@@ -119,6 +139,7 @@ const ZONE_LISTS_PREVIEW_SQL = `(
 export const ZONE_SUMMARY_COLUMNS = {
   memberCounts: 'zoneMemberCounts',
   firstPending: 'zoneFirstPending',
+  ownerUsername: 'zoneOwnerUsername',
   listCount: 'zoneListCount',
   listsPreview: 'zoneListsPreview',
 } as const;
@@ -134,6 +155,7 @@ export function selectZoneSummary(
   return qb
     .addSelect(ZONE_MEMBER_COUNTS_SQL, ZONE_SUMMARY_COLUMNS.memberCounts)
     .addSelect(ZONE_FIRST_PENDING_SQL, ZONE_SUMMARY_COLUMNS.firstPending)
+    .addSelect(ZONE_OWNER_USERNAME_SQL, ZONE_SUMMARY_COLUMNS.ownerUsername)
     .addSelect(ZONE_LIST_COUNT_SQL, ZONE_SUMMARY_COLUMNS.listCount)
     .addSelect(ZONE_LISTS_PREVIEW_SQL, ZONE_SUMMARY_COLUMNS.listsPreview);
 }

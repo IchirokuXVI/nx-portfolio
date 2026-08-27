@@ -30,9 +30,7 @@ export function readZoneMemberCounts(row: SummaryRow): {
   pendingRequestCount: number;
 } {
   const raw = row?.[ZONE_SUMMARY_COLUMNS.memberCounts] as
-    | { memberCount?: unknown; pendingRequestCount?: unknown }
-    | null
-    | undefined;
+    { memberCount?: unknown; pendingRequestCount?: unknown } | null | undefined;
   return {
     memberCount: count(raw?.memberCount),
     pendingRequestCount: count(raw?.pendingRequestCount),
@@ -50,6 +48,17 @@ export function readZoneCounts(row: SummaryRow): ZoneCounts {
     firstPendingRequesterName:
       typeof firstPending === 'string' ? firstPending : null,
   };
+}
+
+/**
+ * The owner's per zone name for one zone row, or null when the zone has no owner
+ * (plan 0024, section 2). Unlike the governance counts this is not gated: a
+ * pending applicant is shown who to nudge, and the exchange is symmetric because
+ * the owner already sees the applicant's handle in their pending list.
+ */
+export function readZoneOwnerUsername(row: SummaryRow): string | null {
+  const raw = row?.[ZONE_SUMMARY_COLUMNS.ownerUsername];
+  return typeof raw === 'string' ? raw : null;
 }
 
 /**

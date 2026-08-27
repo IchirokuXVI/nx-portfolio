@@ -7,6 +7,7 @@ import type { Zone, ZoneMembership } from '../entities';
 import {
   readZoneCounts,
   readZoneListsPreview,
+  readZoneOwnerUsername,
   type SummaryRow,
 } from './zone-summary.reader';
 import {
@@ -45,6 +46,7 @@ function row(overrides: Record<string, unknown> = {}): SummaryRow {
       pendingRequestCount: 2,
     },
     [ZONE_SUMMARY_COLUMNS.firstPending]: 'Ines',
+    [ZONE_SUMMARY_COLUMNS.ownerUsername]: 'Marc',
     [ZONE_SUMMARY_COLUMNS.listCount]: 2,
     [ZONE_SUMMARY_COLUMNS.listsPreview]: [
       { id: 'l1', name: 'Groceries', lineCount: 12, readyCount: 7 },
@@ -87,7 +89,9 @@ describe('zone summary reader', () => {
   it('accepts a bigint count that arrived as a string', () => {
     // node-postgres hands back bigint aggregates as strings unless they are
     // cast; the reader must not turn that into NaN on the wire.
-    const counts = readZoneCounts(row({ [ZONE_SUMMARY_COLUMNS.listCount]: '7' }));
+    const counts = readZoneCounts(
+      row({ [ZONE_SUMMARY_COLUMNS.listCount]: '7' })
+    );
     expect(counts.listCount).toBe(7);
   });
 
@@ -162,14 +166,20 @@ describe('governance gating (plan 0017, section 6)', () => {
     'fills both fields for an approved %s',
     (role) => {
       expect(managesZone(viewer(role))).toBe(true);
-      const view = toMyZoneView(ZONE, viewer(role), counts, []);
+      const view = toMyZoneView(ZONE, viewer(role), counts, [], 'Marc');
       expect(view.counts.pendingRequestCount).toBe(2);
       expect(view.counts.firstPendingRequesterName).toBe('Ines');
     }
   );
 
   it('withholds both fields from a plain member', () => {
-    const view = toMyZoneView(ZONE, viewer(ZoneRole.MEMBER), counts, []);
+    const view = toMyZoneView(
+      ZONE,
+      viewer(ZoneRole.MEMBER),
+      counts,
+      [],
+      'Marc'
+    );
     expect(view.counts.pendingRequestCount).toBeNull();
     expect(view.counts.firstPendingRequesterName).toBeNull();
     // The rest of the card still renders.
@@ -180,9 +190,12 @@ describe('governance gating (plan 0017, section 6)', () => {
   it('withholds both fields from a pending applicant, even an admin one', () => {
     const applicant = viewer(ZoneRole.ADMIN, MembershipStatus.PENDING);
     expect(managesZone(applicant)).toBe(false);
-    const view = toMyZoneView(ZONE, applicant, counts, []);
+    const view = toMyZoneView(ZONE, applicant, counts, [], 'Marc');
     expect(view.counts.pendingRequestCount).toBeNull();
     expect(view.counts.firstPendingRequesterName).toBeNull();
+    // ...and yet they are told who to nudge (plan 0024, section 2.4). This
+    // pairing is the one a careless authorization change breaks.
+    expect(view.ownerUsername).toBe('Marc');
   });
 
   it('nulls rather than zeroes, because the two mean different things', () => {
@@ -202,13 +215,68 @@ describe('governance gating (plan 0017, section 6)', () => {
   });
 });
 
+describe('the owner name (plan 0024, section 2)', () => {
+  const counts: ZoneCounts = {
+    memberCount: 3,
+    listCount: 2,
+    pendingRequestCount: 2,
+    firstPendingRequesterName: 'Ines',
+  };
+
+  it('reads the owner name off its raw column', () => {
+    expect(readZoneOwnerUsername(row())).toBe('Marc');
+  });
+
+  it('is null for a zone whose owner deleted their account', () => {
+    // `ownerUserId` is already nullable and plan 0011 makes this reachable, so
+    // the subquery returning no row is an ordinary answer, not a malformed one.
+    expect(
+      readZoneOwnerUsername(row({ [ZONE_SUMMARY_COLUMNS.ownerUsername]: null }))
+    ).toBeNull();
+    expect(readZoneOwnerUsername(undefined)).toBeNull();
+  });
+
+  it('carries through to the view ungated, for every role', () => {
+    for (const role of [ZoneRole.OWNER, ZoneRole.ADMIN, ZoneRole.MEMBER]) {
+      expect(
+        toMyZoneView(ZONE, viewer(role), counts, [], 'Marc').ownerUsername
+      ).toBe('Marc');
+    }
+    expect(
+      toMyZoneView(ZONE, viewer(ZoneRole.MEMBER), counts, [], null)
+        .ownerUsername
+    ).toBeNull();
+  });
+
+  it('is selected from the OWNER membership, and only an approved one', () => {
+    const added: [string, string][] = [];
+    const qb = {
+      addSelect: jest.fn((sql: string, alias: string) => {
+        added.push([sql, alias]);
+        return qb;
+      }),
+    };
+    selectZoneSummary(qb as never);
+
+    const sql = new Map(added.map(([text, alias]) => [alias, text])).get(
+      ZONE_SUMMARY_COLUMNS.ownerUsername
+    );
+    expect(sql).toContain(`m4.role = 'OWNER'`);
+    expect(sql).toContain(`m4.status = 'APPROVED'`);
+    // Every camelCase column is quoted by hand, or Postgres is handed
+    // `zoneid` and the query fails at runtime where no mock can see it.
+    expect(sql).toContain('m4."zoneId" = z.id');
+  });
+});
+
 describe('the my-zone view (plan 0017, sections 3 and 7)', () => {
   it('carries counts, the preview and ISO 8601 timestamps', () => {
     const view = toMyZoneView(
       ZONE,
       viewer(ZoneRole.OWNER),
       readZoneCounts(row()),
-      readZoneListsPreview(row())
+      readZoneListsPreview(row()),
+      readZoneOwnerUsername(row())
     );
 
     expect(view.createdAt).toBe('2026-01-01T00:00:00.000Z');
@@ -228,7 +296,8 @@ describe('the my-zone view (plan 0017, sections 3 and 7)', () => {
       ZONE,
       viewer(ZoneRole.MEMBER),
       { ...readZoneCounts(row()), listCount: 0 },
-      []
+      [],
+      readZoneOwnerUsername(row())
     );
     // Not "the zone is empty": the caller can read no list in it.
     expect(view.lists).toEqual([]);
