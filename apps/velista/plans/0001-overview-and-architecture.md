@@ -389,6 +389,7 @@ A page plan is not ready for development until its mock is approved.
 | `0010` | The group: its lists, and the people in it | Written 2026-08-27, **mock not drawn** |
 | `0011` | Seven UI defect fixes found by using the app after `0010` | Written 2026-08-27 |
 | `0012` | The list: its lines, and editing them | Written 2026-08-27, mock awaiting approval |
+| `0013` | velista on its own origin, and the app you can install | Written 2026-08-27 |
 | later | One plan per remaining page, in build order | Not written |
 
 The route table in section 6.2 is the build order that remains. `0008` and `0009`

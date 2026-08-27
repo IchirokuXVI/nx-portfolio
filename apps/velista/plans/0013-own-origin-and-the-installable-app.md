@@ -1,4 +1,4 @@
-# 0011. velista on its own origin, and the app you can install
+# 0013. velista on its own origin, and the app you can install
 
 > Prerequisite reading: `0001` sections 5 and 8 (the extraction contract, and D3 on why
 > installability is origin scoped), `0002` sections 5.0 and 5.3 (the mark, and the asset
