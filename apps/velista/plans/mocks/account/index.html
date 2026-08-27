@@ -1,0 +1,666 @@
+<title>Velista Account Page</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Account * { box-sizing: border-box; }
+#ab-Account a { color: #ffb454; text-decoration: none; }
+#ab-Account a:hover { color: #ffc271; }
+#ab-AccountGuest * { box-sizing: border-box; }
+#ab-AccountGuest a { color: #ffb454; text-decoration: none; }
+#ab-AccountGuest a:hover { color: #ffc271; }
+#ab-Rename * { box-sizing: border-box; }
+#ab-Rename a { color: #ffb454; text-decoration: none; }
+#ab-Rename a:hover { color: #ffc271; }
+#ab-Delete * { box-sizing: border-box; }
+#ab-Delete a { color: #ffb454; text-decoration: none; }
+#ab-Delete a:hover { color: #ffc271; }
+</style>
+
+<header>
+  <h1>Velista Account Page</h1>
+  <p class="lede">The design for plan <code>0013</code>: your name, your email, and the two ways out. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 2820px; height: 2520px;">
+      <figure class="board" style="left: 0px; top: 430px; width: 900px;">
+        <figcaption>The account screen</figcaption>
+        <div class="frame" id="ab-Account" style="width: 900px; height: 970px;">
+          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- CONFIRMED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REGISTERED &middot; email confirmed</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; padding: 12px 12px 0;">
+                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div style="flex: 1; padding: 6px 24px 20px; display: flex; flex-direction: column;">
+
+                  <h1 style="margin: 0 0 4px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Your account</h1>
+
+                  <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+
+                  <!-- NAME -->
+                  <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+                    <span style="flex: 1;">
+                      <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+                      <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+                    </span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M9.5 5.5L16 12l-6.5 6.5"/>
+                    </svg>
+                  </button>
+                  <p style="margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: #6f7899;">This is the name other people in your groups see.</p>
+
+                  <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 28px 0 2px;">Getting in</div>
+
+                  <!-- EMAIL -->
+                  <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 12px;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Email</span>
+                      <span style="display: block; font-size: 16px; color: #f7f8fc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">marta@example.com</span>
+                    </span>
+                    <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 11.5px; font-weight: 650; background: rgba(52,211,153,0.14); color: #34d399; white-space: nowrap;">Confirmed</span>
+                  </div>
+
+                  <!-- PASSWORD -->
+                  <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+                    <span style="flex: 1;">
+                      <span style="display: block; font-size: 16px; color: #f7f8fc; margin-bottom: 6px;">Change your password</span>
+                      <span style="display: block; font-size: 12.5px; line-height: 1.45; color: #6f7899;">We send a link to marta@example.com. Using it signs you out on your other phones, and keeps you signed in here.</span>
+                    </span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M9.5 5.5L16 12l-6.5 6.5"/>
+                    </svg>
+                  </button>
+
+                  <!-- SIGN OUT -->
+                  <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+                    <span style="flex: 1;">
+                      <span style="display: block; font-size: 16px; color: #f7f8fc; margin-bottom: 6px;">Sign out</span>
+                      <span style="display: block; font-size: 12.5px; line-height: 1.45; color: #6f7899;">Signs you out on this phone. Your other phones stay signed in.</span>
+                    </span>
+                  </button>
+
+                  <div style="flex: 1; min-height: 20px;"></div>
+
+                  <!-- DELETE -->
+                  <div style="border-top: 1px solid rgba(255,255,255,0.07); padding-top: 8px;">
+                    <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; min-height: 44px; padding: 10px 0; font-family: inherit; font-size: 15.5px; font-weight: 600; color: #fb7185; cursor: pointer;">Delete your account</button>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+            <!-- UNCONFIRMED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REGISTERED &middot; the address was never confirmed</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; padding: 12px 12px 0;">
+                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div style="flex: 1; padding: 6px 24px 20px; display: flex; flex-direction: column;">
+
+                  <h1 style="margin: 0 0 4px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Your account</h1>
+
+                  <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+
+                  <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+                    <span style="flex: 1;">
+                      <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+                      <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+                    </span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M9.5 5.5L16 12l-6.5 6.5"/>
+                    </svg>
+                  </button>
+                  <p style="margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: #6f7899;">This is the name other people in your groups see.</p>
+
+                  <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 28px 0 2px;">Getting in</div>
+
+                  <!-- EMAIL, UNCONFIRMED -->
+                  <div style="padding: 15px 0 14px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                      <span style="flex: 1; min-width: 0;">
+                        <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Email</span>
+                        <span style="display: block; font-size: 16px; color: #f7f8fc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">marta@example.com</span>
+                      </span>
+                      <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 11.5px; font-weight: 650; background: rgba(167,139,250,0.16); color: #a78bfa; white-space: nowrap;">Not confirmed</span>
+                    </div>
+                    <p style="margin: 12px 0 0; font-size: 13px; line-height: 1.5; color: #98a0bb;">
+                      Confirming keeps the account yours. <span style="color: #6f7899;">Did not get it?</span> <a href="#" style="font-weight: 650;">Send it again</a>
+                    </p>
+                  </div>
+
+                  <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+                    <span style="flex: 1;">
+                      <span style="display: block; font-size: 16px; color: #f7f8fc; margin-bottom: 6px;">Change your password</span>
+                      <span style="display: block; font-size: 12.5px; line-height: 1.45; color: #6f7899;">We send a link to marta@example.com. Using it signs you out on your other phones, and keeps you signed in here.</span>
+                    </span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M9.5 5.5L16 12l-6.5 6.5"/>
+                    </svg>
+                  </button>
+
+                  <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+                    <span style="flex: 1;">
+                      <span style="display: block; font-size: 16px; color: #f7f8fc; margin-bottom: 6px;">Sign out</span>
+                      <span style="display: block; font-size: 12.5px; line-height: 1.45; color: #6f7899;">Signs you out on this phone. Your other phones stay signed in.</span>
+                    </span>
+                  </button>
+
+                  <div style="flex: 1; min-height: 12px;"></div>
+
+                  <div style="border-top: 1px solid rgba(255,255,255,0.07); padding-top: 8px;">
+                    <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; min-height: 44px; padding: 10px 0; font-family: inherit; font-size: 15.5px; font-weight: 600; color: #fb7185; cursor: pointer;">Delete your account</button>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 960px; top: 430px; width: 470px;">
+        <figcaption>The guest's screen</figcaption>
+        <div class="frame" id="ab-AccountGuest" style="width: 470px; height: 970px;">
+          <div style="width: 470px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">GUEST &middot; no sign out exists here</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; padding: 12px 12px 0;">
+                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div style="flex: 1; padding: 6px 24px 20px; display: flex; flex-direction: column;">
+
+                  <h1 style="margin: 0 0 4px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Your account</h1>
+
+                  <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+
+                  <!-- NAME: the one row that is identical for a guest -->
+                  <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+                    <span style="flex: 1;">
+                      <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+                      <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+                    </span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M9.5 5.5L16 12l-6.5 6.5"/>
+                    </svg>
+                  </button>
+                  <p style="margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: #6f7899;">This is the name other people in your groups see.</p>
+
+                  <!-- THE WAY OUT OF THIS PHONE -->
+                  <div style="margin-top: 28px; border: 1px solid rgba(255,180,84,0.24); background: rgba(255,180,84,0.06); border-radius: 16px; padding: 20px 18px;">
+                    <h2 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 21px; line-height: 1.25; color: #ffd39a;">This account lives on this phone</h2>
+                    <p style="margin: 0 0 16px; font-size: 13.5px; line-height: 1.55; color: #c2c8db;">There is no email and no password on it yet, so it cannot be opened anywhere else, and clearing this browser&rsquo;s data would end it.</p>
+                    <p style="margin: 0 0 16px; font-size: 13.5px; line-height: 1.55; color: #98a0bb;">Your <strong style="color: #f7f8fc; font-weight: 650;">2 groups</strong> and everything in them stay exactly where they are. This is the same account, with a way back into it.</p>
+                    <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Secure this account</button>
+                  </div>
+
+                  <div style="flex: 1; min-height: 16px;"></div>
+
+                  <!-- DELETE: named as the only other exit there is -->
+                  <div style="border-top: 1px solid rgba(255,255,255,0.07); padding-top: 12px;">
+                    <p style="margin: 0 0 4px; font-size: 12.5px; line-height: 1.5; color: #6f7899;">Until it is secured, deleting is the only other way this account ends.</p>
+                    <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; min-height: 44px; padding: 10px 0; font-family: inherit; font-size: 15.5px; font-weight: 600; color: #fb7185; cursor: pointer;">Delete your account</button>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1490px; top: 430px; width: 1330px;">
+        <figcaption>Changing your name</figcaption>
+        <div class="frame" id="ab-Rename" style="width: 1330px; height: 970px;">
+          <div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ARRIVED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ARRIVED &middot; the name arrives selected</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; padding: 12px 24px 0;">
+                  <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </div>
+                  <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Your account</h1>
+                  <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+                  <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07);">
+                    <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+                    <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 291px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Change name</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 18px;">This is the name other people in your groups see.</div>
+
+                  <label for="name-a" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Name</label>
+                  <div id="name-a" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 15px;">
+                    <span style="font-size: 16px; color: #f7f8fc; background: rgba(255,180,84,0.28); border-radius: 3px; padding: 1px 2px;">Marta</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #6f7899;">
+                    <span>Between 2 and 40 characters</span>
+                    <span style="font-variant-numeric: tabular-nums;">5 / 40</span>
+                  </div>
+
+                  <!-- The propagation question, always both options, never the enum names -->
+                  <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid #ffb454; background: rgba(255,180,84,0.07);">
+                      <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+                      <span>
+                        <span style="display: block; font-size: 14.5px; font-weight: 600; color: #f7f8fc;">Change it in my groups too</span>
+                        <span style="display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #98a0bb;">Groups where you chose a different name keep it.</span>
+                      </span>
+                    </div>
+                    <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); background: transparent;">
+                      <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+                      <span>
+                        <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Only here</span>
+                        <span style="display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #6f7899;">Every group keeps the name it has now.</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <button type="button" disabled style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: rgba(255,180,84,0.24); color: rgba(10,12,20,0.55); font-family: inherit; font-size: 16px; font-weight: 650;">Save name</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- CHANGED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">CHANGED &middot; &ldquo;Only here&rdquo; is the deliberate choice</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; padding: 12px 24px 0;">
+                  <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </div>
+                  <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Your account</h1>
+                  <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+                  <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07);">
+                    <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+                    <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 291px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Change name</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 18px;">This is the name other people in your groups see.</div>
+
+                  <label for="name-b" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Name</label>
+                  <div id="name-b" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 15px; gap: 2px;">
+                    <span style="font-size: 16px; color: #f7f8fc;">Marta R.</span>
+                    <span style="width: 1.5px; height: 21px; background: #ffb454;"></span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #6f7899;">
+                    <span>Between 2 and 40 characters</span>
+                    <span style="font-variant-numeric: tabular-nums;">8 / 40</span>
+                  </div>
+
+                  <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); background: transparent;">
+                      <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+                      <span>
+                        <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Change it in my groups too</span>
+                        <span style="display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #6f7899;">Groups where you chose a different name keep it.</span>
+                      </span>
+                    </div>
+                    <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid #ffb454; background: rgba(255,180,84,0.07);">
+                      <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+                      <span>
+                        <span style="display: block; font-size: 14.5px; font-weight: 600; color: #f7f8fc;">Only here</span>
+                        <span style="display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #98a0bb;">Every group keeps the name it has now.</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Save name</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- REFUSED -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REFUSED &middot; five per hour, not one per minute</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; padding: 12px 24px 0;">
+                  <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </div>
+                  <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Your account</h1>
+                  <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+                  <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07);">
+                    <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+                    <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 34px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Change name</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 18px;">This is the name other people in your groups see.</div>
+
+                  <label for="name-c" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Name</label>
+                  <div id="name-c" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid rgba(251,113,133,0.55); display: flex; align-items: center; padding: 0 15px;">
+                    <span style="font-size: 16px; color: #f7f8fc;">Marta R.</span>
+                  </div>
+
+                  <p role="alert" style="margin: 12px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; line-height: 1.5; color: #fb7185;">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="2" stroke-linecap="round" style="flex: none; margin-top: 1px;" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9"/><path d="M12 7.6v5"/><path d="M12 16.2h.01"/>
+                    </svg>
+                    <span>Too many name changes. You can change it again in <span style="font-variant-numeric: tabular-nums; font-weight: 650;">41:08</span></span>
+                  </p>
+
+                  <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px; opacity: 0.45;">
+                    <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10);">
+                      <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 5px solid #6f7899; background: #0a0c14;"></span>
+                      <span style="font-size: 14.5px; font-weight: 600; color: #c2c8db;">Change it in my groups too</span>
+                    </div>
+                    <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10);">
+                      <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+                      <span style="font-size: 14.5px; font-weight: 600; color: #c2c8db;">Only here</span>
+                    </div>
+                  </div>
+
+                  <button type="button" disabled style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: rgba(255,180,84,0.24); color: rgba(10,12,20,0.55); font-family: inherit; font-size: 16px; font-weight: 650;">Save name</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 1550px; width: 900px;">
+        <figcaption>Deleting the account</figcaption>
+        <div class="frame" id="ab-Delete" style="width: 900px; height: 970px;">
+          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- OWNS GROUPS -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">OWNS GROUPS &middot; counted from the cache</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; padding: 12px 24px 0;">
+                  <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </div>
+                  <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Your account</h1>
+                  <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+                  <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07);">
+                    <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+                    <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 34px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M11.1 3.9 2.6 18.4a1 1 0 0 0 .87 1.5h17.06a1 1 0 0 0 .87-1.5L12.9 3.9a1 1 0 0 0-1.8 0z"/>
+                      <path d="M12 9.4v4"/><path d="M12 16.9h.01"/>
+                    </svg>
+                    <span style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">Delete your account?</span>
+                  </div>
+
+                  <p style="margin: 0 0 14px; font-size: 13.5px; line-height: 1.55; color: #c2c8db;">Your email, your password and your name go for good. This cannot be undone.</p>
+
+                  <!-- The consequence that belongs to other people -->
+                  <div style="border: 1px solid rgba(251,113,133,0.28); background: rgba(251,113,133,0.07); border-radius: 14px; padding: 13px 14px; margin-bottom: 12px;">
+                    <p style="margin: 0; font-size: 13.5px; line-height: 1.55; color: #f7f8fc;">You own <strong style="font-weight: 700;">2 groups</strong>. They will be deleted unless an admin in each takes them on.</p>
+                  </div>
+
+                  <p style="margin: 0 0 18px; font-size: 12.5px; line-height: 1.5; color: #6f7899;">What you added to other people&rsquo;s lists stays, with your name taken off it.</p>
+
+                  <label for="type-a" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Type your name to confirm</label>
+                  <div id="type-a" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 15px;">
+                    <span style="font-size: 16px; color: #4d5470;">Marta</span>
+                  </div>
+
+                  <button type="button" disabled style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: rgba(251,113,133,0.24); color: rgba(10,12,20,0.55); font-family: inherit; font-size: 16px; font-weight: 650;">Delete my account</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- OWNS NONE -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">OWNS NONE &middot; the sentence is absent, not zeroed</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; padding: 12px 24px 0;">
+                  <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
+                    </svg>
+                  </div>
+                  <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Your account</h1>
+                  <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+                  <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07);">
+                    <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+                    <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 291px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M11.1 3.9 2.6 18.4a1 1 0 0 0 .87 1.5h17.06a1 1 0 0 0 .87-1.5L12.9 3.9a1 1 0 0 0-1.8 0z"/>
+                      <path d="M12 9.4v4"/><path d="M12 16.9h.01"/>
+                    </svg>
+                    <span style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">Delete your account?</span>
+                  </div>
+
+                  <p style="margin: 0 0 14px; font-size: 13.5px; line-height: 1.55; color: #c2c8db;">Your email, your password and your name go for good. This cannot be undone.</p>
+
+                  <p style="margin: 0 0 18px; font-size: 12.5px; line-height: 1.5; color: #6f7899;">What you added to other people&rsquo;s lists stays, with your name taken off it.</p>
+
+                  <label for="type-b" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Type your name to confirm</label>
+                  <div id="type-b" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid #fb7185; display: flex; align-items: center; padding: 0 15px; gap: 2px;">
+                    <span style="font-size: 16px; color: #f7f8fc;">Marta</span>
+                    <span style="width: 1.5px; height: 21px; background: #fb7185;"></span>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: #fb7185; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Delete my account</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 430px;"><p>The account page, plan 0013. The app bar has had an account button since 0003 and it has recorded into pendingRoutes ever since. This is the screen behind it.</p><p>Three things nobody in this product can do today, and all three live here: sign out, change their own name, and delete. A search across libs/velista for a sign out finds nothing at all.</p><p>Phone only, 390x844, Night only: it introduces no colour role that 0003 and 0010 have not already proved, so a Day artboard would restate them.</p><p>One route, account, plus two sheets. It is a destination, so it is a route; each confirm is one decision over a screen that must not be lost, so those are sheets (rule E1, 0008).</p></aside>
+      <aside class="note" style="left: 470px; top: 0px; width: 440px;"><p>A GUEST IS OFFERED NO SIGN OUT. Rule A1, and it is the reason the guest gets a different screen rather than the same one with rows disabled.</p><p>For a registered user, sign out drops a pair that signing in mints again. For a guest it is irreversible destruction: TokenStore's own comment says the temporary user's token is the only proof of their identity, so losing it loses their data. No server call gets it back. The groups keep existing, owned by a user whose only credential was the string the button just erased.</p><p>So the app would be offering two controls with the same outcome, one of which reads as routine. The fix is not a warning, it is not drawing it.</p><p>What the guest gets instead is the upgrade, which is the real way off this phone, and delete, which is honest about being the other one.</p></aside>
+      <aside class="note" style="left: 950px; top: 0px; width: 450px;"><p>TWO CHOICES, NEVER THE THREE ENUM NAMES. Rule A3. UsernamePropagation has GLOBAL_ONLY, MATCHING_ZONES and ALL_ZONES, and per zone names are copies rather than derivations, which is why the enum exists at all.</p><p>Read as a question to a person it is: the name you picked in one group is not the name you use everywhere, should this follow it? So: "Change it in my groups too" sends MATCHING_ZONES and is the client's default, "Only here" sends GLOBAL_ONLY.</p><p>ALL_ZONES is not offered. It overwrites a name somebody deliberately chose, which is the exact case the enum's own comment says the default protects: whoever became "Mama" in the family group should not lose it by editing a profile. Offering it honestly needs a screen listing what it would overwrite, and no endpoint returns that.</p><p>The client default differs from the wire default, so propagation is always sent explicitly: omitting it means GLOBAL_ONLY.</p></aside>
+      <aside class="note" style="left: 1440px; top: 0px; width: 450px;"><p>THE PROFILE OWNS THE NAME, NOT THE TOKEN. Rule A2, and the one thing here that silently does not work if it is skipped.</p><p>SessionStore.username is computed from the token pair. PATCH /v1/account/me answers with a UserProfileView and NO new pair, and ACCESS_TOKEN_TTL defaults to 15m. So a person who renames themselves would watch the sheet close, go back to the dashboard, and find the old initial in the app bar for up to a quarter of an hour.</p><p>The tempting fix is calling TokenStore.refresh() afterwards, and it is wrong: refresh ROTATES, revoking the presented token. That is why refresh is single flight in the first place. Spending a rotation to update one letter puts a race into the cheapest action in the app.</p><p>So ProfileStore holds the profile, the PATCH response is written into it, and SessionStore prefers it. The bar changes on the same tick, on every screen, with no request.</p></aside>
+      <aside class="note" style="left: 1930px; top: 0px; width: 450px;"><p>FIVE PER HOUR, NOT ONE PER MINUTE. Rule A4. THROTTLE_LIMITS.usernameChange is { ttl: hours(1), limit: 5 }. Somebody who tries five names in a sitting waits up to an hour.</p><p>That is why the refused frame is drawn at all, and why the countdown is the server's retryAfterSeconds and never a hardcoded 60. It rides in the problem BODY, not a Retry-After header: enableCors sets no exposedHeaders, so a browser cannot read one cross origin. This is rule C3 from 0009 on a bucket an order of magnitude larger.</p><p>AND IT CATCHES A SHIPPED DEFECT. 0010 gave the per zone rename the copy "Too many changes. Wait a minute and try again", and that route carries the same hourly bucket. The string is wrong on a screen that already ships. This plan rewrites zone.error.tooManyRenames to take {{wait}} and renders the server's number in both places.</p></aside>
+      <aside class="note" style="left: 960px; top: 1550px; width: 460px;"><p>EVERY LINE OF THIS COPY IS A CLAIM ABOUT SOMEBODY ELSE'S DATA, so all of it is read from identity.service.ts and account-deletion.service.ts rather than assumed.</p><p>In auth, deleting the users row cascades credentials, OAuth identities, verifications and refresh tokens. In core, user.deleted then, for every zone the user touched: a zone they OWNED goes ownerless and MARKED_FOR_DELETION, which an admin can still rescue by claiming it (0010 built that), and their membership is retired with the per zone username scrubbed to the anonymized placeholder and the status set to KICKED.</p><p>What they wrote stays. Lists, lines and comments reference an opaque userId and are retained; the KICKED tombstone is what keeps them resolving to the neutral former member label.</p><p>The owned group count comes from ZoneStore's myRole, so the sentence costs no request. Somebody who owns none is not shown it at all, because for them it is not true.</p></aside>
+      <aside class="note" style="left: 1490px; top: 1550px; width: 460px;"><p>THE SECOND AND LAST TYPED CONFIRMATION. 0010 section 5.7 spent it once, on deleting a group, and asked that nothing else grow one by imitation without the same argument.</p><p>The argument holds one level up: deleting a group destroys every list in it for everyone in it, and deleting an account does that to every group the person owns at once, plus their own access to every group they do not. If typing was worth its friction there it cannot be optional here.</p><p>What is typed is the person's OWN USERNAME, not a fixed word. It is on the screen, it is personal, and it is the same gesture in both languages, which typing DELETE is not. Compared trimmed and case folded, matching 0010: it is friction, not a spelling test.</p><p>A failed delete leaves the sheet open with the correlation id and does not clear the session. A failed delete must never look like a successful one.</p></aside>
+      <aside class="note" style="left: 1990px; top: 1550px; width: 460px;"><p>SETTINGS IS NOT THIS SCREEN, and the access difference is the whole argument. 0001 lists account as Authenticated and settings as Any. Theme and language belong to whoever is holding the phone, including somebody who has never signed in and is reading the front door in the wrong language. Folding them in here puts them behind authenticatedGuard.</p><p>TWO THINGS ARE UNREACHABLE UNTIL SETTINGS LANDS, and both are one screen from working:</p><p>1. A signed in user cannot change language. app-bar.html branches on signedIn: anonymous gets the locale menu, signed in gets search and account. The menu is not moved, it is dropped.</p><p>2. Nobody can change the theme. ThemeStore, AppThemePreference, appThemeClass and a StorageKeys slot all exist, and nothing in libs/velista calls setPreference. 0002 designed both themes as first class and the app ships one.</p><p>Also found: group, members and list pages render the bar with signedIn true and bind no (account) handler, so the button is drawn, focusable, and inert. This plan wires all four.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 2820;
+    var h = 2520;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

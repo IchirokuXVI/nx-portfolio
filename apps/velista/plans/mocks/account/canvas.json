@@ -1,0 +1,96 @@
+{
+  "title": "Velista Account Page",
+  "lede": "The design for plan <code>0013</code>: your name, your email, and the two ways out. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "artboards": [
+    {
+      "file": "Account.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 900,
+      "h": 970,
+      "title": "The account screen"
+    },
+    {
+      "file": "AccountGuest.dc.html",
+      "x": 960,
+      "y": 0,
+      "w": 470,
+      "h": 970,
+      "title": "The guest's screen"
+    },
+    {
+      "file": "Rename.dc.html",
+      "x": 1490,
+      "y": 0,
+      "w": 1330,
+      "h": 970,
+      "title": "Changing your name"
+    },
+    {
+      "file": "Delete.dc.html",
+      "x": 0,
+      "y": 1120,
+      "w": 900,
+      "h": 970,
+      "title": "Deleting the account"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -430,
+      "w": 430,
+      "text": "The account page, plan 0013. The app bar has had an account button since 0003 and it has recorded into pendingRoutes ever since. This is the screen behind it.\nThree things nobody in this product can do today, and all three live here: sign out, change their own name, and delete. A search across libs/velista for a sign out finds nothing at all.\nPhone only, 390x844, Night only: it introduces no colour role that 0003 and 0010 have not already proved, so a Day artboard would restate them.\nOne route, account, plus two sheets. It is a destination, so it is a route; each confirm is one decision over a screen that must not be lost, so those are sheets (rule E1, 0008)."
+    },
+    {
+      "id": "guest-no-signout",
+      "x": 470,
+      "y": -430,
+      "w": 440,
+      "text": "A GUEST IS OFFERED NO SIGN OUT. Rule A1, and it is the reason the guest gets a different screen rather than the same one with rows disabled.\nFor a registered user, sign out drops a pair that signing in mints again. For a guest it is irreversible destruction: TokenStore's own comment says the temporary user's token is the only proof of their identity, so losing it loses their data. No server call gets it back. The groups keep existing, owned by a user whose only credential was the string the button just erased.\nSo the app would be offering two controls with the same outcome, one of which reads as routine. The fix is not a warning, it is not drawing it.\nWhat the guest gets instead is the upgrade, which is the real way off this phone, and delete, which is honest about being the other one."
+    },
+    {
+      "id": "propagation",
+      "x": 950,
+      "y": -430,
+      "w": 450,
+      "text": "TWO CHOICES, NEVER THE THREE ENUM NAMES. Rule A3. UsernamePropagation has GLOBAL_ONLY, MATCHING_ZONES and ALL_ZONES, and per zone names are copies rather than derivations, which is why the enum exists at all.\nRead as a question to a person it is: the name you picked in one group is not the name you use everywhere, should this follow it? So: \"Change it in my groups too\" sends MATCHING_ZONES and is the client's default, \"Only here\" sends GLOBAL_ONLY.\nALL_ZONES is not offered. It overwrites a name somebody deliberately chose, which is the exact case the enum's own comment says the default protects: whoever became \"Mama\" in the family group should not lose it by editing a profile. Offering it honestly needs a screen listing what it would overwrite, and no endpoint returns that.\nThe client default differs from the wire default, so propagation is always sent explicitly: omitting it means GLOBAL_ONLY."
+    },
+    {
+      "id": "token-stale",
+      "x": 1440,
+      "y": -430,
+      "w": 450,
+      "text": "THE PROFILE OWNS THE NAME, NOT THE TOKEN. Rule A2, and the one thing here that silently does not work if it is skipped.\nSessionStore.username is computed from the token pair. PATCH /v1/account/me answers with a UserProfileView and NO new pair, and ACCESS_TOKEN_TTL defaults to 15m. So a person who renames themselves would watch the sheet close, go back to the dashboard, and find the old initial in the app bar for up to a quarter of an hour.\nThe tempting fix is calling TokenStore.refresh() afterwards, and it is wrong: refresh ROTATES, revoking the presented token. That is why refresh is single flight in the first place. Spending a rotation to update one letter puts a race into the cheapest action in the app.\nSo ProfileStore holds the profile, the PATCH response is written into it, and SessionStore prefers it. The bar changes on the same tick, on every screen, with no request."
+    },
+    {
+      "id": "hourly",
+      "x": 1930,
+      "y": -430,
+      "w": 450,
+      "text": "FIVE PER HOUR, NOT ONE PER MINUTE. Rule A4. THROTTLE_LIMITS.usernameChange is { ttl: hours(1), limit: 5 }. Somebody who tries five names in a sitting waits up to an hour.\nThat is why the refused frame is drawn at all, and why the countdown is the server's retryAfterSeconds and never a hardcoded 60. It rides in the problem BODY, not a Retry-After header: enableCors sets no exposedHeaders, so a browser cannot read one cross origin. This is rule C3 from 0009 on a bucket an order of magnitude larger.\nAND IT CATCHES A SHIPPED DEFECT. 0010 gave the per zone rename the copy \"Too many changes. Wait a minute and try again\", and that route carries the same hourly bucket. The string is wrong on a screen that already ships. This plan rewrites zone.error.tooManyRenames to take {{wait}} and renders the server's number in both places."
+    },
+    {
+      "id": "delete-consequences",
+      "x": 960,
+      "y": 1120,
+      "w": 460,
+      "text": "EVERY LINE OF THIS COPY IS A CLAIM ABOUT SOMEBODY ELSE'S DATA, so all of it is read from identity.service.ts and account-deletion.service.ts rather than assumed.\nIn auth, deleting the users row cascades credentials, OAuth identities, verifications and refresh tokens. In core, user.deleted then, for every zone the user touched: a zone they OWNED goes ownerless and MARKED_FOR_DELETION, which an admin can still rescue by claiming it (0010 built that), and their membership is retired with the per zone username scrubbed to the anonymized placeholder and the status set to KICKED.\nWhat they wrote stays. Lists, lines and comments reference an opaque userId and are retained; the KICKED tombstone is what keeps them resolving to the neutral former member label.\nThe owned group count comes from ZoneStore's myRole, so the sentence costs no request. Somebody who owns none is not shown it at all, because for them it is not true."
+    },
+    {
+      "id": "typed-twice",
+      "x": 1490,
+      "y": 1120,
+      "w": 460,
+      "text": "THE SECOND AND LAST TYPED CONFIRMATION. 0010 section 5.7 spent it once, on deleting a group, and asked that nothing else grow one by imitation without the same argument.\nThe argument holds one level up: deleting a group destroys every list in it for everyone in it, and deleting an account does that to every group the person owns at once, plus their own access to every group they do not. If typing was worth its friction there it cannot be optional here.\nWhat is typed is the person's OWN USERNAME, not a fixed word. It is on the screen, it is personal, and it is the same gesture in both languages, which typing DELETE is not. Compared trimmed and case folded, matching 0010: it is friction, not a spelling test.\nA failed delete leaves the sheet open with the correlation id and does not clear the session. A failed delete must never look like a successful one."
+    },
+    {
+      "id": "settings-gap",
+      "x": 1990,
+      "y": 1120,
+      "w": 460,
+      "text": "SETTINGS IS NOT THIS SCREEN, and the access difference is the whole argument. 0001 lists account as Authenticated and settings as Any. Theme and language belong to whoever is holding the phone, including somebody who has never signed in and is reading the front door in the wrong language. Folding them in here puts them behind authenticatedGuard.\nTWO THINGS ARE UNREACHABLE UNTIL SETTINGS LANDS, and both are one screen from working:\n1. A signed in user cannot change language. app-bar.html branches on signedIn: anonymous gets the locale menu, signed in gets search and account. The menu is not moved, it is dropped.\n2. Nobody can change the theme. ThemeStore, AppThemePreference, appThemeClass and a StorageKeys slot all exist, and nothing in libs/velista calls setPreference. 0002 designed both themes as first class and the app ships one.\nAlso found: group, members and list pages render the bar with signedIn true and bind no (account) handler, so the button is drawn, focusable, and inert. This plan wires all four."
+    }
+  ]
+}

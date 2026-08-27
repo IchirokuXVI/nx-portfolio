@@ -1,0 +1,216 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ARRIVED -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ARRIVED &middot; the name arrives selected</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+      <div style="position: absolute; inset: 0; padding: 12px 24px 0;">
+        <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.5 5.5L8 12l6.5 6.5"/>
+          </svg>
+        </div>
+        <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Your account</h1>
+        <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+        <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07);">
+          <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+          <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+        </div>
+      </div>
+
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+      <div style="position: absolute; left: 0; right: 0; bottom: 291px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+        <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+        <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Change name</div>
+        <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 18px;">This is the name other people in your groups see.</div>
+
+        <label for="name-a" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Name</label>
+        <div id="name-a" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 15px;">
+          <span style="font-size: 16px; color: #f7f8fc; background: rgba(255,180,84,0.28); border-radius: 3px; padding: 1px 2px;">Marta</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #6f7899;">
+          <span>Between 2 and 40 characters</span>
+          <span style="font-variant-numeric: tabular-nums;">5 / 40</span>
+        </div>
+
+        <!-- The propagation question, always both options, never the enum names -->
+        <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid #ffb454; background: rgba(255,180,84,0.07);">
+            <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+            <span>
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #f7f8fc;">Change it in my groups too</span>
+              <span style="display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #98a0bb;">Groups where you chose a different name keep it.</span>
+            </span>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); background: transparent;">
+            <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span>
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Only here</span>
+              <span style="display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #6f7899;">Every group keeps the name it has now.</span>
+            </span>
+          </div>
+        </div>
+
+        <button type="button" disabled style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: rgba(255,180,84,0.24); color: rgba(10,12,20,0.55); font-family: inherit; font-size: 16px; font-weight: 650;">Save name</button>
+        <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+          <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+        </div>
+      </div>
+
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+        <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CHANGED -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">CHANGED &middot; &ldquo;Only here&rdquo; is the deliberate choice</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+      <div style="position: absolute; inset: 0; padding: 12px 24px 0;">
+        <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.5 5.5L8 12l6.5 6.5"/>
+          </svg>
+        </div>
+        <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Your account</h1>
+        <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+        <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07);">
+          <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+          <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+        </div>
+      </div>
+
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+      <div style="position: absolute; left: 0; right: 0; bottom: 291px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 24px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+        <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+        <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Change name</div>
+        <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 18px;">This is the name other people in your groups see.</div>
+
+        <label for="name-b" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Name</label>
+        <div id="name-b" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 15px; gap: 2px;">
+          <span style="font-size: 16px; color: #f7f8fc;">Marta R.</span>
+          <span style="width: 1.5px; height: 21px; background: #ffb454;"></span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #6f7899;">
+          <span>Between 2 and 40 characters</span>
+          <span style="font-variant-numeric: tabular-nums;">8 / 40</span>
+        </div>
+
+        <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10); background: transparent;">
+            <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span>
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Change it in my groups too</span>
+              <span style="display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #6f7899;">Groups where you chose a different name keep it.</span>
+            </span>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid #ffb454; background: rgba(255,180,84,0.07);">
+            <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+            <span>
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #f7f8fc;">Only here</span>
+              <span style="display: block; margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: #98a0bb;">Every group keeps the name it has now.</span>
+            </span>
+          </div>
+        </div>
+
+        <button type="button" style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Save name</button>
+        <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+          <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+        </div>
+      </div>
+
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+        <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- REFUSED -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REFUSED &middot; five per hour, not one per minute</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+      <div style="position: absolute; inset: 0; padding: 12px 24px 0;">
+        <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.5 5.5L8 12l6.5 6.5"/>
+          </svg>
+        </div>
+        <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Your account</h1>
+        <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+        <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07);">
+          <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+          <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+        </div>
+      </div>
+
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 34px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+        <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+        <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Change name</div>
+        <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb; margin-bottom: 18px;">This is the name other people in your groups see.</div>
+
+        <label for="name-c" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Name</label>
+        <div id="name-c" style="height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid rgba(251,113,133,0.55); display: flex; align-items: center; padding: 0 15px;">
+          <span style="font-size: 16px; color: #f7f8fc;">Marta R.</span>
+        </div>
+
+        <p role="alert" style="margin: 12px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; line-height: 1.5; color: #fb7185;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="2" stroke-linecap="round" style="flex: none; margin-top: 1px;" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/><path d="M12 7.6v5"/><path d="M12 16.2h.01"/>
+          </svg>
+          <span>Too many name changes. You can change it again in <span style="font-variant-numeric: tabular-nums; font-weight: 650;">41:08</span></span>
+        </p>
+
+        <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px; opacity: 0.45;">
+          <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10);">
+            <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 5px solid #6f7899; background: #0a0c14;"></span>
+            <span style="font-size: 14.5px; font-weight: 600; color: #c2c8db;">Change it in my groups too</span>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10);">
+            <span style="flex: none; width: 18px; height: 18px; margin-top: 1px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="font-size: 14.5px; font-weight: 600; color: #c2c8db;">Only here</span>
+          </div>
+        </div>
+
+        <button type="button" disabled style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: rgba(255,180,84,0.24); color: rgba(10,12,20,0.55); font-family: inherit; font-size: 16px; font-weight: 650;">Save name</button>
+        <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+          <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
