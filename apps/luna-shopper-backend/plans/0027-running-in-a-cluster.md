@@ -167,6 +167,10 @@ node cannot be maintained. Stop rendering the PDB when `replicaCount` is 1 rathe
 switching it to `maxUnavailable: 1`: a disruption budget over a single replica encodes
 nothing true, and an absent object is clearer than a permissive one.
 
+That is the decision; the template change itself lives in `k8s/plans/0004` section 3,
+alongside the QoS work, because both are answers to the same question of how a single node
+chooses what to give up. Do not make the edit twice.
+
 The rolling update settings stay as they are. With one replica, `maxUnavailable: 0` and
 `maxSurge: 1` still start the replacement and wait for its readiness probe before retiring
 the old pod, so an ordinary deploy is still nearly seamless. What one replica costs is
