@@ -5,8 +5,8 @@ and leaves the **price modelling half** in the backlog.
 
 Built here: the harvester service and its database, price scopes, two source libraries (Mercadona's
 storefront API and OpenStreetMap for physical stores), store discovery, catalog discovery that
-records EAN and brand per product, a single item refresh open to every user behind a global
-cooldown, and the catalog schema those need.
+records EAN and brand per product and runs on a configurable pool of workers, an owner triggered
+refresh, and the catalog schema those need.
 
 Left in backlog 0001: `ItemPrice`, `PriceObservation`, `PricePolicy` and `PriceSubmission` (the
 multi source price model), `ProductGroup`, the category tree and the rewritten search, leaflet OCR,
@@ -15,21 +15,31 @@ browser driven adapters, and the scheduler.
 Everything in section 2 was measured against the live APIs on 2026-08-27. Where a number appears,
 it came from a run, not from documentation.
 
-## 1. The two decisions that shape everything else
+## 1. The three decisions that shape everything else
 
 **The fetching runs in a new `luna-shopper-backend-harvester` service with its own Postgres**, per
 backlog 0001 section 4, built in its minimal form: HTTP and JSON only, no Chromium and no OCR
 engine, so it is not yet the largest image in the system.
 
 The deciding argument is measured rather than architectural. A catalog discovery run is **4,232
-product detail requests** on top of a 151 request tree walk (section 2.5), which is roughly 20 to
-25 minutes of continuous fetching. Catalog must be free to roll at any time (plan 0002 section 6),
-and a rollout would kill that run every time. The cost accepted in exchange is a third database, a
-Helm entry and a CI target.
+product detail requests** on top of a 151 request tree walk (section 2.5), which is tens of minutes
+of continuous fetching. Catalog must be free to roll at any time (plan 0002 section 6), and a
+rollout would kill that run every time. The cost accepted in exchange is a third database, a Helm
+entry and a CI target.
 
-**A refresh that arrives while the cooldown is closed is refused**, with the stored price, its
-observation time, and the seconds remaining. Not queued, not silently served as a success. Section
-6.3.
+**The harvester is written in TypeScript on Node, and that was measured rather than assumed.**
+Section 4.3 is the evaluation. The short version: this workload is IO bound, the whole catalog
+costs 32 ms of CPU to parse and normalize, and Node and Python turn out to be within 1% of each
+other at every concurrency level because both are bounded by the source's latency. A faster runtime
+would improve a number that is already twenty times below the binding constraint.
+
+**The public, globally capped item refresh is deferred to backlog 0006 until Redis exists.** A cap
+of one fetch per five minutes *across the whole platform* needs a shared counter, and
+`@nestjs/throttler` keys per caller and counts in memory per replica, so N gateway replicas would
+allow N fetches per window. A Redis free design using an atomic claim on a database row was written
+and is recorded in that backlog plan; it is correct, and it puts a contended hot write on the
+primary database to answer a question Redis answers in one round trip. **The owner facing refresh
+is still built here** (section 6.4); only the public one waits.
 
 ## 2. What the sources actually return
 
@@ -320,7 +330,7 @@ returns plain records. The harvester maps them to rows.
 ### 3.4 HTTP, and no new dependency
 
 Node 20's global `fetch`. The repository has no HTTP client dependency today and this plan adds
-none. Each client owns a serial request queue with a configurable delay, exponential backoff with
+none. Each client owns a shared token bucket rate limiter (6.3), exponential backoff with
 jitter on 429 and 5xx, 404 as a value rather than an error, an honest `User-Agent` naming the app
 with a contact address, and an `AbortSignal` threaded through every call. That signal is what
 section 6.5's abort is built on, and it is free at this point rather than retrofitted.
@@ -339,8 +349,9 @@ pre upgrade migration Job now that it owns a database.
 A third PostgreSQL instance joins `docker-compose.yml` beside the auth and core databases.
 
 Config: `PORT`, `NATS_URL`, `HARVESTER_DB_URL`, `LOG_LEVEL`, `HARVESTER_ACTOR_ID`,
-`HARVEST_ENABLED`, `HARVEST_USER_AGENT`, `HARVEST_BATCH_SIZE`, `MERCADONA_ENABLED`,
-`MERCADONA_USER_REFRESH_INTERVAL_MS` (default 300000), `OVERPASS_URL`, `NOMINATIM_URL`.
+`HARVEST_ENABLED`, `HARVEST_USER_AGENT`, `HARVEST_BATCH_SIZE`, `HARVEST_DEFAULT_WORKERS`,
+`HARVEST_DEFAULT_MAX_RPS`, `HARVEST_STALE_AFTER`, `MERCADONA_ENABLED`, `OVERPASS_URL`,
+`NOMINATIM_URL`. The two worker knobs are defaults; a source overrides them per chain (6.3).
 
 **No scheduler.** Backlog 0001 section 7.6's dynamic cron registry is not built: every run in this
 plan is started by a person. The schedule columns (`timeOfDay`, `daysOfWeek`, `timezone`,
@@ -356,12 +367,11 @@ owner's own writes. No new authorization machinery.
 
 | Table | Columns |
 | --- | --- |
-| `supermarket_sources` | `id`, `supermarketId` (opaque, unique), `adapterKey` (`mercadona-api`, `osm-places`, `manual`), `enabled`, `config` jsonb, `requestDelayMs`, `lastRunAt`, `lastSuccessAt`, `consecutiveFailures` |
+| `supermarket_sources` | `id`, `supermarketId` (opaque, unique), `adapterKey` (`mercadona-api`, `osm-places`, `manual`), `enabled`, `config` jsonb, `workers`, `maxRequestsPerSecond`, `lastRunAt`, `lastSuccessAt`, `consecutiveFailures` |
 | `harvest_runs` | `id`, `supermarketId` (nullable, see below), `sourceId`, `mode`, `trigger`, `status`, `requestedAt`, `startedAt`, `finishedAt`, `heartbeatAt`, `totalPlanned`, `processed`, `created`, `updated`, `unchanged`, `notFound`, `failed`, `stage`, `stageLabel`, `abortRequestedAt`, `error`, `correlationId`, `requestedByUserId` |
 | `source_catalog_entries` | `supermarketId`, `externalId`, `name`, `brand`, `ean`, `unitSize`, `sizeFormat`, `price`, `unitPrice`, `unitPriceLabel`, `categoryPath`, `url`, `lastSeenAt`; unique (`supermarketId`, `externalId`) |
 | `item_source_refs` | `itemId` (opaque), `supermarketId` (opaque), `externalId`, `externalUrl`, `matchedBy`, `status`, `confidence`, `lastResolvedAt`, `lastSeenAt`; unique (`itemId`, `supermarketId`) |
 | `discovered_places` | `id`, `runId`, `provider`, `externalRef`, `brandKey`, `brandName`, `name`, `latitude`, `longitude`, `street`, `city`, `postalCode`, `website`, `openingHours`, `tags` jsonb, `status`, `supermarketLocationId` (nullable, set on import), `firstSeenAt`, `lastSeenAt`; unique (`provider`, `externalRef`) |
-| `source_fetch_budgets` | `key` (pk), `lastFetchAt`, `minIntervalMs` |
 
 `harvest_runs.supermarketId` is nullable because a **store discovery run belongs to a postal code
 and a radius, not to a chain**: it discovers many chains at once (2.7), and several of them will
@@ -382,6 +392,67 @@ Store discovery runs are excluded from the lock by the null, and get their own s
 The seam is the one used everywhere in this backend: the harvester holds **opaque** `itemId`,
 `supermarketId`, `supermarketLocationId` and `priceScopeId` values, never joins across the
 boundary, and reads and writes catalog only through NATS.
+
+### 4.3 Is Node the right runtime for thousands of requests
+
+The question is fair: everything else in this backend is a request/reply service answering in
+milliseconds, and this is the first component whose job is to make thousands of outbound calls.
+Rather than assert an answer, both halves of the workload were measured.
+
+**Measurement one: the CPU cost of one response.** Parsing a captured Mercadona detail payload
+(3.0 KB average, real data) and running the full normalization of section 3.1 over it, 4,232 times,
+which is one whole catalog:
+
+| Runtime | Wall | CPU | Per response |
+| --- | --- | --- | --- |
+| Node 22.17 | **32 ms** | 31 ms | 7.6 µs |
+| Python 3.13 | 44 ms | 47 ms | 10.4 µs |
+
+Normalizing Mercadona's entire assortment costs **about a thirtieth of a second**. Node is roughly
+1.4x faster than Python here, and the difference is 12 ms spread across a run that takes tens of
+minutes.
+
+**Measurement two: client throughput against concurrency.** A local server serving the same real
+payloads with a fixed 150 ms delay, matching the latency measured against the live API (2.5), hit
+with 600 requests at each concurrency level from a worker pool sharing one cursor, which is the
+exact shape section 6.3 specifies:
+
+| Workers | Node req/s | Python req/s | Node CPU (of one core) |
+| --- | --- | --- | --- |
+| 1 | 6.5 | 6.5 | 0.8% |
+| 2 | 12.9 | 12.9 | 1.2% |
+| 4 | 25.8 | 25.8 | 1.5% |
+| 8 | 51.2 | 51.6 | 2.4% |
+| 16 | 102.2 | 101.8 | 4.0% |
+| 32 | 201.8 | 204.0 | 10.0% |
+
+**The two runtimes are within 1% of each other at every level**, and both scale exactly linearly,
+because throughput here is `concurrency / latency` and nothing else. At 202 requests per second Node
+was using **10% of one core**. Python's thread pool used less CPU (3.7% at the same point), which is
+real and irrelevant: neither is near a limit.
+
+**The conclusion is that the runtime is not the constraint, and cannot become one.** The binding
+constraint is the rate we choose to be polite at, which section 6.3 sets around 4 requests per
+second. Node reached fifty times that on a tenth of a core. A rewrite in Go would reduce a CPU cost
+that is currently 0.15% of a core at the working rate.
+
+Against that, a second language costs a second toolchain in Nx and CI, a second Docker base image
+and its patching, a second dependency and vulnerability surface, and, most concretely, **the loss of
+`@portfolio/luna-shopper/contracts`**: the enums, `LocalizedText` and the message shapes are
+TypeScript, and a Go or Python service would have to regenerate or hand duplicate them, which is
+exactly the drift the contracts library exists to prevent. It would also reimplement
+`@portfolio/luna-shopper/platform`: correlation ids, problem details, the logger, the metrics.
+
+**Where a different runtime would genuinely earn its place** is the CPU bound work backlog 0001
+defers: leaflet OCR, and browser driven adapters for DIA and El Jamón. Those are a different
+workload with a different answer, and the adapter interface is where that decision belongs, per
+adapter, without touching the service. Nothing here forecloses it.
+
+Two honest caveats. The throughput benchmark ran against a local server, so it isolates **client
+overhead** and does not model TLS handshakes, DNS or real network jitter; keep-alive amortizes the
+first of those, and the 0.15 s measured against the live API is the number that actually governs.
+And Go was not measured, because it is not installed on this machine; the reasoning above is why
+measuring it would not change the decision, not a claim that it was tested.
 
 ## 5. Catalog schema changes
 
@@ -600,10 +671,11 @@ snapshot exists for matching and for candidate review, and the Spanish name is s
 The English name is needed only when an `Item` is actually created, so it is fetched then, for that
 one product. A discovery run therefore costs 4,383 requests and an item creation costs one more.
 
-**Timing, and why it is a background job.** At the measured 0.15 s per request the fetching alone
-is about 11 minutes, and at a politer 300 ms delay it is roughly 22 minutes. `requestDelayMs`
-defaults to 1,000 for the small paths and discovery uses its own, lower, delay with concurrency 1.
-Either way this is tens of minutes, which is why it cannot live in a service that redeploys.
+**Timing, and why it is a background job.** The run is not latency bound, it is politeness bound:
+at the default 4 requests per second of section 6.3 those 4,383 requests take **about 18 minutes**,
+and the whole range the knobs allow runs from 9 to 73 minutes. Raising the worker count shortens
+nothing on its own, because the rate limit is what binds (6.3). Either way this is tens of minutes,
+which is why it cannot live in a service that redeploys.
 
 **Matching ladder**, a shortened backlog 0001 section 6.2 with only the steps possible here:
 
@@ -619,53 +691,73 @@ Entries matching no item are candidate new `Item` rows the owner reviews. **This
 populates the database**, and it is deliberately a review queue rather than a bulk insert of 4,232
 products nobody chose.
 
-### 6.3 `REFRESH`, and the global cooldown
+### 6.3 Workers, and why they cannot overlap
 
-Open to every authenticated user, capped at **one fetch per five minutes across the whole
-platform**. This is not an abuse limit keyed on the caller, so `@nestjs/throttler` cannot express
-it: that guard keys on the client IP and stores counters **in memory per replica**, so N gateway
-replicas would allow N fetches per window. There is no Redis in this stack.
+A discovery run is configurably parallel. Two knobs on `supermarket_sources`, doing **two different
+jobs**, which is the part that is easy to get wrong:
 
-The cap is therefore a **row in the harvester database**, claimed atomically:
+- **`workers`** (default 4): how many requests may be in flight at once. Bounds sockets and memory.
+- **`maxRequestsPerSecond`** (default 4): the politeness rate. Bounds our impact on the source.
 
-```sql
-UPDATE source_fetch_budgets
-   SET "lastFetchAt" = now()
- WHERE key = $1
-   AND "lastFetchAt" <= now() - make_interval(secs => $2 / 1000.0)
-RETURNING "lastFetchAt";
-```
+They are separate because a single per worker delay **is a bug at any concurrency above one**: four
+workers each pausing 250 ms between requests is sixteen requests per second, not four, and the
+number the owner set is not the number the source sees. So there is **one token bucket per run,
+shared by every worker**, and workers block on it. Effective throughput is
+`min(maxRequestsPerSecond, workers / latency)`, and at the measured 0.15 s latency four workers
+could sustain 26 req/s, so the rate limiter is what actually binds. That is the intended
+relationship: concurrency exists to absorb latency, not to raise the rate.
 
-Zero rows returned means the window is closed. One statement, atomic under concurrency, correct
-across replicas and restarts, and no new infrastructure. The harvester is pinned to one replica
-anyway, but the correctness does not depend on that, which is the point.
+What that buys over 4,383 requests (151 categories plus 4,232 details):
 
-**The slot is claimed before the fetch and is not released if the fetch fails.** Releasing it would
-turn a failing source into a hammering loop, which is the opposite of what the cap is for.
+| Rate | Run time |
+| --- | --- |
+| 1 req/s | 73 min |
+| 2 req/s | 37 min |
+| **4 req/s** | **18 min** |
+| 8 req/s | 9 min |
 
-**Discovery runs use a different budget key.** A discovery walk makes thousands of requests over
-twenty minutes; sharing one budget would starve every user refresh for the duration. The honest
-reading of the five minute cap is that it stops the public endpoint being a free proxy to
-Mercadona, not that it is the whole of our politeness, so `mercadona:user-refresh` and the run's own
-politeness limiter are separate. A user refresh works normally while a run is in progress.
+**Non-overlap is structural, not coordinated.** Every worker pulls from **one shared work queue**,
+and a queue hands each item to exactly one caller. There is no partitioning scheme to get wrong, no
+range assignment, no modulo of a worker index, and therefore no way for two workers to fetch the
+same product: a work item is taken once because taking it removes it. The tree walk queues category
+ids, the detail phase queues product ids, and both drain the same way.
 
-**One claim buys one fetch of one (item, scope) pair.** The request carries an optional
-`priceScopeId`; when absent it resolves to the item's only scope, or the scope of the zone the
-caller shops in, and is refused as ambiguous when neither settles it.
+**Workers are async tasks in one process, not processes.** Section 4.3 measured one Node process
+sustaining 202 requests per second at 10% of one core, fifty times the working rate, at 7.6 µs of
+CPU per response. There is nothing for a second process or a `worker_thread` to relieve. The knob is
+named `workers` rather than `concurrency` so it keeps the option open without claiming an
+implementation.
 
-Refused response, per the decision in section 1:
+**If they ever must become processes**, the shared queue becomes a table and the claim becomes
+`SELECT ... FOR UPDATE SKIP LOCKED`, which is the same "taking it removes it" property enforced by
+Postgres instead of by the event loop. That is the migration path, and it is not built now: building
+coordination for a contention that does not exist is how a twenty minute job acquires a distributed
+lock manager.
 
-```json
-{ "refreshed": false, "retryAfterSeconds": 143,
-  "price": 1.29, "unitPrice": 1.29, "unitPriceLabel": "L",
-  "observedAt": "2026-08-27T09:14:02Z", "priceSourceKind": "OFFICIAL_API" }
-```
+**Resuming is free and is not machinery.** An aborted run leaves `source_catalog_entries` rows with
+a fresh `lastSeenAt`, so a re-run skips what it already has by reading that timestamp. Backlog 0001
+section 7.4 refuses recovery machinery explicitly, and this respects it: there is no checkpoint to
+replay, only a snapshot that is already the answer.
 
-Carried on a `429` through the gateway's existing problem details shape, with `Retry-After`. The
-client can render a countdown and still show the price it already has. A per IP gateway throttle
-sits on top so that one client cannot spend its time collecting 429s.
+**A failing worker does not fail the run.** Its work item is counted in `failed` and logged with the
+external id and URL, and the worker takes the next item. Abort cancels every in flight request
+through the shared `AbortSignal`, and all workers drain together.
 
-### 6.4 Not clobbering a manual price
+### 6.4 `REFRESH`
+
+Re-fetch detail for the items that already have an `ACTIVE` ref and write their prices for the
+requested scope. **Cost is proportional to the items the owner actually tracks, not to the chain's
+assortment**, which is the whole reason `item_source_refs` exists.
+
+Platform admin gated and owner triggered, like every other run here, using the same worker pool and
+rate limit (6.3). It needs no separate budget and no cooldown.
+
+**The public version, open to every user behind a platform wide cap of one fetch per five minutes,
+is deferred to backlog 0006** until Redis is part of the stack. Section 1 has the reason; that plan
+holds the design and the refusal contract. Nothing here changes when it lands: it adds a caller and
+a gate in front of a run mode that already exists.
+
+### 6.5 Not clobbering a manual price
 
 Using the columns from 5.3:
 
@@ -679,7 +771,7 @@ A two case, hard coded version of backlog 0001 section 2.4's stored `PricePolicy
 because two kinds are reachable. When `ItemPrice` and `PricePolicy` arrive this rule is **deleted**,
 not extended. It is not written as a foundation for them.
 
-### 6.5 Progress, abort and failure
+### 6.6 Progress, abort and failure
 
 - **Counters, `stage`, `stageLabel` and `heartbeatAt`** are written to the run row every batch and
   at least every 10 seconds. This is what survives a page reload, and it rides along with a write
@@ -712,8 +804,9 @@ On the **harvester**, platform admin gated, through the gateway under `/v1/admin
 On **catalog**, platform admin gated: `priceScope.create`, `.update`, `.delete`, `.list`, and
 `supermarketItem.upsertBatch` so a run does not make one round trip per item.
 
-Open to any authenticated user: `catalog.refreshItem` (6.3), exposed as
-`POST /v1/catalog/items/:itemId/refresh`.
+**Nothing here is open to ordinary users.** Every subject in this plan is platform admin gated, and
+the only user facing addition that was designed, `POST /v1/catalog/items/:itemId/refresh`, went to
+backlog 0006 with its cooldown. Catalog's existing reads are unchanged and still open.
 
 ## 8. Politeness, and the licences
 
@@ -737,7 +830,8 @@ to automated bulk access rather than to the data.
 
 Rather than argue it, the plan constrains the behaviour so the objection does not apply: no
 scheduler, so every request happens because a person asked; discovery is a rare owner action, not a
-nightly crawl; a serial queue with a conservative delay and backoff on 429; an honest User-Agent
+nightly crawl; one rate limiter per run that every worker blocks on, so the configured rate is the
+rate the source sees no matter how many workers run (6.3), with backoff on 429; an honest User-Agent
 with a contact address, and specifically **not** the Chrome impersonation the public reference
 implementations use; no asset copying (5.7); personal comparative use; and `MERCADONA_ENABLED`,
 default false in staging so staging and production never hit the same third party twice for the
@@ -777,9 +871,13 @@ still has rules, and they are stricter about *how* than about *whether*.
   an element with no address tags.
 - **Client tests** inject `fetchImpl` and assert delay, backoff, abort and 404 to null.
 - **Category mapping** asserts the whole 5.6 table including the cheese override.
-- **The cooldown** is the one that deserves a real database: two concurrent claims against a live
-  Postgres, asserting exactly one wins and the loser's `retryAfterSeconds` is correct. An in memory
-  fake cannot prove the property that matters.
+- **Workers** (6.3) get the tests that parallelism actually needs, all against a local stub server
+  so they are deterministic: N workers over a known work list fetch **every item exactly once**
+  (assert the multiset of requested ids, not just the count, since a double fetch and a miss cancel
+  out in a count); the observed request rate stays at or under `maxRequestsPerSecond` regardless of
+  `workers`, which is the bug in 6.3 that a per worker delay would introduce; a worker throwing
+  leaves the others draining and the run finishing; and abort mid-run cancels in flight requests and
+  still flushes what was already fetched.
 - **Migration test** seeds the pre-migration shape, runs the 5.2 migration, and asserts every
   existing `SupermarketItem` still resolves to the same price through its new `STORE` scope, and
   that `positionInStore` survived the move.
@@ -800,6 +898,7 @@ still has rules, and they are stricter about *how* than about *whether*.
 | The scheduler (backlog 0001 section 7.6) | No schedule columns are added, so none are wrong when it arrives. |
 | The realtime `admin:harvest` room | Polling is phase one by the backlog's own recommendation. |
 | The basket optimizer | Needs product groups first. |
+| **The public item refresh and its global cooldown** (now **backlog 0006**) | Needs a shared counter and there is no Redis yet. The `REFRESH` run mode is built here, so that plan adds a caller and a gate rather than a mechanism. |
 
 ## 11. Open decisions
 
@@ -810,6 +909,11 @@ still has rules, and they are stricter about *how* than about *whether*.
 - **Default discovery radius.** 3 km returned 26 supermarkets around 14013 and the wider box
   returned 75. Recommendation: default 3 km, owner adjustable, because the review step makes a
   small over-fetch cheap and a large one tedious.
+- **The default rate, which is the only number in 6.3 with no evidence behind it.** Workers and
+  concurrency were measured; **4 requests per second was chosen, not measured**, and it decides
+  whether a run takes 9 minutes or 73. Nothing was tested against Mercadona at rate, deliberately,
+  since finding the limit means exceeding it. Recommendation: start at 4 req/s, watch for 429s, and
+  treat any as a signal to halve rather than to retry harder.
 - **Whether `place.import` should auto-create the chain.** Creating `Supermarket` rows for 17
   brands from one run is convenient and clutters the catalog with chains the owner will never
   shop at. Recommendation: import is per place and creates the chain on demand.
@@ -839,9 +943,11 @@ still has rules, and they are stricter about *how* than about *whether*.
 - Items created from the snapshot carry a Spanish name, an English name, a brand, an EAN and a unit
   size; their prices carry the source's own unit price and label, an observation time, and
   `priceSourceKind` of `OFFICIAL_API`.
-- Any authenticated user can refresh one item, at most once per five minutes across the whole
-  platform, enforced in the database rather than in a per replica counter; a refused refresh returns
-  the stored price, its observation time, and the seconds remaining.
+- A discovery run's parallelism is configurable per source, every queued item is fetched **exactly
+  once** at any worker count, and the observed request rate stays at or under
+  `maxRequestsPerSecond` no matter how many workers are running.
+- The owner can refresh the tracked items of a chain on demand, at a cost proportional to the items
+  tracked rather than to the chain's assortment.
 - A price previously entered by the owner is not overwritten by a fetch, and the disagreement is
   reported.
 - `bulk_price` is stored verbatim and never recomputed.
