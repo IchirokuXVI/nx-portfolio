@@ -6,9 +6,8 @@ import { DetailSection } from './detail-section/detail-section';
 import { DetailToc } from './detail-toc/detail-toc';
 import { Hero } from './hero/hero';
 import { InfoTable } from './info-table/info-table';
-import { LANDING_V2_AVAILABLE_LOCALES } from './landing-v2-locales';
-import { LanguageSwitch } from './language-switch/language-switch';
 import { Landing } from './landing/landing';
+import { LanguageSwitch } from './language-switch/language-switch';
 import { OdontogramContent } from './odontogram-content/odontogram-content';
 import { PortfolioContent } from './portfolio-content/portfolio-content';
 import { ProjectCard } from './project-card/project-card';
@@ -35,15 +34,24 @@ const components = [
   DamoclesContent,
 ];
 
+/**
+ * This library's components, plus plain `RokuTranslatorModule` for the `| rokuT`
+ * pipe.
+ *
+ * It used to carry `RokuTranslatorModule.withConfig`, which made this module the
+ * place landingV2's translations were configured. That moved: the descriptor to
+ * `translations.ts` next to the assets it reads, and the `provideRokuTranslator`
+ * call to `apps/landing-v2/src/app/translation-providers.ts` (plan 0005 D11).
+ *
+ * The reason is not tidiness. Providers on an NgModule imported by a component reach
+ * that component's own injector, not the route injector its pages are created
+ * against, and never the app injector. The locale guard has to reach this app's
+ * translator to adopt a locale before anything renders, and from here it could not.
+ * Several components in this library carry comments about sitting above or below
+ * these providers; those reasons expired with the move.
+ */
 @NgModule({
-  imports: [
-    RokuTranslatorModule.withConfig({
-      locales: LANDING_V2_AVAILABLE_LOCALES,
-      defaultNamespace: 'landingV2',
-      loader: (locale) => import(`../../assets/i18n/${locale}.json`),
-    }),
-    ...components,
-  ],
+  imports: [RokuTranslatorModule, ...components],
   exports: components,
   declarations: [],
   providers: [],

@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { LANDING_V2_DATA_ACCESS_PROVIDERS } from '@portfolio/landing-v2/data-access';
+import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { LandingV2Wrapper } from './landing-v2-wrapper';
 
 describe('LandingV2Wrapper', () => {
@@ -9,7 +11,11 @@ describe('LandingV2Wrapper', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LandingV2Wrapper],
-      providers: [provideRouter([])],
+      providers: [
+        provideRouter([]),
+        provideRokuTranslatorTesting(),
+        ...LANDING_V2_DATA_ACCESS_PROVIDERS,
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LandingV2Wrapper);

@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { Layout } from './layout';
 
 describe('Layout', () => {
@@ -9,7 +10,7 @@ describe('Layout', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [Layout],
-      providers: [provideRouter([])],
+      providers: [provideRouter([]), provideRokuTranslatorTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Layout);

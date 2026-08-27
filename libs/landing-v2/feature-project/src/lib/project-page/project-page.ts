@@ -54,13 +54,15 @@ const CONTENT_BY_SLUG: Record<string, Type<unknown>> = {
  * matching presentational content component from `@portfolio/landing-v2/ui`
  * at execution time (see CONTENT_BY_SLUG).
  *
- * Imports LandingV2UiModule itself (mirroring LandingV2Wrapper) — its
- * RokuTranslatorModule.withConfig() providers land in *this* component's
- * own injector, which is what NgComponentOutlet-created children (the
- * resolved content component) inherit. Without it, RokuTranslatorPipe
- * inside the dynamically-created component throws NG0201 (no provider
- * found), since being merely *registered* in LandingV2UiModule's
- * `components` array doesn't put a component in this injector tree.
+ * Imports LandingV2UiModule for the content components it builds by hand, and for
+ * the `| rokuT` pipe. It used to be imported for the module's
+ * `RokuTranslatorModule.withConfig()` **providers** too, which an
+ * NgComponentOutlet-created child inherited from this component's injector and
+ * without which the pipe inside it threw NG0201. Those providers moved to the app
+ * injector (plan 0005 D11), which sits above every page and every dynamically
+ * created child alike, so the reason to import the module here is now declarations
+ * only: being *registered* in its `components` array is still not the same as being
+ * reachable from this injector tree.
  */
 @Component({
   selector: 'lib-landing-v2-project-page',

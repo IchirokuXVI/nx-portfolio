@@ -6,7 +6,10 @@ import { LanguageSwitch } from './language-switch';
 
 describe('LanguageSwitch', () => {
   let fixture: ComponentFixture<LanguageSwitch>;
-  let localeStore: { locale: ReturnType<typeof signal<string>>; switchAppLocale: jest.Mock };
+  let localeStore: {
+    locale: ReturnType<typeof signal<string>>;
+    switchAppLocale: jest.Mock;
+  };
 
   beforeEach(async () => {
     localeStore = {

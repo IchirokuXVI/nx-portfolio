@@ -41,7 +41,7 @@ describe('DamoclesContent', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it("renders the project title and the live-app link", () => {
+  it('renders the project title and the live-app link', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('.detail-page__title')?.textContent).toBe(
       "Damocle'Sword"

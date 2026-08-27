@@ -35,25 +35,24 @@ export const appRoutes: Route[] = [
         loadChildren: () =>
           import('velista/Routes').then((m) => m.remoteRoutes),
       },
-      {
-        path: '',
-        title: 'app-title',
-        data: { titleNs: 'landingV2', titleFallback: 'Portfolio' },
-        loadChildren: () =>
-          import('landingV2/Routes').then((m) => m.remoteRoutes),
-      },
-      {
-        path: '**',
-        title: 'app-title',
-        data: { titleNs: 'landingV2', titleFallback: 'Portfolio' },
-        component: NotFoundComponent,
-      },
     ],
   },
   {
-    // No locale (including the bare root): localeGuard redirects to /{guess}/...
-    path: '**',
-    canActivate: [localeGuard],
-    component: NotFoundComponent,
+    // **Migrated (plan 0003): landingV2 owns its own locale segment.** Its mount is
+    // empty, so its URLs are unchanged at `/{locale}/...`; what changed is who
+    // decides, and the shell now inserts nothing on its behalf.
+    //
+    // **Must stay BELOW every mounted app.** An empty path route with `loadChildren`
+    // is not terminal: it consumes no segments and then offers the whole path to its
+    // own table, so placed above the entries for `odontogram` and the rest it would
+    // swallow them and render landingV2's not found page instead. `app.routes.spec.ts`
+    // asserts the order rather than leaving it to review.
+    //
+    // `isLocaleSegment` cannot be used to disambiguate `/en` from `/velista` here and
+    // must not be reached for: a two letter app mount would be indistinguishable from
+    // a locale, and the ordering rule is correct however the mounts happen to be
+    // spelled today.
+    path: '',
+    loadChildren: () => import('landingV2/Routes').then((m) => m.remoteRoutes),
   },
 ];

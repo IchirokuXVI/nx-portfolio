@@ -2,7 +2,12 @@ import { AsyncPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { TranslatedInfoFact } from '@portfolio/landing-v2/models';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { DownloadIcon, EmailIcon, GithubIcon, LinkedinIcon } from '@portfolio/shared/ui';
+import {
+  DownloadIcon,
+  EmailIcon,
+  GithubIcon,
+  LinkedinIcon,
+} from '@portfolio/shared/ui';
 import { InfoTable } from '../info-table/info-table';
 
 @Component({

@@ -11,9 +11,7 @@ import { INFO_FACTS_TRANSLATIONS } from './static-info-facts-translation-data';
  * the UI (0003) renders this array directly, no hardcoded rows in the
  * template.
  */
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable()
 export class InfoFactMemory implements InfoFactServiceI {
   private _facts = INFO_FACTS;
   private _factsTranslations = INFO_FACTS_TRANSLATIONS;

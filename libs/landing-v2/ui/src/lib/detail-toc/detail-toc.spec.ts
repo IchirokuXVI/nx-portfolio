@@ -21,9 +21,9 @@ describe('DetailToc', () => {
     ]);
     fixture.detectChanges();
 
-    const links = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLAnchorElement>(
-      '.detail-toc__link'
-    );
+    const links = (
+      fixture.nativeElement as HTMLElement
+    ).querySelectorAll<HTMLAnchorElement>('.detail-toc__link');
 
     expect(links.length).toBe(2);
     expect(links[0].getAttribute('href')).toBe('#overview');
