@@ -8,6 +8,7 @@
   (dismiss)="dismiss.emit()"
   [dismissible]="!busy()"
   [labelledBy]="titleId()"
+  #shell
 >
   <h2 [id]="titleId()" class="title">{{ title() }}</h2>
   <p class="body">{{ body() }}</p>
@@ -49,8 +50,14 @@
       <span>{{ confirmLabel() }}</span>
     </button>
 
+    <!--
+      Through the shell rather than emitting straight out, so Cancel plays the same
+      fall the scrim and Escape do. The shell owns the exit animation because it is
+      the thing that can hold the navigation back long enough to draw it; a button
+      that emitted `dismiss` itself would change the route on the next frame.
+    -->
     @if (!busy()) {
-      <button (click)="dismiss.emit()" class="cancel" type="button">
+      <button (click)="shell.requestDismiss()" class="cancel" type="button">
         {{ 'entry.cancel' | rokuT }}
       </button>
     }

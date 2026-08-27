@@ -36,6 +36,7 @@
   <lib-sheet-shell
     (dismiss)="dismiss()"
     [dismissible]="!busy()"
+    #shell
     labelledBy="group-settings-title"
   >
     <h2 class="title" id="group-settings-title">
@@ -98,7 +99,7 @@
     }
 
     @if (!busy()) {
-      <button (click)="dismiss()" class="cancel" type="button">
+      <button (click)="shell.requestDismiss()" class="cancel" type="button">
         {{ 'entry.cancel' | rokuT }}
       </button>
     }

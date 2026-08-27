@@ -4,6 +4,7 @@
   <lib-sheet-shell
     (dismiss)="dismiss()"
     [dismissible]="!submitting()"
+    #shell
     labelledBy="create-zone-title"
   >
     <h2 class="title" id="create-zone-title">
@@ -73,7 +74,7 @@
     } @else {
       <!-- Gone while the request is in flight: the write has already left, so
            offering to back out of it would be a lie. -->
-      <button (click)="dismiss()" class="cancel" type="button">
+      <button (click)="shell.requestDismiss()" class="cancel" type="button">
         {{ 'entry.cancel' | rokuT }}
       </button>
     }

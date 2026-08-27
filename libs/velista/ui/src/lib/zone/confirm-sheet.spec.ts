@@ -1,6 +1,8 @@
 import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import { SheetShell } from '../entry/sheet-shell';
 import { ConfirmSheet } from './confirm-sheet';
 
 /**
@@ -16,6 +18,7 @@ import { ConfirmSheet } from './confirm-sheet';
   template: `
     <lib-confirm-sheet
       (confirm)="confirmed.set(confirmed() + 1)"
+      (dismiss)="dismissed.set(dismissed() + 1)"
       [body]="'Everything goes'"
       [busy]="busy()"
       [confirmLabel]="'Delete'"
@@ -30,6 +33,7 @@ class Host {
   readonly confirmWith = signal<string | null>(null);
   readonly busy = signal(false);
   readonly confirmed = signal(0);
+  readonly dismissed = signal(0);
 }
 
 async function render(): Promise<ComponentFixture<Host>> {
@@ -62,6 +66,47 @@ function type(fixture: ComponentFixture<Host>, value: string): void {
 }
 
 describe('ConfirmSheet', () => {
+  describe('Cancel', () => {
+    it('plays the fall, exactly as the scrim and Escape do', async () => {
+      // Plan 0011 section 5. The exit animation lives in the shell, because the shell
+      // is the thing that can hold the navigation back long enough to draw it. A
+      // Cancel that emitted `dismiss` itself would change the route on the next frame
+      // and the panel would vanish, which is the defect this guards.
+      jest.useFakeTimers();
+      try {
+        const fixture = await render();
+        const shell = fixture.debugElement.query(By.directive(SheetShell))
+          .componentInstance as SheetShell;
+        jest
+          .spyOn(
+            shell as unknown as { _motionDuration(): number },
+            '_motionDuration'
+          )
+          .mockReturnValue(200);
+
+        (
+          (fixture.nativeElement as HTMLElement).querySelector(
+            '.cancel'
+          ) as HTMLButtonElement
+        ).click();
+        fixture.detectChanges();
+
+        expect(
+          (fixture.nativeElement as HTMLElement)
+            .querySelector('.panel')
+            ?.classList.contains('closing')
+        ).toBe(true);
+        expect(fixture.componentInstance.dismissed()).toBe(0);
+
+        jest.advanceTimersByTime(200);
+
+        expect(fixture.componentInstance.dismissed()).toBe(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
   describe('an ordinary confirm', () => {
     it('is ready to go with no field at all', async () => {
       const fixture = await render();
