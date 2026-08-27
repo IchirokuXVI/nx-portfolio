@@ -5,12 +5,16 @@ import {
   UserKind,
   UsernamePropagation,
   type AuthTokens,
+  type ConsumeOAuthStateRequest,
   type DeleteAccountRequest,
   type DeleteAccountResult,
   type ForgotPasswordRequest,
   type GetProfileRequest,
   type GoogleLoginRequest,
   type LoginRequest,
+  type MintOAuthStateRequest,
+  type MintOAuthStateResult,
+  type OAuthStatePayload,
   type RegisterRequest,
   type ResendVerificationRequest,
   type ResendVerificationResult,
@@ -36,6 +40,7 @@ import {
   Credential,
   EmailVerification,
   OAuthIdentity,
+  OAuthState,
   PasswordReset,
   User,
 } from '../entities';
@@ -64,6 +69,23 @@ const RESET_TTL_MS = 60 * 60 * 1000;
  * them apart would tell an attacker which of their guesses was once real.
  */
 const INVALID_RESET = 'Invalid or expired password reset link';
+
+/**
+ * How long an OAuth state lives (plan 0023, section 4.1). Ten minutes: a consent
+ * screen and a password, not a lunch break. It only has to survive the time
+ * between tapping the button and Google handing the browser back, and every extra
+ * minute is another minute a state sits in a database being replayable.
+ */
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * The one answer an absent, unknown, expired or already spent state gets. It
+ * deliberately does not fall back to "no link" (section 4.4): proceeding without
+ * the `userId` a state was carrying is exactly the data loss this plan exists to
+ * stop, and a silent fallback would make it depend on a race between a token's
+ * expiry and a user's typing speed.
+ */
+const INVALID_OAUTH_STATE = 'Invalid or expired sign in request';
 
 /**
  * The identity domain (plan 0005, section 4). Every way a user comes to exist
@@ -659,6 +681,55 @@ export class IdentityService {
         })
       );
     }
+  }
+
+  /**
+   * Mint an opaque OAuth state (plan 0023, section 4.1).
+   *
+   * The raw value goes back to the caller and is never stored; only its hash is,
+   * beside what the state stands for. `userId` arrives already established by the
+   * gateway's guard, so an absent one here means the caller genuinely held no
+   * token, not that a stale one was quietly ignored (section 4.2).
+   */
+  async mintOAuthState(
+    req: MintOAuthStateRequest
+  ): Promise<MintOAuthStateResult> {
+    const state = await this.dataSource.transaction((manager) =>
+      this.grants.issue(
+        manager,
+        OAuthState,
+        { userId: req.userId ?? null, locale: req.locale ?? null },
+        OAUTH_STATE_TTL_MS
+      )
+    );
+    return { state };
+  }
+
+  /**
+   * Spend an OAuth state and read back what it carried (plan 0023, section 4.1).
+   *
+   * Single use, which is the property the whole design is for: a state that could
+   * be replayed is a way to link an attacker's Google identity onto an account
+   * that is not theirs, and unlike a stolen token that is permanent.
+   */
+  async consumeOAuthState(
+    req: ConsumeOAuthStateRequest
+  ): Promise<OAuthStatePayload> {
+    const record = await this.dataSource.transaction((manager) =>
+      this.grants.consume(
+        manager,
+        OAuthState,
+        req.state ?? '',
+        INVALID_OAUTH_STATE
+      )
+    );
+    // Omitted rather than null: `OAuthStatePayload` says absent, and a `userId`
+    // of null reaching `googleLogin` as `linkUserId` would read as a link
+    // request for nobody.
+    return {
+      ...(record.userId ? { userId: record.userId } : {}),
+      ...(record.locale ? { locale: record.locale } : {}),
+    };
   }
 
   /** Google login: find, link, or create (plan 0005, section 4.4). */

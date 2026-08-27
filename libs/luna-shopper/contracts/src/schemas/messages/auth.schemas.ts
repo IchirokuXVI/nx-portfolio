@@ -33,6 +33,9 @@ export const AUTH_SCHEMA_IDS = {
   refreshRequest: schemaId('msg/auth.refresh/request'),
   upgradeRequest: schemaId('msg/auth.upgrade/request'),
   googleLoginRequest: schemaId('msg/auth.googleLogin/request'),
+  oAuthStatePayload: schemaId('auth/OAuthStatePayload'),
+  mintOAuthStateResult: schemaId('auth/MintOAuthStateResult'),
+  consumeOAuthStateRequest: schemaId('msg/auth.consumeOAuthState/request'),
   setUsernameRequest: schemaId('msg/auth.setUsername/request'),
   getProfileRequest: schemaId('msg/auth.getProfile/request'),
   userProfileView: schemaId('auth/UserProfileView'),
@@ -168,6 +171,32 @@ const googleLoginRequest = object(
   ['providerUserId']
 );
 
+/**
+ * What a state carries, and the mint request that fills it (plan 0023, section
+ * 4.1). One schema for both: the request is the payload, and writing it twice
+ * would let the two drift into disagreeing about what a state may hold.
+ *
+ * Nothing is required. A state with no `userId` is the genuine sign in from
+ * scratch, not a malformed one.
+ */
+const oAuthStatePayload = object(
+  AUTH_SCHEMA_IDS.oAuthStatePayload,
+  { userId: string(), locale: string() },
+  []
+);
+
+const mintOAuthStateResult = object(
+  AUTH_SCHEMA_IDS.mintOAuthStateResult,
+  { state: nonEmptyString() },
+  ['state']
+);
+
+const consumeOAuthStateRequest = object(
+  AUTH_SCHEMA_IDS.consumeOAuthStateRequest,
+  { state: nonEmptyString() },
+  ['state']
+);
+
 const setUsernameRequest = object(
   AUTH_SCHEMA_IDS.setUsernameRequest,
   {
@@ -212,6 +241,9 @@ export const authSchemas: JsonSchema[] = [
   refreshRequest,
   upgradeRequest,
   googleLoginRequest,
+  oAuthStatePayload,
+  mintOAuthStateResult,
+  consumeOAuthStateRequest,
   setUsernameRequest,
   getProfileRequest,
   userProfileView,
@@ -263,6 +295,16 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.googleLogin]: {
     request: AUTH_SCHEMA_IDS.googleLoginRequest,
     response: AUTH_SCHEMA_IDS.authTokens,
+  },
+  [AUTH_PATTERNS.mintOAuthState]: {
+    // The payload is the request: what the gateway asks to have stored is
+    // exactly what the callback reads back out.
+    request: AUTH_SCHEMA_IDS.oAuthStatePayload,
+    response: AUTH_SCHEMA_IDS.mintOAuthStateResult,
+  },
+  [AUTH_PATTERNS.consumeOAuthState]: {
+    request: AUTH_SCHEMA_IDS.consumeOAuthStateRequest,
+    response: AUTH_SCHEMA_IDS.oAuthStatePayload,
   },
   [AUTH_PATTERNS.setUsername]: {
     request: AUTH_SCHEMA_IDS.setUsernameRequest,

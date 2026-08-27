@@ -16,6 +16,9 @@ data:
   REFRESH_TOKEN_TTL: {{ $cfg.refreshTokenTtl | quote }}
   GOOGLE_CLIENT_ID: {{ $cfg.googleClientId | quote }}
   GOOGLE_CALLBACK_URL: {{ $cfg.googleCallbackUrl | quote }}
+  # Where the Google callback sends the browser back to (plan 0023, section 3.4).
+  # The redirect is built from this and never from anything the client supplied.
+  APP_BASE_URL: {{ $cfg.appBaseUrl | default "" | quote }}
   SMTP_HOST: {{ $cfg.smtpHost | quote }}
   SMTP_PORT: {{ $cfg.smtpPort | quote }}
   SMTP_USER: {{ $cfg.smtpUser | quote }}

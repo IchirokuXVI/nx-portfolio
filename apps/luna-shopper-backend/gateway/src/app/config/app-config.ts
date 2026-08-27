@@ -26,6 +26,37 @@ export const LOG_LEVELS = [
   'silent',
 ] as const;
 
+/**
+ * The `{locale}` placeholder `APP_BASE_URL` may carry, substituted with the
+ * locale the sign in flow started in.
+ */
+export const APP_BASE_URL_LOCALE_PLACEHOLDER = '{locale}';
+
+/**
+ * An absolute http(s) URL that may carry {@link APP_BASE_URL_LOCALE_PLACEHOLDER}.
+ *
+ * `Joi.string().uri()` cannot be used directly: braces are not valid URI
+ * characters, so a perfectly good value with the placeholder in it would be
+ * rejected. The placeholder is substituted before the value is parsed, which
+ * checks the thing that actually matters, that what the redirect is built from
+ * resolves to an absolute URL on another origin. A relative value would make the
+ * `Location` relative to the API's own origin, which is the one origin this
+ * redirect exists to get the user away from.
+ */
+const appBaseUrl = Joi.string().custom((value: string, helpers) => {
+  try {
+    const url = new URL(
+      value.split(APP_BASE_URL_LOCALE_PLACEHOLDER).join('en')
+    );
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return helpers.error('any.invalid');
+    }
+  } catch {
+    return helpers.error('any.invalid');
+  }
+  return value;
+}, 'absolute app URL');
+
 export const gatewayValidationSchema = Joi.object({
   PORT: Joi.number().port().default(3000),
   NATS_URL: Joi.string().required(),
@@ -39,6 +70,25 @@ export const gatewayValidationSchema = Joi.object({
   GOOGLE_CLIENT_ID: Joi.string().allow('').default(''),
   GOOGLE_CLIENT_SECRET: Joi.string().allow('').default(''),
   GOOGLE_CALLBACK_URL: Joi.string().uri().allow('').default(''),
+
+  // Where the Google callback sends the browser back to (plan 0023, section
+  // 3.4). The redirect is built from this constant and never from anything the
+  // client supplied, which is the whole of what keeps it from being an open
+  // redirect. Required only when Google is enabled, so a deployment with the
+  // OAuth variables unset still boots with nothing to configure.
+  //
+  // A `{locale}` placeholder is substituted with the locale the flow started in;
+  // with no placeholder the locale is appended as the first path segment. The
+  // placeholder exists because this frontend mounts the app under a path that
+  // comes *after* the locale (`/{locale}/velista`), which a plain prefix cannot
+  // express.
+  APP_BASE_URL: appBaseUrl
+    .allow('')
+    .default('')
+    .when('GOOGLE_CLIENT_ID', {
+      is: Joi.string().min(1).required(),
+      then: appBaseUrl.required().invalid(''),
+    }),
 
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
@@ -57,6 +107,12 @@ export interface GatewayConfig {
   natsUrl: string;
   authJwtPublicKey: string;
   corsOrigins: string[];
+  /**
+   * Origin (and optional path prefix) of the frontend the Google callback
+   * redirects back to, optionally carrying a `{locale}` placeholder. Empty when
+   * Google is not configured.
+   */
+  appBaseUrl: string;
   google: {
     clientId: string;
     clientSecret: string;
@@ -84,6 +140,7 @@ export const gatewayConfiguration = registerAs(
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean),
+    appBaseUrl: process.env.APP_BASE_URL ?? '',
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',

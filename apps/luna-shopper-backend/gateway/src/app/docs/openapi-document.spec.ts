@@ -200,7 +200,12 @@ describe('gateway OpenAPI document', () => {
       expect(undocumented).toEqual([]);
     });
 
-    it('and the only route without a body is the Google redirect', () => {
+    it('and the only routes without a body are the two Google redirects', () => {
+      // Both ends of the OAuth round trip, and neither has a payload to describe:
+      // one hands the browser to Google, the other hands it back to the app with
+      // the token pair in the URL fragment (plan 0023, section 6). The callback
+      // used to document `auth.googleLogin` here, which described a body the
+      // client never sees.
       const redirects = operations
         .filter((operation) =>
           Object.keys(operation.responses).some(isRedirect)
@@ -208,7 +213,10 @@ describe('gateway OpenAPI document', () => {
         .map(
           (operation) => `${operation.method.toUpperCase()} ${operation.path}`
         );
-      expect(redirects).toEqual(['GET /v1/auth/google']);
+      expect(redirects).toEqual([
+        'GET /v1/auth/google',
+        'GET /v1/auth/google/callback',
+      ]);
     });
   });
 

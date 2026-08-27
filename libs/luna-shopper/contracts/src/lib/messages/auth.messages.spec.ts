@@ -22,6 +22,9 @@ describe('auth contracts', () => {
     expect(AUTH_PATTERNS.upgrade).toBe('auth.upgrade');
     expect(AUTH_PATTERNS.forgotPassword).toBe('auth.forgotPassword');
     expect(AUTH_PATTERNS.resetPassword).toBe('auth.resetPassword');
+    expect(AUTH_PATTERNS.googleLogin).toBe('auth.googleLogin');
+    expect(AUTH_PATTERNS.mintOAuthState).toBe('auth.mintOAuthState');
+    expect(AUTH_PATTERNS.consumeOAuthState).toBe('auth.consumeOAuthState');
   });
 
   it('pins the identity event names', () => {

@@ -61,6 +61,24 @@ Call with a dict:
       name: {{ $sec }}
       key: AUTH_JWT_PUBLIC_KEY
 {{- end }}
+{{- if eq $svc.role "gateway" }}
+# Google sign in (plan 0023). The passport dance runs at the gateway, so it needs
+# the same OAuth credentials auth holds, plus the app URL its callback redirects
+# to. All four are empty by default, and with an empty client id the routes stay
+# registered but inert, so boot is unaffected until Google is actually set up.
+- name: GOOGLE_CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: GOOGLE_CLIENT_SECRET
+{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL") }}
+- name: {{ $key }}
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: {{ $key }}
+{{- end }}
+{{- end }}
 {{- if eq $svc.role "core" }}
 - name: CORE_DB_URL
   valueFrom:

@@ -4,6 +4,7 @@ import {
   AUTH_PATTERNS,
   STATS_PATTERNS,
   type AuthTokens,
+  type ConsumeOAuthStateRequest,
   type DeleteAccountRequest,
   type DeleteAccountResult,
   type ForgotPasswordRequest,
@@ -11,6 +12,9 @@ import {
   type GoogleLoginRequest,
   type IdentityStats,
   type LoginRequest,
+  type MintOAuthStateRequest,
+  type MintOAuthStateResult,
+  type OAuthStatePayload,
   type RefreshRequest,
   type RegisterRequest,
   type ResendVerificationRequest,
@@ -97,6 +101,20 @@ export class IdentityController {
   @MessagePattern(AUTH_PATTERNS.googleLogin)
   googleLogin(@Payload() req: GoogleLoginRequest): Promise<AuthTokens> {
     return this.identity.googleLogin(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.mintOAuthState)
+  mintOAuthState(
+    @Payload() req: MintOAuthStateRequest
+  ): Promise<MintOAuthStateResult> {
+    return this.identity.mintOAuthState(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.consumeOAuthState)
+  consumeOAuthState(
+    @Payload() req: ConsumeOAuthStateRequest
+  ): Promise<OAuthStatePayload> {
+    return this.identity.consumeOAuthState(req);
   }
 
   @MessagePattern(AUTH_PATTERNS.deleteAccount)
