@@ -21,7 +21,20 @@ import { JwtStrategy, type CurrentUser } from './jwt.strategy';
 const APP_BASE_URL = 'https://app.example/{locale}/velista';
 
 const configService = {
-  getOrThrow: () => ({ appBaseUrl: APP_BASE_URL }),
+  // Configured, which is what every test below exercises. The unconfigured
+  // callback is its own test at the bottom of this file (plan 0026).
+  getOrThrow: () => ({
+    appBaseUrl: APP_BASE_URL,
+    google: { enabled: true },
+  }),
+} as never;
+
+/** The same controller with Google unset, for the one test that needs it. */
+const unconfiguredConfigService = {
+  getOrThrow: () => ({
+    appBaseUrl: APP_BASE_URL,
+    google: { enabled: false },
+  }),
 } as never;
 
 const profile = {
@@ -357,5 +370,28 @@ describe('POST /v1/auth/google/state', () => {
     // than starting a flow that would end on somebody else's account.
     expect(send).not.toHaveBeenCalled();
     expect(controller).toBeDefined();
+  });
+});
+
+describe('the callback with Google unconfigured (plan 0026)', () => {
+  it('redirects with not_configured rather than rendering an error', async () => {
+    // The one rule this route has: never leave the user on the API's origin.
+    // So the unconfigured case is reported the same way every other failure
+    // here is — as a fragment on a redirect back to the app — rather than as
+    // the 501 the two interactive routes answer with.
+    const send = jest.fn();
+    const controller = new GoogleController(
+      { send } as never,
+      unconfiguredConfigService
+    );
+
+    const result = await controller.callback({ query: {} });
+
+    expect(result.url.startsWith('https://app.example/')).toBe(true);
+    expect(fragmentOf(result.url)).toEqual({
+      error: ERROR_CODES.NOT_CONFIGURED,
+    });
+    // Nothing was asked of auth: there is no flow to complete.
+    expect(send).not.toHaveBeenCalled();
   });
 });

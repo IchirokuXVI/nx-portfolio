@@ -74,6 +74,19 @@ export class ConflictException extends DomainException {
 }
 
 /**
+ * The feature exists in the code but is not configured on this deployment (plan
+ * 0026): Google sign in with no OAuth credentials, registration with no SMTP
+ * host.
+ *
+ * Renders as 501, and the distinction from every other code here is that it is a
+ * statement about the server. Nothing the caller changes will make the request
+ * succeed, and nothing is broken — the operator chose not to configure it.
+ */
+export class NotConfiguredException extends DomainException {
+  readonly code = ERROR_CODES.NOT_CONFIGURED;
+}
+
+/**
  * Too many attempts. Carries the wait so the client can count it down (plan 0021,
  * section 2.2). The seconds travel in {@link DomainException.details} under
  * {@link RETRY_AFTER_SECONDS_DETAIL}, and the exception filter lifts them onto the

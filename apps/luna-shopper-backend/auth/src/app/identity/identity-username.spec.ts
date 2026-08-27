@@ -74,7 +74,10 @@ function build(users: Partial<User>[] = []) {
     userUsernameChanged: jest.fn(),
   };
   const config = {
-    getOrThrow: () => ({ smtp: { verifyBaseUrl: 'https://x' } }),
+    getOrThrow: () => ({
+      smtp: { verifyBaseUrl: 'https://x', enabled: true },
+      google: { enabled: true },
+    }),
   };
   const service = new IdentityService(
     dataSource as never,

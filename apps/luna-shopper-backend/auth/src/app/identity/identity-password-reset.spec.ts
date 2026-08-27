@@ -147,7 +147,9 @@ function build(users: Row[] = [], credentials: Row[] = []) {
         smtp: {
           verifyBaseUrl: 'https://x/verify',
           resetBaseUrl: 'https://x/reset',
+          enabled: true,
         },
+        google: { enabled: true },
       }),
     } as never
   );

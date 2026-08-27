@@ -113,7 +113,12 @@ function build(users: Row[] = []) {
     mail as never,
     events as never,
     new UsernameGenerator(),
-    { getOrThrow: () => ({ smtp: { verifyBaseUrl: 'https://x' } }) } as never
+    {
+      getOrThrow: () => ({
+        smtp: { verifyBaseUrl: 'https://x', enabled: true },
+        google: { enabled: true },
+      }),
+    } as never
   );
   return { service, stores, events, mail };
 }
