@@ -1,7 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import {
   provideRokuTranslator,
   RokuTranslatorService,
@@ -67,13 +66,9 @@ describe('composeTranslationLoader', () => {
 class StubPage {}
 
 describe('the translationsReady resolver', () => {
-  beforeAll(async () => {
-    // The eager load path only runs with an i18next instance behind it, which an app
-    // gets from its initializer. Without this the service settles without ever calling
-    // a loader, and a test of a rejecting loader would prove nothing at all.
-    await RokuTranslator.init({ locale: 'en', supportedLocales: ['en'] });
-  });
-
+  // No `init` here any more. Since plan 0005 `provideRokuTranslator` creates this
+  // app's translator and the service inits it, so the eager load path is live for
+  // every test without a process-wide singleton being primed first.
   afterEach(() => jest.useRealTimers());
 
   /**

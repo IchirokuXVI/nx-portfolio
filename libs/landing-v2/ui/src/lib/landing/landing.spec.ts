@@ -3,18 +3,6 @@ import { provideRouter } from '@angular/router';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { Landing } from './landing';
 
-// Landing renders the Hero, whose `| rokuT` pipes read the translator; mock
-// the singleton so it resolves in isolation, mirroring project-page.spec.ts.
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-      changeLocale: jest.fn(),
-    },
-  };
-});
-
 describe('Landing', () => {
   let component: Landing;
   let fixture: ComponentFixture<Landing>;

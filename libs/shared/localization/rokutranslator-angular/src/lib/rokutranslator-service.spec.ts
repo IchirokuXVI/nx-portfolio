@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import { firstValueFrom } from 'rxjs';
 import { provideRokuTranslator } from './provide-rokutranslator';
 import { RokuTranslatorPipe } from './rokutranslator-pipe';
@@ -34,14 +33,12 @@ function configure(namespace: string, loader: LoaderFunction): void {
   });
 }
 
+/**
+ * No `init` here any more. Since plan 0005 `provideRokuTranslator` creates the
+ * app's translator and the service inits it, so `configure` is the whole setup and
+ * each test gets an instance of its own rather than sharing one process-wide.
+ */
 describe('RokuTranslatorService load completion', () => {
-  beforeAll(async () => {
-    // The eager load path only runs with an i18next instance behind it, which an
-    // app gets from its initializer. Without this the service would resolve
-    // without ever calling a loader, and these tests would prove nothing.
-    await RokuTranslator.init({ locale: 'en', supportedLocales: ['en'] });
-  });
-
   it('settles loaded$ with false and flips loaded when a loader rejects', async () => {
     const rejecting = jest.fn(() => Promise.reject(new Error('404 on chunk')));
     configure('ns-rejecting', rejecting as unknown as LoaderFunction);
@@ -101,10 +98,6 @@ class OnPushBinding {}
 class Host {}
 
 describe('RokuTranslatorPipe', () => {
-  beforeAll(async () => {
-    await RokuTranslator.init({ locale: 'en', supportedLocales: ['en'] });
-  });
-
   function text(fixture: ComponentFixture<Host>): string {
     return (fixture.nativeElement.textContent ?? '').trim();
   }

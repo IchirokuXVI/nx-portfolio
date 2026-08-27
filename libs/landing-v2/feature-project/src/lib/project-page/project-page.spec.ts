@@ -8,23 +8,6 @@ import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutransl
 import { BehaviorSubject } from 'rxjs';
 import { ProjectPage } from './project-page';
 
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-      addNamespace: jest.fn(),
-      addTranslations: jest.fn(),
-      removeNamespace: jest.fn(),
-      // RokuTranslatorService.t() delegates to the singleton; the resolved
-      // content components render real `| rokuT` pipe usages (unlike
-      // LandingV2Wrapper's spec, gated behind Landing's own compReady with
-      // no explicit `whenStable()` wait), so this needs to be callable too.
-      t: jest.fn((key: string) => key),
-    },
-  };
-});
-
 /** A paramMap$ we can push new slugs into, to exercise route-param reuse
  * (the router reuses this component across `projects/:slug` navigations —
  * see project-page.ts). */

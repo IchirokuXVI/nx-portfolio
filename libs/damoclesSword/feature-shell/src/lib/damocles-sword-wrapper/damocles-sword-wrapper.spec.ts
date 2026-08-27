@@ -2,20 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { DamoclesSwordWrapper } from './damocles-sword-wrapper';
 
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      changeLocale: jest.fn(),
-      addNamespace: jest.fn(),
-      addTranslations: jest.fn(),
-      removeNamespace: jest.fn(),
-      getSupportedLocales: jest.fn().mockReturnValue(['en', 'es', 'fr']),
-      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-    },
-  };
-});
-
 describe('DamoclesSwordWrapper', () => {
   let component: DamoclesSwordWrapper;
   let fixture: ComponentFixture<DamoclesSwordWrapper>;

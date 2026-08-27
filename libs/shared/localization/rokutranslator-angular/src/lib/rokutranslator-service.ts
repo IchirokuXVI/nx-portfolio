@@ -6,12 +6,10 @@ import {
   Signal,
   signal,
 } from '@angular/core';
-import {
-  RokuTranslator,
-  TranslationTree,
-} from '@portfolio/localization/rokutranslator';
+import { TranslationTree } from '@portfolio/localization/rokutranslator';
 import { Observable, ReplaySubject, switchMap } from 'rxjs';
 import { RokuLocaleStore } from './roku-locale-store';
+import { ROKU_TRANSLATOR } from './roku-translator-token';
 
 export const ROKU_TRANSLATOR_LOCALES = new InjectionToken<string[]>(
   'Locales to use/add for RokuTranslator'
@@ -55,6 +53,13 @@ export class RokuTranslatorService implements OnDestroy {
   private _loader: LoaderFunction = inject(ROKU_TRANSLATOR_LOADER);
 
   private _store = inject(RokuLocaleStore);
+
+  /**
+   * The app's own translator, from the token `provideRokuTranslator` binds, rather
+   * than a module global. Everything below is unchanged in shape; it just talks to
+   * an instance it was handed instead of one it imported (plan 0005 D4).
+   */
+  private _translator = inject(ROKU_TRANSLATOR);
 
   /** Every namespace this instance owns (default first), registered and torn down together. */
   private _ownedNamespaces: string[] = [
@@ -101,19 +106,49 @@ export class RokuTranslatorService implements OnDestroy {
   }
 
   constructor() {
+    // `init` belongs to the app now, and this is the app's only instance, so this
+    // is where it runs (plan 0005 D8). It used to be an app initializer in the
+    // shell's `app.config.ts`, which is the wrong hook twice over: it runs from the
+    // root injector, and under the shell a remote is not bootstrapping at all.
+    //
+    // Awaiting it before registering translations matters: `addTranslations` only
+    // takes the eager path once there is an i18next instance to add a bundle to.
+    const ready = this._translator
+      .init({
+        supportedLocales: [...this._locales],
+        namespaces: [...this._ownedNamespaces],
+        lowercaseLocale: true,
+      })
+      .then(() => this.registerOwnedNamespaces());
+
+    // The catch is load bearing, not defensive: `Promise.all` has no rejection
+    // path of its own, so one loader that throws (a 404 on a chunk, malformed
+    // JSON) used to leave `loaded$` pending forever and raise an unhandled
+    // rejection. A caller that waits on it would hang on a blank screen.
+    ready
+      .then(() => true)
+      .catch(() => false)
+      .then((ok) => {
+        this.loaded.set(true);
+        this.loaded$.next(ok);
+        this.loaded$.complete();
+      });
+  }
+
+  private async registerOwnedNamespaces(): Promise<void> {
     const promises = [];
 
     // Register every namespace this instance owns (not just the default), so the
     // eager-load path activates for all of them and consumers no longer need to
-    // call RokuTranslator.addNamespace(...) by hand.
+    // call addNamespace(...) by hand.
     for (const namespace of this._ownedNamespaces) {
-      RokuTranslator.addNamespace(namespace);
+      await this._translator.addNamespace(namespace);
     }
 
     if (this._defaultNamespace) {
       for (const locale of this._locales) {
         promises.push(
-          RokuTranslator.addTranslations({
+          this._translator.addTranslations({
             locale,
             namespace: this._defaultNamespace,
             translations: () => this._loader(locale),
@@ -125,7 +160,7 @@ export class RokuTranslatorService implements OnDestroy {
     for (const locale of this._locales) {
       for (const namespace of this._namespaces) {
         promises.push(
-          RokuTranslator.addTranslations({
+          this._translator.addTranslations({
             locale,
             namespace,
             translations: () => this._loader(locale, namespace),
@@ -134,22 +169,11 @@ export class RokuTranslatorService implements OnDestroy {
       }
     }
 
-    // The catch is load bearing, not defensive: `Promise.all` has no rejection
-    // path of its own, so one loader that throws (a 404 on a chunk, malformed
-    // JSON) used to leave `loaded$` pending forever and raise an unhandled
-    // rejection. A caller that waits on it would hang on a blank screen.
-    Promise.all(promises)
-      .then(() => true)
-      .catch(() => false)
-      .then((ok) => {
-        this.loaded.set(true);
-        this.loaded$.next(ok);
-        this.loaded$.complete();
-      });
+    await Promise.all(promises);
   }
 
   ngOnDestroy() {
-    RokuTranslator.removeNamespace(...this._ownedNamespaces);
+    this._translator.removeNamespace(...this._ownedNamespaces);
   }
 
   /**
@@ -167,7 +191,7 @@ export class RokuTranslatorService implements OnDestroy {
   /**
    * @param values interpolation values for a key containing `{{placeholders}}`, and
    *   the place to pass `count` so i18next selects the right plural form. The core
-   *   `RokuTranslator.t` has always taken full i18next options; this wrapper simply
+   *   `RokuTranslator#t` has always taken full i18next options; this wrapper simply
    *   did not pass any through, so a key like `"{{ready}} of {{total}} ready"`
    *   rendered its placeholders literally.
    */
@@ -177,7 +201,7 @@ export class RokuTranslatorService implements OnDestroy {
     locale?: string,
     values?: Record<string, unknown>
   ) {
-    return RokuTranslator.t(key, {
+    return this._translator.t(key, {
       ns: ns || this._defaultNamespace || this._namespaces[0],
       lng: locale,
       ...values,

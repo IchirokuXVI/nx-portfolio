@@ -3,15 +3,6 @@ import { provideRouter } from '@angular/router';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { SectionNews } from './section-news';
 
-// The component reads the active locale from the RokuTranslator singleton in
-// `ngOnInit`; stub it to `en` so the news service returns the mocked list.
-jest.mock('@portfolio/localization/rokutranslator', () => ({
-  RokuTranslator: {
-    getLocale: jest.fn().mockReturnValue('en'),
-    onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-  },
-}));
-
 describe('SectionNews', () => {
   let component: SectionNews;
   let fixture: ComponentFixture<SectionNews>;

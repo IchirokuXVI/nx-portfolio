@@ -2,18 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { LandingV2Wrapper } from './landing-v2-wrapper';
 
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-      addNamespace: jest.fn(),
-      addTranslations: jest.fn(),
-      removeNamespace: jest.fn(),
-    },
-  };
-});
-
 describe('LandingV2Wrapper', () => {
   let component: LandingV2Wrapper;
   let fixture: ComponentFixture<LandingV2Wrapper>;

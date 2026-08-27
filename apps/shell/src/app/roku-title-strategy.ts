@@ -1,7 +1,11 @@
 import { inject, Injectable } from '@angular/core';
 import { Title } from '@angular/platform-browser';
-import { ActivatedRouteSnapshot, RouterStateSnapshot, TitleStrategy } from '@angular/router';
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
+import {
+  ActivatedRouteSnapshot,
+  RouterStateSnapshot,
+  TitleStrategy,
+} from '@angular/router';
+import { ROKU_TRANSLATOR } from '@portfolio/localization/rokutranslator-angular';
 
 /**
  * Resolves a route's `title` as a translation key through RokuTranslator, so
@@ -20,6 +24,18 @@ import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 export class RokuTitleStrategy extends TitleStrategy {
   private readonly title = inject(Title);
 
+  /**
+   * **Transitional, and removed by the shell step of plan 0003**, which is where
+   * `titleNs` / `titleFallback` come out of the route table and each app starts
+   * setting its own title from its own translator (plan 0005 D10).
+   *
+   * Until then the shell still localizes titles on behalf of the apps that have not
+   * migrated, and it does that through the transitional root `ROKU_TRANSLATOR`,
+   * which is the same instance those apps are using. After the migration the shell
+   * has no translator at all and this strategy keeps only the literal `title` path.
+   */
+  private readonly translator = inject(ROKU_TRANSLATOR);
+
   override updateTitle(snapshot: RouterStateSnapshot): void {
     const key = this.buildTitle(snapshot);
     const { ns, fallback } = this.resolveTitleMeta(snapshot.root);
@@ -31,10 +47,12 @@ export class RokuTitleStrategy extends TitleStrategy {
       return;
     }
 
-    const translated = RokuTranslator.t(key, ns ? { ns } : undefined);
+    const translated = this.translator.t(key, ns ? { ns } : undefined);
     const missing = translated === key;
 
-    this.title.setTitle(missing && fallback !== undefined ? fallback : translated);
+    this.title.setTitle(
+      missing && fallback !== undefined ? fallback : translated
+    );
   }
 
   private resolveTitleMeta(root: ActivatedRouteSnapshot): {
