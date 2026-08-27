@@ -224,9 +224,30 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
     /** Drive a live removal or deletion at a page that is already mounted. */
     setDeparture: (next: ZoneDeparture | null) => departure.set(next),
 
+    /**
+     * Reads one zone, and writes what it read back into the cache.
+     *
+     * The write is the point. The real store upserts whatever `getZone` answered, so
+     * every reload hands out a fresh cache signal even when the group came back
+     * unchanged, and a page effect that both calls this and reads the cache schedules
+     * itself again on its own request. A double that only moved `zoneState` could not
+     * reproduce that, and did not: the loop it hides is one `GET /v1/zones/{id}` per
+     * frame for as long as the screen is open.
+     *
+     * The `await` before it matters as much as the write. The real store writes what
+     * the request answered, which is a microtask later at the earliest, and a signal
+     * written **during** an effect and read after it leaves that effect clean. A
+     * double that wrote synchronously would therefore look innocent while shipping the
+     * loop.
+     */
     loadZone: async (zoneId: string) => {
       loads.update((count) => count + 1);
       zoneStates.update((current) => new Map(current).set(zoneId, 'loaded'));
+
+      await Promise.resolve();
+      zones.update((current) =>
+        current.map((zone) => (zone.id === zoneId ? { ...zone } : zone))
+      );
     },
 
     /** What the page asked the store to write to the zone itself. */

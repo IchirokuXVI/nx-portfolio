@@ -5,6 +5,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -155,26 +156,52 @@ export class GroupPage {
       : (Array.from(username)[0] ?? '').toLocaleUpperCase();
   });
 
+  /**
+   * Whether the lists may be asked for yet.
+   *
+   * A boolean and not the zone itself, deliberately. `ZoneStore` keeps its cache in one
+   * map signal, so every write to any zone hands out a new map and anything reading the
+   * zone through it wakes up. Narrowing to the one fact that decides the request means
+   * the effect below runs when the answer changes rather than every time the cache is
+   * touched, and a `boolean` compares equal to itself where a record does not.
+   */
+  private readonly _mayLoadLists = computed(() => {
+    const zone = this._zones.zoneById(this.zoneId());
+    return (
+      zone !== undefined &&
+      zone.myStatus === 'APPROVED' &&
+      zone.status !== 'MARKED_FOR_DELETION'
+    );
+  });
+
   constructor() {
     // Reloads when the id changes, which is what makes navigating between two groups
     // correct rather than showing the previous one's rows under the new one's name.
+    //
+    // **Keyed on the id and nothing else.** `loadZone` upserts what it fetched, which
+    // writes the store's cache signal, so an effect that both called it and read the
+    // cache would schedule itself again the moment its own request landed: one
+    // `GET /v1/zones/{id}` per turn of the loop, forever. The read that the reload
+    // needs is inside the call, and everything else this page wants from the cache is
+    // in `_mayLoadLists` below.
     effect(() => {
       const id = this.zoneId();
-      void this._zones.loadZone(id);
+      untracked(() => void this._zones.loadZone(id));
+    });
 
-      // The lists are asked for only once the caller is known to be approved. The
-      // check reads the cache rather than waiting on the load above: arriving from the
-      // dashboard the answer is already there, and a deep link's `loadZone` will run
-      // this effect again when it lands.
-      const zone = this._zones.zoneById(id);
-      if (
-        zone !== undefined &&
-        zone.myStatus === 'APPROVED' &&
-        zone.status !== 'MARKED_FOR_DELETION' &&
-        this._lists.stateOf(id) === 'idle'
-      ) {
-        void this._lists.load(id);
-      }
+    // The lists are asked for only once the caller is known to be approved, which on a
+    // deep link is not true until the reload above lands. That is why this is its own
+    // effect rather than a branch in that one: it wants to run again when the answer
+    // changes, and the reload must not.
+    effect(() => {
+      const id = this.zoneId();
+      const mayLoad = this._mayLoadLists();
+
+      untracked(() => {
+        if (mayLoad && this._lists.stateOf(id) === 'idle') {
+          void this._lists.load(id);
+        }
+      });
     });
 
     // The caller was removed, or the group was deleted, while this page was open.

@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -163,13 +164,29 @@ export class MembersPage {
   });
 
   constructor() {
+    // The screen's one load.
+    //
+    // Keyed on the group and on the statuses, and on nothing else. Every call in the
+    // body writes a signal that the same body reads: `loadZone` upserts into the zone
+    // cache, `_load` sets the rows it first measured. Tracking those would schedule
+    // this effect again the moment its own requests landed, which is one
+    // `GET /v1/zones/{id}` and one members page per turn of a loop that never ends, so
+    // the body runs untracked and the two things worth reacting to are read above it.
+    //
+    // The statuses are the second key because on a deep link the zone is not cached
+    // yet, so `myRole` is not known and rule G2 makes this screen ask for APPROVED
+    // alone. When the reload lands on a staff member that answer changes, and the
+    // pending queue, which is the reason this screen exists, has to be asked for
+    // again.
     effect(() => {
       const id = this.zoneId();
-      // The zone may not be cached on a deep link, and `myRole` is what decides both
-      // which statuses may be asked for and whether the staff room is joined.
-      void this._zones.loadZone(id);
-      void this._load(id);
-      this._syncStaffRoom(id);
+      const statuses = this._statuses();
+
+      untracked(() => {
+        void this._zones.loadZone(id);
+        void this._load(id, statuses);
+        this._syncStaffRoom(id);
+      });
     });
 
     // A group the caller was removed from, or that was deleted, while this screen was
@@ -338,14 +355,15 @@ export class MembersPage {
     }
   }
 
-  private async _load(zoneId: string): Promise<void> {
+  private async _load(
+    zoneId: string,
+    statuses: readonly Membership['status'][] = this._statuses()
+  ): Promise<void> {
     this._loading.set(this._rows().length === 0);
     this._failure.set(null);
 
     try {
-      const page = await this._members.listMembers(zoneId, {
-        statuses: this._statuses(),
-      });
+      const page = await this._members.listMembers(zoneId, { statuses });
       this._rows.set(page.items);
       this._cursor.set(page.nextCursor);
     } catch (error) {
@@ -363,12 +381,21 @@ export class MembersPage {
    * ordinary member is a `forbidden` rather than an empty page, so this reads `myRole`
    * instead of finding out by being refused.
    */
-  private _statuses(): readonly Membership['status'][] {
-    const zone = this._zones.zoneById(this.zoneId());
-    return canSeePendingRequests(zone?.myRole ?? 'MEMBER')
-      ? ['APPROVED', 'PENDING']
-      : ['APPROVED'];
-  }
+  private readonly _statuses = computed<readonly Membership['status'][]>(
+    () => {
+      const zone = this._zones.zoneById(this.zoneId());
+      return canSeePendingRequests(zone?.myRole ?? 'MEMBER')
+        ? ['APPROVED', 'PENDING']
+        : ['APPROVED'];
+    },
+    {
+      // Compared by value, because the arrays are rebuilt on every read and two fresh
+      // arrays are never `Object.is` equal. Without this the load effect above would
+      // wake on every write to the zone cache, which is exactly what it must not do.
+      equal: (a, b) =>
+        a.length === b.length && a.every((status, i) => status === b[i]),
+    }
+  );
 
   /** Rule G3. Joined for staff, released for everybody else and on destroy. */
   private _syncStaffRoom(zoneId: string): void {

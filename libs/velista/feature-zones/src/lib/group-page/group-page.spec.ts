@@ -137,6 +137,21 @@ describe('GroupPage', () => {
     expect(text(fixture)).toContain('Weekly shop');
   });
 
+  it('reads the group once, and not once per turn of its own effect', async () => {
+    // The regression this guards is not subtle in production and was invisible here:
+    // `loadZone` upserts what it read, so an effect that both called it and read the
+    // zone cache woke on its own answer and asked again, forever. Several rounds of
+    // change detection, because one is what the old code survived.
+    const { fixture, zones } = await render();
+
+    for (let round = 0; round < 5; round += 1) {
+      fixture.detectChanges();
+      await fixture.whenStable();
+    }
+
+    expect(zones.loadCount()).toBe(1);
+  });
+
   it('asks for the lists it has not loaded yet', async () => {
     const { lists } = await render({ listsState: 'idle' });
 

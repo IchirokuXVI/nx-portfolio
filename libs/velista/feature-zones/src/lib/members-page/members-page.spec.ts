@@ -166,6 +166,23 @@ describe('MembersPage', () => {
       });
     });
 
+    it('asks once, and not once per turn of its own effect', async () => {
+      // Same regression as the group page's, and it reached this screen through the
+      // same door: the load effect read the zone cache that `loadZone` writes, so
+      // every answer scheduled the next request.
+      const { fixture, zones, members } = await render({ myRole: 'ADMIN' });
+
+      for (let round = 0; round < 5; round += 1) {
+        fixture.detectChanges();
+        await fixture.whenStable();
+      }
+
+      expect(zones.loadCount()).toBe(1);
+      expect(
+        members.calls.filter((call) => call.method === 'listMembers')
+      ).toHaveLength(1);
+    });
+
     it('asks only for the approved ones as an ordinary member', async () => {
       // Any status other than APPROVED is staff only, and asking for it as a member
       // is a `forbidden` rather than an empty page. The screen decides from `myRole`
