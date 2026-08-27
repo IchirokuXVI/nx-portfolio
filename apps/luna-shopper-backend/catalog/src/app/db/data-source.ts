@@ -17,6 +17,7 @@ loadEnv({ path: 'apps/luna-shopper-backend/catalog/.env' });
 loadEnv({ path: 'apps/luna-shopper-backend/.env.luna-shopper-backend' });
 
 const { CATALOG_ENTITIES } = require('../entities');
+const { CATALOG_MIGRATIONS } = require('./migrations');
 
 // Fail on an unset URL instead of handing `undefined` to TypeORM. Without this
 // the postgres driver quietly falls back to its own defaults (localhost:5432,
@@ -41,6 +42,6 @@ export default new DataSource({
   type: 'postgres',
   url,
   entities: CATALOG_ENTITIES,
-  migrations: ['apps/luna-shopper-backend/catalog/src/app/db/migrations/*.ts'],
+  migrations: CATALOG_MIGRATIONS,
   synchronize: false,
 });

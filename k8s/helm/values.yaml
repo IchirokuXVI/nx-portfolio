@@ -404,10 +404,13 @@ lunaShopperBackend:
   # upgrade Job per stateful service runs that service's migrations before new
   # pods take traffic, never on app boot / synchronize.
   #
-  # Off until the services emit a real `migrate.js` beside `main.js` (plan 0027,
-  # section 2). The command below names a file that is not built today, so
-  # turning the flag on now would fail the Job rather than migrate anything.
+  # On since plan 0027, section 2: each stateful service now emits a real
+  # `migrate.js` beside `main.js` from a second webpack entry, so the command
+  # below exists inside the image. It used to name a file that was never built,
+  # which is why the flag could not simply be flipped: nothing creates the schema
+  # on a fresh cluster (every service is `synchronize: false` by design), and the
+  # Job as configured would have failed rather than migrated.
   migrations:
-    enabled: false
+    enabled: true
     # Command the Job runs inside the service image.
     command: ['node', 'migrate.js']
