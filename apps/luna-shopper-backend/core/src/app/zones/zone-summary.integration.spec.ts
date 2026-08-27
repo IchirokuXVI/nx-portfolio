@@ -763,6 +763,26 @@ describeIntegration('zone summary (real Postgres)', () => {
     });
 
     /**
+     * Statistics and a visibility map, without which the plans below are not
+     * reproducible.
+     *
+     * A freshly inserted table has neither, so every index whose leading column
+     * is `zoneId` costs the planner the same and it picks between them
+     * arbitrarily. That is not hypothetical: plan 0018 added
+     * `ix_membership_zone_username` on `("zoneId", username)`, which leads with
+     * the same column as `ix_memberships_zone_status`, and the member counts
+     * plan started coming back naming the username index for no reason a reader
+     * could see. Analyzing gives the planner the row counts to tell them apart,
+     * and vacuuming sets the visibility map that makes an index only scan
+     * possible, which is how the covering index wins on merit rather than on a
+     * tie break.
+     */
+    beforeAll(async () => {
+      await dataSource.query('VACUUM ANALYZE "zone_memberships"');
+      await dataSource.query('VACUUM ANALYZE "shopping_lists"');
+    });
+
+    /**
      * The planner picks a sequential scan on a table this small however good the
      * index is, so asking it what it WOULD do is the only assertion here that
      * means anything. With `enable_seqscan` off Postgres still falls back to a
@@ -804,6 +824,13 @@ describeIntegration('zone summary (real Postgres)', () => {
         [ids.zone]
       );
       expect(text).toContain('ix_memberships_zone_status');
+      // Index ONLY, which is the whole reason this index and not the one on
+      // `("zoneId", username)`: both can find the zone's rows, and only this
+      // one carries the `status` the counts filter on, so the heap is never
+      // touched. An index scan here would mean the index stopped covering.
+      expect(text).toContain(
+        'Index Only Scan using ix_memberships_zone_status'
+      );
     });
 
     it('backs the preview ordering with the zone/updatedAt index', async () => {
