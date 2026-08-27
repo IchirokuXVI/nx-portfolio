@@ -209,7 +209,14 @@ lunaShopperBackend:
       accessTokenTtl: 15m
       refreshTokenTtl: 30d
       googleClientId: ''
-      googleCallbackUrl: https://api.ichirokuxvi.com/auth/google/callback
+      # The path the gateway actually serves: its controllers are versioned, so
+      # the callback lives under /v1. It must match a URI pre-registered with
+      # Google exactly, which is why it is spelled out rather than derived.
+      googleCallbackUrl: https://api.ichirokuxvi.com/v1/auth/google/callback
+      # Where the Google callback hands the browser back (plan 0023, section 3.4).
+      # `{locale}` is substituted with the locale the flow started in; the app is
+      # mounted after the locale segment, so a plain prefix cannot express it.
+      appBaseUrl: https://ichirokuxvi.com/{locale}/velista
       smtpHost: ''
       smtpPort: '587'
       smtpUser: ''
@@ -239,7 +246,8 @@ lunaShopperBackend:
       accessTokenTtl: 15m
       refreshTokenTtl: 30d
       googleClientId: ''
-      googleCallbackUrl: https://api.staging.ichirokuxvi.com/auth/google/callback
+      googleCallbackUrl: https://api.staging.ichirokuxvi.com/v1/auth/google/callback
+      appBaseUrl: https://staging.ichirokuxvi.com/{locale}/velista
       smtpHost: ''
       smtpPort: '587'
       smtpUser: ''

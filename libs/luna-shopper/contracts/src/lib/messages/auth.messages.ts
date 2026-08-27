@@ -30,6 +30,10 @@ export const AUTH_PATTERNS = {
   upgrade: 'auth.upgrade',
   /** Create or link an account from a verified Google profile. */
   googleLogin: 'auth.googleLogin',
+  /** Mint the opaque OAuth `state` that carries a caller across the Google hop. */
+  mintOAuthState: 'auth.mintOAuthState',
+  /** Spend an OAuth `state`, once, and read back what it was carrying. */
+  consumeOAuthState: 'auth.consumeOAuthState',
   /** Delete the authenticated user's account and all personal identity data. */
   deleteAccount: 'auth.deleteAccount',
   /** Change the caller's global username, optionally propagating to zones. */
@@ -216,4 +220,40 @@ export interface GoogleProfile {
  */
 export interface GoogleLoginRequest extends GoogleProfile {
   linkUserId?: string;
+}
+
+/**
+ * What an OAuth `state` carries across the provider round trip (plan 0023,
+ * section 4.1).
+ *
+ * Both fields are optional and for opposite reasons. `userId` is absent for a
+ * genuine sign in from scratch, and present exactly when the caller minted the
+ * state holding a valid token, which is the one thing that makes the difference
+ * between linking Google onto a guest and stranding every zone that guest owns.
+ * `locale` is absent when the request context had none.
+ */
+export interface OAuthStatePayload {
+  userId?: string;
+  locale?: string;
+}
+
+/**
+ * Mint an OAuth `state` (plan 0023, section 4.2). `userId` is set by the gateway
+ * from the verified token, never from a body: a caller who could name the user a
+ * state links to could link their Google identity onto somebody else's account.
+ */
+export type MintOAuthStateRequest = OAuthStatePayload;
+
+/** The raw state, returned exactly once. Auth stores only its hash. */
+export interface MintOAuthStateResult {
+  state: string;
+}
+
+/**
+ * Spend an OAuth `state` (plan 0023, section 4.1). Single use: a replayed state
+ * is how an attacker links their Google identity onto somebody else's account,
+ * so a second consume of the same value is refused like an unknown one.
+ */
+export interface ConsumeOAuthStateRequest {
+  state: string;
 }

@@ -559,6 +559,62 @@
         ]
       }
     },
+    "/v1/auth/google/state": {
+      "post": {
+        "operationId": "GoogleController_mintState_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "An opaque, single use state valid for ten minutes. Pass it as the `state` query parameter when navigating to `GET /v1/auth/google`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.MintOAuthStateResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/v1/auth/google": {
       "get": {
         "operationId": "GoogleController_start_v1",
@@ -598,25 +654,8 @@
         "operationId": "GoogleController_callback_v1",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": "The `auth.googleLogin` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/auth.AuthTokens"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
+          "302": {
+            "description": "Redirects to the app. On success the token pair rides in the URL fragment (`#accessToken=…&refreshToken=…&userId=…&kind=…&username=…`); on any failure the fragment is `#error=<code>`. There is no response body either way."
           },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
@@ -6889,6 +6928,19 @@
         "required": [
           "userId",
           "deleted"
+        ],
+        "additionalProperties": false
+      },
+      "auth.MintOAuthStateResult": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "state"
         ],
         "additionalProperties": false
       },

@@ -41,6 +41,17 @@ services:
       CORS_ORIGINS: http://localhost:4200
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       PORT: '3000'
+      # Google sign in at the gateway (plan 0023). The credentials are fictional:
+      # no suite here can complete a real consent screen, and what the stack does
+      # need is for the routes to be live so the state mint and the refusal of a
+      # bad state are exercised against a running gateway.
+      GOOGLE_CLIENT_ID: e2e-client-id.apps.googleusercontent.com
+      GOOGLE_CLIENT_SECRET: e2e-client-secret
+      GOOGLE_CALLBACK_URL: http://localhost:3000/v1/auth/google/callback
+      # Where the callback sends the browser back. `{locale}` is substituted with
+      # the locale the flow started in; the app lives under a path that follows
+      # the locale segment, so a plain prefix could not express it.
+      APP_BASE_URL: http://localhost:4200/{locale}/velista
       # Names this container on every span and metric (plan 0016, section 4.2).
       # Tracing stays off unless OTEL_ENABLED and an endpoint are supplied, so
       # this tier runs unchanged without a collector.
