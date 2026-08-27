@@ -1,0 +1,80 @@
+{
+  "title": "Velista List Page",
+  "lede": "The design for plan <code>0012</code>: the shopping list, its lines, and editing them. Phone only, 390 by 844, Night with one Day artboard. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "artboards": [
+    { "file": "List.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "The list, three ways" },
+    { "file": "LineStates.dc.html", "x": 1400, "y": 0, "w": 960, "h": 1230, "title": "The row, specified" },
+    { "file": "AddAndEdit.dc.html", "x": 0, "y": 1400, "w": 1330, "h": 1010, "title": "Adding and changing" },
+    { "file": "Comments.dc.html", "x": 1400, "y": 1400, "w": 1330, "h": 1010, "title": "What people said" },
+    { "file": "ReorderAndSwipe.dc.html", "x": 0, "y": 2560, "w": 1760, "h": 1010, "title": "Order, swipe, and the overflow" },
+    { "file": "ListStates.dc.html", "x": 0, "y": 3720, "w": 1330, "h": 1010, "title": "Loading, and empty" },
+    { "file": "ListProblems.dc.html", "x": 1400, "y": 3720, "w": 1330, "h": 1010, "title": "Not live, failed, gone" },
+    { "file": "ListSettings.dc.html", "x": 0, "y": 4880, "w": 1330, "h": 1010, "title": "Rename, share, delete" },
+    { "file": "DayTheme.dc.html", "x": 1400, "y": 4880, "w": 900, "h": 1010, "title": "The list on Day" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -320,
+      "w": 440,
+      "text": "The list page, plan 0012. The screen the product exists for: the list, its lines, and the aisle.\nPhone only, 390x844. Night, plus a Day artboard, which is mandatory here rather than optional: this page introduces success, danger, attention and neutral as row states side by side, and it is the one screen genuinely used in a bright supermarket.\nNo catalog items anywhere. A line is free text and a quantity, which is all the backend requires."
+    },
+    {
+      "id": "tap",
+      "x": 480,
+      "y": -320,
+      "w": 430,
+      "text": "THE WHOLE ROW TICKS IT OFF. That is the one gesture this screen is built around, because the hand holding the phone is also pushing a trolley.\nSo the ring on the leading side is an indicator and not a target, and the overflow is the only separate target in the row.\nEditing is deliberately further away: the overflow, or a long press. Ticking off happens forty times a shop and editing happens twice."
+    },
+    {
+      "id": "approval",
+      "x": 960,
+      "y": -320,
+      "w": 430,
+      "text": "EVERY NEW LINE STARTS UNAPPROVED, and only a zone owner or admin can approve one. That is core, not a choice made here.\nIt is drawn quietly: a violet edge and one caption. Staff get two buttons on the same row and nobody else gets anything, because there is nothing they can do.\nA staff member's OWN line is approved by the client the instant it lands (rule L3), so the owner of a two person flat never watches their own milk wait for their own approval."
+    },
+    {
+      "id": "lines-first",
+      "x": 2800,
+      "y": 1400,
+      "w": 440,
+      "text": "THE LINES NEVER WAIT FOR THE NAME (rule L2).\nThere is no GET /v1/lists/:id. Naming a list means paging the zone's lists until it turns up, which on a cold arrival is a second round trip.\nSo the two calls are independent: the title skeletons and fills in late, the lines are on screen from the first response. Arriving from the group page the title is already cached and there is nothing to wait for at all.\nIt is also why the URL is zones/:zoneId/lists/:listId. Without the zone in the path the page cannot resolve the name, the caller's role, or which room to join."
+    },
+    {
+      "id": "reorder-mode",
+      "x": 1830,
+      "y": 2560,
+      "w": 440,
+      "text": "REORDER IS A MODE, not a gesture on the ordinary row, and that follows from tap ticking off: a list where a press means both toggle and pick up is a list that does the wrong one.\nSo it is entered from the header, ticking is off inside it, and the row grows a grip.\nThe grip takes keyboard focus and up and down move the line, announced in the live region. A drag handle on its own would put the manual order out of reach of anybody without a working pointer.\nDrag is off until every page of lines has loaded: reorder rewrites positions by index, so sending a partial list can collide two lines onto one number."
+    },
+    {
+      "id": "swipe",
+      "x": 1830,
+      "y": 2960,
+      "w": 440,
+      "text": "Swipe is a shortcut for people who already know it. Not in the shop and Take off the list are both on the overflow as well, so nothing on this screen is reachable only by a gesture."
+    },
+    {
+      "id": "optimistic",
+      "x": 2400,
+      "y": 0,
+      "w": 440,
+      "text": "THIS IS THE FIRST SCREEN THAT USES THE OVERLAY. Plan 0004 designed optimistic writes and version reconciliation and nothing has needed them until now: a line is the only record in the product that carries a version.\nA confirmed write draws nothing, because the feedback was the change. Only failure and being overwritten are drawn, both inline on the row: a toast about a row is read after the row has scrolled away.\nA row with a write in flight is at 70% and is still tappable. Blocking it would make the app feel slow on exactly the connection it was designed for."
+    },
+    {
+      "id": "gaps",
+      "x": 2800,
+      "y": 3720,
+      "w": 440,
+      "text": "THREE THINGS THE BACKEND DOES NOT HAVE, and only the third blocks anything.\n1. No GET /v1/lists/:id, so the URL carries the zone.\n2. No username on a comment or a line, so names are resolved from the group's member list and somebody who has left has none.\n3. No GET /v1/lists/:id/access. PUT replaces the whole set and nothing can read it, so a save built on that would silently revoke people. The share sheet is drawn in full and its live version waits for the endpoint.\nAll three are written down in plan 0012, section 5.6, rather than assumed away."
+    },
+    {
+      "id": "day",
+      "x": 2400,
+      "y": 4880,
+      "w": 430,
+      "text": "Day is not Night with the colours flipped. Every status caption on this page is text, and the bright ramps that carry Night sit around 1.9 to 1 on white, so each role resolves to a different primitive per theme.\nThe fill keeps the bright value, because a fill only has to clear 3 to 1. The check inside the tick flips with it: ink on Night's mint, white on Day's."
+    }
+  ]
+}
