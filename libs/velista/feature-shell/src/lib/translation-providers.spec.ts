@@ -1,13 +1,13 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RokuTranslator } from '@portfolio/localization/rokutranslator';
 import {
   provideRokuTranslator,
+  RokuTranslatorService,
   type TranslationSource,
 } from '@portfolio/localization/rokutranslator-angular';
 import { composeTranslationLoader } from './translation-providers';
-import { translationsReadyResolver } from './translations-ready';
 
 /**
  * Plan 0006's acceptance criteria 2 and 5.
@@ -66,7 +66,7 @@ describe('composeTranslationLoader', () => {
 @Component({ selector: 'lib-stub-page', template: 'page' })
 class StubPage {}
 
-describe('translationsReadyResolver', () => {
+describe('the translationsReady resolver', () => {
   beforeAll(async () => {
     // The eager load path only runs with an i18next instance behind it, which an app
     // gets from its initializer. Without this the service settles without ever calling
@@ -99,7 +99,12 @@ describe('translationsReadyResolver', () => {
           {
             path: '',
             component: StubPage,
-            resolve: { translationsReady: translationsReadyResolver },
+            // The same inline resolver `routes.ts` uses. `loaded$` is handed to the
+            // router unwrapped, so what this asserts is the router's own `take(1)`
+            // over an observable that emits once and completes even on failure.
+            resolve: {
+              translationsReady: () => inject(RokuTranslatorService).loaded$,
+            },
           },
         ]),
         ...provideRokuTranslator({

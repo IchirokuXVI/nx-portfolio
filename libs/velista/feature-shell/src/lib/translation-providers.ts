@@ -40,8 +40,8 @@ const defaultNamespace = VELISTA_UI_TRANSLATIONS.namespace;
  * An unknown namespace falls back to the first source rather than throwing. The
  * library only ever asks for namespaces it was configured with, and those come from
  * this same list, so the fallback is unreachable in practice. It exists because the
- * alternative is a rejected promise, and a rejected loader is the one thing
- * `translations-ready.ts` would rather never see.
+ * alternative is a rejected promise, and a rejected loader is the one thing the
+ * `translationsReady` resolver in `routes.ts` would rather never see.
  *
  * Exported so the routing can be tested with fake sources rather than by loading this
  * app's real asset files, which is what makes "adding a library is one entry" an
@@ -70,6 +70,19 @@ export function composeTranslationLoader(
  * pipe while every page below it threw `NG0201`. Plan 0005 section 3.5 has the full
  * account. The app injector is the one that really does sit above every page.
  *
+ * ## Why they are not on the route table either
+ *
+ * That was the next attempt, and it works for everything that renders. It does not
+ * work for `gatewayInterceptor`, which injects `RokuTranslatorService` to set
+ * `Accept-Language`: a functional interceptor resolves from whichever injector
+ * declares `provideHttpClient`, and that is the app's, above the route. Providers on a
+ * route are visible to everything below them and to nothing above, so the interceptor
+ * saw no service and threw `NG0201` on every gateway request.
+ *
+ * So the destination is the app injector, and `app-providers.ts` spreads this array
+ * there. This file still owns *what* the app's translations are; it just stopped
+ * owning where they are installed.
+ *
  * ## Why the service is initialized rather than injected into existence
  *
  * Nothing in a template injects `RokuTranslatorService` directly (the pipe does, but
@@ -82,8 +95,9 @@ export function composeTranslationLoader(
  * app's.
  *
  * This is what makes the ordering in section 4.2.1 hold with no timing to reason
- * about: the loads have started before any guard runs, so by the time
- * `translationsReadyResolver` waits, it is waiting on something already in flight.
+ * about: the loads have started before any guard runs, so by the time the
+ * `translationsReady` resolver in `routes.ts` waits, it is waiting on something
+ * already in flight.
  */
 export const VELISTA_TRANSLATION_PROVIDERS: (
   Provider | EnvironmentProviders

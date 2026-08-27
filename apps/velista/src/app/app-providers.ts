@@ -30,6 +30,12 @@ import {
   AppBrand,
 } from '@portfolio/velista/models';
 import { VELISTA_PLATFORM_PROVIDERS } from '@portfolio/velista/platform';
+// Deep relative import, and the rule it silences is a real one. See the note on
+// `VELISTA_TRANSLATION_PROVIDERS` below for why the barrel cannot be used here, and
+// rokutranslator plan 0005, D9, for the fix: move `translation-providers.ts` out of a
+// lazily loaded library so every app can import it normally. Suppressed rather than
+// worked around, so the debt is visible to lint's next reader instead of only to git.
+// eslint-disable-next-line @nx/enforce-module-boundaries
 import { VELISTA_TRANSLATION_PROVIDERS } from '../../../../libs/velista/feature-shell/src/lib/translation-providers';
 import { environment } from '../environments/environment';
 
@@ -74,6 +80,31 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   { provide: APP_BASE_PATH, useValue: '/velista' },
   // The app's own backend configuration, not the portfolio's (item 6).
   { provide: APP_API_CONFIG, useValue: environment.api },
+
+  // The app's translations, on **this** injector rather than on the route table that
+  // owns every page, which is where plan 0006 section 3 put them and where they lived
+  // until the gateway interceptor started reading the locale.
+  //
+  // A functional interceptor resolves its `inject()` calls from the injector that
+  // declares `provideHttpClient`, which is this one. `gatewayInterceptor` injects
+  // `RokuTranslatorService` for the `Accept-Language` header (plan 0004, section 4.3),
+  // so the service has to be reachable from here. Route providers sit one level below
+  // and are invisible looking up, so every gateway request threw `NG0201` instead of
+  // being sent. Providing it here fixes that for both run modes at once.
+  //
+  // It is written above `provideHttpClient` to say that out loud. Injector membership
+  // is what actually decides this, not position in the array, but a reader who moves
+  // it below has no way to tell the constraint exists.
+  //
+  // The import reaches into `feature-shell` by path instead of through
+  // `@portfolio/velista/feature-shell`, and both halves of that are deliberate.
+  // `entry.routes.ts` lazy-loads that library, so a static import of its barrel is
+  // `@nx/enforce-module-boundaries`' "static imports of lazy-loaded libraries are
+  // forbidden", and it would pull the whole library into the remote's entry chunk
+  // besides. Naming the one file keeps the chunk to that file and its dependencies.
+  // It is still a relative import across a library boundary, which CLAUDE.md
+  // otherwise forbids; the honest fix is to move `translation-providers.ts` out of a
+  // lazy-loaded library, and that is the locale routing plan's job, not this file's.
   ...VELISTA_TRANSLATION_PROVIDERS,
 
   // HTTP, with the one interceptor that decides every outgoing header
@@ -86,14 +117,6 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // place and both the app and every spec pick it up from there.
   ...VELISTA_PLATFORM_PROVIDERS,
   ...VELISTA_DATA_ACCESS_PROVIDERS,
-
-  // The app's translations are **not** on this list. They are composed by
-  // `feature-shell` and installed by its own route table (plan 0006, section 3), which
-  // is one injector further down and still above every page. They cannot be named here
-  // even though this is where they conceptually belong: `entry.routes.ts` lazy-loads
-  // `feature-shell`, so importing anything from it statically is forbidden by
-  // `@nx/enforce-module-boundaries`. See the comment on the parent route in
-  // `feature-shell`'s `routes.ts`.
 
   // The real gateway, which is the token's default too, but it still has to be bound
   // **here**: `ZoneApi` needs the `HttpClient` configured a few lines above, and that

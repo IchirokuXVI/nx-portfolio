@@ -94,29 +94,33 @@ export const AppShellRoutes: Route[] = [
   {
     path: '',
     component: AppLayout,
-    // The app's translations, installed on the route that owns every page rather
-    // than by `app-providers.ts` (plan 0006, section 3.5 chose the latter, and it
-    // cannot be done: `entry.routes.ts` lazy-loads this library, so a static import
-    // of it from the app is `@nx/enforce-module-boundaries`' "static imports of
-    // lazy-loaded libraries are forbidden", and it would fold this whole library
-    // into the remote's entry chunk besides).
+    // The app's translations are **not** installed here any more. They moved up to
+    // `app-providers.ts`, because `gatewayInterceptor` injects `RokuTranslatorService`
+    // for its `Accept-Language` header and a functional interceptor resolves from the
+    // injector that declares `provideHttpClient`. That injector is the app's, one
+    // level above this route, and a route's providers are invisible looking up, so
+    // every gateway request threw `NG0201`. The full account is on the provider itself.
     //
-    // Nothing about the plan's ownership changes, only the import site: this file
-    // is still `feature-shell` composing, and the providers still land on an
-    // injector that sits above every page, which is the property plan 0005 section
-    // 3.5 was about. `AppUiModule` failed precisely because a standalone
-    // component's imported module provides that component and not the routes below
-    // it; a route's providers are the opposite, and reach every child route.
-    //
-    // It also makes the two run modes identical here. The mounted app and the
-    // standalone bootstrap both enter through this table, so neither has to
-    // remember to install these separately.
+    // What plan 0006 section 3 was protecting still holds: the providers sit above
+    // every page, and the mounted app and the standalone bootstrap get them the same
+    // way, since both enter through `app-providers.ts`. Only the injector changed, and
+    // it moved in the direction that has more above it rather than less.
     canActivate: [localeCorrectionGuard],
     // No page of this app is created until its strings have arrived (plan 0006,
     // section 4). On the parent, so it is decided once for the app rather than
     // repeated by every page ever added, and after the locale guard: Angular runs a
     // route's `canActivate` to completion before its `resolve`, so the locale is
     // already settled and this can only ever wait for the language it will render.
+    //
+    // The observable is handed to the router as it is, with no `firstValueFrom` and no
+    // timeout, and both omissions are the contract rather than an oversight. `loaded$`
+    // emits **exactly one** value and then completes, in the failure case as well as
+    // the success case (rokutranslator 0004, Problem 3), so the router's own `take(1)`
+    // is all the unwrapping it needs and a rejected loader still activates the route,
+    // at worst with keys for the namespace that failed. A timeout would trade that
+    // determinism for a build that renders text on a fast machine and keys on a slow
+    // one, with nothing in the source saying which. Being a `ReplaySubject(1)`, every
+    // navigation after the first resolves from the buffer and costs nothing.
     resolve: { translationsReady: () => inject(RokuTranslatorService).loaded$ },
     data: {
       appKey: APP_KEY,
