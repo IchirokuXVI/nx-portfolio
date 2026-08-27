@@ -106,8 +106,8 @@ providers the mounted one does. What is missing:
    `''` in the standalone build.
 3. **The translator's `init`**, which arrives with plan `0005`.
 4. **The document title**, which the shell's `RokuTitleStrategy` supplies today and will
-   not on another origin. Plan `0005` D10 decides this, and the per app option is the one
-   that works here.
+   not on another origin. Settled in `0005` D10: each app sets its own title, which is the
+   only one of the three options that works at all once velista leaves the shell.
 
 ## Infrastructure
 

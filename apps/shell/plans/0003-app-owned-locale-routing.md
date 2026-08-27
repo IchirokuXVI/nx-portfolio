@@ -73,21 +73,27 @@ checklist is the work; the per app section is only what differs.
 2. **Routes.** Add the locale segment below the mount in the app's own route table, and
    install the merged guard on the parent route.
 3. **Translations.** Move the app's `RokuTranslatorModule.withConfig` call out of its UI
-   module and into a `translation-providers.ts` in its shell library, composing
-   `TranslationSource` descriptors the way velista does. The UI module keeps importing and
-   exporting plain `RokuTranslatorModule` for the pipe.
+   module and into `apps/<app>/src/app/translation-providers.ts`, composing
+   `TranslationSource` descriptors with the shared `composeTranslationLoader`. **In the
+   app, not in the shell library**, per plan `0005` D11: the app is the only place
+   `app-providers.ts` can import from without a boundary violation. Each asset owning
+   library keeps its own descriptor and loader. The UI module keeps importing and exporting
+   plain `RokuTranslatorModule` for the pipe.
 4. **Providers.** Create an `app-providers.ts` for the app and attach it to the exposed
    route in `entry.routes.ts`, plus to `appConfig` for the standalone bootstrap. Use
    `provideEnvironmentInitializer` for anything that must *run* rather than merely be
-   available.
+   available. Translation providers go **above** `provideHttpClient`, per `0005` D9.
 5. **Readiness.** Add the `translationsReady` resolver on the parent route, after the
    guard.
-6. **Data access.** Anything `providedIn: 'root'` in the app's `data-access` moves onto the
+6. **Title.** The parent route sets the document title from the app's own
+   `RokuTranslatorService` (`0005` D10), and the app's `titleNs` / `titleFallback` entries
+   come out of the shell's route table.
+7. **Data access.** Anything `providedIn: 'root'` in the app's `data-access` moves onto the
    app's provider array behind a service token, per rule D5.
-7. **Locale switcher.** Update the call site so it rewrites the locale segment relative to
+8. **Locale switcher.** Update the call site so it rewrites the locale segment relative to
    the mount.
-8. **Specs and e2e.** Update the URLs, see the e2e section.
-9. **Verify, then commit.** See the commit protocol.
+9. **Specs and e2e.** Update the URLs, see the e2e section.
+10. **Verify, then commit.** See the commit protocol.
 
 ### damoclesSword
 
@@ -143,9 +149,11 @@ Mostly done already, and it is the reference for steps 3 through 6. What is left
   from `['', locale, ...mount, ...segments]` to `['', ...mount, locale, ...segments]`.
 - The parent route in `libs/velista/feature-shell/src/lib/routes.ts` takes the merged
   guard.
-- Resolve plan `0005` D9's loose end here: `app-providers.ts` currently imports
-  `translation-providers.ts` by relative path across a library boundary. Whatever the
-  contract plan settles, velista is where it is implemented first.
+- `libs/velista/feature-shell/src/lib/translation-providers.ts` moves to
+  `apps/velista/src/app/translation-providers.ts` (`0005` D11), its
+  `composeTranslationLoader` half moves to `rokutranslator-angular`, and the
+  `@nx/enforce-module-boundaries` suppression added by `daa1795` comes out with the
+  relative import it was covering. Its spec splits the same way.
 - 2 e2e specs.
 
 ## The shell
@@ -161,8 +169,10 @@ locale.
   translator.
 - `apps/shell/src/app/locale-wrapper-component.ts` goes away, along with its job of keeping
   the URL's locale segment in sync.
-- `RokuTitleStrategy` is decided by plan `0005` D10. Whichever option wins, the
-  `titleNs` / `titleFallback` route data comes out of `app.routes.ts`.
+- `RokuTitleStrategy` loses its `RokuTranslator` dependency and keeps only the literal
+  `title` and fallback path, because each app now sets its own title (`0005` D10). The
+  `titleNs` / `titleFallback` route data comes out of `app.routes.ts` as each app takes
+  over its own, so this is finished by step 6 rather than done in one go.
 - `apps/shell/src/app/app.html` stays a bare `<router-outlet>`. The shell drawing no chrome
   is what makes all of this possible and should not change.
 
@@ -215,17 +225,22 @@ and do not assume the suite is protecting anything.
 ## Acceptance criteria
 
 1. Every app serves at `/{mount}/{locale}/{rest}`, and `landingV2` at `/{locale}/{rest}`.
-2. Visiting an app with no locale inserts one and keeps the rest of the path.
-3. Visiting an app with an unsupported but locale shaped segment resolves it, per the D6
-   table.
-4. Switching language in any app rewrites only that app's locale segment, and leaves any
+2. Visiting an app with no locale inserts one and keeps the rest of the path, so
+   `/velista/home` lands on `/velista/en/home` and `/velista/random_non_existant` lands on
+   `/velista/en/random_non_existant` rather than losing the segment.
+3. An unsupported but locale shaped segment is replaced rather than kept, so
+   `/velista/zz/home` lands on `/velista/en/home` and `/velista/de` lands on `/velista/en`.
+4. Each app sets its own document title, in the language the page renders in, and the shell
+   translates nothing.
+5. Switching language in any app rewrites only that app's locale segment, and leaves any
    other app's remembered locale untouched.
-5. Two apps reachable in one session hold independent locales. Set damoclesSword to Spanish
+6. Two apps reachable in one session hold independent locales. Set damoclesSword to Spanish
    and landingV2 to English, navigate between them, and neither changes the other.
-6. No file outside the localization libraries reads or writes `segments[0]` as a locale.
-7. The shell has no translator, no `:locale` route and no locale wrapper.
-8. `nx run-many --all --target=lint test build` green, and every e2e project that CI runs
-   green.
+7. No file outside the localization libraries reads or writes `segments[0]` as a locale.
+8. The shell has no translator, no `:locale` route and no locale wrapper.
+9. No app imports across a library boundary by relative path.
+10. `nx run-many --all --target=lint test build` green, and every e2e project that CI runs
+    green.
 
 ## Out of scope
 
@@ -234,5 +249,6 @@ translation content or namespace names. Renaming `landingV2`. SSR.
 
 ## Open questions
 
-Both are inherited from plan `0005` and must be answered there before step 1, not here:
-the D6 row three behaviour, and which of the D10 title options.
+None. The three this migration was waiting on were settled in plan `0005` before step 1:
+an unsupported locale shaped segment is replaced (D6), each app sets its own title (D10),
+and the composed translation providers live in the app (D11).

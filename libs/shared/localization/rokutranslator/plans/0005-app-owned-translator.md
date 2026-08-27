@@ -195,18 +195,28 @@ Under this plan every app needs both behaviours at its own mount, so two guards 
 every app wiring up two. Collapse them into one guard configured from route `data`
 (`appKey`, `supportedLocales`, `defaultLocale`), with three cases:
 
-| Segment after the mount | Action | Example at `/velista` |
+| Segment after the mount | Action | Example at `/velista`, with `en` resolved |
 | --- | --- | --- |
 | A supported locale | proceed | `/velista/es/home` stays |
 | Absent, or not locale shaped | **insert** the resolved locale, keep the segment | `/velista/home` becomes `/velista/en/home` |
 | Locale shaped but unsupported | **replace** the segment | `/velista/zz/home` becomes `/velista/en/home` |
 
-**The third row is a judgement call and Daniel may overrule it.** A literal reading of
-"the locale part will be used as the next url segment after the locale" would preserve
-`zz` and produce `/velista/en/zz/home`, matching row two's shape. It is written as a
-replacement because `zz` is not a route in any app, so preserving it guarantees a 404
-where replacing it renders the page the visitor asked for. Row two preserves its segment
-precisely because that segment usually *is* a real route.
+Settled by Daniel, with the worked examples he gave. The resolved locale is `en` in all
+four:
+
+| In | Out | Row |
+| --- | --- | --- |
+| `/velista/zz/home` | `/velista/en/home` | replace |
+| `/velista/home` | `/velista/en/home` | insert |
+| `/velista/random_non_existant` | `/velista/en/random_non_existant` | insert |
+| `/velista/de` (de unsupported) | `/velista/en` | replace |
+
+The asymmetry between rows two and three is the point, so it is worth stating why rather
+than leaving it to be read off the table. A locale shaped segment is **consumed**, because
+`zz` and `de` are not routes in any app and preserving them guarantees a 404. A segment
+that is not locale shaped is **kept**, because it usually is a real route and the visitor
+asked for it. `/velista/de` therefore lands on the app's front door in English rather than
+on a dead `de` route, which is the fourth example.
 
 Resolution order for "the resolved locale" is unchanged from plan 0002 D5: the app's last
 used locale from `roku-locale:{appKey}`, then the browser locale, then the app's default.
@@ -264,15 +274,48 @@ injector, and every gateway request throws `NG0201`.
 it. Injector membership decides this, not array position, but writing them above
 `provideHttpClient` is how a reader learns the constraint exists.
 
-There is a loose end this plan should tidy rather than inherit. Because `entry.routes.ts`
-lazy loads the shell library, the app cannot import its barrel statically, so
-`app-providers.ts` currently reaches in by relative path
+There is a loose end this plan tidies rather than inherits, and D11 is where it lands.
+
+Because `entry.routes.ts` lazy loads the shell library, the app cannot import its barrel
+statically, so `app-providers.ts` currently reaches in by relative path
 (`../../../../libs/velista/feature-shell/src/lib/translation-providers`). That works, and
 it keeps the entry chunk to one file rather than a whole barrel, but it is a relative
-import across a library boundary, which CLAUDE.md forbids. The clean fix is for the
-composed translation providers to live in a library the app can import normally, which for
-velista means moving `translation-providers.ts` out of `feature-shell`. Decide it here so
-all four apps land the same way rather than each inventing an escape.
+import across a library boundary, which CLAUDE.md forbids. `daa1795` suppressed the lint
+error with a pointer to this plan rather than working around it, so the debt is visible
+and the suppression comes out with D11.
+
+### D11: the composition lives in the app, not in the shell library
+
+The reason `translation-providers.ts` sits in `feature-shell` has expired. Plan 0006 put it
+there because the providers were installed by the route table, and the route table lives in
+that library. D9 moved the providers to the app injector; the file did not follow, and
+every awkward thing about it since is a symptom of it sitting in a library the app is
+forbidden to import statically.
+
+The file's own docblock already argues for the move: the `provideRokuTranslator` call "has
+to live in the app's composition layer", and which namespaces an app has "is composition
+and belongs to the app's entry point". `feature-shell` was never the intended home, it was
+the reachable one.
+
+Three pieces, three homes, and the same shape for all four apps:
+
+| Piece | Home | Why |
+| --- | --- | --- |
+| `composeTranslationLoader` | `rokutranslator-angular` | Generic. `odontogram-ui-module.ts` hand rolls the same namespace dispatcher inline, so lifting it deletes a duplication rather than copying one into four apps. |
+| The `TranslationSource` descriptor and its loader | the library that owns the assets (`ui`, `models-localization`) | Unchanged. The loader is a relative `import()` of that library's own asset folder, so it genuinely cannot move. |
+| The source list, the default namespace, and the `provideRokuTranslator` call | **`apps/<app>/src/app/translation-providers.ts`** | Statically importable by `app-providers.ts`. No boundary violation and no suppression. |
+
+**The one cost, measured rather than assumed.** The app then statically imports
+`@portfolio/<app>/ui` for the descriptor, which for velista is a barrel of 40 component
+exports, and that pulls `ui` into the remote's entry chunk. It is close to free: `ui`
+already lands in the `feature-shell` chunk, because that library's `routes.ts` imports
+`AppLayout` statically, and both chunks are fetched before first paint since the parent
+route is the entry point. So `ui` moves between two chunks that are always fetched
+together. The pages stay lazy either way, which is the property plan 0007 was protecting.
+
+The spec moves with the file. Each app project already has a jest config, so
+`composeTranslationLoader`'s tests follow it into `rokutranslator-angular` and the
+composition test lives in the app.
 
 ### D10: the shell loses the ability to translate route titles
 
@@ -281,36 +324,49 @@ with a `titleNs` from route data, so today the shell localizes titles on behalf 
 remote. With per app instances the shell has no translator to call, and route `data`
 naming another app's namespace stops meaning anything.
 
-Options, with a recommendation:
+**Decision, from Daniel: each app sets its own title.**
 
-1. **Each app sets its own title.** The app already has its translator and its strings.
-   The shell keeps a `TitleStrategy` that handles only a literal `title` and a fallback,
-   and each app's parent route sets the document title from its own service.
-   **Recommended:** it puts the string next to the instance that owns it, and it is the
-   only option that survives an app running standalone.
-2. Keep a shell strategy that injects the *active* app's translator. Requires the shell to
-   know which app is mounted, which is the coupling this plan removes.
-3. Drop localized titles. Cheapest, and a real regression on a portfolio.
+The app already holds its translator and its strings, so the title goes next to the
+instance that owns it. It is also the only option that survives an app running standalone,
+which velista's backlog plan depends on.
 
-Whichever is chosen, the shell's `titleNs` / `titleFallback` route data goes away, and
-`0002` D8 (localized document titles) is superseded.
+Two alternatives, recorded because they will look attractive to somebody later. Keeping a
+shell strategy that injects the *active* app's translator requires the shell to know which
+app is mounted, which is exactly the coupling this plan removes. Dropping localized titles
+is cheapest and is a real regression on a portfolio whose whole point is being multilingual.
+
+Shape: each app's parent route sets the document title from its own `RokuTranslatorService`,
+after the locale guard and alongside the `translationsReady` resolve, so the title is set in
+the language the page is about to render. The shell keeps a `TitleStrategy` only for a
+literal `title` string with no translation.
+
+The shell's `titleNs` / `titleFallback` route data goes away, `RokuTitleStrategy` loses its
+`RokuTranslator` dependency, and `0002` D8 (localized document titles) is superseded.
 
 ## The new public API
 
-What a composing app writes after this plan:
+What a composing app writes after this plan, in the **app** rather than in a library
+(D11), and imported normally by `app-providers.ts`:
 
 ```ts
-// libs/<scope>/feature-shell/src/lib/translation-providers.ts
+// apps/<app>/src/app/translation-providers.ts
+import { composeTranslationLoader } from '@portfolio/localization/rokutranslator-angular';
+import { APP_AVAILABLE_LOCALES, APP_UI_TRANSLATIONS } from '@portfolio/<app>/ui';
+
+const sources = [APP_UI_TRANSLATIONS];
+
 export const APP_TRANSLATION_PROVIDERS = [
   ...provideRokuTranslator({
     locales: APP_AVAILABLE_LOCALES,
-    defaultNamespace,
-    namespaces,
+    defaultNamespace: APP_UI_TRANSLATIONS.namespace,
+    namespaces: sources.map((s) => s.namespace).filter((n) => n !== defaultNamespace),
     loader: composeTranslationLoader(sources),
   }),
   provideEnvironmentInitializer(() => void inject(RokuTranslatorService)),
 ];
 ```
+
+Adding a second library that ships assets stays a single entry in `sources`.
 
 `provideRokuTranslator` now returns, in addition to what it returns today, the
 `ROKU_TRANSLATOR` instance and the `RokuLocaleStore` bound to it. No call site changes
@@ -323,6 +379,10 @@ What disappears from the workspace:
 - `RokuTranslatorModule.withConfig` as the way an app registers translations, since every
   app moves to the provider array (the module stays, for the pipe)
 - `localeCorrectionGuard` as a separate export, folded into `localeGuard`
+- `odontogram-ui-module.ts`'s inline namespace dispatcher, replaced by the shared
+  `composeTranslationLoader` (D11)
+- the `@nx/enforce-module-boundaries` suppression in velista's `app-providers.ts`, added by
+  `daa1795` and removed by D11
 
 ## Acceptance criteria
 
@@ -335,9 +395,13 @@ What disappears from the workspace:
    injector with no `provideRokuTranslator` above it is an error rather than a silent
    second instance.
 5. One guard handles all three rows of the D6 table, driven only by route `data`, with a
-   test per row.
+   test per row, plus a test for each of the four worked examples under it.
 6. No file outside the localization libraries reads `segments[0]` to find a locale.
-7. `nx run-many --all --target=test` and `--target=lint` are green.
+7. No app imports anything by a relative path across a library boundary, and the
+   `@nx/enforce-module-boundaries` suppression in velista's `app-providers.ts` is gone.
+8. `composeTranslationLoader` exists once, in `rokutranslator-angular`, and odontogram's
+   inline dispatcher is gone.
+9. `nx run-many --all --target=test` and `--target=lint` are green.
 
 ## Out of scope
 
@@ -347,8 +411,11 @@ namespace names, and the JSON files, none of which move.
 
 ## Open questions
 
-1. **D6 row three**, replace or preserve an unsupported locale shaped segment. Written as
-   replace; Daniel's sentence reads as preserve. Settle before the guard is written.
-2. **D10**, which of the three title options. Recommended is per app titles.
-3. **D9's loose end**, where composed translation providers live so the app can import
-   them without a relative cross boundary path.
+None. The three this plan opened were settled by Daniel before implementation started, and
+each is recorded in the decision it belongs to rather than here:
+
+- an unsupported locale shaped segment is **replaced**, not preserved (D6, with four worked
+  examples)
+- **each app sets its own title** (D10)
+- the composition lives in **the app**, with `composeTranslationLoader` lifted into
+  `rokutranslator-angular` (D11)
