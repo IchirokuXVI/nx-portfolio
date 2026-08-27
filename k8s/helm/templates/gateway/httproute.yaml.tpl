@@ -24,7 +24,7 @@
 */}}
 {{- $pinToHttps := and .Values.gateway.tls.enabled .Values.gateway.tls.redirectHttp }}
 {{- range .Values.apps }}
-{{- if or (ne .env "staging") $.Values.staging.enabled }}
+{{- $host := include "charts.host" (dict "item" . "root" $) }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -35,10 +35,10 @@ spec:
   parentRefs:
     - name: portfolio
       {{- if $pinToHttps }}
-      sectionName: {{ .host | replace "." "-" }}-https
+      sectionName: {{ $host | replace "." "-" }}-https
       {{- end }}
   hostnames:
-    - {{ .host }}
+    - {{ $host }}
   rules:
     - matches:
         - path:
@@ -56,7 +56,6 @@ spec:
         - name: {{ .name }}
           port: 80
 {{- end }}
-{{- end }}
 {{- if .Values.lunaShopperBackend.enabled }}
 {{/*
   Luna Shopper public services (plan 0002, section 5). The gateway (REST) and
@@ -66,10 +65,11 @@ spec:
   The realtime service needs nothing here for WebSockets: HTTP/1.1 upgrade is
   handled for a normal HTTPRoute. Its long lived connection timeouts are the one
   thing with no core spec equivalent, and they live in
-  _implementation-envoy.yaml.tpl.
+  implementation-envoy.yaml.tpl.
 */}}
 {{- range .Values.lunaShopperBackend.services }}
-{{- if and .routed (or (ne .env "staging") $.Values.staging.enabled) }}
+{{- if .routed }}
+{{- $host := include "charts.host" (dict "item" . "root" $) }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -80,10 +80,10 @@ spec:
   parentRefs:
     - name: portfolio
       {{- if $pinToHttps }}
-      sectionName: {{ .host | replace "." "-" }}-https
+      sectionName: {{ $host | replace "." "-" }}-https
       {{- end }}
   hostnames:
-    - {{ .host }}
+    - {{ $host }}
   rules:
     - matches:
         - path:

@@ -7,6 +7,11 @@
   off nginx, and it is now the only one in the chart rather than one of three:
   routes no longer need grouping at all (see httproute.yaml.tpl).
 
+  Since plan 0002 the set is five hosts rather than ten, because this release
+  describes one environment. The other five live on the other cluster, with their
+  own Gateway and their own certificates. That is what keeps each cluster's
+  listener count (and its Let's Encrypt exposure) to what it actually serves.
+
   Creating this object causes the Envoy Gateway controller to provision a data
   plane Deployment + Service named envoy-<namespace>-<name>-<hash> in the
   envoy-gateway-system namespace. Neither object is declared here, and the
@@ -15,14 +20,12 @@
 */}}
 {{- $hosts := dict }}
 {{- range .Values.apps }}
-{{- if or (ne .env "staging") $.Values.staging.enabled }}
-{{- $_ := set $hosts .host true }}
-{{- end }}
+{{- $_ := set $hosts (include "charts.host" (dict "item" . "root" $)) true }}
 {{- end }}
 {{- if .Values.lunaShopperBackend.enabled }}
 {{- range .Values.lunaShopperBackend.services }}
-{{- if and .routed (or (ne .env "staging") $.Values.staging.enabled) }}
-{{- $_ := set $hosts .host true }}
+{{- if .routed }}
+{{- $_ := set $hosts (include "charts.host" (dict "item" . "root" $)) true }}
 {{- end }}
 {{- end }}
 {{- end }}

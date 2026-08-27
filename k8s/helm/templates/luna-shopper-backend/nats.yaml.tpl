@@ -1,6 +1,7 @@
 {{- if .Values.lunaShopperBackend.enabled }}
 {{- $root := . }}
-{{- $nats := .Values.lunaShopperBackend.nats }}
+{{- $ls := .Values.lunaShopperBackend }}
+{{- $nats := $ls.nats }}
 ---
 apiVersion: v1
 kind: Service
@@ -41,6 +42,12 @@ spec:
         app: luna-shopper-backend-nats
         app.kubernetes.io/part-of: luna-shopper-backend
     spec:
+      {{- if $ls.priorityClass.enabled }}
+      # The broker belongs to the stateful tier for the same reason the databases
+      # do (plan 0004): everything that talks to it can be rescheduled harmlessly
+      # and it cannot.
+      priorityClassName: {{ $ls.priorityClass.name }}
+      {{- end }}
       containers:
         - name: nats
           image: {{ $nats.image }}
@@ -64,6 +71,12 @@ spec:
               port: 8222
             initialDelaySeconds: 15
             periodSeconds: 20
+          # Requests equal limits for Guaranteed QoS, exactly as the Postgres
+          # instances (plan 0004, section 2). With no resources declared this was
+          # BestEffort and therefore first in line for both the kubelet's
+          # eviction ranking and the kernel's OOM killer.
+          resources:
+            {{- toYaml $nats.resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /data

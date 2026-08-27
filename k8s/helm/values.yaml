@@ -1,27 +1,46 @@
 namespace: nx-portfolio
 
-# Pull policy for the micro-frontend app images. Production/staging pull the
+# ---------------------------------------------------------------------------
+# This file describes ONE environment (plan 0002).
+#
+# Which environment is decided by which cluster you point the release at and
+# which values file you pass alongside this one:
+#
+#   helm upgrade nx-portfolio k8s/helm --namespace nx-portfolio \
+#     --values k8s/helm/values.yaml --values k8s/helm/values.production.yaml
+#   helm upgrade nx-portfolio k8s/helm --namespace nx-portfolio \
+#     --values k8s/helm/values.yaml --values k8s/helm/values.staging.yaml
+#
+# Nothing below names an environment. There is no `env` field, no `-staging`
+# resource name and no `staging.enabled` switch, because staging is a different
+# cluster rather than a different half of this release. Resource names are
+# therefore identical in both, which is what makes the two comparable.
+# ---------------------------------------------------------------------------
+
+# The domain this cluster serves. Every host is derived from it (see `apps` and
+# `lunaShopperBackend.services` below), so it is the single value that turns this
+# chart into "production" or "staging". Deliberately empty here: a deploy with no
+# environment values file should fail rather than quietly pick one.
+baseDomain: ''
+
+# Which environment this is, for telemetry only (DEPLOYMENT_ENVIRONMENT on every
+# backend pod). It labels traces and metrics; nothing in the chart branches on it.
+environment: ''
+
+# Pull policy for the micro-frontend app images. A cluster deploy pulls the
 # freshly pushed images from the registry (Always). A local dev deploy builds the
 # images straight into the Docker Desktop image store and overrides this to
 # IfNotPresent (or Never) so Kubernetes uses them without a registry.
 appImagePullPolicy: Always
 
-# Image tags.
+# The image tag every app and backend service runs.
 #
-# Production apps are pinned to an immutable release version. The live value is
-# kept on the deploy host (helm-live/prod-tag.yaml, outside the rsynced path) and
-# passed with `-f`, so it survives staging deploys and can be hand-edited. A
-# rollback is just re-pinning a previous version whose images still exist.
-#
-# Staging apps track a mutable tag that CI overwrites on every push to main; the
-# staging deploy triggers a rollout restart of the changed apps to re-pull it.
-productionImageTag: latest
-stagingImageTag: staging
-
-# Staging runs alongside production in the same release/namespace, routed by the
-# gateway on its own hostnames. Turn it off to deploy production only.
-staging:
-  enabled: true
+# Production pins an immutable release version, written by deploy-release.sh at
+# deploy time. Staging tracks the mutable `staging` tag that CI overwrites on
+# every push to main, and the staging deploy rolls the changed deployments so
+# they re-pull it. Each cluster holds one release, so the two can never collide
+# and there is no live-version file to preserve across deploys.
+imageTag: latest
 
 # ---------------------------------------------------------------------------
 # Routing (plan 0001). The chart declares WHAT the routes are, as core Gateway
@@ -50,11 +69,11 @@ gateway:
 
   tls:
     enabled: true
-    # Must match a ClusterIssuer the bootstrap created: letsencrypt-prod for the
+    # Must match a ClusterIssuer the bootstrap created: letsencrypt-prod for a
     # public cluster, selfsigned locally.
     issuer: letsencrypt-prod
     # nginx served plain HTTP unencrypted (one server block for :80 and :443), so
-    # redirecting is a behaviour change. On in production, off locally where
+    # redirecting is a behaviour change. On in a cluster, off locally where
     # everything is plain HTTP.
     redirectHttp: true
 
@@ -68,10 +87,10 @@ gateway:
   # covers it first.
   extraAnnotations: {}
 
-# MetalLB IPAddressPool. The public cluster needs it to expose the gateway's data
-# plane on the bare-metal IP below. Docker Desktop already surfaces LoadBalancer
-# services on localhost, so a local deploy disables the pool (its public IP is not
-# routable there and would leave the service pending).
+# MetalLB IPAddressPool. A bare metal cluster needs it to expose the gateway's
+# data plane on the node's public IP. Docker Desktop already surfaces
+# LoadBalancer services on localhost, so a local deploy disables the pool (its
+# public IP is not routable there and would leave the service pending).
 metallb:
   enabled: true
   # Namespaces allowed to claim the pool. The gateway implementation provisions
@@ -84,32 +103,35 @@ metallb:
     - nx-portfolio
     - envoy-gateway-system
 
-ipAddress: 46.62.204.230
+# The address MetalLB advertises, i.e. the cluster's own public IP. Per
+# environment, because the two clusters are two machines.
+ipAddress: ''
 
-# Each app is one deployment/service. `env` selects which image tag it uses
-# (production -> productionImageTag, staging -> stagingImageTag) and one HTTPRoute
-# routes it on `host` under `path`. Image names are the tag-less repo path.
+# Each app is one deployment/service, routed by one HTTPRoute.
+#
+# `hostPrefix` is a label under `baseDomain` rather than a full hostname, so this
+# list is identical in both clusters and the domain is the only thing that moves.
+# An empty prefix means the domain root, which is where the shell lives. A local
+# values file that does not follow the pattern sets an explicit `host` instead,
+# which wins (see the `charts.appHost` helper).
+#
+# Image names are the tag-less repo path; the tag is `imageTag` above.
 apps:
-  # Production - ichirokuxvi.com
   - name: shell
-    env: production
     image: ghcr.io/ichirokuxvi/nx-portfolio/shell
-    host: ichirokuxvi.com
+    hostPrefix: ''
     path: /
   - name: odontogram
-    env: production
     image: ghcr.io/ichirokuxvi/nx-portfolio/odontogram
-    host: mfe.ichirokuxvi.com
+    hostPrefix: mfe
     path: /odontogram
   - name: damoclessword
-    env: production
     image: ghcr.io/ichirokuxvi/nx-portfolio/damoclessword
-    host: mfe.ichirokuxvi.com
+    hostPrefix: mfe
     path: /damoclesSword
   - name: landingv2
-    env: production
     image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
-    host: mfe.ichirokuxvi.com
+    hostPrefix: mfe
     path: /landingV2
   # velista is served from its **own origin**, not from the micro-frontend host under
   # a path (plan 0013). One image serves both roles: `/` is the standalone app that a
@@ -117,80 +139,70 @@ apps:
   #
   # This entry **moved**, it was not added. A second velista entry would run the same
   # image twice on two hostnames, which is the two origin hazard D5 exists to avoid,
-  # rebuilt in the cluster. So `mfe.ichirokuxvi.com/velista` stops existing, and the
-  # shell's `MFE_REMOTE_URLS` in release.yml is what points it at the new host.
+  # rebuilt in the cluster. So `mfe.<domain>/velista` stops existing, and the shell's
+  # `MFE_REMOTE_URLS` in the workflows is what points it at the new host.
   #
   # `path: /` emits no rewrite filter, which is exactly what a host root wants, and
   # the Gateway's HTTPS listener and its certificate follow from this host appearing
   # in `apps` at all. DNS is the one manual prerequisite: cert-manager cannot solve an
   # HTTP-01 challenge for a name that does not resolve.
   - name: velista
-    env: production
     image: ghcr.io/ichirokuxvi/nx-portfolio/velista
-    host: velista.ichirokuxvi.com
-    path: /
-  # Staging - staging.ichirokuxvi.com
-  - name: shell-staging
-    env: staging
-    image: ghcr.io/ichirokuxvi/nx-portfolio/shell
-    host: staging.ichirokuxvi.com
-    path: /
-  - name: odontogram-staging
-    env: staging
-    image: ghcr.io/ichirokuxvi/nx-portfolio/odontogram
-    host: mfe.staging.ichirokuxvi.com
-    path: /odontogram
-  - name: damoclessword-staging
-    env: staging
-    image: ghcr.io/ichirokuxvi/nx-portfolio/damoclessword
-    host: mfe.staging.ichirokuxvi.com
-    path: /damoclesSword
-  - name: landingv2-staging
-    env: staging
-    image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
-    host: mfe.staging.ichirokuxvi.com
-    path: /landingV2
-  # Its own origin in staging too, for the same reasons as the production entry
-  # above, and moved rather than duplicated for the same one.
-  - name: velista-staging
-    env: staging
-    image: ghcr.io/ichirokuxvi/nx-portfolio/velista
-    host: velista.staging.ichirokuxvi.com
+    hostPrefix: velista
     path: /
 
 # ---------------------------------------------------------------------------
 # Luna Shopper backend (plan 0002).
 #
-# Long running Node services (gateway, realtime, auth, core), their stateful
-# dependencies (two Postgres instances + NATS with JetStream) and the zero
-# downtime deploy config (rolling update with a readiness gate, graceful
+# Long running Node services (gateway, realtime, auth, core, catalog), their
+# stateful dependencies (three Postgres instances + NATS with JetStream) and the
+# zero downtime deploy config (rolling update with a readiness gate, graceful
 # shutdown, PodDisruptionBudgets). Kept out of the `apps` list above because the
 # shape differs: these carry env/secrets, health probes and PDBs, and only the
-# gateway and realtime are public (each gets an HTTPRoute); auth and core
-# are internal (ClusterIP, reached over NATS and by the gateway).
+# gateway and realtime are public (each gets an HTTPRoute); auth, core and
+# catalog are internal (ClusterIP, reached over NATS and by the gateway).
 #
-# Disabled by default: turning it on requires the runtime Secrets to exist (see
-# k8s/helm/luna-shopper-backend-secrets.md) and the api./rt. DNS records. Flip to true
-# once those are in place. Staging entries additionally honour `staging.enabled`.
+# Disabled by default: turning it on requires the runtime Secrets to exist (run
+# k8s/bootstrap/provision-release.sh) and the api./rt. DNS records. Flip to true
+# once those are in place.
+#
+# Since plan 0002 this switch means one thing rather than two. It used to stand
+# up the production services unconditionally while only the staging ones honoured
+# `staging.enabled`, so enabling the backend for a staging smoke test also
+# crashlooped five production pods and requested real certificates for the
+# production API hosts. One environment per release removes that entirely.
 # ---------------------------------------------------------------------------
 lunaShopperBackend:
   enabled: false
 
   imagePullPolicy: Always
 
-  # At least two replicas per service so a rolling update (maxUnavailable 0) and a
-  # PodDisruptionBudget (minAvailable 1) actually deliver zero downtime: one pod
-  # keeps serving while the other is replaced or its node is drained.
-  replicaCount: 2
+  # One replica per service (plan 0004, section 3 / plan 0027, section 3).
+  #
+  # NOT a cost decision. `realtime` is a socket.io gateway on the default in
+  # memory adapter, so with two replicas a broadcast emitted on one pod never
+  # reaches clients connected to the other, and a polling handshake that lands on
+  # a different pod per request fails outright. There is no Redis in this stack,
+  # so two replicas is not redundancy; it is a realtime service that is wrong
+  # half the time. This goes back to 2 when a socket.io Redis adapter lands.
+  #
+  # The PodDisruptionBudget below follows this value: at 1 it is not rendered at
+  # all, because `minAvailable: 1` over a single replica blocks every voluntary
+  # eviction and hangs `kubectl drain` forever.
+  replicaCount: 1
 
   # Zero downtime knobs (plan 0002, section 6). maxUnavailable 0 + maxSurge 1
   # means a new pod must pass its readiness probe before an old one is removed.
+  # Still true at one replica: the replacement starts and goes ready before the
+  # old pod is retired, so an ordinary deploy stays brief. What one replica costs
+  # is surviving a crash or a node failure.
   rollout:
     maxUnavailable: 0
     maxSurge: 1
   # Long enough for in flight requests to drain on SIGTERM before SIGKILL.
   terminationGracePeriodSeconds: 30
-  # Node maintenance may never take the last replica of a service.
+  # Node maintenance may never take the last replica of a service. Only rendered
+  # when replicaCount > 1; see the note above.
   pdb:
     minAvailable: 1
 
@@ -202,198 +214,200 @@ lunaShopperBackend:
       cpu: 500m
       memory: 512Mi
 
-  # Non secret config, rendered into a ConfigMap per environment. Secret values
-  # (DB URLs, JWT keys, OAuth secret, SMTP password) live in a separate, pre
-  # created Secret per environment; see luna-shopper-backend-secrets.md.
+  # Non secret config, rendered into one ConfigMap. Secret values (DB URLs, JWT
+  # keys, OAuth secret, SMTP password) live in a separate, pre created Secret;
+  # see luna-shopper-backend-secrets.md and bootstrap/provision-release.sh.
+  #
+  # The keys here are the ones that are the same in every cluster. The per
+  # environment answers (log level, CORS origins, the OAuth callback, the mail
+  # URLs) live in values.production.yaml / values.staging.yaml, which merge over
+  # this map.
   config:
-    production:
-      natsUrl: nats://luna-shopper-backend-nats:4222
-      logLevel: info
-      # Both origins, because after plan 0013 both can be serving velista: the
-      # portfolio at `/velista` and velista's own host. Comma separated, and the
-      # gateway splits and trims it. Plan 0013 section 9 claimed CORS was unaffected
-      # by the move; it is not. The gateway was never same origin with the app, but it
-      # allows an explicit list of hosts, so an origin that is not on the list has
-      # every request blocked. Once D5's redirect lands the portfolio entry can go.
-      corsOrigins: https://ichirokuxvi.com,https://velista.ichirokuxvi.com
-      authJwtKid: prod-1
-      accessTokenTtl: 15m
-      refreshTokenTtl: 30d
-      googleClientId: ''
-      # The path the gateway actually serves: its controllers are versioned, so
-      # the callback lives under /v1. It must match a URI pre-registered with
-      # Google exactly, which is why it is spelled out rather than derived.
-      googleCallbackUrl: https://api.ichirokuxvi.com/v1/auth/google/callback
-      # Where the Google callback hands the browser back (plan 0023, section 3.4).
-      # `{locale}` is substituted with the locale the flow started in.
-      #
-      # velista's own origin, and the locale is now the **first** segment, which is
-      # the canonical URL D5 wants the flow to land on. This value was stale twice
-      # over: it named the portfolio, and it spelled the URL `/{locale}/velista`,
-      # which shell plan 0003 reversed to `/velista/{locale}` when each app took
-      # ownership of the segment below its own mount. On the standalone origin the
-      # mount is empty, so the rule degenerates to `/{locale}` and the substitution
-      # is the whole path.
-      appBaseUrl: https://velista.ichirokuxvi.com/{locale}
-      smtpHost: ''
-      smtpPort: '587'
-      smtpUser: ''
-      mailFrom: Luna Shopper <no-reply@ichirokuxvi.com>
-      mailVerifyBaseUrl: https://ichirokuxvi.com/verify-email
-      mailResetBaseUrl: https://ichirokuxvi.com/reset-password
-      # Comma-separated user ids allowed to write the catalog (plan 0012). Set to
-      # the app owner's registered user id; empty means no one can write.
-      platformAdminUserIds: ''
-      # Telemetry (plan 0016). Tracing stays off until a collector exists in the
-      # cluster (section 8): with no endpoint no exporter is constructed and no
-      # network call is attempted, so the services run exactly as they do today.
-      # Turning it on is a values change and a `helm upgrade`, not a new image.
-      otelEnabled: false
-      otelExporterEndpoint: ''
-      # Full sampling is right while traffic is small; lower it if the volume
-      # ever costs something. Parent based, so it only decides at a trace root.
-      otelSamplerArg: 1
-      # /metrics on each service's health port, reachable inside the cluster
-      # only. It costs nothing until something scrapes it.
-      metricsEnabled: true
-    staging:
-      natsUrl: nats://luna-shopper-backend-nats:4222
-      logLevel: debug
-      # Both origins while both are live, exactly as production above.
-      corsOrigins: https://staging.ichirokuxvi.com,https://velista.staging.ichirokuxvi.com
-      authJwtKid: staging-1
-      accessTokenTtl: 15m
-      refreshTokenTtl: 30d
-      googleClientId: ''
-      googleCallbackUrl: https://api.staging.ichirokuxvi.com/v1/auth/google/callback
-      appBaseUrl: https://velista.staging.ichirokuxvi.com/{locale}
-      smtpHost: ''
-      smtpPort: '587'
-      smtpUser: ''
-      mailFrom: Luna Shopper (staging) <no-reply@staging.ichirokuxvi.com>
-      mailVerifyBaseUrl: https://staging.ichirokuxvi.com/verify-email
-      mailResetBaseUrl: https://staging.ichirokuxvi.com/reset-password
-      platformAdminUserIds: ''
-      # Telemetry (plan 0016). Same posture as production; staging is the natural
-      # place to switch tracing on first once a collector lands.
-      otelEnabled: false
-      otelExporterEndpoint: ''
-      otelSamplerArg: 1
-      metricsEnabled: true
+    natsUrl: nats://luna-shopper-backend-nats:4222
+    accessTokenTtl: 15m
+    refreshTokenTtl: 30d
+    # Google sign in is optional (plan 0026): with an empty client id every
+    # service still boots, and the two interactive Google routes answer 501
+    # `not_configured` instead of failing. Set all three to turn it on.
+    googleClientId: ''
+    # Email is optional the same way (plan 0026, section 3.4). With no SMTP host
+    # registration answers 501 rather than accepting a signup whose confirmation
+    # link is never sent. A cluster that exercises the signup flow sets it.
+    smtpHost: ''
+    smtpPort: '587'
+    smtpUser: ''
+    # Comma-separated user ids allowed to write the catalog (plan 0012). Set to
+    # the app owner's registered user id; empty means no one can write.
+    platformAdminUserIds: ''
+    # Telemetry (plan 0016). Tracing stays off until a collector exists in the
+    # cluster (section 8): with no endpoint no exporter is constructed and no
+    # network call is attempted, so the services run exactly as they do today.
+    # Turning it on is a values change and a `helm upgrade`, not a new image.
+    otelEnabled: false
+    otelExporterEndpoint: ''
+    # Full sampling is right while traffic is small; lower it if the volume ever
+    # costs something. Parent based, so it only decides at a trace root.
+    otelSamplerArg: 1
+    # /metrics on each service's health port, reachable inside the cluster only.
+    # It costs nothing until something scrapes it.
+    metricsEnabled: true
 
   # Each backend service: one Deployment + Service (+ PDB). `routed` services get
-  # an HTTPRoute on `host`; the rest are ClusterIP only. `websocket` additionally
-  # earns the one implementation specific timeout policy. `role`
-  # drives which env vars (and thus which secret keys) the pod receives, so only
-  # the auth pod ever sees the JWT private key. Images are the tag-less repo path;
-  # the tag comes from productionImageTag/stagingImageTag like the apps above.
+  # an HTTPRoute on `hostPrefix`.`baseDomain`; the rest are ClusterIP only.
+  # `websocket` additionally earns the one implementation specific timeout
+  # policy. `role` drives which env vars (and thus which secret keys) the pod
+  # receives, so only the auth pod ever sees the JWT private key. Images are the
+  # tag-less repo path; the tag is `imageTag` like the apps above.
   services:
-    # Production
     - name: luna-shopper-backend-gateway
       role: gateway
-      env: production
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-gateway
       port: 3000
       routed: true
-      host: api.ichirokuxvi.com
+      hostPrefix: api
       websocket: false
     - name: luna-shopper-backend-realtime
       role: realtime
-      env: production
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-realtime
       port: 3001
       routed: true
-      host: rt.ichirokuxvi.com
+      hostPrefix: rt
       websocket: true
     - name: luna-shopper-backend-auth
       role: auth
-      env: production
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-auth
       port: 3002
       routed: false
     - name: luna-shopper-backend-core
       role: core
-      env: production
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-core
       port: 3003
       routed: false
     - name: luna-shopper-backend-catalog
       role: catalog
-      env: production
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-catalog
-      port: 3004
-      routed: false
-    # Staging
-    - name: luna-shopper-backend-gateway-staging
-      role: gateway
-      env: staging
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-gateway
-      port: 3000
-      routed: true
-      host: api.staging.ichirokuxvi.com
-      websocket: false
-    - name: luna-shopper-backend-realtime-staging
-      role: realtime
-      env: staging
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-realtime
-      port: 3001
-      routed: true
-      host: rt.staging.ichirokuxvi.com
-      websocket: true
-    - name: luna-shopper-backend-auth-staging
-      role: auth
-      env: staging
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-auth
-      port: 3002
-      routed: false
-    - name: luna-shopper-backend-core-staging
-      role: core
-      env: staging
-      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-core
-      port: 3003
-      routed: false
-    - name: luna-shopper-backend-catalog-staging
-      role: catalog
-      env: staging
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-catalog
       port: 3004
       routed: false
 
-  # Stateful dependencies. Two Postgres instances (auth owns one, core the other,
-  # so the no shared database rule holds) and one NATS server with JetStream on a
-  # persistent volume so streams survive a restart. Production and staging share
-  # these instances but use separate logical databases / stream prefixes via the
-  # per environment Secret; fully separate instances per environment is a later
-  # refinement. The postgres password comes from each instance's pre created
-  # Secret (see luna-shopper-backend-secrets.md).
+  # Stateful dependencies. Three Postgres instances (auth, core and catalog each
+  # own one, so the no shared database rule holds) and one NATS server with
+  # JetStream on a persistent volume so streams survive a restart.
+  #
+  # Each cluster now runs its own instances, which is what removes the hand
+  # created `*_staging` databases: an instance creates exactly one database from
+  # POSTGRES_DB, and with the instances no longer shared that one is the right
+  # one. It is also what stops a staging request being answered by a production
+  # subscriber on the shared broker, which was the serious failure (plan 0002,
+  # section 1).
+  #
+  # The postgres password comes from each instance's pre created Secret.
   postgres:
     image: postgres:16-alpine
     storageClassName: local-path
     storageSize: 2Gi
+    # Requests equal limits, which is what makes the pod Guaranteed QoS: evicted
+    # last under memory pressure and given the most favourable OOM score (plan
+    # 0004). With no resources at all these were BestEffort, i.e. the FIRST thing
+    # the kubelet killed on a node under pressure, ahead of every stateless pod
+    # that exists only to talk to them.
+    #
+    # A memory limit on Postgres is a decision about Postgres too: past the limit
+    # it is OOM killed rather than swapped, and Postgres sizes its buffers from
+    # its own configuration, not the cgroup. `sharedBuffers` and `workMem` below
+    # are passed to the server so the two numbers are chosen together.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+    # Sized against the 256Mi limit above. postgres:16-alpine would otherwise
+    # default shared_buffers to 128MB and leave almost nothing for work memory
+    # and connections. Raise these and the limit together, never one alone.
+    sharedBuffers: 64MB
+    workMem: 4MB
     instances:
       - name: luna-shopper-backend-auth-db
         database: luna_auth
         user: luna_auth
         secret: luna-shopper-backend-auth-db-secret
+        # Staggered so three dumps never contend for the single node at once
+        # (plan 0005, section 3.1).
+        backupSchedule: '17 2 * * *'
+        # The key in the application Secret holding this instance's connection
+        # string. The backup Job reads it rather than duplicating credentials.
+        urlSecretKey: AUTH_DB_URL
       - name: luna-shopper-backend-core-db
         database: luna_core
         user: luna_core
         secret: luna-shopper-backend-core-db-secret
+        backupSchedule: '37 2 * * *'
+        urlSecretKey: CORE_DB_URL
       - name: luna-shopper-backend-catalog-db
         database: luna_catalog
         user: luna_catalog
         secret: luna-shopper-backend-catalog-db-secret
+        backupSchedule: '57 2 * * *'
+        urlSecretKey: CATALOG_DB_URL
 
   nats:
     image: nats:2.10-alpine
     storageClassName: local-path
     storageSize: 1Gi
+    # Guaranteed QoS, for the same reason as Postgres above.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
 
-  # Database migrations on deploy (plan 0002, section 5 and 6): a Helm pre upgrade
-  # Job per stateful service runs that service's `migration:run` before new pods
-  # take traffic, never on app boot / synchronize. Disabled until the services
-  # ship a migration entrypoint (TypeORM lands in plan 0005+); flip on then.
+  # A PriorityClass for the stateful tier (plan 0004, section 2.1). QoS is
+  # inferred from resource numbers; this says the intent outright, and eviction
+  # and preemption consult both. Deliberately not the built in
+  # `system-cluster-critical`, which is reserved for components the cluster
+  # itself needs and carries scheduling behaviour intended for those.
+  priorityClass:
+    enabled: true
+    name: luna-stateful
+    value: 100000
+
+  # Nightly pg_dump per Postgres instance, uploaded to object storage off the
+  # node (plan 0005). Off by default and on in production: staging is disposable
+  # by design and gains nothing from backups.
+  #
+  # Requires a Secret (see `secret` below) holding S3_ENDPOINT, S3_BUCKET,
+  # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, created out of band exactly like
+  # the others. Use a bucket scoped, ideally write only key: a backup credential
+  # that can delete its own bucket turns a compromised cluster into a compromised
+  # backup.
+  #
+  # Retention is NOT implemented here. An object storage lifecycle rule expresses
+  # "expire after N days" declaratively, runs whether or not the cluster is
+  # healthy, and cannot be broken by a bug in a shell script. Configure 30 days
+  # on the prefix and enable object versioning on the bucket.
+  backups:
+    enabled: false
+    secret: luna-shopper-backend-backup-secret
+    # The same image the instance runs, which is what guarantees pg_dump matches
+    # the server version. The awscli package is added at Job start.
+    image: postgres:16-alpine
+    # A missed window (node down at 02:17) still runs when the node returns,
+    # within this many seconds.
+    startingDeadlineSeconds: 3600
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 5
+
+  # Database migrations on deploy (plan 0002, section 5 and 6): a Helm pre
+  # upgrade Job per stateful service runs that service's migrations before new
+  # pods take traffic, never on app boot / synchronize.
+  #
+  # Off until the services emit a real `migrate.js` beside `main.js` (plan 0027,
+  # section 2). The command below names a file that is not built today, so
+  # turning the flag on now would fail the Job rather than migrate anything.
   migrations:
     enabled: false
-    # Command the Job runs inside the service image once migrations exist.
+    # Command the Job runs inside the service image.
     command: ['node', 'migrate.js']
