@@ -47,12 +47,24 @@ export type RealtimeEvent =
       readonly firstPendingRequesterName: string | null;
     }
   | {
+      /**
+       * `member.usernameChanged` joins its five siblings because it carries the same
+       * payload they do: core emits `toMembershipView(row)` from both places it fires,
+       * the per zone rename in `membership.service.ts` and the global rename's
+       * propagation in `username-propagation.service.ts`.
+       *
+       * It was missing from this union entirely until plan 0015, which is what made
+       * `MATCHING_ZONES` a change nothing could observe: the server renamed the
+       * memberships and every open members screen kept the old name until it was
+       * reloaded, including the renamer's own on a second device.
+       */
       readonly type:
         | 'member.joined'
         | 'member.approved'
         | 'member.kicked'
         | 'member.banned'
-        | 'member.roleChanged';
+        | 'member.roleChanged'
+        | 'member.usernameChanged';
       readonly membership: Membership;
     }
   | {
@@ -99,6 +111,7 @@ export const REALTIME_EVENT_NAMES = [
   'member.kicked',
   'member.banned',
   'member.roleChanged',
+  'member.usernameChanged',
   'list.created',
   'list.updated',
   'list.deleted',

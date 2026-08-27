@@ -238,6 +238,52 @@ describe('MembersPage', () => {
     });
   });
 
+  /**
+   * Plan 0015, section 5.8. `member.usernameChanged` was absent from the realtime union
+   * entirely, which made `MATCHING_ZONES` a propagation nothing could observe: the
+   * server renamed the memberships and every open members screen kept the old name.
+   */
+  describe('when a member is renamed elsewhere', () => {
+    it('changes the row in place, with no refetch', async () => {
+      const { fixture, zones, members } = await render();
+      const before = members.calls.filter(
+        (call) => call.method === 'listMembers'
+      ).length;
+
+      zones.setMemberRename({
+        zoneId: ZONE_ID,
+        membershipId: 'm-marta',
+        username: 'Mamá',
+      });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(text(fixture)).toContain('Mamá');
+      expect(text(fixture)).not.toContain('Marta');
+      // The whole point: the event carries the new name in full, so a page of members
+      // per rename would be a request storm for something already in hand.
+      expect(
+        members.calls.filter((call) => call.method === 'listMembers')
+      ).toHaveLength(before);
+    });
+
+    it('ignores a rename in another group', async () => {
+      const { fixture, zones } = await render();
+
+      zones.setMemberRename({
+        zoneId: 'some-other-zone',
+        membershipId: 'm-marta',
+        username: 'Mamá',
+      });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(text(fixture)).toContain('Marta');
+    });
+  });
+
   describe('the screen around the rows', () => {
     it('opens with the app bar, like the group page it was opened from', async () => {
       const { fixture } = await render();

@@ -114,7 +114,7 @@
       "notAvailable": "Este grupo no está disponible para ti. Puede que se haya eliminado o que te hayan sacado",
       "roleChanged": "Tu papel en este grupo ha cambiado",
       "alreadyClaimed": "Otra persona ya se ha hecho cargo del grupo",
-      "tooManyRenames": "Demasiados cambios. Espera un minuto e inténtalo de nuevo",
+      "tooManyRenames": "Demasiados cambios de nombre. Podrás cambiarlo otra vez en {{wait}}",
       "failed": "No se ha podido. Inténtalo otra vez"
     }
   },
@@ -442,6 +442,70 @@
       "roleChanged": "Tu papel en este grupo ha cambiado",
       "tooFast": "Ve un poco más despacio e inténtalo de nuevo",
       "failed": "No ha funcionado. Inténtalo de nuevo en un momento"
+    }
+  },
+  "account": {
+    "title": "Tu cuenta",
+    "back": "Atrás",
+    "section": {
+      "you": "Tú",
+      "access": "Cómo entras"
+    },
+    "name": {
+      "label": "Nombre",
+      "hint": "Es el nombre que ven los demás en tus grupos",
+      "change": "Cambiar nombre",
+      "rule": "Entre 2 y 40 caracteres",
+      "scope": {
+        "matching": "Cambiarlo también en mis grupos",
+        "matchingHint": "Los grupos donde elegiste otro nombre lo conservan",
+        "globalOnly": "Solo aquí",
+        "globalOnlyHint": "Cada grupo conserva el nombre que tiene ahora"
+      },
+      "save": "Guardar nombre",
+      "saved": "Ahora te llamas {{name}}"
+    },
+    "email": {
+      "label": "Correo",
+      "confirmed": "Confirmado",
+      "unconfirmed": "Sin confirmar",
+      "loading": "Cargando tu correo",
+      "failed": "No pudimos leer los datos de tu cuenta",
+      "retry": "Reintentar"
+    },
+    "password": {
+      "label": "Contraseña",
+      "action": "Cambiar la contraseña",
+      "body": "Te enviamos un enlace a {{email}}. Al usarlo se cerrará la sesión en tus otros teléfonos y seguirás dentro en este",
+      "sent": "Si esa dirección tiene contraseña, el enlace va de camino"
+    },
+    "signOut": {
+      "action": "Cerrar sesión",
+      "body": "Cierra la sesión en este teléfono. En los otros seguirás dentro"
+    },
+    "guest": {
+      "title": "Esta cuenta vive en este teléfono",
+      "body": "Todavía no tiene correo ni contraseña, así que no se puede abrir en ningún otro sitio, y borrar los datos del navegador acabaría con ella",
+      "secure": "Proteger esta cuenta",
+      "deleteNote": "Hasta que la protejas, eliminarla es la única otra forma en que esta cuenta termina"
+    },
+    "delete": {
+      "action": "Eliminar tu cuenta",
+      "title": "¿Eliminar tu cuenta?",
+      "body": "Tu correo, tu contraseña y tu nombre se van para siempre. Esto no se puede deshacer",
+      "ownedZones_one": "Eres dueño de 1 grupo. Se eliminará a menos que un administrador se haga cargo",
+      "ownedZones_other": "Eres dueño de {{count}} grupos. Se eliminarán a menos que un administrador se haga cargo de cada uno",
+      "authored": "Lo que añadiste a las listas de otros se queda, sin tu nombre",
+      "typeName": "Escribe tu nombre para confirmar",
+      "confirm": "Eliminar mi cuenta",
+      "done": "Tu cuenta ya no existe"
+    },
+    "error": {
+      "tooManyRenames": "Demasiados cambios de nombre. Podrás cambiarlo otra vez en {{wait}}",
+      "tooManyResets": "Demasiadas peticiones. Puedes pedir otro en {{wait}}",
+      "badName": "Los nombres tienen de 2 a 40 caracteres y admiten letras, números, espacios y . _ ' -",
+      "gone": "Esa cuenta ya no existe",
+      "failed": "No se pudo completar. Inténtalo de nuevo"
     }
   }
 }

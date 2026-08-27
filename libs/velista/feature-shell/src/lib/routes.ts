@@ -30,8 +30,11 @@ import {
  * carries none and replacing one this app does not support (plan 0005 D6).
  *
  * The route table from plan 0001, section 6.2, is filled in as each page plan
- * lands — `zones/:zoneId`, `lists/:listId`, `auth/*`, `account`, `settings` are
- * what is left. Paths keep the word `zones` even though the interface says group
+ * lands. `settings` is the last one outstanding, and it is deliberately **not** folded
+ * into `account`: its access is Any and `account`'s is Authenticated, so theme and
+ * language would go behind `authenticatedGuard` and an anonymous visitor reading the
+ * front door in the wrong language would have no way to change it (plan 0015,
+ * section 4.5). Paths keep the word `zones` even though the interface says group
  * (rule N2): the translation layer renames the word, the code never does.
  *
  * The export is named for its role, not for the product, so a rename stays a data
@@ -354,6 +357,50 @@ export const AppShellRoutes: Route[] = [
                 loadComponent: () =>
                   import('@portfolio/velista/feature-zones').then(
                     (m) => m.GroupSettingsSheet
+                  ),
+              },
+            ],
+          },
+          {
+            // The account (plan 0015). A **route** and not a sheet, by the same test
+            // `0009` section 4.1 used for the credential screens: it is deep linkable,
+            // it has its own scroll, and it is where somebody goes deliberately rather
+            // than something drawn over a page they were reading.
+            //
+            // `authenticatedGuard` and nothing more. There is no guest variant, because
+            // the guest sees a **different screen** and not a different route: it is a
+            // property of `SessionStore.isGuest` that the page already reads, and
+            // splitting the route would give two URLs for one thing somebody reaches by
+            // pressing one button. That is a deliberate departure from rule C1
+            // (`0009`), and the difference is what the branch protects: there, the
+            // wrong screen silently strands every group a person has, so it had to be
+            // unreachable. Here the wrong branch is a screen with rows that do not
+            // apply. Guards are for the ones that cost something.
+            path: 'account',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-account').then(
+                (m) => m.AccountPage
+              ),
+            children: [
+              {
+                // Renaming needs a field, so it is a small form in a `SheetShell`
+                // rather than a confirm. A child route under rule E1, so the account
+                // screen keeps its scroll underneath and Android's back button
+                // dismisses it.
+                path: 'name',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-account').then(
+                    (m) => m.RenameSheet
+                  ),
+              },
+              {
+                // `confirm/delete`, matching the shape `0010` gave a member action, so
+                // the two typed confirmations in this app are addressed the same way.
+                path: 'confirm/delete',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-account').then(
+                    (m) => m.DeleteAccountSheet
                   ),
               },
             ],

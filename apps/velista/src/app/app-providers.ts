@@ -12,6 +12,8 @@ import {
 import { APP_MOUNT_PATH } from '@portfolio/localization/rokutranslator-angular';
 import { provideService } from '@portfolio/shared/data-access';
 import {
+  ACCOUNT_SERVICE,
+  AccountApi,
   AUTH_SERVICE,
   AuthApi,
   COMMENT_SERVICE,
@@ -147,6 +149,11 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // nothing new about either: both reach this injector's `HttpClient`.
   provideService(LINE_SERVICE, LineApi),
   provideService(COMMENT_SERVICE, CommentApi),
+
+  // The account screen (plan 0015). A seventh time, and still nothing new: `AccountApi`
+  // reaches this injector's `HttpClient`, so the token's default resolving at the root
+  // would not work.
+  provideService(ACCOUNT_SERVICE, AccountApi),
 
   // Start the connection listener. Nothing injects it, so without this nothing would
   // ever construct it: it is a listener, not a dependency. It probes the backend while

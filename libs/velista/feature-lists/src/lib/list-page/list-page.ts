@@ -307,6 +307,39 @@ export class ListPage {
   }
 
   /**
+   * The app bar's account button, which was inert on this screen until plan 0015
+   * (section 4.4).
+   *
+   * The bar keeps emitting an output rather than taking a `routerLink`, so rule D1 holds
+   * and the `ui` library still knows nothing about the route table.
+   */
+  async openAccount(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'account')
+    );
+  }
+
+  /**
+   * The letter in the app bar's account button.
+   *
+   * Unbound on this screen until plan 0015, so the button drew its neutral glyph on the
+   * one page somebody spends the longest on.
+   */
+  readonly accountInitial = computed(() => {
+    const username = this._session.username();
+    if (username === null) {
+      return null;
+    }
+
+    // Code points rather than a slice, because slicing cuts a surrogate pair in half
+    // and a name that starts with an emoji would render the replacement character.
+    const trimmed = username.trim();
+    return trimmed === ''
+      ? null
+      : (Array.from(trimmed)[0] ?? '').toLocaleUpperCase();
+  });
+
+  /**
    * Tick a line off, or put it back.
    *
    * The gesture the whole screen is built around. A reader gets the notice once and

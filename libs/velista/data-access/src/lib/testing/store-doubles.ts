@@ -7,10 +7,14 @@ import type {
   Membership,
   MembershipStatus,
   MyZone,
+  ProfileLoad,
   SessionTokens,
   ShoppingListSummary,
   UserKind,
+  UsernameScope,
+  UserProfile,
 } from '@portfolio/velista/models';
+import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
 import {
   AUTH_SERVICE,
@@ -28,6 +32,7 @@ import {
 } from '../memberships/membership-service';
 import {
   ZoneStore,
+  type MemberRename,
   type ZoneDeparture,
   type ZoneEntry,
   type ZoneEntryOutcome,
@@ -138,6 +143,7 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
   const lastEntry = signal<ZoneEntry | null>(options.lastEntry ?? null);
   const departure = signal<ZoneDeparture | null>(options.departure ?? null);
   const lastCodeChange = signal<string | null>(options.lastCodeChange ?? null);
+  const memberRename = signal<MemberRename | null>(null);
 
   /**
    * How the load of each individual zone is going (plan 0010).
@@ -232,6 +238,20 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
 
     /** Drive a live removal or deletion at a page that is already mounted. */
     setDeparture: (next: ZoneDeparture | null) => departure.set(next),
+
+    // ---------------------------------------------------------- plan 0015
+
+    memberRename: memberRename.asReadonly(),
+
+    /**
+     * Drive a live rename at a members screen that is already mounted.
+     *
+     * This is the whole of section 5.8's acceptance criterion: a rename that propagates
+     * to the groups has to change an open members list **without a refetch**, and a
+     * spec proves it by calling this and asserting the row changed while `loadCount`
+     * stood still.
+     */
+    setMemberRename: (next: MemberRename | null) => memberRename.set(next),
 
     lastCodeChange: lastCodeChange.asReadonly(),
     clearLastCodeChange: () => lastCodeChange.set(null),
@@ -372,7 +392,8 @@ export type AuthCall =
   | { readonly method: 'login'; readonly email: string }
   | { readonly method: 'upgrade'; readonly email: string }
   | { readonly method: 'verifyEmail'; readonly token: string }
-  | { readonly method: 'resendVerification' };
+  | { readonly method: 'resendVerification' }
+  | { readonly method: 'forgotPassword'; readonly email: string };
 
 /** What a faked auth service does when asked. */
 export interface FakeAuthOptions {
@@ -390,6 +411,9 @@ export interface FakeAuthOptions {
 
   /** What a resend answers. The default is a send with a wait the server named. */
   readonly resend?: ResendOutcome;
+
+  /** What a password reset ask answers. The default is a send with a wait. */
+  readonly forgotPassword?: ResendOutcome;
 }
 
 /**
@@ -435,6 +459,14 @@ export function fakeAuthService(options: FakeAuthOptions = {}) {
     resendVerification: async (): Promise<ResendOutcome> => {
       calls.push({ method: 'resendVerification' });
       return options.resend ?? { state: 'sent', waitSeconds: 52 };
+    },
+
+    forgotPassword: async (email: string): Promise<ResendOutcome> => {
+      calls.push({ method: 'forgotPassword', email });
+      // Defaulted separately from the resend, because the two buckets differ and a
+      // shared default would hide the difference rule A4 is about: the reset is one
+      // per minute and the rename is five per hour.
+      return options.forgotPassword ?? { state: 'sent', waitSeconds: 60 };
     },
   };
 
@@ -914,4 +946,111 @@ export function provideFakeMembershipService(
  */
 export function provideAccountNotice(): Provider {
   return AccountNotice;
+}
+
+/** How a faked `ProfileStore` should present the caller (plan 0015). */
+export interface FakeProfileOptions {
+  readonly profile?: UserProfile | null;
+  readonly state?: ProfileLoad;
+  readonly error?: unknown;
+  /** What `rename` throws back as its failure, if anything. */
+  readonly renameRejectsWith?: unknown;
+  /** What `remove` throws back as its failure, if anything. */
+  readonly removeRejectsWith?: unknown;
+}
+
+/** One recorded call to a faked `ProfileStore`. */
+export type ProfileCall =
+  | { readonly method: 'load' }
+  | {
+      readonly method: 'rename';
+      readonly username: string;
+      readonly scope: UsernameScope;
+    }
+  | { readonly method: 'remove' }
+  | { readonly method: 'clear' };
+
+/**
+ * A `ProfileStore` that answers without a transport.
+ *
+ * {@link fakeZoneStore}'s reasoning, and one thing specific to this store: the real one
+ * writes the **response** into itself rather than the string it was handed, so a fake
+ * that echoed the argument would let a page pass a test the server would fail. This one
+ * updates its held profile from the argument only because it has no server to normalize
+ * it, and `ProfileStore` keeps its own spec for the part that matters.
+ */
+export function fakeProfileStore(options: FakeProfileOptions = {}) {
+  const calls: ProfileCall[] = [];
+  const profile = signal<UserProfile | null>(options.profile ?? null);
+  const state = signal<ProfileLoad>(options.state ?? 'loaded');
+
+  return {
+    profile: profile.asReadonly(),
+    state: state.asReadonly(),
+    error: () => options.error ?? null,
+    username: computed(() => {
+      const held = profile();
+      return held === null || held.username === '' ? null : held.username;
+    }),
+
+    load: async () => {
+      calls.push({ method: 'load' });
+    },
+
+    rename: async (username: string, scope: UsernameScope) => {
+      calls.push({ method: 'rename', username, scope });
+      if (options.renameRejectsWith !== undefined) {
+        return { state: 'failed' as const, error: options.renameRejectsWith };
+      }
+
+      profile.update((held) =>
+        held === null ? held : { ...held, username }
+      );
+      return { state: 'renamed' as const };
+    },
+
+    remove: async () => {
+      calls.push({ method: 'remove' });
+      return options.removeRejectsWith !== undefined
+        ? { state: 'failed' as const, error: options.removeRejectsWith }
+        : { state: 'deleted' as const };
+    },
+
+    clear: () => {
+      calls.push({ method: 'clear' });
+      profile.set(null);
+    },
+
+    /** Everything the page asked for, in order. */
+    calls: calls as readonly ProfileCall[],
+  };
+}
+
+export type FakeProfileStore = ReturnType<typeof fakeProfileStore>;
+
+/** {@link fakeProfileStore} bound to the real class. */
+export function provideFakeProfileStore(
+  store: FakeProfileStore = fakeProfileStore()
+): Provider {
+  return { provide: ProfileStore, useValue: store };
+}
+
+/**
+ * A `UserProfile` with the shape the app actually reads.
+ *
+ * A registered, confirmed account by default, because that is the screen most specs
+ * are about; the guest and the unconfirmed states are one override each.
+ */
+export function profileFor(
+  overrides: Partial<UserProfile> = {}
+): UserProfile {
+  return {
+    userId: 'u1',
+    kind: 'REGISTERED',
+    username: 'Dani',
+    email: 'dani@example.com',
+    emailVerified: true,
+    displayName: null,
+    ...overrides,
+  };
 }

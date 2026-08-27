@@ -8,18 +8,21 @@ import { Injectable, signal } from '@angular/core';
  * saying the account is secured and naming the address. Both are drawn in the second
  * frame of their artboard (plan 0009, section 2).
  */
-export type AccountNoticeKind = 'registered' | 'upgraded';
+export type AccountNoticeKind = 'registered' | 'upgraded' | 'deleted';
 
 export interface AccountNoticeState {
   readonly kind: AccountNoticeKind;
   /**
    * The address the person just typed.
    *
-   * **This is the only place the app knows their email.** The token pair carries
-   * `userId`, `kind` and `username` and no address, and `GET /v1/account/me` is out of
-   * scope for this plan, so a nudge that names the address can only be shown on the
-   * navigation that follows the form. That is also the right scope for it: it is news
-   * about something that just happened, not a standing property of the session.
+   * The token pair carries `userId`, `kind` and `username` and no address, so a nudge
+   * that names the address is shown on the navigation that follows the form. That is
+   * also the right scope for it: it is news about something that just happened, not a
+   * standing property of the session.
+   *
+   * Empty for `deleted`, which is the one notice with no address to name and the one
+   * read by a different screen: the other two land on the dashboard, and somebody whose
+   * account is gone lands on the front door (plan 0015, section 5.7).
    */
   readonly email: string;
 }
@@ -49,6 +52,18 @@ export class AccountNotice {
   /** Called by the register and upgrade screens, immediately before navigating. */
   set(kind: AccountNoticeKind, email: string): void {
     this._notice.set({ kind, email });
+  }
+
+  /**
+   * Called by the delete sheet, immediately before navigating to the front door.
+   *
+   * Its own method rather than `set('deleted', '')`, so no call site has to pass an
+   * empty string for a field that does not apply. Held here rather than in router
+   * state, which would survive a reload: coming back to this URL tomorrow is not the
+   * moment to be told an account was deleted.
+   */
+  setDeleted(): void {
+    this._notice.set({ kind: 'deleted', email: '' });
   }
 
   /** The dashboard has said it. It does not say it twice. */

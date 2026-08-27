@@ -1,0 +1,51 @@
+<!--
+  A `<button>` only when there is something to press. The alternative, one button with
+  `disabled` or a click handler that returns early, leaves a focusable control with an
+  accessible name and no behaviour, which is precisely the defect on the app bar that
+  section 4.4 went looking for.
+
+  The two branches share their inner markup through one `ng-template`, so the row's
+  geometry is written once and cannot drift between them.
+-->
+@if (hasAction()) {
+  <button
+    (click)="press()"
+    [attr.aria-label]="ariaLabel()"
+    [class.destructive]="destructive()"
+    [class.divided]="divided()"
+    class="row"
+    type="button"
+  >
+    <ng-container [ngTemplateOutlet]="content" />
+    @if (chevron()) {
+      <lib-chevron-right-icon aria-hidden="true" class="chevron" />
+    }
+  </button>
+} @else {
+  <div [class.divided]="divided()" class="row static">
+    <ng-container [ngTemplateOutlet]="content" />
+  </div>
+}
+
+<ng-template #content>
+  <span class="body">
+    @if (label() !== '') {
+      <span class="label">{{ label() }}</span>
+    }
+
+    <span [class.strong]="label() !== ''" class="value">{{ value() }}</span>
+
+    @if (detail() !== '') {
+      <span class="detail">{{ detail() }}</span>
+    }
+  </span>
+
+  <!--
+    Words, never a colour on its own: "Confirmed" and "Not confirmed" both survive a
+    colourblind reader and a screen reader alike (section 7). The tone only tints a
+    label that already says what it means.
+  -->
+  @if (chip() !== '') {
+    <span [class]="'chip ' + chipTone()">{{ chip() }}</span>
+  }
+</ng-template>

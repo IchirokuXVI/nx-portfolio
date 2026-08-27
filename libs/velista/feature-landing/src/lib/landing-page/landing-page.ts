@@ -12,6 +12,7 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
+import { AccountNotice } from '@portfolio/velista/data-access';
 import { APP_KEY, type PreviewLineVm } from '@portfolio/velista/models';
 import {
   AppBar,
@@ -30,10 +31,12 @@ import {
  * and the two screens stop being one component that renders at most half of its
  * imports at a time.
  *
- * It injects **no data token at all**. It reads nothing from `ZoneStore`, and it does
- * not need `SessionStore` either, because the guard has already established that the
- * viewer is anonymous. The only service here is the locale store, which exists to make
- * the one control in the header do something (plan 0007, section 6.2).
+ * It reads nothing from `ZoneStore` and does not need `SessionStore`, because the guard
+ * has already established that the viewer is anonymous. It injected no data token at
+ * all until plan 0015, which added exactly one: `AccountNotice`, so that somebody who
+ * has just deleted their account is told once. That news has nowhere else to land —
+ * after a delete there is no session, so the dashboard cannot report it — and the
+ * notice holds no request and no identity.
  */
 @Component({
   selector: 'lib-landing-page',
@@ -55,6 +58,7 @@ export class LandingPage {
   private readonly _route = inject(ActivatedRoute);
   private readonly _router = inject(Router);
   private readonly _t = inject(RokuTranslatorService);
+  private readonly _notice = inject(AccountNotice);
 
   /**
    * The languages the header offers.
@@ -76,6 +80,22 @@ export class LandingPage {
 
   /** Reads the store signal, so the label follows an in-place switch. */
   readonly locale = this._localeStore.locale;
+
+  /**
+   * Whether an account was just deleted, so this screen can say so once.
+   *
+   * The one data token this page injects, and the class comment's "no data token at
+   * all" is now one exception rather than none. It is worth it: after a delete there
+   * **is** no session, so the dashboard cannot report it, and the front door is where
+   * the person lands. `AccountNotice` is already the thing every other piece of news
+   * about an account travels in, and it holds no request and no identity.
+   *
+   * A plain field read once at construction, and **not** a `computed`: the notice is
+   * cleared in the same breath so a reload of this URL does not repeat the sentence,
+   * and a `computed` that wrote to a signal would throw. One-shot is also what this is:
+   * the news does not change while the screen is up.
+   */
+  readonly accountDeleted = this._readDeletedNotice();
 
   /** Uppercased here rather than in the app bar, which keeps taking a plain string. */
   readonly localeLabel = computed(() => this.locale().toLocaleUpperCase());
@@ -203,5 +223,15 @@ export class LandingPage {
    */
   private _notYetRouted(destination: string): void {
     this.pendingRoutes.update((current) => [...current, destination]);
+  }
+
+  /** See {@link accountDeleted}. Reads the one-shot notice and consumes it. */
+  private _readDeletedNotice(): boolean {
+    const deleted = this._notice.notice()?.kind === 'deleted';
+    if (deleted) {
+      this._notice.clear();
+    }
+
+    return deleted;
   }
 }

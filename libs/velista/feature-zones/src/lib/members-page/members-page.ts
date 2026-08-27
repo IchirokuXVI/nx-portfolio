@@ -232,6 +232,33 @@ export class MembersPage {
       );
     });
 
+    // A member was renamed while this screen was open (plan 0015, section 5.8).
+    //
+    // Patched in place rather than refetched, which is the whole point: a rename with
+    // `MATCHING_ZONES` can change several rows at once, and a page of members per event
+    // would be a request storm for a change the event already carries in full.
+    //
+    // It reaches this screen through `ZoneStore` rather than through a second
+    // subscription to `REALTIME_CLIENT.events`, so every screen in the app still learns
+    // about the stream through a store. The store cannot patch the row itself: the
+    // members list is page state and lives here, deliberately.
+    effect(() => {
+      const rename = this._zones.memberRename();
+      if (rename === null || rename.zoneId !== this.zoneId()) {
+        return;
+      }
+
+      untracked(() => {
+        this._rows.update((current) =>
+          current.map((row) =>
+            row.id === rename.membershipId
+              ? { ...row, username: rename.username }
+              : row
+          )
+        );
+      });
+    });
+
     inject(DestroyRef).onDestroy(() => this._releaseStaffRoom());
   }
 
@@ -239,6 +266,16 @@ export class MembersPage {
   async back(): Promise<void> {
     await this._router.navigateByUrl(
       appPath(this._locale(), this._basePath, 'zones', this.zoneId())
+    );
+  }
+
+  /**
+   * The app bar's account button, which was inert on this screen until plan 0015
+   * (section 4.4).
+   */
+  async openAccount(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'account')
     );
   }
 

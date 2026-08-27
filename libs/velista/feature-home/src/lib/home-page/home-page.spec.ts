@@ -563,6 +563,21 @@ describe('HomePage', () => {
       expect(fixture.componentInstance.pendingRoutes()).toEqual([]);
     });
 
+    it('opens the account, which the app bar has pointed at since 0003', async () => {
+      // Recorded in `pendingRoutes` until plan 0015 built the screen behind it. A
+      // sibling like the group page, for the same reason: this page's path is `home`.
+      const fixture = await render();
+      const navigate = watchNavigation();
+
+      fixture.componentInstance.account();
+
+      expect(navigate).toHaveBeenCalledWith(
+        ['..', 'account'],
+        expect.objectContaining({ relativeTo: TestBed.inject(ActivatedRoute) })
+      );
+      expect(fixture.componentInstance.pendingRoutes()).toEqual([]);
+    });
+
     // This recorded the list screen as unbuilt until plan 0012 built it. The
     // navigation carries the **zone** as well as the list: the route is
     // `zones/:zoneId/lists/:listId` and there is no `GET /v1/lists/:id`, so an id on

@@ -257,6 +257,19 @@ export class GroupPage {
     );
   }
 
+  /**
+   * The app bar's account button, which was inert on this screen until plan 0015
+   * (section 4.4).
+   *
+   * The bar keeps emitting an output rather than taking a `routerLink`, so rule D1 holds
+   * and the `ui` library still knows nothing about the route table.
+   */
+  async openAccount(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'account')
+    );
+  }
+
   openMembers(): void {
     void this._router.navigate(['members'], { relativeTo: this._route });
   }

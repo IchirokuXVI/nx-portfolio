@@ -1,4 +1,9 @@
-<lib-app-bar [accountInitial]="accountInitial()" [signedIn]="true" />
+<!-- `(account)` was unbound here until plan 0015. See the note on the group page. -->
+<lib-app-bar
+  (account)="openAccount()"
+  [accountInitial]="accountInitial()"
+  [signedIn]="true"
+/>
 
 <main class="page">
   <!-- The string moves to the accessible name, so nothing is lost for a screen

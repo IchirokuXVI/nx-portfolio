@@ -114,7 +114,7 @@
       "notAvailable": "This group is not available to you. It may have been deleted, or you may have been removed",
       "roleChanged": "Your role in this group changed",
       "alreadyClaimed": "Somebody else has already taken this group on",
-      "tooManyRenames": "Too many changes. Wait a minute and try again",
+      "tooManyRenames": "Too many name changes. You can change it again in {{wait}}",
       "failed": "That did not go through. Try again"
     }
   },
@@ -442,6 +442,70 @@
       "roleChanged": "Your role in this group changed",
       "tooFast": "Slow down for a moment and try again",
       "failed": "That did not work. Try again in a moment"
+    }
+  },
+  "account": {
+    "title": "Your account",
+    "back": "Back",
+    "section": {
+      "you": "You",
+      "access": "Getting in"
+    },
+    "name": {
+      "label": "Name",
+      "hint": "This is the name other people in your groups see",
+      "change": "Change name",
+      "rule": "Between 2 and 40 characters",
+      "scope": {
+        "matching": "Change it in my groups too",
+        "matchingHint": "Groups where you chose a different name keep it",
+        "globalOnly": "Only here",
+        "globalOnlyHint": "Every group keeps the name it has now"
+      },
+      "save": "Save name",
+      "saved": "Your name is now {{name}}"
+    },
+    "email": {
+      "label": "Email",
+      "confirmed": "Confirmed",
+      "unconfirmed": "Not confirmed",
+      "loading": "Loading your email",
+      "failed": "We could not read your account details",
+      "retry": "Try again"
+    },
+    "password": {
+      "label": "Password",
+      "action": "Change your password",
+      "body": "We send a link to {{email}}. Using it signs you out on your other phones, and keeps you signed in here",
+      "sent": "If that address has a password, a link is on its way"
+    },
+    "signOut": {
+      "action": "Sign out",
+      "body": "Signs you out on this phone. Your other phones stay signed in"
+    },
+    "guest": {
+      "title": "This account lives on this phone",
+      "body": "There is no email and no password on it yet, so it cannot be opened anywhere else, and clearing this browser's data would end it",
+      "secure": "Secure this account",
+      "deleteNote": "Until it is secured, deleting is the only other way this account ends"
+    },
+    "delete": {
+      "action": "Delete your account",
+      "title": "Delete your account?",
+      "body": "Your email, your password and your name go for good. This cannot be undone",
+      "ownedZones_one": "You own 1 group. It will be deleted unless an admin in it takes it on",
+      "ownedZones_other": "You own {{count}} groups. They will be deleted unless an admin in each takes them on",
+      "authored": "What you added to other people's lists stays, with your name taken off it",
+      "typeName": "Type your name to confirm",
+      "confirm": "Delete my account",
+      "done": "Your account is gone"
+    },
+    "error": {
+      "tooManyRenames": "Too many name changes. You can change it again in {{wait}}",
+      "tooManyResets": "Too many requests. You can ask for another in {{wait}}",
+      "badName": "Names are 2 to 40 characters, and can use letters, numbers, spaces and . _ ' -",
+      "gone": "That account no longer exists",
+      "failed": "That did not go through. Try again"
     }
   }
 }

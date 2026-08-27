@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, type HttpContext } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type { SessionTokens } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
@@ -127,24 +127,70 @@ export class AuthApi implements AuthServiceI {
   }
 
   /**
-   * `POST /v1/auth/verify-resend`, bearer authenticated.
+   * `POST /v1/auth/resend-verification`, bearer authenticated.
    *
    * Nothing calls this yet: `VERIFY_RESEND_AVAILABLE` is false until the endpoint
    * lands (plan 0009, section 5.8). It is written now because the shape it answers is
    * the whole of rule C3, and because the countdown it feeds is built and tested.
+   *
+   * **The path was `/v1/auth/verify-resend` until plan 0015 checked it**, which is a
+   * route the gateway has never served. Nothing had noticed because the flag above
+   * meant nothing called it; the correction is here so that turning the flag on is the
+   * one line change 0009 promised rather than a 404 to debug afterwards.
    *
    * A refusal is an outcome rather than a thrown error. The server's own wait comes
    * back in the problem document's `retryAfterSeconds`, in the body and not a header,
    * because this API exposes no custom response headers cross origin.
    */
   async resendVerification(): Promise<ResendOutcome> {
+    return this._askForEmail(
+      '/v1/auth/resend-verification',
+      'auth.verifyResend',
+      {},
+      operation
+    );
+  }
+
+  /**
+   * `POST /v1/auth/forgot-password`, one per minute, **anonymous**.
+   *
+   * Anonymous rather than bearer even though the account screen calls it while signed
+   * in, because the route takes no token: the address is in the body, and it has to be,
+   * since the whole point is that somebody locked out can ask. Sending a bearer would
+   * also mean a 401 started a refresh, spending the caller's rotation on a route that
+   * never looks at it.
+   *
+   * The answer says nothing about whether the address has an account. That is the
+   * endpoint's design and the copy above it has to match it (section 5.6).
+   */
+  async forgotPassword(email: string): Promise<ResendOutcome> {
+    return this._askForEmail(
+      '/v1/auth/forgot-password',
+      'auth.forgotPassword',
+      { email },
+      anonymous
+    );
+  }
+
+  /**
+   * The two routes that send an email and answer only with a wait.
+   *
+   * One function because the whole of both is rule C3: a refusal is an outcome rather
+   * than a failure, the wait is whatever the server named, and a `null` wait is a real
+   * state rather than a missing value. Two copies of that would be two places for the
+   * hardcoded sixty to come back.
+   */
+  private async _askForEmail(
+    path: string,
+    name: string,
+    payload: object,
+    context: (name: string) => HttpContext
+  ): Promise<ResendOutcome> {
     try {
       const body = await firstValueFrom(
-        this._http.post<unknown>(
-          this._urls.gateway('/v1/auth/verify-resend'),
-          {},
-          { context: operation('auth.verifyResend') }
-        )
+        this._http.post<unknown>(this._urls.gateway(path), payload, {
+          context: context(name),
+        })
       );
 
       return { state: 'sent', waitSeconds: waitFrom(body) };

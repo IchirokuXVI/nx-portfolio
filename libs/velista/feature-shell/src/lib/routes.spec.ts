@@ -355,4 +355,54 @@ describe('AppShellRoutes', () => {
       );
     });
   });
+
+  /**
+   * The account (plan 0015). A route rather than a sheet, by the same test `0009`
+   * section 4.1 used: it is deep linkable, it has its own scroll, and it is where
+   * somebody goes deliberately.
+   */
+  describe('the account', () => {
+    const account = pages.find((route) => route.path === 'account');
+
+    it('is declared, before the empty front door', () => {
+      const paths = pages.map((route) => route.path);
+
+      expect(account).toBeDefined();
+      expect(paths.indexOf('account')).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('is authenticated, and guarded by nothing else', () => {
+      // There is deliberately no guest variant: the guest sees a **different screen**
+      // and not a different route, which is a property of `SessionStore.isGuest` that
+      // the page reads. Splitting it would give two URLs for one thing somebody
+      // reaches by pressing one button (section 4.1).
+      expect(account?.canActivate).toHaveLength(1);
+      expect(account?.canMatch).toBeUndefined();
+    });
+
+    it('offers the rename and the delete confirm as sheets over it', () => {
+      // Rule E1: children, so the screen underneath keeps its scroll and Android's
+      // back button dismisses them.
+      expect(account?.children?.map((route) => route.path)).toEqual([
+        'name',
+        'confirm/delete',
+      ]);
+    });
+
+    it('guards neither sheet beyond the page they sit on', () => {
+      // Both are about the caller's own account, which `authenticatedGuard` above has
+      // already established they have.
+      expect(
+        account?.children?.every((route) => route.canActivate === undefined)
+      ).toBe(true);
+    });
+
+    it('keeps the page and both sheets lazy', () => {
+      const added = [account, ...(account?.children ?? [])];
+
+      expect(added.every((route) => route?.loadComponent !== undefined)).toBe(
+        true
+      );
+    });
+  });
 });

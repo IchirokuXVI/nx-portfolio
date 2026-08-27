@@ -395,10 +395,10 @@ export class HomePage {
   /**
    * Everything else this page can start, and where each of them currently stops.
    *
-   * What is left leads to the shopping list, which is the next plan, and to the account
-   * screen, which is later still. The two entry actions have gone because `0008` built
-   * them, securing an account because `0009` did, and opening a group and reviewing its
-   * requests because `0010` did.
+   * What is left is search, and starting a list from the dashboard. The two entry
+   * actions have gone because `0008` built them, securing an account because `0009`
+   * did, opening a group and reviewing its requests because `0010` did, and **the
+   * account screen because `0015` did**.
    *
    * They are recorded rather than left unbound so the controls are real, focusable and
    * testable now, and so that connecting each one later is a single line here instead
@@ -427,8 +427,18 @@ export class HomePage {
     this._notYetRouted('search');
   }
 
+  /**
+   * Your account (plan 0015), which the app bar's button has pointed at since `0003`
+   * and which nothing was behind until now.
+   *
+   * `['..', 'account']` because this page's own path is `home`, so the account screen
+   * is its **sibling**, exactly as the credential screens and the group page are.
+   * Neither the locale nor the mount is written down (extraction contract, item 5).
+   */
   account(): void {
-    this._notYetRouted('account');
+    void this._router.navigate(['..', 'account'], {
+      relativeTo: this._route,
+    });
   }
 
   /**

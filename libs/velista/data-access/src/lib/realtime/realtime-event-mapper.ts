@@ -79,7 +79,8 @@ export function toRealtimeEvent(
     case 'member.approved':
     case 'member.kicked':
     case 'member.banned':
-    case 'member.roleChanged': {
+    case 'member.roleChanged':
+    case 'member.usernameChanged': {
       const membership = toMembership(payload);
       return membership === null ? null : { type: name, membership };
     }

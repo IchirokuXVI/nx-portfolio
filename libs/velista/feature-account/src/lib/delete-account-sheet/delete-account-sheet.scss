@@ -1,0 +1,49 @@
+@use '../account-sheet';
+
+@include account-sheet.sheet-form;
+
+// The icon sits on the baseline of the heading rather than above it, so the warning
+// and the question read as one line.
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+}
+
+.glyph {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-status-danger-fg);
+}
+
+// The one consequence that belongs to other people, boxed so it is not read past.
+.consequence {
+  margin: 0 0 var(--app-space-4);
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-status-danger-border);
+  border-radius: var(--app-field-radius);
+  background: var(--app-status-danger-bg);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+}
+
+.aside {
+  margin: 0 0 var(--app-space-6);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+// The support reference, quieter than the sentence it belongs to: it is for a bug
+// report rather than for the person reading it.
+.reference {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}

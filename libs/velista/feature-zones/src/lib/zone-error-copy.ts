@@ -1,4 +1,5 @@
 import { GatewayError } from '@portfolio/velista/data-access';
+import { retryClock } from '@portfolio/velista/platform';
 
 /**
  * Which sentence a failure gets, keyed on the error code **and the operation**.
@@ -115,4 +116,23 @@ export function shouldRefetch(
 /** The support reference to show beside a generic failure, when there is one. */
 export function correlationIdOf(error: unknown): string | null {
   return error instanceof GatewayError ? error.correlationId : null;
+}
+
+/**
+ * The server's own wait as `m:ss`, or the empty string when it named none.
+ *
+ * **Rule A4** (plan 0015, section 5.4). `zone.error.tooManyRenames` reads "You can
+ * change it again in {{wait}}" and this is what fills it. It used to say "wait a
+ * minute" and interpolate nothing, on a bucket that is five per **hour**: the countdown
+ * would run out, invite the tap, and fail again.
+ *
+ * The empty string is a real answer rather than a fallback. Not being told how long to
+ * wait is not the same as having waited, and there is no invented duration to reach
+ * for (rule C3, plan 0009).
+ */
+export function retryAfterClock(error: unknown): string {
+  const seconds =
+    error instanceof GatewayError ? error.retryAfterSeconds : undefined;
+
+  return seconds === undefined ? '' : retryClock(seconds);
 }

@@ -24,7 +24,11 @@ import { appPath } from '@portfolio/velista/platform';
 import { ConfirmSheet, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import { MemberListRefresh } from '../member-list-refresh';
 import { membershipIdOf, zoneIdOf } from '@portfolio/velista/platform';
-import { shouldRefetch, zoneErrorKey } from '../zone-error-copy';
+import {
+  retryAfterClock,
+  shouldRefetch,
+  zoneErrorKey,
+} from '../zone-error-copy';
 
 /** The four actions that need something in front of them before they happen. */
 export type MemberSheetAction = 'remove' | 'ban' | 'transfer' | 'rename';
@@ -96,6 +100,20 @@ export class MemberActionSheet {
   readonly busy = signal(false);
   readonly errorKey = signal<string | null>(null);
 
+  /**
+   * The wait the server named on a refusal, as `m:ss`, or the empty string.
+   *
+   * **Rule A4** (plan 0015, section 5.4). `zone.error.tooManyRenames` used to read "Too
+   * many changes. Wait a minute and try again" while the bucket behind it,
+   * `usernameChange`, is **five per hour**. A countdown that said a minute would run
+   * out, invite the tap, and fail again. The key now takes `{{wait}}` and this is what
+   * fills it, from `retryAfterSeconds` in the problem body.
+   *
+   * Empty when the server named none, which is a real state rather than a missing
+   * value: rule C3 has no invented duration to fall back on.
+   */
+  readonly errorWait = signal('');
+
   readonly canRename = computed(() => {
     const next = this.typedName().trim();
     return (
@@ -164,6 +182,7 @@ export class MemberActionSheet {
 
     this.busy.set(true);
     this.errorKey.set(null);
+    this.errorWait.set('');
 
     const operation =
       this.action === 'rename' ? 'member.rename' : 'member.govern';
@@ -178,6 +197,7 @@ export class MemberActionSheet {
       await this.dismiss();
     } catch (error) {
       this.errorKey.set(zoneErrorKey(error, operation));
+      this.errorWait.set(retryAfterClock(error));
 
       if (shouldRefetch(error, operation)) {
         void this._zones.loadZone(this.zoneId());

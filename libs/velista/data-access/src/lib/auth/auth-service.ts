@@ -48,6 +48,31 @@ export interface AuthServiceI {
    * to send. See {@link VERIFY_RESEND_AVAILABLE} for why nothing calls this yet.
    */
   resendVerification(): Promise<ResendOutcome>;
+
+  /**
+   * Ask for a password reset link (`POST /v1/auth/forgot-password`, one per minute).
+   *
+   * **Unauthenticated and deliberately incurious.** The answer is identical for an
+   * address with a password, one with no account at all, and one that signs in with
+   * Google, so a caller cannot use it to learn which addresses are registered. The copy
+   * above it has to match that: "if that address has a password, a link is on its way",
+   * and never a claim of delivery (plan 0015, section 5.6).
+   *
+   * The address is a parameter rather than being taken from the session because the
+   * route has no session to take it from. The account screen passes the profile's own
+   * email, which is the only place in the app that calls this today.
+   *
+   * Answers a {@link ResendOutcome} for the same reason the resend does: a refusal is an
+   * ordinary outcome the screen has copy and a wait for, not a failure to report as
+   * one, and both states carry the server's own number rather than a hardcoded sixty
+   * (rule C3, and rule A4).
+   *
+   * **Spending the link signs every other device out.** `resetPassword` revokes every
+   * live refresh token and then issues a fresh pair to whoever spent it, so the person
+   * changing their password stays signed in where they did it. The row says so before
+   * it is pressed.
+   */
+  forgotPassword(email: string): Promise<ResendOutcome>;
 }
 
 /** What `POST /v1/auth/verify-email` answers. Deliberately not the token pair. */
@@ -78,10 +103,15 @@ export type ResendOutcome =
  * Whether the gateway serves the resend endpoint yet.
  *
  * Plan 0009 section 5.8 lists two backend changes it is written against, and this is
- * the first of them. Until it lands `POST /v1/auth/verify-resend` is a 404, so the
- * resend sentence is **not rendered anywhere**: not in the dashboard nudge, and not on
- * the expired link screen. Everything else on all five screens works, which is what
+ * the first of them. Until it lands the resend sentence is **not rendered anywhere**:
+ * not in the dashboard nudge, not on the expired link screen, and not on the account
+ * screen's unconfirmed email row. Everything else on those screens works, which is what
  * makes this a flag rather than a blocker.
+ *
+ * The path this guards was wrong until plan 0015 went looking for it: the client asked
+ * for `/v1/auth/verify-resend` and the gateway has always served
+ * `/v1/auth/resend-verification`, so flipping the flag would have produced a 404 on a
+ * route that exists. Corrected in `AuthApi`; the flag itself is 0009's to turn.
  *
  * A constant rather than a runtime probe on purpose. There is nothing to discover at
  * runtime that is not already known at build time, and a probe would spend a request

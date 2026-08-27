@@ -89,3 +89,34 @@ export const LINE_APPROVAL_STATUS_FALLBACK: LineApprovalStatus = 'PENDING';
 export const USER_KINDS = ['TEMPORARY', 'REGISTERED'] as const;
 export type UserKind = (typeof USER_KINDS)[number];
 export const USER_KIND_FALLBACK: UserKind = 'TEMPORARY';
+
+/**
+ * How far a rename travels, as **this app's** two valued question (plan 0015, rule A3).
+ *
+ * The wire enum `UsernamePropagation` has three values and this one has two, which is
+ * the point rather than an omission. `ALL_ZONES` overwrites a name somebody
+ * deliberately chose inside a group, and offering it honestly needs a screen listing
+ * what it would overwrite; no endpoint returns that list, so the app cannot ask the
+ * question fairly and therefore does not ask it at all.
+ *
+ * Named for what the person is deciding rather than for what the server does with it,
+ * because the sheet is asking about other people's screens: the name you picked in one
+ * group is not the name you use everywhere, so should this change follow it?
+ *
+ * The mapping to the wire lives in `AccountApi`, which is the boundary rule D4 puts it
+ * at. There is no fallback because nothing maps **into** this type: it only ever goes
+ * out, chosen by a radio group that has exactly these two options.
+ */
+export const USERNAME_SCOPES = ['MY_GROUPS_TOO', 'ONLY_HERE'] as const;
+export type UsernameScope = (typeof USERNAME_SCOPES)[number];
+
+/**
+ * What the rename sheet arrives on, and it is **not** the wire default.
+ *
+ * `MATCHING_ZONES` can only ever change a name that already equalled the old global
+ * one, so it cannot clobber a deliberate choice, while `GLOBAL_ONLY` leaves a person
+ * renamed in one place and not in another, which reads as the rename half working. The
+ * gateway defaults to `GLOBAL_ONLY` when the field is absent, so the safer answer only
+ * happens if it is asked for, which is why the client always sends it explicitly.
+ */
+export const USERNAME_SCOPE_DEFAULT: UsernameScope = 'MY_GROUPS_TOO';

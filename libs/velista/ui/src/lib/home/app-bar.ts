@@ -52,10 +52,18 @@ export class AppBar {
   /**
    * The letter in the account button.
    *
-   * There is no display name to derive one from: the API exposes no profile, and the
-   * only human readable name anywhere is per zone (plan 0004, section 11 item 2). The
-   * container passes what it can and this falls back to a neutral glyph rather than
-   * inventing an initial.
+   * The container derives it from `SessionStore.username`, which is the caller's global
+   * name: it rides on the token pair since backend plan 0018, and `ProfileStore`
+   * overrides it after a rename (rule A2, plan 0015). So there is no request behind
+   * this and no loading state for it either.
+   *
+   * This comment used to say the API exposed no profile and the only readable name was
+   * per zone. That was true when it was written and has not been since; a stale comment
+   * is read as a constraint, which is why `0010` rule G2 asks for it to be corrected
+   * rather than left (plan 0015, section 4.4).
+   *
+   * Null still falls back to a neutral glyph rather than inventing an initial, which is
+   * the right rendering for a name that is genuinely empty.
    */
   readonly accountInitial = input<string | null>(null);
 

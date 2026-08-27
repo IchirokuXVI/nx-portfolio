@@ -1,4 +1,6 @@
 import type { Provider } from '@angular/core';
+import { AccountMemory } from './account/account-memory';
+import { ProfileStore } from './account/profile-store';
 import { ApiUrl } from './api-url';
 import { AccountNotice } from './auth/account-notice';
 import { AuthMemory } from './auth/auth-memory';
@@ -66,11 +68,20 @@ import { ZoneStore } from './zones/zone-store';
  * so root scope would work for both, and they are listed here anyway so that every fake
  * in this library is installed in one place rather than two. `LineApi` and `CommentApi`
  * stay out, like every other real transport.
+ *
+ * `ProfileStore` (plan 0015) joins for `ZoneStore`'s reason a third time: it resolves
+ * `ACCOUNT_SERVICE`, so at the root it would serve a fixture email beside a real
+ * session. It is listed **above** `SessionStore` only for readability; `SessionStore`
+ * injects it, and DI does not care about the order of an array. `AccountMemory` joins
+ * for `ZoneMemory`'s reason exactly, and `AccountApi` stays out like every other real
+ * transport.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
   TokenStore,
+  ProfileStore,
   SessionStore,
+  AccountMemory,
   AccountNotice,
   ConnectionRecovery,
   AuthMemory,

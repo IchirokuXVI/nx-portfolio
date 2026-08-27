@@ -11,8 +11,13 @@
 > section 4.5 says why, along with the two preferences nobody in this app can change
 > today.
 >
-> **Status: written 2026-08-27, mock drawn the same day and awaiting approval.**
-> Nothing here is built yet.
+> **Status: written 2026-08-27, mock drawn the same day, built 2026-08-27.**
+> Section 8's boxes are ticked below against what shipped. Two departures are recorded
+> there and neither changes a decision: `member.usernameChanged` reaches the members
+> screen through a record on `ZoneStore` rather than a row it patches, because the store
+> holds zone summaries and the members list is page state; and the resend sentence on
+> the unconfirmed email row stays behind `VERIFY_RESEND_AVAILABLE`, which is `0009`'s
+> flag to turn. The wrong resend **path** that flag guarded was corrected while here.
 
 ## 1. Purpose
 
@@ -604,44 +609,75 @@ the Spanish agreement reason in `0001`.
 
 ## 8. Acceptance criteria
 
-- [ ] `/en/velista/account` renders for a signed in user, redirects an anonymous one, and
+Ticked 2026-08-27 against what shipped. Each line names the spec that holds it, so a
+box that stops being true fails a test rather than aging quietly in a document.
+
+- [x] `/en/velista/account` renders for a signed in user, redirects an anonymous one, and
       is declared before the `''` front door, with `0008`'s ordering spec still passing.
-- [ ] The name and initial render with **no request** and no loading state, from
-      `SessionStore`. Only the email row skeletons.
-- [ ] Renaming updates the app bar's initial on the dashboard **immediately**, and a spec
-      proves `TokenStore.refresh` was **not** called (rule A2).
-- [ ] The rename sends `propagation` explicitly, defaulting to `MATCHING_ZONES`, and
-      `ALL_ZONES` is not reachable from any control (rule A3).
-- [ ] A rename refused by the hourly bucket counts down from `retryAfterSeconds`, and a
+      `routes.spec.ts`, "the account".
+- [x] The name and initial render with **no request** and no loading state, from
+      `SessionStore`. Only the email row skeletons. `account-page.spec.ts`, "what
+      renders without a request".
+- [x] Renaming updates the app bar's initial on the dashboard **immediately**, and a spec
+      proves `TokenStore.refresh` was **not** called (rule A2). `profile-store.spec.ts`,
+      "rule A2", and `rename-sheet.spec.ts`, "rule A2: no token refresh".
+- [x] The rename sends `propagation` explicitly, defaulting to `MATCHING_ZONES`, and
+      `ALL_ZONES` is not reachable from any control (rule A3). `rename-sheet.spec.ts`,
+      "rule A3", which asserts the radio values are exactly the two.
+- [x] A rename refused by the hourly bucket counts down from `retryAfterSeconds`, and a
       spec proves a wait longer than a minute is rendered as that number rather than 60
-      (rule A4).
-- [ ] `zone.error.tooManyRenames` renders the server's wait on `0010`'s member rename
-      sheet too, verified against the in-memory service.
-- [ ] A guest sees the guest screen, and **no sign out control exists in the DOM** for
-      them — asserted by query, not by inspection (rule A1).
-- [ ] A guest's primary goes to `auth/upgrade` and never to `auth/register`, which is
+      (rule A4). `rename-sheet.spec.ts` asserts `41:08` from 2468 seconds.
+- [x] `zone.error.tooManyRenames` renders the server's wait on `0010`'s member rename
+      sheet too, verified against the in-memory service. The key now takes `{{wait}}`,
+      `retryAfterClock` fills it, and `MemberActionSheet` passes it.
+- [x] A guest sees the guest screen, and **no sign out control exists in the DOM** for
+      them — asserted by query, not by inspection (rule A1). `account-page.spec.ts`,
+      "rule A1".
+- [x] A guest's primary goes to `auth/upgrade` and never to `auth/register`, which is
       rule C2 (`0009`) holding on a second screen.
-- [ ] Sign out clears the session, lands on the front door, and its copy claims nothing
+- [x] Sign out clears the session, lands on the front door, and its copy claims nothing
       about other devices.
-- [ ] The delete sheet counts owned groups from `ZoneStore` with no request, and omits
+- [x] The delete sheet counts owned groups from `ZoneStore` with no request, and omits
       the sentence entirely for somebody who owns none.
-- [ ] Delete stays disabled until the typed username matches, trimmed and case folded.
-- [ ] A successful delete clears the session and navigates; a failed one leaves the sheet
+      `delete-account-sheet.spec.ts`, "the consequences it states".
+- [x] Delete stays disabled until the typed username matches, trimmed and case folded.
+- [x] A successful delete clears the session and navigates; a failed one leaves the sheet
       open with the correlation id and does **not** clear it.
-- [ ] `not_found` on the profile or the rename clears the session rather than rendering a
-      retry (section 5.9).
-- [ ] `member.usernameChanged` is in the realtime union and `ZoneStore` updates that
-      member in place, proven by a spec that renames a member and asserts an open members
-      screen changes without a refetch (section 5.8).
-- [ ] The app bar's account button navigates from the group, members and list pages as
+- [x] `not_found` on the profile or the rename clears the session rather than rendering a
+      retry (section 5.9). `accountFailure` answers `endSession` for it, and the page
+      acts on it.
+- [x] `member.usernameChanged` is in the realtime union and an open members screen
+      changes without a refetch (section 5.8). `members-page.spec.ts`, "when a member is
+      renamed elsewhere", asserts the row changed while the request count stood still.
+
+      **One departure from the letter of this plan.** It says `ZoneStore` should update
+      that member's username in place, and the store has no such row to update: it holds
+      zone **summaries**, and the members list is page state, deliberately, for the
+      reason `MembersPage` records. So the store records the rename the way it already
+      records a departure, and the screen that owns the rows applies it. The alternative
+      was a second realtime subscription inside the page, which would have made it the
+      first screen in the app to read the stream without going through a store.
+- [x] The app bar's account button navigates from the group, members and list pages as
       well as the dashboard, and `AppBar.accountInitial`'s stale comment is corrected
-      (section 4.4).
-- [ ] `home-page.ts`'s `pendingRoutes` no longer records `account`.
-- [ ] No component in `libs/velista/ui` injects a store or a service token (rule D1).
-- [ ] Every state in section 3 is reachable against `AccountMemory` with no gateway
-      running.
-- [ ] `npx nx lint` and `npx nx test` pass for every touched project, and
-      `npx nx build velista` succeeds, which is the only real type gate in this workspace.
+      (section 4.4). The list page was also passing no `accountInitial` at all, so its
+      button drew the neutral glyph; that is bound now too.
+- [x] `home-page.ts`'s `pendingRoutes` no longer records `account`.
+- [x] No component in `libs/velista/ui` injects a store or a service token (rule D1).
+      `layering.spec.ts` scans the whole library and passes with `AccountRow` and
+      `SectionHeading` in it.
+- [x] Every state in section 3 is reachable against `AccountMemory` with no gateway
+      running. It answers a null email for a `TEMPORARY` token, refuses the sixth rename
+      in an hour with a 2468 second wait, and is idempotent on delete.
+- [x] `npx nx lint` and `npx nx test` pass for every touched project, and
+      `npx nx build velista` succeeds, which is the only real type gate in this
+      workspace. All eleven velista projects are green, plus `shell` and `shared/*`.
+
+**One thing this plan describes and did not turn on.** The unconfirmed email row draws
+the resend sentence only while `VERIFY_RESEND_AVAILABLE` is true, and it is still false:
+that is `0009`'s flag and its own section 5.8 owns the decision to flip it. Looking for
+the endpoint did find that the client had always asked for `/v1/auth/verify-resend`
+while the gateway serves `/v1/auth/resend-verification`, so flipping the flag would have
+produced a 404 on a route that exists. Corrected in `AuthApi`, with its spec.
 
 ## 9. Out of scope
 

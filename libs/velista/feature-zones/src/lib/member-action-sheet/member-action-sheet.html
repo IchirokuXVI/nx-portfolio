@@ -28,8 +28,14 @@
       type="text"
     />
 
+    <!--
+      `{{wait}}` is the server's own number, and only `zone.error.tooManyRenames` reads
+      it. Passing it to every key here is harmless: i18next drops an interpolation
+      nothing references, and branching on the key would be a switch in a template that
+      has to stay in step with `zoneErrorKey` (rule A4, plan 0015).
+    -->
     @if (errorKey(); as key) {
-      <p class="error" role="alert">{{ key | rokuT }}</p>
+      <p class="error" role="alert">{{ key | rokuT: { wait: errorWait() } }}</p>
     }
 
     <button

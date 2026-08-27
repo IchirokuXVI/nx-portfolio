@@ -218,7 +218,7 @@ describe('AuthApi', () => {
 
       const result = api.resendVerification();
 
-      httpMock.expectOne(`${GATEWAY}/v1/auth/verify-resend`).flush(
+      httpMock.expectOne(`${GATEWAY}/v1/auth/resend-verification`).flush(
         {
           code: 'rate_limited',
           correlationId: 'c1',
@@ -245,7 +245,7 @@ describe('AuthApi', () => {
       const result = api.resendVerification();
 
       httpMock
-        .expectOne(`${GATEWAY}/v1/auth/verify-resend`)
+        .expectOne(`${GATEWAY}/v1/auth/resend-verification`)
         .flush(
           { code: 'rate_limited', correlationId: 'c1' },
           { status: 429, statusText: 'Too Many Requests' }
@@ -268,7 +268,7 @@ describe('AuthApi', () => {
 
       const result = api.resendVerification();
       httpMock
-        .expectOne(`${GATEWAY}/v1/auth/verify-resend`)
+        .expectOne(`${GATEWAY}/v1/auth/resend-verification`)
         .flush({ retryAfterSeconds: 52 });
 
       await expect(result).resolves.toEqual({ state: 'sent', waitSeconds: 52 });
@@ -285,7 +285,7 @@ describe('AuthApi', () => {
 
       const result = api.resendVerification();
       httpMock
-        .expectOne(`${GATEWAY}/v1/auth/verify-resend`)
+        .expectOne(`${GATEWAY}/v1/auth/resend-verification`)
         .flush(
           { code: 'internal', correlationId: 'c1' },
           { status: 500, statusText: 'Server Error' }

@@ -1,4 +1,13 @@
-<lib-app-bar [signedIn]="true" />
+<!--
+  `(account)` was unbound here until plan 0015, and so was `accountInitial`, so the
+  button drew a neutral glyph on the one screen somebody spends the longest on. Both are
+  bound now; `(openSearch)` stays unbound, because search is not built (section 4.4).
+-->
+<lib-app-bar
+  (account)="openAccount()"
+  [accountInitial]="accountInitial()"
+  [signedIn]="true"
+/>
 
 <main class="page">
   <!--

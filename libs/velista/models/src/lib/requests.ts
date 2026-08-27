@@ -167,6 +167,22 @@ export interface SetUsernameRequest {
   readonly username: string;
 }
 
+/**
+ * Renaming yourself everywhere, or only globally (`PATCH /v1/account/me`).
+ *
+ * `propagation` is optional on the wire and **never omitted here** (rule A3, plan
+ * 0015): the gateway reads an absent field as `GLOBAL_ONLY`, which is not what the
+ * screen offers as its default, so the safer answer only happens when it is sent.
+ *
+ * The value is the wire enum's own string rather than this app's `UsernameScope`,
+ * because this is a request body and rule D4 maps one way: models come from the wire,
+ * bodies go to it, and the translation between the two happens in `AccountApi`.
+ */
+export interface SetGlobalUsernameRequest {
+  readonly username: string;
+  readonly propagation: 'GLOBAL_ONLY' | 'MATCHING_ZONES';
+}
+
 /** Orders `GET /v1/zones/:id/members` accepts. Anything else is rejected by the DTO. */
 export const MEMBER_ORDERS = ['joined', 'name', 'role'] as const;
 export type MemberOrder = (typeof MEMBER_ORDERS)[number];

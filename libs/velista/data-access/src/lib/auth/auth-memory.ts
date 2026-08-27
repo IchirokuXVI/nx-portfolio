@@ -23,6 +23,12 @@ const SENT_WAIT_SECONDS = 52;
 /** The one address that is already taken, so a `conflict` is reachable on demand. */
 const TAKEN_EMAIL = 'taken@example.com';
 
+/** The wait a refused reset reports. Under a minute, because that bucket is per minute. */
+const RESET_REFUSED_WAIT_SECONDS = 47;
+
+/** The wait a sent reset reports. */
+const RESET_SENT_WAIT_SECONDS = 60;
+
 /**
  * Credentials, in memory. Asked for by name, never a default.
  *
@@ -50,6 +56,9 @@ export class AuthMemory implements AuthServiceI {
 
   /** How many times another confirmation has been asked for, so a refusal is reachable. */
   private _resendCount = 0;
+
+  /** Every address a reset was asked for, in order, so a spec can assert which one. */
+  readonly forgotPasswordAsks: string[] = [];
 
   async register(email: string, password: string): Promise<SessionTokens> {
     if (this._accounts.has(normalize(email))) {
@@ -114,6 +123,25 @@ export class AuthMemory implements AuthServiceI {
     return this._resendCount > 3
       ? { state: 'refused', waitSeconds: REFUSED_WAIT_SECONDS }
       : { state: 'sent', waitSeconds: SENT_WAIT_SECONDS };
+  }
+
+  /**
+   * A password reset link, in memory.
+   *
+   * **Incurious, exactly like the real one.** The address is not looked up, and an
+   * unknown one gets the same answer as a registered one, because that is the whole
+   * design of the endpoint (plan 0015, section 5.6) and a fake that answered
+   * differently would let a screen grow copy the real service can never justify.
+   *
+   * One per minute rather than three per ten, matching `THROTTLE_LIMITS.passwordReset`,
+   * so the second ask in a sitting is refused and the refused sentence is reachable.
+   */
+  async forgotPassword(email: string): Promise<ResendOutcome> {
+    this.forgotPasswordAsks.push(normalize(email));
+
+    return this.forgotPasswordAsks.length > 1
+      ? { state: 'refused', waitSeconds: RESET_REFUSED_WAIT_SECONDS }
+      : { state: 'sent', waitSeconds: RESET_SENT_WAIT_SECONDS };
   }
 
   private _issue(

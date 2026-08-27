@@ -1,4 +1,14 @@
-<lib-app-bar [accountInitial]="accountInitial()" [signedIn]="true" />
+<!--
+  `(account)` was unbound here until plan 0015, which is a defect rather than a design:
+  the button was drawn, focusable and named, and did nothing. `(openSearch)` stays
+  unbound and stays a defect, because search is not built and recording it in three more
+  places is not progress (section 4.4).
+-->
+<lib-app-bar
+  (account)="openAccount()"
+  [accountInitial]="accountInitial()"
+  [signedIn]="true"
+/>
 
 <main class="page">
   <!-- The string moves to the accessible name, so nothing is lost for a screen

@@ -1,3 +1,5 @@
+export * from './lib/account/account-row';
+export * from './lib/account/section-heading';
 export * from './lib/app-locales';
 export * from './lib/app-ui-module';
 export * from './lib/auth/auth-screen';

@@ -41,3 +41,17 @@
   flex: 1;
   min-block-size: var(--app-space-6);
 }
+
+// The one sentence after a delete (plan 0015, section 5.7). Neutral, not a success
+// tone: nothing good just happened, something asked for did. Quiet enough that it does
+// not compete with the hero it sits above, and gone entirely on the next visit.
+.notice {
+  margin: 0 var(--app-space-5);
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}

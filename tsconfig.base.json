@@ -105,6 +105,9 @@
         "./libs/luna-shopper/test-fixtures/src/jest.ts"
       ],
       "velista/Routes": ["./apps/velista/src/app/remote-entry/entry.routes.ts"],
+      "@portfolio/velista/feature-account": [
+        "./libs/velista/feature-account/src/index.ts"
+      ],
       "@portfolio/velista/feature-auth": [
         "./libs/velista/feature-auth/src/index.ts"
       ],

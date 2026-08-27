@@ -1,3 +1,7 @@
+export * from './lib/account/account-api';
+export * from './lib/account/account-memory';
+export * from './lib/account/account-service';
+export * from './lib/account/profile-store';
 export * from './lib/api-url';
 export * from './lib/auth/account-notice';
 export * from './lib/auth/auth-api';

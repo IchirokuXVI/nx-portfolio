@@ -5,6 +5,7 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
+import { AccountNotice } from '@portfolio/velista/data-access';
 import { APP_KEY } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { LandingPage } from './landing-page';
@@ -36,12 +37,18 @@ interface Options {
   readonly supportedLocales?: readonly string[] | undefined;
   /** Whether the page is mounted under a parent route at all. */
   readonly withParent?: boolean;
+  /**
+   * Whether an account was just deleted, which is the one piece of news this screen
+   * reports (plan 0015, section 5.7).
+   */
+  readonly accountDeleted?: boolean;
 }
 
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<LandingPage>;
   store: FakeLocaleStore;
   router: { navigate: jest.Mock };
+  notice: AccountNotice;
 }> {
   TestBed.resetTestingModule();
 
@@ -62,6 +69,11 @@ async function render(options: Options = {}): Promise<{
     imports: [LandingPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting(),
+      // The real `AccountNotice` rather than a double, matching `provideAccountNotice`:
+      // it is one signal and two setters with no dependencies, so faking it would mean
+      // writing the same object twice and would let a spec pass against behaviour the
+      // app does not have.
+      AccountNotice,
       { provide: RokuLocaleStore, useValue: store },
       { provide: Router, useValue: router },
       {
@@ -71,10 +83,16 @@ async function render(options: Options = {}): Promise<{
     ],
   }).compileComponents();
 
+  const notice = TestBed.inject(AccountNotice);
+  if (options.accountDeleted === true) {
+    // Set before the component is created, which is when it reads and consumes it.
+    notice.setDeleted();
+  }
+
   const fixture = TestBed.createComponent(LandingPage);
   fixture.detectChanges();
 
-  return { fixture, store, router };
+  return { fixture, store, router, notice };
 }
 
 function query(fixture: ComponentFixture<LandingPage>, selector: string) {
@@ -260,6 +278,33 @@ describe('LandingPage', () => {
       const { fixture } = await render();
 
       expect(query(fixture, 'router-outlet')).not.toBeNull();
+    });
+  });
+
+  /**
+   * Plan 0015, section 5.7. After a delete there is no session, so the dashboard cannot
+   * report it and the front door is where the person lands.
+   */
+  describe('after an account is deleted', () => {
+    it('says once that the account is gone', async () => {
+      const { fixture } = await render({ accountDeleted: true });
+
+      expect(query(fixture, '.notice')).not.toBeNull();
+    });
+
+    it('says nothing on an ordinary visit', async () => {
+      const { fixture } = await render();
+
+      expect(query(fixture, '.notice')).toBeNull();
+    });
+
+    it('consumes the notice, so a revisit does not repeat it', async () => {
+      // The reason it is a one-shot store rather than router state: state survives a
+      // reload through the history entry, and coming back to this URL tomorrow is not
+      // the moment to be told an account was deleted.
+      const { notice } = await render({ accountDeleted: true });
+
+      expect(notice.notice()).toBeNull();
     });
   });
 });
