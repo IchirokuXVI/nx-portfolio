@@ -12,8 +12,8 @@ const dockerOrigin = process.env['E2E_BASE_URL'];
 const baseURL =
   process.env['BASE_URL'] ||
   (dockerOrigin
-    ? `${dockerOrigin}/en/damoclesSword`
-    : 'http://localhost:4200/en/damoclesSword');
+    ? `${dockerOrigin}/damoclesSword/en`
+    : 'http://localhost:4200/damoclesSword/en');
 
 /**
  * Read environment variables from file.

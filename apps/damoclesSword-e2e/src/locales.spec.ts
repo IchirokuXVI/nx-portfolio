@@ -13,7 +13,7 @@ import { findRawKeys, settle, usableLocales } from './support/locale-helpers';
 const PATH = '/damoclesSword';
 
 async function discoverLocales(page: import('@playwright/test').Page) {
-  await page.goto(`/en${PATH}`);
+  await page.goto(`${PATH}/en`);
   await settle(page);
   return usableLocales(page);
 }
@@ -32,7 +32,7 @@ test.describe('damoclesSword localization', () => {
 
     for (const locale of locales) {
       await test.step(`locale "${locale}"`, async () => {
-        await page.goto(`/${locale}${PATH}`);
+        await page.goto(`${PATH}/${locale}`);
         await settle(page);
 
         const rawKeys = await findRawKeys(page);

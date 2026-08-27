@@ -9,4 +9,6 @@ import { DAMOCLES_AVAILABLE_LOCALES } from '@portfolio/damoclesSword/ui';
  * Defaults to every available locale. To disable one, restrict here, for example
  * `DAMOCLES_AVAILABLE_LOCALES.filter((l) => l !== 'fr')`.
  */
-export const DAMOCLES_USABLE_LOCALES: string[] = [...DAMOCLES_AVAILABLE_LOCALES];
+export const DAMOCLES_USABLE_LOCALES: string[] = [
+  ...DAMOCLES_AVAILABLE_LOCALES,
+];

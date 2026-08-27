@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
+import { DAMOCLES_DATA_ACCESS_PROVIDERS } from '../data-access-providers';
 import { ProjectMemory } from './project-memory';
 import { PROJECTS } from './static-project-data';
 
@@ -7,7 +8,13 @@ describe('ProjectMemory', () => {
   let service: ProjectMemory;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    // The whole set, not just the class under test: these services resolve each
+    // other through their tokens, and none of them is `providedIn: 'root'` any
+    // more (plan 0005 D5). Installing them the way the app does keeps the spec
+    // honest about what the app actually provides.
+    TestBed.configureTestingModule({
+      providers: [...DAMOCLES_DATA_ACCESS_PROVIDERS],
+    });
     service = TestBed.inject(ProjectMemory);
   });
 
@@ -37,7 +44,9 @@ describe('ProjectMemory', () => {
     const starlit = projects.find((p) => p.label === 'STARLIT: ASCENSION');
 
     expect(starlit?.locale).toBe('en');
-    expect(starlit?.description).toContain('Starlit: Ascension is a VR Shooter');
+    expect(starlit?.description).toContain(
+      'Starlit: Ascension is a VR Shooter'
+    );
   });
 
   it('gives the STARLIT: ASCENSION game a right-positioned video and top-right logo', async () => {

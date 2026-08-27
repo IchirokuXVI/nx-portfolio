@@ -6,7 +6,6 @@ import {
 } from '@angular/core';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
 import { CallToActionButton } from './call-to-action-button/call-to-action-button';
-import { DAMOCLES_AVAILABLE_LOCALES } from './damocles-locales';
 import { ContactForm } from './contact-form/contact-form';
 import { DoubleBorderedTitle } from './double-bordered-title/double-bordered-title';
 import { FooterLogo } from './footer-logo/footer-logo';
@@ -21,20 +20,20 @@ import { MainHeader } from './main-header/main-header';
 import { NewsCard } from './news-card/news-card';
 import { SectionContactSupport } from './section-contact-support/section-contact-support';
 import { SectionFuture } from './section-future/section-future';
-import { SectionHowWeWork } from './section-how-we-work/section-how-we-work';
 import { SectionGeneralContact } from './section-general-contact/section-general-contact';
 import { SectionHiring } from './section-hiring/section-hiring';
+import { SectionHowWeWork } from './section-how-we-work/section-how-we-work';
 import { SectionLayout } from './section-layout/section-layout';
 import { SectionNews } from './section-news/section-news';
 import { SectionOurValues } from './section-our-values/section-our-values';
 import { SectionOurVision } from './section-our-vision/section-our-vision';
-import { SectionProjects } from './section-projects/section-projects';
 import { SectionProjectsDetailed } from './section-projects-detailed/section-projects-detailed';
+import { SectionProjects } from './section-projects/section-projects';
+import { SectionPublishing } from './section-publishing/section-publishing';
 import { SectionServicesContact } from './section-services-contact/section-services-contact';
 import { SectionWhatWeDo } from './section-what-we-do/section-what-we-do';
 import { SectionWhereWeFit } from './section-where-we-fit/section-where-we-fit';
 import { SectionWhoWeAre } from './section-who-we-are/section-who-we-are';
-import { SectionPublishing } from './section-publishing/section-publishing';
 import { LibFontLoaderComponent } from './services/font-loader/font-loader';
 import { TrailerVideo } from './trailer-video/trailer-video';
 
@@ -72,15 +71,22 @@ const components = [
   SectionGeneralContact,
 ];
 
+/**
+ * This library's components, plus plain `RokuTranslatorModule` for the `| rokuT`
+ * pipe.
+ *
+ * It used to carry `RokuTranslatorModule.withConfig`, which made this module the
+ * place damoclesSword's translations were configured. That moved: the descriptor to
+ * `translations.ts` next to the assets it reads, and the `provideRokuTranslator`
+ * call to `apps/damoclesSword/src/app/translation-providers.ts` (plan 0005 D11).
+ *
+ * The reason is not tidiness. Providers on an NgModule imported by a component reach
+ * that component's own injector, not the route injector its pages are created
+ * against, and never the app injector. The locale guard has to reach this app's
+ * translator to adopt a locale before anything renders, and from here it could not.
+ */
 @NgModule({
-  imports: [
-    RokuTranslatorModule.withConfig({
-      locales: DAMOCLES_AVAILABLE_LOCALES,
-      defaultNamespace: 'damoclesSword',
-      loader: (locale) => import(`../../assets/i18n/${locale}.json`),
-    }),
-    ...components,
-  ],
+  imports: [RokuTranslatorModule, ...components],
   exports: components,
   declarations: [],
   providers: [],

@@ -16,7 +16,7 @@ test.describe('damoclesSword language selector', () => {
     // Wide enough that the header uses its inline (non-hamburger) layout, so the
     // switcher is directly interactive without opening the mobile nav.
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/en/damoclesSword');
+    await page.goto('/damoclesSword/en');
     await settle(page);
 
     const openDropdown = page.locator(

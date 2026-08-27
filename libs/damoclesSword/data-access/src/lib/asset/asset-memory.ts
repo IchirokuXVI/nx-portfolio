@@ -28,9 +28,7 @@ const ASSET_LOADERS: Record<AssetKey, () => Promise<string>> = {
  * services already return resolved asset URLs alongside their data, so callers
  * of a `getList()` never need it.
  */
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable()
 export class AssetMemory implements AssetServiceI {
   get(key: AssetKey) {
     return ASSET_LOADERS[key]();

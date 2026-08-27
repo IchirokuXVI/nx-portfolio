@@ -11,19 +11,20 @@ export const appRoutes: Route[] = [
     loadChildren: () => import('odontogram/Routes').then((m) => m.remoteRoutes),
   },
   {
-    // **Transitional**, and shrinking one app per commit. The apps below have not
-    // migrated yet, so the shell still inserts a locale ahead of them before their
-    // bundles load. This whole route goes with the last of them (plan 0003, step 6).
+    // **Migrated (plan 0003): damoclesSword owns its own locale segment**, so it
+    // mounts at the top level and its own guard settles the locale below
+    // `/damoclesSword`. It sets its own document title too.
+    path: 'damoclesSword',
+    loadChildren: () =>
+      import('damoclesSword/Routes').then((m) => m.remoteRoutes),
+  },
+  {
+    // **Transitional**, and shrinking one app per commit. velista has not migrated
+    // yet, so the shell still inserts a locale ahead of it before its bundle loads.
+    // This whole route goes with it (plan 0003, step 6).
     path: ':locale',
     canActivate: [localeGuard],
     children: [
-      {
-        path: 'damoclesSword',
-        title: 'app-title',
-        data: { titleNs: 'damoclesSword', titleFallback: "Damocle'Sword" },
-        loadChildren: () =>
-          import('damoclesSword/Routes').then((m) => m.remoteRoutes),
-      },
       {
         // Must stay ABOVE the empty-path landingV2 entry. An empty-path route
         // with loadChildren is not terminal: Angular would hand `velista/...`

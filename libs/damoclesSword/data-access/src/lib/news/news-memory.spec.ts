@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
+import { DAMOCLES_DATA_ACCESS_PROVIDERS } from '../data-access-providers';
 import { NewsMemory } from './news-memory';
 import { NEWS } from './static-news-data';
 
@@ -7,7 +8,13 @@ describe('NewsMemory', () => {
   let service: NewsMemory;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    // The whole set, not just the class under test: these services resolve each
+    // other through their tokens, and none of them is `providedIn: 'root'` any
+    // more (plan 0005 D5). Installing them the way the app does keeps the spec
+    // honest about what the app actually provides.
+    TestBed.configureTestingModule({
+      providers: [...DAMOCLES_DATA_ACCESS_PROVIDERS],
+    });
     service = TestBed.inject(NewsMemory);
   });
 
