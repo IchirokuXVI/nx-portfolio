@@ -8,12 +8,13 @@ describe('ProjectMemory', () => {
   let service: ProjectMemory;
 
   beforeEach(() => {
-    // The whole set, not just the class under test: these services resolve each
-    // other through their tokens, and none of them is `providedIn: 'root'` any
-    // more (plan 0005 D5). Installing them the way the app does keeps the spec
-    // honest about what the app actually provides.
+    // The app's provider set, plus the class under test by name. The set binds each
+    // token to its implementation with `provideService`, which is what these
+    // services resolve each other through; `useClass` does not also make the class
+    // injectable by name, and this spec is about the implementation rather than the
+    // interface, so it asks for it directly (plan 0005 D5).
     TestBed.configureTestingModule({
-      providers: [...DAMOCLES_DATA_ACCESS_PROVIDERS],
+      providers: [...DAMOCLES_DATA_ACCESS_PROVIDERS, ProjectMemory],
     });
     service = TestBed.inject(ProjectMemory);
   });

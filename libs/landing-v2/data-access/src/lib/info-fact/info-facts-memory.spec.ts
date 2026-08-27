@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
+import { LANDING_V2_DATA_ACCESS_PROVIDERS } from '../data-access-providers';
 import { InfoFactMemory } from './info-facts-memory';
 import { INFO_FACTS } from './static-info-facts-data';
 
@@ -7,9 +8,14 @@ describe('InfoFactMemory', () => {
   let service: InfoFactMemory;
 
   beforeEach(() => {
-    // Named explicitly: the in-memory services stopped being `providedIn: 'root'`
-    // when the app took ownership of its providers (plan 0005 D5).
-    TestBed.configureTestingModule({ providers: [InfoFactMemory] });
+    // The app's provider set, plus the class under test by name. The set binds each
+    // token to its implementation with `provideService`, which is what these
+    // services resolve each other through; `useClass` does not also make the class
+    // injectable by name, and this spec is about the implementation rather than the
+    // interface, so it asks for it directly (plan 0005 D5).
+    TestBed.configureTestingModule({
+      providers: [...LANDING_V2_DATA_ACCESS_PROVIDERS, InfoFactMemory],
+    });
     service = TestBed.inject(InfoFactMemory);
   });
 

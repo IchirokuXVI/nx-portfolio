@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { NotFoundResourceError } from '@portfolio/shared/data-access';
 import { firstValueFrom } from 'rxjs';
+import { LANDING_V2_DATA_ACCESS_PROVIDERS } from '../data-access-providers';
 import { ProjectMemory } from './projects-memory';
 import { PROJECTS } from './static-projects-data';
 
@@ -8,7 +9,9 @@ describe('ProjectMemory', () => {
   let service: ProjectMemory;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [ProjectMemory] });
+    TestBed.configureTestingModule({
+      providers: [...LANDING_V2_DATA_ACCESS_PROVIDERS, ProjectMemory],
+    });
     service = TestBed.inject(ProjectMemory);
   });
 

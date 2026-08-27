@@ -1,5 +1,4 @@
-import { inject, Injectable, Signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { inject, Injectable, signal, Signal } from '@angular/core';
 import { Router, UrlSegment } from '@angular/router';
 import { canonicalLocale } from '@portfolio/localization/rokutranslator';
 import { BehaviorSubject, Observable } from 'rxjs';
@@ -36,20 +35,50 @@ export class RokuLocaleStore {
   private _router = inject(Router);
   private _translator = inject(ROKU_TRANSLATOR);
 
-  private readonly _locale$ = new BehaviorSubject<string>(
-    this.readInitialLocale()
-  );
+  private readonly _initial = this.readInitialLocale();
+
+  private readonly _locale$ = new BehaviorSubject<string>(this._initial);
+
+  /**
+   * The signal half, written by hand rather than derived with `toSignal`.
+   *
+   * **This is a module federation constraint, not a style preference.**
+   * `@angular/core/rxjs-interop` is a secondary entry point that federation does not
+   * dedupe: every remote bundles its own copy, and each copy carries its own copy of
+   * core's internal module state. `toSignal` calls `assertInInjectionContext`, which
+   * reads that state, so the check runs against whichever remote happened to load
+   * `rxjs-interop` first while the injector was set by the shell's core. The two never
+   * agree, and the result is a hard `NG0203` at construction with a DI graph that is
+   * perfectly correct.
+   *
+   * It only became reachable when this store stopped being `providedIn: 'root'`
+   * (plan 0005 D5). Root scoped, it was created once, by the shell, out of the shell's
+   * own bundle, where the two copies happened to be the same one. Provided per app it
+   * is constructed from a remote's chunk, and this is the one class in the workspace
+   * deliberately instantiated from several different bundles, so it must not depend on
+   * cross-bundle module state at all.
+   *
+   * Keeping the subject as the canonical holder and setting the signal beside it costs
+   * one line in `publish` and removes the dependency entirely. `requireSync` is not
+   * needed either: the signal is created with the same initial value the subject has,
+   * so it always has one.
+   */
+  private readonly _locale = signal(this._initial);
 
   /** Current locale as an observable. Data pipelines key their refetch off this. */
   readonly locale$: Observable<string> = this._locale$.asObservable();
 
   /** Current locale as a signal. Reading it in a view wakes OnPush components. */
-  readonly locale: Signal<string> = toSignal(this._locale$, {
-    requireSync: true,
-  });
+  readonly locale: Signal<string> = this._locale.asReadonly();
 
   constructor() {
-    this._translator.onLocaleChange((locale) => this._locale$.next(locale));
+    this._translator.onLocaleChange((locale) => this.publish(locale));
+  }
+
+  /** The one place the two representations move, so they cannot drift apart. */
+  private publish(locale: string): void {
+    this._locale.set(locale);
+    this._locale$.next(locale);
   }
 
   /**
