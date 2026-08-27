@@ -1,0 +1,51 @@
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--app-space-2);
+}
+
+.field {
+  flex: 1;
+  min-width: 0;
+  padding: var(--app-space-2) var(--app-space-3);
+  background: var(--app-surface-sunken);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-field-radius);
+  font: inherit;
+  font-size: var(--app-field-font-size);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+  resize: none;
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.send {
+  flex-shrink: 0;
+  min-height: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  background: var(--app-action-bg);
+  border: 0;
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-on-action);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}

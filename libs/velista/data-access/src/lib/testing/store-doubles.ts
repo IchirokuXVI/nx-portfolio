@@ -1,6 +1,9 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
   Identity,
+  Line,
+  LineApprovalStatus,
+  LineStatus,
   Membership,
   MembershipStatus,
   MyZone,
@@ -16,7 +19,9 @@ import {
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
+import { LineStore, type LineLoadState } from '../lines/line-store';
 import { ListStore, type ListLoadState } from '../lists/list-store';
+import { MemberNames } from '../memberships/member-names';
 import {
   MEMBERSHIP_SERVICE,
   type MembershipServiceI,
@@ -531,6 +536,220 @@ export type FakeListStore = ReturnType<typeof fakeListStore>;
 /** {@link fakeListStore} bound to the real token. */
 export function provideFakeListStore(store: FakeListStore): Provider {
   return { provide: ListStore, useValue: store };
+}
+
+export interface FakeLineStateOptions {
+  readonly lines?: readonly Line[];
+  readonly state?: LineLoadState;
+  readonly error?: unknown;
+  /** Whether every page has arrived. False turns dragging off (rule L4). */
+  readonly complete?: boolean;
+  /** What the next write answers, so a spec can drive the failure paths. */
+  readonly writeOutcome?: 'succeeded' | 'failed' | 'overwritten';
+}
+
+/** One write a page asked for, so a spec can assert what was sent and in what order. */
+export type LineWriteCall =
+  | { readonly kind: 'add'; readonly content: string; readonly quantity: number }
+  | { readonly kind: 'status'; readonly lineId: string; readonly status: LineStatus }
+  | {
+      readonly kind: 'approval';
+      readonly lineId: string;
+      readonly status: LineApprovalStatus;
+    }
+  | { readonly kind: 'update'; readonly lineId: string }
+  | { readonly kind: 'delete'; readonly lineId: string }
+  | { readonly kind: 'reorder'; readonly orderedLineIds: readonly string[] };
+
+/**
+ * A `LineStore` that is simply in the state you asked for.
+ *
+ * `fakeListStore`'s reasoning one level down, and the calls it records are what several
+ * of plan 0012's acceptance criteria actually turn on. Rule L3 in particular is a claim
+ * about **two requests in order**: a staff member's add is followed by an approval of
+ * the id that came back, and a plain member's is not. Only a double that keeps the
+ * sequence can state that.
+ *
+ * `addedApprovalStatus` exists for the other half of L3: when the backend's auto
+ * approve option lands, the created line comes back already APPROVED and the second
+ * call must stop happening on its own, with no edit to the page.
+ */
+export function fakeLineStore(options: FakeLineStateOptions = {}) {
+  const lines = signal<readonly Line[]>(options.lines ?? []);
+  const state = signal<LineLoadState>(options.state ?? 'loaded');
+  const error = signal<unknown>(options.error ?? null);
+  const complete = signal(options.complete ?? true);
+  const writes = signal<
+    ReadonlyMap<
+      string,
+      {
+        readonly outcome: 'pending' | 'failed' | 'overwritten';
+        readonly byUserId: string | null;
+      }
+    >
+  >(new Map());
+  const commentCounts = signal<ReadonlyMap<string, number>>(new Map());
+  const loads = signal(0);
+
+  const calls: LineWriteCall[] = [];
+  let outcome = options.writeOutcome ?? 'succeeded';
+  /** What an add answers with. APPROVED here makes rule L3's second call unnecessary. */
+  let addedApproval: LineApprovalStatus = 'PENDING';
+
+  return {
+    loadCount: loads.asReadonly(),
+    calls: calls as readonly LineWriteCall[],
+
+    linesIn: () => lines(),
+    stateOf: () => state(),
+    errorOf: () => error(),
+    isComplete: () => complete(),
+    writeNoteOf: (lineId: string) => writes().get(lineId) ?? null,
+    commentCountOf: (lineId: string) => commentCounts().get(lineId),
+    forList: () =>
+      computed(() => ({
+        lines: lines(),
+        state: state(),
+        error: error(),
+        complete: complete(),
+        writes: writes(),
+        commentCounts: commentCounts(),
+      })),
+
+    load: async () => {
+      loads.update((count) => count + 1);
+    },
+    refresh: async () => {
+      loads.update((count) => count + 1);
+    },
+
+    addLine: async (
+      listId: string,
+      content: string,
+      quantity: number,
+      createdByUserId: string
+    ) => {
+      calls.push({ kind: 'add', content, quantity });
+
+      if (outcome === 'failed') {
+        return { state: 'failed' as const, error: new Error('add failed') };
+      }
+
+      const added: Line = {
+        id: 'server-id',
+        listId,
+        content,
+        quantity,
+        itemId: null,
+        position: lines().length + 1,
+        approvalStatus: addedApproval,
+        status: 'PENDING',
+        createdByUserId,
+        approvedByUserId: null,
+        version: 1,
+      };
+      lines.update((current) => [...current, added]);
+      return { state: 'added' as const, line: added };
+    },
+
+    updateLine: async (lineId: string) => {
+      calls.push({ kind: 'update', lineId });
+      return outcome;
+    },
+
+    setStatus: async (lineId: string, status: LineStatus) => {
+      calls.push({ kind: 'status', lineId, status });
+      if (outcome === 'succeeded') {
+        lines.update((current) =>
+          current.map((l) => (l.id === lineId ? { ...l, status } : l))
+        );
+      }
+      return outcome;
+    },
+
+    setApproval: async (lineId: string, status: LineApprovalStatus) => {
+      calls.push({ kind: 'approval', lineId, status });
+      return outcome;
+    },
+
+    reorder: async (_listId: string, orderedLineIds: readonly string[]) => {
+      calls.push({ kind: 'reorder', orderedLineIds });
+      return outcome === 'failed' ? ('failed' as const) : ('succeeded' as const);
+    },
+
+    deleteLine: async (lineId: string) => {
+      calls.push({ kind: 'delete', lineId });
+      return outcome === 'failed'
+        ? { state: 'failed' as const, error: new Error('delete failed') }
+        : { state: 'deleted' as const };
+    },
+
+    recordCommentCount: (lineId: string, count: number) => {
+      commentCounts.update((current) => new Map(current).set(lineId, count));
+    },
+    dismissNote: (lineId: string) => {
+      writes.update((current) => {
+        const next = new Map(current);
+        next.delete(lineId);
+        return next;
+      });
+    },
+    forget: () => undefined,
+
+    /** Move the store while a fixture is mounted, to test a live update. */
+    set: (next: readonly Line[]) => lines.set(next),
+    setState: (next: LineLoadState, cause: unknown = null) => {
+      state.set(next);
+      error.set(cause);
+    },
+    setComplete: (next: boolean) => complete.set(next),
+    setWriteOutcome: (next: 'succeeded' | 'failed' | 'overwritten') => {
+      outcome = next;
+    },
+    /** What a created line comes back as. APPROVED is the backend's auto approve. */
+    setAddedApproval: (next: LineApprovalStatus) => {
+      addedApproval = next;
+    },
+    setNote: (
+      lineId: string,
+      note: {
+        readonly outcome: 'pending' | 'failed' | 'overwritten';
+        readonly byUserId: string | null;
+      }
+    ) => writes.update((current) => new Map(current).set(lineId, note)),
+  };
+}
+
+export type FakeLineStore = ReturnType<typeof fakeLineStore>;
+
+/** {@link fakeLineStore} bound to the real token. */
+export function provideFakeLineStore(store: FakeLineStore): Provider {
+  return { provide: LineStore, useValue: store };
+}
+
+/**
+ * A `MemberNames` that resolves whatever map it was given.
+ *
+ * The absence of a name is the interesting case rather than the presence of one: a
+ * comment outlives its author's membership, so an unresolved id has to render as a
+ * neutral phrase and never as an id (plan 0012, section 5.4).
+ */
+export function fakeMemberNames(
+  names: Readonly<Record<string, string>> = {},
+  members: readonly Membership[] = []
+) {
+  return {
+    nameOf: (_zoneId: string, userId: string) => names[userId] ?? null,
+    membersOf: () => members,
+    ensure: async () => undefined,
+    prime: () => undefined,
+  };
+}
+
+export function provideFakeMemberNames(
+  store: ReturnType<typeof fakeMemberNames>
+): Provider {
+  return { provide: MemberNames, useValue: store };
 }
 
 /** One recorded call to a faked membership service. */

@@ -14,7 +14,7 @@ import { ZoneStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, ZONE_NAME_MAX_LENGTH } from '@portfolio/velista/models';
 import { appPath } from '@portfolio/velista/platform';
 import { ConfirmSheet, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
-import { zoneIdOf } from '../route-params';
+import { zoneIdOf } from '@portfolio/velista/platform';
 import { shouldRefetch, zoneErrorKey } from '../zone-error-copy';
 
 /** Which confirm, if any, is covering the settings sheet. */

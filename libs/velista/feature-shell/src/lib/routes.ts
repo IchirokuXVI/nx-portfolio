@@ -13,7 +13,12 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { APP_USABLE_LOCALES } from './usable-locales';
-import { zoneIdGuard, zoneMemberGuard, zoneStaffGuard } from './zone-guards';
+import {
+  listIdGuard,
+  zoneIdGuard,
+  zoneMemberGuard,
+  zoneStaffGuard,
+} from './zone-guards';
 
 /**
  * This app's route table. The shell lazy-loads it through `velista/Routes`.
@@ -90,6 +95,57 @@ function memberActionRoutes(): Route[] {
         (m) => m.MemberActionSheet
       ),
   }));
+}
+
+/**
+ * The four sheets over the list page (plan 0012, section 4.2).
+ *
+ * Every one is a route and not a template flag, which is rule E1 from `0008`
+ * unchanged: each covers the page without losing it, and Android's back button has to
+ * dismiss it.
+ *
+ * Ticking a line off is deliberately not among them and never will be. It is one tap,
+ * it is reversible by the same tap, and it is the thing the screen is for.
+ *
+ * No guards here. Which of these a caller may **use** is decided by the page from the
+ * caller's own facts, and it cannot be decided by a guard at all: there is no
+ * `GET /v1/lists/:id/access` and `ListView` carries no role for the caller, so whether
+ * somebody may write to a list is not knowable before a write is attempted
+ * (section 5.5). Core re-resolves the permission on every request regardless, so a
+ * guard passing has never meant a write will be allowed.
+ */
+function listSheetRoutes(): Route[] {
+  return [
+    {
+      path: 'lines/:lineId/edit',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-lists').then((m) => m.EditLineSheet),
+    },
+    {
+      // Approved member, readers included: `comment.add` requires only
+      // `requireApproved` on the zone, not write access on the list.
+      path: 'lines/:lineId/comments',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-lists').then((m) => m.CommentsSheet),
+    },
+    {
+      path: 'lines/:lineId/confirm/delete',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-lists').then(
+          (m) => m.DeleteLineSheet
+        ),
+    },
+    {
+      // Rename, share and delete. All three are `requireManage`, which is a different
+      // rule from the write access that gates lines: the list's creator, a zone admin,
+      // or the owner. The sheet itself decides what to draw from `myRole`.
+      path: 'settings',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-lists').then(
+          (m) => m.ListSettingsSheet
+        ),
+    },
+  ];
 }
 
 export const AppShellRoutes: Route[] = [
@@ -238,6 +294,29 @@ export const AppShellRoutes: Route[] = [
           // necessity: a route whose children are absent and whose segments are left over
           // does not match anyway, but the specific before the general is the ordering
           // that stays correct when somebody later gives the group page more children.
+          // The list, and the four sheets over it (plan 0012). A **sibling** of
+          // `zones/:zoneId` rather than a child of it, because it is its own
+          // destination: a child would render inside the group page's outlet, over the
+          // group page, which is what a sheet does and this is not.
+          //
+          // Declared before `zones/:zoneId` for the reason `members` is, and here it is
+          // necessity rather than habit: `zones/:zoneId` is a prefix of this path and
+          // would match `/zones/<uuid>/lists/<uuid>` with two segments left over.
+          //
+          // Two `canMatch` guards, each stating one thing. `zoneIdGuard` checks the
+          // zone segment and `listIdGuard` is **rule L1**: it declines any list segment
+          // that is not a UUID, so `/zones/<uuid>/lists/new` falls through to the group
+          // page's own `lists/new` child instead of being swallowed by `:listId`.
+          {
+            path: 'zones/:zoneId/lists/:listId',
+            canMatch: [zoneIdGuard, listIdGuard],
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-lists').then(
+                (m) => m.ListPage
+              ),
+            children: [...listSheetRoutes()],
+          },
           {
             path: 'zones/:zoneId/members',
             canMatch: [zoneIdGuard],

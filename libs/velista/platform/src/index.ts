@@ -4,6 +4,7 @@ export * from './lib/browser-facade';
 export * from './lib/connection-state';
 export * from './lib/platform-providers';
 export * from './lib/reload-blocker';
+export * from './lib/route-params';
 export * from './lib/storage-keys';
 export * from './lib/testing/velista-testing';
 export * from './lib/theme-store';

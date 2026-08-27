@@ -68,7 +68,7 @@
       @for (list of zone().lists; track list.id) {
         <li class="list-item">
           <button
-            (click)="openList.emit(list.id)"
+            (click)="openList.emit({ zoneId: zone().id, listId: list.id })"
             class="list-row"
             type="button"
           >

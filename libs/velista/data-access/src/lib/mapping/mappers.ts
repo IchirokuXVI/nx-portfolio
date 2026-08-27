@@ -3,6 +3,8 @@ import {
   LINE_APPROVAL_STATUSES,
   LINE_STATUS_FALLBACK,
   LINE_STATUSES,
+  LIST_ROLE_FALLBACK,
+  LIST_ROLES,
   MEMBERSHIP_STATUS_FALLBACK,
   MEMBERSHIP_STATUSES,
   USER_KIND_FALLBACK,
@@ -13,6 +15,7 @@ import {
   ZONE_STATUSES,
   type Comment,
   type Line,
+  type ListAccessEntry,
   type ListPresence,
   type ListPreview,
   type Membership,
@@ -435,4 +438,41 @@ export function toPage<T>(
 /** From the `{ id }` acknowledgement several delete endpoints return. */
 export function toDeletedId(raw: unknown): string | null {
   return isRecord(raw) ? str(raw['id']) : null;
+}
+
+/**
+ * From the `entries` of a list access document.
+ *
+ * Written against the `GET /v1/lists/:id/access` that plan 0012 section 5.6 asks for
+ * and that does not exist yet, which is why it is tolerant about the envelope: the
+ * endpoint may answer the bare array or the `{ entries }` object the PUT accepts, and
+ * both are the same fact. An entry with no membership id is dropped, per the rule at
+ * the top of this file: it names nobody, so no row can be drawn for it.
+ */
+export function toListAccessEntries(
+  raw: unknown
+): readonly ListAccessEntry[] {
+  const items = Array.isArray(raw)
+    ? raw
+    : isRecord(raw)
+      ? raw['entries']
+      : null;
+
+  return mapArray(items, toListAccessEntry);
+}
+
+function toListAccessEntry(raw: unknown): ListAccessEntry | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const membershipId = str(raw['membershipId']);
+  if (membershipId === null) {
+    return null;
+  }
+
+  return {
+    membershipId,
+    role: oneOf(raw['role'], LIST_ROLES, LIST_ROLE_FALLBACK),
+  };
 }

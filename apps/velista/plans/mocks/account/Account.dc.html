@@ -1,0 +1,170 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- CONFIRMED -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REGISTERED &middot; email confirmed</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <div style="display: flex; align-items: center; padding: 12px 12px 0;">
+        <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.5 5.5L8 12l6.5 6.5"/>
+          </svg>
+        </button>
+      </div>
+
+      <div style="flex: 1; padding: 6px 24px 20px; display: flex; flex-direction: column;">
+
+        <h1 style="margin: 0 0 4px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Your account</h1>
+
+        <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+
+        <!-- NAME -->
+        <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+          <span style="flex: 1;">
+            <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+            <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+          </span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9.5 5.5L16 12l-6.5 6.5"/>
+          </svg>
+        </button>
+        <p style="margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: #6f7899;">This is the name other people in your groups see.</p>
+
+        <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 28px 0 2px;">Getting in</div>
+
+        <!-- EMAIL -->
+        <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 12px;">
+          <span style="flex: 1; min-width: 0;">
+            <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Email</span>
+            <span style="display: block; font-size: 16px; color: #f7f8fc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">marta@example.com</span>
+          </span>
+          <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 11.5px; font-weight: 650; background: rgba(52,211,153,0.14); color: #34d399; white-space: nowrap;">Confirmed</span>
+        </div>
+
+        <!-- PASSWORD -->
+        <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+          <span style="flex: 1;">
+            <span style="display: block; font-size: 16px; color: #f7f8fc; margin-bottom: 6px;">Change your password</span>
+            <span style="display: block; font-size: 12.5px; line-height: 1.45; color: #6f7899;">We send a link to marta@example.com. Using it signs you out on your other phones, and keeps you signed in here.</span>
+          </span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9.5 5.5L16 12l-6.5 6.5"/>
+          </svg>
+        </button>
+
+        <!-- SIGN OUT -->
+        <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+          <span style="flex: 1;">
+            <span style="display: block; font-size: 16px; color: #f7f8fc; margin-bottom: 6px;">Sign out</span>
+            <span style="display: block; font-size: 12.5px; line-height: 1.45; color: #6f7899;">Signs you out on this phone. Your other phones stay signed in.</span>
+          </span>
+        </button>
+
+        <div style="flex: 1; min-height: 20px;"></div>
+
+        <!-- DELETE -->
+        <div style="border-top: 1px solid rgba(255,255,255,0.07); padding-top: 8px;">
+          <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; min-height: 44px; padding: 10px 0; font-family: inherit; font-size: 15.5px; font-weight: 600; color: #fb7185; cursor: pointer;">Delete your account</button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- UNCONFIRMED -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REGISTERED &middot; the address was never confirmed</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <div style="display: flex; align-items: center; padding: 12px 12px 0;">
+        <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.5 5.5L8 12l6.5 6.5"/>
+          </svg>
+        </button>
+      </div>
+
+      <div style="flex: 1; padding: 6px 24px 20px; display: flex; flex-direction: column;">
+
+        <h1 style="margin: 0 0 4px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Your account</h1>
+
+        <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+
+        <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+          <span style="flex: 1;">
+            <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+            <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+          </span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9.5 5.5L16 12l-6.5 6.5"/>
+          </svg>
+        </button>
+        <p style="margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: #6f7899;">This is the name other people in your groups see.</p>
+
+        <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 28px 0 2px;">Getting in</div>
+
+        <!-- EMAIL, UNCONFIRMED -->
+        <div style="padding: 15px 0 14px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Email</span>
+              <span style="display: block; font-size: 16px; color: #f7f8fc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">marta@example.com</span>
+            </span>
+            <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 11.5px; font-weight: 650; background: rgba(167,139,250,0.16); color: #a78bfa; white-space: nowrap;">Not confirmed</span>
+          </div>
+          <p style="margin: 12px 0 0; font-size: 13px; line-height: 1.5; color: #98a0bb;">
+            Confirming keeps the account yours. <span style="color: #6f7899;">Did not get it?</span> <a href="#" style="font-weight: 650;">Send it again</a>
+          </p>
+        </div>
+
+        <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+          <span style="flex: 1;">
+            <span style="display: block; font-size: 16px; color: #f7f8fc; margin-bottom: 6px;">Change your password</span>
+            <span style="display: block; font-size: 12.5px; line-height: 1.45; color: #6f7899;">We send a link to marta@example.com. Using it signs you out on your other phones, and keeps you signed in here.</span>
+          </span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9.5 5.5L16 12l-6.5 6.5"/>
+          </svg>
+        </button>
+
+        <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
+          <span style="flex: 1;">
+            <span style="display: block; font-size: 16px; color: #f7f8fc; margin-bottom: 6px;">Sign out</span>
+            <span style="display: block; font-size: 12.5px; line-height: 1.45; color: #6f7899;">Signs you out on this phone. Your other phones stay signed in.</span>
+          </span>
+        </button>
+
+        <div style="flex: 1; min-height: 12px;"></div>
+
+        <div style="border-top: 1px solid rgba(255,255,255,0.07); padding-top: 8px;">
+          <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; min-height: 44px; padding: 10px 0; font-family: inherit; font-size: 15.5px; font-weight: 600; color: #fb7185; cursor: pointer;">Delete your account</button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

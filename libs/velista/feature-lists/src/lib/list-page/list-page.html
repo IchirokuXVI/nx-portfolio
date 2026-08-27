@@ -1,0 +1,126 @@
+<lib-app-bar [signedIn]="true" />
+
+<main class="page">
+  <!--
+    The string moves to the accessible name, so nothing is lost for a screen reader
+    when the label becomes a glyph. In reorder mode this ends the mode rather than
+    leaving the page, which is what makes the mode safe to enter (rule L4).
+  -->
+  <button
+    (click)="back()"
+    [attr.aria-label]="'list.header.back' | rokuT"
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
+  </button>
+
+  <!--
+    One union, read once. Each state is its own `@if` on `current.kind` rather than an
+    `@else if` chain, because a chain does not narrow a discriminated union far enough
+    for the compiler to accept the branches that carry extra fields.
+  -->
+  @let current = state();
+
+  @if (current.kind === 'gone') {
+    <div class="state">
+      <p class="state-body">
+        @if (current.reason === 'deleted') {
+          {{ 'list.gone.deleted' | rokuT }}
+        } @else {
+          {{ 'list.gone.unshared' | rokuT }}
+        }
+      </p>
+
+      <button (click)="leave()" class="state-action" type="button">
+        {{ 'list.header.back' | rokuT }}
+      </button>
+    </div>
+  }
+
+  @if (current.kind === 'error') {
+    <lib-error-state
+      (retry)="retryLoad()"
+      [body]="'home.error.body' | rokuT"
+      [correlationId]="current.correlationId"
+      [title]="current.messageKey | rokuT"
+    />
+  }
+
+  @if (current.kind !== 'error' && current.kind !== 'gone') {
+    <!--
+      The header draws from the cache when the caller arrived from the group page, so
+      the common path shows a named list on the first frame and skeletons only the
+      lines. On a cold arrival the title skeletons too and the lines still load, which
+      is rule L2 and is the whole reason these are two requests.
+    -->
+    @if (header(); as list) {
+      <lib-list-header
+        (openSettings)="openSettings()"
+        (startReorder)="startReorder()"
+        [canReorder]="loaded()?.canReorder ?? false"
+        [hasMenu]="(loaded()?.abilities?.canManage ?? false) && !reordering()"
+        [header]="list"
+      />
+    }
+  }
+
+  @if (current.kind === 'loading') {
+    <lib-row-skeleton [count]="5" labelKey="zone.detail.loading" />
+  }
+
+  @if (current.kind === 'loaded') {
+    <!--
+      Shown once, and only ever to somebody who tapped a row they cannot change. The
+      tick is the whole interaction model here, so silence would read as a broken app
+      and repetition would read as nagging (section 3.2).
+    -->
+    @if (readerNoticeShown() && !current.abilities.canWrite) {
+      <lib-list-notice messageKey="list.readOnly.notice" />
+    }
+
+    @if (current.empty) {
+      <div class="state">
+        <p class="state-title">{{ 'list.empty.title' | rokuT }}</p>
+        <p class="state-body">{{ 'list.empty.body' | rokuT }}</p>
+      </div>
+    } @else {
+      <lib-line-list
+        (act)="act($event)"
+        (dismiss)="dismissNote($event)"
+        (retry)="retry($event)"
+        (ticked)="toggle($event)"
+        [announcement]="announcement()"
+        [lines]="current.lines"
+        [reordering]="reordering()"
+      />
+    }
+
+    @if (reordering()) {
+      <button (click)="endReorder()" class="reorder-done" type="button">
+        {{ 'list.reorder.done' | rokuT }}
+      </button>
+    }
+  }
+</main>
+
+<!--
+  Pinned below the scrolling column, and **absent** rather than disabled for a reader:
+  a disabled text field at the bottom of the screen is an invitation that does not work
+  and costs a tap to find out (section 3.2).
+
+  It is also absent in reorder mode, where adding a line mid drag would insert a row
+  into the order somebody is halfway through rewriting.
+-->
+@if (loaded(); as page) {
+  @if (page.abilities.canWrite && !reordering()) {
+    <lib-line-composer
+      (submitted)="add($event)"
+      [takeFocus]="page.empty"
+      [busy]="composerBusy()"
+    />
+  }
+}
+
+<!-- The four sheets. Routes, not template flags, so the back button dismisses them. -->
+<router-outlet />

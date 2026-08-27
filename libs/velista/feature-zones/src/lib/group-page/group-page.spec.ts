@@ -425,16 +425,20 @@ describe('GroupPage', () => {
       );
     });
 
-    it('records the list screen as unbuilt rather than leaving it dead', async () => {
-      const { fixture } = await render({
+    // This asserted `pendingRoutes` until plan 0012 built the list screen. The route
+    // carries the **zone** as well as the list, which is rule L1 and is not decoration:
+    // there is no `GET /v1/lists/:id`, so a list id alone resolves neither the list's
+    // name, nor its zone, nor the caller's role in it (plan 0012, section 4.1).
+    it('opens the list, by zone and list id', async () => {
+      const { fixture, router } = await render({
         lists: [list('list-1', 'Weekly shop')],
       });
 
       fixture.componentInstance.openList('list-1');
 
-      expect(fixture.componentInstance.pendingRoutes()).toEqual([
-        'lists/list-1',
-      ]);
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        `/velista/en/zones/${ZONE_ID}/lists/list-1`
+      );
     });
   });
 });

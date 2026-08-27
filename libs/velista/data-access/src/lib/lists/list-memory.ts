@@ -1,5 +1,6 @@
 import { inject, Injectable, signal } from '@angular/core';
 import type {
+  ListAccessEntry,
   ListOrder,
   MyZone,
   Page,
@@ -7,7 +8,7 @@ import type {
 } from '@portfolio/velista/models';
 import { TokenStore } from '../auth/token-store';
 import { GatewayError } from '../errors';
-import { SEED_LISTS } from '../zones/static-group-data';
+import { SEED_LIST_ACCESS, SEED_LISTS } from '../zones/static-group-data';
 import { SEED_USER_ID } from '../zones/static-zone-data';
 import { ZoneMemory } from '../zones/zone-memory';
 import type { ListServiceI } from './list-service';
@@ -75,6 +76,119 @@ export class ListMemory implements ListServiceI {
     });
 
     return list;
+  }
+
+  /** Rename. `requireManage`, so the creator, a zone admin, or the owner. */
+  async updateList(
+    listId: string,
+    name: string
+  ): Promise<ShoppingListSummary> {
+    return this._patch(listId, (list) => ({ ...list, name }));
+  }
+
+  async deleteList(listId: string): Promise<string> {
+    const zoneId = this._zoneOf(listId);
+    if (zoneId === null) {
+      throw memoryFailure('not_found', 404);
+    }
+
+    this._byZone.update((current) => {
+      const next = new Map(current);
+      next.set(
+        zoneId,
+        (current.get(zoneId) ?? []).filter((list) => list.id !== listId)
+      );
+      return next;
+    });
+
+    this._access.delete(listId);
+    return listId;
+  }
+
+  /**
+   * Replace the access set.
+   *
+   * Replaces, exactly as the real `PUT` does, so a spec that sends a partial set sees
+   * the revocation rather than a merge. That behaviour is the entire reason the share
+   * sheet waits on a read endpoint (section 5.5), and a fake that quietly merged would
+   * hide the problem the plan was written about.
+   */
+  async setListAccess(
+    listId: string,
+    entries: readonly ListAccessEntry[]
+  ): Promise<ShoppingListSummary> {
+    const zoneId = this._zoneOf(listId);
+    if (zoneId === null) {
+      throw memoryFailure('not_found', 404);
+    }
+
+    this._access.set(listId, [...entries]);
+    return this._patch(listId, (list) => list);
+  }
+
+  /**
+   * Who can read and write this list.
+   *
+   * The endpoint this stands in for does not exist yet, and that is the point: the
+   * share sheet is built and passing against this method today, so when
+   * `LIST_ACCESS_READABLE` flips the sheet is already finished.
+   */
+  async getListAccess(listId: string): Promise<readonly ListAccessEntry[]> {
+    if (this._zoneOf(listId) === null) {
+      throw memoryFailure('not_found', 404);
+    }
+
+    return this._access.get(listId) ?? [];
+  }
+
+  /** Test and development seam: set one list's access without a request. */
+  setAccessFixture(listId: string, entries: readonly ListAccessEntry[]): void {
+    this._access.set(listId, [...entries]);
+  }
+
+  private readonly _access = new Map<string, ListAccessEntry[]>(
+    Object.entries(SEED_LIST_ACCESS).map(([listId, entries]) => [
+      listId,
+      [...entries],
+    ])
+  );
+
+  private _zoneOf(listId: string): string | null {
+    for (const [zoneId, lists] of this._byZone()) {
+      if (lists.some((list) => list.id === listId)) {
+        return zoneId;
+      }
+    }
+
+    return null;
+  }
+
+  private _patch(
+    listId: string,
+    change: (list: ShoppingListSummary) => ShoppingListSummary
+  ): ShoppingListSummary {
+    const zoneId = this._zoneOf(listId);
+    if (zoneId === null) {
+      throw memoryFailure('not_found', 404);
+    }
+
+    const lists = this._byZone().get(zoneId) ?? [];
+    const current = lists.find((list) => list.id === listId);
+    if (current === undefined) {
+      throw memoryFailure('not_found', 404);
+    }
+
+    const updated = change(current);
+    this._byZone.update((all) => {
+      const next = new Map(all);
+      next.set(
+        zoneId,
+        lists.map((list) => (list.id === listId ? updated : list))
+      );
+      return next;
+    });
+
+    return updated;
   }
 
   /** Test and development seam: replace one zone's lists outright. */

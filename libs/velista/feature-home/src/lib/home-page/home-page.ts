@@ -102,7 +102,16 @@ export class HomePage {
       : null;
   });
 
-  /** The list this device last opened, resolved against the zones actually loaded. */
+  /**
+   * The list this device last opened, resolved against the zones actually loaded.
+   *
+   * Stored as `zoneId/listId` since plan 0012, because the list route needs both.
+   * A **stored value changing shape** is worth naming: a device that remembers the old
+   * form holds a bare list id with no separator, which `selectHomeState` reads as "a
+   * list id with no zone" and declines to build a card from. That is a missing card
+   * once, on one device, rather than a card that navigates somewhere broken
+   * (section 4.1).
+   */
   private readonly _resumeListId = signal<string | null>(null);
 
   readonly state = computed<HomeState>(() => {
@@ -397,8 +406,17 @@ export class HomePage {
    */
   readonly pendingRoutes = signal<readonly string[]>([]);
 
-  openList(listId: string): void {
-    this._notYetRouted(`lists/${listId}`);
+  /**
+   * Open a list, from a zone card's row or from the resume card.
+   *
+   * Both ids, because the list route is `zones/:zoneId/lists/:listId` and there is no
+   * `GET /v1/lists/:id` for an id alone to be resolved through (plan 0012, rule L1).
+   */
+  openList(target: { zoneId: string; listId: string }): void {
+    void this._router.navigate(
+      ['..', 'zones', target.zoneId, 'lists', target.listId],
+      { relativeTo: this._route }
+    );
   }
 
   newList(): void {

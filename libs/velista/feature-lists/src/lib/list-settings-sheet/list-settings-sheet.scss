@@ -1,0 +1,31 @@
+@use '../sheet-form';
+
+@include sheet-form.sheet-form;
+
+.section {
+  margin: var(--app-space-6) 0 var(--app-space-2);
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.share {
+  max-block-size: 32vh;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.share-item {
+  display: block;
+  border-block-end: 1px solid var(--app-border-subtle);
+
+  &:last-child {
+    border-block-end: none;
+  }
+}
+
+.spinning {
+  font-size: var(--app-icon-sm);
+}

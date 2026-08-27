@@ -14,8 +14,12 @@ import { provideService } from '@portfolio/shared/data-access';
 import {
   AUTH_SERVICE,
   AuthApi,
+  COMMENT_SERVICE,
+  CommentApi,
   ConnectionRecovery,
   gatewayInterceptor,
+  LINE_SERVICE,
+  LineApi,
   LIST_SERVICE,
   ListApi,
   MEMBERSHIP_SERVICE,
@@ -138,6 +142,11 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // than resolved from its token's default at the root.
   provideService(LIST_SERVICE, ListApi),
   provideService(MEMBERSHIP_SERVICE, MembershipApi),
+
+  // The list screen (plan 0012). Same reasoning a fifth and sixth time, and there is
+  // nothing new about either: both reach this injector's `HttpClient`.
+  provideService(LINE_SERVICE, LineApi),
+  provideService(COMMENT_SERVICE, CommentApi),
 
   // Start the connection listener. Nothing injects it, so without this nothing would
   // ever construct it: it is a listener, not a dependency. It probes the backend while

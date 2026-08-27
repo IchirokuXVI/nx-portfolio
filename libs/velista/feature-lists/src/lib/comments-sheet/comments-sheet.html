@@ -1,0 +1,38 @@
+<lib-sheet-shell (dismiss)="dismiss()" #shell labelledBy="comments-title">
+  <h2 class="title" id="comments-title">
+    {{ 'list.comments.title' | rokuT: { name: lineName() } }}
+  </h2>
+
+  @if (loading()) {
+    <p class="body">{{ 'list.comments.loading' | rokuT }}</p>
+  }
+
+  @if (empty()) {
+    <p class="body">{{ 'list.comments.empty' | rokuT }}</p>
+  }
+
+  @if (comments().length > 0) {
+    <ul class="comments">
+      @for (comment of comments(); track comment.id) {
+        <li class="comment">
+          <lib-comment-row [comment]="comment" />
+        </li>
+      }
+    </ul>
+  }
+
+  @if (errorKey(); as key) {
+    <p class="error" role="alert">{{ key | rokuT }}</p>
+  }
+
+  <!--
+    Offered to a reader too. `comment.add` requires only an approved membership on the
+    zone, not write access on the list, so this is the one control on the whole screen
+    that never depends on being a writer (section 3.2).
+  -->
+  <lib-comment-composer (submitted)="send($event)" [busy]="sending()" />
+
+  <button (click)="shell.requestDismiss()" class="cancel" type="button">
+    {{ 'entry.cancel' | rokuT }}
+  </button>
+</lib-sheet-shell>

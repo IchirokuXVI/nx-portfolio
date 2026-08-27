@@ -336,5 +336,112 @@
       "reference": "ref {{correlationId}}",
       "copyReference": "Copiar referencia"
     }
+  },
+  "list": {
+    "header": {
+      "inGroup": "en {{name}}",
+      "ready": "{{ready}} de {{total}} listos",
+      "notLive": "No se está actualizando ahora",
+      "back": "Volver al grupo"
+    },
+    "add": {
+      "placeholder": "Añade algo",
+      "action": "Añadir",
+      "quantity": "Cuántos",
+      "more": "Uno más",
+      "fewer": "Uno menos"
+    },
+    "empty": {
+      "title": "Todavía no hay nada en esta lista",
+      "body": "Escribe lo primero y todos lo verán"
+    },
+    "readOnly": {
+      "notice": "Puedes ver esta lista, no cambiarla"
+    },
+    "line": {
+      "awaitingApproval": "Esperando aprobación",
+      "rejected": "Rechazado",
+      "notAvailable": "No estaba en la tienda",
+      "approve": "Añadirlo",
+      "reject": "Esto no",
+      "restore": "Devolverlo a la lista",
+      "markNotAvailable": "Marcar como que no estaba",
+      "markPending": "Devolverlo a la lista",
+      "edit": "Cambiar esto",
+      "comments": "Lo que se ha dicho",
+      "delete": "Quitar de la lista",
+      "menuFor": "Más opciones para {{name}}",
+      "overwritten": "{{name}} cambió esto mientras lo editabas",
+      "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
+      "failed": "No se ha guardado. Toca para reintentar",
+      "move": "Mover",
+      "movedTo": "Movido a la posición {{position}} de {{total}}"
+    },
+    "reorder": {
+      "enter": "Ponerlas en orden",
+      "title": "Ponerlas en orden",
+      "body": "Arrastra por el asa. Mientras estés aquí no se puede marcar nada",
+      "done": "Hecho",
+      "started": "Poniéndolas en orden. No se puede marcar nada",
+      "ended": "Has terminado de ponerlas en orden",
+      "moveUp": "Subir {{name}}",
+      "moveDown": "Bajar {{name}}"
+    },
+    "edit": {
+      "title": "Cambiar esta línea",
+      "content": "Qué es",
+      "save": "Guardar"
+    },
+    "confirm": {
+      "deleteLine": {
+        "title": "¿Quitar {{name}} de la lista?",
+        "body": "Se irá para todos, y también lo que se haya dicho de ella",
+        "action": "Quitarla"
+      },
+      "deleteList": {
+        "title": "¿Eliminar {{name}}?",
+        "body": "Se irán todas sus líneas, para todo el grupo. Esto no se puede deshacer",
+        "typeName": "Escribe el nombre de la lista para confirmar",
+        "action": "Eliminar esta lista"
+      }
+    },
+    "comments": {
+      "title": "Sobre {{name}}",
+      "placeholder": "Di algo sobre esto",
+      "send": "Enviar",
+      "empty": "Todavía nadie ha dicho nada",
+      "someone": "Alguien del grupo",
+      "loading": "Cargando lo que se ha dicho"
+    },
+    "settings": {
+      "title": "Ajustes de la lista",
+      "name": "Nombre de la lista",
+      "save": "Guardar",
+      "share": "Quién puede usar esta lista",
+      "delete": "Eliminar esta lista",
+      "accessFor": "Qué puede hacer {{name}} con esta lista",
+      "access": {
+        "none": "Sin acceso",
+        "reader": "Puede verla",
+        "writer": "Puede añadir y marcar",
+        "always": "Siempre tiene acceso",
+        "shortNone": "Nada",
+        "shortReader": "Ver",
+        "shortWriter": "Añadir",
+        "creator": "Empezó esta lista",
+        "staffNote": "Los administradores pueden abrir todas las listas"
+      }
+    },
+    "gone": {
+      "deleted": "Esa lista se ha eliminado",
+      "unshared": "Esa lista ya no está compartida contigo"
+    },
+    "error": {
+      "notAvailable": "Esta lista no está disponible para ti. Puede que se haya eliminado o que ya no esté compartida contigo",
+      "readOnly": "Puedes ver esta lista, no cambiarla",
+      "roleChanged": "Tu papel en este grupo ha cambiado",
+      "tooFast": "Ve un poco más despacio e inténtalo de nuevo",
+      "failed": "No ha funcionado. Inténtalo de nuevo en un momento"
+    }
   }
 }

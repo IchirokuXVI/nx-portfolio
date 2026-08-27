@@ -65,3 +65,19 @@ export function zoneIdOf(route: ActivatedRoute): Signal<string> {
 export function membershipIdOf(route: ActivatedRoute): Signal<string> {
   return paramSignal(route, 'membershipId');
 }
+
+/** The list this screen is about (plan 0012, rule L1). */
+export function listIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'listId');
+}
+
+/**
+ * The line a sheet over the list page is about.
+ *
+ * Walked up the tree like the rest, which matters more here than anywhere: the delete
+ * confirm sits at `lines/:lineId/confirm/delete`, two levels below the route that
+ * declares the parameter.
+ */
+export function lineIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'lineId');
+}

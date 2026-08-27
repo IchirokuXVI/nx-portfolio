@@ -9,6 +9,7 @@ on top of them, and the page built from both.
 | `entry/` | `0008` creating a group and joining with a code | https://claude.ai/code/artifact/eb800fe2-6786-4528-9f43-2d638f6e5acb |
 | `auth/` | `0009` signing in, registering, and the guest upgrade | https://claude.ai/code/artifact/5bc9cb60-284c-4f4a-9fc9-63e6ace1109a |
 | `list/` | `0012` the list page: its lines, and editing them | https://claude.ai/code/artifact/59311ab0-2a5f-4169-a115-af8f56f939be |
+| `account/` | `0015` the account page: your name, your email, and the two ways out | https://claude.ai/code/artifact/724e98ef-0b68-4d62-a19a-3ea29275af36 |
 | `brand/` | The mark itself. Source of truth for both, see below | |
 
 ## How a folder is put together

@@ -8,6 +8,7 @@ export * from './lib/enums';
 export * from './lib/home-view';
 export * from './lib/join-code';
 export * from './lib/limits';
+export * from './lib/list-view';
 export * from './lib/problem';
 export * from './lib/requests';
 export * from './lib/zone-view';

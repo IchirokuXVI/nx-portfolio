@@ -1,4 +1,5 @@
 import type {
+  ListAccessEntry,
   Membership,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
@@ -123,6 +124,40 @@ export const SEED_LISTS: Readonly<
   'zone-parents': [
     list('list-sunday', 'zone-parents', 'Sunday lunch', 'user-mum', 9, 2),
   ],
+};
+
+/**
+ * Who can read and write each seeded list, by membership id.
+ *
+ * There is no `GET /v1/lists/:id/access` yet (plan 0012, section 5.5), so nothing
+ * against a real gateway can produce this and the share sheet is built entirely
+ * against these rows. It is keyed by **membership** and not by user, because that is
+ * what the `PUT` payload names and what the sheet therefore has to send back.
+ *
+ * Note who is missing. Toni is an admin of `zone-flat` and holds **no row on
+ * `list-weekly`**, which is the arrangement the plan's read only state is really
+ * about: `requireRead` lets a zone admin open any list in their zone, and
+ * `requireWrite` has no such bypass, so Toni can open that list and cannot add a line
+ * to it. A fixture that gave every admin write access would make that unreachable, and
+ * it is the case the screen is most likely to get wrong.
+ */
+export const SEED_LIST_ACCESS: Readonly<
+  Record<string, readonly ListAccessEntry[]>
+> = {
+  // Created by the seeded caller, who was given WRITER in the same transaction, plus
+  // one other member who was shared in.
+  'list-weekly': [
+    { membershipId: 'm-flat-me', role: 'WRITER' },
+    { membershipId: 'm-flat-marta', role: 'READER' },
+  ],
+  // Toni's list, shared with the caller as a writer.
+  'list-cleaning': [
+    { membershipId: 'm-flat-toni', role: 'WRITER' },
+    { membershipId: 'm-flat-me', role: 'WRITER' },
+  ],
+  // The caller is a plain member of `zone-parents` and can only read this one, which
+  // is the state section 3.2 draws: every line, no composer, one notice on first tap.
+  'list-sunday': [{ membershipId: 'm-parents-me', role: 'READER' }],
 };
 
 function member(

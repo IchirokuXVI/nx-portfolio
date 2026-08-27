@@ -398,7 +398,9 @@ describe('HomePage', () => {
 
   describe('the resume card', () => {
     it('appears for a list this device remembered', async () => {
-      const storage = new Map([[StorageKeys.lastList, 'l1']]);
+      // `zoneId/listId` since plan 0012: the list route needs both, and there is no
+      // `GET /v1/lists/:id` for an id on its own to be resolved through (rule L1).
+      const storage = new Map([[StorageKeys.lastList, 'z1/l1']]);
 
       const fixture = await render({ storage });
 
@@ -408,6 +410,17 @@ describe('HomePage', () => {
 
     it('stays away when nothing was remembered', async () => {
       const fixture = await render();
+
+      expect(query(fixture, 'lib-resume-list-card')).toBeNull();
+    });
+
+    // A device that last opened a list before plan 0012 holds a bare id. It is read as
+    // a list with no zone and the card does not render, which costs one missing card
+    // on one device rather than a navigation to a route that cannot resolve.
+    it('stays away for a value stored before the zone was part of it', async () => {
+      const storage = new Map([[StorageKeys.lastList, 'l1']]);
+
+      const fixture = await render({ storage });
 
       expect(query(fixture, 'lib-resume-list-card')).toBeNull();
     });
@@ -550,14 +563,20 @@ describe('HomePage', () => {
       expect(fixture.componentInstance.pendingRoutes()).toEqual([]);
     });
 
-    it('still records the list screen, which is the next plan', async () => {
+    // This recorded the list screen as unbuilt until plan 0012 built it. The
+    // navigation carries the **zone** as well as the list: the route is
+    // `zones/:zoneId/lists/:listId` and there is no `GET /v1/lists/:id`, so an id on
+    // its own resolves nothing (plan 0012, rule L1).
+    it('opens a list by zone and list id', async () => {
       const fixture = await render({ zones: [zone({ id: 'z1' })] });
+      const navigate = watchNavigation();
 
-      fixture.componentInstance.openList('list-1');
+      fixture.componentInstance.openList({ zoneId: 'z1', listId: 'list-1' });
 
-      expect(fixture.componentInstance.pendingRoutes()).toEqual([
-        'lists/list-1',
-      ]);
+      expect(navigate).toHaveBeenCalledWith(
+        ['..', 'zones', 'z1', 'lists', 'list-1'],
+        expect.objectContaining({ relativeTo: TestBed.inject(ActivatedRoute) })
+      );
     });
   });
 });

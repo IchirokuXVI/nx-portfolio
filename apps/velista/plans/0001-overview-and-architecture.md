@@ -251,7 +251,7 @@ the interface.
 | `auth/upgrade` | Turn a guest account into a real one, in place | **Guest only** | `0009` |
 | `auth/verify` | Consumes an email confirmation token | Public | `0009` |
 | `auth/callback` | Consumes the token pair the backend redirects back with after Google | Public | `0009`, blocked on the backend |
-| `account` | Profile, upgrade a temporary account, delete | Authenticated | later |
+| `account` | Profile, upgrade a temporary account, delete | Authenticated | `0015` |
 | `settings` | Locale, theme, density | Any | later |
 
 Numbers are assigned when each page plan is written, in build order, so this column is
@@ -390,6 +390,7 @@ A page plan is not ready for development until its mock is approved.
 | `0011` | Seven UI defect fixes found by using the app after `0010` | Written 2026-08-27 |
 | `0012` | The list: its lines, and editing them | Written 2026-08-27, mock awaiting approval |
 | `0013` | velista on its own origin, and the app you can install | Written 2026-08-27 |
+| `0015` | The account: your name, your email, and the two ways out | Written 2026-08-27, mock awaiting approval |
 | later | One plan per remaining page, in build order | Not written |
 
 The route table in section 6.2 is the build order that remains. `0008` and `0009`

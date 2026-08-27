@@ -87,11 +87,29 @@ function selectResume(
     return null;
   }
 
+  // `zoneId/listId` since plan 0012, because the list route needs both and there is no
+  // `GET /v1/lists/:id` to resolve an id on its own (section 4.1). A value with no
+  // separator was written by a build before that change: it is a list id with no zone,
+  // and rather than guessing one, the card simply does not render. That is a missing
+  // card once, on one device, and it is replaced the next time a list is opened.
+  const separator = resumeListId.indexOf('/');
+  if (separator < 0) {
+    return null;
+  }
+
+  const zoneId = resumeListId.slice(0, separator);
+  const listId = resumeListId.slice(separator + 1);
+
   for (const zone of zones) {
-    const list = zone.lists.find((entry) => entry.id === resumeListId);
+    if (zone.id !== zoneId) {
+      continue;
+    }
+
+    const list = zone.lists.find((entry) => entry.id === listId);
     if (list !== undefined) {
       return {
         listId: list.id,
+        zoneId: zone.id,
         listName: list.name,
         zoneName: zone.name,
         lineCount: list.lineCount,
