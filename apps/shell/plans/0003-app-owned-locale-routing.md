@@ -50,14 +50,25 @@ correct regardless of how the mounts happen to be spelled today.
 
 ## The guard contract
 
-One guard, from `rokutranslator-angular`, configured entirely from route `data`. Its three
-cases are the D6 table in plan `0005` and are not restated here. Every app installs the
-same guard on its parent route with its own `appKey`, `supportedLocales` and
-`defaultLocale`, which is exactly the shape `damoclesSword`, `odontogram`, `landingV2` and
-`velista` already use for `localeCorrectionGuard`.
+One guard, from `rokutranslator-angular`, configured entirely from route `data`. Its four
+cases and its worked examples are the D6 tables in plan `0005` and are not restated here.
+Every app installs the same guard on its parent route with its own `appKey`,
+`supportedLocales` and `defaultLocale`, which is exactly the shape `damoclesSword`,
+`odontogram`, `landingV2` and `velista` already use for `localeCorrectionGuard`.
 
-What each app gains over today is the *insert* case, which the shell used to perform on
-their behalf before the remote ever loaded. That is the entire behavioural addition.
+The invariant each app inherits is that **the segment after its mount is a supported,
+canonical locale before anything below it renders**, because the app's own 404 page is
+localized and cannot be drawn before the language is known. The guard therefore never
+declines a URL and never routes to a not found page; it settles a locale and hands the rest
+of the path to normal routing, which may then 404 in a language the visitor can read.
+
+Two behaviours are new for the apps:
+
+- the **insert** case, which the shell used to perform on their behalf before the remote
+  ever loaded
+- the **non canonical** case (`/velista/en-US` becoming `/velista/en`), which nothing does
+  today, because `localeCorrectionGuard` compares the already formatted URL locale and so
+  sees `en-US` and `en` as equal
 
 ## Per app work
 
@@ -176,6 +187,27 @@ locale.
 - `apps/shell/src/app/app.html` stays a bare `<router-outlet>`. The shell drawing no chrome
   is what makes all of this possible and should not change.
 
+### The shell's own 404, which the localized 404 rule reaches
+
+The guard contract says no not found page is drawn before a locale is settled. The shell
+has two `NotFoundComponent` entries, and after this plan the shell has no translator, so
+both need a decision rather than a copy across.
+
+**The wildcard under `:locale` and the top level wildcard are probably both unreachable.**
+`landingV2` mounts at the empty path, so once the mount ordering in the section above is in
+place, any URL matching no app mount falls into `landingV2`, whose guard settles a locale
+and whose own table serves the 404. Confirm that rather than assume it: if it holds, both
+shell wildcards are dead entries and deleting them is cleaner than localizing something
+nothing reaches.
+
+**If either is reachable**, `NotFoundComponent` already has the right shape. It self
+provides a translator with its own `shared/ui` namespace and gates rendering on `loaded$`,
+so it does not depend on an app being mounted. What it does not have is a locale: today it
+inherits the singleton's, and after this plan its instance would start on the browser
+locale with nothing correcting it. Give it the same resolution the guard uses, or accept
+the browser locale explicitly and write down that a 404 outside every app is the one page
+whose language is not URL driven.
+
 ## Commit protocol
 
 Daniel's instruction, and it is the right shape for a migration where each step is
@@ -225,21 +257,25 @@ and do not assume the suite is protecting anything.
 ## Acceptance criteria
 
 1. Every app serves at `/{mount}/{locale}/{rest}`, and `landingV2` at `/{locale}/{rest}`.
-2. Visiting an app with no locale inserts one and keeps the rest of the path, so
-   `/velista/home` lands on `/velista/en/home` and `/velista/random_non_existant` lands on
-   `/velista/en/random_non_existant` rather than losing the segment.
-3. An unsupported but locale shaped segment is replaced rather than kept, so
-   `/velista/zz/home` lands on `/velista/en/home` and `/velista/de` lands on `/velista/en`.
-4. Each app sets its own document title, in the language the page renders in, and the shell
+2. Every worked example in `0005` D6 holds, for a visitor whose resolved locale is `es`:
+   `/velista/home` to `/velista/es/home`, `/velista/zz/qwfp` to `/velista/es/qwfp`,
+   `/velista/de` to `/velista/es`, `/velista/en-US` to `/velista/en`, and `/velista/en`
+   left alone with the app now in English.
+3. A URL carrying a supported locale changes the app's active locale and is persisted, so
+   arriving at `/velista/en` while the app remembers `es` leaves it in English on the next
+   visit.
+4. `/velista/qwfp` renders the app's own 404 **in the resolved locale**. No route below a
+   mount is ever reached, and no not found page is ever drawn, before a locale is settled.
+5. Each app sets its own document title, in the language the page renders in, and the shell
    translates nothing.
-5. Switching language in any app rewrites only that app's locale segment, and leaves any
+6. Switching language in any app rewrites only that app's locale segment, and leaves any
    other app's remembered locale untouched.
-6. Two apps reachable in one session hold independent locales. Set damoclesSword to Spanish
+7. Two apps reachable in one session hold independent locales. Set damoclesSword to Spanish
    and landingV2 to English, navigate between them, and neither changes the other.
-7. No file outside the localization libraries reads or writes `segments[0]` as a locale.
-8. The shell has no translator, no `:locale` route and no locale wrapper.
-9. No app imports across a library boundary by relative path.
-10. `nx run-many --all --target=lint test build` green, and every e2e project that CI runs
+8. No file outside the localization libraries reads or writes `segments[0]` as a locale.
+9. The shell has no translator, no `:locale` route and no locale wrapper.
+10. No app imports across a library boundary by relative path.
+11. `nx run-many --all --target=lint test build` green, and every e2e project that CI runs
     green.
 
 ## Out of scope

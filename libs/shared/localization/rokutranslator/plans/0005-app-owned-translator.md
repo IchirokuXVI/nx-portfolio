@@ -193,33 +193,80 @@ What they need is merging. Today the work is split by *who* runs it:
 
 Under this plan every app needs both behaviours at its own mount, so two guards means
 every app wiring up two. Collapse them into one guard configured from route `data`
-(`appKey`, `supportedLocales`, `defaultLocale`), with three cases:
+(`appKey`, `supportedLocales`, `defaultLocale`).
 
-| Segment after the mount | Action | Example at `/velista`, with `en` resolved |
+#### The invariant
+
+**The segment immediately after the mount is a supported, canonical locale before anything
+below it renders.** That is the whole contract, and it is what every case below serves.
+
+The reason it has to hold *before* rendering rather than during is that **the 404 page is
+localized too**. There is no page an app can show, not even a failure, until it knows what
+language to show it in. So the guard never declines a URL and never routes to a not found
+page itself: it always settles a locale, then hands the rest of the path to normal routing,
+which is free to 404 afterwards.
+
+#### The four cases
+
+| Segment after the mount | Action | Effect on the active locale |
 | --- | --- | --- |
-| A supported locale | proceed | `/velista/es/home` stays |
-| Absent, or not locale shaped | **insert** the resolved locale, keep the segment | `/velista/home` becomes `/velista/en/home` |
-| Locale shaped but unsupported | **replace** the segment | `/velista/zz/home` becomes `/velista/en/home` |
+| Supported and canonical (`es`) | proceed | **adopt it** |
+| Supported, non canonical (`en-US`) | rewrite the segment to its canonical form | **adopt the canonical form** |
+| Locale shaped but unsupported (`zz`, `de`) | **replace** the segment | resolve, as below |
+| Absent, or not locale shaped (`home`, `qwfp`) | **insert** the resolved locale before it, keep it | resolve, as below |
 
-Settled by Daniel, with the worked examples he gave. The resolved locale is `en` in all
-four:
+"Resolve" is unchanged from plan 0002 D5: the app's last used locale from
+`roku-locale:{appKey}`, then the browser locale, then the app's default.
 
-| In | Out | Row |
-| --- | --- | --- |
-| `/velista/zz/home` | `/velista/en/home` | replace |
-| `/velista/home` | `/velista/en/home` | insert |
-| `/velista/random_non_existant` | `/velista/en/random_non_existant` | insert |
-| `/velista/de` (de unsupported) | `/velista/en` | replace |
+**A supported URL locale outranks the stored preference and replaces it.** Arriving at
+`/velista/en` when the app remembers `es` switches the app to English and persists that,
+because a link someone followed is a stronger signal than what they last picked. This is
+already what `resolveDesiredLocale` documents as "a valid URL locale wins"; it is spelled
+out here because the old three row table hid it behind the word "proceed".
 
-The asymmetry between rows two and three is the point, so it is worth stating why rather
-than leaving it to be read off the table. A locale shaped segment is **consumed**, because
-`zz` and `de` are not routes in any app and preserving them guarantees a 404. A segment
-that is not locale shaped is **kept**, because it usually is a real route and the visitor
-asked for it. `/velista/de` therefore lands on the app's front door in English rather than
-on a dead `de` route, which is the fourth example.
+#### Worked examples
 
-Resolution order for "the resolved locale" is unchanged from plan 0002 D5: the app's last
-used locale from `roku-locale:{appKey}`, then the browser locale, then the app's default.
+Daniel's, with supported locales `en` and `es` and the visitor's resolved locale `es`. The
+resolved locale is **not** a constant; every row below that resolves lands on `es` because
+that is this visitor's, and would land on `en` for a visitor whose is `en`.
+
+| In | Out | Case | Locale after |
+| --- | --- | --- | --- |
+| `/velista/es` | unchanged | supported | `es` |
+| `/velista/en` | unchanged | supported | **`en`** |
+| `/velista/en/home` | unchanged | supported | **`en`** |
+| `/velista/en-US` | `/velista/en` | non canonical | **`en`** |
+| `/velista/es-ES` | `/velista/es` | non canonical | `es` |
+| `/velista/zz` | `/velista/es` | unsupported | `es` |
+| `/velista/zz/home` | `/velista/es/home` | unsupported | `es` |
+| `/velista/zz/qwfp` | `/velista/es/qwfp` | unsupported | `es` |
+| `/velista/de` | `/velista/es` | unsupported (passes the regex, is not supported) | `es` |
+| `/velista/home` | `/velista/es/home` | insert | `es` |
+| `/velista/qwfp` | `/velista/es/qwfp` | insert | `es` |
+
+`/velista/qwfp` and `/velista/zz/qwfp` end on a 404, and that is correct rather than a case
+to design around. `qwfp` is not a route, so the app's own not found page renders, in
+Spanish, which is only possible because the guard settled the locale first.
+
+#### Why an unsupported locale is consumed and an unknown word is not
+
+The asymmetry between the last two cases is deliberate and is the one thing a reader is
+likely to get wrong. A locale shaped segment is **consumed**, because it was occupying the
+locale slot and a supported locale now takes that slot. A segment that is not locale shaped
+was never in the locale slot, so the locale is inserted **in front of it** and it keeps its
+place in the path. `zz` and `de` disappear; `home` and `qwfp` survive and are routed to.
+
+#### One behaviour change to be deliberate about
+
+The non canonical case does not happen today. `localeCorrectionGuard` compares
+`RokuTranslator.formatLocale(urlLocale)` against the desired locale, and `formatLocale`
+already strips the region, so `en-US` compares equal to `en` and no redirect fires. The URL
+keeps `en-US`.
+
+The merged guard has to compare against the **raw** segment instead, so that a segment
+which is supported but not canonical is still rewritten. Small change, and it needs its own
+test, because the two locales being equal after formatting is exactly what makes it look
+correct today.
 
 `isLocaleSegment` already distinguishes rows two and three (`^[a-z]{2}(-[A-Z]{2})?$`), so
 no new matching logic is needed.
@@ -394,14 +441,18 @@ What disappears from the workspace:
 4. `RokuLocaleStore` is not `providedIn: 'root'` anywhere, and resolving it from an
    injector with no `provideRokuTranslator` above it is an error rather than a silent
    second instance.
-5. One guard handles all three rows of the D6 table, driven only by route `data`, with a
-   test per row, plus a test for each of the four worked examples under it.
-6. No file outside the localization libraries reads `segments[0]` to find a locale.
-7. No app imports anything by a relative path across a library boundary, and the
+5. One guard handles all four cases of the D6 table, driven only by route `data`, with a
+   test per case and a test per worked example, including the two that end on a 404 and the
+   three that change the active locale.
+6. The guard never routes to a not found page and never declines a URL. Every path below a
+   mount reaches normal routing with a supported canonical locale already settled, so an
+   app's 404 page is always rendered in a known language.
+7. No file outside the localization libraries reads `segments[0]` to find a locale.
+8. No app imports anything by a relative path across a library boundary, and the
    `@nx/enforce-module-boundaries` suppression in velista's `app-providers.ts` is gone.
-8. `composeTranslationLoader` exists once, in `rokutranslator-angular`, and odontogram's
+9. `composeTranslationLoader` exists once, in `rokutranslator-angular`, and odontogram's
    inline dispatcher is gone.
-9. `nx run-many --all --target=test` and `--target=lint` are green.
+10. `nx run-many --all --target=test` and `--target=lint` are green.
 
 ## Out of scope
 
