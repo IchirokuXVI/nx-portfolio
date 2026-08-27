@@ -69,12 +69,28 @@ cannot be set once by hand.
 
    ```sh
    docker compose -f docker/ddns/compose.yml logs -f
-   docker exec nx-portfolio-ddns ddclient -verbose -force -noquiet
+   docker exec nx-portfolio-ddns ddclient -file /config/ddclient.conf \
+     -verbose -force -noquiet
    ```
 
    The forced run reports, per record, whether it updated or found the address
-   already current. Then check the Cloudflare dashboard shows your address on all
-   five names.
+   already current. `-force` matters: ddclient caches the last address it sent, so
+   without it a run that should update a newly added hostname can decide there is
+   nothing to do. `-file` is spelled out because a bare `ddclient` looks for its
+   own default path, not the one this container mounts.
+
+   Then check the Cloudflare dashboard shows your address on all five names.
+
+   **After editing `config/ddclient.conf`, restart the container.** The file is a
+   bind mount so the container already sees the new contents, but the running
+   daemon parsed the old one at startup and holds it in memory:
+
+   ```sh
+   docker compose -f docker/ddns/compose.yml restart
+   ```
+
+   `restart` is enough. `up -d --force-recreate` is only needed if `compose.yml`
+   itself changed, since nothing about the config lives in the image.
 
 4. **Set all five records to DNS only (grey cloud), not proxied.** Proxied records
    would hide your home address, which is genuinely attractive here, but the proxy
