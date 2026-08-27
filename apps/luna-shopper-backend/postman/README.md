@@ -3,7 +3,7 @@
 A smoke and contract suite for the backend running locally. It is meant to answer one
 question quickly: **is the stack actually working?**
 
-- `luna-shopper.postman_collection.json` — 65 requests across 10 folders
+- `luna-shopper.postman_collection.json` — 71 requests across 11 folders
 - `slot-0.postman_environment.json` — points at slot 0 (`gateway :3000`, `Mailpit :8025`)
 
 ## Running it
