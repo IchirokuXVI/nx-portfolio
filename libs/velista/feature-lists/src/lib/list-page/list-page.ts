@@ -181,9 +181,14 @@ export class ListPage {
       // Not live means the room was refused or the connection dropped. What is on
       // screen is correct and will not update itself, which is worth saying: looking
       // live while being stale is worse than looking broken.
+      //
+      // Keyed on the **zone**, not the list. Nothing subscribes per list, and it does
+      // not need to: list and line events are broadcast to the zone room as well
+      // (`jetstream.consumer.ts:181-187`), so the zone subscription is what makes this
+      // screen live and a refused zone is what makes it stale. Asking about a list room
+      // nobody joins could only ever answer no.
       live:
-        this._realtime.connected() &&
-        !this._realtime.refusedRooms().has(`list:${listId}`),
+        this._realtime.connected() && !this._realtime.refusedZones().has(zoneId),
       errorKey: this._errorKey(),
       correlationId: this._correlationId(),
       gone: this._gone(),

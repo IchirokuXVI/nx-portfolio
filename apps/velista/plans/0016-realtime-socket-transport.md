@@ -1,6 +1,4 @@
-# 0002: the realtime socket transport
-
-> **Status: backlog. Not scheduled for development.**
+# 0016: the realtime socket transport
 
 > Prerequisite reading: `0004` sections 6 to 9 (the realtime contract, the stores, and
 > rule D5), and `0010` section 5.3 (rule G3, the staff room).
@@ -123,6 +121,14 @@ is the failure mode of a fake that is more orthogonal than the thing it fakes.
 
 ### 3.3 F2. The production realtime URL points at the gateway (blocking)
 
+> **Resolved before this plan was scheduled, by plan 0014.** The two URLs are no longer
+> literals: `environment.prod.ts` reads `LUNA_GATEWAY_URL` and `LUNA_REALTIME_URL`, which
+> `webpack.prod.config.ts` substitutes at compile time and defaults to `api.` and **`rt.`**
+> respectively. The audit below is kept because it is the reason that split exists, and
+> because the second symptom, `isGateway` and `isRealtime` answering true for one string,
+> is the sort of thing that comes back the moment somebody sets both variables to the same
+> host.
+
 `apps/velista/src/environments/environment.prod.ts:15` sets:
 
 ```ts
@@ -174,6 +180,13 @@ designed one. Section 10 keeps it out of scope and section 5.3 leaves the one se
 makes adding it later a method rather than a redesign.
 
 ### 3.6 F5. Staging builds carry the production API configuration
+
+> **Resolved before this plan was scheduled, by plan 0014**, and not the way this section
+> guessed. There is still one `production` build configuration and no third environment
+> file; what changed is that the hosts come from the build environment rather than from
+> the file, so `docker-ci.yml` builds the staging image with `api.staging.` and
+> `rt.staging.` and `release.yml` builds production with the bare hosts. The severity
+> argument below stands as the record of why it mattered.
 
 There are two environment files and one `production` build configuration
 (`apps/velista/project.json`), and CI distinguishes staging from production only by
@@ -479,10 +492,10 @@ Named so that "the bases" has an edge:
 The first is this plan's to fix. The rest are not, and none of them blocks writing the
 code, only trusting it in a deployed environment.
 
-1. **F2, the production realtime host.** `environment.prod.ts` must point at
-   `https://rt.ichirokuxvi.com`. One line, and the first thing this plan does.
-2. **F5, a staging environment.** A third environment file and a `staging` build
-   configuration, or the socket ships pointing staging clients at production rooms.
+1. ~~**F2, the production realtime host.**~~ Done by plan 0014: the host is
+   `LUNA_REALTIME_URL`, defaulting to `https://rt.ichirokuxvi.com`.
+2. ~~**F5, a staging environment.**~~ Done by plan 0014, by build variables rather than by
+   a third environment file. Staging clients get `rt.staging.ichirokuxvi.com`.
 3. **The realtime service is only correct at one replica, and it runs at two.** Three
    independent instances of the same shape, listed together because they have one fix:
    - **Event fanout.** Both replicas consume the same durable JetStream consumer,
@@ -507,7 +520,8 @@ code, only trusting it in a deployed environment.
 
 ## 12. Build order
 
-1. Fix F2. One line, and everything after it is testable against a real staging backend.
+1. ~~Fix F2.~~ Already done by plan 0014. Nothing to do, and everything after it is
+   testable against a real staging backend.
 2. Change the interface (section 4), update `RealtimeMemory`, `ZoneStore`, `MembersPage`,
    and their specs. **This step is green with no new dependency**, which is what makes it
    reviewable on its own.
@@ -536,3 +550,94 @@ that is wrong today and is currently only survivable because nothing implements 
    connection busy at 25 second intervals by default, which should be well inside any
    sane idle timeout, but this is worth confirming rather than discovering as a reconnect
    every N minutes in production.
+
+## 14. What changed while building it
+
+The plan above is left as written, because a plan that is quietly edited to match what
+was built stops being evidence of anything. This section is the diff.
+
+### 14.1 Two findings had already been fixed
+
+F2 and F5 were both closed by plan 0014, which landed between this plan being written and
+being scheduled. Build order step 1 was a no-op. Sections 3.3, 3.6, 11 and 12 carry the
+correction inline.
+
+### 14.2 The fake shares the registry
+
+Section 5.2 gives `RoomRegistry` to the transport. It is used by `RealtimeMemory` too, and
+that turned out to be the more valuable half. F1 diagnoses the old fake as *more orthogonal
+than the thing it fakes*: it modelled rooms as independent strings, so the one behaviour
+most worth faking, a staff intent that rides on a zone subscription, was the one it could
+not express. Rebuilding the fake on the registry is what makes that structurally
+impossible to reintroduce, and it is why `RealtimeMemory.rooms` is now derived rather than
+maintained. Its `refuse` set is keyed by zone id to match `refusedZones`.
+
+### 14.3 `droppedEvents` and `retry()` are on the interface
+
+Section 5.3 puts `droppedEvents` on `RealtimeSocket`, and section 11 item 4 leaves
+`retry()` implied. Nothing injects the concrete class, by design, so a member on the class
+alone is a member nothing can reach: both are on `RealtimeClientI`, and `RealtimeMemory`
+implements both. Counting a dropped payload in the fake costs three lines and closes the
+same blind spot on the path every spec takes.
+
+### 14.4 The failure counter is not cleared on `connect`
+
+The one real correction to a rule. **R3 says to reset the counter and clear `degraded` on a
+successful `connect`, and that cannot work**, for the reason R2 gives two paragraphs
+earlier: the server answers a bad token by disconnecting inside `handleConnection`, which
+reaches the client as a `connect` immediately followed by a `disconnect` and no error at
+all. Resetting on `connect` therefore resets on the exact failure the counter exists to
+catch, the latch never fires, and the client loops forever against a token that will never
+be accepted, which is precisely the outcome R2 and R3 were written to prevent.
+
+The counter is cleared when a connection **proves** itself instead: any acknowledgement
+from the server, or ten seconds of uptime. The ack is the immediate signal and the timer
+covers the case of a caller who is subscribed to nothing. `realtime-socket.spec.ts` asserts
+the connect-then-drop loop latches.
+
+Two smaller readings of the same rule, both erring towards not looping:
+
+- **A null token from `ensureFreshToken` counts as a failed attempt.** R3 counts only
+  failures "where the token was fresh when sent", which leaves the tokenless case
+  unretried or retried forever. Connecting with no token is a guaranteed drop, so an
+  uncounted retry is the same forever-loop one step earlier.
+- **An acknowledgement that is neither `{ ok: true }` nor `{ ok: false }` is a failure,
+  not a refusal.** R7 and R8 name those two shapes and not a third. Refusals latch and
+  failures are retried, so ambiguity has to fall on the side that recovers. This is rule
+  D4 applied to an ack.
+
+### 14.5 A failed ask schedules the reconcile that retries it
+
+R7 ends "let the next reconcile retry it", and nothing in the design guaranteed there
+would be a next one: reconciles are driven by acquires, releases and connects, so a zone
+whose subscribe timed out would stay quietly not live until the user happened to navigate.
+A single timer, at the ack timeout, is armed when any ask in a reconcile failed.
+
+### 14.6 `onDisconnected()` beside `onConnected()`
+
+Section 5.2 names only `onConnected()`. The joined set has to be cleared when the socket
+goes away as well, not only when the next one arrives: the client is in no rooms from the
+moment the connection drops, and without it a reconnect can emit an unsubscribe for a room
+the previous socket held. Both clear the same per-connection state, and `clear()` drops the
+desire too, which is what signing out means.
+
+### 14.7 Two call sites the audit did not reach
+
+- **`list-page` read `refusedRooms().has('list:{id}')`** for its "live" flag, a room
+  nothing ever joins, so the flag could only ever answer yes. It now reads the zone, which
+  is what actually carries the list's events (`jetstream.consumer.ts:181-187`).
+- **`members-page` held its staff subscription without the zone it was for**, so moving
+  between two groups kept the first group's subscription and never took one on the second.
+  Latent while `ZoneStore` happened to hold a room for every visible group; a real bug on
+  a deep link, where it does not. Fixed with the release.
+
+A third, smaller: a refusal is dropped when the last holder of a zone releases, so a group
+nobody subscribes to cannot go on reading as stale.
+
+### 14.8 Measured, not estimated
+
+Section 9 guesses 35 to 40KB for the client plus `engine.io-client` and asks for a look at
+the budget. Built: **42.8KB raw in one lazily loaded chunk**, initial total 341.96KB
+against the 1mb budget. `main.js` mentions `socket.io-client` only as a module federation
+share-scope key, which is Nx's ordinary treatment of a discovered dependency and is what
+section 9 asks for. Nothing was added to `SINGLETON_LIBRARIES`.

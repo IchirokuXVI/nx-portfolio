@@ -338,7 +338,7 @@ describe('MembersPage', () => {
       const { realtime } = await render({ myRole: 'MEMBER' });
 
       expect(realtime.rooms.has(`zone:${ZONE_ID}:staff`)).toBe(false);
-      expect(realtime.refusedRooms().size).toBe(0);
+      expect(realtime.refusedZones().size).toBe(0);
     });
 
     it('releases it when the screen is destroyed', async () => {

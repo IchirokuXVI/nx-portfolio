@@ -572,10 +572,12 @@ describe('ZoneStore', () => {
     });
   });
 
-  describe('refused rooms', () => {
+  describe('refused zones', () => {
     it('reports a zone whose room the server declined as not live', async () => {
-      // Looking live while being stale is worse than looking broken.
-      realtime.refuse.add('zone:z2');
+      // Looking live while being stale is worse than looking broken. Keyed by zone id:
+      // the client answers zone ids, and a room name would have to be stripped back to
+      // one, which is what used to go wrong for the staff room (plan 0016, F3).
+      realtime.refuse.add('z2');
 
       await store.load();
 
