@@ -40,6 +40,14 @@ That single missing key causes everything a development build implies:
 - No optimization, no minification, source maps included, and the unbundled chunk layout
   that `k8s/README.md` already warns fires hundreds of requests.
 - Budgets are not enforced, so the size regression that would normally fail a build passes.
+- **The service worker never registers.** `app.config.ts` gates it on
+  `enabled: !isDevMode()`, and a development build makes `isDevMode()` true. So the PWA that
+  `apps/velista/plans/0013` just shipped, the installable app and its offline behaviour,
+  would be silently absent from the deployed image, and the `serviceWorker` build option that
+  emits `ngsw-worker.js` and `ngsw.json` does not run in that configuration either. Plan 0013
+  and this one therefore have to land together: the own origin move is what makes velista
+  installable, and this missing build argument is what would have stopped anyone from
+  installing it.
 
 Velista also lacks `forwardEnv: ["BUILDER_TAG"]`, which every other app has. It happens not
 to matter in CI, where the builder is published as `latest` and the Dockerfile defaults to
@@ -184,8 +192,12 @@ someone renames a host, which is the only day it matters.
 
 Answering the broader question, because Velista is not obviously the only one.
 
-- **`shell`** bakes `MFE_BASE_URL`. Already handled, already set per environment in both
-  workflows. Nothing to do.
+- **`shell`** bakes `MFE_BASE_URL` for the three remotes on the micro-frontend host, and
+  `MFE_REMOTE_URLS` for velista, which since `apps/velista/plans/0013` is served from its own
+  origin that no base URL can produce. Both are already set per environment in both workflows,
+  so there is nothing to do here. It is worth noting the direction, though: that pair tells
+  the **shell** where velista is, and says nothing about where velista thinks the backend is.
+  This plan is the other half of that, and the two are independent.
 - **`odontogram`, `damoclesSword`, `landingV2`** are environment agnostic. They call no
   backend and bake no host.
 - **`libs/shared/environments`** exports `BACK_API_DOMAIN: 'https://ichirokuxvi.com'` with
@@ -208,5 +220,8 @@ Answering the broader question, because Velista is not obviously the only one.
 - No occurrence of `process.env` survives in the emitted bundle.
 - The production image is a production build: check that `main.*.js` is minified and that the
   output is not the multi hundred chunk development layout.
+- `ngsw-worker.js` and `ngsw.json` are present in the built output, and the deployed app
+  registers the worker. That is the check that proves plan 0013's PWA actually survives the
+  trip into the image, and it fails today.
 - End to end, the staging Velista reaches `api.staging.ichirokuxvi.com` and is accepted by
   CORS, which is the assertion that ties this plan to `k8s/plans/0002`.

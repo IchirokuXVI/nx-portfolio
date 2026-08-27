@@ -125,23 +125,30 @@ deploy passes `--values values.yaml --values values.production.yaml`.
 
 ## 4. DNS
 
-All eight records currently resolve to `46.62.204.230`, verified at time of writing. Four of
+All ten records currently resolve to `46.62.204.230`, verified at time of writing. Five of
 them have to move to the new staging address once it exists:
 
 | Record | Now | After |
 | --- | --- | --- |
 | `ichirokuxvi.com` | 46.62.204.230 | unchanged |
 | `mfe.ichirokuxvi.com` | 46.62.204.230 | unchanged |
+| `velista.ichirokuxvi.com` | 46.62.204.230 | unchanged |
 | `api.ichirokuxvi.com` | 46.62.204.230 | unchanged |
 | `rt.ichirokuxvi.com` | 46.62.204.230 | unchanged |
 | `staging.ichirokuxvi.com` | 46.62.204.230 | **staging VPS** |
 | `mfe.staging.ichirokuxvi.com` | 46.62.204.230 | **staging VPS** |
+| `velista.staging.ichirokuxvi.com` | 46.62.204.230 | **staging VPS** |
 | `api.staging.ichirokuxvi.com` | 46.62.204.230 | **staging VPS** |
 | `rt.staging.ichirokuxvi.com` | 46.62.204.230 | **staging VPS** |
 
+`velista.*` is there because velista moved to its own origin
+(`apps/velista/plans/0013`) rather than sitting under `mfe.*/velista`. That makes ten
+Gateway listeners and ten certificates on the two clusters combined, which is the number the
+rate limit note below is about.
+
 Move them **before** the first staging deploy. cert-manager requests a certificate per
 listener as soon as the chart applies, and Let's Encrypt rate limits failed validations far
-more tightly than successful issuances. Lower the TTL on the four staging records a day
+more tightly than successful issuances. Lower the TTL on the five staging records a day
 ahead so the cutover is quick.
 
 `values.staging.yaml` sets `ipAddress` to the staging VPS address, which is what the chart's
@@ -205,7 +212,7 @@ The production apps keep their names and are untouched.
 - **It does not separate the two clusters' container images.** Both pull the same
   environment agnostic images from the same GHCR packages. Only the shell and velista bake
   environment specific URLs, and both are handled by build arguments
-  (see `apps/velista/plans/0012`).
+  (see `apps/velista/plans/0014`).
 - **It does not give staging its own OAuth client or SMTP sender.** Those are configuration
   values in `values.staging.yaml`, and with Google sign in becoming optional
   (`apps/luna-shopper-backend/plans/0026`) staging can run with them unset.
