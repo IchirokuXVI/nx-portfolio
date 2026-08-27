@@ -67,18 +67,23 @@
     "build:docker": {
       "executor": "@portfolio/docker:build",
       "options": {
-        "imageName": "nx-portfolio/velista"
+        "imageName": "nx-portfolio/velista",
+        "forwardEnv": ["BUILDER_TAG", "LUNA_GATEWAY_URL", "LUNA_REALTIME_URL"]
       },
       "configurations": {
         "development": {
           "versionTags": ["dev"],
           "buildArgs": {
+            "NODE_ENV": "development",
             "BUILDER_TAG": "dev"
           }
         },
         "production": {
           "pushToRegistry": true,
-          "versionTags": ["latest"]
+          "versionTags": ["latest"],
+          "buildArgs": {
+            "NODE_ENV": "production"
+          }
         }
       },
       "defaultConfiguration": "development"
