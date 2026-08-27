@@ -6,6 +6,7 @@
   <lib-sheet-shell
     (dismiss)="dismiss()"
     [dismissible]="!busy()"
+    #shell
     labelledBy="member-rename-title"
   >
     <h2 class="title" id="member-rename-title">
@@ -45,7 +46,7 @@
     </button>
 
     @if (!busy()) {
-      <button (click)="dismiss()" class="cancel" type="button">
+      <button (click)="shell.requestDismiss()" class="cancel" type="button">
         {{ 'entry.cancel' | rokuT }}
       </button>
     }
