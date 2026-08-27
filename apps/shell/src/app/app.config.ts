@@ -1,31 +1,23 @@
-import {
-  ApplicationConfig,
-  inject,
-  provideAppInitializer,
-  provideZoneChangeDetection,
-} from '@angular/core';
-import { provideRouter, TitleStrategy } from '@angular/router';
-import { ROKU_TRANSLATOR } from '@portfolio/localization/rokutranslator-angular';
+import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
+import { provideRouter } from '@angular/router';
 import { appRoutes } from './app.routes';
-import { RokuTitleStrategy } from './roku-title-strategy';
 
+/**
+ * **The shell has no translator.**
+ *
+ * It used to initialize one here, as an app initializer, and every remote used that
+ * instance. Each app owns its own now (plan 0005), sets its own document title
+ * (D10) and settles its own locale (plan 0003), so there is nothing left for the
+ * shell to hold on anybody's behalf. What remains is a host that mounts remotes and
+ * supplies a router, which is what it should have been.
+ *
+ * `TitleStrategy` is gone with the translator: with no `titleNs` in any route table,
+ * Angular's default strategy sets whatever an app's `localizedTitle` resolver
+ * produced, which is already the finished string.
+ */
 export const appConfig: ApplicationConfig = {
   providers: [
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(appRoutes),
-    // **Transitional, and the whole of what the shell step of plan 0003 deletes.**
-    //
-    // The translator is per app now (plan 0005), so initializing one here is the
-    // shell holding state that belongs to somebody else. It stays only until the
-    // last app owns its locale: an app that has not migrated still resolves the
-    // transitional root `ROKU_TRANSLATOR`, and it has to be initialized by someone.
-    //
-    // Resolved through the token rather than imported, so this line inits exactly
-    // the instance those apps will find.
-    provideAppInitializer(() =>
-      inject(ROKU_TRANSLATOR).init({ lowercaseLocale: true })
-    ),
-    // Localize document titles through RokuTranslator (route title = key).
-    { provide: TitleStrategy, useClass: RokuTitleStrategy },
   ],
 };

@@ -26,14 +26,12 @@ import { ROKU_TRANSLATOR } from './roku-translator-token';
  * portfolio's root injector could not see an app scoped translator provided below it
  * anyway.
  *
- * `providedIn: 'root'` is **transitional and removed by the cleanup step of
- * `apps/shell/plans/0003`**, for the same reason `ROKU_TRANSLATOR` keeps a root
- * factory: an app that has not migrated yet installs its translations on a UI module,
- * below the components that inject this store, so until it moves its providers up the
- * root binding is the only one those components can see. A local provider wins for
- * everything below it, so an app that *has* migrated already gets its own.
+ * It had a root binding while the migration was in flight, so an app still installing
+ * its translations on a UI module could reach one. Every app provides its own now, and
+ * resolving this without `provideRokuTranslator` above it is an error rather than a
+ * silent second store watching a translator nobody else is using.
  */
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class RokuLocaleStore {
   private _router = inject(Router);
   private _translator = inject(ROKU_TRANSLATOR);

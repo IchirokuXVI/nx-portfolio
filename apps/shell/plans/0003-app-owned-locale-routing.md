@@ -2,9 +2,31 @@
 
 ## Implementation status
 
-Not started. Depends on `libs/shared/localization/rokutranslator/plans/0005-app-owned-translator.md`,
-which must land first: this plan is the migration, that one is the contract. Depends on
-`0002` only for convenience, since retiring `landing` removes an app from the list below.
+Done, in the order the commit protocol sets out: the library, then odontogram,
+landingV2, damoclesSword and velista, then the shell and the cleanup.
+
+Three things the implementation learned that this plan did not have:
+
+- **An app's parent route needs a child that always matches** (a trailing `**`). A
+  parent with `children` matches only if one of them matches the remainder, so with
+  `:locale` as the only child a locale-less URL failed to match the branch at all,
+  Angular fell through to the shell, and the guard whose job is to *insert* the
+  missing locale never ran. That catch-all is load bearing, not a 404 nicety.
+- **It cannot be a `redirectTo`.** Angular applies redirects during recognition,
+  before guards, so a `redirectTo` catch-all bounces against its own parent forever
+  without the guard getting a say. damoclesSword, which answers unknown paths by
+  sending them home, needed a component route there instead.
+- **The shell's two wildcards were unreachable**, as suspected, and are gone. Any URL
+  matching no mount falls through to the empty path app, whose guard settles a locale
+  and whose own table serves the 404. `LocaleWrapperComponent` was already gone before
+  this plan started; the shell used a componentless `:locale` route.
+
+The e2e suites are updated to the new URL shape but were not run: neither
+`shell:serve` nor `shell:serve-static` serves a history API fallback, so every client
+route deep link answers 404 locally — `/en`, `/en/odontogram` and `/odontogram/en`
+alike. Measured on the old shape too, so it predates this work. The guard contract is
+covered instead by an `entry.routes.spec.ts` per app, each driving the real Angular
+router through the same nesting the shell builds.
 
 ## Goal
 

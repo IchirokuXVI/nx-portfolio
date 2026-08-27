@@ -3,20 +3,14 @@ import {
   ActivatedRouteSnapshot,
   CanActivateFn,
   Router,
-  RouterStateSnapshot,
   UrlSegment,
   UrlTree,
 } from '@angular/router';
 import { ROKU_TRANSLATOR } from '../roku-translator-token';
 import { writeAppLocale } from './app-locale-storage';
 import { APP_MOUNT_PATH } from './app-mount-path';
-import { isLocaleSegment } from './is-locale-segment';
 import { LocaleRouteData } from './locale-route-data';
 import { resolveLocaleSegments } from './locale-segment';
-import { resolveGuessLocale } from './resolve-locale';
-
-/** Storage key for the app at the site root (mapped from the empty path). */
-const ROOT_APP_KEY = 'landingV2';
 
 /**
  * The one locale guard (plan 0005 D6). Every app installs it on its own parent
@@ -37,11 +31,11 @@ const ROOT_APP_KEY = 'landingV2';
  * pure and carries the tests. All this adds is the two effects: adopt the locale on
  * the app's translator, and persist it.
  *
- * It replaces the pair this workspace used to have, `localeGuard` on the shell's
- * `:locale` route (which *inserted* a locale into a path that had none) and
- * `localeCorrectionGuard` on each app's route (which *replaced* one the app did not
- * support). Under app owned routing every app needs both behaviours at its own
- * mount, so two guards meant every app wiring up two.
+ * It replaces the pair this workspace used to have: one on the shell's `:locale`
+ * route, which *inserted* a locale into a path that had none, and one on each app's
+ * route, which *replaced* one the app did not support. Under app owned routing every
+ * app needs both behaviours at its own mount, so two guards meant every app wiring
+ * up two.
  */
 export const localeGuard: CanActivateFn = async (
   route,
@@ -52,7 +46,11 @@ export const localeGuard: CanActivateFn = async (
   const data = readLocaleRouteData(route);
 
   if (!data.supportedLocales || !data.appKey) {
-    return shellPreloadGuard(router, state);
+    throw new Error(
+      'localeGuard needs `appKey` and `supportedLocales` in the route data of the ' +
+        "route it is installed on, or an ancestor's. Without them it cannot know " +
+        'which locales this app has, and settling a locale is the one thing it does.'
+    );
   }
 
   const tree = router.parseUrl(state.url);
@@ -148,37 +146,4 @@ function readLocaleRouteData(
   }
 
   return merged;
-}
-
-/**
- * **Transitional, deleted with the shell's `:locale` route** (plan 0003, step 6).
- *
- * The shell still owns a locale first route for apps that have not migrated yet, and
- * it installs this guard with no `data` at all: it cannot know any app's locales
- * before that app's bundle has loaded. All it can do is make sure *some* locale is
- * in the path, and let the app's own guard correct it once the app is there.
- *
- * Once every app owns its locale segment, nothing installs this guard without data
- * and this branch goes with the route that needed it.
- */
-function shellPreloadGuard(
-  router: Router,
-  state: RouterStateSnapshot
-): true | UrlTree {
-  const tree = router.parseUrl(state.url);
-  const primary = tree.root.children['primary'];
-  const segments = primary ? primary.segments.map((s) => s.path) : [];
-  const first = segments[0];
-
-  if (first && isLocaleSegment(first)) {
-    return true;
-  }
-
-  const guess = resolveGuessLocale(first ? first : ROOT_APP_KEY);
-
-  const redirect = router.createUrlTree(['/', guess, ...segments]);
-  redirect.queryParams = tree.queryParams;
-  redirect.fragment = tree.fragment;
-
-  return redirect;
 }

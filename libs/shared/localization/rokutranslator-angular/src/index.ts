@@ -25,7 +25,6 @@ export {
 export { APP_MOUNT_PATH } from './lib/locale-routing/app-mount-path';
 export { injectSupportedLocales } from './lib/locale-routing/inject-supported-locales';
 export { isLocaleSegment } from './lib/locale-routing/is-locale-segment';
-export { localeCorrectionGuard } from './lib/locale-routing/locale-correction-guard';
 export { localeGuard } from './lib/locale-routing/locale-guard';
 export type { LocaleRouteData } from './lib/locale-routing/locale-route-data';
 export {
