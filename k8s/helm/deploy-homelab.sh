@@ -109,6 +109,38 @@ for tool in kubectl helm; do
   fi
 done
 
+# ---------------------------------------------------------------------------
+# Is the cluster bootstrapped?
+#
+# The chart renders Gateway, HTTPRoute and BackendTrafficPolicy objects, none of
+# which exist on a stock cluster. Without the bootstrap, `helm upgrade` fails with
+# ten repetitions of `no matches for kind ... ensure CRDs are installed first`,
+# one per routing object, which buries the single fact that matters: the
+# prerequisites were never installed. Checking one CRD is enough to say it in a
+# sentence instead.
+# ---------------------------------------------------------------------------
+if ! kubectl get crd httproutes.gateway.networking.k8s.io >/dev/null 2>&1; then
+  echo "The Gateway API CRDs are not installed on this cluster, so the chart's" >&2
+  echo "routing objects cannot be created. Bootstrap it once, then re-run this:" >&2
+  echo >&2
+  echo "  ./k8s/bootstrap/install.sh --issuer selfsigned --no-metallb" >&2
+  echo "  CLOUDFLARE_API_TOKEN=... ./k8s/bootstrap/cluster-issuer-dns01.sh" >&2
+  echo >&2
+  echo "See section 4 of k8s/README-homelab.md for what those flags mean." >&2
+  exit 1
+fi
+
+# The issuer values.homelab.yaml names. A missing one does not fail the install,
+# it just leaves every Certificate Pending forever with the site serving no valid
+# TLS, which is a slower and more confusing failure than this line.
+if ! kubectl get clusterissuer letsencrypt-dns01 >/dev/null 2>&1; then
+  echo "Warning: ClusterIssuer 'letsencrypt-dns01' does not exist, and" >&2
+  echo "values.homelab.yaml points every certificate at it. The deploy will" >&2
+  echo "succeed and the certificates will stay Pending. Create it with:" >&2
+  echo "  CLOUDFLARE_API_TOKEN=... ./k8s/bootstrap/cluster-issuer-dns01.sh" >&2
+  echo >&2
+fi
+
 PREVIOUS="$(current_version)"
 if [ -n "$PREVIOUS" ]; then
   echo "Currently serving: ${PREVIOUS}"

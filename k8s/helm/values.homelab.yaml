@@ -6,7 +6,7 @@
 # Do not run `helm upgrade` against this file by hand. The version being served
 # is an argument, not a value in this file, exactly as on the VPS: the script
 # passes it as `--set imageTag`, which is what makes rolling between releases one
-# command. See section 5 of k8s/README-homelab.md.
+# command. See section 7 of k8s/README-homelab.md.
 #
 # This is the real production domain running the SAME published images the VPS
 # ran. It is NOT one of the three localhost files: those serve `localhost` with
@@ -146,6 +146,6 @@ lunaShopperBackend:
   # dump needs the S3 credentials in luna-shopper-backend-backup-secret, which
   # this machine has no reason to hold for a few days. Take a manual dump before
   # migrating to netcup rather than trusting that this window produced one; see
-  # section 8 of k8s/README-homelab.md.
+  # section 10 of k8s/README-homelab.md.
   backups:
     enabled: false

@@ -9,14 +9,14 @@ window from becoming an untested build of anything, and makes the move to netcup
 a change of address rather than a change of software.
 
 Read section 1 before doing anything else. It is a go or no go test, and if it
-comes back no, section 8 is where to go instead.
+comes back no, section 9 is where to go instead.
 
 ## 1. First: can this machine be reached at all?
 
 Three things have to be true, and only the first is under your control.
 
 **a. The router forwards 80 and 443 to this machine.** DNS-01 certificates
-(section 4) remove the need for inbound port 80 *for the certificate challenge
+(section 5) remove the need for inbound port 80 *for the certificate challenge
 only*. Visitors still arrive on 443, and the HTTP to HTTPS redirect answers on 80.
 Forward both.
 
@@ -29,7 +29,7 @@ WAN address your router reports against `curl https://ifconfig.me`. If they
 differ, the address on the router is private, you do not own the public one, and
 no amount of port forwarding will help.
 
-If (b) or (c) fails, stop and read section 8.
+If (b) or (c) fails, stop and read section 9.
 
 ## 2. What you are actually deploying
 
@@ -105,7 +105,38 @@ cannot be set once by hand.
 The five records are the apex, `mfe`, `velista`, `api` and `rt`. Staging is
 deliberately not among them.
 
-## 4. Certificates
+## 4. Bootstrap the cluster
+
+**Do this before anything else touches Helm.** The chart renders `Gateway`,
+`HTTPRoute` and `BackendTrafficPolicy` objects, and none of those kinds exist on a
+stock Docker Desktop cluster. Skipping this step fails the install with a wall of
+`no matches for kind "HTTPRoute" in version "gateway.networking.k8s.io/v1"` and
+`ensure CRDs are installed first`, which is what it looks like when the Gateway API
+CRDs, Envoy Gateway and cert-manager are simply not there.
+
+These are deliberately not in the chart (k8s plan 0001): the chart names the
+implementation only through `gateway.className`, so swapping it is this script
+plus one values key.
+
+```sh
+./k8s/bootstrap/install.sh --issuer selfsigned --no-metallb
+```
+
+Both flags matter here:
+
+- `--no-metallb` matches `metallb.enabled: false` in `values.homelab.yaml`. MetalLB
+  exists to advertise a VPS's address on a bare metal network; Docker Desktop
+  publishes LoadBalancer services on localhost by itself, and the pool's address
+  is not routable here anyway.
+- `--issuer selfsigned` installs cert-manager but creates only the `selfsigned`
+  ClusterIssuer. The real issuer for this deploy is the DNS-01 one in section 5,
+  and passing `--issuer letsencrypt` here would additionally register an ACME
+  account for an HTTP-01 issuer that nothing references.
+
+The script prints the GatewayClass name at the end. It should be `eg` with
+`ACCEPTED=True`, which is what `gateway.className` expects.
+
+## 5. Certificates
 
 ```sh
 CLOUDFLARE_API_TOKEN=... ./k8s/bootstrap/cluster-issuer-dns01.sh
@@ -123,7 +154,7 @@ issued. Watch with `kubectl -n nx-portfolio get certificate -w`.
 more tightly than successful ones. If one fails, read
 `kubectl describe certificate <name>` and fix the cause before retrying.
 
-## 5. First deploy
+## 6. First deploy
 
 **Registry credentials.** The VPS authenticated to ghcr.io at the node level. This
 machine has no such credential, and if the packages are private every pod fails as
@@ -154,7 +185,7 @@ gone:
 ./k8s/helm/deploy-homelab.sh 0.1.1
 ```
 
-## 6. Switching versions
+## 7. Switching versions
 
 This is the whole point of pinning to immutable release tags. Rolling forward and
 rolling back are the same command with a different argument:
@@ -185,7 +216,7 @@ summary rather than failing. So the flow is: publish the release, wait for the
 workflow, then `deploy-homelab.sh <version>` here. Staging behaves the same way
 against `SSH_DEPLOY_HOST_STAGING`.
 
-## 7. Keeping development and production apart
+## 8. Keeping development and production apart
 
 The requirement is that the two stacks never share infrastructure or read each
 other's values. They already do not, and it is worth knowing exactly why rather
@@ -228,7 +259,7 @@ One real hazard remains, and nothing in the setup prevents it:
 > restarts and then everything is `ImagePullBackOff` at once. Recover by
 > re-running `deploy-homelab.sh <version>`, which re-pulls.
 
-## 8. If the home line will not work, or you would rather not
+## 9. If the home line will not work, or you would rather not
 
 Two alternatives, both better than fighting a residential connection.
 
@@ -247,7 +278,7 @@ that TLS terminates at Cloudflare rather than at your Gateway, so the chart's ow
 certificate and WebSocket timeout handling stop being exercised, and it is a
 different shape from what netcup will run.
 
-## 9. Tearing this down
+## 10. Tearing this down
 
 When netcup is ready:
 
