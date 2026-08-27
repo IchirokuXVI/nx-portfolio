@@ -19,7 +19,7 @@
 .titles {
   display: flex;
   align-items: baseline;
-  gap: var(--app-space-2);
+  gap: var(--app-space-3);
   min-width: 0;
 }
 
@@ -37,7 +37,7 @@
 .presence {
   display: flex;
   align-items: center;
-  gap: var(--app-space-1);
+  gap: var(--app-space-2);
   flex-shrink: 0;
 }
 

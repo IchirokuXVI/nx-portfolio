@@ -147,7 +147,10 @@
     "loading": "Cargando tus grupos",
     "or": "O",
     "hero": {
-      "headline": "Una lista. Todos al día.",
+      "headline": {
+        "top": "Crea listas.",
+        "bottom": "Comparte y apunta."
+      },
       "body": "Listas de la compra compartidas con la gente con la que compras de verdad. Los cambios aparecen en el móvil de todos al instante."
     },
     "preview": {

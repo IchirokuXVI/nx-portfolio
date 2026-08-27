@@ -15,7 +15,14 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
   imports: [RokuTranslatorPipe],
   template: `
     <div class="hero">
-      <h1 class="headline">{{ 'home.hero.headline' | rokuT }}</h1>
+      <h1 class="headline">
+        <div>
+          {{ 'home.hero.headline.top' | rokuT }}
+        </div>
+        <div>
+          {{ 'home.hero.headline.bottom' | rokuT }}
+        </div>
+      </h1>
       <p class="body">{{ 'home.hero.body' | rokuT }}</p>
     </div>
   `,

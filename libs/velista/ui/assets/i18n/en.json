@@ -147,7 +147,10 @@
     "loading": "Loading your groups",
     "or": "OR",
     "hero": {
-      "headline": "One list. Everyone in sync.",
+      "headline": {
+        "top": "One list.",
+        "bottom": "Everyone in sync."
+      },
       "body": "Shared shopping lists for the people you actually shop with. Changes show up on everyone's phone as they happen."
     },
     "preview": {
