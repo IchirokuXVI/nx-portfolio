@@ -42,6 +42,7 @@ spec:
         app: {{ .name }}-migrate
         app.kubernetes.io/part-of: luna-shopper-backend
     spec:
+      {{- include "charts.imagePullSecrets" $root | nindent 6 }}
       restartPolicy: Never
       securityContext:
         runAsNonRoot: true

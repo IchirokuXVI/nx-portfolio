@@ -35,6 +35,7 @@ spec:
         app: {{ .name }}
         app.kubernetes.io/part-of: luna-shopper-backend
     spec:
+      {{- include "charts.imagePullSecrets" $root | nindent 6 }}
       # Give in flight work time to finish on SIGTERM before SIGKILL.
       terminationGracePeriodSeconds: {{ $ls.terminationGracePeriodSeconds }}
       securityContext:

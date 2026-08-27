@@ -15,6 +15,7 @@ spec:
       labels:
         app: {{ .name }}
     spec:
+      {{- include "charts.imagePullSecrets" $ | nindent 6 }}
       containers:
         - name: {{ .name }}
           image: {{ .image }}:{{ $.Values.imageTag }}

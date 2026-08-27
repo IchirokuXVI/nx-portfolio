@@ -1,60 +1,96 @@
-# Production served from a home machine, for the window between losing the VPS
+# Production served from the home machine, for the window between losing the VPS
 # and the netcup box being provisioned.
 #
-#   helm upgrade --install nx-portfolio k8s/helm --namespace nx-portfolio \
-#     --create-namespace \
-#     --values k8s/helm/values.yaml --values k8s/helm/values.homelab.yaml
+#   ./k8s/helm/deploy-homelab.sh 0.1.1
 #
-# This is the real production domain on locally built images. It is NOT one of
-# the three localhost files: those serve `localhost` or `*.localhost` with self
-# signed certificates and cover only the shell and three remotes, which predates
-# both velista and the Luna Shopper backend. Deploying one of them here would put
-# up a site missing half of what production runs.
+# Do not run `helm upgrade` against this file by hand. The version being served
+# is an argument, not a value in this file, exactly as on the VPS: the script
+# passes it as `--set imageTag`, which is what makes rolling between releases one
+# command. See section 5 of k8s/README-homelab.md.
+#
+# This is the real production domain running the SAME published images the VPS
+# ran. It is NOT one of the three localhost files: those serve `localhost` with
+# self signed certificates, and their `apps` lists predate both velista and the
+# Luna Shopper backend, so all three would put up a site missing half the system.
 #
 # Read k8s/README-homelab.md before the first deploy. Two prerequisites are not
 # in this file and cannot be: ports 80 and 443 have to reach this machine, and
-# the ichirokuxvi.com records have to point at this machine's public address
-# (docker/ddns keeps them there as it changes).
+# the ichirokuxvi.com records have to point at its public address (docker/ddns
+# keeps them there as it changes).
 #
-# Delete this file's deploy the day the netcup box is ready. It is a bridge, not
-# a fourth environment.
+# Delete this file's deploy the day netcup is ready. It is a bridge, not a fourth
+# environment.
 
 baseDomain: ichirokuxvi.com
 
-# Production, because that is what this is serving. Telemetry only, nothing in
+# Production, because that is what this is serving. Telemetry only; nothing in
 # the chart branches on it.
 environment: production
 
 # ---------------------------------------------------------------------------
 # Images.
 #
-# `homelab` rather than `dev` or `latest`, and this is the load bearing line in
-# the file. The three localhost values files deploy `imageTag: dev`, which is the
-# tag `--configuration=development` produces, and that is the same tag your own
-# development work overwrites every time you rebuild. A production deploy reading
-# `dev` would mean any local rebuild silently changes what the public site serves
-# on its next pod restart.
+# Note what is NOT here: no `apps` list and no `lunaShopperBackend.services`
+# list. Both are inherited from values.yaml, which means this deploy pulls
+# ghcr.io/ichirokuxvi/nx-portfolio/* exactly as the VPS did. The images running
+# at home are the identical artefacts CI built, tested and published, so this
+# window is not an untested build of anything, and moving to netcup is a change
+# of address rather than a change of software.
 #
-# So the public deploy gets its own tag, built explicitly:
+# That is also why nothing here is built locally. Your machine's `nx build`
+# output never reaches this deploy, so ordinary development cannot alter what the
+# public site serves.
 #
-#   DOCKER_IMAGE_TAG=homelab npx nx run shell:build:docker --configuration=production
-#
-# and nothing you do on the `dev` tag can reach it.
+# `latest` is only the floor. deploy-homelab.sh overrides it with the release
+# version on every deploy, so a bare `helm upgrade` with this file still deploys
+# something coherent rather than nothing.
 # ---------------------------------------------------------------------------
-imageTag: homelab
+imageTag: latest
 
-# The images are built straight into the local Docker image store, so there is no
-# registry to pull from and Always would fail every pod.
+# IfNotPresent, where both clusters use Always, and the difference is deliberate.
+#
+# Release tags are immutable: 0.1.1 is one set of digests forever, so re-checking
+# the registry on every pod start buys nothing. What it costs is availability. A
+# pod restarting during a network blip, an expired token or a ghcr.io incident
+# cannot start under Always even though the exact image is already on disk. On a
+# domestic line with no out of hours operator, degrading gracefully is worth more
+# than freshness this deploy cannot use.
+#
+# The one thing to remember: re-deploying the SAME version after force pushing a
+# different image to that tag will not pick up the change. Do not do that. Cut a
+# new release instead, which is what the tag being immutable means.
 appImagePullPolicy: IfNotPresent
+
+# ---------------------------------------------------------------------------
+# Registry credentials.
+#
+# The VPS authenticated to ghcr.io at the node level, so neither cluster values
+# file sets this. This machine has no such credential, and if the packages are
+# private every pod fails as ImagePullBackOff with an authentication error that
+# names no fix.
+#
+# Create the Secret once with a GitHub personal access token carrying only
+# read:packages:
+#
+#   kubectl -n nx-portfolio create secret docker-registry ghcr-pull \
+#     --docker-server=ghcr.io \
+#     --docker-username=IchirokuXVI \
+#     --docker-password=<token with read:packages>
+#
+# Harmless to leave set if the packages are public: Kubernetes simply does not
+# need it. Cheaper than diagnosing the failure it prevents.
+# ---------------------------------------------------------------------------
+imagePullSecrets:
+  - ghcr-pull
 
 # ---------------------------------------------------------------------------
 # Routing.
 #
-# Same objects production uses. The only difference from values.production.yaml
-# is that MetalLB is off: it exists to advertise a VPS's public address on a bare
-# metal network, and here the LoadBalancer Service is published on the host by
-# Docker Desktop instead. Leaving it on would ask for an address this machine
-# does not own.
+# The same objects production uses. The only difference from
+# values.production.yaml is that MetalLB is off: it exists to advertise a VPS's
+# public address on a bare metal network, and here the LoadBalancer Service is
+# published on the host by Docker Desktop instead. Leaving it on would ask for an
+# address this machine does not own.
 # ---------------------------------------------------------------------------
 gateway:
   enabled: true
@@ -77,33 +113,6 @@ metallb:
   enabled: false
 
 # ---------------------------------------------------------------------------
-# Apps. Same five production serves, on the same five hostnames, with the local
-# image names (`nx-portfolio/<app>`, the `imageName` in each project.json) rather
-# than the ghcr.io paths, because these are built here and never pushed.
-# ---------------------------------------------------------------------------
-apps:
-  - name: shell
-    image: nx-portfolio/shell
-    hostPrefix: ''
-    path: /
-  - name: odontogram
-    image: nx-portfolio/odontogram
-    hostPrefix: mfe
-    path: /odontogram
-  - name: damoclessword
-    image: nx-portfolio/damoclessword
-    hostPrefix: mfe
-    path: /damoclesSword
-  - name: landingv2
-    image: nx-portfolio/landingv2
-    hostPrefix: mfe
-    path: /landingV2
-  - name: velista
-    image: nx-portfolio/velista
-    hostPrefix: velista
-    path: /
-
-# ---------------------------------------------------------------------------
 # Luna Shopper backend.
 #
 # On, because velista is useless without it: the account pages, the lists and the
@@ -120,7 +129,7 @@ apps:
 lunaShopperBackend:
   enabled: true
 
-  # Same reason as appImagePullPolicy above.
+  # Same reasoning as appImagePullPolicy above.
   imagePullPolicy: IfNotPresent
 
   config:
@@ -133,51 +142,10 @@ lunaShopperBackend:
     mailVerifyBaseUrl: https://ichirokuxvi.com/verify-email
     mailResetBaseUrl: https://ichirokuxvi.com/reset-password
 
-  # The whole services list is restated, not because anything about its shape
-  # changes, but because Helm replaces lists rather than merging them: overriding
-  # only the images is not possible, and inheriting the list from values.yaml
-  # would leave all five pointing at ghcr.io paths carrying a `homelab` tag that
-  # was never pushed there. With imagePullPolicy IfNotPresent that fails as five
-  # ImagePullBackOff pods rather than as anything that names the cause.
-  #
-  # Keep this in step with values.yaml if a service is ever added or renamed.
-  services:
-    - name: luna-shopper-backend-gateway
-      role: gateway
-      image: nx-portfolio/luna-shopper-backend-gateway
-      port: 3000
-      routed: true
-      hostPrefix: api
-      websocket: false
-    - name: luna-shopper-backend-realtime
-      role: realtime
-      image: nx-portfolio/luna-shopper-backend-realtime
-      port: 3001
-      routed: true
-      hostPrefix: rt
-      websocket: true
-    - name: luna-shopper-backend-auth
-      role: auth
-      image: nx-portfolio/luna-shopper-backend-auth
-      port: 3002
-      routed: false
-    - name: luna-shopper-backend-core
-      role: core
-      image: nx-portfolio/luna-shopper-backend-core
-      port: 3003
-      routed: false
-    - name: luna-shopper-backend-catalog
-      role: catalog
-      image: nx-portfolio/luna-shopper-backend-catalog
-      port: 3004
-      routed: false
-
   # Off, and this is the one real regression against the VPS deploy. The nightly
   # dump needs the S3 credentials in luna-shopper-backend-backup-secret, which
   # this machine has no reason to hold for a few days. Take a manual dump before
-  # migrating to netcup rather than trusting that this window produced one:
-  #
-  #   kubectl -n nx-portfolio exec luna-shopper-backend-core-db-0 -- \
-  #     pg_dump -U luna_core luna_core > core.sql
+  # migrating to netcup rather than trusting that this window produced one; see
+  # section 8 of k8s/README-homelab.md.
   backups:
     enabled: false

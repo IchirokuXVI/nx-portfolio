@@ -33,6 +33,15 @@ environment: ''
 # IfNotPresent (or Never) so Kubernetes uses them without a registry.
 appImagePullPolicy: Always
 
+# Registry credentials for the pods that pull application images, as a list of
+# Secret names in this chart's namespace.
+#
+# Empty in both clusters and meant to stay that way: each VPS authenticates to
+# the registry at the node level, so no per pod Secret is involved and nothing
+# below renders. It exists for a cluster CI did not provision, where there is no
+# node level credential to inherit; see values.homelab.yaml.
+imagePullSecrets: []
+
 # The image tag every app and backend service runs.
 #
 # Production pins an immutable release version, written by deploy-release.sh at

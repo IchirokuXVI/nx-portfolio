@@ -362,7 +362,53 @@ jobs:
           docker compose -f k8s/e2e/luna-shopper-backend/compose.yml \
             -f k8s/e2e/luna-shopper-backend/compose.apps.yml down -v --remove-orphans || true
 
+      # Is there a staging host to deploy to?
+      #
+      # Everything above (build, test, e2e, push) stands on its own: the staging
+      # images are in the registry and the suites have run. Only the SSH steps
+      # below need a machine, and staging is the environment most likely not to
+      # have one, since it is disposable by design and gets stood down whenever it
+      # is not earning its keep.
+      #
+      # Without this gate, no staging host turns every push to main red at the
+      # first ssh call, hiding whether the build and the tests actually passed.
+      # With it, the run stays green and says plainly that it did not deploy.
+      #
+      # Secrets are read through `env` rather than interpolated into the script,
+      # which keeps a secret's contents out of the shell command line.
+      - name: Is a staging host configured
+        id: deploy-target
+        env:
+          DEPLOY_HOST: ${{ secrets.SSH_DEPLOY_HOST_STAGING }}
+          DEPLOY_USER: ${{ secrets.SSH_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+        run: |
+          missing=""
+          [ -n "$DEPLOY_HOST" ] || missing="$missing SSH_DEPLOY_HOST_STAGING"
+          [ -n "$DEPLOY_USER" ] || missing="$missing SSH_DEPLOY_USER"
+          [ -n "$DEPLOY_KEY" ]  || missing="$missing SSH_DEPLOY_KEY"
+
+          if [ -z "$missing" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Staging host is configured; the deploy will run."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Staging deploy skipped::Affected images were built, tested and pushed under the staging tag, but no deploy ran because these repository secrets are unset:$missing. Staging is currently stood down; set them to bring it back."
+            {
+              echo "### Staging deploy skipped"
+              echo
+              echo "Affected images were built, tested and pushed under the \`staging\` tag."
+              echo "No host was deployed to because these secrets are unset:"
+              echo
+              for s in $missing; do echo "- \`$s\`"; done
+              echo
+              echo "Staging is disposable by design (k8s plan 0002), so this is expected"
+              echo "while no staging machine exists. Set the secrets to bring it back."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Set up SSH for deployment
+        if: steps.deploy-target.outputs.configured == 'true'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
@@ -375,6 +421,7 @@ jobs:
       # that is currently working.
       # ---------------------------------------------------------------------------
       - name: Sync chart to the staging host
+        if: steps.deploy-target.outputs.configured == 'true'
         run: |
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
             ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }}:/root/k8s/
@@ -382,12 +429,14 @@ jobs:
       # A deploy that cannot possibly work is rejected in seconds here rather than
       # diagnosed in minutes from a crashloop (k8s plan 0006, section 3).
       - name: Preflight the staging Secrets
+        if: steps.deploy-target.outputs.configured == 'true'
         run: |
           ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
             "bash /root/k8s/bootstrap/provision-release.sh --check --env staging"
 
       - name: Deploy staging via Helm
+        if: steps.deploy-target.outputs.configured == 'true'
         run: |
           ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
@@ -458,7 +507,7 @@ jobs:
       # a private GHCR package, a PVC that cannot bind, and a failing readiness
       # probe all announce themselves there and nowhere else.
       - name: Diagnose the failed deploy
-        if: failure()
+        if: failure() && steps.deploy-target.outputs.configured == 'true'
         run: |
           ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \

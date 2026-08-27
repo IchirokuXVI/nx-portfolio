@@ -90,3 +90,26 @@ Call with a dict:
 {{- end -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+imagePullSecrets for the pods that pull application images from the registry.
+
+Empty in both clusters, and it should stay that way: each VPS authenticates to
+the registry at the node level, so nothing per pod is needed there and the two
+cluster deploys render exactly what they rendered before this existed.
+
+It exists for a cluster that CI did not provision. A home machine running Docker
+Desktop against the same published images holds no node level registry
+credential, and a private package then fails as ImagePullBackOff carrying an
+authentication error that names no fix. See values.homelab.yaml.
+
+Call with the root context.
+*/}}
+{{- define "charts.imagePullSecrets" -}}
+{{- with .Values.imagePullSecrets }}
+imagePullSecrets:
+{{- range . }}
+  - name: {{ . }}
+{{- end }}
+{{- end }}
+{{- end }}

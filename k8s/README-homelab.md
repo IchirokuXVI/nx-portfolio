@@ -3,29 +3,33 @@
 A bridge for the window between losing the VPS and netcup provisioning the
 replacement. Everything here is meant to be deleted afterwards.
 
+The images served are the **same published artefacts CI built, tested and pushed**
+for a release. Nothing is built locally for this deploy, which is what keeps the
+window from becoming an untested build of anything, and makes the move to netcup
+a change of address rather than a change of software.
+
 Read section 1 before doing anything else. It is a go or no go test, and if it
-comes back no, the rest of this document does not apply and section 7 is where to
-go instead.
+comes back no, section 8 is where to go instead.
 
 ## 1. First: can this machine be reached at all?
 
 Three things have to be true, and only the first is under your control.
 
-**a. The router forwards 80 and 443 to this machine.** DNS-01 certificates (see
-below) remove the need for inbound port 80 *for the certificate challenge only*.
-Visitors still arrive on 443, and the HTTP to HTTPS redirect still answers on 80.
+**a. The router forwards 80 and 443 to this machine.** DNS-01 certificates
+(section 4) remove the need for inbound port 80 *for the certificate challenge
+only*. Visitors still arrive on 443, and the HTTP to HTTPS redirect answers on 80.
 Forward both.
 
 **b. The ISP does not block them.** Inbound 80 and 443 are blocked on many Spanish
 residential lines. Test from outside your own network, not from a browser on this
-PC, which will short circuit through the router.
+PC, which short circuits through the router.
 
 **c. You are not behind CGNAT.** This is the one that ends the plan. Compare the
-WAN address your router reports against what `curl https://ifconfig.me` returns.
-If they differ, the address on the router is private, you do not own the public
-one, and no amount of port forwarding will help.
+WAN address your router reports against `curl https://ifconfig.me`. If they
+differ, the address on the router is private, you do not own the public one, and
+no amount of port forwarding will help.
 
-If (b) or (c) fails, stop and read section 7.
+If (b) or (c) fails, stop and read section 8.
 
 ## 2. What you are actually deploying
 
@@ -36,8 +40,10 @@ three remotes and nothing else. Deploying one would put up a site missing half o
 production.
 
 `k8s/helm/values.homelab.yaml` is the file for this. It is production's hostnames,
-production's backend config, and production's five certificates, on locally built
-images under their own tag.
+production's backend config and production's five certificates, running the
+published `ghcr.io` images at a pinned release version. It sets no `apps` list and
+no `services` list of its own: both are inherited from `values.yaml`, so the image
+paths are literally production's.
 
 ## 3. Point the domain here
 
@@ -71,18 +77,17 @@ cannot be set once by hand.
    five names.
 
 4. **Set all five records to DNS only (grey cloud), not proxied.** Proxied records
-   would hide your home address, which is genuinely attractive here, but the
-   proxy terminates TLS itself and expects a reachable origin certificate, and
-   `rt.ichirokuxvi.com` carries WebSocket traffic that wants the timeouts the
-   chart sets on its own Gateway. Grey cloud now; revisit only if the address
-   leaking bothers you more than the extra moving parts.
+   would hide your home address, which is genuinely attractive here, but the proxy
+   terminates TLS itself and expects a reachable origin certificate, and
+   `rt.ichirokuxvi.com` carries WebSocket traffic that wants the timeouts the chart
+   sets on its own Gateway. Grey cloud now; revisit only if the address leaking
+   bothers you more than the extra moving parts.
 
-   The consequence is worth stating plainly: your home IP address becomes public
-   information for as long as this runs.
+   The consequence, plainly: your home IP address is public information for as
+   long as this runs.
 
 The five records are the apex, `mfe`, `velista`, `api` and `rt`. Staging is
-deliberately not in the list, and `staging.*` can be left pointing wherever it
-points; nothing will answer.
+deliberately not among them.
 
 ## 4. Certificates
 
@@ -99,100 +104,134 @@ Expect a couple of minutes per name while TXT records propagate. Five names are
 issued. Watch with `kubectl -n nx-portfolio get certificate -w`.
 
 **Do not iterate blindly here.** Let's Encrypt rate limits failed validations far
-more tightly than successful ones. If a certificate fails, read
+more tightly than successful ones. If one fails, read
 `kubectl describe certificate <name>` and fix the cause before retrying.
 
-## 5. Build and deploy
+## 5. First deploy
 
-The backend Secrets come first, once. The script generates its own passwords and
-JWT keypair, so this cluster's credentials are its own and share nothing with the
-VPS that is gone:
+**Registry credentials.** The VPS authenticated to ghcr.io at the node level. This
+machine has no such credential, and if the packages are private every pod fails as
+`ImagePullBackOff` carrying an authentication error that names no fix. Create the
+Secret once, with a GitHub personal access token carrying only `read:packages`:
+
+```sh
+kubectl create namespace nx-portfolio
+kubectl -n nx-portfolio create secret docker-registry ghcr-pull \
+  --docker-server=ghcr.io \
+  --docker-username=IchirokuXVI \
+  --docker-password=<token with read:packages>
+```
+
+Harmless if the packages are public: Kubernetes simply will not need it.
+
+**Backend Secrets.** Once. The script generates its own passwords and JWT keypair,
+so this cluster's credentials are its own and share nothing with the VPS that is
+gone:
 
 ```sh
 ./k8s/bootstrap/provision-release.sh --env production
 ```
 
-Then build every image under the `homelab` tag. Note `--configuration=production`
-and the explicit tag; both matter, and section 6 explains why:
+**Deploy a release.** Nothing is built; the images come from the registry:
 
 ```sh
-DOCKER_IMAGE_TAG=homelab MFE_BASE_URL=https://mfe.ichirokuxvi.com \
-  npx nx run shell:build:docker --configuration=production
-
-for app in odontogram damoclesSword landingV2 velista; do
-  DOCKER_IMAGE_TAG=homelab npx nx run $app:build:docker --configuration=production
-done
-
-for svc in gateway realtime auth core catalog; do
-  DOCKER_IMAGE_TAG=homelab \
-    npx nx run luna-shopper-backend-$svc:build:docker --configuration=production
-done
+./k8s/helm/deploy-homelab.sh 0.1.1
 ```
 
-The shell bakes `MFE_BASE_URL` in at build time, so it has to be the public
-micro-frontend host and not a localhost variant, or the deployed shell will try
-to load its remotes from your machine's loopback in the visitor's browser.
+## 6. Switching versions
 
-Deploy:
+This is the whole point of pinning to immutable release tags. Rolling forward and
+rolling back are the same command with a different argument:
 
 ```sh
-helm upgrade --install nx-portfolio k8s/helm --namespace nx-portfolio \
-  --create-namespace \
-  --values k8s/helm/values.yaml --values k8s/helm/values.homelab.yaml
+./k8s/helm/deploy-homelab.sh --current   # what is being served, per workload
+./k8s/helm/deploy-homelab.sh --list      # versions actually published
+./k8s/helm/deploy-homelab.sh 0.1.0       # roll back
+./k8s/helm/deploy-homelab.sh 0.1.1       # roll forward again
 ```
 
-## 6. Keeping development and production apart
+`--current` reads the live Deployment rather than the Helm release, because those
+two can disagree: a failed upgrade leaves the release recording a version no pod
+ever ran. `--list` asks the registry rather than listing git tags, because a
+rollback is only possible to a version whose images still exist.
 
-This is the part that bites, because both live in one Docker daemon on one
-machine. Three separations, and all three are already in place:
+> **Rolling the application back does not roll the database back.** Migrations are
+> expand and contract, which is exactly what makes going backwards safe: the older
+> code meets a newer but backward compatible schema and keeps working. What it
+> does not do is undo anything. There is no down migration, and 0.1.0's
+> `migrate.js` will not remove what 0.1.1's added. If a release did something
+> destructive to data, restore from a dump instead (`k8s/helm/restore-database.sh`).
 
-**Images are separated by tag.** Development builds produce `:dev`
-(`--configuration=development`). The public deploy reads `:homelab` and nothing
-else. Your ordinary `nx build`, `nx serve` and e2e work never touches `homelab`,
-so no rebuild you do can change what the public site serves. The rule is simply:
-never type `DOCKER_IMAGE_TAG=homelab` except when you actually intend to ship.
+**Where new versions come from.** Publishing a GitHub Release still builds, tests
+and pushes every image exactly as before. Only the SSH deploy is skipped while no
+`SSH_DEPLOY_HOST` secret exists, and the run says so in a notice and in the job
+summary rather than failing. So the flow is: publish the release, wait for the
+workflow, then `deploy-homelab.sh <version>` here. Staging behaves the same way
+against `SSH_DEPLOY_HOST_STAGING`.
 
-**Containers are separated by compose project.** `luna-shopper-backend` is slot 0,
-your own development stack. `luna-slot<N>` are the parallel worktree stacks. The
-DNS updater is `nx-portfolio-ddns`. The public deploy is not a compose project at
-all: it is Kubernetes objects in the `nx-portfolio` namespace. A
-`docker compose down` in any worktree cannot reach any of the others.
+## 7. Keeping development and production apart
 
-**Ports do not overlap.** The public deploy takes host 80 and 443 through the
-Envoy LoadBalancer that Docker Desktop publishes. Slot 0 uses 3000 to 3003, 5432,
-5433, 4222 and 1025/8025. `nx serve` uses 4200 and up. Nothing collides.
+The requirement is that the two stacks never share infrastructure or read each
+other's values. They already do not, and it is worth knowing exactly why rather
+than trusting it.
+
+| | Development | Production (here) |
+| --- | --- | --- |
+| Runtime | Docker Compose | Docker Desktop Kubernetes |
+| Project / namespace | `luna-shopper-backend` (slot 0) | namespace `nx-portfolio` |
+| Postgres, NATS, Redis | containers publishing host ports | StatefulSets on **ClusterIP, no host ports** |
+| Storage | compose named volumes | Kubernetes PVCs (local-path) |
+| Config source | `.env` files generated by `luna-slot` | ConfigMap + six Secrets |
+| Images | built locally, `:dev` | pulled from ghcr.io, `:<version>` |
+| Host ports | 5432/5433/5434, 4222, 6379, 1025, 8025, 9090, 3010, 16686 | **80 and 443 only**, via Envoy |
+
+The infrastructure is therefore already duplicated: two Postgres sets, two NATS,
+two Redis, none of them shared. Production's databases publish no host port at
+all, so nothing on this machine can reach them by accident, and the services find
+each other by in-cluster DNS (`luna-shopper-backend-auth-db`) which resolves
+nowhere else. A dev service pointed at `localhost:5432` cannot reach production's
+Postgres even deliberately.
+
+**If you want dev off the default ports as well**, the slot mechanism already does
+it, no new machinery:
+
+```powershell
+./k8s/e2e/luna-shopper-backend/luna-slot.ps1 -Slot 1
+```
+
+That moves every dev port by +100 (Postgres 5532/5533/5534, NATS 4322, Redis 6479,
+services 3100 to 3104), renames the compose project to `luna-slot1`, and rewrites
+the `.env` files to match. Production is untouched because it never used those
+ports.
 
 One real hazard remains, and nothing in the setup prevents it:
 
-> **`docker system prune -a` will delete the `homelab` images and take the public
-> site down** at the next pod restart, because `imagePullPolicy: IfNotPresent`
-> has no registry to fall back on. The pods stay up on already running
-> containers, so it looks fine until something restarts and then everything is
-> ImagePullBackOff at once. Use `docker image prune` with a filter, or rebuild
-> after pruning.
+> **`docker system prune -a` deletes the pulled release images** and the site goes
+> down at the next pod restart, because `imagePullPolicy: IfNotPresent` will not
+> re-fetch them on its own. Running pods survive, so it looks fine until something
+> restarts and then everything is `ImagePullBackOff` at once. Recover by
+> re-running `deploy-homelab.sh <version>`, which re-pulls.
 
-## 7. If the home line will not work, or you would rather not
+## 8. If the home line will not work, or you would rather not
 
 Two alternatives, both better than fighting a residential connection.
 
 **A cheap VPS for four days.** Providers with hourly billing (netcup's own G12
 line, Scaleway, Vultr, DigitalOcean) will rent something adequate for roughly one
-or two euros over a long weekend. It has a static address, open ports, and it is
-the same shape as every deploy you have done before: point DNS at it, run
-`install.sh --k3s`, `provision-release.sh`, `helm upgrade` with
-`values.production.yaml`. No dynamic DNS, no port forwarding, no CGNAT question,
-and your PC stays yours. This is the cheapest way out of the problem and it is
-what to do if section 1 came back no.
+or two euros over a long weekend. Static address, open ports, and the same shape
+as every deploy you have done: point DNS at it, `install.sh --k3s`,
+`provision-release.sh`, `deploy-release.sh <version>`. No dynamic DNS, no port
+forwarding, no CGNAT question, and your PC stays yours. This is the cheapest way
+out and it is what to do if section 1 came back no.
 
-**Cloudflare Tunnel.** `cloudflared` runs on this machine and dials out to
-Cloudflare, so there is no inbound connection to block and CGNAT stops mattering.
-It also removes the need for ddclient entirely, since the tunnel is addressed by
-name rather than by IP. The cost is that TLS terminates at Cloudflare rather than
-at your Gateway, which means the chart's own certificate and WebSocket timeout
-handling stop being exercised, and it is a different shape from what netcup will
-run. Worth it if section 1 fails and you would rather not rent a box.
+**Cloudflare Tunnel.** `cloudflared` dials out from this machine, so there is no
+inbound connection to block and CGNAT stops mattering. It also removes ddclient
+entirely, since the tunnel is addressed by name rather than by IP. The cost is
+that TLS terminates at Cloudflare rather than at your Gateway, so the chart's own
+certificate and WebSocket timeout handling stop being exercised, and it is a
+different shape from what netcup will run.
 
-## 8. Tearing this down
+## 9. Tearing this down
 
 When netcup is ready:
 
@@ -203,12 +242,17 @@ When netcup is ready:
      pg_dump -U luna_core luna_core > core.sql
    ```
    Repeat for `auth` and `catalog`, then restore with `k8s/helm/restore-database.sh`.
-2. Stand up netcup with `install.sh --k3s`, `provision-release.sh --env production`
-   and `values.production.yaml`, and set `ipAddress` in that file to the new
-   address.
-3. `docker compose -f docker/ddns/compose.yml down`, then set the five records to
+2. Set `SSH_DEPLOY_HOST`, `SSH_DEPLOY_USER` and `SSH_DEPLOY_KEY` in the repository
+   secrets. The release workflow starts deploying again on its own; nothing in it
+   needs editing back.
+3. Stand up netcup with `install.sh --k3s`, `provision-release.sh --env production`
+   and `values.production.yaml`, setting `ipAddress` to the new address.
+4. `docker compose -f docker/ddns/compose.yml down`, then point the five records at
    the netcup address by hand. Do this last: while ddclient runs it will happily
    put your home address back.
-4. Delete `values.homelab.yaml`, `cluster-issuer-dns01.sh`, `docker/ddns/` and
-   this file. They describe a situation that no longer exists, and a stale runbook
-   for serving production from a laptop is worse than none.
+5. Delete `values.homelab.yaml`, `deploy-homelab.sh`, `cluster-issuer-dns01.sh`,
+   `docker/ddns/` and this file. They describe a situation that no longer exists,
+   and a stale runbook for serving production from a desktop is worse than none.
+
+The `imagePullSecrets` support added to the chart can stay: it renders nothing
+when the list is empty, which is what both cluster values files leave it as.

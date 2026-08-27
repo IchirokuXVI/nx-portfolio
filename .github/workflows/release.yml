@@ -142,7 +142,54 @@ jobs:
           apps_tobuild=$(npx nx show projects --type "app" --with-target build:docker | paste -sd, -)
           npx nx run-many -t build:docker --configuration production --projects $apps_tobuild
 
+      # Is there anywhere to deploy to?
+      #
+      # Everything above this point (build, test, push) is worth doing whether or
+      # not a host exists: the release images land in the registry and can be
+      # deployed later, or pulled by a machine that is not this pipeline's to know
+      # about. Only the SSH steps below need a VPS.
+      #
+      # Without this gate a missing host fails the release at the first ssh call,
+      # which marks a release red that in fact published every image correctly.
+      # With it, the release succeeds and says plainly that it did not deploy.
+      #
+      # Secrets are read through `env` rather than interpolated into the script,
+      # which keeps a secret's contents out of the shell command line.
+      - name: Is a production host configured
+        id: deploy-target
+        env:
+          DEPLOY_HOST: ${{ secrets.SSH_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.SSH_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+        run: |
+          missing=""
+          [ -n "$DEPLOY_HOST" ] || missing="$missing SSH_DEPLOY_HOST"
+          [ -n "$DEPLOY_USER" ] || missing="$missing SSH_DEPLOY_USER"
+          [ -n "$DEPLOY_KEY" ]  || missing="$missing SSH_DEPLOY_KEY"
+
+          if [ -z "$missing" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Production host is configured; the deploy will run."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Production deploy skipped::Images for ${{ steps.version.outputs.version }} were built, tested and pushed to the registry, but no deploy ran because these repository secrets are unset:$missing. Set them to deploy automatically, or deploy by hand with k8s/helm/deploy-release.sh (VPS) or k8s/helm/deploy-homelab.sh (home machine)."
+            {
+              echo "### Production deploy skipped"
+              echo
+              echo "Release **${{ steps.version.outputs.version }}** was built, tested and pushed."
+              echo "No host was deployed to because these secrets are unset:"
+              echo
+              for s in $missing; do echo "- \`$s\`"; done
+              echo
+              echo "Deploy it by hand with:"
+              echo '```sh'
+              echo "./k8s/helm/deploy-homelab.sh ${{ steps.version.outputs.version }}"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Set up SSH for deployment
+        if: steps.deploy-target.outputs.configured == 'true'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
@@ -152,6 +199,7 @@ jobs:
       # rather than renaming both is what keeps this workflow — the one that is
       # currently working — untouched by the split.
       - name: Sync chart to the production host
+        if: steps.deploy-target.outputs.configured == 'true'
         run: |
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
             ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
@@ -159,12 +207,14 @@ jobs:
       # Reject a deploy that cannot possibly work in seconds, rather than
       # diagnosing it in minutes from a crashloop (k8s plan 0006, section 3).
       - name: Preflight the production Secrets
+        if: steps.deploy-target.outputs.configured == 'true'
         run: |
           ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
             "bash /root/k8s/bootstrap/provision-release.sh --check --env production"
 
       - name: Deploy production release
+        if: steps.deploy-target.outputs.configured == 'true'
         run: |
           ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
@@ -174,7 +224,7 @@ jobs:
       # ImagePullBackOff, a PVC that cannot bind, and a failing readiness probe all
       # announce themselves there and nowhere else (k8s plan 0003, section 3.4).
       - name: Diagnose the failed release
-        if: failure()
+        if: failure() && steps.deploy-target.outputs.configured == 'true'
         run: |
           ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
