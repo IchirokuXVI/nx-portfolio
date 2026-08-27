@@ -1,0 +1,3507 @@
+{
+  "info": {
+    "name": "Luna Shopper — local (slot 0)",
+    "description": "Smoke and contract suite for the Luna Shopper backend running locally.\n\nRun the folders in order: the run builds one identity and one zone and threads them through lists, lines and the catalog, then deletes what it made.\n\nPoint `baseUrl` at the gateway for your slot (slot 0 is http://localhost:3000) and `mailpitUrl` at Mailpit (slot 0 is http://localhost:8025).\n\nTwo assertions run against every single request: nothing may return 5xx, and nothing may take longer than 10s. A 5xx anywhere means a service behind the gateway is down or throwing, so check folder 00 first.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Fall back to the slot 0 gateway if no environment is selected.",
+          "if (!pm.variables.get('baseUrl')) {",
+          "  pm.collectionVariables.set('baseUrl', 'http://localhost:3000');",
+          "}",
+          "if (!pm.variables.get('mailpitUrl')) {",
+          "  pm.collectionVariables.set('mailpitUrl', 'http://localhost:8025');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Applies to every request in the collection.",
+          "pm.test('no server error', function () {",
+          "  pm.expect(pm.response.code, 'the service behind the gateway returned ' + pm.response.code).to.be.below(500);",
+          "});",
+          "pm.test('responded within 10s', function () {",
+          "  pm.expect(pm.response.responseTime).to.be.below(10000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "mailpitUrl",
+      "value": "http://localhost:8025"
+    },
+    {
+      "key": "catalogAdmin",
+      "value": "false"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "username",
+      "value": ""
+    },
+    {
+      "key": "runId",
+      "value": ""
+    },
+    {
+      "key": "runEmail",
+      "value": ""
+    },
+    {
+      "key": "runPassword",
+      "value": ""
+    },
+    {
+      "key": "guestZoneId",
+      "value": ""
+    },
+    {
+      "key": "guestJoinCode",
+      "value": ""
+    },
+    {
+      "key": "zoneId",
+      "value": ""
+    },
+    {
+      "key": "joinCode",
+      "value": ""
+    },
+    {
+      "key": "membershipId",
+      "value": ""
+    },
+    {
+      "key": "listId",
+      "value": ""
+    },
+    {
+      "key": "lineId",
+      "value": ""
+    },
+    {
+      "key": "lineId2",
+      "value": ""
+    },
+    {
+      "key": "lineVersion",
+      "value": ""
+    },
+    {
+      "key": "itemId",
+      "value": ""
+    },
+    {
+      "key": "supermarketId",
+      "value": ""
+    },
+    {
+      "key": "locationId",
+      "value": ""
+    },
+    {
+      "key": "supermarketItemId",
+      "value": ""
+    },
+    {
+      "key": "mailId",
+      "value": ""
+    },
+    {
+      "key": "verifyToken",
+      "value": ""
+    },
+    {
+      "key": "previousRefreshToken",
+      "value": ""
+    },
+    {
+      "key": "previousJoinCode",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00 · Health",
+      "item": [
+        {
+          "name": "Platform stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "stats"
+              ]
+            },
+            "description": "Unauthenticated liveness probe. The gateway fans out to core and auth, and the contract says a block comes back null when that service did not answer, so this one call tells you which services are actually up.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "pm.test('core answered (core service is up)', function () {",
+                  "  pm.expect(b.core, 'core block is null, so core did not answer').to.not.be.null;",
+                  "  pm.expect(b.core.zones).to.be.a('number');",
+                  "});",
+                  "pm.test('auth answered (auth service is up)', function () {",
+                  "  pm.expect(b.identity, 'identity block is null, so auth did not answer').to.not.be.null;",
+                  "});",
+                  "pm.test('measuredAt is a timestamp', function () {",
+                  "  pm.expect(Date.parse(b.measuredAt)).to.be.a('number').and.not.NaN;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Swagger UI is served",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/docs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "docs"
+              ]
+            },
+            "description": "The gateway mounts Swagger at /docs. A 200 here proves the HTTP layer is up even when the services behind it are not.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Start here. If the core or auth assertion fails, everything downstream fails too and this folder is the reason why."
+    },
+    {
+      "name": "01 · Guest flow",
+      "item": [
+        {
+          "name": "Create a zone anonymously",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones"
+              ]
+            },
+            "description": "Sent with no Authorization header. The backend mints a TEMPORARY user and returns its tokens next to the zone, which is how the app onboards someone who has not signed up yet.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman guest zone\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "pm.test('a guest identity was minted', function () {",
+                  "  pm.expect(b.tokens, 'tokens').to.be.an('object');",
+                  "  pm.expect(b.tokens.kind).to.eql('TEMPORARY');",
+                  "});",
+                  "pm.test('the zone came back with a join code', function () {",
+                  "  pm.expect(b.data.id).to.be.a('string');",
+                  "  pm.expect(b.data.joinCode).to.be.a('string').and.not.empty;",
+                  "  pm.expect(b.data.status).to.eql('ACTIVE');",
+                  "});",
+                  "pm.collectionVariables.set('guestZoneId', b.data.id);",
+                  "pm.collectionVariables.set('guestJoinCode', b.data.joinCode);",
+                  "const _t = pm.response.json().tokens;",
+                  "if (_t && _t.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', _t.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', _t.refreshToken);",
+                  "  pm.collectionVariables.set('userId', _t.userId);",
+                  "  pm.collectionVariables.set('username', _t.username);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Look the zone up by join code",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/by-code/{{guestJoinCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "by-code",
+                "{{guestJoinCode}}"
+              ]
+            },
+            "description": "The public preview shown before someone commits to joining. It is deliberately thin: name and member count only, so an unauthenticated caller holding a code cannot read the zone id or anything else about it.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "pm.test('returns the zone name and member count', function () {",
+                  "  pm.expect(b.name).to.eql('Postman guest zone');",
+                  "  pm.expect(b.memberCount).to.be.at.least(1);",
+                  "});",
+                  "pm.test('the preview leaks nothing else', function () {",
+                  "  pm.expect(b, 'the zone id must not be exposed here').to.not.have.property('id');",
+                  "  pm.expect(Object.keys(b).sort()).to.eql(['memberCount', 'name']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I (guest)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/account/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "account",
+                "me"
+              ]
+            },
+            "description": "The guest token is accepted on authenticated routes."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "pm.test('caller is the temporary user', function () {",
+                  "  pm.expect(b.kind).to.eql('TEMPORARY');",
+                  "  pm.expect(b.userId).to.eql(pm.collectionVariables.get('userId'));",
+                  "});",
+                  "pm.test('a guest has no verified email', function () {",
+                  "  pm.expect(b.emailVerified).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete the guest zone",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{guestZoneId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{guestZoneId}}"
+              ]
+            },
+            "description": "Keeps this folder self-cleaning: the guest owns the zone, so it can remove it before the run switches to a registered identity."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "The anonymous onboarding path: create a zone with no account, get tokens back, clean up."
+    },
+    {
+      "name": "02 · Registration & login",
+      "item": [
+        {
+          "name": "Register a fresh account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Mints the identity the rest of the run uses. The pre-request script generates a unique address every time, so a repeat run never collides with the last one.\n\nRegistration is throttled to 3 per minute. If that bucket is empty the run stops here rather than cascading a missing token through every later folder.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{runEmail}}\",\n  \"password\": \"{{runPassword}}\",\n  \"displayName\": \"Postman Runner\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A new identity per run, so the suite can be re-run without hitting 409.",
+                  "const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);",
+                  "pm.collectionVariables.set('runEmail', 'postman+' + id + '@luna.test');",
+                  "pm.collectionVariables.set('runPassword', 'Postman123!');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 429) {",
+                  "  pm.test('RATE LIMITED: registration allows 3/min. Wait a minute and re-run.', function () {",
+                  "    throw new Error('Registration returned 429. Everything after this needs the token it mints, so the run is stopping here.');",
+                  "  });",
+                  "  postman.setNextRequest(null);",
+                  "} else {",
+                  "  pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "  const b = pm.response.json();",
+                  "  pm.test('a registered identity came back', function () {",
+                  "    pm.expect(b.kind).to.eql('REGISTERED');",
+                  "    pm.expect(b.accessToken).to.be.a('string').and.not.empty;",
+                  "    pm.expect(b.refreshToken).to.be.a('string').and.not.empty;",
+                  "  });",
+                  "  const _t = pm.response.json();",
+                  "  if (_t && _t.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', _t.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', _t.refreshToken);",
+                  "    pm.collectionVariables.set('userId', _t.userId);",
+                  "    pm.collectionVariables.set('username', _t.username);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I (registered)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/account/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "account",
+                "me"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "pm.test('profile matches what we registered', function () {",
+                  "  pm.expect(b.email).to.eql(pm.collectionVariables.get('runEmail'));",
+                  "  pm.expect(b.kind).to.eql('REGISTERED');",
+                  "});",
+                  "pm.test('email starts out unverified', function () {",
+                  "  pm.expect(b.emailVerified).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in with those credentials",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{runEmail}}\",\n  \"password\": \"{{runPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('login returns the same user', function () {",
+                  "  pm.expect(pm.response.json().userId).to.eql(pm.collectionVariables.get('userId'));",
+                  "});",
+                  "const _t = pm.response.json();",
+                  "if (_t && _t.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', _t.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', _t.refreshToken);",
+                  "  pm.collectionVariables.set('userId', _t.userId);",
+                  "  pm.collectionVariables.set('username', _t.username);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh the session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Refresh tokens are rotated on every use: the presented one is revoked and a new one issued, so a leaked row is worth one use at most. The access token is not asserted to change, because two JWTs minted in the same second carry identical claims and are byte-identical by design.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('previousRefreshToken', pm.collectionVariables.get('refreshToken'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('the refresh token was rotated', function () {",
+                  "  pm.expect(pm.response.json().refreshToken).to.not.eql(pm.collectionVariables.get('previousRefreshToken'));",
+                  "});",
+                  "const _t = pm.response.json();",
+                  "if (_t && _t.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', _t.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', _t.refreshToken);",
+                  "  pm.collectionVariables.set('userId', _t.userId);",
+                  "  pm.collectionVariables.set('username', _t.username);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "The used refresh token is revoked",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Replays the token consumed by the request above. Rotation is only worth anything if the old token stops working, so this is the half worth asserting.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{previousRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(401);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registering the same email twice is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Deliberately reuses the address registered above. Expects 409.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{runEmail}}\",\n  \"password\": \"{{runPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', function () { pm.response.to.have.status(409); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(409);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wrong password is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{runEmail}}\",\n  \"password\": \"definitely-not-the-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(401);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A too-short password is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "The contract sets minLength 8, so validation should reject this before it reaches the database.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"postman-invalid@luna.test\",\n  \"password\": \"short\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(400);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Registration, login, refresh rotation, and the three failure modes worth pinning down."
+    },
+    {
+      "name": "03 · Email verification (Mailpit)",
+      "item": [
+        {
+          "name": "Find the verification mail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mailpitUrl}}/api/v1/messages?limit=50",
+              "host": [
+                "{{mailpitUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Reads the local Mailpit inbox (slot 0: http://localhost:8025). Skip this folder if you run the stack without Mailpit.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const msgs = pm.response.json().messages || [];",
+                  "const mine = msgs.filter(function (m) {",
+                  "  return (m.To || []).some(function (t) {",
+                  "    return t.Address === pm.collectionVariables.get('runEmail');",
+                  "  });",
+                  "});",
+                  "pm.test('a mail was delivered to this run address', function () {",
+                  "  pm.expect(mine.length, 'no message for ' + pm.collectionVariables.get('runEmail')).to.be.above(0);",
+                  "});",
+                  "if (mine.length) { pm.collectionVariables.set('mailId', mine[0].ID); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Extract the token from it",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mailpitUrl}}/api/v1/message/{{mailId}}",
+              "host": [
+                "{{mailpitUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "message",
+                "{{mailId}}"
+              ]
+            },
+            "description": "The mail carries a link shaped `<frontend-url>?token=<raw token>`; this pulls that query parameter out and stores it.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "const hay = (b.HTML || '') + ' ' + (b.Text || '');",
+                  "const m = hay.match(/[?&]token=([^\"'&\\s<>]+)/);",
+                  "pm.test('the mail contains a token link', function () {",
+                  "  pm.expect(m, 'no ?token= found in the message body').to.not.be.null;",
+                  "});",
+                  "if (m) { pm.collectionVariables.set('verifyToken', decodeURIComponent(m[1])); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify the email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verifyToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profile now reports a verified email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/account/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "account",
+                "me"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('emailVerified flipped to true', function () {",
+                  "  pm.expect(pm.response.json().emailVerified).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Closes the loop on the confirmation mail by reading it back out of Mailpit. Everything after this folder runs whether or not this one did."
+    },
+    {
+      "name": "04 · Zones",
+      "item": [
+        {
+          "name": "Create a zone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones"
+              ]
+            },
+            "description": "Same endpoint as the guest flow, but with a bearer token, so the zone belongs to the registered user instead of minting a new guest.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman zone {{runId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('runId', Date.now().toString(36));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('zoneId', b.data.id);",
+                  "pm.collectionVariables.set('joinCode', b.data.joinCode);",
+                  "pm.test('the caller owns the new zone', function () {",
+                  "  pm.expect(b.data.ownerUserId).to.eql(pm.collectionVariables.get('userId'));",
+                  "});",
+                  "const _t = pm.response.json().tokens;",
+                  "if (_t && _t.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', _t.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', _t.refreshToken);",
+                  "  pm.collectionVariables.set('userId', _t.userId);",
+                  "  pm.collectionVariables.set('username', _t.username);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my zones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "pm.test('the response is a cursor page', function () {",
+                  "  pm.expect(b.items).to.be.an('array');",
+                  "  pm.expect(b).to.have.property('nextCursor');",
+                  "});",
+                  "pm.test('the new zone is in it, owned by me', function () {",
+                  "  const z = b.items.find(function (x) { return x.id === pm.collectionVariables.get('zoneId'); });",
+                  "  pm.expect(z, 'zone missing from my list').to.be.an('object');",
+                  "  pm.expect(z.myRole).to.eql('OWNER');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get the zone",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{zoneId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{zoneId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('ids match', function () {",
+                  "  pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('zoneId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rename the zone",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{zoneId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{zoneId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman zone renamed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the new name stuck', function () {",
+                  "  pm.expect(pm.response.json().name).to.eql('Postman zone renamed');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{zoneId}}",
+                "members"
+              ]
+            },
+            "description": "Captures the caller's own membership id, which the member-scoped routes need."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "const me = b.items.find(function (m) { return m.userId === pm.collectionVariables.get('userId'); });",
+                  "pm.test('I am an approved owner of the zone', function () {",
+                  "  pm.expect(me, 'no membership for the caller').to.be.an('object');",
+                  "  pm.expect(me.role).to.eql('OWNER');",
+                  "  pm.expect(me.status).to.eql('APPROVED');",
+                  "});",
+                  "if (me) { pm.collectionVariables.set('membershipId', me.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set my username in this zone",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/members/{{membershipId}}/username",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{zoneId}}",
+                "members",
+                "{{membershipId}}",
+                "username"
+              ]
+            },
+            "description": "Per-zone display name, separate from the global username.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"postman-runner\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the per-zone username stuck', function () {",
+                  "  pm.expect(pm.response.json().username).to.eql('postman-runner');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Count zones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "count"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Regenerate the join code",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/regenerate-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{zoneId}}",
+                "regenerate-code"
+              ]
+            },
+            "description": "Invalidates the old code. Asserts the value actually changed."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('previousJoinCode', pm.collectionVariables.get('joinCode'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "const code = b.joinCode || (b.data && b.data.joinCode);",
+                  "pm.test('a new join code was issued', function () {",
+                  "  pm.expect(code, 'no joinCode in the response').to.be.a('string').and.not.empty;",
+                  "  pm.expect(code).to.not.eql(pm.collectionVariables.get('joinCode'));",
+                  "});",
+                  "if (code) { pm.collectionVariables.set('joinCode', code); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "The regenerated code resolves",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/by-code/{{joinCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "by-code",
+                "{{joinCode}}"
+              ]
+            },
+            "description": "Uses the code captured from the rotation above. Paired with that request it proves rotation issued a working code rather than being a no-op.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the new code resolves to the renamed zone', function () {",
+                  "  pm.expect(pm.response.json().name).to.eql('Postman zone renamed');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "The superseded join code is dead",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/by-code/{{previousJoinCode}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "by-code",
+                "{{previousJoinCode}}"
+              ]
+            },
+            "description": "The code from before the rotation must stop working, otherwise regenerating it would not actually revoke anyone's access.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(404);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Zone lifecycle for an owner: create, read, rename, members, join-code rotation."
+    },
+    {
+      "name": "05 · Lists & lines",
+      "item": [
+        {
+          "name": "Create a list",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/lists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{zoneId}}",
+                "lists"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Weekly shop\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('listId', b.id);",
+                  "pm.test('the list belongs to the zone and starts empty', function () {",
+                  "  pm.expect(b.zoneId).to.eql(pm.collectionVariables.get('zoneId'));",
+                  "  pm.expect(b.counts.lineCount).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List the zone's lists",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/lists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{zoneId}}",
+                "lists"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the new list shows up', function () {",
+                  "  const ids = pm.response.json().items.map(function (l) { return l.id; });",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('listId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rename the list",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lists/{{listId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lists",
+                "{{listId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Weekly shop (renamed)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the new name stuck', function () {",
+                  "  pm.expect(pm.response.json().name).to.eql('Weekly shop (renamed)');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add a line",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lists",
+                "{{listId}}",
+                "lines"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Milk\",\n  \"quantity\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('lineId', b.id);",
+                  "pm.collectionVariables.set('lineVersion', b.version);",
+                  "pm.test('the line came back with the defaults we expect', function () {",
+                  "  pm.expect(b.content).to.eql('Milk');",
+                  "  pm.expect(b.quantity).to.eql(2);",
+                  "  pm.expect(b.status).to.eql('PENDING');",
+                  "  pm.expect(b.position).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add a second line",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lists",
+                "{{listId}}",
+                "lines"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Bread\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('lineId2', b.id);",
+                  "pm.test('it sorts after the first line', function () {",
+                  "  pm.expect(b.position).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List the lines",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lists",
+                "{{listId}}",
+                "lines"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const items = pm.response.json().items;",
+                  "pm.test('both lines are present', function () {",
+                  "  pm.expect(items.length).to.be.at.least(2);",
+                  "});",
+                  "pm.test('they come back in position order', function () {",
+                  "  const pos = items.map(function (l) { return l.position; });",
+                  "  pm.expect(pos).to.eql(pos.slice().sort(function (a, b) { return a - b; }));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit a line",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lines/{{lineId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lines",
+                "{{lineId}}"
+              ]
+            },
+            "description": "Also checks the optimistic-concurrency version counter moves.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Whole milk\",\n  \"quantity\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "pm.test('the edit applied', function () {",
+                  "  pm.expect(b.content).to.eql('Whole milk');",
+                  "  pm.expect(b.quantity).to.eql(3);",
+                  "});",
+                  "pm.test('the version counter advanced', function () {",
+                  "  pm.expect(b.version).to.be.above(Number(pm.collectionVariables.get('lineVersion')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark it ready",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lines/{{lineId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lines",
+                "{{lineId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"READY\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('status is READY', function () {",
+                  "  pm.expect(pm.response.json().status).to.eql('READY');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve it",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lines/{{lineId}}/approval",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lines",
+                "{{lineId}}",
+                "approval"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approvalStatus\": \"APPROVED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('approvalStatus is APPROVED', function () {",
+                  "  pm.expect(pm.response.json().approvalStatus).to.eql('APPROVED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reorder the lines",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines/reorder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lists",
+                "{{listId}}",
+                "lines",
+                "reorder"
+              ]
+            },
+            "description": "Puts the second line first. The next request proves the order really changed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderedLineIds\": [\n    \"{{lineId2}}\",\n    \"{{lineId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "The new order took effect",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lists",
+                "{{listId}}",
+                "lines"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const items = pm.response.json().items;",
+                  "pm.test('the second line now sorts first', function () {",
+                  "  pm.expect(items[0].id).to.eql(pm.collectionVariables.get('lineId2'));",
+                  "  pm.expect(items[1].id).to.eql(pm.collectionVariables.get('lineId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Comment on a line",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lines/{{lineId}}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lines",
+                "{{lineId}}",
+                "comments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Get the semi-skimmed one if they have it\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read the comments back",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lines/{{lineId}}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lines",
+                "{{lineId}}",
+                "comments"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the comment is there', function () {",
+                  "  const bodies = pm.response.json().items.map(function (c) { return c.body; });",
+                  "  pm.expect(bodies).to.include('Get the semi-skimmed one if they have it');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List counts reflect the work",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/lists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{zoneId}}",
+                "lists"
+              ]
+            },
+            "description": "The denormalised counters on the list should have followed the line edits."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const l = pm.response.json().items.find(function (x) { return x.id === pm.collectionVariables.get('listId'); });",
+                  "pm.test('lineCount is 2 and readyCount is 1', function () {",
+                  "  pm.expect(l.counts.lineCount).to.eql(2);",
+                  "  pm.expect(l.counts.readyCount).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "The core collaborative surface: a list, its lines, their status/approval, reordering, comments, and the counters that hang off them."
+    },
+    {
+      "name": "06 · Catalog (read)",
+      "item": [
+        {
+          "name": "List items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/items?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "items"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Catalog reads are open to any authenticated user."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the response is a cursor page', function () {",
+                  "  pm.expect(pm.response.json().items).to.be.an('array');",
+                  "  pm.expect(pm.response.json()).to.have.property('nextCursor');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List supermarkets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/supermarkets?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "supermarkets"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the response is a cursor page', function () {",
+                  "  pm.expect(pm.response.json().items).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A non-admin write is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "items"
+              ]
+            },
+            "description": "The allowlist is the only thing protecting the shared catalog from any signed-in user, so it is worth asserting positively. Expects 403 unless the run's user is in PLATFORM_ADMIN_USER_IDS.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": {\n    \"en\": \"Should not be created\",\n    \"es\": \"No deberia crearse\"\n  },\n  \"category\": \"OTHER\",\n  \"defaultUnit\": \"UNIT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Inverted: this request asserts the refusal, so it is the *admin* run that skips it.",
+                  "if (pm.collectionVariables.get('catalogAdmin') === 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', function () { pm.response.to.have.status(403); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(403);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A well-formed but unknown id is 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/items/00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "items",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(404);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A malformed id is a client error, not a 500",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/items/not-a-uuid",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "items",
+                "not-a-uuid"
+              ]
+            },
+            "description": "KNOWN FAILURE against the current backend: this returns 500. A path parameter that is not a UUID is a bad request, so it should be 400 (or 404), never a server error. See the README."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('a malformed id does not 500', function () {",
+                  "  pm.expect(pm.response.code, 'unvalidated path parameter reached the service').to.be.below(500);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Read-only catalog checks, which every authenticated user can run. The write CRUD lives in the next folder because it is gated to the platform-admin allowlist."
+    },
+    {
+      "name": "06b · Catalog (admin only)",
+      "item": [
+        {
+          "name": "Create an item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": {\n    \"en\": \"Whole milk\",\n    \"es\": \"Leche entera\"\n  },\n  \"brand\": \"Postman Dairy\",\n  \"category\": \"DAIRY\",\n  \"defaultUnit\": \"LITER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('itemId', b.id);",
+                  "pm.test('both locales came back', function () {",
+                  "  pm.expect(b.name.en).to.eql('Whole milk');",
+                  "  pm.expect(b.name.es).to.eql('Leche entera');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get the item",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/items/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "items",
+                "{{itemId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('ids match', function () {",
+                  "  pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('itemId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update the item",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/items/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "items",
+                "{{itemId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"brand\": \"Postman Creamery\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the brand changed', function () {",
+                  "  pm.expect(pm.response.json().brand).to.eql('Postman Creamery');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create a supermarket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/supermarkets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "supermarkets"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": {\n    \"en\": \"Postman Market\",\n    \"es\": \"Mercado Postman\"\n  },\n  \"websiteUrl\": \"https://example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set('supermarketId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add a location to it",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/supermarkets/{{supermarketId}}/locations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "supermarkets",
+                "{{supermarketId}}",
+                "locations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"1 Test Street\",\n  \"city\": \"Madrid\",\n  \"country\": \"ES\",\n  \"latitude\": 40.4168,\n  \"longitude\": -3.7038\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set('locationId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List the supermarket's locations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/supermarkets/{{supermarketId}}/locations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "supermarkets",
+                "{{supermarketId}}",
+                "locations"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the new location shows up', function () {",
+                  "  const ids = pm.response.json().items.map(function (l) { return l.id; });",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('locationId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Price the item at that location",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/supermarket-items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "supermarket-items"
+              ]
+            },
+            "description": "Upsert, so running the suite twice updates the same row instead of failing.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemId\": \"{{itemId}}\",\n  \"supermarketLocationId\": \"{{locationId}}\",\n  \"price\": 1.29,\n  \"currency\": \"EUR\",\n  \"available\": true,\n  \"positionInStore\": \"Aisle 4\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "if (b && b.id) { pm.collectionVariables.set('supermarketItemId', b.id); }",
+                  "pm.test('the price was stored', function () {",
+                  "  pm.expect(Number(b.price)).to.eql(1.29);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Offers for the item",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/items/{{itemId}}/offers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "items",
+                "{{itemId}}",
+                "offers"
+              ]
+            },
+            "description": "The join back the other way: which locations carry this item and at what price."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the offer we just created is listed', function () {",
+                  "  const items = pm.response.json().items || [];",
+                  "  pm.expect(items.length, 'no offers returned for the item').to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Offers at the location",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/locations/{{locationId}}/offers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "locations",
+                "{{locationId}}",
+                "offers"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the offer is listed for the location too', function () {",
+                  "  const items = pm.response.json().items || [];",
+                  "  pm.expect(items.length, 'no offers returned for the location').to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Catalog write CRUD plus the supermarket-item price join. Every request here is skipped unless the collection variable `catalogAdmin` is set to 'true', because these routes are gated to the PLATFORM_ADMIN_USER_IDS allowlist and would otherwise all return 403."
+    },
+    {
+      "name": "07 · Account",
+      "item": [
+        {
+          "name": "Change my global username",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/account/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "account",
+                "me"
+              ]
+            },
+            "description": "GLOBAL_ONLY leaves per-zone names alone, which the next request checks.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"postman-{{runId}}\",\n  \"propagation\": \"GLOBAL_ONLY\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('the username changed', function () {",
+                  "  pm.expect(pm.response.json().username).to.eql('postman-' + pm.collectionVariables.get('runId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "The per-zone name was left alone",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{zoneId}}",
+                "members"
+              ]
+            },
+            "description": "Proves GLOBAL_ONLY propagation really is scoped: the zone membership should still carry the name set in folder 04."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const me = pm.response.json().items.find(function (m) { return m.userId === pm.collectionVariables.get('userId'); });",
+                  "pm.test('membership still says postman-runner', function () {",
+                  "  pm.expect(me.username).to.eql('postman-runner');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Profile changes, and the propagation rule that decides whether they reach zone memberships."
+    },
+    {
+      "name": "08 · Contract & error handling",
+      "item": [
+        {
+          "name": "No token is 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/account/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "account",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(401);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A garbage token is 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer not-a-real-jwt"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/account/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "account",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(401);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "An unknown zone is 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            },
+            "description": "Authenticated, so this is a genuine not-found rather than an authorisation failure."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(404);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "An unknown join code is 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/by-code/ZZZZZZ",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "by-code",
+                "ZZZZZZ"
+              ]
+            },
+            "description": "The contract folds 'never existed' and 'no longer active' into the same 404, so the code cannot be used to probe which zones exist.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(404);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A missing required field is 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones"
+              ]
+            },
+            "description": "name is required by CreateZoneDto.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('body is an RFC7807 problem document', function () {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b, 'type').to.have.property('type');",
+                  "  pm.expect(b, 'title').to.have.property('title');",
+                  "  pm.expect(b.status, 'status field').to.eql(400);",
+                  "  pm.expect(b, 'code').to.have.property('code');",
+                  "  pm.expect(b.correlationId, 'correlationId').to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "An unknown route is 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/definitely-not-a-route",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "definitely-not-a-route"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "The failure paths. These matter as much as the happy path: a backend that 500s where it should 404 is broken even when every green test passes."
+    },
+    {
+      "name": "09 · Cleanup",
+      "item": [
+        {
+          "name": "Delete the second line",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lines/{{lineId2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lines",
+                "{{lineId2}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete the list",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lists/{{listId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lists",
+                "{{listId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete the zone",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/zones/{{zoneId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "zones",
+                "{{zoneId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete the supermarket-item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/supermarket-items/{{supermarketItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "supermarket-items",
+                "{{supermarketItemId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete the location",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/locations/{{locationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "locations",
+                "{{locationId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete the supermarket",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/supermarkets/{{supermarketId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "supermarkets",
+                "{{supermarketId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete the catalog item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/catalog/items/{{itemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "items",
+                "{{itemId}}"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Catalog writes are restricted to the PLATFORM_ADMIN_USER_IDS allowlist.",
+                  "// Set the collection variable catalogAdmin to 'true' to run this folder.",
+                  "if (pm.collectionVariables.get('catalogAdmin') !== 'true') {",
+                  "  if (pm.execution && pm.execution.skipRequest) { pm.execution.skipRequest(); }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Removes everything the run created, so the suite can be run repeatedly against the same database without piling up fixtures. The registered user is left behind on purpose: DELETE /v1/account is destructive and is not worth wiring into a routine smoke run."
+    }
+  ]
+}
