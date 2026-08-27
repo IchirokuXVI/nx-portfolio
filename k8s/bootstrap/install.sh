@@ -7,8 +7,9 @@
 # swapping it is this script plus one values key.
 #
 # Usage:
+#   ./k8s/bootstrap/install.sh --k3s                            # bare VPS, start here
 #   ./k8s/bootstrap/install.sh                                  # envoy + letsencrypt
-#   ./k8s/bootstrap/install.sh --issuer selfsigned              # local (Docker Desktop)
+#   ./k8s/bootstrap/install.sh --issuer selfsigned --no-metallb # local (Docker Desktop)
 #   ./k8s/bootstrap/install.sh --implementation envoy --issuer letsencrypt \
 #     --email you@example.com
 #
@@ -23,9 +24,21 @@ set -euo pipefail
 GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.6.1}"
 ENVOY_GATEWAY_VERSION="${ENVOY_GATEWAY_VERSION:-v1.9.0}"
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.21.1}"
+# Chart version, which tracks the app version one for one. Check what is current
+# with `helm search repo metallb/metallb --versions`.
+METALLB_VERSION="${METALLB_VERSION:-0.16.1}"
 
 IMPLEMENTATION=envoy
 ISSUER=letsencrypt
+# Installing a Kubernetes distribution is too large a side effect to do
+# implicitly, so k3s is opt in: pass --k3s on a machine that has no cluster yet.
+# It is still idempotent, and skips itself if k3s is already installed.
+INSTALL_K3S=false
+# MetalLB, by contrast, is on by default. This script is the Linux/VPS path (the
+# local one is install.ps1), and on a bare metal cluster the chart's IPAddressPool
+# has nothing to bind to without it. --no-metallb is for a Docker Desktop cluster,
+# which surfaces LoadBalancer services on localhost by itself.
+INSTALL_METALLB=true
 # Let's Encrypt wants a contact address for expiry warnings. Only the ACME issuer
 # reads it; the self signed one ignores it.
 ACME_EMAIL="${ACME_EMAIL:-danieliyo65@gmail.com}"
@@ -41,7 +54,10 @@ while [ $# -gt 0 ]; do
     --email)          ACME_EMAIL="$2";     shift 2 ;;
     --gateway)        GATEWAY_NAME="$2";   shift 2 ;;
     --namespace)      GATEWAY_NAMESPACE="$2"; shift 2 ;;
-    -h|--help)        sed -n '2,15p' "$0"; exit 0 ;;
+    --k3s)            INSTALL_K3S=true;    shift ;;
+    --metallb)        INSTALL_METALLB=true;  shift ;;
+    --no-metallb)     INSTALL_METALLB=false; shift ;;
+    -h|--help)        sed -n '2,17p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -55,8 +71,61 @@ case "$ISSUER" in
   *) echo "unsupported issuer: $ISSUER (expected letsencrypt or selfsigned)" >&2; exit 1 ;;
 esac
 
+# ---------------------------------------------------------------------------
+# 0. k3s.
+#
+# Two of k3s's defaults actively fight this stack, so both are disabled:
+#
+#   traefik   would take ports 80 and 443, which is exactly what Envoy Gateway
+#             needs. Two ingress implementations on one node is one too many.
+#   servicelb k3s's built in LoadBalancer (Klipper) races MetalLB for the same
+#             Service objects. Whichever answers first wins, which is not a
+#             property you want in the layer that decides whether the site is
+#             reachable.
+#
+# --write-kubeconfig-mode 644 lets a non root user (and the CI deploy user) read
+# /etc/rancher/k3s/k3s.yaml without sudo.
+#
+# No version is pinned here. Gateway API v1.5+ CRDs need a Kubernetes API server
+# of 1.31 or newer, and the current k3s stable channel has been past that since
+# well before this script existed, so pinning would only mean a stale channel to
+# maintain. Pass INSTALL_K3S_VERSION or INSTALL_K3S_CHANNEL through the
+# environment if a specific release is ever needed.
+# ---------------------------------------------------------------------------
+if [ "$INSTALL_K3S" = true ]; then
+  if command -v k3s >/dev/null 2>&1; then
+    echo "==> k3s already installed, skipping (k3s $(k3s --version | head -1 | awk '{print $3}'))"
+  else
+    echo "==> installing k3s (traefik and servicelb disabled)"
+    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="\
+      --disable traefik \
+      --disable servicelb \
+      --write-kubeconfig-mode 644" sh -
+  fi
+
+  export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+
+  # k3s reports ready before the API server accepts connections, so the steps
+  # below would fail on a fresh install without waiting for the node.
+  echo "==> waiting for the node to become Ready"
+  kubectl wait --for=condition=Ready node --all --timeout=180s
+
+  # helm does not ship with k3s, and every step after this one needs it.
+  if ! command -v helm >/dev/null 2>&1; then
+    echo "==> installing helm"
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  fi
+fi
+
+for tool in kubectl helm; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "$tool is required and not on PATH. On a bare VPS, run with --k3s." >&2
+    exit 1
+  }
+done
+
 echo "==> cluster: $(kubectl config current-context)"
-echo "==> implementation: $IMPLEMENTATION, issuer: $ISSUER"
+echo "==> implementation: $IMPLEMENTATION, issuer: $ISSUER, metallb: $INSTALL_METALLB"
 
 # ---------------------------------------------------------------------------
 # 1. Gateway API CRDs, standard channel.
@@ -74,7 +143,33 @@ kubectl apply --server-side --force-conflicts -f \
   "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
 
 # ---------------------------------------------------------------------------
-# 2. The implementation.
+# 2. MetalLB.
+#
+# The controller only. The address pool itself stays in the application chart
+# (templates/ipadd-pool.yaml.tpl, from .Values.ipAddress), because which address
+# this cluster answers on is a property of the deployment, not of the machine.
+# That split is also why this step has to exist: the chart declares an
+# IPAddressPool and an L2Advertisement, so without the CRDs installed here the
+# very first `helm upgrade` fails with `no matches for kind "IPAddressPool"`.
+#
+# L2 mode, which is what a single node with one address in front of it wants:
+# MetalLB answers ARP for the pool address on the node's own interface. No BGP
+# peer, no FRR, nothing to configure beyond the pool.
+# ---------------------------------------------------------------------------
+if [ "$INSTALL_METALLB" = true ]; then
+  echo "==> installing MetalLB $METALLB_VERSION"
+  helm repo add metallb https://metallb.github.io/metallb >/dev/null
+  helm repo update metallb >/dev/null
+  helm upgrade --install metallb metallb/metallb \
+    --version "$METALLB_VERSION" \
+    --namespace metallb-system --create-namespace \
+    --wait
+else
+  echo "==> skipping MetalLB (--no-metallb)"
+fi
+
+# ---------------------------------------------------------------------------
+# 3. The implementation.
 #
 # --skip-crds because step 1 already installed the Gateway API CRDs from the
 # pinned URL above, and letting the chart install its own copy both collides with
@@ -121,7 +216,7 @@ spec:
 YAML
 
 # ---------------------------------------------------------------------------
-# 3. cert-manager, with the Gateway API integration enabled.
+# 4. cert-manager, with the Gateway API integration enabled.
 #
 # Off by default, and the flag name has moved between versions: v1.21 takes
 # `config.gatewayAPI.enabled`, earlier ones took `config.enableGatewayAPI`, older
@@ -140,7 +235,7 @@ helm upgrade --install cert-manager jetstack/cert-manager \
   --wait
 
 # ---------------------------------------------------------------------------
-# 4. The ClusterIssuer.
+# 5. The ClusterIssuer.
 #
 # The local and production paths differ by this flag rather than by mechanism:
 # both end up as cert-manager issued Secrets referenced from the Gateway's
@@ -191,6 +286,11 @@ echo
 echo "==> gatewayclass (expect 'eg', ACCEPTED=True; this is gateway.className)"
 kubectl get gatewayclass
 echo
+if [ "$INSTALL_METALLB" = true ]; then
+  echo "==> metallb-system (controller + one speaker per node)"
+  kubectl get pods -n metallb-system
+  echo
+fi
 echo "==> envoy-gateway-system"
 kubectl get pods -n envoy-gateway-system
 echo

@@ -213,7 +213,7 @@ gates the deploy. To run it yourself:
 
 ```sh
 echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
-docker login ghcr.io                                   # the images are private
+docker login ghcr.io                                   # only if a package is still private
 docker compose -f e2e/compose.yml up -d --pull always
 E2E_BASE_URL=https://staging.ichirokuxvi.com \
   npx playwright test -c apps/damoclesSword-e2e/playwright.config.ts --project=chromium
