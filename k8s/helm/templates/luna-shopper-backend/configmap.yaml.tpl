@@ -12,6 +12,9 @@ metadata:
   namespace: {{ .Values.namespace }}
 data:
   NATS_URL: {{ $cfg.natsUrl | quote }}
+  # The cache, presence store and socket backplane (plan 0028). Not a secret:
+  # the instance is cluster local with no auth, exactly like NATS above.
+  REDIS_URL: {{ $cfg.redisUrl | quote }}
   LOG_LEVEL: {{ $cfg.logLevel | quote }}
   CORS_ORIGINS: {{ $cfg.corsOrigins | quote }}
   AUTH_JWT_KID: {{ $cfg.authJwtKid | quote }}

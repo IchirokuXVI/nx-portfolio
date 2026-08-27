@@ -42,6 +42,7 @@ import {
  */
 async function loadAppModule(): Promise<new () => unknown> {
   process.env.NATS_URL ??= 'nats://localhost:4222';
+  process.env.REDIS_URL ??= 'redis://localhost:6379';
   process.env.AUTH_JWT_PUBLIC_KEY ??= 'documentation-only-public-key';
   const { AppModule } = await import('../app.module');
   return AppModule as unknown as new () => unknown;

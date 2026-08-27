@@ -7,10 +7,14 @@ import '@portfolio/luna-shopper/platform/tracing';
 
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { bootstrapPlatform } from '@portfolio/luna-shopper/platform';
+import {
+  bootstrapPlatform,
+  RedisService,
+} from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app/app.module';
 import type { RealtimeConfig } from './app/config/app-config';
+import { RedisIoAdapter } from './app/socket/redis-io.adapter';
 
 /**
  * Dedicated realtime server. It holds the client WebSocket/SSE connections and
@@ -34,6 +38,20 @@ async function bootstrap() {
   // URI versioning is on for the SSE endpoints (`/v1/zones/:id/stream`, plan
   // 0009, section 3); the socket transport is unversioned.
   bootstrapPlatform(app, { versioning: true });
+
+  // The socket backplane (plan 0028, section 2.1), installed before `listen`
+  // because that is when Nest creates the gateway's socket server: the server
+  // has to be built with the adapter already attached, or the sockets that
+  // connect in the meantime are stranded on the in memory one.
+  const redis = app.get(RedisService);
+  // Give the connection a moment to come up before the first command is issued.
+  // It resolves either way, so Redis being down delays boot briefly and then
+  // starts degraded rather than blocking the service from starting at all.
+  await redis.whenReady();
+
+  const socketAdapter = new RedisIoAdapter(app, redis);
+  socketAdapter.connect();
+  app.useWebSocketAdapter(socketAdapter);
 
   await app.listen(config.port);
 

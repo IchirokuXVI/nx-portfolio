@@ -13,6 +13,10 @@ import { gatewayValidationSchema } from './app-config';
 /** The variables every gateway needs whatever else is switched on. */
 const base = {
   NATS_URL: 'nats://localhost:4222',
+  // Required since plan 0028: the throttler counts in Redis and fails closed, so
+  // a gateway that started without it would be an open registration and password
+  // reset endpoint that looked healthy.
+  REDIS_URL: 'redis://localhost:6379',
   AUTH_JWT_PUBLIC_KEY: 'a-public-key',
 };
 
@@ -20,6 +24,28 @@ const validate = (env: Record<string, string>) =>
   gatewayValidationSchema.validate({ ...base, ...env });
 
 describe('gateway configuration', () => {
+  /**
+   * Required rather than optional, and deliberately so (plan 0028, section 5).
+   * The throttler counts in Redis and fails closed, so a gateway that started
+   * without a connection string would be an open registration and password reset
+   * endpoint reporting itself perfectly healthy. Failing at boot is the loud
+   * version of a failure that is otherwise entirely silent.
+   */
+  it('refuses to boot with no Redis to count rate limits in', () => {
+    const { error } = gatewayValidationSchema.validate({
+      NATS_URL: 'nats://localhost:4222',
+      AUTH_JWT_PUBLIC_KEY: 'a-public-key',
+    });
+
+    expect(error?.message).toContain('REDIS_URL');
+  });
+
+  it('refuses a REDIS_URL that is not a redis URL', () => {
+    const { error } = validate({ REDIS_URL: 'localhost:6379' });
+
+    expect(error?.message).toContain('REDIS_URL');
+  });
+
   it('boots with Google unset and nothing else to supply', () => {
     const { error, value } = validate({});
 

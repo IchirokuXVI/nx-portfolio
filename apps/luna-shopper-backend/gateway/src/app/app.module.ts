@@ -12,7 +12,11 @@ import {
   PlatformHealthModule,
   PlatformModule,
   ProblemThrottlerGuard,
+  RedisModule,
+  RedisService,
+  RedisThrottlerStorage,
 } from '@portfolio/luna-shopper/platform';
+import { Logger } from 'nestjs-pino';
 import { GatewayAccountModule } from './account/account.module';
 import { GatewayAuthModule } from './auth/auth.module';
 import { GatewayCatalogModule } from './catalog/catalog.module';
@@ -68,9 +72,27 @@ import { GatewayZonesModule } from './zones/zones.module';
         ],
       },
     }),
+    // The backplane (plan 0028). The gateway uses it for the rate limit counters
+    // and the public stats cache, and it is required rather than optional
+    // because the throttler below fails closed without it.
+    RedisModule.forRoot(),
     // Global rate limiting with stricter named buckets for the open surfaces
-    // (plan 0004, section 8).
-    ThrottlerModule.forRoot(createThrottlerOptions()),
+    // (plan 0004, section 8), counting in Redis rather than in this process
+    // (plan 0028, section 2.4).
+    //
+    // Nothing in `createThrottlerOptions` changes: one bucket, same limits. What
+    // changes is where the count lives, so two replicas share one bucket instead
+    // of granting two. `verifyResend` and `passwordReset` are `limit: 1` and say
+    // of themselves that the whole of the enforcement is the bucket, which is
+    // why this is worth doing even at one replica: it is the piece that would
+    // otherwise silently double the moment a second pod appeared.
+    ThrottlerModule.forRootAsync({
+      inject: [RedisService, Logger],
+      useFactory: (redis: RedisService, logger: Logger) => ({
+        ...createThrottlerOptions(),
+        storage: new RedisThrottlerStorage(redis, logger),
+      }),
+    }),
     // Auth endpoints + JWT verification (plan 0005).
     GatewayAuthModule,
     // Zone + membership endpoints (plan 0006).
