@@ -35,6 +35,11 @@ jobs:
       DOCKER_BUILD_CACHE_MODE: min
       # Where the shell loads its remotes from in production.
       PROD_MFE_BASE_URL: https://mfe.ichirokuxvi.com
+      # ...and the remotes that are not on that host. velista is served from its own
+      # origin (plan 0013), which no base URL can produce, so it names itself here and
+      # overrides the base derived tuple. Per remote overrides win over the base, so
+      # the other three are unaffected and stay unlisted.
+      PROD_MFE_REMOTE_URLS: velista=https://velista.ichirokuxvi.com
 
     steps:
       - name: Checkout repository
@@ -124,6 +129,7 @@ jobs:
         env:
           DOCKER_IMAGE_TAG: ${{ steps.version.outputs.version }},latest
           MFE_BASE_URL: ${{ env.PROD_MFE_BASE_URL }}
+          MFE_REMOTE_URLS: ${{ env.PROD_MFE_REMOTE_URLS }}
         run: |
           apps_tobuild=$(npx nx show projects --type "app" --with-target build:docker | paste -sd, -)
           npx nx run-many -t build:docker --configuration production --projects $apps_tobuild

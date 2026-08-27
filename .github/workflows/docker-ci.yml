@@ -50,6 +50,11 @@ jobs:
       # Where the shell loads its remotes from on staging. Baked into the shell
       # bundle at build time (ignored by the other, environment-agnostic apps).
       STAGING_MFE_BASE_URL: https://mfe.staging.ichirokuxvi.com
+      # ...and the remotes that are not on that host. velista is served from its own
+      # origin (plan 0013), which no base URL can produce, so it names itself here and
+      # overrides the base derived tuple. Per remote overrides win over the base, so
+      # the other three are unaffected and stay unlisted.
+      STAGING_MFE_REMOTE_URLS: velista=https://velista.staging.ichirokuxvi.com
 
     steps:
       # Checkout full history so Nx can detect changes
@@ -188,12 +193,13 @@ jobs:
             npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_testable_apps }}
 
       # Build & push affected micro-frontends under the mutable `staging` tag.
-      # The shell reads MFE_BASE_URL; the other apps ignore it.
+      # The shell reads MFE_BASE_URL and MFE_REMOTE_URLS; the other apps ignore both.
       - name: Build & push staging images
         if: ${{ steps.get-affected-apps.outputs.affected_apps_tobuild != '' }}
         env:
           DOCKER_IMAGE_TAG: staging
           MFE_BASE_URL: ${{ env.STAGING_MFE_BASE_URL }}
+          MFE_REMOTE_URLS: ${{ env.STAGING_MFE_REMOTE_URLS }}
         run: |
           npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}
 

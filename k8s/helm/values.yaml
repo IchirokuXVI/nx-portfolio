@@ -111,11 +111,24 @@ apps:
     image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
     host: mfe.ichirokuxvi.com
     path: /landingV2
+  # velista is served from its **own origin**, not from the micro-frontend host under
+  # a path (plan 0013). One image serves both roles: `/` is the standalone app that a
+  # phone installs, and `/remoteEntry.mjs` on the same host is what the shell loads.
+  #
+  # This entry **moved**, it was not added. A second velista entry would run the same
+  # image twice on two hostnames, which is the two origin hazard D5 exists to avoid,
+  # rebuilt in the cluster. So `mfe.ichirokuxvi.com/velista` stops existing, and the
+  # shell's `MFE_REMOTE_URLS` in release.yml is what points it at the new host.
+  #
+  # `path: /` emits no rewrite filter, which is exactly what a host root wants, and
+  # the Gateway's HTTPS listener and its certificate follow from this host appearing
+  # in `apps` at all. DNS is the one manual prerequisite: cert-manager cannot solve an
+  # HTTP-01 challenge for a name that does not resolve.
   - name: velista
     env: production
     image: ghcr.io/ichirokuxvi/nx-portfolio/velista
-    host: mfe.ichirokuxvi.com
-    path: /velista
+    host: velista.ichirokuxvi.com
+    path: /
   # Staging - staging.ichirokuxvi.com
   - name: shell-staging
     env: staging
@@ -137,11 +150,13 @@ apps:
     image: ghcr.io/ichirokuxvi/nx-portfolio/landingv2
     host: mfe.staging.ichirokuxvi.com
     path: /landingV2
+  # Its own origin in staging too, for the same reasons as the production entry
+  # above, and moved rather than duplicated for the same one.
   - name: velista-staging
     env: staging
     image: ghcr.io/ichirokuxvi/nx-portfolio/velista
-    host: mfe.staging.ichirokuxvi.com
-    path: /velista
+    host: velista.staging.ichirokuxvi.com
+    path: /
 
 # ---------------------------------------------------------------------------
 # Luna Shopper backend (plan 0002).
@@ -194,7 +209,13 @@ lunaShopperBackend:
     production:
       natsUrl: nats://luna-shopper-backend-nats:4222
       logLevel: info
-      corsOrigins: https://ichirokuxvi.com
+      # Both origins, because after plan 0013 both can be serving velista: the
+      # portfolio at `/velista` and velista's own host. Comma separated, and the
+      # gateway splits and trims it. Plan 0013 section 9 claimed CORS was unaffected
+      # by the move; it is not. The gateway was never same origin with the app, but it
+      # allows an explicit list of hosts, so an origin that is not on the list has
+      # every request blocked. Once D5's redirect lands the portfolio entry can go.
+      corsOrigins: https://ichirokuxvi.com,https://velista.ichirokuxvi.com
       authJwtKid: prod-1
       accessTokenTtl: 15m
       refreshTokenTtl: 30d
@@ -204,9 +225,16 @@ lunaShopperBackend:
       # Google exactly, which is why it is spelled out rather than derived.
       googleCallbackUrl: https://api.ichirokuxvi.com/v1/auth/google/callback
       # Where the Google callback hands the browser back (plan 0023, section 3.4).
-      # `{locale}` is substituted with the locale the flow started in; the app is
-      # mounted after the locale segment, so a plain prefix cannot express it.
-      appBaseUrl: https://ichirokuxvi.com/{locale}/velista
+      # `{locale}` is substituted with the locale the flow started in.
+      #
+      # velista's own origin, and the locale is now the **first** segment, which is
+      # the canonical URL D5 wants the flow to land on. This value was stale twice
+      # over: it named the portfolio, and it spelled the URL `/{locale}/velista`,
+      # which shell plan 0003 reversed to `/velista/{locale}` when each app took
+      # ownership of the segment below its own mount. On the standalone origin the
+      # mount is empty, so the rule degenerates to `/{locale}` and the substitution
+      # is the whole path.
+      appBaseUrl: https://velista.ichirokuxvi.com/{locale}
       smtpHost: ''
       smtpPort: '587'
       smtpUser: ''
@@ -231,13 +259,14 @@ lunaShopperBackend:
     staging:
       natsUrl: nats://luna-shopper-backend-nats:4222
       logLevel: debug
-      corsOrigins: https://staging.ichirokuxvi.com
+      # Both origins while both are live, exactly as production above.
+      corsOrigins: https://staging.ichirokuxvi.com,https://velista.staging.ichirokuxvi.com
       authJwtKid: staging-1
       accessTokenTtl: 15m
       refreshTokenTtl: 30d
       googleClientId: ''
       googleCallbackUrl: https://api.staging.ichirokuxvi.com/v1/auth/google/callback
-      appBaseUrl: https://staging.ichirokuxvi.com/{locale}/velista
+      appBaseUrl: https://velista.staging.ichirokuxvi.com/{locale}
       smtpHost: ''
       smtpPort: '587'
       smtpUser: ''
