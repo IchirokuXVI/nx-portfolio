@@ -96,11 +96,6 @@ apps:
     image: ghcr.io/ichirokuxvi/nx-portfolio/shell
     host: ichirokuxvi.com
     path: /
-  - name: landing
-    env: production
-    image: ghcr.io/ichirokuxvi/nx-portfolio/landing
-    host: mfe.ichirokuxvi.com
-    path: /landing
   - name: odontogram
     env: production
     image: ghcr.io/ichirokuxvi/nx-portfolio/odontogram
@@ -127,11 +122,6 @@ apps:
     image: ghcr.io/ichirokuxvi/nx-portfolio/shell
     host: staging.ichirokuxvi.com
     path: /
-  - name: landing-staging
-    env: staging
-    image: ghcr.io/ichirokuxvi/nx-portfolio/landing
-    host: mfe.staging.ichirokuxvi.com
-    path: /landing
   - name: odontogram-staging
     env: staging
     image: ghcr.io/ichirokuxvi/nx-portfolio/odontogram

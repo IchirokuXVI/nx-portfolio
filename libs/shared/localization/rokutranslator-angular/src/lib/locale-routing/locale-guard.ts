@@ -3,8 +3,8 @@ import { CanActivateFn, Router, UrlTree } from '@angular/router';
 import { isLocaleSegment } from './is-locale-segment';
 import { resolveGuessLocale } from './resolve-locale';
 
-/** Storage key for the root landing app (mapped from the empty path). */
-const ROOT_APP_KEY = 'landing';
+/** Storage key for the app at the site root (mapped from the empty path). */
+const ROOT_APP_KEY = 'landingV2';
 
 function appKeyForPath(firstSegment: string | undefined): string {
   return firstSegment ? firstSegment : ROOT_APP_KEY;

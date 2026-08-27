@@ -1,14 +1,14 @@
 # Zero-setup local override for Docker Desktop Kubernetes — "port" variant (default).
 #
 # Each app is exposed on its own LoadBalancer port: shell on 80, remotes on
-# 8081-8084. Docker Desktop publishes each LoadBalancer on localhost:<port>, so no
+# 8082-8084. Docker Desktop publishes each LoadBalancer on localhost:<port>, so no
 # hosts-file entries, no admin, and no reverse proxy are needed.
 #
 # Because the remote ports do NOT match the remotes' dev-serve ports (4201-4204),
 # the shell image must be told where its remotes live, via MFE_REMOTE_URLS (a
 # per-remote map). Build the shell with:
 #
-#   MFE_REMOTE_URLS="landing=http://localhost:8081,odontogram=http://localhost:8082,damoclesSword=http://localhost:8083,landingV2=http://localhost:8084" \
+#   MFE_REMOTE_URLS="odontogram=http://localhost:8082,damoclesSword=http://localhost:8083,landingV2=http://localhost:8084" \
 #     npx nx run shell:build:docker --configuration=development
 #
 #   helm upgrade --install nx-portfolio k8s/helm \
@@ -53,10 +53,6 @@ apps:
     env: production
     image: nx-portfolio/shell
     lbPort: 80
-  - name: landing
-    env: production
-    image: nx-portfolio/landing
-    lbPort: 8081
   - name: odontogram
     env: production
     image: nx-portfolio/odontogram

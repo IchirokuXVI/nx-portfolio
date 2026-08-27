@@ -15,7 +15,7 @@ const config: ModuleFederationConfig = {
    * declare module 'my-external-remote';
    *
    */
-  remotes: ['landing', 'odontogram', 'damoclesSword', 'landingV2', 'velista'],
+  remotes: ['odontogram', 'damoclesSword', 'landingV2', 'velista'],
   /**
    * One `RokuTranslator` across the shell and every remote, so the locale is a
    * property of the page rather than of whichever bundle asked. See

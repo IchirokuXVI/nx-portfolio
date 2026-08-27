@@ -139,7 +139,7 @@ particular way**. Pick one overlay:
 
 | Overlay | Topology | Reach it at | Build the shell with |
 | --- | --- | --- | --- |
-| **`values.localhost.yaml`** (default) | each app its own LoadBalancer port (shell 80, remotes 8081–8084). **No bootstrap needed.** | `http://localhost` | `MFE_REMOTE_URLS=landing=http://localhost:8081,…` |
+| **`values.localhost.yaml`** (default) | each app its own LoadBalancer port (shell 80, remotes 8082–8084). **No bootstrap needed.** | `http://localhost` | `MFE_REMOTE_URLS=odontogram=http://localhost:8082,…` |
 | `values.localhost-mfe.yaml` | one `localhost` host, remotes under `/mfe/<remote>`, through the gateway | `http://localhost` | `MFE_BASE_URL=http://localhost/mfe` |
 | `values.local.yaml` | `portfolio.localhost` / `mfe.localhost` hostnames (closest to production) | `http://portfolio.localhost` | `MFE_BASE_URL=http://mfe.localhost` |
 
@@ -195,9 +195,9 @@ npx playwright test -c apps/landing-v2-e2e/playwright.config.ts --project=chromi
 npx cypress run --project apps/shell-e2e --browser electron
 ```
 
-> `landing-e2e` and `odontogram-e2e` currently fail to compile (`TS5095`: their
-> tsconfig sets `module: commonjs` under the workspace's `moduleResolution: bundler`)
-> and their specs predate the through-shell routing. That is a pre-existing issue,
+> `odontogram-e2e` currently fails to compile (`TS5095`: its tsconfig sets
+> `module: commonjs` under the workspace's `moduleResolution: bundler`)
+> and its specs predate the through-shell routing. That is a pre-existing issue,
 > unrelated to the deployment.
 
 ### e2e against the published images (what CI runs)

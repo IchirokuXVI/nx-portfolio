@@ -2,8 +2,9 @@
 
 ## Implementation status
 
-Not started. **Do this first.** It is independent of everything else and it removes one
-whole app from the surface that `0003` has to migrate.
+Done. The remote, its e2e project and its four libraries are deleted; the shell's
+federation configs, `tsconfig.base.json`, every Helm values file, the prod compose file
+and the CI e2e filter no longer mention it, and `ROOT_APP_KEY` now says `landingV2`.
 
 ## Goal
 

@@ -57,11 +57,6 @@ apps:
     image: nx-portfolio/shell
     host: portfolio.localhost
     path: /
-  - name: landing
-    env: production
-    image: nx-portfolio/landing
-    host: mfe.localhost
-    path: /landing
   - name: odontogram
     env: production
     image: nx-portfolio/odontogram

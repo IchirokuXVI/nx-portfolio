@@ -7,10 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 An Nx monorepo hosting a personal portfolio built as an Angular **module-federation** micro-frontend system, plus a custom Nx docker build/deploy toolchain and Kubernetes/Helm deployment config.
 
 - `shell` — the host application. Owns the router and mounts remotes at runtime.
-- `landing`, `odontogram`, `damoclesSword` — remote micro-frontend apps, each exposing routes via `./Routes` (module federation).
+- `odontogram`, `damoclesSword`, `landingV2`, `velista` — remote micro-frontend apps, each exposing routes via `./Routes` (module federation).
 - `apps/docker/*` — non-Angular Nx "app" projects (builder, local-http-server) that just wrap a Dockerfile; tagged `type:static-docker` or `type:dynamic-docker` and driven by CI (see below).
 - `tools/docker` — a custom Nx plugin (`@portfolio/docker`) providing the `build` and `push` executors used by every app's `build:docker` target, plus an `application` generator for scaffolding a Dockerfile into a new app.
-- `libs/<scope>/*` — Nx libraries grouped by micro-frontend scope (`damoclesSword`, `landing`, `odontogram`) plus `shared`, following the `data-access` / `feature-*` / `ui` / `models` naming convention.
+- `libs/<scope>/*` — Nx libraries grouped by micro-frontend scope (`damoclesSword`, `odontogram`, `landing-v2`, `velista`) plus `shared`, following the `data-access` / `feature-*` / `ui` / `models` naming convention.
 - `k8s/helm` — Helm chart deployed via CI to a k3s cluster. Routing is the Gateway API (`Gateway` + one `HTTPRoute` per app); the data plane is provisioned by Envoy Gateway in its own namespace, not declared by the chart.
 - `k8s/bootstrap` — one-off per-cluster install of the Gateway API CRDs, Envoy Gateway, cert-manager and a ClusterIssuer (`install.sh` / `install.ps1`). Deliberately outside the chart, so the chart names the implementation only through `gateway.className`.
 
@@ -19,13 +19,13 @@ An Nx monorepo hosting a personal portfolio built as an Angular **module-federat
 Run everything through Nx (`npx nx ...`); there are no top-level `package.json` scripts.
 
 ```sh
-# Serve the shell with its dev remotes (odontogram, landing) — damoclesSword is served separately
+# Serve the shell with its dev remotes — damoclesSword is served separately
 npx nx serve shell
 
 # Serve a single remote directly (each depends on shell:serve via `dependsOn`)
 npx nx serve damoclesSword
 npx nx serve odontogram
-npx nx serve landing
+npx nx serve landingV2
 
 # Production build (all apps default to the `production` build configuration)
 npx nx build shell
@@ -42,7 +42,7 @@ npx nx run-many --all --target=test
 npx nx run-many --all --target=lint
 npx nx run-many --all --target=build
 
-# e2e (shell/landing/odontogram/damoclesSword-e2e use Cypress or Playwright per project)
+# e2e (shell/odontogram/damoclesSword/landingV2/velista-e2e use Cypress or Playwright per project)
 npx nx e2e <project>-e2e
 
 # Run a target across every affected project (mirrors CI)
@@ -62,7 +62,7 @@ There are no top-level `package.json` scripts — run everything through Nx, eit
 
 ### Module federation topology
 
-`shell` is the only app with `serve-static`/`serve` acting as host; its `module-federation.config.ts` declares `remotes: ['landing', 'odontogram', 'damoclesSword']`. Each remote's own `module-federation.config.ts` exposes `./Routes` from `src/app/remote-entry/entry.routes.ts`. Path aliases like `damoclesSword/Routes` (defined in `tsconfig.base.json`) let the shell lazy-load a remote's routes as if they were a local module:
+`shell` is the only app with `serve-static`/`serve` acting as host; its `module-federation.config.ts` declares `remotes: ['odontogram', 'damoclesSword', 'landingV2', 'velista']`. Each remote's own `module-federation.config.ts` exposes `./Routes` from `src/app/remote-entry/entry.routes.ts`. Path aliases like `damoclesSword/Routes` (defined in `tsconfig.base.json`) let the shell lazy-load a remote's routes as if they were a local module:
 
 ```ts
 loadChildren: () => import('damoclesSword/Routes').then((m) => m.remoteRoutes);
@@ -84,7 +84,7 @@ The shell's top-level route is `:locale` (e.g. `/en/damoclesSword/...`), handled
 
 ### Library layout
 
-Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `landing`, `odontogram`. Within a scope, libraries follow Nx's convention: `data-access` (API/services), `feature-*` (routed feature libs / remote entry points), `ui` (presentational components + static assets), `models` / `models-localization` (types, and per-domain translation keys). Import via the `@portfolio/<scope>/<lib>` TS path aliases in `tsconfig.base.json` — do not use relative paths across library boundaries.
+Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`. Within a scope, libraries follow Nx's convention: `data-access` (API/services), `feature-*` (routed feature libs / remote entry points), `ui` (presentational components + static assets), `models` / `models-localization` (types, and per-domain translation keys). Import via the `@portfolio/<scope>/<lib>` TS path aliases in `tsconfig.base.json` — do not use relative paths across library boundaries.
 
 `@nx/enforce-module-boundaries` is configured permissively (`onlyDependOnLibsWithTags: ['*']`) — there's no hard tag-based dependency firewall today, so don't rely on lint to catch cross-scope layering mistakes.
 

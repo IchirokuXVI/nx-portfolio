@@ -18,14 +18,6 @@
     "isolatedModules": true,
     "paths": {
       "@portfolio/docker": ["./tools/docker/src/index.ts"],
-      "@portfolio/landing/data-access": [
-        "./libs/landing/data-access/src/index.ts"
-      ],
-      "@portfolio/landing/feature-shell": [
-        "./libs/landing/feature-shell/src/index.ts"
-      ],
-      "@portfolio/landing/models": ["./libs/landing/models/src/index.ts"],
-      "@portfolio/landing/ui": ["./libs/landing/ui/src/index.ts"],
       "@portfolio/localization/rokutranslator": [
         "./libs/shared/localization/rokutranslator/src/index.ts"
       ],
@@ -58,7 +50,6 @@
       "@portfolio/shared/models": ["./libs/shared/models/src/index.ts"],
       "@portfolio/shared/ui": ["./libs/shared/ui/src/index.ts"],
       "@portfolio/shared/util": ["./libs/shared/util/src/index.ts"],
-      "landing/Routes": ["./apps/landing/src/app/remote-entry/entry.routes.ts"],
       "odontogram/Routes": [
         "./apps/odontogram/src/app/remote-entry/entry.routes.ts"
       ],
