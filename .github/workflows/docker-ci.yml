@@ -55,6 +55,11 @@ jobs:
       # overrides the base derived tuple. Per remote overrides win over the base, so
       # the other three are unaffected and stay unlisted.
       STAGING_MFE_REMOTE_URLS: velista=https://velista.staging.ichirokuxvi.com
+      # Which backend the staging velista image talks to (velista plan 0014).
+      # velista is the only app that reads these; every other one ignores them,
+      # exactly as MFE_BASE_URL is ignored by every app except the shell.
+      STAGING_LUNA_GATEWAY_URL: https://api.staging.ichirokuxvi.com
+      STAGING_LUNA_REALTIME_URL: https://rt.staging.ichirokuxvi.com
 
     steps:
       # Checkout full history so Nx can detect changes
@@ -168,13 +173,15 @@ jobs:
           echo "affected_testable_apps=$affected_testable_apps" >> "$GITHUB_OUTPUT"
           echo "affected_apps_tobuild=$affected_apps_tobuild" >> "$GITHUB_OUTPUT"
 
-          # Staging kubernetes deployment names are the lowercased app names with a
-          # `-staging` suffix (see k8s/helm/values.yaml). Used to roll them below.
-          affected_staging=$(echo "$affected_apps_tobuild" | tr ',' '\n' | sed '/^$/d' | tr '[:upper:]' '[:lower:]' | sed 's/$/-staging/' | paste -sd' ' -)
-          echo "affected_staging=$affected_staging" >> "$GITHUB_OUTPUT"
+          # The deployment name is now just the lowercased project name. The
+          # `-staging` suffix went away with the env dimension (k8s plan 0002):
+          # staging is a different cluster, not a differently named half of the
+          # same release, so deriving a name by string surgery is over.
+          affected_deployments=$(echo "$affected_apps_tobuild" | tr ',' '\n' | sed '/^$/d' | tr '[:upper:]' '[:lower:]' | paste -sd' ' -)
+          echo "affected_deployments=$affected_deployments" >> "$GITHUB_OUTPUT"
 
           echo "Affected apps to build: $affected_apps_tobuild"
-          echo "Affected staging deployments: $affected_staging"
+          echo "Affected deployments: $affected_deployments"
 
       # Build affected static docker apps (builder base, local http server)
       - name: Build affected docker apps
@@ -200,6 +207,8 @@ jobs:
           DOCKER_IMAGE_TAG: staging
           MFE_BASE_URL: ${{ env.STAGING_MFE_BASE_URL }}
           MFE_REMOTE_URLS: ${{ env.STAGING_MFE_REMOTE_URLS }}
+          LUNA_GATEWAY_URL: ${{ env.STAGING_LUNA_GATEWAY_URL }}
+          LUNA_REALTIME_URL: ${{ env.STAGING_LUNA_REALTIME_URL }}
         run: |
           npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}
 
@@ -358,39 +367,110 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
 
-      - name: Sync chart and deploy staging via Helm
+      # ---------------------------------------------------------------------------
+      # Everything below targets SSH_DEPLOY_HOST_STAGING, a different machine from
+      # production's SSH_DEPLOY_HOST (k8s plan 0002, section 3). Two clusters, two
+      # releases, one chart. Adding a secret rather than renaming both keeps the
+      # production workflow untouched, which matters because production is the one
+      # that is currently working.
+      # ---------------------------------------------------------------------------
+      - name: Sync chart to the staging host
         run: |
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
-            ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
+            ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }}:/root/k8s/
 
+      # A deploy that cannot possibly work is rejected in seconds here rather than
+      # diagnosed in minutes from a crashloop (k8s plan 0006, section 3).
+      - name: Preflight the staging Secrets
+        run: |
           ssh -o StrictHostKeyChecking=no \
-            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
-            "bash -s -- '${{ steps.get-affected-apps.outputs.affected_staging }}'" << 'EOF'
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
+            "bash /root/k8s/bootstrap/provision-release.sh --check --env staging"
+
+      - name: Deploy staging via Helm
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
+            "bash -s -- '${{ steps.get-affected-apps.outputs.affected_deployments }}'" << 'EOF'
             set -e
-            AFFECTED_STAGING="$1"
+            AFFECTED="$1"
 
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-            PROD_TAG_FILE=/root/helm-live/prod-tag.yaml
 
-            # Preserve the live production version across staging deploys.
-            EXTRA_VALUES=""
-            if [ -f "$PROD_TAG_FILE" ]; then
-              EXTRA_VALUES="--values $PROD_TAG_FILE"
-            fi
+            # No prod-tag.yaml plumbing any more. It existed only because a
+            # staging deploy and a production deploy shared one release, so the
+            # staging upgrade had to avoid clobbering the pinned production
+            # version. Two releases on two clusters cannot collide.
+            echo "Applying chart (staging)..."
 
-            echo "Applying chart (staging enabled, production version preserved)..."
-            helm upgrade nx-portfolio /root/k8s/helm \
+            # --atomic implies --wait and rolls back on failure, which is exactly
+            # right for the environment whose purpose is to absorb failures: a
+            # broken staging deploy leaves staging on the last good revision
+            # instead of half migrated. Without --wait, `helm upgrade` returns as
+            # soon as the API server accepts the manifests, so the job went green
+            # while pods crashlooped or a rollout hung forever.
+            #
+            # It also covers the migration Jobs for free: they are pre-upgrade
+            # hooks, so a migration that fails through its backoffLimit fails the
+            # upgrade before any new pod takes traffic.
+            #
+            # 10m is chosen against the slowest real path: three migration Jobs,
+            # then the Deployments rolling with a readiness probe whose
+            # initialDelaySeconds is 5 and periodSeconds 10, on a single node
+            # pulling images.
+            helm upgrade --install nx-portfolio /root/k8s/helm \
               --namespace nx-portfolio \
               --create-namespace \
               --values /root/k8s/helm/values.yaml \
-              $EXTRA_VALUES
+              --values /root/k8s/helm/values.staging.yaml \
+              --atomic --timeout 10m
 
             # The staging tag is mutable, so a plain upgrade will not restart the
-            # staging pods; roll the affected ones so they re-pull the new image.
-            for dep in $AFFECTED_STAGING; do
+            # pods; roll the affected ones so they re-pull the new image.
+            #
+            # Two loops, not one: all restarts are requested before any is
+            # awaited, so the rollouts overlap instead of serialising.
+            for dep in $AFFECTED; do
               echo "Restarting deployment/$dep ..."
-              kubectl rollout restart "deployment/$dep" -n nx-portfolio || true
+              kubectl rollout restart "deployment/$dep" -n nx-portfolio
+            done
+
+            # And then actually observe them. `rollout restart` is asynchronous by
+            # design: it patches the pod template annotation and returns, so the
+            # loop above asks for restarts and sees none of them. This is the half
+            # --wait cannot cover, because the restarts happen after Helm has
+            # finished. `rollout status` exits non zero on timeout, which fails
+            # the step, which is the entire point.
+            #
+            # The `|| true` that used to be here is gone: a restart that cannot be
+            # requested is a real failure, and now that deployment names are just
+            # the lowercased project names, a mismatch is a bug rather than a
+            # naming quirk to tolerate.
+            for dep in $AFFECTED; do
+              kubectl rollout status "deployment/$dep" -n nx-portfolio --timeout=5m
             done
 
             echo "Staging deployment complete."
+          EOF
+
+      # A failed deploy otherwise leaves a Helm error and nothing else. Events are
+      # the part that matters and the part people forget: ImagePullBackOff against
+      # a private GHCR package, a PVC that cannot bind, and a failing readiness
+      # probe all announce themselves there and nowhere else.
+      - name: Diagnose the failed deploy
+        if: failure()
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
+            "bash -s" << 'EOF'
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            kubectl -n nx-portfolio get pods -o wide || true
+            kubectl -n nx-portfolio get events --sort-by=.lastTimestamp | tail -40 || true
+            for p in $(kubectl -n nx-portfolio get pods \
+                  --field-selector=status.phase!=Running -o name 2>/dev/null); do
+              echo "::group::$p"
+              kubectl -n nx-portfolio describe "$p" | tail -30 || true
+              kubectl -n nx-portfolio logs "$p" --tail=50 --all-containers || true
+              echo "::endgroup::"
+            done
           EOF
