@@ -98,6 +98,12 @@ thing standing between a signed-in user and the shared catalog.
   Wait a minute and re-run. Manual `curl` against `/v1/auth/*` counts against the same
   buckets. Nothing leaks when the run stops there: folder 01 has already cleaned up after
   itself and folder 02 has not created anything yet.
+- **Renaming is throttled by the hour, not the minute.** Username changes are limited to
+  **5 per hour per IP**, and a full run uses two of them (one per-zone in folder 04, one
+  global in folder 07). So the third run in an hour will find that bucket empty. Those two
+  requests report a `429` as `SKIPPED` rather than failing, because an exhausted hourly
+  bucket says nothing about whether the backend works. Everything else in the run is
+  unaffected.
 - **Folder 03 is optional.** It talks to Mailpit rather than the API. If you run the
   stack without the mail container, skip that folder; nothing after it depends on the
   email being verified.
