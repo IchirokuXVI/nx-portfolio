@@ -1,5 +1,6 @@
 import { inject } from '@angular/core';
 import {
+  ActivatedRouteSnapshot,
   CanActivateFn,
   Router,
   RouterStateSnapshot,
@@ -8,6 +9,7 @@ import {
 } from '@angular/router';
 import { ROKU_TRANSLATOR } from '../roku-translator-token';
 import { writeAppLocale } from './app-locale-storage';
+import { APP_MOUNT_PATH } from './app-mount-path';
 import { isLocaleSegment } from './is-locale-segment';
 import { LocaleRouteData } from './locale-route-data';
 import { resolveLocaleSegments } from './locale-segment';
@@ -18,8 +20,9 @@ const ROOT_APP_KEY = 'landingV2';
 
 /**
  * The one locale guard (plan 0005 D6). Every app installs it on its own parent
- * route, configured entirely from route `data`, and it establishes one invariant
- * before anything below that route renders:
+ * route, configured from route `data` (`appKey`, `supportedLocales`,
+ * `defaultLocale`) plus the mount the app already holds as `APP_MOUNT_PATH`, and it
+ * establishes one invariant before anything below that route renders:
  *
  * **the segment immediately after the app's mount is a supported, canonical locale.**
  *
@@ -45,7 +48,8 @@ export const localeGuard: CanActivateFn = async (
   state
 ): Promise<boolean | UrlTree> => {
   const router = inject(Router);
-  const data = route.data as Partial<LocaleRouteData>;
+  const fallbackMount = inject(APP_MOUNT_PATH);
+  const data = readLocaleRouteData(route);
 
   if (!data.supportedLocales || !data.appKey) {
     return shellPreloadGuard(router, state);
@@ -57,7 +61,7 @@ export const localeGuard: CanActivateFn = async (
 
   const resolved = resolveLocaleSegments({
     segments: segments.map((segment) => segment.path),
-    mountPath: data.mountPath ?? '',
+    mountPath: data.mountPath ?? fallbackMount,
     appKey: data.appKey,
     supportedLocales: data.supportedLocales,
     defaultLocale: data.defaultLocale,
@@ -99,6 +103,52 @@ export const localeGuard: CanActivateFn = async (
 
   return tree;
 };
+
+/**
+ * Collect the guard's configuration from anywhere along the activated route chain,
+ * deepest definition winning.
+ *
+ * Split across two routes on purpose, and the split follows ownership. The app's
+ * entry route knows **where the app is mounted**, because that is the difference
+ * between running as a remote of the shell and running standalone. The feature
+ * library's route table knows the app's **locales**, because those come from the same
+ * consts it passes to `provideRokuTranslator`. Neither knows the other's half.
+ *
+ * Read from route `data` rather than from DI, which is where `mountPath` started and
+ * why this function exists. `Route.providers` on the entry route are not reliably
+ * visible to a guard on a route below it: guards resolve against the closest
+ * environment injector Angular has *created* by the preactivation phase, and the entry
+ * route's is not always one of them, so `inject(APP_MOUNT_PATH)` quietly returned its
+ * root default of `''`. The symptom was the shell inserting a second locale ahead of
+ * the mount, `/odontogram/en` becoming `/en/odontogram/en`, which looks like a routing
+ * bug and is a DI timing one. Route `data` is resolved during recognition and has no
+ * such question. `APP_MOUNT_PATH` remains the fallback and is what the locale switcher
+ * reads, since a component injector has no such timing problem.
+ */
+function readLocaleRouteData(
+  route: ActivatedRouteSnapshot
+): Partial<LocaleRouteData> {
+  const merged: Partial<LocaleRouteData> = {};
+
+  for (const ancestor of route.pathFromRoot) {
+    const data = ancestor.data as Partial<LocaleRouteData>;
+
+    if (data.appKey !== undefined) {
+      merged.appKey = data.appKey;
+    }
+    if (data.supportedLocales !== undefined) {
+      merged.supportedLocales = data.supportedLocales;
+    }
+    if (data.defaultLocale !== undefined) {
+      merged.defaultLocale = data.defaultLocale;
+    }
+    if (data.mountPath !== undefined) {
+      merged.mountPath = data.mountPath;
+    }
+  }
+
+  return merged;
+}
 
 /**
  * **Transitional, deleted with the shell's `:locale` route** (plan 0003, step 6).

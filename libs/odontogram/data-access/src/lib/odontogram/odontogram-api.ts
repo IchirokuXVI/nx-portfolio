@@ -13,7 +13,7 @@ import {
   OdontogramServiceI,
 } from './odontogram-service';
 
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class OdontogramApi extends ApiConsumer implements OdontogramServiceI {
   private _http: HttpClient = inject(HttpClient);
 

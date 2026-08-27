@@ -47,7 +47,17 @@ export class RokuTitleStrategy extends TitleStrategy {
       return;
     }
 
-    const translated = this.translator.t(key, ns ? { ns } : undefined);
+    if (!ns) {
+      // No namespace, so the title is already a finished string: either a literal
+      // one, or a key an app resolved through its own translator with
+      // `localizedTitle` (plan 0005 D10). Either way the shell has nothing to add,
+      // and running it through `t()` would risk turning a real title into a
+      // fallback, because i18next returns the key on a miss.
+      this.title.setTitle(key);
+      return;
+    }
+
+    const translated = this.translator.t(key, { ns });
     const missing = translated === key;
 
     this.title.setTitle(

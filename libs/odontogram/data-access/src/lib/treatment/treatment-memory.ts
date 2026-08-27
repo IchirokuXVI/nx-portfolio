@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TREATMENTS } from './static-treatments-data';
 import { TreatmentGetListFilter, TreatmentServiceI } from './treatment-service';
 
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class TreatmentMemory implements TreatmentServiceI {
   private _treatments: Map<string, Treatment>;
   private _inMemoryFilter = new InMemoryFilter<

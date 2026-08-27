@@ -4,19 +4,19 @@ import { NotFoundComponent } from '@portfolio/shared/ui';
 
 export const appRoutes: Route[] = [
   {
-    // Plain locale segment; localeGuard checks it is a valid locale and, when it
-    // is not (an app path or the bare root), redirects to /{guess}/{path}. The
-    // route is componentless, so children render in the shell's root outlet.
+    // **Migrated (plan 0003): odontogram owns its own locale segment**, so it mounts
+    // at the top level and its own guard settles the locale below `/odontogram`.
+    // It sets its own document title too, which is why there is no `titleNs` here.
+    path: 'odontogram',
+    loadChildren: () => import('odontogram/Routes').then((m) => m.remoteRoutes),
+  },
+  {
+    // **Transitional**, and shrinking one app per commit. The apps below have not
+    // migrated yet, so the shell still inserts a locale ahead of them before their
+    // bundles load. This whole route goes with the last of them (plan 0003, step 6).
     path: ':locale',
     canActivate: [localeGuard],
     children: [
-      {
-        path: 'odontogram',
-        title: 'app-title',
-        data: { titleNs: 'odontogram/ui', titleFallback: 'Odontogram' },
-        loadChildren: () =>
-          import('odontogram/Routes').then((m) => m.remoteRoutes),
-      },
       {
         path: 'damoclesSword',
         title: 'app-title',

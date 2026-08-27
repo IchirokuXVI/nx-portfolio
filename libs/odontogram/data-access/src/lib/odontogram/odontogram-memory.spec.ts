@@ -8,7 +8,9 @@ import { runSharedOdontogramServiceTests } from './odontogram-service.shared-spe
 function serviceFactory() {
   TestBed.configureTestingModule({
     imports: [],
-    providers: [],
+    // Named explicitly: the memory services stopped being `providedIn: 'root'`
+    // when the app took ownership of its providers (plan 0005 D5).
+    providers: [OdontogramMemory],
   });
 
   const service = TestBed.inject(OdontogramMemory);
