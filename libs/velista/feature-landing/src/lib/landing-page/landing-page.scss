@@ -10,6 +10,27 @@
   display: flex;
   flex-direction: column;
   min-block-size: 100%;
+  position: relative;
+  // Most of the glow is outside the page, so the corner is a quarter circle rather
+  // than a ball stuck to the edge. On `.page` and not on the host: the sheet outlet
+  // is a sibling of this element for exactly this class of reason, and a clipped
+  // host would clip a fixed sheet's scrim.
+  overflow: hidden;
+
+  // The mock's warm corner. A pseudo element, so it costs no element and can never
+  // be tabbed to or clicked through. Both the ramp and the geometry are tokens: Day
+  // resolves the image to `none` and the corner is simply not painted.
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block-start: var(--app-glow-inset-block-start);
+    inset-inline-end: var(--app-glow-inset-inline-end);
+    inline-size: var(--app-glow-size);
+    block-size: var(--app-glow-size);
+    border-radius: var(--app-radius-full);
+    background-image: var(--app-ambient-glow);
+    pointer-events: none;
+  }
 }
 
 // This screen does not scroll. It is deliberately one screen, on the theory that the

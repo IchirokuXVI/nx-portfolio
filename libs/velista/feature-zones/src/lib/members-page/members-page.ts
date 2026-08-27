@@ -29,12 +29,15 @@ import {
 } from '@portfolio/velista/models';
 import { appPath } from '@portfolio/velista/platform';
 import {
+  AppBar,
+  ChevronLeftIcon,
   ErrorState,
   MemberRow,
   PendingRequestRow,
   RowSkeleton,
 } from '@portfolio/velista/ui';
 import { canSeePendingRequests, memberActionsFor } from '../member-actions';
+import { MemberListRefresh } from '../member-list-refresh';
 import { zoneIdOf } from '../route-params';
 import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
 
@@ -70,6 +73,8 @@ import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
   imports: [
     RokuTranslatorPipe,
     RouterOutlet,
+    AppBar,
+    ChevronLeftIcon,
     ErrorState,
     MemberRow,
     PendingRequestRow,
@@ -88,6 +93,7 @@ export class MembersPage {
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+  private readonly _refresh = inject(MemberListRefresh);
 
   readonly zoneId = zoneIdOf(this._route);
 
@@ -105,6 +111,26 @@ export class MembersPage {
 
   /** A failure's copy, as a key. Null for the one failure that must say nothing. */
   readonly errorKey = signal<string | null>(null);
+
+  /**
+   * What the screen is called, outside the state union so it is named while it is
+   * loading and while it is failing.
+   *
+   * On a cold deep link there is no cached group to put in "Members of {{name}}", so
+   * it falls back to the plain label rather than rendering a sentence with a hole in
+   * it. Both keys already exist.
+   */
+  readonly title = computed(() => {
+    const name = this._zones.zoneById(this.zoneId())?.name ?? '';
+    return name === ''
+      ? { key: 'zone.detail.members', name: '' }
+      : { key: 'zone.members.title', name };
+  });
+
+  readonly accountInitial = computed(() => {
+    const username = this._session.username();
+    return username === null ? null : initialOf(username);
+  });
 
   /** The staff room, held while this screen is open and released with it (rule G3). */
   private _leaveStaffRoom: (() => void) | null = null;
@@ -181,6 +207,9 @@ export class MembersPage {
     effect(() => {
       const id = this.zoneId();
       const statuses = this._statuses();
+      // The third key: a sheet over this screen changed a row. Read bare, outside
+      // `untracked`, alongside the two that were already here.
+      this._refresh.token();
 
       untracked(() => {
         void this._zones.loadZone(id);
@@ -286,11 +315,6 @@ export class MembersPage {
   }
 
   retry(): void {
-    void this._load(this.zoneId());
-  }
-
-  /** A sheet finished. Re-read, because it changed a row this screen is showing. */
-  refresh(): void {
     void this._load(this.zoneId());
   }
 

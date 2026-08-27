@@ -36,6 +36,14 @@ export class InviteCard {
   readonly copied = input(false);
 
   /**
+   * Set when this code has just replaced an older one.
+   *
+   * Says so in the live region it already has, and takes a class that draws the same
+   * attention in colour. Never colour alone: the sentence is what carries it.
+   */
+  readonly isNew = input(false);
+
+  /**
    * Whether to offer sharing at all.
    *
    * The Web Share API exists on a phone and mostly does not on a desktop, and a

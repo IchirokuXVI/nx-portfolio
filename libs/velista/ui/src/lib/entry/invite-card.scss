@@ -14,6 +14,15 @@
   border-radius: var(--app-card-radius);
   background: var(--app-surface-raised);
   box-shadow: var(--app-elevation-1);
+
+  // A code that has just replaced an older one. The sentence in the live region is
+  // what actually says so; this is the second signal and never the only one. The
+  // border goes to the solid attention colour rather than the card gaining a tint,
+  // because the tint token is a 10% fill and would let the page ground through a
+  // surface that has a sunken field sitting on it.
+  &.is-new {
+    border-color: var(--app-status-attention-fg);
+  }
 }
 
 .title {

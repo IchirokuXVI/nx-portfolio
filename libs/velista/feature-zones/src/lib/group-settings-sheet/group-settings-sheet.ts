@@ -103,12 +103,19 @@ export class GroupSettingsSheet {
    * The group page and the dashboard both pick the new code up from the store, which
    * this write patches from the server's answer. Nothing refetches, and the
    * `zone.updated` broadcast that follows says the same thing to every other device.
+   *
+   * **Closes both sheets**, exactly as `save()` does after a rename, rather than
+   * dropping the confirm and leaving the settings sheet showing the name field. The
+   * write is the end of the task, not a step in one, and the card that holds the new
+   * code is behind two layers until this closes. The store has already patched
+   * `joinCode`, so the group page's invite card is drawing it before the panel has
+   * finished falling.
    */
   async regenerate(): Promise<void> {
     await this._run(() => this._zones.regenerateJoinCode(this.zoneId()));
 
     if (this.errorKey() === null) {
-      this.pending.set(null);
+      await this.dismiss();
     }
   }
 

@@ -1,8 +1,15 @@
 <lib-app-bar [accountInitial]="accountInitial()" [signedIn]="true" />
 
 <main class="page">
-  <button (click)="back()" class="back" type="button">
-    {{ 'zone.detail.back' | rokuT }}
+  <!-- The string moves to the accessible name, so nothing is lost for a screen
+       reader when the label becomes a glyph. -->
+  <button
+    (click)="back()"
+    [attr.aria-label]="'zone.detail.back' | rokuT"
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
   </button>
 
   <!--
@@ -114,6 +121,7 @@
         (copyCode)="copyCode(group.joinCode)"
         (share)="shareCode(group.joinCode)"
         [copied]="codeCopied()"
+        [isNew]="codeIsNew()"
         [joinCode]="group.joinCode"
         [shareable]="canShare"
         [zoneName]="group.name"

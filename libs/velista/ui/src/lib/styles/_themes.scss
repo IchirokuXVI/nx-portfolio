@@ -139,6 +139,17 @@ $app-status-line: 26%;
   --app-scrim: rgb(var(--app-ink-950-rgb) / 74%);
   --app-sheet-shadow: 0 -18px 40px rgb(var(--app-ink-950-rgb) / 42%);
 
+  // The soft corner the unauthenticated surface is lit from: amber at the centre
+  // falling through violet to nothing. Channel for channel the mock's, through the
+  // primitives that already hold those numbers, so it is a role rather than a
+  // gradient written into one component's stylesheet where no theme could reach it.
+  --app-ambient-glow: radial-gradient(
+    circle,
+    rgb(var(--app-amber-500-rgb) / 15%) 0%,
+    rgb(var(--app-violet-400-rgb) / 9%) 44%,
+    rgb(var(--app-ink-950-rgb) / 0%) 72%
+  );
+
   @include app-status(
     var(--app-mint-400),
     var(--app-mint-400-rgb),
@@ -202,6 +213,12 @@ $app-status-line: 26%;
   // by its own shadow and a 74% scrim would read as the lights going out.
   --app-scrim: rgb(var(--app-ink-900-rgb) / 42%);
   --app-sheet-shadow: 0 -12px 32px rgb(var(--app-ink-900-rgb) / 16%);
+
+  // None, on purpose and not by omission: `DayTheme.dc.html` draws no glow, because
+  // the ramps that read as warmth on near black read as a stain on white. The role
+  // is still defined here so the contract stays complete and a component can use it
+  // without asking which theme is on.
+  --app-ambient-glow: none;
 
   @include app-status(
     // The 700s, not the 400s. A bright ramp that carries Night is close to

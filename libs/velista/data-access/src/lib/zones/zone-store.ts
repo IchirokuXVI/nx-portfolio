@@ -108,6 +108,7 @@ export class ZoneStore {
   private readonly _state = signal<ZoneLoadState>('idle');
   private readonly _error = signal<unknown>(null);
   private readonly _lastEntry = signal<ZoneEntry | null>(null);
+  private readonly _lastCodeChange = signal<string | null>(null);
   private readonly _departure = signal<ZoneDeparture | null>(null);
 
   /**
@@ -140,6 +141,15 @@ export class ZoneStore {
 
   /** The way in just taken, or null. Cleared by whoever renders it. */
   readonly lastEntry = this._lastEntry.asReadonly();
+
+  /**
+   * The zone whose join code was just replaced, or null.
+   *
+   * The same shape as `lastEntry` and for the same reason: landing on a card that
+   * quietly holds a different six characters is not the same as being told the code
+   * is new, and it must be said once rather than every time the page is drawn.
+   */
+  readonly lastCodeChange = this._lastCodeChange.asReadonly();
 
   /** The zone just lost, or null. Cleared by whoever reports it. */
   readonly departure = this._departure.asReadonly();
@@ -302,6 +312,11 @@ export class ZoneStore {
     this._lastEntry.set(null);
   }
 
+  /** The group page has said the code is new. It does not say it twice. */
+  clearLastCodeChange(): void {
+    this._lastCodeChange.set(null);
+  }
+
   /** One zone out of the cache, or undefined when it has not been loaded. */
   zoneById(zoneId: string): MyZone | undefined {
     return this._byId().get(zoneId);
@@ -354,7 +369,15 @@ export class ZoneStore {
 
   /** Mint a new join code. The old one stops working for everybody it was sent to. */
   async regenerateJoinCode(zoneId: string): Promise<ZoneWriteOutcome> {
-    return this._write(() => this._zones.regenerateJoinCode(zoneId));
+    const outcome = await this._write(() =>
+      this._zones.regenerateJoinCode(zoneId)
+    );
+
+    if (outcome.state === 'succeeded') {
+      this._lastCodeChange.set(zoneId);
+    }
+
+    return outcome;
   }
 
   /**

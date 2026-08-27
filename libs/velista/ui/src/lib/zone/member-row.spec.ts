@@ -101,6 +101,33 @@ describe('MemberRow', () => {
     expect(document.activeElement).toBe(el(fixture, '.trigger'));
   });
 
+  it('closes on a click outside and leaves focus where the click landed', async () => {
+    // Not `close()`, which would pull focus back to a row the person has finished
+    // with. Escape and choosing an item are the two gestures that hand focus back.
+    const fixture = await render();
+    openMenu(fixture);
+
+    const elsewhere = document.createElement('button');
+    document.body.appendChild(elsewhere);
+    elsewhere.focus();
+    elsewhere.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(el(fixture, '[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(elsewhere);
+
+    elsewhere.remove();
+  });
+
+  it('keeps the menu open when the click is the trigger itself', async () => {
+    // The trigger is inside the host, so its own click is an inside click and
+    // `toggleMenu()` is still the only thing that toggles.
+    const fixture = await render();
+    openMenu(fixture);
+
+    expect(el(fixture, '[role="menu"]')).not.toBeNull();
+  });
+
   it('emits the chosen action and closes', async () => {
     const fixture = await render();
     openMenu(fixture);

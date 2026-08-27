@@ -37,19 +37,32 @@
 // A destination's back, not a sheet's dismiss: these pages are reached by deep link
 // as readily as from the dashboard, so there may be no history entry behind them and
 // the control has to be a real navigation (plan 0009, section 4.1).
+// The shape is `AuthScreen`'s, copied rather than shared: as the header of this file
+// says, Sass cannot cross a library boundary, so a caret button that looks the same
+// on both surfaces is written twice on purpose.
+//
+// The negative inline start margin keeps the glyph optically aligned with the content
+// below it. The button is wider than the caret, so without it the caret sits indented
+// from the column it heads.
 @mixin back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   align-self: flex-start;
-  min-block-size: var(--app-touch-target);
-  padding-inline: var(--app-space-2);
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
   margin-inline-start: calc(var(--app-space-2) * -1);
-  background: transparent;
   border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
   color: var(--app-text-secondary);
-  font: inherit;
-  font-size: var(--app-text-sm);
   cursor: pointer;
 
   @include focus-ring;
+}
+
+@mixin back-glyph {
+  font-size: var(--app-icon-md);
 }
 
 @mixin primary-action {

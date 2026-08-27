@@ -1,11 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  inject,
   input,
   output,
   signal,
   viewChild,
-  type ElementRef,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { MemberAction, MemberRowVm } from '@portfolio/velista/models';
@@ -44,6 +45,7 @@ import { RoleChip } from './role-chip';
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(keydown.escape)': 'close()',
+    '(document:click)': 'closeOnOutsideClick($event.target)',
     // The open menu has to paint over the rows below it, and a parent stylesheet
     // cannot reach inside this component to arrange that: style encapsulation scopes
     // the parent's selectors to the parent's own template. So the stacking context is
@@ -57,6 +59,8 @@ export class MemberRow {
   readonly act = output<{ action: MemberAction; membershipId: string }>();
 
   readonly menuOpen = signal(false);
+
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   private readonly _trigger =
     viewChild<ElementRef<HTMLButtonElement>>('trigger');
@@ -102,6 +106,28 @@ export class MemberRow {
 
     this.menuOpen.set(false);
     this._trigger()?.nativeElement.focus();
+  }
+
+  /**
+   * A click anywhere else closes the menu, and leaves focus where it landed.
+   *
+   * Separate from `close()` on purpose. `close()` hands focus back to the trigger,
+   * which is right for Escape and for choosing an item, and wrong here: the person has
+   * just put focus where they wanted it, and pulling it back to a row they have
+   * finished with is the kind of thing that makes a page feel like it is arguing.
+   *
+   * The trigger sits inside the host, so its own click is an inside click and
+   * `toggleMenu()` still does the toggling.
+   */
+  protected closeOnOutsideClick(target: EventTarget | null): void {
+    if (!this.menuOpen()) {
+      return;
+    }
+
+    const host = this._host.nativeElement;
+    if (target === null || !host.contains(target as Node)) {
+      this.menuOpen.set(false);
+    }
   }
 
   choose(action: MemberAction): void {

@@ -21,6 +21,7 @@ import { APP_BASE_PATH, type GroupState } from '@portfolio/velista/models';
 import { appPath, BrowserFacade } from '@portfolio/velista/platform';
 import {
   AppBar,
+  ChevronLeftIcon,
   EmptyState,
   ErrorState,
   GroupHeader,
@@ -68,6 +69,7 @@ import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
     RokuTranslatorPipe,
     RouterOutlet,
     AppBar,
+    ChevronLeftIcon,
     EmptyState,
     ErrorState,
     GroupHeader,
@@ -95,6 +97,15 @@ export class GroupPage {
 
   /** Set for a moment after the invite code is copied, which swaps the label. */
   readonly codeCopied = signal(false);
+
+  /**
+   * Whether the code on screen is the one that has just replaced an older one.
+   *
+   * Held here rather than read from the store on every draw, because the store's copy
+   * is cleared the moment this page has taken it: the notice belongs to this visit and
+   * must not come back when the person navigates away and returns.
+   */
+  readonly codeIsNew = signal(false);
 
   /** A failure from claiming an ownerless group, as a key. Null when there is none. */
   readonly claimErrorKey = signal<string | null>(null);
@@ -201,6 +212,21 @@ export class GroupPage {
         if (mayLoad && this._lists.stateOf(id) === 'idle') {
           void this._lists.load(id);
         }
+      });
+    });
+
+    // A new join code was minted by the settings sheet this page sits under. Taken
+    // once and cleared, exactly as the dashboard takes `lastEntry`, so the notice
+    // belongs to the arrival rather than to every draw of the card.
+    effect(() => {
+      const zoneId = this._zones.lastCodeChange();
+      if (zoneId === null || zoneId !== this.zoneId()) {
+        return;
+      }
+
+      untracked(() => {
+        this._zones.clearLastCodeChange();
+        this.codeIsNew.set(true);
       });
     });
 
