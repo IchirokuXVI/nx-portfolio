@@ -32,7 +32,7 @@
     },
     "observability:up": {
       "executor": "nx:run-commands",
-      "// ": "Plan 0016, section 9. stack:up plus the opt-in `observability` compose profile: the OTLP collector, Jaeger, Prometheus and Grafana. Prints the URLs it just published, on this slot's ports. The services already point at the collector (luna-slot.sh writes OTEL_EXPORTER_OTLP_ENDPOINT into each service .env), so nothing else has to change for spans to start landing.",
+      "// ": "Plan 0016, section 9. Starts ONLY the four containers of the opt-in `observability` compose profile: the OTLP collector, Jaeger, Prometheus and Grafana. It does not start the base stack and does not migrate, so run stack:up first (or alongside) for the databases. Prints the URLs it just published, on this slot's ports. The services already point at the collector (luna-slot.sh writes OTEL_EXPORTER_OTLP_ENDPOINT into each service .env), so nothing else has to change for spans to start landing.",
       "cache": false,
       "options": {
         "command": "bash k8s/e2e/luna-shopper-backend/stack.sh -p observability up"

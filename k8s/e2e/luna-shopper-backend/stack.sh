@@ -22,26 +22,31 @@
 #
 # --- the -p flag ------------------------------------------------------------
 #
-# `-p <name>` (or `--profile <name>`) activates a compose profile for the verb
-# that follows, so the optional groups in compose.yml get the same one command
+# `-p <name>` (or `--profile <name>`) scopes the verb that follows to one compose
+# profile, so the optional groups in compose.yml get the same one command
 # treatment as the base stack:
 #
-#   stack.sh -p observability up      # the base stack, plus collector/Jaeger/
-#                                     # Prometheus/Grafana
+#   stack.sh -p observability up      # start ONLY collector/Jaeger/Prometheus/
+#                                     # Grafana, leaving the base stack alone
 #   stack.sh -p observability down    # remove ONLY those four, keep the databases
 #
-# It means different things to the two verbs, because compose is itself
-# asymmetric here and pretending otherwise would be a trap:
+# In both directions -p means the same thing: operate on that profile and
+# nothing else. Neither direction can be a plain passthrough of --profile to get
+# there, because compose treats profiles as a filter on top of the unprofiled
+# services rather than as a selection:
 #
-#   up   is ADDITIVE. Compose starts every unprofiled service plus the named
-#        profile's, which is what a passthrough of --profile already does.
-#   down is RESTRICTIVE. `compose down` is NOT scoped by a profile in the way it
-#        looks: unprofiled services are always in the active set, so
-#        `--profile observability down` would take the three databases and NATS
-#        with it. So a profiled `down` is a `stop` + `rm` over exactly the
-#        services that profile adds (see profile_services), and it leaves the
-#        volumes alone, because losing six hours of Grafana history to a
-#        teardown of something else is not a tradeoff anybody chose.
+#   up   `--profile X up` also starts every unprofiled service, so it would drag
+#        the whole base stack along and then migrate it. Naming the profile's
+#        services explicitly is what scopes it. Dependencies still resolve.
+#   down `--profile X down` is worse than additive: unprofiled services are
+#        always in the active set, so it would take the three databases and NATS
+#        with it. A profiled `down` is a `stop` + `rm` over exactly the services
+#        the profile adds, and it leaves the volumes alone, because losing six
+#        hours of Grafana history to a teardown of something else is not a
+#        tradeoff anybody chose.
+#
+# So a profiled `up` does NOT migrate. The base stack is what owns databases,
+# and `stack.sh up` is still the command that brings it up and migrates it.
 #
 # Which services a profile adds is DERIVED, never hardcoded: see
 # profile_services. Adding a profile to compose.yml is therefore enough to make
@@ -271,19 +276,46 @@ bootstrap_config() {
 }
 
 up() {
+  # With -p this is scoped to that profile's own containers, so it never starts
+  # the base stack and never migrates. See up_profile.
+  if [[ -n "$PROFILE" ]]; then
+    up_profile "$PROFILE"
+    return
+  fi
+
   echo "==> bringing the compose stack up (waiting on healthchecks)"
   compose up -d --wait
 
-  # The migrations run whatever profile is selected. They are idempotent, so the
-  # cost of the uniform rule is a few seconds on `-p observability up`, and the
-  # alternative, an `up` whose meaning shifts with the flag, is how somebody ends
-  # up with an unmigrated database and no idea why.
   for svc in "${MIGRATED_SERVICES[@]}"; do
     echo "==> migrating $svc"
     npx nx run "luna-shopper-backend-$svc:migration:run"
   done
 
   echo "==> stack is up and migrated"
+}
+
+# Bring up ONLY what a profile adds, naming its services explicitly.
+#
+# `--profile X up` on its own is additive: compose starts every unprofiled
+# service too, so it would bring the whole base stack along and then migrate it.
+# That is a surprising amount of work to ask for by typing `observability:up`,
+# and it makes the flag mean one thing to `up` and another to `down`. Naming the
+# services keeps both directions the same promise: -p operates on that profile.
+#
+# Dependencies still resolve, so a profile whose services depend on each other
+# (otel-collector on jaeger) comes up in the right order.
+up_profile() {
+  local profile="$1" svcs
+  svcs="$(profile_services "$profile")"
+  if [[ -z "$svcs" ]]; then
+    echo "no services are gated behind a '$profile' profile in compose.yml" >&2
+    return 1
+  fi
+
+  echo "==> starting the '$profile' profile: $(tr '\n' ' ' <<<"$svcs")"
+  # Word splitting is the point here: $svcs is a newline separated service list.
+  # shellcheck disable=SC2086
+  compose_base --profile "$profile" up -d --wait $svcs
   print_profile_hints
 }
 
@@ -495,11 +527,23 @@ done
 # is dispatched here rather than from inside up(): a checkout that cannot be
 # configured has started nothing, and should not reach up_or_clean's teardown.
 # `down` is exempt on purpose, since tearing down needs no service config.
+#
+# A profiled `up` is exempt for the same reason: it starts containers that read
+# none of the six service .env files, and refusing to start Grafana over a
+# missing auth/.env would be a confusing failure for a command that touches no
+# database. `stack.sh up` remains the command that configures a fresh checkout.
 case "${1:-}" in
   bootstrap) bootstrap_config ;;
-  up) bootstrap_config && up ;;
-  # With -p this is scoped to that profile's own containers; without it, it is
-  # the whole project and its volumes, as before.
+  # With -p both of these are scoped to that profile's own containers. Without
+  # it, `up` is the base stack plus its migrations and `down` is the whole
+  # project including volumes, both unchanged.
+  up)
+    if [[ -n "$PROFILE" ]]; then
+      up
+    else
+      bootstrap_config && up
+    fi
+    ;;
   down)
     if [[ -n "$PROFILE" ]]; then
       down_profile "$PROFILE"
