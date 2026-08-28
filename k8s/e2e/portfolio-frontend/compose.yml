@@ -3,7 +3,7 @@
 # and remotes are tested unchanged. Used by .github/workflows/docker-ci.yml, and
 # runnable locally too:
 #
-#   echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
+#   echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com velista.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
 #   docker login ghcr.io   # to pull the private images
 #   docker compose -f k8s/e2e/portfolio-frontend/compose.yml up -d --pull always
 #   E2E_BASE_URL=https://staging.ichirokuxvi.com \
@@ -24,7 +24,7 @@ services:
       - |
         set -e
         apk add --no-cache openssl >/dev/null
-        for domain in staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com; do
+        for domain in staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com velista.staging.ichirokuxvi.com; do
           if [ ! -f "/certs/$$domain.crt" ]; then
             openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
               -keyout "/certs/$$domain.key" -out "/certs/$$domain.crt" \
@@ -49,6 +49,8 @@ services:
         condition: service_started
       landingv2:
         condition: service_started
+      velista:
+        condition: service_started
     ports:
       - '80:80'
       - '443:443'
@@ -66,6 +68,14 @@ services:
     image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/damoclessword:${E2E_IMAGE_TAG:-staging}
   landingv2:
     image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/landingv2:${E2E_IMAGE_TAG:-staging}
+  # velista is a remote like the others, but it is served from an origin of its own
+  # rather than from the micro-frontend host (velista plan 0013), so it needs a
+  # server block and a certificate under its own name. It is not optional here: the
+  # shell initialises every remote container while it boots, so a velista that does
+  # not answer takes the whole shell down and every suite fails on an empty
+  # `<ng-shell-root>`, whichever app it was testing.
+  velista:
+    image: ${E2E_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/velista:${E2E_IMAGE_TAG:-staging}
 
 volumes:
   certs:
