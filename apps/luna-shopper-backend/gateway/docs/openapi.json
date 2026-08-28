@@ -2804,6 +2804,89 @@
         "tags": [
           "lists"
         ]
+      },
+      "get": {
+        "operationId": "ListsController_getAccess_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `list.getAccess` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/list.ListAccessView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lists"
+        ]
       }
     },
     "/v1/lists/{id}/lines": {
@@ -6550,6 +6633,9 @@
           "name": {
             "type": "string",
             "maxLength": 120
+          },
+          "autoApproveLines": {
+            "type": "boolean"
           }
         }
       },
@@ -6560,17 +6646,23 @@
             "type": "string",
             "format": "uuid"
           },
-          "role": {
-            "type": "string",
-            "enum": [
-              "READER",
-              "WRITER"
-            ]
+          "permissions": {
+            "type": "array",
+            "description": "The complete permission set for this membership. Empty revokes access.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "READ",
+                "WRITE",
+                "DECIDE",
+                "MANAGE"
+              ]
+            }
           }
         },
         "required": [
           "membershipId",
-          "role"
+          "permissions"
         ]
       },
       "SetListAccessDto": {
@@ -7474,6 +7566,15 @@
           "NOT_AVAILABLE"
         ]
       },
+      "enums.ListPermission": {
+        "type": "string",
+        "enum": [
+          "READ",
+          "WRITE",
+          "DECIDE",
+          "MANAGE"
+        ]
+      },
       "enums.MembershipStatus": {
         "type": "string",
         "enum": [
@@ -7674,6 +7775,46 @@
         ],
         "additionalProperties": false
       },
+      "list.ListAccessEntry": {
+        "type": "object",
+        "properties": {
+          "membershipId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/enums.ListPermission"
+            }
+          }
+        },
+        "required": [
+          "membershipId",
+          "permissions"
+        ],
+        "additionalProperties": false
+      },
+      "list.ListAccessView": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.ListAccessEntry"
+            }
+          }
+        },
+        "required": [
+          "listId",
+          "entries"
+        ],
+        "additionalProperties": false
+      },
       "list.ListCounts": {
         "type": "object",
         "properties": {
@@ -7737,6 +7878,15 @@
           "counts": {
             "$ref": "#/components/schemas/list.ListCounts"
           },
+          "autoApproveLines": {
+            "type": "boolean"
+          },
+          "myPermissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/enums.ListPermission"
+            }
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -7752,6 +7902,8 @@
           "name",
           "createdByUserId",
           "counts",
+          "autoApproveLines",
+          "myPermissions",
           "createdAt",
           "updatedAt"
         ],

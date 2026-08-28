@@ -1,7 +1,7 @@
 import type {
   LineApprovalStatus,
   LineStatus,
-  ListRole,
+  ListPermission,
 } from '../enums/list.enums';
 import type { PageQuery, Paginated } from '../pagination';
 
@@ -13,6 +13,7 @@ import type { PageQuery, Paginated } from '../pagination';
 export const LIST_PATTERNS = {
   create: 'list.create',
   setAccess: 'list.setAccess',
+  getAccess: 'list.getAccess',
   update: 'list.update',
   delete: 'list.delete',
   list: 'list.list',
@@ -51,15 +52,45 @@ export interface ListView {
    * frontend maps one shape whichever endpoint it came from (plan 0017, 3.4).
    */
   counts: ListCounts;
+  /**
+   * Whether a new line on this list is approved the moment it is added (plan
+   * 0037, section 3). Configuration rather than a preference: changing it needs
+   * `MANAGE`, and it governs only what a **new** line starts as.
+   */
+  autoApproveLines: boolean;
+  /**
+   * What the **caller** may do on this list (plan 0036, section 7), including the
+   * derived grant a zone OWNER or ADMIN holds on every list in the zone.
+   *
+   * It rides here rather than on a request of its own because it is per caller
+   * data about a resource the caller is already fetching, and two round trips
+   * could disagree for exactly as long as it took. It is what lets the client
+   * stop offering controls and discovering from a refusal which of them existed.
+   */
+  myPermissions: ListPermission[];
   /** ISO 8601 UTC (plan 0017, section 7). */
   createdAt: string;
   /** ISO 8601 UTC (plan 0017, section 7). */
   updatedAt: string;
 }
 
+/**
+ * One membership's stored permissions on one list.
+ *
+ * An **empty array means no access**, and `setAccess` stores it by deleting the
+ * row rather than by writing an empty set (plan 0036, section 2.2). Group staff
+ * never appear as an entry: their grant is derived from `ZoneRole` and there is
+ * nothing stored to return or to revoke (section 2.4).
+ */
 export interface ListAccessEntry {
   membershipId: string;
-  role: ListRole;
+  permissions: ListPermission[];
+}
+
+/** The stored access table for one list, as `GET /v1/lists/:id/access` returns it. */
+export interface ListAccessView {
+  listId: string;
+  entries: ListAccessEntry[];
 }
 
 export interface LineView {
@@ -114,6 +145,30 @@ export interface UpdateListRequest {
   userId: string;
   listId: string;
   name?: string;
+  /** Turn approval on a new line on or off (plan 0037, section 3). `MANAGE`. */
+  autoApproveLines?: boolean;
+}
+
+/** Read a list's stored access table (plan 0036, section 6). `MANAGE` only. */
+export interface GetListAccessRequest {
+  userId: string;
+  listId: string;
+}
+
+/**
+ * The caller's own permissions on one list changed (plan 0036, section 8).
+ *
+ * Addressed to the person behind the membership rather than to the list room,
+ * because the room event names nobody and, by construction, cannot reach the one
+ * person it most needs to: somebody who has just been **granted** access was
+ * never in the room to hear it.
+ *
+ * An empty `permissions` is somebody who has just lost the list entirely.
+ */
+export interface ListMyAccessChangedEvent {
+  listId: string;
+  zoneId: string;
+  permissions: ListPermission[];
 }
 
 export interface ListIdRequest {

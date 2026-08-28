@@ -1,5 +1,5 @@
 import {
-  ListRole,
+  ListPermission,
   MembershipStatus,
   type CreateListRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -131,17 +131,65 @@ describe('creating a list', () => {
     ]);
   });
 
-  it('grants WRITER, because a list here is shopped from and not read', async () => {
-    // The decision worth pinning: a group of readers watching one person shop is
-    // not a household shopping list. Narrowing it afterwards is the share sheet's
-    // job and is one tap away.
+  it('grants the group read, write and decide, because a list here is shopped from', async () => {
+    // The decision worth pinning (plan 0036, section 2.6): a group of readers
+    // watching one person shop is not a household shopping list, and with DECIDE
+    // split out of the old WRITER, granting write alone would ship a shared list
+    // only its creator can tick anything off. Narrowing it afterwards is the
+    // share sheet's job and is one tap away.
     const { service, written } = serviceWith(['m-2']);
 
     await service.create(request(true));
 
-    expect(written.access.every((row) => row.role === ListRole.WRITER)).toBe(
-      true
+    const others = written.access.filter(
+      (row) => row.membershipId !== CREATOR_MEMBERSHIP
     );
+    expect(others).toHaveLength(1);
+    for (const row of others) {
+      expect([...(row.permissions ?? [])].sort()).toEqual(
+        [
+          ListPermission.DECIDE,
+          ListPermission.READ,
+          ListPermission.WRITE,
+        ].sort()
+      );
+    }
+  });
+
+  it('gives the creator all four, as an ordinary row', async () => {
+    // Plan 0036, section 2.5. Their governing power used to be derived from
+    // `createdByUserId`, which made it exactly as irrevocable as a group admin's.
+    // As a row, a group admin can rewrite it, down to deleting it.
+    const { service, written } = serviceWith(['m-2']);
+
+    await service.create(request(true));
+
+    const creator = written.access.find(
+      (row) => row.membershipId === CREATOR_MEMBERSHIP
+    );
+    expect([...(creator?.permissions ?? [])].sort()).toEqual(
+      [
+        ListPermission.DECIDE,
+        ListPermission.MANAGE,
+        ListPermission.READ,
+        ListPermission.WRITE,
+      ].sort()
+    );
+  });
+
+  it('never grants MANAGE to the rest of the group', async () => {
+    // Governing the list is the thing the creator kept, and only group staff may
+    // hand that bit out afterwards (plan 0036, section 5, rule 3).
+    const { service, written } = serviceWith(['m-2', 'm-3']);
+
+    await service.create(request(true));
+
+    const others = written.access.filter(
+      (row) => row.membershipId !== CREATOR_MEMBERSHIP
+    );
+    expect(
+      others.some((row) => row.permissions?.includes(ListPermission.MANAGE))
+    ).toBe(false);
   });
 
   it('keeps it to its creator when the box was unticked', async () => {

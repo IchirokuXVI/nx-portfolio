@@ -251,15 +251,32 @@ export class LineStore {
    * below it, and keying on nothing would lose the field's focus between two adds,
    * which is the one thing section 4.8 will not allow.
    *
-   * Rule L3 lives in the caller rather than here. This method reports the line it
-   * created and the page decides whether to follow it with an approval, because
-   * whether the caller is staff is a fact about the zone and this store holds lines.
+   * **The placeholder is drawn with the approval the server is going to give it.** Core
+   * decides that from two facts, in order: the adder holds `DECIDE`, or the list
+   * auto-approves (backend plan 0037, section 2). Both are known here before the request
+   * is sent, so there is no reason to draw `PENDING` and correct it a frame later, and
+   * every reason not to: the frame in between is the approve button appearing on the
+   * adder's own line, which is the defect plan 0030 section 5 exists to remove.
+   *
+   * They arrive as an `approval` argument rather than being resolved here, and that is
+   * the same division this method already had for rule L3: whether the caller may decide
+   * is a fact about a list, and this store holds lines. `ListStore` holds the list, the
+   * page holds the abilities derived from it, and passing them down keeps this store from
+   * injecting a second store to ask a question its caller had already answered.
+   *
+   * Required rather than defaulted, because a default of "not approved" is exactly the
+   * old behaviour and would reintroduce the defect silently at every call site that
+   * forgot it.
    */
   async addLine(
     listId: string,
     content: string,
     quantity: number,
-    createdByUserId: string
+    createdByUserId: string,
+    approval: {
+      readonly canDecide: boolean;
+      readonly autoApproveLines: boolean;
+    }
   ): Promise<
     | { readonly state: 'added'; readonly line: Line }
     | { readonly state: 'failed'; readonly error: unknown }
@@ -272,13 +289,16 @@ export class LineStore {
       quantity,
       itemId: null,
       position: this._nextPosition(listId),
-      // PENDING because core starts every line there, whoever added it. Drawing it as
-      // approved and correcting a frame later would be a lie the staff path then has
-      // to undo in front of the person who made it.
-      approvalStatus: 'PENDING',
+      approvalStatus:
+        approval.canDecide || approval.autoApproveLines
+          ? 'APPROVED'
+          : 'PENDING',
+      // The approver is the adder only when they are the one who could have been asked.
+      // An auto-approved line has **no** approver, because nobody decided: the list is
+      // configured not to ask, and a null here is the honest record of that.
+      approvedByUserId: approval.canDecide ? createdByUserId : null,
       status: 'PENDING',
       createdByUserId,
-      approvedByUserId: null,
       version: 0,
     };
 
@@ -382,9 +402,7 @@ export class LineStore {
    * was rather than at the end, which is why the whole list is rewritten rather than
    * the row appended.
    */
-  async deleteLine(
-    lineId: string
-  ): Promise<{
+  async deleteLine(lineId: string): Promise<{
     readonly state: 'deleted' | 'failed';
     readonly error?: unknown;
   }> {

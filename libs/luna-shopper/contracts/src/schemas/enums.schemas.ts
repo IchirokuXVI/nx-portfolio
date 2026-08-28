@@ -6,7 +6,7 @@ import {
 import {
   LineApprovalStatus,
   LineStatus,
-  ListRole,
+  ListPermission,
 } from '../lib/enums/list.enums';
 import { MergeRequestStatus } from '../lib/enums/merge.enums';
 import {
@@ -29,7 +29,7 @@ export const ENUM_IDS = {
   zoneStatus: schemaId('enums/ZoneStatus'),
   zoneRole: schemaId('enums/ZoneRole'),
   membershipStatus: schemaId('enums/MembershipStatus'),
-  listRole: schemaId('enums/ListRole'),
+  listPermission: schemaId('enums/ListPermission'),
   lineApprovalStatus: schemaId('enums/LineApprovalStatus'),
   lineStatus: schemaId('enums/LineStatus'),
   mergeRequestStatus: schemaId('enums/MergeRequestStatus'),
@@ -42,7 +42,7 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.zoneStatus, Object.values(ZoneStatus)),
   enumOf(ENUM_IDS.zoneRole, Object.values(ZoneRole)),
   enumOf(ENUM_IDS.membershipStatus, Object.values(MembershipStatus)),
-  enumOf(ENUM_IDS.listRole, Object.values(ListRole)),
+  enumOf(ENUM_IDS.listPermission, Object.values(ListPermission)),
   enumOf(ENUM_IDS.lineApprovalStatus, Object.values(LineApprovalStatus)),
   enumOf(ENUM_IDS.lineStatus, Object.values(LineStatus)),
   enumOf(ENUM_IDS.mergeRequestStatus, Object.values(MergeRequestStatus)),

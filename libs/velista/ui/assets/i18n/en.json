@@ -377,7 +377,10 @@
       "short": "List is empty"
     },
     "readOnly": {
-      "notice": "You can read this list, not change it"
+      "banner": "You can read this list, not change it"
+    },
+    "ticking": {
+      "notMine": "Add anything you need. Ticking things off is for whoever does the shop"
     },
     "line": {
       "awaitingApproval": "Waiting for approval",
@@ -412,7 +415,9 @@
     "edit": {
       "title": "Change this line",
       "content": "What is it",
-      "save": "Save"
+      "save": "Save",
+      "remainder_one": "The one you are not bringing back stays on the list, marked as not in the shop",
+      "remainder_other": "The {{count}} you are not bringing back stay on the list, marked as not in the shop"
     },
     "confirm": {
       "deleteLine": {
@@ -433,25 +438,29 @@
       "send": "Send",
       "empty": "Nothing said about this yet",
       "someone": "Someone in the group",
-      "loading": "Loading what people said"
+      "loading": "Loading what people said",
+      "readOnly": "You can read what people said here, not add to it"
     },
     "settings": {
       "title": "List settings",
       "name": "List name",
       "save": "Save",
       "share": "Who can use this list",
+      "approval": "New lines",
+      "autoApprove": {
+        "label": "Add without asking",
+        "hint": "New lines go straight onto the list instead of waiting for approval. The ones already waiting stay as they are"
+      },
       "delete": "Delete this list",
       "accessFor": "What {{name}} can do with this list",
       "access": {
-        "none": "No access",
-        "reader": "Can read",
-        "writer": "Can add and tick off",
-        "always": "Always has access",
-        "shortNone": "None",
-        "shortReader": "Read",
-        "shortWriter": "Add & tick",
-        "creator": "Started this list",
-        "staffNote": "Admins can open every list"
+        "read": "Can see this list",
+        "write": "Can add things to it",
+        "decide": "Can tick off and decide what goes on it",
+        "manage": "List admin",
+        "creator": "Created this list",
+        "staffNote": "Group admins always have full access to every list in the group. This cannot be changed here",
+        "manageLocked": "Only group admins can appoint list admins"
       }
     },
     "gone": {

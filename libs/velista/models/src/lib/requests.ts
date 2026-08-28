@@ -1,7 +1,7 @@
 import type {
   LineApprovalStatus,
   LineStatus,
-  ListRole,
+  ListPermission,
   ZoneRole,
 } from './enums';
 
@@ -62,12 +62,45 @@ export interface CreateListRequest {
   readonly shareWithZone: boolean;
 }
 
+/**
+ * Rename a list, or reconfigure it. `MANAGE` on the list, and nothing less.
+ *
+ * Both fields are optional and the sheet sends only the one it changed, which is the
+ * whole reason this type is written out rather than spread from a model: the gateway
+ * validates with `forbidNonWhitelisted`, and a `PATCH` body carrying every field would
+ * make a rename overwrite a setting somebody else had just changed.
+ */
 export interface UpdateListRequest {
   readonly name?: string;
+  /**
+   * Whether new lines on this list arrive already approved (backend plan 0037,
+   * section 3).
+   *
+   * It governs what a **new** line starts as and nothing else. Turning it on leaves the
+   * lines already waiting waiting, because those are somebody's outstanding question
+   * and a switch is not an answer to one.
+   */
+  readonly autoApproveLines?: boolean;
 }
 
+/**
+ * Replace what the named memberships may do on a list.
+ *
+ * **Not a partial update of a set.** Each entry states the whole answer for that
+ * membership, and a membership the payload does not name is left alone (backend plan
+ * 0036, section 5.2). An **empty `permissions` array deletes the row**, which is how
+ * access is revoked, so an entry with nothing in it is a deliberate instruction and
+ * never a way of saying "no change".
+ *
+ * The server adds `READ` to any non-empty set it is given, and the share sheet ticks it
+ * in the checkbox handler as well. That duplicates the feedback, not the rule: the
+ * server enforces and the sheet explains.
+ */
 export interface SetListAccessRequest {
-  readonly entries: readonly { membershipId: string; role: ListRole }[];
+  readonly entries: readonly {
+    membershipId: string;
+    permissions: readonly ListPermission[];
+  }[];
 }
 
 export interface AddLineRequest {

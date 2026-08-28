@@ -49,6 +49,8 @@ export const ACCESS_ALICE_GROCERIES_ID = 'acce0000-0000-4000-a000-000000000001';
 export const ACCESS_ALICE_HARDWARE_ID = 'acce0000-0000-4000-a000-000000000002';
 export const ACCESS_BOB_GROCERIES_ID = 'acce0000-0000-4000-a000-000000000003';
 export const ACCESS_BOB_HARDWARE_ID = 'acce0000-0000-4000-a000-000000000004';
+/** The guest's row: DECIDE without WRITE, one of plan 0036's two new states. */
+export const ACCESS_TEMP_GROCERIES_ID = 'acce0000-0000-4000-a000-000000000005';
 
 // --- Core: lines + comments --------------------------------------------------
 export const LINE_MILK_ID = '11e00000-0000-4000-a000-000000000001';

@@ -20,6 +20,9 @@ function vm(overrides: Partial<LineRowVm> = {}): LineRowVm {
     overwrittenBy: null,
     interactive: true,
     actions: ['edit', 'markNotAvailable', 'comments', 'delete'],
+    // Non-null exactly when `actions` includes `edit`, which is the invariant
+    // `LineRowVm.editScope` states and `select-list-state.spec.ts` guards.
+    editScope: 'full',
     decidable: false,
     restorable: false,
     editor: null,
@@ -288,8 +291,11 @@ describe('LineRow', () => {
     });
 
     it('gives a reader the comment affordance and nothing else', async () => {
+      // It survives plan 0030. A reader may not write a comment any more, and may still
+      // read the conversation, and this overflow entry is the only way to it
+      // (section 3.1). What leaves is the composer inside the sheet.
       const fixture = await render(
-        vm({ interactive: false, actions: ['comments'] })
+        vm({ interactive: false, actions: ['comments'], editScope: null })
       );
 
       const items = fixture.nativeElement.querySelectorAll('.item');
@@ -298,16 +304,18 @@ describe('LineRow', () => {
     });
 
     it('shows the two decisions only when the row is decidable', async () => {
-      const staff = await render(
+      const decider = await render(
         vm({ approvalStatus: 'PENDING', decidable: true })
       );
-      expect(staff.nativeElement.querySelectorAll('.decision')).toHaveLength(2);
+      expect(decider.nativeElement.querySelectorAll('.decision')).toHaveLength(
+        2
+      );
 
       const plain = await render(vm({ approvalStatus: 'PENDING' }));
       expect(plain.nativeElement.querySelectorAll('.decision')).toHaveLength(0);
     });
 
-    it('offers putting a turned down line back, to staff', async () => {
+    it('offers putting a turned down line back, to whoever decides', async () => {
       const fixture = await render(
         vm({ approvalStatus: 'REJECTED', restorable: true, struck: true })
       );

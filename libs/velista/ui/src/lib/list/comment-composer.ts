@@ -19,9 +19,13 @@ import { SendIcon } from '../icons/icons';
  * difference is what is being written: a line is a thing to buy and a comment is a
  * sentence about one, so it wraps and it grows.
  *
- * **Offered to a reader too.** `comment.add` requires only an approved membership on
- * the zone, not write access on the list, so this is the one thing somebody with read
- * access can actually do and it stays available in the read only state (section 3.2).
+ * **No longer offered to a reader.** `comment.add` used to require only an approved
+ * membership on the zone, which made this the one thing somebody with read access could
+ * really do. Backend plan 0036 section 4 narrows it to `WRITE` or `DECIDE`, so read
+ * means read here as well, and the sheet draws this component only for `canComment`
+ * (velista plan 0030, section 3.1). The decision belongs to the container, as the line
+ * composer's does: this one is simply not rendered, and a sentence takes its place so
+ * the sheet does not end in nothing.
  *
  * ## The button is the height of the box, and it is a glyph
  *

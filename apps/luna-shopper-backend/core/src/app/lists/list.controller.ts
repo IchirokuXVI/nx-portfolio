@@ -10,8 +10,10 @@ import {
   type CommentView,
   type CreateListRequest,
   type DeleteLineRequest,
+  type GetListAccessRequest,
   type LinePage,
   type LineView,
+  type ListAccessView,
   type ListCommentsRequest,
   type ListIdRequest,
   type ListLinesRequest,
@@ -49,6 +51,11 @@ export class ListController {
   @MessagePattern(LIST_PATTERNS.setAccess)
   setAccess(@Payload() req: SetListAccessRequest): Promise<{ listId: string }> {
     return this.lists.setAccess(req);
+  }
+
+  @MessagePattern(LIST_PATTERNS.getAccess)
+  getAccess(@Payload() req: GetListAccessRequest): Promise<ListAccessView> {
+    return this.lists.getAccess(req);
   }
 
   @MessagePattern(LIST_PATTERNS.update)

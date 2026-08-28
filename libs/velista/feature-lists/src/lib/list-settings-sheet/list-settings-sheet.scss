@@ -9,6 +9,46 @@
   color: var(--app-text-primary);
 }
 
+// The auto-approve switch (plan 0030, section 6.5). Same shape as the create-list
+// sheet's share choice, and drawn by the platform for the same reason: a checkbox is
+// the widget every assistive technology already understands.
+.choice {
+  margin-block-start: var(--app-space-3);
+}
+
+.choice-label {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  cursor: pointer;
+}
+
+.checkbox {
+  flex-shrink: 0;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
+
+  @include sheet-form.focus-ring;
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+// What `aria-describedby` points at, so the sentence about the lines already waiting is
+// read out with the control rather than found afterwards.
+.choice-hint {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
 .share {
   max-block-size: 32vh;
   margin: 0;

@@ -36,6 +36,10 @@ function list(id: string): ShoppingListSummary {
     createdByUserId: 'user-me',
     lineCount: 12,
     readyCount: 7,
+    autoApproveLines: false,
+    // The group page draws no permission badge (plan 0030, section 11), so any
+    // non-empty set does: what matters here is that a card renders, not what it permits.
+    myPermissions: ['READ', 'WRITE', 'DECIDE'],
   };
 }
 

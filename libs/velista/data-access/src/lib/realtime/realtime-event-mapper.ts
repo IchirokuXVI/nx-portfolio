@@ -1,6 +1,7 @@
 import {
   toComment,
   toLine,
+  toListPermissions,
   toListPresence,
   toMembership,
   toShoppingList,
@@ -135,6 +136,32 @@ export function toRealtimeEvent(
       }
       const listId = str(payload['listId']);
       return listId === null ? null : { type: name, listId };
+    }
+
+    case 'list.myAccessChanged': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+
+      // Both ids are required, and `zoneId` is required for the same reason `listId` is
+      // rather than for tidiness: without it a list this client has never loaded cannot
+      // be placed anywhere, and there is no route that would resolve it afterwards.
+      const listId = str(payload['listId']);
+      const zoneId = str(payload['zoneId']);
+      if (listId === null || zoneId === null) {
+        return null;
+      }
+
+      // An empty set is the payload that says the caller was removed, so it is mapped
+      // and delivered rather than treated as a missing field. `toListPermissions` gives
+      // the same empty set for an absent or unreadable array, which lands on the same
+      // safe answer: no permissions, no controls.
+      return {
+        type: name,
+        listId,
+        zoneId,
+        permissions: toListPermissions(payload['permissions']),
+      };
     }
 
     case 'line.added':

@@ -20,6 +20,7 @@ import {
   type CommentView,
   type LinePage,
   type LineView,
+  type ListAccessView,
   type ListPage,
   type ListView,
 } from '@portfolio/luna-shopper/contracts';
@@ -105,6 +106,7 @@ export class ListsController {
       userId: user.userId,
       listId: id,
       name: dto.name,
+      autoApproveLines: dto.autoApproveLines,
     });
   }
 
@@ -132,6 +134,26 @@ export class ListsController {
       userId: user.userId,
       listId: id,
       entries: dto.entries,
+    });
+  }
+
+  /**
+   * The list's stored access table (plan 0036, section 6).
+   *
+   * `MANAGE` only: who else may write to a list is governance rather than
+   * content, so `READ` does not reach it. The gate is core's, as it is for every
+   * other route here. Group staff appear in no entry, because their grant is
+   * derived from `ZoneRole` and there is nothing stored to return.
+   */
+  @Get(':id/access')
+  @ApiContractResponse(LIST_PATTERNS.getAccess)
+  getAccess(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string
+  ): Promise<ListAccessView> {
+    return this.nats.send<ListAccessView>(LIST_PATTERNS.getAccess, {
+      userId: user.userId,
+      listId: id,
     });
   }
 

@@ -1,6 +1,7 @@
 import type {
   Comment,
   Line,
+  ListPermission,
   ListPresence,
   Membership,
   ShoppingList,
@@ -112,6 +113,29 @@ export type RealtimeEvent =
     }
   | { readonly type: 'list.deleted'; readonly listId: string }
   | { readonly type: 'list.accessChanged'; readonly listId: string }
+  | {
+      /**
+       * The **caller's own** effective permissions on one list changed, on the user
+       * channel (backend plan 0036, section 8).
+       *
+       * Its sibling `list.accessChanged` goes to the list room and names nobody, so
+       * every client in the room re-syncs. That is adequate for people who kept access
+       * and useless for the two it is actually about: the person who lost it, and the
+       * person who gained it and was therefore never in the room to hear about it.
+       *
+       * `zoneId` rides along because the client needs it and the list id alone does not
+       * yield it: there is no `GET /v1/lists/:id`, so a list this client has never
+       * loaded cannot be placed in a zone from its id.
+       *
+       * An **empty `permissions` array is not a malformed payload**, it is somebody
+       * being removed from the list, and it is the one payload here where the empty case
+       * carries the meaning.
+       */
+      readonly type: 'list.myAccessChanged';
+      readonly listId: string;
+      readonly zoneId: string;
+      readonly permissions: readonly ListPermission[];
+    }
   | { readonly type: 'line.added' | 'line.updated'; readonly line: Line }
   | {
       readonly type: 'line.reordered';
@@ -152,6 +176,7 @@ export const REALTIME_EVENT_NAMES = [
   'list.updated',
   'list.deleted',
   'list.accessChanged',
+  'list.myAccessChanged',
   'line.added',
   'line.updated',
   'line.reordered',

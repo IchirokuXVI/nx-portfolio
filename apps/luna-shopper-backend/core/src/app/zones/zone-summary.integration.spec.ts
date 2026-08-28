@@ -1,7 +1,7 @@
 import {
   LineApprovalStatus,
   LineStatus,
-  ListRole,
+  ListPermission,
   MembershipStatus,
   ZoneRole,
   ZoneStatus,
@@ -198,13 +198,16 @@ describeIntegration('zone summary (real Postgres)', () => {
       { updatedAt: new Date('2026-06-01T00:00:00.000Z') }
     );
 
-    // The reader can open Groceries and nothing else.
+    // The reader can open Groceries and nothing else. `{READ}` alone, which is
+    // the weakest set a row can hold: an empty one is a deleted row (plan 0036,
+    // section 2.2), and READABLE_LIST asks for READ literally rather than for the
+    // mere existence of a row.
     const accessRepo = dataSource.getRepository(ListAccess);
     await accessRepo.save(
       accessRepo.create({
         listId: groceries.id,
         membershipId: reader.id,
-        role: ListRole.READER,
+        permissions: [ListPermission.READ],
       })
     );
 

@@ -1,22 +1,41 @@
 import type {
   Line,
   LineAction,
+  LineEditScope,
   LineRowVm,
   LineWriteState,
   ListAbilitiesVm,
   ListHeaderVm,
   ListPageState,
+  ListPermission,
   ListViewerVm,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
 
-/** What a caller is, as far as the zone is concerned. */
+/**
+ * What the caller may do on this list, as the server answered it.
+ *
+ * One field, and that is the whole of plan 0030 section 3. It used to carry a zone role
+ * and a flag recording that a write had already been refused, and both were the client
+ * re-deriving an authorization answer it had never been given. `myPermissions` rides on
+ * every `ListView` now, so the caller is the set they hold and nothing else.
+ *
+ * `userId` left with them. Nothing in this function asks who the caller is any more: the
+ * creator was the one person the client could prove was a writer, and the creator's power
+ * became an ordinary access row in backend plan 0036 section 2.5, so their id decides
+ * nothing here. The struct survives rather than collapsing into a bare array, because it
+ * is the caller half of the input and the next fact about the caller has a place to go.
+ */
 export interface CallerFacts {
-  readonly userId: string;
-  /** OWNER or ADMIN of the zone this list is in. */
-  readonly isStaff: boolean;
-  /** Whether a write has already been refused, which makes read only certain. */
-  readonly knownReader: boolean;
+  /**
+   * Empty means read only, an absent or unreadable `myPermissions` included.
+   *
+   * The deliberate inversion of the old optimism (plan 0030, section 3.2). With four
+   * permissions there are eight controls to be wrong about, and guessing all of them and
+   * correcting each from its own refusal would be a screen that rearranges itself while
+   * somebody is using it.
+   */
+  readonly permissions: readonly ListPermission[];
 }
 
 /** Everything `selectListState` needs, and nothing that is not a fact. */
@@ -96,7 +115,7 @@ export function selectListState(input: ListStateInput): ListPageState {
     return { kind: 'loading', header };
   }
 
-  const abilities = selectAbilities(input);
+  const abilities = selectAbilities(input.caller.permissions);
   const lines = sortLines(input.lines).map((line) =>
     toRow(line, input, abilities)
   );
@@ -108,8 +127,14 @@ export function selectListState(input: ListStateInput): ListPageState {
     abilities,
     empty: lines.length === 0,
     // Rule L4: dragging is available only once every page has arrived, and never in
-    // the middle of somebody reading a long list.
+    // the middle of somebody reading a long list. Still `canWrite`, because reordering
+    // rewrites what the list asks for rather than what the shop had (section 4).
     canReorder: abilities.canWrite && input.linesComplete && lines.length > 1,
+    // A list fact rather than an ability, so it is read from the summary and not from
+    // the permission set. False while the list itself is still a cold cache miss, which
+    // is the safe direction: an optimistic row drawn PENDING and corrected to APPROVED
+    // is a row settling down, and the reverse is an approve button flashing (section 5).
+    autoApproveLines: input.list?.autoApproveLines ?? false,
   };
 }
 
@@ -135,31 +160,50 @@ function selectHeader(input: ListStateInput): ListHeaderVm {
 }
 
 /**
- * What the caller may do.
+ * What the caller may do, as four membership tests on the set the server sent.
  *
- * The write answer is **optimistic where it is unknown**, and that needs saying
- * plainly. `ListView` carries no role for the caller and there is no
- * `GET /v1/lists/:id/access`, so the only person the client can know is a writer is the
- * one who created the list: creating one inserts a WRITER row in the same transaction.
+ * Nothing is guessed and nothing is inferred, which is the whole change (plan 0030,
+ * section 3). Group staff are not special-cased either: a zone `OWNER` or `ADMIN` holds
+ * all four permissions on every list in the zone and the server sends them all four
+ * (backend plan 0036, section 2.4), so the last place this screen re-derived an
+ * authorization rule the server had already applied is gone.
  *
- * Everybody else is offered the composer until a write is actually refused, at which
- * point `knownReader` is set and the page switches to read only in place with the copy
- * section 5.7 gives it. The alternative, hiding the composer from everybody unproven,
- * would take the screen away from the people who use it in order to spare a rare reader
- * one refused request.
+ * **Each boolean is exactly one permission, and `MANAGE` implies none of the others
+ * here.** Backend plan 0036's summary table reads as though it did, but its own call
+ * site table (section 4) is what the server actually enforces, and there `line.add` asks
+ * for `WRITE`, `line.setStatus` for `DECIDE`, and `comment.add` for `WRITE` or `DECIDE`.
+ * Widening these booleans would draw a composer for a `{READ, MANAGE}` row and have the
+ * server refuse every use of it, which is precisely the failure rule G2 exists to
+ * prevent. What `MANAGE` really buys beyond governance is per row rather than per
+ * person, and {@link editScopeFor} and {@link actionsFor} are where it is spent.
  *
- * Managing is a **different rule** and is knowable: `requireManage` is the creator, a
- * zone admin, or the owner, and all three are facts the client already holds.
+ * The `MANAGE` column of section 4's table is not contradicted by that: it describes the
+ * ordinary list admin, who was granted the other three in the same sheet, and such a
+ * caller does get everything in it.
+ *
+ * Exported because two sheets that open over this page need the same answer from the
+ * same list, and a second copy of these four tests is a second answer waiting to
+ * disagree with this one.
  */
-function selectAbilities(input: ListStateInput): ListAbilitiesVm {
-  const { list, caller } = input;
-  const isCreator = list?.createdByUserId === caller.userId;
+export function selectAbilities(
+  permissions: readonly ListPermission[]
+): ListAbilitiesVm {
+  const held = new Set(permissions);
+  const canWrite = held.has('WRITE');
+  const canDecide = held.has('DECIDE');
+  const canManage = held.has('MANAGE');
 
   return {
-    canWrite: !caller.knownReader,
-    knownReader: caller.knownReader,
-    canManage: isCreator || caller.isStaff,
-    canDecide: caller.isStaff,
+    canWrite,
+    canDecide,
+    // The server's rule for `comment.add`, stated once. `MANAGE` is deliberately not in
+    // it: governing a list is not the same as being part of the conversation on it, and
+    // a list admin who wants to comment holds one of the other two in every real case.
+    canComment: canWrite || canDecide,
+    canManage,
+    // A summary of the three above rather than a fourth fact, so the banner is decided
+    // in one place instead of by every surface asking "and none of the others either?".
+    readOnly: !canWrite && !canDecide && !canManage,
   };
 }
 
@@ -207,9 +251,16 @@ function toRow(
         ? null
         : input.nameOf(note.byUserId),
     commentCount: input.commentCounts.get(line.id),
-    // In reorder mode nothing is a checkbox, and a reader's rows are never tappable.
-    interactive: abilities.canWrite && !input.reordering,
+    // In reorder mode nothing is a checkbox. Otherwise it follows `canDecide` and no
+    // longer `canWrite`: the tap **is** ticking off, and ticking off is `DECIDE` now
+    // (section 4). A `WRITE`-only caller therefore has a full composer and rows that do
+    // not answer a tap, which is correct and is why that caller gets a caption naming
+    // who does the ticking (section 7).
+    interactive: abilities.canDecide && !input.reordering,
     actions: actionsFor(line, abilities, input.reordering),
+    // Both from the same expression as the `edit` entry above, so the invariant
+    // `LineRowVm.editScope` states cannot be broken from one side.
+    editScope: input.reordering ? null : editScopeFor(line, abilities),
     decidable: abilities.canDecide && awaiting && !input.reordering,
     restorable: abilities.canDecide && rejected && !input.reordering,
     // Nobody is shown as editing while the list is being reordered: the sheet cannot be
@@ -245,11 +296,66 @@ function captionKeyFor(
 }
 
 /**
+ * Which fields the edit sheet may make live on this row, or null for no edit at all.
+ *
+ * A function of the caller's permissions **and** the line's approval together, which is
+ * the point of deriving it per row (plan 0030, section 4): a `MANAGE` holder gets the
+ * full sheet on every row, while a caller holding only `DECIDE` gets no edit on a
+ * pending row and the quantity stepper on an approved one. Writing those two answers
+ * down separately is how they end up disagreeing.
+ *
+ * The three cases mirror backend plan 0036 section 4.1 exactly, in the order the server
+ * checks them:
+ *
+ * - `MANAGE` may edit any field of any line, because a governed thing needs somebody who
+ *   can fix a line that was approved with a typo in it;
+ * - `WRITE` may edit a `PENDING` or `REJECTED` line and never an `APPROVED` one, so a
+ *   writer cannot quietly change what the group agreed to;
+ * - `DECIDE` may change the quantity of an `APPROVED` line and nothing else, which is
+ *   the single field a person in the aisle learns that the list did not know.
+ *
+ * A `DECIDE` holder who needs more than the number still has a way through and it is not
+ * this sheet: `DECIDE` puts a line back to `PENDING`, so un-approve, edit, approve reads
+ * correctly and leaves the approval saying what happened.
+ *
+ * Exported for the edit sheet, which is a routed child and has to reach the same answer
+ * about the same row without the page handing it down.
+ */
+export function editScopeFor(
+  line: Line,
+  abilities: ListAbilitiesVm
+): LineEditScope | null {
+  const approved = line.approvalStatus === 'APPROVED';
+
+  if (abilities.canManage) {
+    return 'full';
+  }
+
+  if (!approved && abilities.canWrite) {
+    return 'full';
+  }
+
+  return approved && abilities.canDecide ? 'quantity' : null;
+}
+
+/**
  * What the overflow holds for this row.
  *
- * Empty means no overflow button at all, not a disabled one. A reader gets exactly one
- * entry, comments, because commenting requires only an approved membership on the zone
- * and is the one thing they can actually do (section 3.2).
+ * Empty means no overflow button at all, not a disabled one, exactly as
+ * `MemberRowVm.actions` decided it: a disabled control says "you could do this, later"
+ * about something that will never be permitted.
+ *
+ * **A read-only caller still gets `['comments']`**, and that is a deliberate reading of
+ * plan 0030. Its section 3.1 says the sheet "opens for everybody with `READ` and draws
+ * its composer only for `canComment`, with the read-only note in its place", and the
+ * overflow is the only way into that sheet, so removing the entry would take away the
+ * reading of a conversation the same passage says a reader keeps. Acceptance item 1's
+ * "no overflow on any row" cannot hold at the same time as that sentence, and the
+ * reasoned passage wins over the checklist line.
+ *
+ * Everything else is section 4's table, one row at a time. `markNotAvailable` and
+ * `markPending` are one control with two directions, and they follow `DECIDE` now
+ * because saying what the shop had is deciding rather than writing.
  */
 function actionsFor(
   line: Line,
@@ -260,16 +366,32 @@ function actionsFor(
     return [];
   }
 
-  if (!abilities.canWrite) {
-    return ['comments'];
+  const actions: LineAction[] = [];
+
+  if (editScopeFor(line, abilities) !== null) {
+    actions.push('edit');
   }
 
-  return [
-    'edit',
-    // The two are one control with two directions: a line that is already marked as
-    // missing offers putting it back, and one that is not offers marking it.
-    line.status === 'NOT_AVAILABLE' ? 'markPending' : 'markNotAvailable',
-    'comments',
-    'delete',
-  ];
+  if (abilities.canDecide) {
+    // One control with two directions: a line already marked as missing offers putting
+    // it back, and one that is not offers marking it.
+    actions.push(
+      line.status === 'NOT_AVAILABLE' ? 'markPending' : 'markNotAvailable'
+    );
+  }
+
+  actions.push('comments');
+
+  // `WRITE` deletes what has not been agreed to yet; `MANAGE` deletes anything at all,
+  // including an approved line that should never have existed (backend plan 0036,
+  // section 4.1). There is no third case: `DECIDE` marks a line as not in the shop
+  // rather than removing it, which keeps the record of what was asked for.
+  if (
+    abilities.canManage ||
+    (abilities.canWrite && line.approvalStatus !== 'APPROVED')
+  ) {
+    actions.push('delete');
+  }
+
+  return actions;
 }

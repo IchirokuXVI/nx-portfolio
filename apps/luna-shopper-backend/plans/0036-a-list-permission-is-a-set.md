@@ -97,13 +97,24 @@ two people to be a subset of the other, and neither is.
 ordered at the ends and unordered in the middle is worse than a set, so all four are
 stored the same way and every check asks whether one member is present.
 
-### 2.2 `READ` is implied, and also stored
+### 2.2 The two implications are stored, not implied at every read
 
-Any permission implies `READ`, per the requirement. That invariant is enforced at the
-**write** boundary rather than at every read: `setAccess` adds `READ` to any non-empty
-set it is given, so a stored set that lacks `READ` cannot exist. Every predicate that
-asks "may this caller see the list" therefore asks for `READ` literally and nothing has
-to remember to imply it.
+Any permission implies `READ`, per the requirement. And `MANAGE` implies `WRITE` and
+`DECIDE`, because the table above defines it as everything before it plus governing the
+list, and the requirement it comes from says a list admin has all the other permissions.
+
+Both invariants are enforced at the **write** boundary rather than at every read:
+`setAccess` adds `READ` to any non-empty set it is given, and adds `WRITE` and `DECIDE`
+to any set holding `MANAGE`, so neither a stored set that lacks `READ` nor a stored
+`{READ, MANAGE}` can exist. Every predicate downstream is then a single literal
+membership test: nothing has to remember to imply anything, and the `myPermissions` that
+section 7 puts on the wire is the whole truth about a caller rather than a seed the
+client has to expand the same way the server did.
+
+Without the second implication a group admin could grant `{READ, MANAGE}` and create
+somebody who may rename the list, delete any line on it and decide who else may use it,
+yet may not add one. That is not a person anybody set out to describe, and it would be
+reachable from the share sheet in one tap.
 
 The other half of the invariant: **an empty set is not stored, it is a deleted row.**
 Revoking everything removes the `list_access` row. "No row" is then the single

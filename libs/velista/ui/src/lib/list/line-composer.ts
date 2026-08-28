@@ -28,12 +28,16 @@ import { QuantityStepper } from './quantity-stepper';
  * resets to one so the seventh item does not silently inherit the sixth one's count.
  * A FAB would put a dialog between every pair of those six.
  *
- * ## It is absent for a reader, never disabled
+ * ## It is absent without `WRITE`, never disabled
  *
  * That decision belongs to the container, which knows whether the caller may write.
  * This component is simply not rendered in that case, because a disabled text field at
  * the bottom of a screen is an invitation that does not work and costs a tap to find
  * out (section 3.2).
+ *
+ * It is drawn from certainty since velista plan 0030: `myPermissions` arrives with the
+ * list, so the composer is absent from the first frame for somebody who may not add,
+ * rather than being taken away after their first line is refused.
  *
  * ## The counter appears late
  *

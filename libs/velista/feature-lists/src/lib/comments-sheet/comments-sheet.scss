@@ -18,3 +18,16 @@
 .comment {
   display: block;
 }
+
+// Where the composer would be, and at roughly its height, so the sheet keeps its shape
+// for anybody who sees both versions of it (plan 0030, section 3.1). Quiet: it explains
+// an absence and is not itself news.
+.read-only {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}

@@ -13,7 +13,7 @@ import {
   ItemCategory,
   LineApprovalStatus,
   LineStatus,
-  ListRole,
+  ListPermission,
   MembershipStatus,
   MergeRequestStatus,
   UnitOfMeasure,
@@ -115,10 +115,20 @@ export function makeList(overrides: Partial<SeedList> = {}): SeedList {
     zoneId: uuid(),
     name: 'A List',
     createdByUserId: uuid(),
+    autoApproveLines: false,
     ...overrides,
   };
 }
 
+/**
+ * A list access row. Defaults to `{READ}`, the weakest set that can be stored.
+ *
+ * Weakest rather than most useful, because a fixture that granted more than a
+ * test asked for would let a check pass for a permission the test never meant to
+ * hand out. It is not the empty set: an empty set is a deleted row (plan 0036,
+ * section 2.2), so a test that wants no access omits the row rather than making
+ * one with nothing in it.
+ */
 export function makeListAccess(
   overrides: Partial<SeedListAccess> = {}
 ): SeedListAccess {
@@ -126,7 +136,7 @@ export function makeListAccess(
     id: uuid(),
     listId: uuid(),
     membershipId: uuid(),
-    role: ListRole.READER,
+    permissions: [ListPermission.READ],
     ...overrides,
   };
 }

@@ -1,54 +1,107 @@
+// The row stacks now. Four checkboxes cannot sit beside a name across a 390 wide
+// phone, and the segmented control they replace only fitted because it abbreviated
+// itself; with the whole width available each label says what it means (plan 0030,
+// section 6.1).
 .row {
   display: flex;
-  align-items: center;
-  gap: var(--app-space-3);
-  min-height: var(--app-member-row-height);
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding-block: var(--app-space-3);
+}
+
+.who {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-2);
+  min-width: 0;
 }
 
 .name {
-  flex: 1;
   min-width: 0;
   font-size: var(--app-text-sm);
+  font-weight: 600;
   color: var(--app-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.fixed {
+// Beside the name and quieter than it: whoever made the list is worth knowing and is
+// not a permission, so it must not read like one (section 6.3).
+.creator {
   flex-shrink: 0;
   font-size: var(--app-text-2xs);
   color: var(--app-text-muted);
 }
 
-.choices {
+// A real fieldset, so the four boxes are one group and the name of the person they are
+// about is announced once rather than folded into every label.
+.boxes {
   display: flex;
-  flex-shrink: 0;
-  background: var(--app-surface-sunken);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-full);
-  overflow: hidden;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
-// The short label is what fits across 390. The long phrase is the accessible name, on
-// the element, so the two never have to agree on width.
-.choice {
-  min-height: var(--app-touch-target);
-  padding: 0 var(--app-space-3);
-  background: none;
-  border: 0;
-  font: inherit;
-  font-size: var(--app-text-2xs);
-  color: var(--app-text-muted);
+// Visually hidden and still announced. `display: none` would take it out of the
+// accessibility tree, which is the usual way a group ends up unnamed.
+.legend {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+// The label wraps the control, so the whole phrase is the hit target. A bare 16px box
+// is under every touch target guideline there is, and the words beside it are the part
+// a thumb actually aims at. `create-list-sheet` does it this way too.
+.box-label {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  cursor: pointer;
+
+  &:has(.checkbox:disabled) {
+    color: var(--app-text-muted);
+    cursor: default;
+  }
+}
+
+.checkbox {
+  flex-shrink: 0;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  // Drawn by the platform, as every other checkbox in this app is. Accent colour is
+  // enough to make it this app's, and replacing it with a div would mean reimplementing
+  // focus, the keyboard, and a disabled state this row leans on heavily.
+  accent-color: var(--app-action-bg);
   cursor: pointer;
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  &:disabled {
+    cursor: default;
   }
 }
 
-.choice.selected {
-  background: var(--app-action-bg);
-  color: var(--app-text-on-action);
+// Under the boxes it explains, never beside the name: a disabled control with no
+// sentence next to it reads as a bug, and the sentence has to be where the disabled
+// thing is (section 6.1).
+.reason {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
 }
