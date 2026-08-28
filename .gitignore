@@ -46,8 +46,18 @@ apps/luna-shopper-backend/*/.env
 apps/luna-shopper-backend/*/.env.test
 # pg_dump snapshots written by luna-shopper-backend:db:snapshot (plan 0013, section 3.2).
 apps/luna-shopper-backend/.snapshots/
-# Per worktree compose slot file written by luna-slot.sh / luna-slot.ps1.
+# Per worktree compose slot file written by luna-slot.sh / luna-slot.ps1, and the
+# logs and pid files of the services its --up started.
 k8s/e2e/luna-shopper-backend/.env.slot
+k8s/e2e/luna-shopper-backend/.run/
+# The front end half of the same idea, written by tools/dev/ng-slot.sh / .ps1: the
+# slot descriptor, the per app .env files Nx loads into each project's tasks
+# (MFE_REMOTE_URLS for the shell, the backend URLs for velista), and the logs and
+# pid files of whatever --up started. All of it is per worktree by design.
+tools/dev/.env.ng-slot
+tools/dev/.run/
+apps/shell/.env
+apps/velista/.env
 # Jest JSON summaries and per service logs from the stack targets (plan 0015);
 # CI reads them to prove the infra-backed suites actually executed, then uploads
 # them as failure artifacts. Nothing here is worth committing.

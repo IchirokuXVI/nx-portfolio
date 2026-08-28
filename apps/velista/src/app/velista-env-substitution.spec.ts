@@ -25,7 +25,8 @@ describe('velista environment substitution', () => {
     let dir = __dirname;
     while (!existsSync(join(dir, 'nx.json'))) {
       const parent = dirname(dir);
-      if (parent === dir) throw new Error('could not locate the workspace root');
+      if (parent === dir)
+        throw new Error('could not locate the workspace root');
       dir = parent;
     }
     return dir;
@@ -48,9 +49,7 @@ describe('velista environment substitution', () => {
   /** Variable names the DefinePlugin defines under `process.env.`. */
   function definedNames(source: string): string[] {
     const names = new Set<string>();
-    for (const match of source.matchAll(
-      /'process\.env\.([A-Z0-9_]+)'\s*:/g
-    )) {
+    for (const match of source.matchAll(/'process\.env\.([A-Z0-9_]+)'\s*:/g)) {
       names.add(match[1]);
     }
     return [...names].sort();
@@ -58,13 +57,15 @@ describe('velista environment substitution', () => {
 
   const environment = read('apps/velista/src/environments/environment.prod.ts');
   const webpack = read('apps/velista/webpack.prod.config.ts');
+  const devEnvironment = read('apps/velista/src/environments/environment.ts');
+  const devWebpack = read('apps/velista/webpack.config.ts');
 
   it('substitutes every variable the production environment reads', () => {
     expect(envReads(environment)).toEqual(definedNames(webpack));
   });
 
   it('reads the two backend URLs and nothing else', () => {
-    // If this list grows, the DefinePlugin has to grow with it — which is what
+    // If this list grows, the DefinePlugin has to grow with it, which is what
     // the assertion above enforces. This one is here so the intent is legible.
     expect(envReads(environment)).toEqual([
       'LUNA_GATEWAY_URL',
@@ -72,11 +73,27 @@ describe('velista environment substitution', () => {
     ]);
   });
 
-  it('leaves the development environment free of process.env', () => {
-    // The development build has no DefinePlugin, so a read there would reach a
-    // browser intact. `nx serve velista` would break, not the deployed image.
-    expect(
-      envReads(read('apps/velista/src/environments/environment.ts'))
-    ).toEqual([]);
+  /**
+   * The development build used to be asserted the other way round: it had no
+   * DefinePlugin, so any `process.env` read there would have reached a browser
+   * intact and `nx serve velista` would break.
+   *
+   * It has one now, and for a reason the old rule could not have anticipated. The
+   * dev slots (`tools/dev/ng-slot.sh`) serve this app from several worktrees at
+   * once, each against its own backend on its own ports, so the two URLs cannot be
+   * literals in `environment.ts` any more than they can in the production one.
+   *
+   * The invariant is therefore unchanged and now stated symmetrically: every
+   * `process.env` read has a matching substitution in the config that builds it.
+   */
+  it('substitutes every variable the development environment reads', () => {
+    expect(envReads(devEnvironment)).toEqual(definedNames(devWebpack));
+  });
+
+  it('reads the same two variables in development', () => {
+    expect(envReads(devEnvironment)).toEqual([
+      'LUNA_GATEWAY_URL',
+      'LUNA_REALTIME_URL',
+    ]);
   });
 });
