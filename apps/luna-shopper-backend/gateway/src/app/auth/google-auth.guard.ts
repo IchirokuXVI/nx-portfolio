@@ -21,6 +21,21 @@ export function stateOf(request: GoogleRequest | undefined): string {
 }
 
 /**
+ * Whether Google actually sent this browser back, which is true exactly when the
+ * request carries an authorization code to exchange.
+ *
+ * `passport-oauth2` treats a request with no code as a request to *start* the
+ * flow: it builds the authorization URL and redirects to Google. On the callback
+ * route that is the wrong half of the dance, so this is what the callback guard
+ * asks before handing passport the request.
+ */
+export function hasAuthorizationCode(
+  request: GoogleRequest | undefined
+): boolean {
+  return typeof request?.query?.['code'] === 'string';
+}
+
+/**
  * Answers 501 when this deployment has no Google credentials (plan 0026,
  * section 3.3).
  *
@@ -109,6 +124,23 @@ export class GoogleCallbackGuard extends AuthGuard('google') {
     // `Unknown authentication strategy` — and let the handler through with no
     // user, which it already answers with a redirect carrying `#error=`.
     if (!this.enabled) {
+      return true;
+    }
+    // No code, no dance. `passport-oauth2` reads a request without one as a
+    // request to start the flow and answers with a redirect to Google's consent
+    // screen, which would quietly make this route a second `GET /v1/auth/google`
+    // that skips the state mint, and it does it from inside `canActivate`, so
+    // neither `handleRequest` below nor the handler ever runs. Letting the
+    // request through with no user instead lands it on the one answer this route
+    // is allowed to give, a redirect into the app carrying `#error=`.
+    //
+    // A refusal at the consent screen comes back with `error` and no `code` and
+    // so takes this path too. That is the same outcome passport would produce,
+    // since it fails the request and `handleRequest` turns the failure into no
+    // user, one step shorter.
+    if (
+      !hasAuthorizationCode(context.switchToHttp().getRequest<GoogleRequest>())
+    ) {
       return true;
     }
     return super.canActivate(context);
