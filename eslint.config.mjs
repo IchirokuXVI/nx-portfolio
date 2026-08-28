@@ -34,6 +34,15 @@ export default [
             // Matched as the import is written, extensionless, the same way the
             // eslint entry above is.
             '^.*/module-federation\\.shared$',
+            // The shared Playwright reporter helper, imported by every e2e suite's
+            // `playwright.config.ts`. Test runner configuration rather than
+            // application code: it never reaches a bundle and no spec imports it. It
+            // is one file at the workspace root for the same reason as the entry
+            // above, that a suite whose reporters disagree with the others produces a
+            // CI log nobody can read, so the decision belongs in one place.
+            // Matched as the import is written, extensionless, the same way the
+            // entries above are.
+            '^.*/playwright\\.reporters$',
           ],
           depConstraints: [
             {
