@@ -17,6 +17,7 @@
 #   tools/dev/ng-slot.sh --restart       bounce the running apps, keeping the slot
 #   tools/dev/ng-slot.sh --down          stop what this worktree started
 #   tools/dev/ng-slot.sh --list          every worktree's slot, and what is live
+#   tools/dev/ng-slot.sh --e2e-env       print this slot's E2E_BASE_URL export
 #
 # --- you almost never need to stop anything ----------------------------------
 #
@@ -89,6 +90,11 @@
 # The two app level files are picked up on their own: Nx loads `{projectRoot}/.env`
 # into the environment of that project's tasks, which is the same mechanism the
 # luna services already rely on. Nothing has to be exported by the caller.
+#
+# The e2e suites are the one thing that mechanism cannot reach, because it is per
+# PROJECT: apps/shell/.env reaches `nx serve shell` and never a *-e2e task. So the
+# descriptor also carries E2E_BASE_URL and `--e2e-env` prints it as an export, the
+# one value a caller does have to put in its own environment.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -169,6 +175,12 @@ usage:
   ng-slot.sh --restart [--apps a,b]        bounce apps, keeping the rest serving
   ng-slot.sh --down                        stop what this worktree started
   ng-slot.sh --list                        every worktree's slot, and what is live
+  ng-slot.sh --e2e-env                     print this slot's E2E_BASE_URL export
+
+Point an e2e suite at this slot rather than at slot 0's ports:
+
+  eval "$(tools/dev/ng-slot.sh --e2e-env)"
+  npx nx e2e velista-e2e
 
 Source changes need none of this: every app watches its own files and the
 libraries it consumes, and live reloads. --restart is for a changed .env (a slot
@@ -380,6 +392,12 @@ NG_ODONTOGRAM_PORT=${odontogram_port}
 NG_DAMOCLESSWORD_PORT=${damocles_port}
 NG_LANDINGV2_PORT=${landing_port}
 NG_VELISTA_PORT=${velista_port}
+NG_SHELL_URL=http://localhost:${shell_port}
+NG_VELISTA_URL=http://localhost:${velista_port}
+# What the e2e suites read. Every front end suite drives its app through the
+# shell, so this slot's shell origin is the answer for all four of them; see
+# --e2e-env, which prints it as an export for \`eval\`.
+E2E_BASE_URL=http://localhost:${shell_port}
 EOF
 
   # The shell resolves its remotes at build time (apps/shell/remote-urls.ts), and
@@ -465,6 +483,23 @@ require_config() {
   # shellcheck disable=SC1090
   . "$SLOT_ENV"
   [[ -n "${NG_SLOT:-}" ]]
+}
+
+# Print this slot's e2e URLs as exports, for `eval`. The backend half has done it
+# this way since run-services.sh grew a `ports` verb, and stack.sh consumes it the
+# same way, so the front end reads the same on both sides of the stack.
+#
+# It exists because Nx loads {projectRoot}/.env per PROJECT: apps/shell/.env
+# reaches `nx serve shell` and nothing else, so no file this script writes can
+# reach a *-e2e project's task. Something has to cross that gap in the caller's
+# environment, and a value derived from the slot beats a port read off the table
+# by eye.
+e2e_env() {
+  if ! require_config; then
+    echo "this worktree has no Angular slot; run --up or --auto first." >&2
+    return 1
+  fi
+  echo "export E2E_BASE_URL=http://localhost:${NG_SHELL_PORT}"
 }
 
 serve_app() {
@@ -572,6 +607,10 @@ up() {
     echo "Remember the shell owns the outlet: open a remote at the shell's URL"
     echo "(http://localhost:$NG_SHELL_PORT/<app>/<locale>), not at its own port."
     echo "velista is the exception and renders standalone on $NG_VELISTA_PORT."
+    echo
+    echo "To run an e2e suite against this slot instead of slot 0:"
+    echo "  eval \"\$(tools/dev/ng-slot.sh --e2e-env)\""
+    echo "  npx nx e2e velista-e2e"
     return 0
   fi
 
@@ -893,6 +932,7 @@ timeout=300
 while (( $# )); do
   case "$1" in
     --list) action='list'; shift ;;
+    --e2e-env) action='e2e-env'; shift ;;
     --up) action='up'; shift ;;
     --restart) action='restart'; shift ;;
     --down) action='down'; shift ;;
@@ -929,6 +969,7 @@ fi
 
 case "${action:-}" in
   list) list ;;
+  e2e-env) e2e_env ;;
   down) down ;;
   restart) restart "$apps_csv" "$timeout" ;;
   up) up "$slot_arg" "$backend_slot" "$apps_csv" "$timeout" ;;

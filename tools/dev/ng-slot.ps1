@@ -10,6 +10,7 @@
   ./tools/dev/ng-slot.ps1 -Up        # configure if needed, then serve
   ./tools/dev/ng-slot.ps1 -Down      # stop what this worktree started
   ./tools/dev/ng-slot.ps1 -List      # every worktree's slot, and what is live
+  ./tools/dev/ng-slot.ps1 -E2eEnv    # print this slot's E2E_BASE_URL assignment
 
 .DESCRIPTION
   A slot is an integer N. Slot 0 is exactly the ports project.json already names,
@@ -43,6 +44,11 @@
   apps/shell/.env, apps/velista/.env, and tools/dev/.run (logs and pids). Nx loads
   {projectRoot}/.env into that project's tasks, so the two app files are picked up
   with nothing exported by the caller. Idempotent.
+
+  The e2e suites are the one thing that mechanism cannot reach, because it is per
+  PROJECT: apps/shell/.env reaches `nx serve shell` and never a *-e2e task. So the
+  descriptor also carries E2E_BASE_URL and -E2eEnv prints it as an assignment, the
+  one value a caller does have to put into its own session.
 #>
 [CmdletBinding()]
 param(
@@ -52,6 +58,7 @@ param(
   [switch]$Restart,
   [switch]$Down,
   [switch]$Auto,
+  [switch]$E2eEnv,
   [string]$Apps,
   [int]$BackendSlot = -1,
   [int]$Timeout = 300
@@ -326,6 +333,12 @@ NG_ODONTOGRAM_PORT=$odontogramPort
 NG_DAMOCLESSWORD_PORT=$damoclesPort
 NG_LANDINGV2_PORT=$landingPort
 NG_VELISTA_PORT=$velistaPort
+NG_SHELL_URL=http://localhost:$shellPort
+NG_VELISTA_URL=http://localhost:$velistaPort
+# What the e2e suites read. Every front end suite drives its app through the
+# shell, so this slot's shell origin is the answer for all four of them; see
+# -E2eEnv, which prints it as an assignment to paste or invoke.
+E2E_BASE_URL=http://localhost:$shellPort
 "@
 
   # The shell resolves its remotes at build time (apps/shell/remote-urls.ts) and
@@ -398,6 +411,21 @@ function Read-SlotConfig {
   }
   if (-not $config.ContainsKey('NG_SLOT')) { return $null }
   return $config
+}
+
+# Print this slot's e2e URL as an assignment, the twin of ng-slot.sh --e2e-env.
+#
+# It exists because Nx loads {projectRoot}/.env per PROJECT: apps/shell/.env
+# reaches `nx serve shell` and nothing else, so no file this script writes can
+# reach a *-e2e project's task. Something has to cross that gap in the caller's
+# session, and a value derived from the slot beats a port read off the table by
+# eye. Invoke-Expression on the output does it in one step.
+function Invoke-E2eEnv {
+  $config = Read-SlotConfig
+  if (-not $config) {
+    throw 'this worktree has no Angular slot; run -Up or -Auto first.'
+  }
+  Write-Output "`$env:E2E_BASE_URL = 'http://localhost:$($config['NG_SHELL_PORT'])'"
 }
 
 function Start-App([string]$app, [int]$port) {
@@ -510,6 +538,10 @@ function Invoke-Up {
     Write-Host "Remember the shell owns the outlet: open a remote at the shell's URL"
     Write-Host "(http://localhost:$($config['NG_SHELL_PORT'])/<app>/<locale>), not at its own port."
     Write-Host "velista is the exception and renders standalone on $($config['NG_VELISTA_PORT'])."
+    Write-Host ''
+    Write-Host 'To run an e2e suite against this slot instead of slot 0:'
+    Write-Host '  Invoke-Expression (./tools/dev/ng-slot.ps1 -E2eEnv)'
+    Write-Host '  npx nx e2e velista-e2e'
     return
   }
 
@@ -735,6 +767,7 @@ function Invoke-List {
   Write-Host "Slots 0..$maxSlot with neither a claim nor a listener are omitted."
 }
 
+if ($E2eEnv) { Invoke-E2eEnv; return }
 if ($List) { Invoke-List; return }
 if ($Down) { Invoke-Down; return }
 if ($Restart) { Invoke-Restart; return }
@@ -763,6 +796,12 @@ usage:
   ng-slot.ps1 -Restart [-Apps a,b]        bounce apps, keeping the rest serving
   ng-slot.ps1 -Down                       stop what this worktree started
   ng-slot.ps1 -List                       every worktree's slot, and what is live
+  ng-slot.ps1 -E2eEnv                     print this slot's E2E_BASE_URL assignment
+
+Point an e2e suite at this slot rather than at slot 0's ports:
+
+  Invoke-Expression (./tools/dev/ng-slot.ps1 -E2eEnv)
+  npx nx e2e velista-e2e
 
 Source changes need none of this: every app watches its own files and the
 libraries it consumes, and live reloads. -Restart is for a changed .env (a slot

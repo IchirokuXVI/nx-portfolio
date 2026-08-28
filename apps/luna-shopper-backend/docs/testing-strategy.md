@@ -6,12 +6,12 @@ honest across service boundaries. This is the concrete implementation of
 
 ## Layers
 
-| Layer | Tool | Where | Needs infra |
-| --- | --- | --- | --- |
-| **Unit** | Jest (`@nx/jest`) | colocated `*.spec.ts`, broker + DB mocked | no |
-| **Schema contract** | Jest + Ajv | `libs/luna-shopper/contracts/src/schemas/*.spec.ts` | no |
-| **Integration** | Jest, real Postgres/NATS | `*.integration.spec.ts` under the `test-integration` target | yes |
-| **End to end** | Playwright (`@nx/playwright`) | `apps/luna-shopper-backend-e2e` | yes |
+| Layer               | Tool                          | Where                                                       | Needs infra |
+| ------------------- | ----------------------------- | ----------------------------------------------------------- | ----------- |
+| **Unit**            | Jest (`@nx/jest`)             | colocated `*.spec.ts`, broker + DB mocked                   | no          |
+| **Schema contract** | Jest + Ajv                    | `libs/luna-shopper/contracts/src/schemas/*.spec.ts`         | no          |
+| **Integration**     | Jest, real Postgres/NATS      | `*.integration.spec.ts` under the `test-integration` target | yes         |
+| **End to end**      | Playwright (`@nx/playwright`) | `apps/luna-shopper-backend-e2e`                             | yes         |
 
 `nx affected` runs the right unit + schema tests per change, mirroring CI. The
 infra-backed layers are gated so they never break the fast, infra-free suite.
@@ -71,20 +71,28 @@ npx nx run luna-shopper-backend-auth:migration:run
 npx nx run luna-shopper-backend-core:migration:run
 npx nx run luna-shopper-backend-catalog:migration:run
 
+# Every port below comes from the file luna-slot.sh just wrote, never from a
+# number typed into this document. It carries the whole slot: the databases, the
+# broker, and the five services. Writing the numbers out here is how this section
+# went stale once already, naming a `default + N*100` scheme that had been
+# replaced by the 43000 band, so the commands pointed at dead ports.
+set -a; . k8s/e2e/luna-shopper-backend/.env.slot; set +a
+
 # integration (real Postgres); LUNA_INTEGRATION un-skips the gated specs
 LUNA_INTEGRATION=1 npx nx run luna-shopper-backend-core:test-integration
 
 # The platform library has one too (plan 0016): it drives a real NATS round trip
 # and asserts the whole chain lands in ONE trace. It reads NATS_URL, which no
 # project .env supplies for a library, so pass this slot's broker port.
-LUNA_INTEGRATION=1 NATS_URL=nats://localhost:4322 \
+LUNA_INTEGRATION=1 NATS_URL="nats://localhost:$LUNA_NATS_PORT" \
   npx nx run luna-shopper/platform:test-integration
 
 # e2e: start the five services, then point the suite at THEIR ports. The default
 # is :3000/:3001, which on a slot is either nothing (so the suite skips itself and
 # reports a green run that tested nothing) or somebody else's stack.
 bash k8s/e2e/luna-shopper-backend/run-services.sh start
-E2E_GATEWAY_URL=http://localhost:3100 E2E_REALTIME_URL=http://localhost:3101 \
+E2E_GATEWAY_URL="http://localhost:$LUNA_GATEWAY_PORT" \
+E2E_REALTIME_URL="http://localhost:$LUNA_REALTIME_PORT" \
   npx nx e2e luna-shopper-backend-e2e
 bash k8s/e2e/luna-shopper-backend/run-services.sh stop
 ```
@@ -98,11 +106,11 @@ Those graceful skips are correct for a developer with no Docker running. In CI
 they are a lie: a green check that proves nothing. So there is one more variable
 (plan 0015, section 3).
 
-| Variable | Meaning |
-| --- | --- |
-| `LUNA_INTEGRATION` | a stack is up; run the gated integration specs |
+| Variable             | Meaning                                                                      |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `LUNA_INTEGRATION`   | a stack is up; run the gated integration specs                               |
 | `LUNA_REQUIRE_STACK` | a stack was brought up **on purpose**; an intended skip is now a **failure** |
-| `E2E_SEED` | seed the demo world in the Playwright global setup |
+| `E2E_SEED`           | seed the demo world in the Playwright global setup                           |
 
 `LUNA_REQUIRE_STACK` is set by both CI tiers and by the `*:stack` targets, and by
 nothing else. Where it is set, a missing `LUNA_INTEGRATION`, an unreachable
@@ -111,10 +119,10 @@ gateway, or a missing `E2E_SEED` fails the run rather than skipping it.
 Each gate has exactly **one** definition, which is what makes that inversion
 trustworthy:
 
-| Gate | Where |
-| --- | --- |
+| Gate                                 | Where                                                                                                             |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
 | `describeIntegration`, `requiredEnv` | `libs/luna-shopper/test-fixtures/src/lib/infra-gate.ts`, imported as `@portfolio/luna-shopper/test-fixtures/jest` |
-| `gatewayReachable`, `gateOnStack` | `apps/luna-shopper-backend-e2e/src/support/db.ts` |
+| `gatewayReachable`, `gateOnStack`    | `apps/luna-shopper-backend-e2e/src/support/db.ts`                                                                 |
 
 The integration gate is a jest-only second entry point rather than part of the
 package barrel, because the Playwright suite imports that barrel and has no
@@ -125,7 +133,7 @@ no integration specs yet is legitimate. The hole that leaves, a `testMatch` typo
 emptying a suite while the pipeline stays green, is closed instead by
 `apps/luna-shopper-backend/tools/ci/assert-integration-ran.js`: it reads each
 run's Jest JSON summary and fails when a service known to have specs executed
-none. It counts *executed* tests rather than total, so a wholesale skip cannot
+none. It counts _executed_ tests rather than total, so a wholesale skip cannot
 pass it either.
 
 The `test-integration` and `e2e` targets are deliberately **uncached**. Their
@@ -147,11 +155,11 @@ pacts will assert.
 
 Every layer runs, in two tiers of fidelity (plan 0015, section 2).
 
-| | Where | Services run as | What it protects |
-| --- | --- | --- | --- |
-| **Unit + schema** | `pr.yml`, job `verify` | n/a | the fast, infra-free layer |
-| **Tier 1** | `pr.yml`, job `verify-infra` | `node dist/.../main.js` | application correctness; fast enough to block a merge on |
-| **Tier 2** | `docker-ci.yml`, before `helm upgrade` | the just built images | image shape: entrypoint, non root user, runtime deps, `SIGTERM`, baked config |
+|                   | Where                                  | Services run as         | What it protects                                                              |
+| ----------------- | -------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- |
+| **Unit + schema** | `pr.yml`, job `verify`                 | n/a                     | the fast, infra-free layer                                                    |
+| **Tier 1**        | `pr.yml`, job `verify-infra`           | `node dist/.../main.js` | application correctness; fast enough to block a merge on                      |
+| **Tier 2**        | `docker-ci.yml`, before `helm upgrade` | the just built images   | image shape: entrypoint, non root user, runtime deps, `SIGTERM`, baked config |
 
 - Both `pr.yml` jobs are required checks on `main` and `dev`. That is what keeps
   the property this repo already relies on: every commit reaching those branches
@@ -161,7 +169,7 @@ Every layer runs, in two tiers of fidelity (plan 0015, section 2).
   nothing beyond `npm ci`. `nx affected` further narrows which services'
   integration suites run; e2e is all or nothing, because it exercises the whole
   system.
-- Tier 2 runs *before* the `helm upgrade` and the `kubectl rollout restart`, so a
+- Tier 2 runs _before_ the `helm upgrade` and the `kubectl rollout restart`, so a
   red suite stops the deploy and a broken image never reaches staging. It costs
   the stack boot and the suite, not a rebuild: `docker-ci.yml` already built those
   images on the way to staging.
