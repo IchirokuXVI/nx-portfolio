@@ -4,8 +4,8 @@
 # worktree on an isolated "slot", so several worktrees, and therefore several
 # agents, can serve the front end at the same time without fighting over ports.
 #
-# It is the front end twin of k8s/e2e/luna-shopper-backend/luna-slot.sh and uses
-# the same arithmetic, but the two numberings are INDEPENDENT: front end slot 5
+# It is the front end twin of k8s/e2e/luna-shopper-backend/luna-slot.sh, in its own
+# port band, and the two numberings are INDEPENDENT: front end slot 5
 # may talk to backend slot 1, or 2, or 8, and several front end slots may talk to
 # one backend at the same time. That last case is the common one, when nobody is
 # changing the backend and a single instance serves everybody. See
@@ -34,13 +34,26 @@
 #
 # --- what a slot is ----------------------------------------------------------
 #
-# An integer N. Every port is its default plus N*100:
+# An integer N.
 #
-#   shell 4200   (static remotes 4201)   odontogram 4202
-#   damoclesSword 4203   landingV2 4204   velista 4205
+# Slot 0 is exactly the ports the project.json files already name, and stays that
+# way: shell 4200, static remotes 4201, odontogram 4202, damoclesSword 4203,
+# landingV2 4204, velista 4205. It is the developer's own, so a lone worktree needs
+# no slot at all and the plain `npx nx serve shell` workflow is unchanged.
 #
-# Slot 0 is the ports the project.json files already name, so a lone worktree
-# needs no slot at all and the plain `npx nx serve shell` workflow is unchanged.
+# Every other slot gets a 100 port block up in the 42000s, keeping the shape of
+# the defaults so the numbers stay readable:
+#
+#   slot 1  shell 42000  (static 42001)  odontogram 42002  dSword 42003
+#           landingV2 42004  velista 42005
+#   slot 2  the same, plus 100: 42100..42105
+#   ...
+#   slot 9  42800..42805
+#
+# The high band is not decoration. `default + N*100` put slot 1 on 4300 and slot 4
+# on 4600, right in the range everything else on a developer machine also wants,
+# so slots collided with other software instead of with each other. See SLOT_BAND
+# for how 42000 was chosen against what Windows actually reserves.
 #
 # --- why the ports are not simply overridden in project.json -----------------
 #
@@ -63,8 +76,8 @@
 # `--excludeTaskDependencies` goes on the remotes because three of them declare
 # `dependsOn: ['shell:serve']`, which exists to stop somebody opening a remote on
 # its own port and seeing a blank page. Here the shell is already being started
-# beside them, on this slot's port, so letting Nx start a second one on 4200 would
-# recreate exactly the collision this script exists to avoid.
+# beside them, on this slot's port, so letting Nx start a second one on the port
+# the graph names would recreate exactly the collision this script exists to avoid.
 #
 # --- what it writes (all git ignored, so it is safe per worktree) ------------
 #
@@ -86,20 +99,49 @@ SLOT_ENV="$here/.env.ng-slot"
 RUN_DIR="$here/.run"
 PROBE="$here/probe-ports.mjs"
 
-# Every app this script can serve, and its default port. The order is the order
-# --up starts them and --list prints them. `shell` is first because it is the host.
+# Every app this script can serve. The order is the order --up starts them and
+# --list prints them; `shell` is first because it is the host.
 APPS=(shell odontogram damoclesSword landingV2 velista)
-declare -A BASE_PORT=(
+
+# Slot 0 is exactly the ports `project.json` names, and nothing here may change
+# them: they are the developer's own, the ones their browser and their tools point
+# at, and the ones `npx nx serve shell` uses with no slot at all.
+declare -A DEFAULT_PORT=(
   [shell]=4200
+  [staticRemotes]=4201
   [odontogram]=4202
   [damoclesSword]=4203
   [landingV2]=4204
   [velista]=4205
 )
-# Nx serves static remotes from a file server of its own at the host port plus one.
-# --up skips every remote so nothing binds it, but it is still part of the slot's
-# range and must not be handed to another app.
-STATIC_REMOTES_OFFSET=1
+
+# Every OTHER slot lives up here instead, one 100 port block per slot.
+#
+# It used to be `default + N*100`, which put slot 1 on 4300 and slot 4 on 4600, in
+# the middle of the range everything else on a developer machine also wants. That
+# produced exactly the collisions the slots exist to prevent, just with other
+# software instead of another worktree.
+#
+# 42000 is chosen against what this machine actually reserves rather than by
+# feel. `netsh int ipv4 show dynamicport tcp` puts the Windows ephemeral range at
+# 49152 and up, and `netsh int ipv4 show excludedportrange protocol=tcp` puts every
+# Hyper-V and WSL reservation at 50000 and up. So 40000..48000 is clear of both,
+# while being far above the crowded region below 10000 where the defaults live.
+#
+# The shape of a block is the shape of the defaults, so the numbers stay readable:
+# 4200 becomes 42000, 4205 becomes 42005.
+SLOT_BAND=42000
+declare -A SLOT_OFFSET=(
+  [shell]=0
+  # Nx serves static remotes from a file server of its own at the host port plus
+  # one. --up skips every remote so nothing binds it, but it is still part of the
+  # slot's block and must not be handed to another app.
+  [staticRemotes]=1
+  [odontogram]=2
+  [damoclesSword]=3
+  [landingV2]=4
+  [velista]=5
+)
 
 # How high --auto and --list will look. Ten concurrent front ends is far past what
 # a laptop will build, and an open ended scan makes --list slow for no one's
@@ -151,7 +193,17 @@ EOF
 
 # --- slot arithmetic ---------------------------------------------------------
 
-port_for() { echo $(( BASE_PORT[$1] + $2 * 100 )); }
+# The port one app gets on one slot. Slot 0 is the defaults, untouched; every other
+# slot is its block in the high band. One function, so nothing can hold a second
+# copy of that rule.
+port_for() {
+  local app="$1" slot="$2"
+  if (( slot == 0 )); then
+    echo "${DEFAULT_PORT[$app]}"
+  else
+    echo $(( SLOT_BAND + (slot - 1) * 100 + SLOT_OFFSET[$app] ))
+  fi
+}
 
 # Every port a slot occupies, including the static remote file server that --up
 # never starts. Used by --down, --list and the free slot search, so all three agree
@@ -161,7 +213,7 @@ slot_ports() {
   for app in "${APPS[@]}"; do
     port_for "$app" "$slot"
   done
-  echo $(( BASE_PORT[shell] + STATIC_REMOTES_OFFSET + slot * 100 ))
+  port_for staticRemotes "$slot"
 }
 
 # --- reading the other worktrees ---------------------------------------------
@@ -200,6 +252,30 @@ probe_ports() {
 # So it is worked out rather than assumed, in an order that puts a human's stated
 # choice first and a running instance ahead of a guess.
 
+# The port a Luna service gets on a backend slot.
+#
+# It restates k8s/e2e/luna-shopper-backend/luna-slot.sh's arithmetic, which is a
+# duplication worth being explicit about: this script has to know where the backend
+# listens (to point velista at it, and to find which backends are running), the two
+# scripts are independent entry points with no shared library between them, and a
+# shell function cannot be imported from a different tool without turning one into
+# a dependency of the other. Both files name the same constants and both say so; if
+# either band moves, this moves with it. The symptom of getting it wrong is this
+# script naming a gateway port that the backend script never serves on, which is
+# exactly what happened when the backend moved to its high band and this did not.
+BACKEND_SLOT_BAND=43000
+declare -A BACKEND_DEFAULT_PORT=([gateway]=3000 [realtime]=3001)
+declare -A BACKEND_SLOT_OFFSET=([gateway]=0 [realtime]=1)
+
+backend_port() {
+  local service="$1" slot="$2"
+  if (( slot == 0 )); then
+    echo "${BACKEND_DEFAULT_PORT[$service]}"
+  else
+    echo $(( BACKEND_SLOT_BAND + (slot - 1) * 100 + BACKEND_SLOT_OFFSET[$service] ))
+  fi
+}
+
 # The luna slot this same worktree is configured for, if it runs its own backend.
 # This is the real pairing when there is one: same worktree, not same number.
 own_backend_slot() {
@@ -209,14 +285,22 @@ own_backend_slot() {
 }
 
 # The backend slots whose gateway is answering right now.
+#
+# The slot each port belongs to is carried alongside rather than recovered by
+# arithmetic from the port number: slot 0's gateway is 3000 and the rest are up in
+# the 43000s, so there is no single sum that inverts both.
 running_backend_slots() {
   local slot state port
-  local -a ports=()
+  local -a ports=() slots=()
   for (( slot = 0; slot <= MAX_SLOT; slot++ )); do
-    ports+=("$(( 3000 + slot * 100 ))")
+    ports+=("$(backend_port gateway "$slot")")
+    slots+=("$slot")
   done
+
+  local i=0
   while IFS=$'\t' read -r port state; do
-    [[ "$state" == "open" ]] && echo $(( (port - 3000) / 100 ))
+    [[ "$state" == "open" ]] && echo "${slots[$i]}"
+    i=$(( i + 1 ))
   done < <(probe_ports "${ports[@]}")
 }
 
@@ -270,7 +354,6 @@ detect_backend_slot() {
 
 write_config() {
   local slot="$1" backend_slot="$2"
-  local off=$(( slot * 100 )) boff=$(( backend_slot * 100 ))
 
   local shell_port odontogram_port damocles_port landing_port velista_port
   shell_port=$(port_for shell "$slot")
@@ -279,7 +362,9 @@ write_config() {
   landing_port=$(port_for landingV2 "$slot")
   velista_port=$(port_for velista "$slot")
 
-  local gateway_port=$(( 3000 + boff )) realtime_port=$(( 3001 + boff ))
+  local gateway_port realtime_port
+  gateway_port=$(backend_port gateway "$backend_slot")
+  realtime_port=$(backend_port realtime "$backend_slot")
 
   mkdir -p "$RUN_DIR"
 
@@ -290,7 +375,7 @@ write_config() {
 NG_SLOT=${slot}
 NG_BACKEND_SLOT=${backend_slot}
 NG_SHELL_PORT=${shell_port}
-NG_STATIC_REMOTES_PORT=$(( shell_port + STATIC_REMOTES_OFFSET ))
+NG_STATIC_REMOTES_PORT=$(port_for staticRemotes "$slot")
 NG_ODONTOGRAM_PORT=${odontogram_port}
 NG_DAMOCLESSWORD_PORT=${damocles_port}
 NG_LANDINGV2_PORT=${landing_port}
@@ -329,7 +414,7 @@ Configured this worktree for Angular slot ${slot}.
   damoclesSword http://localhost:${damocles_port}
   landingV2     http://localhost:${landing_port}
   velista       http://localhost:${velista_port}   (own origin, plan 0013)
-  reserved      $(( shell_port + STATIC_REMOTES_OFFSET )), held for Nx's static remote server
+  reserved      $(port_for staticRemotes "$slot"), held for Nx's static remote server
   backend       luna-shopper slot ${backend_slot}: gateway ${gateway_port}, realtime ${realtime_port}
                 (an independent number, not this slot's; --backend-slot <n> moves it)
 
@@ -446,7 +531,7 @@ up() {
     IFS=',' read -r -a wanted <<< "$apps_csv"
     local app
     for app in "${wanted[@]}"; do
-      [[ -n "${BASE_PORT[$app]:-}" ]] || { echo "unknown app '$app'; known: ${APPS[*]}" >&2; return 2; }
+      [[ -n "${SLOT_OFFSET[$app]:-}" ]] || { echo "unknown app '$app'; known: ${APPS[*]}" >&2; return 2; }
     done
   else
     wanted=("${APPS[@]}")
@@ -566,7 +651,7 @@ restart() {
   if [[ -n "$apps_csv" ]]; then
     IFS=',' read -r -a wanted <<< "$apps_csv"
     for app in "${wanted[@]}"; do
-      [[ -n "${BASE_PORT[$app]:-}" ]] || { echo "unknown app '$app'; known: ${APPS[*]}" >&2; return 2; }
+      [[ -n "${SLOT_OFFSET[$app]:-}" ]] || { echo "unknown app '$app'; known: ${APPS[*]}" >&2; return 2; }
     done
   else
     # Default to whatever this slot currently has up, so a restart never quietly
@@ -731,7 +816,7 @@ list() {
   done < <(probe_ports "${all_ports[@]}")
 
   echo
-  echo "Angular dev slots (ports are the default plus slot*100)"
+  echo "Angular dev slots (slot 0 is the project.json ports; 1 and up are 42000 + (slot-1)*100)"
   echo
   printf '  %-4s %-7s %-46s %s\n' 'SLOT' 'STATE' 'PORTS  shell/odtg/dsword/landing/velista' 'CLAIMED BY'
   for (( slot = 0; slot <= MAX_SLOT; slot++ )); do

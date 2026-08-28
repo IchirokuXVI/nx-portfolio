@@ -13,10 +13,18 @@
   ./k8s/e2e/luna-shopper-backend/luna-slot.ps1 -List   # every worktree's slot, and what is live
 
 .DESCRIPTION
-  A slot is an integer N. Every host port is default + N*100, the compose project
-  (its containers, network, and named volumes) is "luna-slot<N>", and the five
-  services listen on 300{0..4}+N*100. Slot 0 keeps the original ports and the
-  "luna-shopper-backend" project name, so a lone worktree needs no slot.
+  A slot is an integer N. The compose project (its containers, network, and named
+  volumes) is "luna-slot<N>".
+
+  Slot 0 keeps exactly the historic ports (gateway 3000, auth-db 5432, nats 4222,
+  and the rest) and the "luna-shopper-backend" project name, so a lone worktree
+  needs no slot and nothing here changes it.
+
+  Every other slot gets a 100 port block up in the 43000s: slot 1 is 43000..43054,
+  slot 2 is 43100..43154, and so on. That is a change from `default + N*100`, which
+  scattered a slot across 5532, 4322, 6479, 1125 and 16786, most of them in the
+  range everything else on the machine also wants, so slots collided with other
+  software instead of with each other.
 
   tools/dev/ng-slot.ps1 does the same for the Angular apps, but the two numbers are
   INDEPENDENT and must not be assumed equal. A front end on slot 5 may point at
@@ -86,6 +94,25 @@ $minAutoSlot = 1
 # about who may call: CORS allows every slot regardless.
 $defaultAppSlot = 0
 
+# The port an Angular app gets on a front end slot.
+#
+# It restates tools/dev/ng-slot.ps1's arithmetic, which is a duplication worth being
+# explicit about: this script has to know the front end's ports (to allow their
+# origins, and to aim the redirects), the two scripts are independent entry points
+# with no shared library between them, and a function cannot be imported from a
+# different tool without turning one into a dependency of the other. Both files name
+# the same two constants and both say so; if either band moves, this moves with it.
+# The two -List outputs printing different numbers for one slot is the symptom of
+# getting it wrong.
+$frontendSlotBand = 42000
+$frontendDefaultPort = @{ shell = 4200; velista = 4205 }
+$frontendSlotOffset = @{ shell = 0; velista = 5 }
+
+function Get-FrontendPort([string]$app, [int]$slot) {
+  if ($slot -eq 0) { return $frontendDefaultPort[$app] }
+  return $frontendSlotBand + ($slot - 1) * 100 + $frontendSlotOffset[$app]
+}
+
 # Every origin any front end slot can serve on, as one comma separated list.
 #
 # Not this slot's, and not a guess at which front end will call: the numbering is
@@ -97,10 +124,48 @@ $defaultAppSlot = 0
 function Get-FrontendOrigins {
   $origins = @()
   for ($slot = 0; $slot -le $maxSlot; $slot++) {
-    $origins += "http://localhost:$(4200 + $slot * 100)"   # shell
-    $origins += "http://localhost:$(4205 + $slot * 100)"   # velista's own origin
+    $origins += "http://localhost:$(Get-FrontendPort 'shell' $slot)"
+    $origins += "http://localhost:$(Get-FrontendPort 'velista' $slot)"
   }
   return ($origins -join ',')
+}
+
+# One table and one function, so every caller derives ports the same way.
+#
+# Slot 0 is exactly the historic ports, and nothing here may change them: they are
+# the developer's own, the ones their tools, their Postman environment and their
+# running containers already point at.
+#
+# Every other slot gets a 100 port block up in the 43000s. It used to be
+# `default + N*100`, which scattered a slot across 5532, 4322, 6479, 1125, 8125,
+# 3100 and 16786, most of them in the range everything else on a developer machine
+# also wants, so slots collided with other software instead of with each other.
+#
+# 43000 is chosen against what this machine actually reserves rather than by feel.
+# `netsh int ipv4 show dynamicport tcp` puts the Windows ephemeral range at 49152
+# and up, and `netsh int ipv4 show excludedportrange protocol=tcp` puts every
+# Hyper-V and WSL reservation at 50000 and up. So 40000..48000 is clear of both, and
+# 43000 sits above the front end's 42000 band (tools/dev/ng-slot.ps1) with room for
+# nine slots on each side.
+#
+# The offsets group by kind so a block stays readable: services at +0, databases at
+# +10, messaging at +20, cache at +30, mail at +40, observability at +50.
+$defaultPort = @{
+  gateway = 3000; realtime = 3001; auth = 3002; core = 3003; catalog = 3004
+  auth_db = 5432; core_db = 5433; catalog_db = 5434
+  nats = 4222; nats_mon = 8222
+  redis = 6379
+  smtp = 1025; mailpit = 8025
+  otlp_grpc = 4317; otlp_http = 4318; jaeger = 16686; prometheus = 9090; grafana = 3010
+}
+$lunaSlotBand = 43000
+$slotOffset = @{
+  gateway = 0; realtime = 1; auth = 2; core = 3; catalog = 4
+  auth_db = 10; core_db = 11; catalog_db = 12
+  nats = 20; nats_mon = 21
+  redis = 30
+  smtp = 40; mailpit = 41
+  otlp_grpc = 50; otlp_http = 51; jaeger = 52; prometheus = 53; grafana = 54
 }
 
 function Get-SlotProject([int]$slot) {
@@ -109,25 +174,26 @@ function Get-SlotProject([int]$slot) {
   return "luna-slot$slot"
 }
 
+# The port one thing gets on one slot.
+function Get-LunaPort([string]$name, [int]$slot) {
+  if ($slot -eq 0) { return $defaultPort[$name] }
+  return $lunaSlotBand + ($slot - 1) * 100 + $slotOffset[$name]
+}
+
 # The infrastructure compose brings up. `--wait` covers all of it, so a slot with
 # some of these open and some closed is genuinely half started.
 function Get-InfraPorts([int]$slot) {
-  $off = $slot * 100
-  return @(
-    (5432 + $off),   # auth-db
-    (5433 + $off),   # core-db
-    (5434 + $off),   # catalog-db
-    (4222 + $off),   # nats
-    (8222 + $off),   # nats monitoring
-    (6379 + $off),   # redis
-    (1025 + $off),   # smtp
-    (8025 + $off)    # mailpit ui
-  )
+  $ports = @()
+  foreach ($name in @('auth_db', 'core_db', 'catalog_db', 'nats', 'nats_mon', 'redis', 'smtp', 'mailpit')) {
+    $ports += (Get-LunaPort $name $slot)
+  }
+  return $ports
 }
 
 function Get-ServicePorts([int]$slot) {
-  $off = $slot * 100
-  return @((3000 + $off), (3001 + $off), (3002 + $off), (3003 + $off), (3004 + $off))
+  $ports = @()
+  foreach ($name in $serviceNames) { $ports += (Get-LunaPort $name $slot) }
+  return $ports
 }
 
 # Reserved per slot whether or not the `observability` profile is up, so two
@@ -135,8 +201,11 @@ function Get-ServicePorts([int]$slot) {
 # a slot is up: the profile is opt in, and counting it would report every healthy
 # slot as partial.
 function Get-ObservabilityPorts([int]$slot) {
-  $off = $slot * 100
-  return @((4317 + $off), (4318 + $off), (16686 + $off), (9090 + $off), (3010 + $off))
+  $ports = @()
+  foreach ($name in @('otlp_grpc', 'otlp_http', 'jaeger', 'prometheus', 'grafana')) {
+    $ports += (Get-LunaPort $name $slot)
+  }
+  return $ports
 }
 
 function Get-SlotPorts([int]$slot) {
@@ -236,32 +305,31 @@ METRICS_ENABLED=true
 }
 
 function Write-SlotConfig([int]$slot, [int]$appSlot) {
-  $off = $slot * 100
-
-  $authDb = 5432 + $off
-  $coreDb = 5433 + $off
-  $catalogDb = 5434 + $off
-  $nats = 4222 + $off
-  $natsMon = 8222 + $off
-  $redis = 6379 + $off
-  $smtp = 1025 + $off
-  $mailUi = 8025 + $off
-  $gateway = 3000 + $off
-  $realtime = 3001 + $off
-  $auth = 3002 + $off
-  $core = 3003 + $off
-  $catalog = 3004 + $off
-  $otlpGrpc = 4317 + $off
-  $otlpHttp = 4318 + $off
-  $jaegerUi = 16686 + $off
-  $prometheus = 9090 + $off
-  $grafana = 3010 + $off
+  # Every port comes from Get-LunaPort, so this function cannot drift from what
+  # -List probes and -Down frees.
+  $authDb = Get-LunaPort 'auth_db' $slot
+  $coreDb = Get-LunaPort 'core_db' $slot
+  $catalogDb = Get-LunaPort 'catalog_db' $slot
+  $nats = Get-LunaPort 'nats' $slot
+  $natsMon = Get-LunaPort 'nats_mon' $slot
+  $redis = Get-LunaPort 'redis' $slot
+  $smtp = Get-LunaPort 'smtp' $slot
+  $mailUi = Get-LunaPort 'mailpit' $slot
+  $gateway = Get-LunaPort 'gateway' $slot
+  $realtime = Get-LunaPort 'realtime' $slot
+  $auth = Get-LunaPort 'auth' $slot
+  $core = Get-LunaPort 'core' $slot
+  $catalog = Get-LunaPort 'catalog' $slot
+  $otlpGrpc = Get-LunaPort 'otlp_grpc' $slot
+  $otlpHttp = Get-LunaPort 'otlp_http' $slot
+  $jaegerUi = Get-LunaPort 'jaeger' $slot
+  $prometheus = Get-LunaPort 'prometheus' $slot
+  $grafana = Get-LunaPort 'grafana' $slot
 
   # The one front end the singular URLs point at. See the header: this is a choice,
   # not an inference, because a redirect target cannot be a list.
-  $aoff = $appSlot * 100
-  $shellPort = 4200 + $aoff
-  $velistaPort = 4205 + $aoff
+  $shellPort = Get-FrontendPort 'shell' $appSlot
+  $velistaPort = Get-FrontendPort 'velista' $appSlot
 
   $project = Get-SlotProject $slot
 
@@ -729,7 +797,7 @@ function Invoke-List {
   }
 
   Write-Host ""
-  Write-Host 'Luna Shopper dev slots (ports are the default plus slot*100)'
+  Write-Host 'Luna Shopper dev slots (slot 0 is the historic ports; 1 and up are a block at 43000 + (slot-1)*100)'
   Write-Host ""
   Write-Host ('  {0,-4} {1,-20} {2,-9} {3,-9} {4,-7} {5}' -f 'SLOT', 'COMPOSE PROJECT', 'INFRA', 'SERVICES', 'OBSERV', 'CLAIMED BY')
 

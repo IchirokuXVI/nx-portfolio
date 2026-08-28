@@ -12,10 +12,17 @@
   ./tools/dev/ng-slot.ps1 -List      # every worktree's slot, and what is live
 
 .DESCRIPTION
-  A slot is an integer N and every port is its default plus N*100: shell 4200
-  (static remotes 4201), odontogram 4202, damoclesSword 4203, landingV2 4204,
-  velista 4205. Slot 0 is the ports project.json already names, so a lone worktree
-  needs no slot and `npx nx serve shell` is unchanged.
+  A slot is an integer N. Slot 0 is exactly the ports project.json already names,
+  and stays that way: shell 4200, static remotes 4201, odontogram 4202,
+  damoclesSword 4203, landingV2 4204, velista 4205. It is the developer's own, so a
+  lone worktree needs no slot and `npx nx serve shell` is unchanged.
+
+  Every other slot gets a 100 port block up in the 42000s, keeping the shape of the
+  defaults: slot 1 is 42000..42005, slot 2 is 42100..42105, up to slot 9 at
+  42800..42805. The high band is not decoration; `default + N*100` put slot 1 on
+  4300 and slot 4 on 4600, in the range everything else on a developer machine also
+  wants, so slots collided with other software instead of with each other. See
+  $slotBand for how 42000 was chosen against what Windows actually reserves.
 
   The ports cannot simply be overridden in project.json: `nx serve shell` runs the
   module federation dev server, which starts the remotes itself and reads each
@@ -58,20 +65,49 @@ $slotEnv = Join-Path $here '.env.ng-slot'
 $runDir = Join-Path $here '.run'
 $probe = Join-Path $here 'probe-ports.mjs'
 
-# Every app this script can serve, and its default port. The order is the order
-# -Up starts them and -List prints them. shell is first because it is the host.
+# Every app this script can serve. The order is the order -Up starts them and -List
+# prints them; shell is first because it is the host.
 $appOrder = @('shell', 'odontogram', 'damoclesSword', 'landingV2', 'velista')
-$basePort = @{
+
+# Slot 0 is exactly the ports project.json names, and nothing here may change them:
+# they are the developer's own, the ones their browser and their tools point at,
+# and the ones `npx nx serve shell` uses with no slot at all.
+$defaultPort = @{
   shell         = 4200
+  staticRemotes = 4201
   odontogram    = 4202
   damoclesSword = 4203
   landingV2     = 4204
   velista       = 4205
 }
-# Nx serves static remotes from a file server of its own at the host port plus one.
-# -Up skips every remote so nothing binds it, but it is still part of the slot's
-# range and must not be handed to another app.
-$staticRemotesOffset = 1
+
+# Every OTHER slot lives up here instead, one 100 port block per slot.
+#
+# It used to be `default + N*100`, which put slot 1 on 4300 and slot 4 on 4600, in
+# the middle of the range everything else on a developer machine also wants. That
+# produced exactly the collisions the slots exist to prevent, just with other
+# software instead of another worktree.
+#
+# 42000 is chosen against what this machine actually reserves rather than by feel.
+# `netsh int ipv4 show dynamicport tcp` puts the Windows ephemeral range at 49152
+# and up, and `netsh int ipv4 show excludedportrange protocol=tcp` puts every
+# Hyper-V and WSL reservation at 50000 and up. So 40000..48000 is clear of both,
+# while being far above the crowded region below 10000 where the defaults live.
+#
+# The shape of a block is the shape of the defaults, so the numbers stay readable:
+# 4200 becomes 42000, 4205 becomes 42005.
+$slotBand = 42000
+$slotOffset = @{
+  shell         = 0
+  # Nx serves static remotes from a file server of its own at the host port plus
+  # one. -Up skips every remote so nothing binds it, but it is still part of the
+  # slot's block and must not be handed to another app.
+  staticRemotes = 1
+  odontogram    = 2
+  damoclesSword = 3
+  landingV2     = 4
+  velista       = 5
+}
 
 # How high -Auto and -List will look. Ten concurrent front ends is far past what a
 # laptop will build, and an open ended scan makes -List slow for no one's benefit.
@@ -89,14 +125,20 @@ $minAutoSlot = 1
 # Find-BackendSlot, not a coupling to this slot's number.
 $defaultBackendSlot = 0
 
-function Get-PortFor([string]$app, [int]$slot) { return $basePort[$app] + $slot * 100 }
+# The port one app gets on one slot. Slot 0 is the defaults, untouched; every other
+# slot is its block in the high band. One function, so nothing can hold a second
+# copy of that rule.
+function Get-PortFor([string]$app, [int]$slot) {
+  if ($slot -eq 0) { return $defaultPort[$app] }
+  return $slotBand + ($slot - 1) * 100 + $slotOffset[$app]
+}
 
 # Every port a slot occupies, the static remote file server included, so -Down,
 # -List and the free slot search all agree on what "this slot is busy" means.
 function Get-SlotPorts([int]$slot) {
   $ports = @()
   foreach ($app in $appOrder) { $ports += (Get-PortFor $app $slot) }
-  $ports += ($basePort['shell'] + $staticRemotesOffset + $slot * 100)
+  $ports += (Get-PortFor 'staticRemotes' $slot)
   return $ports
 }
 
@@ -184,6 +226,26 @@ function Stop-RecordedPid($recorded) {
 # pointed at one backend, because most front end work needs a backend running, not
 # a backend of its own.
 
+# The port a Luna service gets on a backend slot.
+#
+# It restates k8s/e2e/luna-shopper-backend/luna-slot.ps1's arithmetic, which is a
+# duplication worth being explicit about: this script has to know where the backend
+# listens (to point velista at it, and to find which backends are running), the two
+# scripts are independent entry points with no shared library between them, and a
+# function cannot be imported from a different tool without turning one into a
+# dependency of the other. Both files name the same constants and both say so; if
+# either band moves, this moves with it. The symptom of getting it wrong is this
+# script naming a gateway port the backend script never serves on, which is exactly
+# what happened when the backend moved to its high band and this did not.
+$backendSlotBand = 43000
+$backendDefaultPort = @{ gateway = 3000; realtime = 3001 }
+$backendSlotOffset = @{ gateway = 0; realtime = 1 }
+
+function Get-BackendPort([string]$service, [int]$slot) {
+  if ($slot -eq 0) { return $backendDefaultPort[$service] }
+  return $backendSlotBand + ($slot - 1) * 100 + $backendSlotOffset[$service]
+}
+
 # The luna slot this same worktree is configured for, if it runs its own backend.
 # This is the real pairing when there is one: same worktree, not same number.
 function Get-OwnBackendSlot {
@@ -198,11 +260,11 @@ function Get-OwnBackendSlot {
 # The backend slots whose gateway is answering right now.
 function Get-RunningBackendSlots {
   $ports = @()
-  for ($slot = 0; $slot -le $maxSlot; $slot++) { $ports += (3000 + $slot * 100) }
+  for ($slot = 0; $slot -le $maxSlot; $slot++) { $ports += (Get-BackendPort 'gateway' $slot) }
   $states = Get-PortStates $ports
   $slots = @()
   for ($slot = 0; $slot -le $maxSlot; $slot++) {
-    if ($states[(3000 + $slot * 100)] -eq 'open') { $slots += $slot }
+    if ($states[(Get-BackendPort 'gateway' $slot)] -eq 'open') { $slots += $slot }
   }
   return $slots
 }
@@ -246,9 +308,9 @@ function Write-SlotConfig([int]$slot, [int]$backendSlot) {
   $damoclesPort = Get-PortFor 'damoclesSword' $slot
   $landingPort = Get-PortFor 'landingV2' $slot
   $velistaPort = Get-PortFor 'velista' $slot
-  $staticPort = $shellPort + $staticRemotesOffset
-  $gatewayPort = 3000 + $backendSlot * 100
-  $realtimePort = 3001 + $backendSlot * 100
+  $staticPort = Get-PortFor 'staticRemotes' $slot
+  $gatewayPort = Get-BackendPort 'gateway' $backendSlot
+  $realtimePort = Get-BackendPort 'realtime' $backendSlot
 
   New-Item -ItemType Directory -Force -Path $runDir | Out-Null
 
@@ -411,7 +473,7 @@ function Invoke-Up {
   if ($Apps) {
     $wanted = $Apps -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
     foreach ($app in $wanted) {
-      if (-not $basePort.ContainsKey($app)) {
+      if (-not $slotOffset.ContainsKey($app)) {
         throw "unknown app '$app'; known: $($appOrder -join ', ')"
       }
     }
@@ -538,7 +600,7 @@ function Invoke-Restart {
   if ($Apps) {
     $wanted = $Apps -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
     foreach ($app in $wanted) {
-      if (-not $basePort.ContainsKey($app)) {
+      if (-not $slotOffset.ContainsKey($app)) {
         throw "unknown app '$app'; known: $($appOrder -join ', ')"
       }
     }
@@ -615,7 +677,7 @@ function Invoke-List {
   $states = Get-PortStates $allPorts
 
   Write-Host ""
-  Write-Host 'Angular dev slots (ports are the default plus slot*100)'
+  Write-Host 'Angular dev slots (slot 0 is the project.json ports; 1 and up are 42000 + (slot-1)*100)'
   Write-Host ""
   Write-Host ('  {0,-4} {1,-7} {2,-40} {3}' -f 'SLOT', 'STATE', 'PORTS  shell/odtg/dsword/landing/velista', 'CLAIMED BY')
 
