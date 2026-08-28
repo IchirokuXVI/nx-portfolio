@@ -51,6 +51,15 @@ export interface SetRoleRequest {
 
 export interface CreateListRequest {
   readonly name: string;
+  /**
+   * Whether every approved member of the group gets access to it (plan 0024).
+   *
+   * Sent on every create, including when it is true. The backend defaults an absent
+   * field to sharing, but this client always states the answer it collected, so what
+   * went over the wire is what the person ticked rather than what a default happened
+   * to agree with.
+   */
+  readonly shareWithZone: boolean;
 }
 
 export interface UpdateListRequest {

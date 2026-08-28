@@ -70,6 +70,15 @@ export class RealtimeMemory implements RealtimeClientI {
     return this._registry.acquireZone(zoneId, options?.staff === true);
   }
 
+  enterZone(zoneId: string, options?: RealtimeSubscribeOptions): () => void {
+    if (this.refuse.has(zoneId)) {
+      this._refused.update((current) => new Set(current).add(zoneId));
+      return () => undefined;
+    }
+
+    return this._registry.acquireZonePresence(zoneId, options?.staff === true);
+  }
+
   subscribeList(listId: string): () => void {
     return this._registry.acquireList(listId);
   }
@@ -92,6 +101,11 @@ export class RealtimeMemory implements RealtimeClientI {
    */
   get viewedLists(): ReadonlySet<string> {
     return this._registry.viewedLists();
+  }
+
+  /** The zones this client is announcing itself in. {@link viewedLists}' reasoning. */
+  get presentZones(): ReadonlySet<string> {
+    return this._registry.presentZones();
   }
 
   get editedLines(): ReadonlyMap<string, string> {

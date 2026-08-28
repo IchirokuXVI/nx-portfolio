@@ -306,9 +306,14 @@ export class ListPage {
     // The dashboard's own subscription to the resume list stays `subscribeList`, and
     // must: reading a dashboard is not shopping, and a page that announced it would put
     // every user into whichever list they last opened.
+    //
+    // `enterZone` and not `subscribeZone`, which is plan 0023's half of the same
+    // correction: shopping from a list **is** being in that group, and the zone
+    // subscription every group already holds for its live counts cannot say so,
+    // because it is held for every group at once from the moment the app loads.
     effect((onCleanup) => {
       const leaveList = this._realtime.viewList(this.listId());
-      const leaveZone = this._realtime.subscribeZone(this.zoneId());
+      const leaveZone = this._realtime.enterZone(this.zoneId());
       onCleanup(() => {
         leaveList();
         leaveZone();

@@ -72,6 +72,24 @@ export interface RealtimeClientI {
   subscribeZone(zoneId: string, options?: RealtimeSubscribeOptions): () => void;
 
   /**
+   * Announce that this client is **on** a group right now, refcounted (plan 0023).
+   *
+   * {@link viewList}'s counterpart, and it acquires the zone room the same way and for
+   * the same reason: the server refuses the intent from a socket that is not in
+   * `zone:{id}`, so the client holds both as one call.
+   *
+   * The split matters more here than it does for a list. Every group the user belongs
+   * to is subscribed for the whole session so its counts stay live, and zone presence
+   * used to be a side effect of that subscription, which made a member of six groups
+   * report as present in all six at once and never leave any of them. Only a screen
+   * that is open right now can answer where somebody is, so only a screen announces
+   * it, and navigation releases the old one because the page is destroyed.
+   *
+   * Advisory only (plan 0004, section 6.7), as all presence is.
+   */
+  enterZone(zoneId: string, options?: RealtimeSubscribeOptions): () => void;
+
+  /**
    * Join a list room, refcounted. See {@link subscribeZone}.
    *
    * Observing, not announcing. A caller that also wants to be **seen** on the list

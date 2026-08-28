@@ -1,3 +1,50 @@
 @use '../sheet-form';
 
 @include sheet-form.sheet-form;
+
+// Who can see it (plan 0024). Local to this sheet rather than in the shared mixin:
+// the create-group sheet has one field and no choice, so a block in the mixin would
+// be carried by a file that never draws it.
+.choice {
+  margin-block-start: var(--app-space-5);
+}
+
+// The label wraps the control, so the whole phrase is the hit target. On a phone a
+// bare 16px box is under every touch target guideline there is, and the words beside
+// it are the part a thumb actually aims at.
+.choice-label {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  cursor: pointer;
+}
+
+.checkbox {
+  flex-shrink: 0;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  // The one control in this sheet drawn by the platform. A checkbox is the widget
+  // every assistive technology and every autofill already understands, and accent
+  // colour is enough to make it this app's rather than replacing it with a div that
+  // has to reimplement focus, keyboard and the indeterminate state it will never use.
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
+
+  @include sheet-form.focus-ring;
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+// Sits under the label and is what `aria-describedby` points at, so the consequence
+// of unticking is read out with the control rather than found afterwards.
+.choice-hint {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}

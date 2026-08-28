@@ -2,10 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   ListRole,
+  MembershipStatus,
   RealtimeEvent,
   ZoneRole,
-  type ListCounts,
   type CreateListRequest,
+  type ListCounts,
   type ListIdRequest,
   type ListListsRequest,
   type ListOrder,
@@ -19,15 +20,17 @@ import {
   decodeCursor,
   encodeCursor,
 } from '@portfolio/luna-shopper/platform';
-import { DataSource, Repository, type SelectQueryBuilder } from 'typeorm';
-import { ListAccess, ShoppingList } from '../entities';
+import {
+  DataSource,
+  Repository,
+  type EntityManager,
+  type SelectQueryBuilder,
+} from 'typeorm';
+import { ListAccess, ShoppingList, ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { ZoneCountsService } from '../zones/zone-counts.service';
-import {
-  LIST_COUNTS_COLUMN,
-  LIST_COUNTS_SQL,
-} from '../zones/zone-summary.sql';
+import { LIST_COUNTS_COLUMN, LIST_COUNTS_SQL } from '../zones/zone-summary.sql';
 import { ListAccessService } from './list-access.service';
 import { EMPTY_LIST_COUNTS, toListView } from './list.mappers';
 
@@ -67,10 +70,31 @@ export class ListService {
 
   /**
    * Create a list (plan 0007, section 2): any approved member of the zone. The
-   * creator gets WRITER access by default, in the same transaction.
+   * creator gets WRITER access, in the same transaction.
+   *
+   * ## Shared with the group unless the creator says otherwise (plan 0034)
+   *
+   * `shareWithZone` grants every **other approved** member of the zone WRITER as
+   * well, in the same transaction as the list itself, so a list is never briefly
+   * visible to nobody and a failed grant does not leave one behind that only its
+   * creator can open.
+   *
+   * **WRITER and not READER**, which is the decision in this method worth arguing
+   * about. This app's lists are shopped from: the thing a member does with one is
+   * tick a line off in an aisle, and a reader cannot. A group of readers watching
+   * one person shop is not a household shopping list, it is a document. Somebody
+   * who wants that narrows it afterwards in the share sheet, which already exists
+   * and already has the three states; nothing here is a decision they cannot undo.
+   *
+   * Pending and rejected memberships are left out. Access follows the membership
+   * row, so somebody approved later has no row here and is granted nothing, which
+   * is the same gap `setAccess` has always had and is the share sheet's job.
    */
   async create(req: CreateListRequest): Promise<ListView> {
     const membership = await this.authz.requireApproved(req.zoneId, req.userId);
+    // Absent means shared. See `CreateListRequest.shareWithZone`: a client written
+    // before this field existed must keep getting what it always got.
+    const shareWithZone = req.shareWithZone !== false;
 
     const list = await this.dataSource.transaction(async (manager) => {
       const list = await manager.getRepository(ShoppingList).save(
@@ -80,13 +104,25 @@ export class ListService {
           createdByUserId: req.userId,
         })
       );
-      await manager.getRepository(ListAccess).save(
+
+      const membershipIds = shareWithZone
+        ? await this.approvedMembershipIds(manager, req.zoneId, membership.id)
+        : [];
+
+      await manager.getRepository(ListAccess).save([
         manager.getRepository(ListAccess).create({
           listId: list.id,
           membershipId: membership.id,
           role: ListRole.WRITER,
-        })
-      );
+        }),
+        ...membershipIds.map((membershipId) =>
+          manager.getRepository(ListAccess).create({
+            listId: list.id,
+            membershipId,
+            role: ListRole.WRITER,
+          })
+        ),
+      ]);
       return list;
     });
 
@@ -95,6 +131,32 @@ export class ListService {
     this.events.emit(RealtimeEvent.ListCreated, req.zoneId, view, view.id);
     await this.zoneCounts.emitZoneCounts(req.zoneId);
     return view;
+  }
+
+  /**
+   * Every approved membership of a zone but the creator's, as ids.
+   *
+   * Ids rather than entities, because that is all the grant needs and a zone with a
+   * large membership should not load a row's worth of columns per member to write
+   * one uuid each. It runs on the transaction's manager so it sees the same snapshot
+   * as the insert beside it: a member approved between the read and the write is
+   * exactly the race the share sheet exists to settle, and is not worth a lock here.
+   */
+  private async approvedMembershipIds(
+    manager: EntityManager,
+    zoneId: string,
+    exceptMembershipId: string
+  ): Promise<string[]> {
+    const rows = await manager
+      .getRepository(ZoneMembership)
+      .createQueryBuilder('m')
+      .select('m.id', 'id')
+      .where('m.zoneId = :zoneId', { zoneId })
+      .andWhere('m.status = :status', { status: MembershipStatus.APPROVED })
+      .andWhere('m.id != :exceptMembershipId', { exceptMembershipId })
+      .getRawMany<{ id: string }>();
+
+    return rows.map((row) => row.id);
   }
 
   /**

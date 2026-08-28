@@ -23,6 +23,30 @@
     type="text"
   />
 
+  <!--
+    A real checkbox, labelled by wrapping it, and described by the sentence under it.
+    Ticked by default because sharing is what a group is for, and it is a checkbox
+    rather than two segments because there is a plain default and a deliberate
+    exception, not two equal choices.
+  -->
+  <div class="choice">
+    <label class="choice-label" for="create-list-share">
+      <input
+        (change)="onShareChange($event)"
+        [checked]="shareWithZone()"
+        [disabled]="submitting()"
+        aria-describedby="create-list-share-hint"
+        class="checkbox"
+        id="create-list-share"
+        type="checkbox"
+      />
+      <span>{{ 'zone.newList.shareLabel' | rokuT }}</span>
+    </label>
+    <p class="choice-hint" id="create-list-share-hint">
+      {{ 'zone.newList.shareHint' | rokuT }}
+    </p>
+  </div>
+
   @if (errorKey(); as key) {
     <p class="error" role="alert">{{ key | rokuT }}</p>
   }

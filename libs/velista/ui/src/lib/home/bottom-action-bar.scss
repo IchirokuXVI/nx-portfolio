@@ -27,8 +27,9 @@
   }
 }
 
-// The primary action and the line saying why it does nothing yet, stacked, so the
-// caption sits under the button instead of competing with it in the row.
+// The primary action and the line it shows when tapped, stacked, so the answer sits
+// under the button instead of competing with it in the row. The gap is inside the
+// column, so the row's height is the button's until there is something to say.
 .primary-slot {
   flex: 1;
   display: flex;
@@ -44,19 +45,12 @@
   font-size: var(--app-text-base);
   font-weight: 600;
 
-  &:hover:not(:disabled) {
+  &:hover {
     background: var(--app-action-bg-hover);
   }
 
-  &:active:not(:disabled) {
+  &:active {
     background: var(--app-action-bg-pressed);
-  }
-
-  // Muted rather than hidden, and still legible: the button is here to say what is
-  // coming, so a contrast low enough to be unreadable would defeat the point.
-  &:disabled {
-    cursor: default;
-    opacity: 0.55;
   }
 }
 

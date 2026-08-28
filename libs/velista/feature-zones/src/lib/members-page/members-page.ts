@@ -270,6 +270,15 @@ export class MembersPage {
     // now applies it and the five membership events that never had a channel, so the
     // rows are live through one mechanism rather than one row's worth of one.
 
+    // The members screen is a screen about one group, so being on it is being in that
+    // group (plan 0023). Separate from the staff room above, and unconditional, because
+    // that one is held only for an owner or an admin: presence that depended on the
+    // reader's role would light up for staff and leave every ordinary member invisible.
+    effect((onCleanup) => {
+      const leave = this._realtime.enterZone(this.zoneId());
+      onCleanup(leave);
+    });
+
     inject(DestroyRef).onDestroy(() => this._releaseStaffRoom());
   }
 

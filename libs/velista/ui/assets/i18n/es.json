@@ -108,6 +108,8 @@
       "body": "Cualquiera del grupo puede empezar una lista. Podrás cambiarle el nombre después",
       "label": "Nombre de la lista",
       "placeholder": "Compra semanal",
+      "shareLabel": "Todo el grupo puede verla",
+      "shareHint": "Pueden añadir cosas y marcarlas. Desactívalo para dejarla solo para ti y compartirla con quien quieras más adelante",
       "submit": "Crear lista"
     },
     "error": {
@@ -495,7 +497,7 @@
       "title": "Esta cuenta vive en este teléfono",
       "body": "Todavía no tiene correo ni contraseña, así que no se puede abrir en ningún otro sitio, y borrar los datos del navegador acabaría con ella",
       "secure": "Proteger esta cuenta",
-      "deleteNote": "Hasta que la protejas, eliminarla es la única otra forma en que esta cuenta termina"
+      "deleteNote": "Para cerrar sesión tienes que eliminar tu cuenta, porque no está protegida con un correo"
     },
     "delete": {
       "action": "Eliminar tu cuenta",

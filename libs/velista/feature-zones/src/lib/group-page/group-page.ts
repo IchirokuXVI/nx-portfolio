@@ -18,8 +18,10 @@ import {
   MemberNames,
   presenceNames,
   PresenceStore,
+  REALTIME_CLIENT,
   SessionStore,
   ZoneStore,
+  type RealtimeClientI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -93,6 +95,7 @@ export class GroupPage {
   private readonly _zones = inject(ZoneStore);
   private readonly _lists = inject(ListStore);
   private readonly _presence = inject(PresenceStore);
+  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _names = inject(MemberNames);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
@@ -141,9 +144,13 @@ export class GroupPage {
   /**
    * Who is in this group right now, named and without the reader.
    *
-   * Zone presence needs no intent and no subscription of this page's own: the server
-   * computes it from who holds the zone room, and `ZoneStore` holds one per zone
-   * already (plan 0022, section 3.1). The three joins are `presenceNames`.
+   * Plan 0022, section 3.1 said this needed no intent, because the server computed
+   * zone presence from who holds the zone room and `ZoneStore` holds one per zone
+   * already. That was true and it was the defect: `ZoneStore` holds a room for
+   * **every** group the caller belongs to, for the whole session, so everybody was
+   * reported as being in all of their groups at once and never left any of them. Plan
+   * 0023 splits the intent out, and the effect below is this page announcing it. The
+   * three joins are still `presenceNames`.
    */
   private readonly _online = computed(() =>
     this._named(this._presence.onlineIn(this.zoneId()))
@@ -298,6 +305,18 @@ export class GroupPage {
         this._zones.clearLastCodeChange();
         this.codeIsNew.set(true);
       });
+    });
+
+    // This page is what makes the caller present in this group (plan 0023).
+    //
+    // An intent rather than a subscription, and held by a screen rather than a store,
+    // because a screen is the only thing that knows where somebody is. It takes the
+    // zone room with it, which `ZoneStore` is holding anyway, so the refcount keeps
+    // one subscription and this adds the intent riding on it. Released on destroy,
+    // which is what navigating away from this group does.
+    effect((onCleanup) => {
+      const leave = this._realtime.enterZone(this.zoneId());
+      onCleanup(leave);
     });
 
     // The names behind the presence rows, asked for only when there is somebody to

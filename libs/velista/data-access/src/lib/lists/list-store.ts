@@ -136,13 +136,14 @@ export class ListStore {
    */
   async createList(
     zoneId: string,
-    name: string
+    name: string,
+    shareWithZone: boolean
   ): Promise<
     | { readonly state: 'created'; readonly list: ShoppingListSummary }
     | { readonly state: 'failed'; readonly error: unknown }
   > {
     const outcome = await this._mutations.run(null, () =>
-      this._lists.createList(zoneId, name)
+      this._lists.createList(zoneId, name, shareWithZone)
     );
 
     if (outcome.state === 'failed') {

@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { COMMENT_BODY_MAX_LENGTH } from '@portfolio/velista/models';
+import { SendIcon } from '../icons/icons';
 
 /**
  * Saying something about a line.
@@ -21,10 +22,22 @@ import { COMMENT_BODY_MAX_LENGTH } from '@portfolio/velista/models';
  * **Offered to a reader too.** `comment.add` requires only an approved membership on
  * the zone, not write access on the list, so this is the one thing somebody with read
  * access can actually do and it stays available in the read only state (section 3.2).
+ *
+ * ## The button is the height of the box, and it is a glyph
+ *
+ * It used to be `min-height: var(--app-touch-target)` next to a two row textarea, on a
+ * row aligned to `flex-end`. So it was noticeably shorter than the thing it belonged
+ * to and sat against its bottom edge, which reads as two controls that happen to be
+ * adjacent rather than one composer. `align-items: stretch` makes the pair one block,
+ * and stretch also means the button keeps matching if the textarea's rows ever change.
+ *
+ * A tall button wants a glyph and not a word: **Send** across the middle of a 60px
+ * square is a label looking for its control. So the plane is drawn and the word is the
+ * `aria-label`, which is also what a tooltip-less icon button owes a screen reader.
  */
 @Component({
   selector: 'lib-comment-composer',
-  imports: [RokuTranslatorPipe],
+  imports: [RokuTranslatorPipe, SendIcon],
   template: `
     <form (submit)="onSubmit($event)" class="composer">
       <textarea
@@ -39,8 +52,13 @@ import { COMMENT_BODY_MAX_LENGTH } from '@portfolio/velista/models';
         rows="2"
       ></textarea>
 
-      <button [disabled]="!canSubmit() || busy()" class="send" type="submit">
-        {{ 'list.comments.send' | rokuT }}
+      <button
+        [attr.aria-label]="'list.comments.send' | rokuT"
+        [disabled]="!canSubmit() || busy()"
+        class="send"
+        type="submit"
+      >
+        <lib-send-icon class="glyph" />
       </button>
     </form>
   `,

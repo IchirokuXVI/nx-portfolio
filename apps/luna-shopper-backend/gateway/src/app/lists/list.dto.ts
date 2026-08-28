@@ -9,6 +9,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -28,6 +29,18 @@ export class CreateListDto {
   @MinLength(1)
   @MaxLength(120)
   name!: string;
+
+  /**
+   * Whether every approved member of the zone gets access to it (plan 0034).
+   *
+   * Optional, and omitting it shares. See `CreateListRequest.shareWithZone`: the
+   * default is the common case and it is also the behaviour every client written
+   * before this field existed already relies on.
+   */
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  shareWithZone?: boolean;
 }
 
 export class UpdateListDto {
@@ -99,7 +112,8 @@ export class UpdateLineDto {
   @ApiPropertyOptional({
     format: 'uuid',
     nullable: true,
-    description: 'Set or clear the catalog item link; null clears it (plan 0012)',
+    description:
+      'Set or clear the catalog item link; null clears it (plan 0012)',
   })
   @IsOptional()
   @IsUUID()

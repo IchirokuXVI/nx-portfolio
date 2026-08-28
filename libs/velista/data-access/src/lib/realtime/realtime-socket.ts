@@ -194,6 +194,22 @@ export class RealtimeSocket implements RealtimeClientI {
     };
   }
 
+  enterZone(zoneId: string, options?: RealtimeSubscribeOptions): () => void {
+    // The room comes with it, exactly as it does for `viewList`: the server refuses
+    // the intent from a socket that is not in `zone:{id}` (plan 0023).
+    const release = this._registry.acquireZonePresence(
+      zoneId,
+      options?.staff === true
+    );
+    void this._reconcile();
+
+    return () => {
+      release();
+      this._publishRefused();
+      void this._reconcile();
+    };
+  }
+
   subscribeList(listId: string): () => void {
     const release = this._registry.acquireList(listId);
     void this._reconcile();
@@ -543,6 +559,36 @@ export class RealtimeSocket implements RealtimeClientI {
     const plan = this._registry.reconcilePresence();
 
     return Promise.all([
+      ...plan.zonesToEnter.map(async (zoneId) => {
+        const outcome = await this._emit(
+          socket,
+          REALTIME_CLIENT_MESSAGES.zoneEnter,
+          { zoneId }
+        );
+        if (outcome === 'ok') {
+          this._registry.onZonePresenceStarted(zoneId);
+        } else if (outcome === 'refused') {
+          this._registry.onZonePresenceRefused(zoneId);
+        } else {
+          this._registry.onZonePresenceAskFailed(zoneId);
+        }
+        return outcome;
+      }),
+      ...plan.zonesToLeave.map(async (zoneId) => {
+        const outcome = await this._emit(
+          socket,
+          REALTIME_CLIENT_MESSAGES.zoneLeave,
+          { zoneId }
+        );
+        // A refusal to a leave is a leave, as it is for an unview: the server
+        // acknowledges it whatever state it was in, so only a timeout is retried.
+        if (outcome === 'failed') {
+          this._registry.onZonePresenceAskFailed(zoneId);
+        } else {
+          this._registry.onZonePresenceStopped(zoneId);
+        }
+        return outcome;
+      }),
       ...plan.viewsToStart.map(async (listId) => {
         const outcome = await this._emit(
           socket,

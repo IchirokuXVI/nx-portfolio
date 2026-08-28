@@ -182,6 +182,8 @@ export const REALTIME_CLIENT_MESSAGES = {
   zoneUnsubscribe: 'zone.unsubscribe',
   listSubscribe: 'list.subscribe',
   listUnsubscribe: 'list.unsubscribe',
+  zoneEnter: 'presence.enterZone',
+  zoneLeave: 'presence.leaveZone',
   listView: 'presence.view',
   listUnview: 'presence.unview',
   lineEdit: 'presence.edit',

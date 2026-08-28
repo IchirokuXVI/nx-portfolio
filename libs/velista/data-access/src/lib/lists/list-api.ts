@@ -57,11 +57,15 @@ export class ListApi implements ListServiceI {
     return toPage(body, toShoppingListSummary);
   }
 
-  async createList(zoneId: string, name: string): Promise<ShoppingListSummary> {
+  async createList(
+    zoneId: string,
+    name: string,
+    shareWithZone: boolean
+  ): Promise<ShoppingListSummary> {
     const body = await firstValueFrom(
       this._http.post<unknown>(
         this._lists(zoneId),
-        { name },
+        { name, shareWithZone },
         { context: operation('lists.create') }
       )
     );
@@ -69,10 +73,7 @@ export class ListApi implements ListServiceI {
     return required(toShoppingListSummary(body), 'lists.create');
   }
 
-  async updateList(
-    listId: string,
-    name: string
-  ): Promise<ShoppingListSummary> {
+  async updateList(listId: string, name: string): Promise<ShoppingListSummary> {
     const request: UpdateListRequest = { name };
 
     const body = await firstValueFrom(

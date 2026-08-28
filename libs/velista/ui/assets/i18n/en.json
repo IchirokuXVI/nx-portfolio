@@ -108,6 +108,8 @@
       "body": "Anyone in this group can start a list. You can rename it later",
       "label": "List name",
       "placeholder": "Weekly shop",
+      "shareLabel": "Everyone in the group can see it",
+      "shareHint": "They can add to it and tick things off. Turn this off to keep it to yourself, and share it with whoever you choose later",
       "submit": "Create list"
     },
     "error": {
@@ -495,7 +497,7 @@
       "title": "This account lives on this phone",
       "body": "There is no email and no password on it yet, so it cannot be opened anywhere else, and clearing this browser's data would end it",
       "secure": "Secure this account",
-      "deleteNote": "Until it is secured, deleting is the only other way this account ends"
+      "deleteNote": "In order to log out you need to delete your account because it is not secured to an email"
     },
     "delete": {
       "action": "Delete your account",

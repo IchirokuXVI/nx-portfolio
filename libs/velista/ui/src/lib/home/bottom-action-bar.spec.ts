@@ -5,12 +5,11 @@ import { BottomActionBar } from './bottom-action-bar';
 /**
  * Plan 0019, section 4. The primary action on the dashboard was **New list**, which
  * called a method that did nothing, because a list belongs to a zone and the dashboard
- * is the one screen with no zone in scope. It is now **Get shopping list**, disabled,
- * with the reason on screen.
+ * is the one screen with no zone in scope. It is now **Get shopping list**.
  *
- * The assertion worth keeping is that the disabled state is not reachable from
- * outside: it is a hard coded binding rather than an input, so no caller can enable a
- * button with nothing behind it.
+ * It was disabled with a permanent caption underneath. Plan 0025 makes it live and
+ * moves the caption behind the tap, so the assertions worth keeping are that nothing
+ * says **Coming soon** until somebody asks, and that asking is what says it.
  */
 async function render(): Promise<ComponentFixture<BottomActionBar>> {
   TestBed.resetTestingModule();
@@ -46,14 +45,21 @@ describe('BottomActionBar', () => {
     );
   });
 
-  it('ships it disabled, because there is nothing behind it yet', async () => {
+  it('says nothing about it being unbuilt until somebody asks', async () => {
     const fixture = await render();
 
-    expect(primary(fixture).disabled).toBe(true);
+    expect(primary(fixture).disabled).toBe(false);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.soon')
+    ).toBeNull();
+    expect(primary(fixture).getAttribute('aria-describedby')).toBeNull();
   });
 
-  it('says why, where a screen reader will find it', async () => {
+  it('answers the tap, where a screen reader will hear it', async () => {
     const fixture = await render();
+
+    primary(fixture).click();
+    fixture.detectChanges();
 
     const describedBy = primary(fixture).getAttribute('aria-describedby');
     expect(describedBy).not.toBeNull();
@@ -62,6 +68,20 @@ describe('BottomActionBar', () => {
       `#${describedBy}`
     );
     expect(reason?.textContent?.trim()).toBe('home.action.generateListSoon');
+    // A live region, because the answer appears with nothing else on screen moving.
+    expect(reason?.getAttribute('role')).toBe('status');
+  });
+
+  it('keeps the answer once given, rather than timing it out', async () => {
+    const fixture = await render();
+
+    primary(fixture).click();
+    primary(fixture).click();
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.soon')
+    ).toHaveLength(1);
   });
 
   it('leaves the join-by-code action working', async () => {

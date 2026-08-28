@@ -141,5 +141,19 @@ describe('the list composers submit the line, not the page', () => {
       expect(emitted).toEqual([]);
       expect(notPrevented).toBe(false);
     });
+
+    it('sends with a glyph, and is still named by the word (plan 0025)', async () => {
+      // The button carries no text now, so the accessible name is the only name it
+      // has: dropping the label would leave a screen reader with an unnamed submit.
+      const fixture = await render(CommentComposer);
+
+      const send = fixture.nativeElement.querySelector(
+        'button.send'
+      ) as HTMLButtonElement;
+
+      expect(send.textContent?.trim()).toBe('');
+      expect(send.getAttribute('aria-label')).toBe('list.comments.send');
+      expect(send.querySelector('lib-send-icon')).not.toBeNull();
+    });
   });
 });

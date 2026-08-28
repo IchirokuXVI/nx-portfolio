@@ -259,6 +259,99 @@ describe('RoomRegistry', () => {
       }
     }
 
+    /** Accept the zone half of an outstanding presence plan. */
+    function settleZonePresence(): void {
+      const plan = registry.reconcilePresence();
+      for (const zoneId of plan.zonesToEnter) {
+        registry.onZonePresenceStarted(zoneId);
+      }
+      for (const zoneId of plan.zonesToLeave) {
+        registry.onZonePresenceStopped(zoneId);
+      }
+    }
+
+    describe('zones (plan 0023)', () => {
+      it('announces nothing for a plain zone subscription', () => {
+        // The defect this split exists for: every group the caller belongs to is
+        // subscribed for the whole session, so a subscription that announced would
+        // put one person in all of their groups at once and never take them out.
+        registry.acquireZone('z1', false);
+        settle(registry);
+
+        expect(registry.reconcilePresence().zonesToEnter).toEqual([]);
+      });
+
+      it('takes the zone room with the intent, and gives both back together', () => {
+        const release = registry.acquireZonePresence('z1', false);
+
+        expect(settle(registry).zonesToSubscribe).toEqual([
+          { zoneId: 'z1', staff: false },
+        ]);
+        expect(registry.reconcilePresence().zonesToEnter).toEqual(['z1']);
+
+        release();
+        expect(registry.reconcile().zonesToUnsubscribe).toEqual(['z1']);
+      });
+
+      it('proposes nothing until the room it depends on is joined', () => {
+        registry.acquireZonePresence('z1', false);
+
+        expect(registry.reconcile().zonesToSubscribe).toHaveLength(1);
+        expect(registry.reconcilePresence().zonesToEnter).toEqual([]);
+
+        registry.onZoneSubscribed('z1', false);
+        expect(registry.reconcilePresence().zonesToEnter).toEqual(['z1']);
+      });
+
+      it('leaves the group when the screen goes, keeping the subscription', () => {
+        // Navigation, exactly: the dashboard holds the room for its live counts and
+        // the group page held the intent. Only the intent goes.
+        registry.acquireZone('z1', false);
+        const page = registry.acquireZonePresence('z1', false);
+        settle(registry);
+        settleZonePresence();
+
+        page();
+        expect(registry.reconcile().zonesToUnsubscribe).toEqual([]);
+        expect(registry.reconcilePresence().zonesToLeave).toEqual(['z1']);
+      });
+
+      it('says nothing about presence when the room itself is going', () => {
+        // `zone.unsubscribe` drops this socket from zone presence on the server, so a
+        // leave beside it buys another ack for what the unsubscribe already did.
+        const release = registry.acquireZonePresence('z1', false);
+        settle(registry);
+        settleZonePresence();
+
+        release();
+        expect(registry.reconcile().zonesToUnsubscribe).toEqual(['z1']);
+        expect(registry.reconcilePresence().zonesToLeave).toEqual([]);
+      });
+
+      it('does not re-ask a refused intent, and asks again once re-subscribed', () => {
+        registry.acquireZonePresence('z1', false);
+        settle(registry);
+        registry.onZonePresenceRefused('z1');
+
+        expect(registry.reconcilePresence().zonesToEnter).toEqual([]);
+
+        registry.onZoneSubscribed('z1', false);
+        expect(registry.reconcilePresence().zonesToEnter).toEqual(['z1']);
+      });
+
+      it('announces again on the next connection, presence being per connection', () => {
+        registry.acquireZonePresence('z1', false);
+        settle(registry);
+        settleZonePresence();
+
+        registry.onDisconnected();
+        registry.onConnected();
+        settle(registry);
+
+        expect(registry.reconcilePresence().zonesToEnter).toEqual(['z1']);
+      });
+    });
+
     it('takes the list room with the view, and gives both back together', () => {
       const release = registry.acquireListView('l1');
 
