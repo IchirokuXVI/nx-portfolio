@@ -8,6 +8,7 @@ import {
 import { Repository } from 'typeorm';
 import { ListAccess, ListLine, ShoppingList } from '../entities';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { ZONE_READABLE_LIST_IDS_SQL } from '../zones/zone-summary.sql';
 
 /**
  * Authorization for lists, lines and comments (plan 0007, section 4). Every check
@@ -81,6 +82,28 @@ export class ListAccessService {
       throw new ForbiddenException('You do not have access to this list');
     }
     return list;
+  }
+
+  /**
+   * Every list in a zone this caller may read (plan 0032, section 4.1).
+   *
+   * The set behind {@link requireRead}, asked once for a whole zone instead of
+   * once per list. The realtime service turns it into a presence room per list at
+   * `zone.subscribe` time, which is the only way a group page can show who is
+   * shopping from each of its rows without opening a room per row.
+   *
+   * It is the query the zone summary already runs, without the preview's limit
+   * and selecting only ids, so the rooms and the card a client is looking at
+   * cannot disagree. A caller with no approved membership matches nothing and
+   * gets an empty set rather than an error, because the zone check beside it is
+   * what answers whether they belong here at all.
+   */
+  async readableListIds(zoneId: string, userId: string): Promise<string[]> {
+    const rows = await this.lists.query<{ id: string }[]>(
+      ZONE_READABLE_LIST_IDS_SQL,
+      [zoneId, userId]
+    );
+    return rows.map((row) => row.id);
   }
 
   /** Requires WRITER access on the list (plan 0007, section 4). */

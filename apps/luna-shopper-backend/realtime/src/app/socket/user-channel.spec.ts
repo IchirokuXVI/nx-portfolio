@@ -106,7 +106,9 @@ async function build(userId = 'u1', verifies = true) {
     ),
   };
   const coreAccess = {
-    checkZone: jest.fn(async () => false),
+    // Plan 0032 turned the zone check into one answer carrying the readable list
+    // ids. This suite joins no list presence rooms, so the set stays empty.
+    checkZoneWithLists: jest.fn(async () => ({ allowed: false, listIds: [] })),
     checkZoneStaff: jest.fn(async () => false),
     checkList: jest.fn(async () => false),
   };
@@ -120,6 +122,9 @@ async function build(userId = 'u1', verifies = true) {
     coreAccess as never,
     presence as never,
     relay,
+    // Plan 0031 gave the gateway the room sync service, which this suite never
+    // exercises: nothing here loses access to anything.
+    { bind: jest.fn() } as never,
     { debug: jest.fn() } as never
   );
   (gateway as unknown as { server: unknown }).server = io.server;
@@ -147,7 +152,7 @@ describe('the user room a socket is put in', () => {
     // Every other room is checked because the socket is claiming a relationship
     // to a resource. Asking "may this user hear about this user" would be a
     // round trip to answer a tautology (section 2).
-    expect(coreAccess.checkZone).not.toHaveBeenCalled();
+    expect(coreAccess.checkZoneWithLists).not.toHaveBeenCalled();
     expect(coreAccess.checkZoneStaff).not.toHaveBeenCalled();
   });
 
@@ -185,7 +190,10 @@ describe('the user room a socket is put in', () => {
 
   it('delivers one copy to a member who does hold the zone room as well', async () => {
     const { gateway, io, relay, coreAccess } = await build('u1');
-    coreAccess.checkZone.mockResolvedValue(true);
+    coreAccess.checkZoneWithLists.mockResolvedValue({
+      allowed: true,
+      listIds: [],
+    });
     const client = io.client('s1');
     await gateway.handleConnection(client as never);
     await gateway.subscribeZone(client as never, { zoneId: 'z1' });

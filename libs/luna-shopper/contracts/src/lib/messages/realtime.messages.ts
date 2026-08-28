@@ -41,6 +41,74 @@ export function userRoom(userId: string): string {
 }
 
 /**
+ * Builds the `list:{listId}:presence` room name (plan 0032): everyone in the
+ * zone who may read this list, whether or not they have it open.
+ *
+ * A room of its own rather than {@link listRoom}, and the distinction is the
+ * whole design. `list:{listId}` carries every line and comment event, so joining
+ * it eagerly would push every edit of every readable list to every device
+ * permanently, and would destroy what that room means, which today is "I am
+ * looking at this list". This one carries `presence.listUpdated` and nothing
+ * else, so a group page can light a dot per row without opening a room per row.
+ *
+ * Derived from {@link listRoom} so the two cannot drift, and derivable from a
+ * list id alone, which is what lets the presence broadcast reach it: the
+ * broadcaster knows the list, never the zone.
+ */
+export function listPresenceRoom(listId: string): string {
+  return `${listRoom(listId)}:presence`;
+}
+
+/**
+ * What a room name refers to, once read back apart (plan 0031, section 4).
+ *
+ * The eviction sweep is handed the rooms a socket holds, as strings, and has to
+ * turn each one back into the access question that admitted it. Reading them
+ * apart here, next to the builders, is what stops the two drifting: a room shape
+ * added above with no case below is a room nothing can re-check, and the sweep
+ * would leave a socket in it forever without ever saying so.
+ */
+export type ParsedRoom =
+  | { kind: 'zone'; zoneId: string }
+  | { kind: 'zoneStaff'; zoneId: string }
+  | { kind: 'list'; listId: string }
+  | { kind: 'listPresence'; listId: string };
+
+/**
+ * Read a room name back into the access question that gates it, or `undefined`
+ * for a name this service did not build.
+ *
+ * Socket.io puts every socket in a room named after its own id, so `undefined`
+ * is an ordinary answer here rather than a fault, and the sweep passes over it.
+ *
+ * {@link userRoom} is the one room deliberately left unparsed. Every other room
+ * here is a claim on a resource that an access answer can revoke; that one is
+ * the verified token itself (plan 0030, section 2), so there is no question to
+ * re-ask and nothing the sweep could ever be right to evict a socket from.
+ */
+export function parseRoom(room: string): ParsedRoom | undefined {
+  const parts = room.split(':');
+
+  if (parts[0] === RealtimeRoom.Zone) {
+    if (parts.length === 2) {
+      return { kind: 'zone', zoneId: parts[1] };
+    }
+    if (parts.length === 3 && parts[2] === 'staff') {
+      return { kind: 'zoneStaff', zoneId: parts[1] };
+    }
+  }
+  if (parts[0] === RealtimeRoom.List) {
+    if (parts.length === 2) {
+      return { kind: 'list', listId: parts[1] };
+    }
+    if (parts.length === 3 && parts[2] === 'presence') {
+      return { kind: 'listPresence', listId: parts[1] };
+    }
+  }
+  return undefined;
+}
+
+/**
  * Access checks the realtime service asks core before adding a socket to a room
  * (plan 0009, section 5). They mirror the socket rooms: a zone check gates the
  * `zone:` room, a list check gates the `list:` room. Core resolves membership and
@@ -71,6 +139,16 @@ export interface CheckListAccessRequest {
 /** Whether the caller may join the requested room. */
 export interface AccessCheckResult {
   allowed: boolean;
+  /**
+   * On a zone check only: the lists in that zone this caller may read (plan
+   * 0032, section 4.1).
+   *
+   * It rides on the zone answer because subscribing to a zone is already a round
+   * trip to core, so this adds a field rather than a call. The realtime service
+   * joins a presence room per id, which is how a group page lights a dot per row
+   * without opening a room per row.
+   */
+  listIds?: readonly string[];
 }
 
 /** A user present in a zone or on a list. */

@@ -9,6 +9,7 @@ import {
   type OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import {
+  listPresenceRoom,
   listRoom,
   RealtimeClientMessage,
   userRoom,
@@ -23,6 +24,7 @@ import { TokenVerifierService } from '../auth/token-verifier.service';
 import { CoreAccessClient } from '../messaging/core-access.client';
 import { PresenceService } from '../presence/presence.service';
 import { EventRelayService } from '../relay/event-relay.service';
+import { RoomSyncService } from './room-sync.service';
 
 interface ZoneSubscription {
   zoneId: string;
@@ -81,6 +83,7 @@ export class RealtimeGateway
     private readonly coreAccess: CoreAccessClient,
     private readonly presence: PresenceService,
     private readonly relay: EventRelayService,
+    private readonly roomSync: RoomSyncService,
     private readonly logger: Logger
   ) {}
 
@@ -101,9 +104,15 @@ export class RealtimeGateway
    * usually in both. Socket.io resolves an array of rooms to the union of the
    * sockets in them and delivers once per socket; a loop delivers once per room,
    * which is a double toast and a double refetch for exactly the person the
-   * event is about.
+   * event is about. Plan 0032 turns that from routine into unavoidable: every
+   * socket in `list:{id}` is in `list:{id}:presence` too, and both rooms carry
+   * `presence.listUpdated`.
    */
   onModuleInit(): void {
+    // Only a gateway is handed the socket server, and only something holding it
+    // can take a room away from a socket (plan 0031).
+    this.roomSync.bind(this.server);
+
     this.relay.stream$.subscribe((message) => {
       this.server.local.to(message.rooms).emit(message.event, message.payload);
       if (message.correlationId) {
@@ -152,7 +161,11 @@ export class RealtimeGateway
     @MessageBody() body: ZoneSubscription
   ): Promise<Ack> {
     const userId = this.userOf(client);
-    if (!userId || !(await this.coreAccess.checkZone(userId, body.zoneId))) {
+    if (!userId) {
+      return { ok: false };
+    }
+    const zone = await this.coreAccess.checkZoneWithLists(userId, body.zoneId);
+    if (!zone.allowed) {
       return { ok: false };
     }
     await client.join(zoneRoom(body.zoneId));
@@ -162,6 +175,23 @@ export class RealtimeGateway
     // `member.roleChanged` has already told the client its role changed.
     if (await this.coreAccess.checkZoneStaff(userId, body.zoneId)) {
       await client.join(zoneStaffRoom(body.zoneId));
+    }
+    /**
+     * A presence room per readable list, on the server's initiative (plan 0032).
+     *
+     * The client never asks for these, which is what lets a group page light a
+     * dot on eight rows while holding one subscription. It is here rather than in
+     * `handleConnection` because connecting is currently a token verification and
+     * nothing else: enumerating every readable list across every zone would put
+     * the most expensive query this service makes on the critical path of every
+     * connect, and connects are bursty in exactly the worst conditions, since a
+     * deploy reconnects every client at once.
+     *
+     * Room membership is the access control, not a filter on the broadcast:
+     * whoever may not read the list is not in the room to hear that it exists.
+     */
+    for (const listId of zone.listIds) {
+      await client.join(listPresenceRoom(listId));
     }
     await this.presence.joinZone(client.id, body.zoneId);
     return { ok: true };
@@ -174,6 +204,27 @@ export class RealtimeGateway
   ): Promise<Ack> {
     await client.leave(zoneRoom(body.zoneId));
     await client.leave(zoneStaffRoom(body.zoneId));
+    /**
+     * The list presence rooms go with the subscription that acquired them (plan
+     * 0032, section 4), for the same reason the staff room does: they are not
+     * rooms of their own on the client, so nothing else will ever release them.
+     *
+     * The set is asked for again rather than remembered on the socket, and it is
+     * the cached answer the subscribe used, so this is a Redis read rather than a
+     * round trip. Bookkeeping per socket would be a third place to keep in step
+     * with the two sweeps, and any drift it could avoid is drift those sweeps
+     * already exist to fix.
+     */
+    const userId = this.userOf(client);
+    if (userId) {
+      const { listIds } = await this.coreAccess.checkZoneWithLists(
+        userId,
+        body.zoneId
+      );
+      for (const listId of listIds) {
+        await client.leave(listPresenceRoom(listId));
+      }
+    }
     await this.presence.leaveZone(client.id, body.zoneId);
     return { ok: true };
   }

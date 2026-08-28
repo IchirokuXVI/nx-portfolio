@@ -54,8 +54,36 @@ function makeZone(over: Partial<Zone> = {}): Zone {
 
 interface Harness {
   svc: ZoneService;
-  events: { emit: jest.Mock };
+  events: EventsSpy;
   zone: Zone;
+}
+
+/**
+ * A membership event goes out through `emitTo` and a zone event through `emit`
+ * (plan 0030, section 4.1: an event about a member is addressed to the zone and
+ * to the member it is about). This suite asserts the order the two interleave
+ * in, which no single `jest.Mock` can answer, so both record into one shared
+ * log and the assertions read that.
+ */
+interface EventsSpy {
+  emit: jest.Mock;
+  emitTo: jest.Mock;
+  log: [RealtimeEvent, unknown][];
+}
+
+function makeEvents(): EventsSpy {
+  const log: [RealtimeEvent, unknown][] = [];
+  return {
+    emit: jest.fn((event: RealtimeEvent, _zoneId: string, payload: unknown) => {
+      log.push([event, payload]);
+    }),
+    emitTo: jest.fn(
+      (event: RealtimeEvent, _audience: unknown, payload: unknown) => {
+        log.push([event, payload]);
+      }
+    ),
+    log,
+  };
 }
 
 /**
@@ -93,7 +121,7 @@ function makeService(opts: {
     },
   };
 
-  const events = { emit: jest.fn() };
+  const events = makeEvents();
   const authz = {
     requireRole: jest.fn(async () => opts.caller),
   } as unknown as ZoneAuthzService;
@@ -113,8 +141,8 @@ function makeService(opts: {
 }
 
 /** The emitted events as `[name, payload]` pairs, in the order they went out. */
-function emitted(events: { emit: jest.Mock }): [RealtimeEvent, unknown][] {
-  return events.emit.mock.calls.map((call) => [call[0], call[2]]);
+function emitted(events: EventsSpy): [RealtimeEvent, unknown][] {
+  return events.log;
 }
 
 describe('ZoneService.transferOwnership', () => {
@@ -222,7 +250,7 @@ describe('ZoneService.transferOwnership', () => {
       })
     ).rejects.toThrow('rolled back');
 
-    expect(events.emit).not.toHaveBeenCalled();
+    expect(emitted(events)).toEqual([]);
   });
 });
 
@@ -273,7 +301,7 @@ describe('ZoneService.claimOwnership', () => {
       svc.claimOwnership({ zoneId: 'z1', userId: 'u-admin' })
     ).rejects.toThrow('already has an owner');
 
-    expect(events.emit).not.toHaveBeenCalled();
+    expect(emitted(events)).toEqual([]);
   });
 
   it('announces nothing when the transaction rolls back', async () => {
@@ -287,6 +315,6 @@ describe('ZoneService.claimOwnership', () => {
       svc.claimOwnership({ zoneId: 'z1', userId: 'u-admin' })
     ).rejects.toThrow('rolled back');
 
-    expect(events.emit).not.toHaveBeenCalled();
+    expect(emitted(events)).toEqual([]);
   });
 });
