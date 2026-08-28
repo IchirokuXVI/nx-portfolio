@@ -817,6 +817,16 @@ export function fakeMemberNames(
 
   return {
     nameOf: (_zoneId: string, userId: string) => names[userId] ?? null,
+    /**
+     * The role from whichever seeded membership carries this user id, or null.
+     *
+     * Read off `members` rather than taking a map of its own, so a fixture cannot seed
+     * a role for somebody the share sheet has never heard of. Null is the ordinary
+     * answer for a fake given only names, which is the state every screen is in before
+     * the members request lands.
+     */
+    roleOf: (_zoneId: string, userId: string) =>
+      members.find((member) => member.userId === userId)?.role ?? null,
     membersOf: () => members,
     ensure: async (zoneId: string) => {
       if (!asked.includes(zoneId)) {
@@ -842,6 +852,14 @@ export interface FakePresenceOptions {
   readonly viewers?: Readonly<Record<string, readonly string[]>>;
   /** List id to `userId -> lineId`, for who is editing what. */
   readonly editors?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /**
+   * List id to `userId -> when this client first saw them`, in epoch milliseconds.
+   *
+   * Absent is the interesting case rather than present: a viewer with no arrival time
+   * is what every page draws on its first frame and after every reconnection, so it is
+   * the state the header's panel has to read well.
+   */
+  readonly since?: Readonly<Record<string, Readonly<Record<string, number>>>>;
 }
 
 /**
@@ -866,6 +884,10 @@ export function fakePresenceStore(options: FakePresenceOptions = {}) {
   return {
     onlineIn: (zoneId: string) => users(options.online?.[zoneId]),
     viewersOf: (listId: string) => users(options.viewers?.[listId]),
+    viewerSince: (listId: string, userId: string) => {
+      const at = options.since?.[listId]?.[userId];
+      return at === undefined ? null : new Date(at);
+    },
     editorsOf,
     editorOfLine: (listId: string, lineId: string) =>
       editorsOf(listId).find((editor) => editor.lineId === lineId) ?? null,

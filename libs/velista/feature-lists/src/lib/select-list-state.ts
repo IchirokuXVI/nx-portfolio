@@ -6,6 +6,7 @@ import type {
   ListAbilitiesVm,
   ListHeaderVm,
   ListPageState,
+  ListViewerVm,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
 
@@ -39,13 +40,13 @@ export interface ListStateInput {
   readonly nameOf: (userId: string) => string | null;
   readonly reordering: boolean;
   /**
-   * Who else is shopping this list, already named and already without the reader.
+   * Who else has this list open, already resolved and already without the reader.
    *
    * Resolved by the container, as `selectHomeState`'s presence is: the filtering of the
-   * caller is a rendering decision and the naming needs `MemberNames`, and this function
-   * is pure so that neither has to happen here (plan 0022, section 3.4).
+   * caller is a rendering decision, and the name, the role and the arrival time each
+   * need a store, while this function is pure so that none of that happens here.
    */
-  readonly viewers: readonly string[];
+  readonly viewers: readonly ListViewerVm[];
   /**
    * Whoever is editing one line, by line id, or null. Never the reader themselves.
    *
@@ -128,8 +129,6 @@ function selectHeader(input: ListStateInput): ListHeaderVm {
       ? lines.filter((line) => line.status === 'READY').length
       : (list?.readyCount ?? 0),
     lineCount: counted ? lines.length : (list?.lineCount ?? 0),
-    // The sentence the resume card points at, in the resume card's own words: this is
-    // the screen it offers a way back into (plan 0022, section 3.4).
     viewers: input.viewers,
     live: input.live,
   };

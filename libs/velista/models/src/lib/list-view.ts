@@ -1,4 +1,9 @@
-import type { LineApprovalStatus, LineStatus, ListRole } from './enums';
+import type {
+  LineApprovalStatus,
+  LineStatus,
+  ListRole,
+  ZoneRole,
+} from './enums';
 
 /**
  * What the list page draws, as plain data (plan 0012).
@@ -148,6 +153,42 @@ export interface ListAbilitiesVm {
   readonly canDecide: boolean;
 }
 
+/**
+ * One person who has this list open, as the header's presence row draws them.
+ *
+ * Richer than the bare name every other presence surface takes, because this is the
+ * only one that opens: a card says "Ana and Marc are here" and stops there, while this
+ * screen also answers who they are and how long they have been in the aisle.
+ *
+ * The reader is already gone by the time one of these exists, and so is anybody whose
+ * name would not resolve, exactly as `presenceNames` has always decided it: presence
+ * under reports by design (plan 0004, section 6.7) and an id is not a person.
+ */
+export interface ListViewerVm {
+  readonly userId: string;
+  /** Their name **in this group**, which is the only human readable name the API has. */
+  readonly name: string;
+  /**
+   * Their role in the group, or null when the members have not arrived yet.
+   *
+   * The zone role rather than a list role, because a list role is not on the wire for
+   * anybody but the caller: `ListView` carries no per member access and there is no
+   * `GET /v1/lists/:id/access`. Null draws no chip rather than guessing MEMBER, which
+   * would demote an owner for as long as one request is in flight.
+   */
+  readonly role: ZoneRole | null;
+  /**
+   * When this client first saw them here, or null.
+   *
+   * Not "when they opened the list": no presence payload carries a timestamp, so the
+   * only honest instant available is the first snapshot **this** session saw them in.
+   * Somebody who was already shopping when the reader arrived therefore reads as having
+   * arrived with them, and a dropped socket restarts every clock, because
+   * `PresenceStore` empties on a disconnect and nothing it held is true afterwards.
+   */
+  readonly since: Date | null;
+}
+
 /** The header: the list, the group it is in, and how far the shop has got. */
 export interface ListHeaderVm {
   /** Null while a cold arrival is still finding the name (rule L2). */
@@ -156,14 +197,16 @@ export interface ListHeaderVm {
   readonly readyCount: number;
   readonly lineCount: number;
   /**
-   * Who else is shopping this list right now, named and without the reader.
+   * Who else has this list open right now, named and without the reader.
    *
-   * The screen the resume card points at, so it says the same thing in the same words
-   * (plan 0022, section 3.4). It can only be filled because this page announces itself
-   * with `viewList`; while it merely subscribed, the server's viewer set was empty
-   * forever and nobody ever saw this row anywhere.
+   * It can only be filled because this page announces itself with `viewList`; while it
+   * merely subscribed, the server's viewer set was empty forever and nobody ever saw
+   * this row anywhere (plan 0022, section 2.1).
+   *
+   * Whole people rather than the bare names the resume card takes: this row opens, and
+   * what it opens onto needs a role and an arrival time for each of them.
    */
-  readonly viewers: readonly string[];
+  readonly viewers: readonly ListViewerVm[];
   /** The list room was refused or the connection dropped (section 3.1). */
   readonly live: boolean;
 }

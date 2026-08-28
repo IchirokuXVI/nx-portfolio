@@ -22,6 +22,7 @@ import {
   ListStore,
   MemberNames,
   presenceNames,
+  presencePeople,
   PresenceStore,
   REALTIME_CLIENT,
   SessionStore,
@@ -32,6 +33,7 @@ import {
   APP_BASE_PATH,
   type ListGoneReason,
   type ListPageState,
+  type ListViewerVm,
   type PresenceUser,
 } from '@portfolio/velista/models';
 import {
@@ -221,14 +223,34 @@ export class ListPage {
   });
 
   /**
-   * Who else is shopping this list, named and without the reader.
+   * Who else has this list open, named and without the reader.
    *
-   * The three joins are `presenceNames`, which the resume card makes as well: this is
-   * the screen that card points at, so the two say the same thing in the same words.
+   * The three joins are `presencePeople`, which is `presenceNames` with the user id
+   * kept: the two lookups below are made **by id**, and matching people back up by
+   * their names would put the wrong role on the second Ana in a group with two.
+   *
+   * Both lookups answer null freely and neither is waited for. The role is null until
+   * the zone's members land, and the arrival time is null for anybody first seen in the
+   * snapshot being read, which is every viewer on the first frame after a reconnection.
+   * The row draws both cases rather than holding the sentence back, because presence is
+   * advisory and a row that waited for a role would say nothing for the first second of
+   * every visit (plan 0004, section 6.7).
    */
-  private readonly _viewers = computed(() =>
-    this._named(this._presence.viewersOf(this.listId()))
-  );
+  private readonly _viewers = computed<readonly ListViewerVm[]>(() => {
+    const zoneId = this.zoneId();
+    const listId = this.listId();
+
+    return presencePeople(
+      this._presence.viewersOf(listId),
+      this._session.userId(),
+      (userId) => this._names.nameOf(zoneId, userId)
+    ).map((person) => ({
+      userId: person.userId,
+      name: person.name,
+      role: this._names.roleOf(zoneId, person.userId),
+      since: this._presence.viewerSince(listId, person.userId),
+    }));
+  });
 
   /**
    * Who is editing which line, named, by line id.
