@@ -139,6 +139,17 @@ if [ "$INSTALL_K3S" = true ]; then
   fi
 fi
 
+# The kubeconfig for a run that did NOT install k3s.
+#
+# The export above only happens inside the --k3s branch, so re-running this
+# script without the flag on a k3s host, or running it through sudo, which drops
+# the caller's environment, left every kubectl below pointed at no cluster at
+# all. Only adopted when the file is readable, so a workstation aimed at a
+# remote cluster keeps its own ~/.kube/config.
+if [ -z "${KUBECONFIG:-}" ] && [ -r /etc/rancher/k3s/k3s.yaml ]; then
+  export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+fi
+
 for tool in kubectl helm; do
   command -v "$tool" >/dev/null 2>&1 || {
     echo "$tool is required and not on PATH. On a bare VPS, run with --k3s." >&2
