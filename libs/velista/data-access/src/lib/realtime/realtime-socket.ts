@@ -190,6 +190,23 @@ export class RealtimeSocket implements RealtimeClientI {
     };
   }
 
+  viewList(listId: string): () => void {
+    // The room comes with it. A view without its room is not a weaker subscription,
+    // it is a refused one (plan 0017, section 3.2).
+    const release = this._registry.acquireListView(listId);
+    void this._reconcile();
+
+    return () => {
+      release();
+      void this._reconcile();
+    };
+  }
+
+  setEditingLine(listId: string, lineId: string | null): void {
+    this._registry.setEditingLine(listId, lineId);
+    void this._reconcile();
+  }
+
   retry(): void {
     this._failures = 0;
     this._degraded.set(false);
@@ -425,10 +442,23 @@ export class RealtimeSocket implements RealtimeClientI {
 
         this._publishRefused();
 
+        // Presence second, in the same pass and never in a loop. An intent is only
+        // sendable once its room is joined, and the rooms above have just been
+        // answered; folding this into the do/while instead would re-ask a room whose
+        // subscribe had merely timed out, turning R7's deliberate five second retry
+        // into a tight loop against a slow core (plan 0017, section 5.1).
+        const presence = await this._announcePresence(socket);
+
+        if (generation !== this._generation) {
+          return;
+        }
+
         // R7. A timed-out ask left its room unjoined, and something has to be the
         // "next reconcile" that retries it, or a group stays quietly not live until
-        // the user happens to navigate.
-        if (outcomes.includes('failed')) {
+        // the user happens to navigate. A presence intent is retried for the sharper
+        // reason: an unsent stop leaves the server telling everybody else that this
+        // client is still editing a line it walked away from.
+        if (outcomes.includes('failed') || presence.includes('failed')) {
           this._scheduleReconcile();
         }
       } while (this._reconcileAgain);
@@ -484,6 +514,80 @@ export class RealtimeSocket implements RealtimeClientI {
     }
 
     return outcome;
+  }
+
+  /**
+   * Say whatever presence intents the rooms now permit, and record every answer.
+   *
+   * Every ask here is about a list this client is already in, so a `{ ok: false }` is a
+   * disagreement rather than an ordinary no, and the registry latches it for the
+   * connection instead of spinning on it. None of it touches `refusedZones`: that
+   * signal is about a group going stale, and a presence intent going unheard costs an
+   * avatar, not an update.
+   */
+  private async _announcePresence(socket: SocketLike): Promise<AskOutcome[]> {
+    const plan = this._registry.reconcilePresence();
+
+    return Promise.all([
+      ...plan.viewsToStart.map(async (listId) => {
+        const outcome = await this._emit(
+          socket,
+          REALTIME_CLIENT_MESSAGES.listView,
+          { listId }
+        );
+        if (outcome === 'ok') {
+          this._registry.onViewStarted(listId);
+        } else if (outcome === 'refused') {
+          this._registry.onViewRefused(listId);
+        } else {
+          this._registry.onPresenceAskFailed(listId);
+        }
+        return outcome;
+      }),
+      ...plan.viewsToStop.map(async (listId) => {
+        const outcome = await this._emit(
+          socket,
+          REALTIME_CLIENT_MESSAGES.listUnview,
+          { listId }
+        );
+        // A refusal to a stop is a stop: the server acknowledges an unview whatever
+        // state it was in, so anything but a timeout means it is not counting us.
+        if (outcome === 'failed') {
+          this._registry.onPresenceAskFailed(listId);
+        } else {
+          this._registry.onViewStopped(listId);
+        }
+        return outcome;
+      }),
+      ...plan.editsToStart.map(async ({ listId, lineId }) => {
+        const outcome = await this._emit(
+          socket,
+          REALTIME_CLIENT_MESSAGES.lineEdit,
+          { listId, lineId }
+        );
+        if (outcome === 'ok') {
+          this._registry.onEditStarted(listId, lineId);
+        } else if (outcome === 'refused') {
+          this._registry.onEditRefused(listId);
+        } else {
+          this._registry.onPresenceAskFailed(listId);
+        }
+        return outcome;
+      }),
+      ...plan.editsToStop.map(async (listId) => {
+        const outcome = await this._emit(
+          socket,
+          REALTIME_CLIENT_MESSAGES.lineStopEdit,
+          { listId }
+        );
+        if (outcome === 'failed') {
+          this._registry.onPresenceAskFailed(listId);
+        } else {
+          this._registry.onEditStopped(listId);
+        }
+        return outcome;
+      }),
+    ]);
   }
 
   /**

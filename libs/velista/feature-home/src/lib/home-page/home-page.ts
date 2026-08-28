@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -12,11 +13,15 @@ import {
   AccountNotice,
   AUTH_SERVICE,
   GatewayError,
+  MemberNames,
   NetworkError,
+  PresenceStore,
+  REALTIME_CLIENT,
   SessionStore,
   VERIFY_RESEND_AVAILABLE,
   ZoneStore,
   type AuthServiceI,
+  type RealtimeClientI,
 } from '@portfolio/velista/data-access';
 import type { HomeState, MyZone } from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
@@ -80,6 +85,9 @@ import { selectHomeState } from './select-home-state';
 })
 export class HomePage {
   private readonly _zoneStore = inject(ZoneStore);
+  private readonly _presence = inject(PresenceStore);
+  private readonly _names = inject(MemberNames);
+  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _session = inject(SessionStore);
   private readonly _accountNotice = inject(AccountNotice);
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
@@ -114,6 +122,81 @@ export class HomePage {
    */
   private readonly _resumeListId = signal<string | null>(null);
 
+  /**
+   * The remembered list, as `zoneId/listId`, but only once its zone is one of ours.
+   *
+   * A **string** rather than a pair, and that is what makes it usable in an effect:
+   * a computed returning a fresh object would be a new value on every zone reload, so
+   * the room below would be left and re-joined every time the dashboard refreshed.
+   *
+   * The zone check is not a permission check, which is the server's job. It saves a
+   * subscription that could only ever be refused, for a list on a device that has since
+   * left the group.
+   */
+  private readonly _presenceListKey = computed<string | null>(() => {
+    const stored = this._resumeListId();
+    if (stored === null) {
+      return null;
+    }
+
+    const separator = stored.indexOf('/');
+    if (separator < 0) {
+      return null;
+    }
+
+    const zoneId = stored.slice(0, separator);
+    return this._zoneStore.myZones().some((zone) => zone.id === zoneId)
+      ? stored
+      : null;
+  });
+
+  /**
+   * Who else is shopping the resume list, named and without the reader.
+   *
+   * Three joins, and each is a decision rather than plumbing:
+   *
+   * - **The reader is removed.** Somebody looking at their own dashboard is not
+   *   shopping the list, and a card that counts them is wrong about the only thing it
+   *   says. The store keeps them because a store keeps what the server said; the
+   *   sentence is where that stops being useful.
+   * - **A name that does not resolve is left out rather than rendered as an id.** The
+   *   same rule the comment sheet follows, for the same reason: to the person reading
+   *   the card, "not loaded yet", "left the group" and "not allowed to see them" are
+   *   one fact, and none of the three is a hex string.
+   * - **A wire username wins if one ever appears.** Presence carries a user id and no
+   *   name today, so this always falls through to the zone's memberships; reading the
+   *   field first is what makes the day it is filled in a no-op here.
+   */
+  private readonly _resumeShoppers = computed<readonly string[]>(() => {
+    const key = this._presenceListKey();
+    if (key === null) {
+      return [];
+    }
+
+    const separator = key.indexOf('/');
+    const zoneId = key.slice(0, separator);
+    const listId = key.slice(separator + 1);
+    const me = this._session.userId();
+
+    const names: string[] = [];
+    for (const viewer of this._presence.viewersOf(listId)) {
+      if (viewer.userId === me) {
+        continue;
+      }
+
+      const name =
+        viewer.username !== ''
+          ? viewer.username
+          : this._names.nameOf(zoneId, viewer.userId);
+
+      if (name !== null && name !== '') {
+        names.push(name);
+      }
+    }
+
+    return names;
+  });
+
   readonly state = computed<HomeState>(() => {
     const identity = this._session.identity();
 
@@ -133,6 +216,7 @@ export class HomePage {
       loadState: this._zoneStore.state(),
       correlationId: this._correlationId(),
       resumeListId: this._resumeListId(),
+      resumeShoppers: this._resumeShoppers(),
       guestBannerDismissed: this._guestBannerDismissed(),
     });
   });
@@ -230,6 +314,28 @@ export class HomePage {
   constructor() {
     this._resumeListId.set(this._browser.readStorage(StorageKeys.lastList));
     void this._zoneStore.load();
+
+    // The resume card's one live room (plan 0017, section 7).
+    //
+    // `subscribeList` and deliberately **not** `viewList`: this page holds the room to
+    // watch it, and announcing a view here would put the reader in their own card's
+    // sentence. It is also the one place plan 0016's "do not subscribe to a list for
+    // updates the zone room already carries" does not apply, because
+    // `presence.listUpdated` is published to `list:{id}` alone.
+    //
+    // The names come from the zone's memberships, since presence carries ids only.
+    effect((onCleanup) => {
+      const key = this._presenceListKey();
+      if (key === null) {
+        return;
+      }
+
+      const separator = key.indexOf('/');
+      const release = this._realtime.subscribeList(key.slice(separator + 1));
+      void this._names.ensure(key.slice(0, separator));
+
+      onCleanup(() => release());
+    });
 
     // Shown once. Cleared when this page is destroyed rather than by a dismiss
     // control, because there is nothing to decide: the card is about something that

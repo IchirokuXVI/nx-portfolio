@@ -44,6 +44,7 @@ function select(
     loadState: 'loaded',
     correlationId: null,
     resumeListId: null,
+    resumeShoppers: [],
     guestBannerDismissed: false,
     ...overrides,
   });
@@ -288,6 +289,20 @@ describe('selectHomeState', () => {
     it('is absent when the zone remembered is not the one holding the list', () => {
       expect(select({ resumeListId: 'z-other/l1' })).toMatchObject({
         resume: null,
+      });
+    });
+
+    // Plan 0017, section 7. The container resolves the names, because presence
+    // carries user ids and a name is a fact about a zone rather than about a person.
+    it('carries whoever the container says is shopping the list', () => {
+      expect(
+        select({ resumeListId: 'z1/l1', resumeShoppers: ['Ana', 'Marc'] })
+      ).toMatchObject({ resume: { shoppers: ['Ana', 'Marc'] } });
+    });
+
+    it('carries an empty list of shoppers rather than omitting the field', () => {
+      expect(select({ resumeListId: 'z1/l1' })).toMatchObject({
+        resume: { shoppers: [] },
       });
     });
   });

@@ -407,6 +407,165 @@ describe('RealtimeSocket', () => {
     });
   });
 
+  /**
+   * Plan 0017. The intents ride on the subscriptions, so the ordering between the two
+   * is the whole of what can go wrong here.
+   */
+  describe('presence', () => {
+    it('announces the view only after the subscribe it depends on is answered', async () => {
+      const client = build();
+      await settle();
+      socket().driveConnect();
+
+      client.viewList('l1');
+      await settle();
+
+      // The server refuses `presence.view` from a socket that is not in the room, so
+      // the order is not a preference: the other way round is a refusal.
+      const messages = socket().emitted.map((entry) => entry.message);
+      expect(messages).toEqual(['list.subscribe', 'presence.view']);
+      expect(socket().bodiesFor('presence.view')).toEqual([{ listId: 'l1' }]);
+    });
+
+    it('takes the list room for a viewer, so a caller holds one thing', async () => {
+      const client = build();
+      await settle();
+      socket().driveConnect();
+
+      const release = client.viewList('l1');
+      await settle();
+      release();
+      await settle();
+
+      expect(socket().bodiesFor('list.unsubscribe')).toEqual([
+        { listId: 'l1' },
+      ]);
+      // Nothing said about presence: `list.unsubscribe` clears the viewer and the
+      // editor entries on the server, so saying it again buys two acks for nothing.
+      expect(socket().bodiesFor('presence.unview')).toEqual([]);
+    });
+
+    it('unviews without leaving the room when an observer still holds it', async () => {
+      const client = build();
+      await settle();
+      socket().driveConnect();
+
+      client.subscribeList('l1');
+      const viewer = client.viewList('l1');
+      await settle();
+      viewer();
+      await settle();
+
+      expect(socket().bodiesFor('presence.unview')).toEqual([{ listId: 'l1' }]);
+      expect(socket().bodiesFor('list.unsubscribe')).toEqual([]);
+    });
+
+    it('sends the edited line, and moves it with no stop in between', async () => {
+      const client = build();
+      await settle();
+      socket().driveConnect();
+
+      client.viewList('l1');
+      await settle();
+
+      client.setEditingLine('l1', 'line-1');
+      await settle();
+      client.setEditingLine('l1', 'line-2');
+      await settle();
+
+      expect(socket().bodiesFor('presence.edit')).toEqual([
+        { listId: 'l1', lineId: 'line-1' },
+        { listId: 'l1', lineId: 'line-2' },
+      ]);
+      expect(socket().bodiesFor('presence.stopEdit')).toEqual([]);
+
+      client.setEditingLine('l1', null);
+      await settle();
+      expect(socket().bodiesFor('presence.stopEdit')).toEqual([
+        { listId: 'l1' },
+      ]);
+    });
+
+    it('re-announces every view and the edited line on the next connection', async () => {
+      const client = build();
+      await settle();
+      socket().driveConnect();
+
+      client.viewList('l1');
+      await settle();
+      client.setEditingLine('l1', 'line-1');
+      await settle();
+
+      const first = socket();
+      jest.useFakeTimers();
+      try {
+        first.driveDisconnect();
+        jest.runOnlyPendingTimers();
+        await settle();
+      } finally {
+        jest.useRealTimers();
+      }
+
+      socket().driveConnect();
+      await settle();
+
+      // Presence is per connection on both ends: the new socket is present nowhere,
+      // however sure the registry is that this client is viewing and editing.
+      expect(socket()).not.toBe(first);
+      expect(socket().bodiesFor('presence.view')).toEqual([{ listId: 'l1' }]);
+      expect(socket().bodiesFor('presence.edit')).toEqual([
+        { listId: 'l1', lineId: 'line-1' },
+      ]);
+    });
+
+    it('does not repeat a refused view, and never calls it a stale zone', async () => {
+      const client = build();
+      await settle();
+      socket().driveConnect();
+
+      socket().answers.set('presence.view', ['refused', 'ok']);
+      client.viewList('l1');
+      await settle();
+
+      // Whatever the disagreement is, asking again on this connection gets the same
+      // answer. And it is not a zone going stale: an unheard intent costs an avatar,
+      // not an update, so the badge that means "this group is not live" stays off.
+      client.viewList('l1');
+      await settle();
+
+      expect(socket().bodiesFor('presence.view')).toEqual([{ listId: 'l1' }]);
+      expect([...client.refusedZones()]).toEqual([]);
+    });
+
+    it('retries an intent that timed out', async () => {
+      const client = build();
+      await settle();
+      socket().driveConnect();
+
+      socket().answers.set('presence.view', ['timeout']);
+
+      jest.useFakeTimers();
+      try {
+        client.viewList('l1');
+        await settle();
+        expect(socket().bodiesFor('presence.view')).toEqual([{ listId: 'l1' }]);
+
+        // A timeout is not a refusal, here for the sharper version of R7's reason: an
+        // unsent stop leaves the server telling everybody else that this client is
+        // still editing a line it walked away from.
+        jest.runOnlyPendingTimers();
+        await settle();
+      } finally {
+        jest.useRealTimers();
+      }
+
+      expect(socket().bodiesFor('presence.view')).toEqual([
+        { listId: 'l1' },
+        { listId: 'l1' },
+      ]);
+    });
+  });
+
   describe('R6, resubscribing from the registry', () => {
     it('re-issues every held subscription on the next connect', async () => {
       const client = build();
