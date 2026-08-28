@@ -1,12 +1,12 @@
-# 0027: four permissions on a list
+# 0030: four permissions on a list
 
 > Prerequisite reading: `0012` (the list page, its state union, and section 5.5 on why
 > the share sheet is built and not offered), `0020` (rule G2, and the sentence in section
 > 1 this plan quotes), and `0010` section 5.4 (how a member row decides its own menu).
 >
-> Companion plans: `luna-shopper-backend/plans/0035`, which replaces the two list roles
+> Companion plans: `luna-shopper-backend/plans/0036`, which replaces the two list roles
 > with a set of four permissions and finally tells the client which of them the caller
-> holds, and `0036`, which moves approval into the server.
+> holds, and `0037`, which moves approval into the server.
 >
 > Depends on both. Nothing here can be built against today's API.
 
@@ -24,7 +24,7 @@ comment: `canWrite` is **optimistic**, because `ListView` carried no permission 
 there was no `GET /v1/lists/:id/access`. So the page offers the composer to everybody
 and learns the truth from a refused write.
 
-`0035` puts the answer on the wire. This plan spends it, in four places:
+`0036` puts the answer on the wire. This plan spends it, in four places:
 
 - the abilities stop being a guess (section 3),
 - the row menus, the tick gesture and the decision buttons follow four permissions
@@ -83,7 +83,7 @@ answer that will eventually disagree with the first.
 
 `selectAbilities` becomes four membership tests on a set and stops taking
 `caller.isStaff` at all: staff hold all four permissions on every list in the zone
-(`0035` section 2.4), so the server sends them `['READ','WRITE','DECIDE','MANAGE']` and
+(`0036` section 2.4), so the server sends them `['READ','WRITE','DECIDE','MANAGE']` and
 the client has nothing left to special-case. That deletes the last place on this screen
 where the client re-derived an authorization rule the server already applied, which is
 the same cleanup `0020` did for the group page.
@@ -92,14 +92,20 @@ the same cleanup `0020` did for the group page.
 
 Commenting used to require only an approved membership on the zone, so it was the one
 thing `0012` could confidently offer a reader (`actionsFor` returns exactly
-`['comments']` for a non-writer). After `0035` a read-only caller may **read** comments
+`['comments']` for a non-writer). After `0036` a read-only caller may **read** comments
 and may not write one. The comments sheet therefore opens for everybody with `READ` and
 draws its composer only for `canComment`, with the read-only note in its place.
 
+`0027` has just made that sheet read like a chat, with the composer pinned under the
+conversation. A pinned composer is precisely the control that must not be drawn for
+somebody who cannot use it: it is the most prominent thing on the sheet and it is always
+in view. The read-only note takes its place, in its position, rather than leaving the
+sheet ending in nothing.
+
 This is worth flagging as a **visible removal** for existing users: somebody who has
-`READER` on a list today can comment on it and will not be able to afterwards. The
-migration's backfill (`0035` section 3.1) keeps it rare, since today's `WRITER` becomes
-`{READ, WRITE, DECIDE}` and keeps commenting.
+`READER` on a list today can comment on it and will not be able to afterwards. Today's
+`WRITER` keeps commenting, because `WRITE` grants it and that is what the migration
+backfills them to (`0036` section 3.1).
 
 ### 3.2 Empty means read-only, and the composer is drawn from certainty now
 
@@ -124,17 +130,18 @@ list still means **no overflow button at all**, never a disabled one, exactly as
 `MemberRowVm.actions` decided it: a disabled control says "you could do this, later"
 about something that will never be permitted.
 
-| | read only | `WRITE` | `DECIDE` | `WRITE` + `DECIDE` |
-| --- | --- | --- | --- | --- |
-| Tap a row to tick it off | no | no | yes | yes |
-| Add a line (the composer) | no | yes | no | yes |
-| Reorder | no | yes | no | yes |
-| Edit / delete a `PENDING` or `REJECTED` line | no | yes | no | yes |
-| Edit an `APPROVED` line | no | no | quantity only | quantity only |
-| Approve, reject, restore | no | no | yes | yes |
-| Mark not available / back to pending | no | no | yes | yes |
-| Comment | read only | yes | yes | yes |
-| Open the settings sheet | no | no | no | `MANAGE` only |
+| | read only | `WRITE` | `DECIDE` | `WRITE` + `DECIDE` | `MANAGE` |
+| --- | --- | --- | --- | --- | --- |
+| Tap a row to tick it off | no | no | yes | yes | yes |
+| Add a line (the composer) | no | yes | no | yes | yes |
+| Reorder | no | yes | no | yes | yes |
+| Edit / delete a `PENDING` or `REJECTED` line | no | yes | no | yes | yes |
+| Edit an `APPROVED` line | no | no | quantity only | quantity only | **every field** |
+| Delete an `APPROVED` line | no | no | no | no | yes |
+| Approve, reject, restore | no | no | yes | yes | yes |
+| Mark not available / back to pending | no | no | yes | yes | yes |
+| Comment | read only | yes | yes | yes | yes |
+| Open the settings sheet | no | no | no | no | yes |
 
 Three consequences worth stating because they are not obvious from the table:
 
@@ -145,32 +152,39 @@ Three consequences worth stating because they are not obvious from the table:
   rather than reading as a broken screen (section 7).
 - **`decidable` and `restorable` stop meaning "staff".** They mean `canDecide`, and their
   doc comments, which currently say "True only for staff", change with them.
-- **The edit sheet has two modes.** For `WRITE` on an unapproved line it is what it is
-  today. For `DECIDE` on an approved line it shows the content read-only and offers only
-  the quantity stepper. Two modes of one sheet rather than a second sheet, because they
-  are the same gesture from the same row and the difference is which fields are live.
+- **The edit sheet has two modes, chosen by the caller's permissions and the line's
+  approval together.** Full, every field live: `WRITE` on an unapproved line, or `MANAGE`
+  on any line. Quantity only, content shown but not editable: `DECIDE` on an approved
+  line. Two modes of one sheet rather than two sheets, because they are the same gesture
+  from the same row and the only difference is which fields are live.
+
+  The mode is a function of both inputs and not of the permission alone. A group admin
+  holds `MANAGE` and gets the full sheet on every row. A caller holding only `DECIDE`
+  gets no edit entry on a pending row at all, because they lack `WRITE`, and the quantity
+  stepper on an approved one. Deriving the mode from the row rather than from the person
+  is what keeps those two answers from having to be written down separately.
 
 ### 4.1 The edit sheet warns before it splits
 
 When the quantity stepper on an approved line is taken **below** its current value, and
 the list does not auto-approve, the sheet says what the server is about to do, in the
 sheet, before the save: something to the effect that the 2 that are not coming home stay
-on the list marked as not available. `0036` creates that row whether or not the sheet
+on the list marked as not available. `0037` creates that row whether or not the sheet
 mentions it, and a row appearing out of nowhere under the one you just edited is
 confusing exactly once per user, which is once too many for a sentence this cheap.
 
-On an auto-approving list the sentence is absent, because the split is (`0036`
+On an auto-approving list the sentence is absent, because the split is (`0037`
 section 4.5).
 
 ## 5. The approve button stops flashing
 
-`0036` creates a line `APPROVED` when its author holds `DECIDE`. So the row that used to
+`0037` creates a line `APPROVED` when its author holds `DECIDE`. So the row that used to
 arrive `PENDING` and immediately grow two decision buttons now arrives approved, and the
 frontend work is subtraction:
 
 - The **optimistic add** must construct its placeholder row with the approval the server
   is going to give it, not with `PENDING`. It can, and from a fact it already holds:
-  `canDecide` plus `autoApproveLines`, the same two inputs `0036` section 2 uses. Getting
+  `canDecide` plus `autoApproveLines`, the same two inputs `0037` section 2 uses. Getting
   this wrong is the whole defect, one frame narrower.
 - Any client-side approve-after-add is removed outright.
 
@@ -188,19 +202,40 @@ rules below.
 
 `ShareRowVm.role: ListRole | null` becomes
 `ShareRowVm.permissions: readonly ListPermission[]`, and the row draws a checkbox per
-grantable permission. A segmented control was right for three mutually exclusive states
-and cannot express a set where `WRITE` and `DECIDE` are independent.
+permission. A segmented control was right for three mutually exclusive states and cannot
+express a set where `WRITE` and `DECIDE` are independent.
 
-**`MANAGE` is not offered.** The list's creator holds it from creation, and group admins
-hold it always; nobody else can be given it from this sheet. That is the requirement's
-own reading, and it keeps the sheet to three checkboxes and one legible question. The
-wire accepts `MANAGE` (`0035` section 5), so offering it later is one checkbox and one
-label, not a redesign.
+**All four are drawn, and the fourth is not always live.** `MANAGE`, labelled List admin,
+may only be granted or revoked by a group `OWNER` or `ADMIN` (`0036` section 5, rule 3).
+So the checkbox renders for everybody who can open the sheet, and is interactive only for
+a caller who is group staff. For a list admin who is not, it draws in its current state,
+disabled, with a line saying that only group admins appoint list admins.
+
+Disabled rather than absent, which is the opposite of what `LineRowVm.actions` does for a
+row menu, and the difference is worth being deliberate about. An absent menu entry hides
+a capability that will never exist for this person, and there is nothing to explain. A
+list admin's own permission checkbox is different: it is the answer to "why can Marc
+change who uses this list?", it is visible in every other row of the same table, and
+hiding it in some rows and not others would make the table itself unreadable. So it is
+drawn, and the reason is drawn with it.
+
+### 6.1.1 `ShareRowVm` grows one field, and it is not an ability
+
+The sheet needs to know whether **this caller** may set `MANAGE`. That is a fact about
+the caller's zone role, which `MembershipStore` already holds, so it does not go on
+`ListAbilitiesVm`: nothing else on the list page needs it, and an ability that only one
+sheet reads is a fact stored twice.
+
+`ShareRowVm` instead grows `lockedPermissions: readonly ListPermission[]`, the members of
+the set this row's checkboxes may not change, with `fixedReasonKey` explaining why. A
+group staff row locks all four (section 6.3). Every other row locks `MANAGE`, or nothing,
+depending on the caller. One field expresses both cases, and the row component renders
+from it without knowing which rule produced it, which is rule D1 doing its job.
 
 ### 6.2 Ticking anything ticks read
 
 Required, and it matches the server, which adds `READ` to any non-empty set it is given
-(`0035` section 2.2). The client does it **in the checkbox handler**, so the person sees
+(`0036` section 2.2). The client does it **in the checkbox handler**, so the person sees
 Can view tick itself the moment they tick Can add, rather than seeing it appear after a
 save. Unticking the last of the others leaves Can view ticked; unticking Can view itself
 clears the row to no access, because that is the only thing "cannot view" can mean.
@@ -220,20 +255,46 @@ edit this?", and the sheet is the only place that answers it. The checkboxes ren
 ticked and non-interactive, with the sentence underneath, which is the same shape
 `0010`'s member rows use for an action that will never be permitted.
 
-The list creator's row is **no longer fixed**. `0035` section 2.5 makes their power an
-ordinary `list_access` row, so a group admin can change it. `fixedReasonKey`'s
-`list.settings.access.creator` case goes with it, and the creator instead gets a plain
-"Created this list" label beside their name so the row still reads as theirs.
+The list creator's row is **no longer fixed**. `0036` section 2.5 makes their power an
+ordinary `list_access` row, so a group admin can change it, including taking their
+`MANAGE` away. `fixedReasonKey`'s `list.settings.access.creator` case goes with it, and
+the creator instead gets a plain "Created this list" label beside their name so the row
+still reads as theirs.
+
+To a list admin who is not group staff, the creator's row is an ordinary row with its
+`MANAGE` box locked, like every other row (section 6.1). They can adjust what the creator
+may do to the list's contents and cannot remove the creator's authority over it. That is
+the requirement's asymmetry rendered: the group appoints and unappoints, the list admin
+runs the list.
 
 Whether the sheet lets a non-staff list admin *attempt* a change to a staff row: no. The
 row is fixed for everybody, because for everybody the answer is the same and the server
-refuses it identically (`0035` section 5, rule 2).
+refuses it identically (`0036` section 5, rule 2).
 
-### 6.4 The auto-approve toggle lives here too
+### 6.4 The header's viewer chips stay zone roles
+
+`0029` gave the list header a viewer sheet, and `ListViewerVm.role` carries each viewer's
+**zone** role with a comment explaining the choice: a list role is not on the wire for
+anybody but the caller, because `ListView` carries no per member access and there is no
+`GET /v1/lists/:id/access`.
+
+Half of that reason expires here. The endpoint lands, so a `MANAGE` holder could be shown
+what each viewer may do on this list. They should not be, and the chip stays a zone role:
+
+- The access table is `MANAGE` only (`0036` section 4.3). A chip sourced from it would
+  say different things to two people standing in the same aisle looking at the same
+  sheet, which is worse than a chip that says less.
+- `0029` asked the question "who is here, what are they allowed to do, and since when"
+  about a group, and the group's answer is the one that does not change per list.
+
+The comment on `role` needs its reasoning updated rather than its value: the endpoint
+exists now, and the reason is that its answer is not everybody's to see.
+
+### 6.5 The auto-approve toggle lives here too
 
 `autoApproveLines` is a switch in the settings sheet, above the share section, with a
 line of copy saying that new lines will not need approving and that the ones already
-waiting are unaffected (`0036` section 3). `MANAGE` only, which the sheet already is.
+waiting are unaffected (`0037` section 3). `MANAGE` only, which the sheet already is.
 
 ## 7. Copy
 
@@ -248,14 +309,14 @@ New or rewritten keys, all under the existing `list.` namespace:
 - The comments sheet's read-only note, in place of its composer (section 3.1).
 - The quantity-reduction warning in the edit sheet (section 4.1).
 - The three checkbox labels and the corrected staff note (section 6).
-- The auto-approve switch and its explanation (section 6.4).
+- The auto-approve switch and its explanation (section 6.5).
 
 Both locales, as always, and the keys belong to `models-localization` beside the ones
 they sit with.
 
 ## 8. When permissions change while the page is open
 
-`0035` section 8 adds `list.myAccessChanged` on the user channel, carrying the caller's
+`0036` section 8 adds `list.myAccessChanged` on the user channel, carrying the caller's
 new effective set for one list. `RealtimeEventMapper` maps it, `ListStore` applies it to
 the held `ListView`, and three behaviours fall out with no further work:
 
@@ -282,19 +343,58 @@ needs four accounts, a group, and a share sheet), and the states worth exercisin
 `WRITE`-only caller and a `DECIDE`-only caller, are the two nothing has ever rendered.
 Seed the mock world with one of each.
 
-## 10. What is deliberately not built
+## 10. Testing this, and putting it away afterwards
+
+Everything below runs in **this worktree's own slot**, never on slot 0, which is the
+developer's own. `CLAUDE.md` has the rules and `tools/dev/README.md` has the reasoning;
+what follows is what this plan in particular needs.
+
+```sh
+tools/dev/ng-slot.sh --list                      # what is already running, before claiming
+tools/dev/ng-slot.sh --up --apps velista         # velista alone, on its own origin
+tools/dev/ng-slot.sh --up --apps shell,velista   # ...plus the shell, for the mounted mode
+tools/dev/ng-slot.sh --restart --apps velista    # after a slot move or --backend-slot
+eval "$(tools/dev/ng-slot.sh --e2e-env)"         # point a suite at this worktree (tools/dev/0001)
+npx nx e2e velista-e2e
+tools/dev/ng-slot.sh --down                      # ALWAYS, including on an abandoned task
+```
+
+Three things specific to this work:
+
+- **Serve `velista` alone for most of it.** Every screen this plan touches is on
+  velista's own origin (`0013`), and an Angular dev server is 700 MB to 1 GB. The shell
+  is only needed to confirm the mounted mode still draws, which is worth doing once at
+  the end rather than paying for throughout.
+- **Do not start a Luna slot for this.** Front end and backend slot numbers are
+  independent, and several front end slots can share one backend. Point at a gateway that
+  is already listening with `--backend-slot <n>`, taking one of your own only when the
+  backend work in `0036`/`0037` is what you are actually changing. A Luna slot is five
+  Nest services plus eight containers, and it is the half that exhausts the machine.
+- **Most of this needs no backend at all.** Four permission states need four accounts, a
+  group and a share sheet against a real gateway; against `ListMemory` (section 9) they
+  need a seed value. That is the whole argument for making the mock enforce permissions
+  rather than only store them, and it is why section 9 is not optional work.
+
+`--down` when you are finished, not to check your work: everything is served with watch
+on and a change to a source file or a library it consumes rebuilds and reloads by itself.
+The one thing a running process cannot pick up is a rewritten `.env`, and that case is
+`--restart`.
+
+## 11. What is deliberately not built
 
 - **Per-list permission badges on the dashboard or the group page.** `myPermissions`
   arrives on every `ListView` in the page, so it is available, and a "read only" chip on a
   card answers a question nobody asks until they open the list.
 - **A request-access flow.** Somebody with no access does not see the list at all, so
   there is nowhere to put the button.
-- **Explaining the split in the timeline.** `0036` section 7 declined the column that
+- **Explaining the split in the timeline.** `0037` section 7 declined the column that
   would make it possible; the adjacent row plus the warning in 4.1 is the whole story
   this screen tells.
-- **Offering `MANAGE` from the share sheet.** Section 6.1.
+- **Letting a list admin appoint another one.** `MANAGE` is drawn in every row and is
+  live only for group staff (section 6.1). The rule is the server's (`0036` section 5.1);
+  the sheet only explains it.
 
-## 11. Acceptance
+## 12. Acceptance
 
 1. A caller with no permissions opens a list by its URL. They see every line, both
    statuses, every comment, the counts and who else is viewing. There is no composer, no
@@ -308,12 +408,18 @@ Seed the mock world with one of each.
 4. That caller lowers an approved quantity from 3 to 1, having been told what will
    happen, and the remainder appears directly below with no refresh and no reorder.
 5. A group admin who was never granted anything on the list has every control on the
-   screen, including the settings sheet.
-6. A group admin adds a line and no approve button is ever drawn on it, on any frame.
-7. In the share sheet, ticking Can add ticks Can view. Group admin rows are drawn, fully
-   ticked, unchangeable, with the reason. The creator's row is changeable by a group
-   admin.
-8. Turning on auto-approve leaves the lines already waiting waiting, and the next line
-   anybody adds arrives approved.
-9. Revoking a member's access while they have the list open moves them off it. Granting
-   access to somebody who had none makes the list appear for them without a refresh.
+   screen, including the settings sheet, and the full edit sheet on an approved row.
+6. A list admin who is not group staff has the same, and their edit sheet on an approved
+   row is also the full one.
+7. A group admin adds a line and no approve button is ever drawn on it, on any frame.
+8. In the share sheet, ticking Can add ticks Can view. Group admin rows are drawn, fully
+   ticked, unchangeable, with the reason.
+9. The same sheet, opened by a group admin: every List admin box is live, including on
+   the creator's row. Opened by a list admin who is not staff: every List admin box is
+   drawn in its current state, disabled, with the reason, and the other three boxes on
+   the same rows are live.
+10. Turning on auto-approve leaves the lines already waiting waiting, and the next line
+    anybody adds arrives approved.
+11. Revoking a member's access while they have the list open moves them off it. Granting
+    access to somebody who had none makes the list appear for them without a refresh.
+12. The slot this was all tested in is `--down` afterwards, and `--list` says so.

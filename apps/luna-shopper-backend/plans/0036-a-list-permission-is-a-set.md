@@ -1,11 +1,11 @@
-# 0035: a list permission is a set, not a role
+# 0036: a list permission is a set, not a role
 
 > Prerequisite reading: `0007` section 1 (`list_access` as the access table) and section
 > 4 (the three `require*` checks), `0017` section 3.2 (`READABLE_LIST`, the one
 > definition of a readable list), and `0034` (what creating a list grants).
 >
-> Companion plans: `0036`, which takes approval away from the client once this plan has
-> a permission to hang it on, and `velista/plans/0027`, which is the screen half.
+> Companion plans: `0037`, which takes approval away from the client once this plan has
+> a permission to hang it on, and `velista/plans/0030`, which is the screen half.
 >
 > Verified against the source on 2026-08-28.
 
@@ -113,7 +113,7 @@ and stops a zero-permission row silently satisfying an `EXISTS`.
 ### 2.3 `MANAGE`, and why the enum member is not called `ADMIN`
 
 The requirement asks for a better name than "edit list properties" and suggests "list
-admin". The **user-facing** name is List admin, in `velista/plans/0027`. The enum member
+admin". The **user-facing** name is List admin, in `velista/plans/0030`. The enum member
 is `MANAGE` for one reason: `ZoneRole.ADMIN` already exists in the same codebase and
 frequently in the same expression. A line reading `role === ADMIN` beside one reading
 `permissions.includes(ADMIN)` is a misreading waiting to happen, and the two mean
@@ -156,7 +156,7 @@ So the creator's power becomes an ordinary **row**: `ListService.create` writes 
 can then rewrite that row like any other, down to and including deleting it.
 
 `createdByUserId` stays on the entity. It is still the honest answer to who made the
-list, it is still what the frontend attributes a list to, and `0036` uses it. It simply
+list, it is still what the frontend attributes a list to, and `0037` uses it. It simply
 stops being an authorization input.
 
 ### 2.6 What `shareWithZone` grants
@@ -224,7 +224,7 @@ Three things make that acceptable where it would not normally be:
   developer's seed data, not somebody's Saturday.
 
 The frontend must not present the resulting state as a broken screen.
-`velista/plans/0027` section 4 gives the `WRITE`-only caller a caption naming who does
+`velista/plans/0030` section 4 gives the `WRITE`-only caller a caption naming who does
 the ticking, and that caption exists largely for the fortnight after this migration.
 
 **Not solved by widening later.** If the first week shows the grant was needed after
@@ -268,7 +268,7 @@ And the call sites:
 | Operation | Was | Becomes |
 | --- | --- | --- |
 | `line.add` | `WRITER` | `WRITE` |
-| `line.update` | `WRITER`, any line | `WRITE` on a `PENDING`/`REJECTED` line; `DECIDE` for the quantity of an `APPROVED` line and nothing else (`0036` section 4); `MANAGE` for any field of any line |
+| `line.update` | `WRITER`, any line | `WRITE` on a `PENDING`/`REJECTED` line; `DECIDE` for the quantity of an `APPROVED` line and nothing else (`0037` section 4); `MANAGE` for any field of any line |
 | `line.delete` | `WRITER`, any line | `WRITE` on a `PENDING`/`REJECTED` line; `MANAGE` for any line |
 | `line.reorder` | `WRITER` | `WRITE` |
 | `line.setStatus` | `WRITER` | `DECIDE` |
@@ -285,7 +285,7 @@ Three different answers, and the whole shape of the model is in them:
   only, which is the requirement stated exactly. A writer whose line has been agreed to
   cannot quietly change what was agreed to.
 - **`DECIDE` may change its quantity, and nothing else.** That single field is what a
-  person in the aisle learns that the list did not know, and `0036` section 4 is about
+  person in the aisle learns that the list did not know, and `0037` section 4 is about
   what the server does with it. Content, item reference and position are untouched.
 - **`MANAGE` may edit any field of any line**, whatever its approval, and delete any
   line. A list admin governs the list, and a governed thing needs somebody who can fix
@@ -310,7 +310,7 @@ Required, and it is what makes rejection a conversation rather than a dead end. 
 `PENDING`. An `APPROVED` line is not reachable by this path at all (section 4.1).
 
 This happens on **any** edit, including a quantity-only one, and including on a list
-that auto-approves (`0036` section 3): the option decides what a **new** line starts as,
+that auto-approves (`0037` section 3): the option decides what a **new** line starts as,
 and a rejection somebody made on purpose is not undone by an edit.
 
 ### 4.3 `READ` is genuinely everything else
@@ -340,7 +340,7 @@ rules, applied in this order:
    about staff rows.
 3. **Only a zone `OWNER` or `ADMIN` may change the `MANAGE` bit**, in either direction.
    An entry from any other caller whose `MANAGE` differs from what the stored row already
-   holds is rejected. Section 5.2.
+   holds is rejected. Section 5.1.
 4. **`READ` is added to any non-empty set.** Section 2.2.
 5. **An empty set deletes the row.** Section 2.2. This is how access is revoked, and it
    is the same call, so a share sheet has one save button rather than a save and a
@@ -352,7 +352,7 @@ that and set `MANAGE` as well. That is the whole of the asymmetry the requiremen
 for: **staff rows are untouchable, `MANAGE` is the group's to hand out, every other row
 and bit is a list admin's, and the creator's row is an ordinary row** (section 2.5).
 
-### 5.2 Why a list admin cannot appoint another one
+### 5.1 Why a list admin cannot appoint another one
 
 `MANAGE` is grantable, unlike the derived staff grant, so somebody other than the creator
 can be made a list admin. What they cannot then do is make a third.
@@ -375,7 +375,7 @@ clearing a row that holds `MANAGE` is therefore a `MANAGE` change and is refused
 3, which is the right answer and would be an obvious hole if the rules were checked in
 the other order.
 
-### 5.1 Not a partial update
+### 5.2 Not a partial update
 
 `setAccess` replaces each named membership's set outright and leaves unnamed memberships
 alone. It is not `PATCH` semantics on the set (no add-these, remove-those), because a
@@ -464,7 +464,39 @@ rooms.
   and commit it. `openapi-document.spec.ts` fails on a stale one, so a forgotten
   regeneration is a red PR.
 
-## 10. What is deliberately not built
+## 10. Testing this, and putting it away afterwards
+
+This plan is the one that genuinely needs a backend slot of its own, and it is worth
+saying why, because most work does not. It runs a migration, it rewrites rows in
+`list_access` for every list in the database, and its acceptance needs four accounts in
+one group holding four different permission sets. That is a disruptive migration and an
+isolated database, which is exactly the case `CLAUDE.md` reserves a Luna slot for.
+
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list      # before claiming anything
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up        # compose, migrations, five services
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart --services gateway,core
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down      # ALWAYS, including on an abandoned task
+```
+
+- **`--list` first, every time.** It reads every worktree's claim and probes the ports,
+  so it is the only accurate answer to what is already running. A hand rolled
+  `docker compose up` writes no claim and no per slot `.env`, so it collides with slot 0,
+  which is the developer's own.
+- **A front end to look at it with is a separate, cheaper claim.**
+  `tools/dev/ng-slot.sh --up --apps velista --backend-slot <n>` points velista at this
+  slot. The two numbers are independent and need not match.
+- **`--down` when finished, not to check your work.** A Luna slot is five Nest services
+  at roughly 230 MB each plus eight containers and its own Postgres volumes, and it is
+  the half that exhausts a 32 GB machine first. Leaving one up after an abandoned task is
+  the most expensive thing anybody does by accident here.
+- **The migration is the part to run twice.** Once forward against a database seeded with
+  both `READER` and `WRITER` rows, then `down`, then forward again. Section 3 says the
+  reverse is lossy on purpose, and a lossy reverse is only safe if somebody has watched it
+  happen. `luna-slot.sh --down` and a fresh `--up` is the cheapest way to get a clean
+  database to try it against again.
+
+## 11. What is deliberately not built
 
 - **A zone-wide default permission set for new lists.** `0034`'s checkbox already
   carries the answer and remembers nothing, which is the version that cannot get out of
@@ -478,7 +510,7 @@ rooms.
   checkboxes is legible; a share sheet with four checkboxes and five presets built from
   them is not.
 
-## 11. Acceptance
+## 12. Acceptance
 
 1. A zone admin who has never been granted anything on a list opens it, adds a line,
    ticks it off, approves somebody else's, renames the list and changes who may use it.
@@ -487,17 +519,27 @@ rooms.
    indicators. Every write they attempt is refused, **comments included**.
 3. A member holding `{READ, WRITE}` adds a line, edits a pending one, deletes a rejected
    one, comments, and is refused when they try to approve a line, set one to `READY`, or
-   touch an approved line.
+   touch an approved line in any way.
 4. A member holding `{READ, DECIDE}` approves a line, rejects one, sets one to
-   `NOT_AVAILABLE`, comments, and is refused when they try to add a line or edit an
-   unapproved one.
-5. Editing a `REJECTED` line returns it to `PENDING` and clears its approver.
-6. A list admin who is not group staff tries to revoke a group admin's access and is
+   `NOT_AVAILABLE`, comments, and changes an approved line's quantity. They are refused
+   when they try to add a line, edit an unapproved one, or change an approved line's
+   content.
+5. A member holding `{READ, MANAGE}` edits the content of an approved line and deletes
+   another, both of which every other permission is refused.
+6. Editing a `REJECTED` line returns it to `PENDING` and clears its approver.
+7. A list admin who is not group staff tries to revoke a group admin's access and is
    refused with a message naming the reason. A group admin revokes the list creator's
    access entirely, and the creator's next request for the list is a 403.
-7. `GET /v1/lists/:id/access` returns the stored rows to a `MANAGE` holder and 403s for
+8. That same list admin tries to grant `MANAGE` to a fourth member, and is refused. They
+   try to remove `MANAGE` from the creator, and are refused. They grant that fourth member
+   `{READ, WRITE}` in the same sheet and it succeeds. A group admin then grants the
+   `MANAGE` that was refused, and it succeeds.
+9. `GET /v1/lists/:id/access` returns the stored rows to a `MANAGE` holder and 403s for
    a `WRITE` holder. Group staff appear in no entry.
-8. Changing a member's permissions while they have the list open redraws their screen
-   without a refresh, and revoking them entirely moves them off it.
-9. The migration runs against a database holding both `READER` and `WRITER` rows and
-   produces sets matching section 3; every list's creator holds `MANAGE` afterwards.
+10. Changing a member's permissions while they have the list open redraws their screen
+    without a refresh, and revoking them entirely moves them off it.
+11. The migration runs against a database holding both `READER` and `WRITER` rows and
+    produces sets matching section 3: `READER` to `{READ}`, `WRITER` to `{READ, WRITE}`
+    with no `DECIDE`, and every list's creator holding `MANAGE`. Its `down` is run once
+    and watched, per section 10.
+12. The Luna slot all of this ran in is `--down` afterwards, and `--list` says so.

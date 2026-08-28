@@ -1,13 +1,13 @@
-# 0036: the server decides approval
+# 0037: the server decides approval
 
-> Prerequisite reading: `0035` (the permission set, and `DECIDE` in particular), and
+> Prerequisite reading: `0036` (the permission set, and `DECIDE` in particular), and
 > `0007` sections 1 and 2 (`ListLine`, its two independent state machines, and the line
 > mutations).
 >
-> Companion plan: `velista/plans/0027` section 5, which removes the client-side
+> Companion plan: `velista/plans/0030` section 5, which removes the client-side
 > approval this plan makes unnecessary.
 >
-> Depends on `0035`: every rule below is keyed on `DECIDE`, which does not exist yet.
+> Depends on `0036`: every rule below is keyed on `DECIDE`, which does not exist yet.
 
 ## 1. Two things the client is deciding that it should not be
 
@@ -39,7 +39,7 @@ everybody an admin of the whole group, which grants far more than they meant.
 1. **The adder holds `DECIDE` on the list.** The line is created `APPROVED`, with
    `approvedByUserId` set to the adder. They are the person the approval was going to be
    asked of, and adding the line is them giving it. Group staff hold `DECIDE` on every
-   list (`0035` section 2.4), so this is the rule that fixes 1.1.
+   list (`0036` section 2.4), so this is the rule that fixes 1.1.
 2. **Otherwise, the list has `autoApproveLines` set.** The line is created `APPROVED`
    with `approvedByUserId` **null**. Nobody decided; the list is configured not to ask.
    A null approver is the honest record of that, and it is a nullable column already.
@@ -70,7 +70,7 @@ The requirement says this belongs in the backend, and it is right.
 
 `ShoppingList` gains `autoApproveLines boolean NOT NULL DEFAULT false`. It appears on
 `ListView`, and `UpdateListRequest` may set it. Changing it is `MANAGE`
-(`0035` section 4), which is what makes it list configuration rather than a preference.
+(`0036` section 4), which is what makes it list configuration rather than a preference.
 
 Three things it deliberately does **not** do:
 
@@ -79,7 +79,7 @@ Three things it deliberately does **not** do:
   answer to it. A `DECIDE` holder clears them in the queue that already exists.
 - **It does not remove approval from the list.** A `DECIDE` holder may still reject an
   auto-approved line, and editing a rejected line still returns it to `PENDING`
-  (`0035` section 4.2) rather than straight back to `APPROVED`. The option governs what
+  (`0036` section 4.2) rather than straight back to `APPROVED`. The option governs what
   a **new** line starts as, and nothing else. A rejection made on purpose is not undone
   by a setting or by an edit.
 - **It is not a zone-wide setting.** One household can perfectly well run a
@@ -93,7 +93,7 @@ when a shopper comes back with less.**
 
 Somebody in the aisle holding `DECIDE` finds one tin where the list says three. They set
 the quantity to 1. That is the only field `DECIDE` may change on an approved line
-(`0035` section 4), and it is deliberately not a plain edit, because on its own it
+(`0036` section 4), and it is deliberately not a plain edit, because on its own it
 silently rewrites history: the list now says somebody asked for one tin, and the two
 they did not get have vanished with no record that they were ever wanted.
 
@@ -115,14 +115,21 @@ of separating `WRITE` from `DECIDE` survives only if this happens server side.
 ### 4.2 The rule is about the line, not about who edited it
 
 Any quantity reduction on an `APPROVED` line splits, whoever made it, including a
-`MANAGE` holder and including a group admin. Keying it on the actor instead would mean
-the same edit to the same line produces different data depending on who is signed in,
-which is not explainable in any user interface and not testable in any useful way.
+`MANAGE` holder and including a group admin. The line's approval is the trigger, and a
+line's approval is a fact anybody looking at it can see.
 
-The one case that argument costs us is a list admin correcting a typo, who wanted 1 and
-typed 3. They get a spurious "2 not available" line. Their remedy is to delete it, which
-`MANAGE` may do to any line (`0035` section 4.1). One extra tap for the rare case is the
-right trade against a rule that cannot be stated in a sentence.
+The one case that argument costs us is somebody correcting a typo: they wanted 1, typed
+3, it was approved at 3, and lowering it now produces a "2 not available" line nobody
+ever wanted. That is accepted rather than worked around. The line **was** approved at 3,
+which is a thing that really happened, and the split is the honest record of undoing it.
+A `MANAGE` holder who minds can delete the remainder, since `MANAGE` may delete any line
+(`0036` section 4.1), and nobody else needs to.
+
+The alternative was a rule keyed on the actor, or a flag on the request saying "this one
+does not count". Both make the same edit to the same line produce different data
+depending on who is signed in or on what a client remembered to send, which is not
+explainable in any user interface and not testable in any useful way. A spurious row that
+can be deleted is a much smaller problem than a rule nobody can state.
 
 ### 4.3 Where the new line goes
 
@@ -174,14 +181,14 @@ means every frame the client can paint is arithmetically true.
 Both go to the list room, as the existing `emit` already routes them, and both are
 existing event types, so no client needs a new handler to stay correct. A client that
 knows nothing about this plan gets a correct list; the frontend work in
-`velista/plans/0027` is about explaining it, not about receiving it.
+`velista/plans/0030` is about explaining it, not about receiving it.
 
 ## 6. Contracts and tests
 
 - `ListView.autoApproveLines: boolean` and `UpdateListRequest.autoApproveLines?: boolean`
   in `libs/luna-shopper/contracts`, plus the gateway's `UpdateListDto`.
 - One migration adding the column with its default. It can be the same migration as
-  `0035` section 3 if the two land together, and should be if they do: one deploy, one
+  `0036` section 3 if the two land together, and should be if they do: one deploy, one
   lock on `shopping_lists` and `list_access`.
 - **Regenerate the OpenAPI document** and commit it (`CLAUDE.md`, Luna Shopper backend).
 - The split wants its own spec file beside `list-create-sharing.spec.ts`. Every row of
@@ -189,7 +196,38 @@ knows nothing about this plan gets a correct list; the frontend work in
   line is a case on its own, because it is the part a naive implementation gets wrong by
   appending to the end.
 
-## 7. What is deliberately not built
+## 7. Testing this, and putting it away afterwards
+
+This plan adds one column and changes what two handlers write. It does **not** need a
+Luna slot of its own the way `0036` does: no disruptive migration, and its acceptance
+needs two accounts rather than four. If `0036` is being built alongside it, share that
+slot; if it is not, point at a gateway that is already listening.
+
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list        # what is already up
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart --services core,gateway
+tools/dev/ng-slot.sh --up --apps velista --backend-slot <n>  # a screen to watch it on
+tools/dev/ng-slot.sh --down                                  # ALWAYS
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down         # ...if you claimed one
+```
+
+Two notes specific to this work:
+
+- **The split is best watched on two clients at once**, because section 5 is entirely
+  about what each of them sees and in what order. One front end slot pointed at the
+  backend, two browser profiles, one list. That costs one Angular dev server, not a
+  second stack.
+- **`--restart` after an `.env` rewrite, not `--down`.** Everything is served with watch
+  on and each service watches its own sources, so a change to `LineService` recompiles by
+  itself. The one thing a running process cannot pick up is a rewritten `.env`, which is
+  what `--backend-slot` does, and the rewrite triggers a rebuild that silently keeps the
+  old values. Nothing looks wrong, which is why it is worth knowing.
+
+`--down` when you are finished, including on an abandoned task. A Luna slot is five Nest
+services plus eight containers and its own Postgres volumes, and a few unshared ones
+exhaust a 32 GB machine.
+
+## 8. What is deliberately not built
 
 - **A link between the remainder and the line it came from.** A `splitFromLineId` column
   would let the UI say "2 of the 3 you asked for", and it is a column, an index, a
@@ -200,7 +238,7 @@ knows nothing about this plan gets a correct list; the frontend work in
 - **A per-line "approve on add" override.** The permission and the list setting between
   them cover every case anybody has described.
 
-## 8. Acceptance
+## 9. Acceptance
 
 1. A group admin adds a line. It arrives `APPROVED`, attributed to them, and no decision
    button is ever drawn on it.
@@ -215,3 +253,6 @@ knows nothing about this plan gets a correct list; the frontend work in
 6. Lowering a `PENDING` line from 3 to 1 produces no remainder.
 7. A `DECIDE` holder attempting to change an approved line's **content** is refused, and
    attempting to set a quantity of 0 is refused.
+8. A `MANAGE` holder lowering the same approved line from 3 to 1 gets the same remainder
+   as the `DECIDE` holder did, and can then delete it. The split does not care who did it.
+9. Whatever slots this ran in are `--down` afterwards, and `--list` says so.
