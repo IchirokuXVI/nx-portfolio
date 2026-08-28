@@ -45,6 +45,8 @@ export class RokuTranslatorPipe implements PipeTransform {
     // new to say: the locale changed, and the strings for the current locale
     // finished loading. The second is why an OnPush view no longer keeps the raw
     // keys it painted before the first `import()` resolved.
+    this._serv.locale();
+    this._serv.loaded();
 
     const ns = typeof nsOrValues === 'string' ? nsOrValues : undefined;
     const interpolation =
