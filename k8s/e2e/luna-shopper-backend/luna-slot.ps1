@@ -47,9 +47,11 @@ param(
   [Parameter(Position = 0)][string]$Slot,
   [switch]$List,
   [switch]$Up,
+  [switch]$Restart,
   [switch]$Down,
   [switch]$Auto,
   [Alias('p','Profile')][string]$ComposeProfile,
+  [string]$Services,
   [int]$AppSlot = -1,
   [switch]$KeepData,
   [int]$Timeout = 180
@@ -66,7 +68,7 @@ $probe = Join-Path $root 'tools/dev/probe-ports.mjs'
 # The five Nest services, in the order -Up starts them. Their ports are not passed
 # on the command line: each reads PORT out of its own .env, which this script wrote
 # for this slot, so there is one place a port can be wrong.
-$services = @('gateway', 'realtime', 'auth', 'core', 'catalog')
+$serviceNames = @('gateway', 'realtime', 'auth', 'core', 'catalog')
 
 # How high -Auto and -List will look. See the same constant in ng-slot.ps1.
 $maxSlot = 9
@@ -425,6 +427,159 @@ function Find-FreeSlot {
   throw "no free Luna slot in ${minAutoSlot}..${maxSlot}: every one is claimed by another worktree or has something listening on it (slot 0 is the developer's own, and -Auto never takes it)"
 }
 
+# Kill a process tree, tolerating a pid that is already gone.
+#
+# cmd swallows taskkill's output, not PowerShell: redirecting a native command's
+# stderr in 5.1 wraps each line in an ErrorRecord, which $ErrorActionPreference =
+# 'Stop' then treats as terminating. "The process N not found" is an ordinary
+# outcome here, not a failure, and it is the common one when a .pid file was
+# written by the bash twin (whose pid is an MSYS pid this side cannot use) or by a
+# run that has since exited.
+function Invoke-TaskKill($processId) {
+  & cmd.exe /c "taskkill /F /T /PID $processId >nul 2>&1"
+  return ($LASTEXITCODE -eq 0)
+}
+
+# The image names a `.pid` file here can legitimately name. Anything else is a pid
+# that has been recycled since it was recorded.
+$killableImages = @('node', 'npx', 'npm', 'cmd', 'conhost', 'powershell', 'pwsh')
+
+# Kill a recorded pid ONLY if it still looks like the process that was recorded.
+#
+# A .pid file outlives the process it names, and the operating system reuses pids.
+# Killing one unverified means killing whatever inherited the number, which on a
+# developer machine could be another worktree's services, the editor, or the thing
+# the developer is actually working in. `/T` makes it worse by taking that
+# process's whole tree.
+#
+# The port sweep is what actually guarantees the port is free. This is only here to
+# stop a wrapper spawning a replacement first, so declining to kill an unrecognised
+# pid costs nothing and removes the chance of killing a stranger.
+function Stop-RecordedPid($recorded) {
+  if (-not $recorded) { return }
+  $process = Get-Process -Id $recorded -ErrorAction SilentlyContinue
+  if ($null -eq $process) { return }
+  if ($killableImages -notcontains $process.ProcessName.ToLower()) { return }
+  [void](Invoke-TaskKill $recorded)
+}
+
+# The PORT a service will listen on, read back from the .env this script wrote for
+# it. One source of truth: nothing passes a port on the command line, so a service
+# and the wait that watches for it cannot disagree.
+function Get-ServicePort([string]$svc) {
+  $envPath = Join-Path $root "apps/luna-shopper-backend/$svc/.env"
+  if (-not (Test-Path $envPath)) { return $null }
+  foreach ($line in (Get-Content $envPath)) {
+    if ($line -match '^PORT=(\d+)\s*$') { return [int]$Matches[1] }
+  }
+  return $null
+}
+
+# Start each named service in the background; returns the ports to wait on.
+function Start-Services([string[]]$svcs, [int]$slotNumber) {
+  New-Item -ItemType Directory -Force -Path $runDir | Out-Null
+  $ports = @()
+  foreach ($svc in $svcs) {
+    $port = Get-ServicePort $svc
+    if ($null -eq $port) {
+      throw "no PORT in apps/luna-shopper-backend/$svc/.env; rerun luna-slot.ps1 $slotNumber"
+    }
+
+    $states = Get-PortStates @($port)
+    if ($states[$port] -ne 'closed') {
+      throw "port $port ($svc, slot $slotNumber) is already $($states[$port]); run -Down or -Restart"
+    }
+
+    Write-Host "==> serving $svc on :$port  (log: k8s/e2e/luna-shopper-backend/.run/$svc.log)"
+    # Two files, not one: PowerShell 5.1 refuses to redirect both streams to the
+    # same path, and Nest writes plenty to stderr on a healthy boot.
+    $process = Start-Process -FilePath 'npx.cmd' `
+      -ArgumentList @('nx', 'run', "luna-shopper-backend-${svc}:serve") `
+      -WorkingDirectory $root -NoNewWindow -PassThru `
+      -RedirectStandardOutput (Join-Path $runDir "$svc.log") `
+      -RedirectStandardError (Join-Path $runDir "$svc.err.log")
+    Set-Content -Path (Join-Path $runDir "$svc.pid") -Value $process.Id -Encoding utf8
+    $ports += $port
+  }
+  return $ports
+}
+
+# Stop the recorded processes, then free the ports, then free them again.
+#
+# Killing by port alone is not enough, and the gap is not theoretical: a service
+# spawned but not yet bound is invisible to a port sweep, so it survives the stop
+# and binds a moment later, and the next -Up fails with "port 3100 is already open"
+# over nothing visible. Scoped to the named services, so -Restart -Services gateway
+# leaves the other four alone.
+function Stop-Services([string[]]$svcs, [int[]]$ports) {
+  foreach ($svc in $svcs) {
+    $pidFile = Join-Path $runDir "$svc.pid"
+    if (Test-Path $pidFile) {
+      $recorded = (Get-Content $pidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+      Stop-RecordedPid $recorded
+      Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+    }
+  }
+
+  $freed = 0
+  foreach ($pass in 1, 2) {
+    foreach ($port in $ports) {
+      if (Stop-Port $port) {
+        Write-Host "  freed $port"
+        $freed++
+      }
+    }
+    if ($pass -eq 1) { Start-Sleep -Seconds 3 }
+  }
+  return ($freed -gt 0)
+}
+
+# Bounce the Nest services and leave the compose stack exactly where it is.
+#
+# Rarely needed. `nx run <svc>:serve` is @nx/js:node, whose watch defaults to true,
+# so a change to a service or a library it consumes rebuilds and restarts that one
+# process by itself. What it will not pick up is a rewritten .env, because Nx loads
+# {projectRoot}/.env into the task when it starts it.
+#
+# It exists chiefly so that is not a reason to run -Down, which takes the databases
+# and their volumes with it. Restarting a service should never cost the data
+# somebody has been working with.
+function Invoke-Restart {
+  $config = Read-SlotConfig
+  if ($null -eq $config) {
+    throw 'this worktree has no slot configured, so there is nothing to restart.'
+  }
+  $slotNumber = [int]$config['LUNA_SLOT']
+
+  $wanted = $serviceNames
+  if ($Services) {
+    $wanted = $Services -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    foreach ($svc in $wanted) {
+      if ($serviceNames -notcontains $svc) {
+        throw "unknown service '$svc'; known: $($serviceNames -join ', ')"
+      }
+    }
+  }
+
+  Write-Host "==> restarting on Luna slot ${slotNumber}: $($wanted -join ', ')"
+  Write-Host '    (the compose stack and its volumes are left alone)'
+  $stopping = @()
+  foreach ($svc in $wanted) {
+    $port = Get-ServicePort $svc
+    if ($null -ne $port) { $stopping += $port }
+  }
+  [void](Stop-Services $wanted $stopping)
+
+  $ports = Start-Services $wanted $slotNumber
+
+  Write-Host "==> waiting up to ${Timeout}s for them to listen"
+  if (Wait-ForPorts $ports $Timeout) {
+    Write-Host "restarted: $($wanted -join ', ')"
+    return
+  }
+  throw 'timed out; see k8s/e2e/luna-shopper-backend/.run/*.log'
+}
+
 # Wait until every port answers, or until the timeout.
 function Wait-ForPorts([int[]]$ports, [int]$timeoutSeconds) {
   $deadline = (Get-Date).AddSeconds($timeoutSeconds)
@@ -477,34 +632,7 @@ function Invoke-Up {
   # infrastructure is; it reads the same .env.slot just written.
   Invoke-Stack @('up')
 
-  New-Item -ItemType Directory -Force -Path $runDir | Out-Null
-  $ports = @()
-  foreach ($svc in $services) {
-    $envPath = Join-Path $root "apps/luna-shopper-backend/$svc/.env"
-    $port = $null
-    foreach ($line in (Get-Content $envPath)) {
-      if ($line -match '^PORT=(\d+)\s*$') { $port = [int]$Matches[1]; break }
-    }
-    if ($null -eq $port) {
-      throw "no PORT in apps/luna-shopper-backend/$svc/.env; rerun luna-slot.ps1 $slotNumber"
-    }
-
-    $states = Get-PortStates @($port)
-    if ($states[$port] -ne 'closed') {
-      throw "port $port ($svc, slot $slotNumber) is already $($states[$port]); run -Down first"
-    }
-
-    Write-Host "==> serving $svc on :$port  (log: k8s/e2e/luna-shopper-backend/.run/$svc.log)"
-    # Two files, not one: PowerShell 5.1 refuses to redirect both streams to the
-    # same path, and Nest writes plenty to stderr on a healthy boot.
-    $process = Start-Process -FilePath 'npx.cmd' `
-      -ArgumentList @('nx', 'run', "luna-shopper-backend-${svc}:serve") `
-      -WorkingDirectory $root -NoNewWindow -PassThru `
-      -RedirectStandardOutput (Join-Path $runDir "$svc.log") `
-      -RedirectStandardError (Join-Path $runDir "$svc.err.log")
-    Set-Content -Path (Join-Path $runDir "$svc.pid") -Value $process.Id -Encoding utf8
-    $ports += $port
-  }
+  $ports = Start-Services $serviceNames $slotNumber
 
   Write-Host "==> waiting up to ${Timeout}s for the five services to listen"
   if (Wait-ForPorts $ports $Timeout) {
@@ -521,9 +649,9 @@ function Invoke-Up {
   $states = Get-PortStates $ports
   Write-Host ""
   Write-Host "timed out after ${Timeout}s. These are not listening yet:"
-  for ($i = 0; $i -lt $services.Count; $i++) {
+  for ($i = 0; $i -lt $serviceNames.Count; $i++) {
     if ($states[$ports[$i]] -ne 'open') {
-      Write-Host "  $($services[$i]) ($($ports[$i])): $($states[$ports[$i]]), see k8s/e2e/luna-shopper-backend/.run/$($services[$i]).log"
+      Write-Host "  $($serviceNames[$i]) ($($ports[$i])): $($states[$ports[$i]]), see k8s/e2e/luna-shopper-backend/.run/$($serviceNames[$i]).log"
     }
   }
   throw 'the processes are still running; -Down stops them.'
@@ -543,8 +671,7 @@ function Stop-Port([int]$port) {
   $killed = $false
   foreach ($owningPid in $owners) {
     if ($owningPid -and $owningPid -ne 0) {
-      & taskkill /F /T /PID $owningPid *> $null
-      if ($LASTEXITCODE -eq 0) { $killed = $true }
+      if (Invoke-TaskKill $owningPid) { $killed = $true }
     }
   }
   return $killed
@@ -560,17 +687,9 @@ function Invoke-Down {
 
   $slotNumber = [int]$config['LUNA_SLOT']
   Write-Host "==> stopping the services of Luna Shopper slot $slotNumber"
-  $stopped = 0
-  foreach ($port in (Get-ServicePorts $slotNumber)) {
-    if (Stop-Port $port) {
-      Write-Host "  freed $port"
-      $stopped++
-    }
+  if (-not (Stop-Services $serviceNames (Get-ServicePorts $slotNumber))) {
+    Write-Host '  none of the five were running'
   }
-  if ($stopped -eq 0) { Write-Host '  none of the five were listening' }
-
-  Get-ChildItem -Path $runDir -Filter '*.pid' -ErrorAction SilentlyContinue |
-    Remove-Item -Force -ErrorAction SilentlyContinue
 
   # Containers only ever hold the infra ports, so they are taken down by compose
   # rather than by killing a pid.
@@ -653,6 +772,7 @@ function Invoke-List {
 
 if ($List) { Invoke-List; return }
 if ($Down) { Invoke-Down; return }
+if ($Restart) { Invoke-Restart; return }
 if ($Up) { Invoke-Up; return }
 if ($Auto) { Write-SlotConfig (Find-FreeSlot) (Resolve-AppSlot); return }
 if ($Slot -match '^\d+$') { Write-SlotConfig ([int]$Slot) (Resolve-AppSlot); return }
@@ -662,11 +782,18 @@ usage:
   luna-slot.ps1 <slot>          configure this worktree for that slot
   luna-slot.ps1 -Auto           configure it for the lowest free slot
   luna-slot.ps1 -Up [<slot>]    configure if needed, then start everything
+  luna-slot.ps1 -Restart        bounce the services, keeping the databases
   luna-slot.ps1 -Down           stop the services and take the stack down
   luna-slot.ps1 -List           every worktree's slot, and what is live
 
+Source changes need none of this: `nx serve` watches each service and the
+libraries it consumes and restarts that one process itself. -Restart is for a
+changed .env, which a running service cannot pick up, and it leaves the compose
+stack and its volumes alone so a restart never costs you the data.
+
 options:
   -Profile <name>   compose profile for -Up / -Down (e.g. observability)
+  -Services a,b     limit -Restart to these (default: all five)
   -AppSlot <n>      which Angular slot the Google callback and the mail links
                     send a browser to (default 0). Only those; CORS allows every
                     Angular slot no matter what this says.

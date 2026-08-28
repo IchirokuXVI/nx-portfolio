@@ -42,6 +42,7 @@ param(
   [Parameter(Position = 0)][string]$Slot,
   [switch]$List,
   [switch]$Up,
+  [switch]$Restart,
   [switch]$Down,
   [switch]$Auto,
   [string]$Apps,
@@ -136,6 +137,42 @@ function Get-WorktreeSlot([string]$worktree) {
 
 function Write-EnvFile($path, $content) {
   Set-Content -Path $path -Value $content -Encoding utf8
+}
+
+# Kill a process tree, tolerating a pid that is already gone.
+#
+# cmd swallows taskkill's output, not PowerShell: redirecting a native command's
+# stderr in 5.1 wraps each line in an ErrorRecord, which $ErrorActionPreference =
+# 'Stop' then treats as terminating. "The process N not found" is an ordinary
+# outcome here, not a failure, and it is the common one when a .pid file was
+# written by the bash twin (whose pid is an MSYS pid this side cannot use) or by a
+# run that has since exited.
+function Invoke-TaskKill($processId) {
+  & cmd.exe /c "taskkill /F /T /PID $processId >nul 2>&1"
+  return ($LASTEXITCODE -eq 0)
+}
+
+# The image names a `.pid` file here can legitimately name. Anything else is a pid
+# that has been recycled since it was recorded.
+$killableImages = @('node', 'npx', 'npm', 'cmd', 'conhost', 'powershell', 'pwsh')
+
+# Kill a recorded pid ONLY if it still looks like the process that was recorded.
+#
+# A .pid file outlives the process it names, and the operating system reuses pids.
+# Killing one unverified means killing whatever inherited the number, which on a
+# developer machine could be another worktree's dev server, the editor, or the
+# thing the developer is actually working in. `/T` makes it worse by taking that
+# process's whole tree.
+#
+# The port sweep is what actually guarantees the port is free. This is only here to
+# stop a wrapper spawning a replacement first, so declining to kill an unrecognised
+# pid costs nothing and removes the chance of killing a stranger.
+function Stop-RecordedPid($recorded) {
+  if (-not $recorded) { return }
+  $process = Get-Process -Id $recorded -ErrorAction SilentlyContinue
+  if ($null -eq $process) { return }
+  if ($killableImages -notcontains $process.ProcessName.ToLower()) { return }
+  [void](Invoke-TaskKill $recorded)
 }
 
 # --- which backend velista should talk to ------------------------------------
@@ -442,11 +479,97 @@ function Stop-Port([int]$port) {
   $killed = $false
   foreach ($owningPid in $owners) {
     if ($owningPid -and $owningPid -ne 0) {
-      & taskkill /F /T /PID $owningPid *> $null
-      if ($LASTEXITCODE -eq 0) { $killed = $true }
+      if (Invoke-TaskKill $owningPid) { $killed = $true }
     }
   }
   return $killed
+}
+
+# Stop the recorded processes, then free the ports, then free them again.
+#
+# Killing by port alone is not enough, and the gap is not theoretical: an app that
+# has been spawned but has not bound yet is invisible to a port sweep, so it
+# survives the stop and binds a moment later, and the next -Up fails with "port
+# 4300 is already open" over nothing visible.
+#
+# Scoped to the named apps rather than sweeping the whole .run directory, because
+# `-Restart -Apps velista` must leave the shell's process and pid file alone.
+function Stop-Apps([string[]]$apps, [int[]]$ports) {
+  foreach ($app in $apps) {
+    $pidFile = Join-Path $runDir "$app.pid"
+    if (Test-Path $pidFile) {
+      $recorded = (Get-Content $pidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+      Stop-RecordedPid $recorded
+      Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+    }
+  }
+
+  $freed = 0
+  foreach ($pass in 1, 2) {
+    foreach ($port in $ports) {
+      if (Stop-Port $port) {
+        Write-Host "  freed $port"
+        $freed++
+      }
+    }
+    if ($pass -eq 1) { Start-Sleep -Seconds 3 }
+  }
+  return ($freed -gt 0)
+}
+
+# Bounce some of this slot's apps, leaving the rest of it serving.
+#
+# Almost nothing needs this. Every app is served with watch and live reload on, and
+# watches its own files AND the libraries it consumes, so a source change anywhere
+# recompiles and reaches the browser unaided. What does NOT reach a running server
+# is the environment: Nx loads {projectRoot}/.env into a task when it starts it, and
+# webpack evaluates MFE_REMOTE_URLS and the DefinePlugin values once while building
+# its config. So after -BackendSlot or a slot move the server keeps the old URLs,
+# and it does not look stuck: the write triggers a watch rebuild that silently
+# reuses the startup values.
+function Invoke-Restart {
+  $config = Read-SlotConfig
+  if ($null -eq $config) {
+    throw 'this worktree has no slot configured, so there is nothing to restart.'
+  }
+  $slotNumber = [int]$config['NG_SLOT']
+
+  $wanted = @()
+  if ($Apps) {
+    $wanted = $Apps -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    foreach ($app in $wanted) {
+      if (-not $basePort.ContainsKey($app)) {
+        throw "unknown app '$app'; known: $($appOrder -join ', ')"
+      }
+    }
+  }
+  else {
+    # Default to whatever this slot currently has up, so a restart never quietly
+    # starts an app the worker had deliberately left out of -Up.
+    $states = Get-PortStates (Get-SlotPorts $slotNumber)
+    foreach ($app in $appOrder) {
+      if ($states[(Get-PortFor $app $slotNumber)] -eq 'open') { $wanted += $app }
+    }
+    if ($wanted.Count -eq 0) {
+      throw "nothing of Angular slot $slotNumber is running; use -Up to start it."
+    }
+  }
+
+  $ports = @()
+  foreach ($app in $wanted) { $ports += (Get-PortFor $app $slotNumber) }
+
+  Write-Host "==> stopping $($wanted -join ', ')"
+  [void](Stop-Apps $wanted $ports)
+
+  New-Item -ItemType Directory -Force -Path $runDir | Out-Null
+  foreach ($app in $wanted) { Start-App $app (Get-PortFor $app $slotNumber) }
+
+  Write-Host "==> waiting up to ${Timeout}s for the restarted apps"
+  if (Wait-ForPorts $ports $Timeout) {
+    Write-Host "restarted on Angular slot ${slotNumber}: $($wanted -join ', ')"
+    return
+  }
+  throw 'timed out; the processes are still running, see tools/dev/.run/*.log'
 }
 
 function Invoke-Down {
@@ -459,17 +582,9 @@ function Invoke-Down {
 
   $slotNumber = [int]$config['NG_SLOT']
   Write-Host "==> stopping Angular slot $slotNumber"
-  $stopped = 0
-  foreach ($port in (Get-SlotPorts $slotNumber)) {
-    if (Stop-Port $port) {
-      Write-Host "  freed $port"
-      $stopped++
-    }
+  if (-not (Stop-Apps $appOrder (Get-SlotPorts $slotNumber))) {
+    Write-Host "  nothing was running on this slot's ports"
   }
-  if ($stopped -eq 0) { Write-Host "  nothing was listening on this slot's ports" }
-
-  Get-ChildItem -Path $runDir -Filter '*.pid' -ErrorAction SilentlyContinue |
-    Remove-Item -Force -ErrorAction SilentlyContinue
 
   # Say plainly if a port survived. A -Down that reports success over a port it could
   # not free sends the next -Up into a collision it was meant to prevent.
@@ -560,6 +675,7 @@ function Invoke-List {
 
 if ($List) { Invoke-List; return }
 if ($Down) { Invoke-Down; return }
+if ($Restart) { Invoke-Restart; return }
 if ($Up) { Invoke-Up; return }
 
 if ($Auto) {
@@ -582,11 +698,18 @@ usage:
   ng-slot.ps1 <slot> [-BackendSlot <n>]   configure this worktree for that slot
   ng-slot.ps1 -Auto [-BackendSlot <n>]    configure it for the lowest free slot
   ng-slot.ps1 -Up [<slot>] [-Apps a,b]    configure if needed, then serve
+  ng-slot.ps1 -Restart [-Apps a,b]        bounce apps, keeping the rest serving
   ng-slot.ps1 -Down                       stop what this worktree started
   ng-slot.ps1 -List                       every worktree's slot, and what is live
 
+Source changes need none of this: every app watches its own files and the
+libraries it consumes, and live reloads. -Restart is for a changed .env (a slot
+move, or -BackendSlot), which a running server cannot pick up.
+
 options:
-  -Apps a,b,c         limit -Up to these apps (default: all five)
+  -Apps a,b,c         limit -Up or -Restart to these apps
+                      (-Up default: all five; -Restart default: whatever of this
+                      slot is currently running)
   -BackendSlot <n>    which luna-shopper slot velista should talk to. It is NOT
                       this slot's number: the two numberings are independent, and
                       one backend can serve every front end slot at once. Left

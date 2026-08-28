@@ -8,8 +8,16 @@
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh <slot>   configure for that slot
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --auto    configure for the lowest free one
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up      configure if needed, then start it all
+#   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart bounce the services, keep the databases
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down    stop it all
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list    every worktree's slot, and what is live
+#
+# You almost never need --restart, and even less often --down. `nx serve` is
+# `@nx/js:node` with `watch` defaulting to true, so a change to a service or to a
+# library it consumes rebuilds and restarts that one process on its own. What a
+# running service will not pick up is a rewritten .env, because Nx loads it into
+# the task when it starts it. --restart replaces the processes and leaves compose
+# and its volumes untouched, so it never costs the data in the databases.
 #
 # What a slot is: an integer N. Every host port is its default + N*100, the
 # compose project (and therefore its containers, network, and named volumes) is
@@ -89,11 +97,18 @@ usage:
   luna-slot.sh <slot>              configure this worktree for that slot
   luna-slot.sh --auto              configure it for the lowest free slot
   luna-slot.sh --up [<slot>]       configure if needed, then start everything
+  luna-slot.sh --restart           bounce the services, keeping the databases
   luna-slot.sh --down              stop the services and take the stack down
   luna-slot.sh --list              every worktree's slot, and what is live
 
+Source changes need none of this: `nx serve` watches each service and the
+libraries it consumes and restarts that one process itself. --restart is for a
+changed .env, which a running service cannot pick up, and it leaves the compose
+stack and its volumes alone so a restart never costs you the data.
+
 options:
   -p, --profile <name>   compose profile for --up / --down (e.g. observability)
+  --services a,b         limit --restart to these (default: all five)
   --app-slot <n>         which Angular slot the Google callback and the mail
                          links send a browser to (default 0). Only those; CORS
                          allows every Angular slot no matter what this says.
@@ -487,6 +502,44 @@ current_app_slot() {
 
 # --- up ----------------------------------------------------------------------
 
+# The PORT a service will listen on, read back from the .env this script wrote for
+# it. One source of truth: nothing passes a port on the command line, so a service
+# and the wait that watches for it cannot disagree.
+service_port() {
+  sed -n "s/^PORT=\([0-9]\+\)[[:space:]]*$/\1/p" \
+    "$root/apps/luna-shopper-backend/$1/.env" 2>/dev/null | head -n 1
+}
+
+# Start each named service in the background and collect the ports to wait on.
+# Both arguments are names of arrays in the caller, so the ports come back without
+# a subshell swallowing the jobs.
+serve_services() {
+  local -n _svcs="$1"
+  local -n _ports="$2"
+  local svc port state
+
+  mkdir -p "$RUN_DIR"
+  for svc in "${_svcs[@]}"; do
+    port="$(service_port "$svc")"
+    if [[ -z "$port" ]]; then
+      echo "no PORT in apps/luna-shopper-backend/$svc/.env; rerun luna-slot.sh ${LUNA_SLOT:-<slot>}" >&2
+      return 1
+    fi
+
+    state="$(probe_ports "$port" | cut -f2)"
+    if [[ "$state" != "closed" ]]; then
+      echo "port $port ($svc, slot ${LUNA_SLOT:-?}) is already $state; run --down or --restart" >&2
+      return 1
+    fi
+
+    echo "==> serving $svc on :$port  (log: k8s/e2e/luna-shopper-backend/.run/$svc.log)"
+    npx nx run "luna-shopper-backend-$svc:serve" > "$RUN_DIR/$svc.log" 2>&1 &
+    echo $! > "$RUN_DIR/$svc.pid"
+    disown $! 2>/dev/null || true
+    _ports+=("$port")
+  done
+}
+
 wait_for_ports() {
   local timeout="$1"; shift
   local -a ports=("$@")
@@ -530,29 +583,8 @@ up() {
   [[ -n "$profile" ]] && stack+=(--profile "$profile")
   "${stack[@]}" up
 
-  mkdir -p "$RUN_DIR"
-  local svc port
   local -a ports=()
-  for svc in "${SERVICES[@]}"; do
-    port="$(sed -n "s/^PORT=\([0-9]\+\)[[:space:]]*$/\1/p" "$root/apps/luna-shopper-backend/$svc/.env" | head -n 1)"
-    if [[ -z "$port" ]]; then
-      echo "no PORT in apps/luna-shopper-backend/$svc/.env; rerun luna-slot.sh $LUNA_SLOT" >&2
-      return 1
-    fi
-
-    local state
-    state="$(probe_ports "$port" | cut -f2)"
-    if [[ "$state" != "closed" ]]; then
-      echo "port $port ($svc, slot $LUNA_SLOT) is already $state; run --down first" >&2
-      return 1
-    fi
-
-    echo "==> serving $svc on :$port  (log: k8s/e2e/luna-shopper-backend/.run/$svc.log)"
-    npx nx run "luna-shopper-backend-$svc:serve" > "$RUN_DIR/$svc.log" 2>&1 &
-    echo $! > "$RUN_DIR/$svc.pid"
-    disown $! 2>/dev/null || true
-    ports+=("$port")
-  done
+  serve_services SERVICES ports || return 1
 
   echo "==> waiting up to ${timeout}s for the five services to listen"
   if wait_for_ports "$timeout" "${ports[@]}"; then
@@ -606,6 +638,125 @@ kill_port() {
   return $(( killed ? 0 : 1 ))
 }
 
+# Bounce the Nest services and leave the compose stack exactly where it is.
+#
+# Rarely needed. `nx run <svc>:serve` is `@nx/js:node`, whose `watch` defaults to
+# true, so a change to a service or to a library it consumes rebuilds and restarts
+# that one process by itself. What it will not pick up is a rewritten .env, because
+# Nx loads `{projectRoot}/.env` into the task when it starts it: a new PORT, a new
+# database URL, a changed CORS list or APP_BASE_URL all need the process replaced.
+#
+# It exists chiefly so that is not a reason to run `--down`, which takes the
+# databases and their volumes with it. Restarting a service should never cost the
+# data somebody has been working with.
+restart_services() {
+  local services_csv="$1" timeout="$2"
+
+  if ! require_config; then
+    echo "this worktree has no slot configured, so there is nothing to restart." >&2
+    return 1
+  fi
+
+  local -a wanted=()
+  local svc port state
+  if [[ -n "$services_csv" ]]; then
+    IFS=',' read -r -a wanted <<< "$services_csv"
+    for svc in "${wanted[@]}"; do
+      [[ " ${SERVICES[*]} " == *" $svc "* ]] || {
+        echo "unknown service '$svc'; known: ${SERVICES[*]}" >&2; return 2; }
+    done
+  else
+    wanted=("${SERVICES[@]}")
+  fi
+
+  echo "==> restarting on Luna slot $LUNA_SLOT: ${wanted[*]}"
+  echo "    (the compose stack and its volumes are left alone)"
+  local -a stopping=()
+  for svc in "${wanted[@]}"; do
+    port="$(service_port "$svc")"
+    [[ -n "$port" ]] && stopping+=("$port")
+  done
+  stop_services wanted stopping || true
+
+  local -a ports=()
+  serve_services wanted ports || return 1
+
+  echo "==> waiting up to ${timeout}s for them to listen"
+  if wait_for_ports "$timeout" "${ports[@]}"; then
+    echo "restarted: ${wanted[*]}"
+    return 0
+  fi
+  echo "timed out; see k8s/e2e/luna-shopper-backend/.run/*.log" >&2
+  return 1
+}
+
+# Stop the recorded wrapper processes, then free the ports, then free them again.
+#
+# Killing by port alone is not enough, and the gap is not theoretical: a service
+# that has been spawned but has not bound yet is invisible to a port sweep, so it
+# survives the stop and binds a moment later. That is how a `--down` followed by an
+# `--up` ends in "port 3100 is already open" with nothing visibly running.
+#
+# So: kill the recorded pid first, which stops the `npx` wrapper before it can
+# hand the port to a child, then sweep the ports for anything already listening,
+# then pause and sweep once more for whatever bound during the first pass.
+# Kill a recorded pid ONLY if it still looks like the process that was recorded.
+#
+# A .pid file outlives the process it names, and the operating system reuses pids.
+# Killing one unverified means killing whatever inherited the number, which on a
+# developer machine could be another worktree's services, the editor, or the thing
+# the developer is actually working in.
+#
+# The port sweep below is what actually guarantees the port is free. This is only
+# here to stop a wrapper spawning a replacement first, so declining to kill an
+# unrecognised pid costs nothing and removes the chance of killing a stranger.
+kill_recorded_pid() {
+  local pid="$1" cmdline=''
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+
+  # Where /proc exists the command line settles it outright.
+  if [[ -r "/proc/$pid/cmdline" ]]; then
+    cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+    case "$cmdline" in
+      *node*|*npx*|*npm*|*nx*) ;;
+      *) return 0 ;;
+    esac
+  fi
+
+  kill -TERM "$pid" 2>/dev/null || true
+  kill -KILL "$pid" 2>/dev/null || true
+}
+
+# Both arguments name arrays in the caller: the services to stop, and their ports.
+# It is scoped to those names rather than sweeping the whole .run directory,
+# because `--restart --services gateway` must leave the other four alone.
+stop_services() {
+  local -n _svcs="$1"
+  local -n _ports="$2"
+  local svc pidfile pid port freed=0
+
+  for svc in "${_svcs[@]}"; do
+    pidfile="$RUN_DIR/$svc.pid"
+    [[ -e "$pidfile" ]] || continue
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    [[ -n "$pid" ]] && kill_recorded_pid "$pid"
+    rm -f "$pidfile"
+  done
+
+  local pass
+  for pass in 1 2; do
+    for port in "${_ports[@]}"; do
+      if kill_port "$port"; then
+        echo "  freed $port"
+        freed=$(( freed + 1 ))
+      fi
+    done
+    (( pass == 1 )) && sleep 3
+  done
+
+  return $(( freed ? 0 : 1 ))
+}
+
 down() {
   local profile="$1" keep_data="$2"
 
@@ -616,15 +767,9 @@ down() {
   fi
 
   echo "==> stopping the services of Luna Shopper slot $LUNA_SLOT"
-  local port stopped=0
-  while IFS= read -r port; do
-    if kill_port "$port"; then
-      echo "  freed $port"
-      stopped=$(( stopped + 1 ))
-    fi
-  done < <(service_ports "$LUNA_SLOT")
-  (( stopped )) || echo "  none of the five were listening"
-  rm -f "$RUN_DIR"/*.pid 2>/dev/null || true
+  local -a ports=()
+  mapfile -t ports < <(service_ports "$LUNA_SLOT")
+  stop_services SERVICES ports || echo "  none of the five were running"
 
   # Containers only ever hold the infra ports, so they are taken down by compose
   # rather than by killing a pid.
@@ -731,6 +876,7 @@ list() {
 action=''
 slot_arg=''
 app_slot=''
+services_csv=''
 profile=''
 keep_data=''
 timeout=180
@@ -739,7 +885,10 @@ while (( $# )); do
   case "$1" in
     --list) action='list'; shift ;;
     --up) action='up'; shift ;;
+    --restart) action='restart'; shift ;;
     --down) action='down'; shift ;;
+    --services) services_csv="${2:-}"; shift 2 ;;
+    --services=*) services_csv="${1#*=}"; shift ;;
     # --auto names the slot, not the verb, so `--up --auto` stays an --up.
     --auto) slot_arg='auto'; [[ -n "$action" ]] || action='configure'; shift ;;
     -p | --profile) profile="${2:-}"; shift 2 ;;
@@ -775,6 +924,7 @@ fi
 case "${action:-}" in
   list) list ;;
   down) down "$profile" "$keep_data" ;;
+  restart) restart_services "$services_csv" "$timeout" ;;
   up) up "$slot_arg" "$profile" "$timeout" "$app_slot" ;;
   # An --app-slot given on its own keeps the slot this worktree already has, and a
   # re-run with neither keeps the front end it was already pointed at.

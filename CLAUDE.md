@@ -75,11 +75,17 @@ tools/dev/ng-slot.sh --up --apps shell,velista  # ...or just some
 tools/dev/ng-slot.sh --up 5 --backend-slot 1    # ...pointed at a named backend
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up   # compose + migrations + five services
 
+# bounce processes without losing the slot (or, for luna, the databases)
+tools/dev/ng-slot.sh --restart --apps velista
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart --services gateway
+
 tools/dev/ng-slot.sh --down
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down
 ```
 
-Both have `.ps1` twins with `-List` / `-Up` / `-Down`. Everything they write is git ignored and per worktree. **Do not add a port override to a `project.json` to work around a collision**: use a slot. See `tools/dev/README.md` for why the remote ports cannot come from the project graph, and `k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md` for the backend half.
+**Editing code needs none of those.** Everything is served with watch on, and each app or service watches its own sources _and_ the libraries it consumes, so a change recompiles and reloads by itself; only the app you edited rebuilds. The one thing a running process cannot pick up is a rewritten `.env` (a slot move, `--backend-slot`, `--app-slot`), because Nx loads `{projectRoot}/.env` when it starts the task and webpack reads its values once — and the rewrite _does_ trigger a rebuild that silently keeps the old values, so nothing looks wrong. That case is `--restart`. Use `--down` when you are finished with a slot, not to check your work.
+
+Both have `.ps1` twins with `-List` / `-Up` / `-Restart` / `-Down`. Everything they write is git ignored and per worktree. **Do not add a port override to a `project.json` to work around a collision**: use a slot. See `tools/dev/README.md` for why the remote ports cannot come from the project graph, and `k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md` for the backend half.
 
 ## Architecture
 

@@ -14,8 +14,23 @@
 #   tools/dev/ng-slot.sh <slot>          configure this worktree for that slot
 #   tools/dev/ng-slot.sh --auto          configure it for the lowest free slot
 #   tools/dev/ng-slot.sh --up [<slot>]   configure if needed, then serve
+#   tools/dev/ng-slot.sh --restart       bounce the running apps, keeping the slot
 #   tools/dev/ng-slot.sh --down          stop what this worktree started
 #   tools/dev/ng-slot.sh --list          every worktree's slot, and what is live
+#
+# --- you almost never need to stop anything ----------------------------------
+#
+# Every app is served with watch and live reload on, and each app watches its own
+# sources AND the libraries it consumes, so editing `libs/velista/...` recompiles
+# velista and reaches the browser by itself. Apps are independent processes here,
+# so a change to one remote rebuilds only that remote and leaves the other four
+# alone; the shell picks the remote up on the next page load.
+#
+# The exception is the environment. Nx loads `{projectRoot}/.env` when it starts a
+# task, and webpack reads MFE_REMOTE_URLS and the DefinePlugin values once while
+# building its config, so a running server never sees a rewritten .env. Worse, it
+# does not look stuck: the write triggers a watch rebuild that silently reuses the
+# startup values. That is what --restart is for.
 #
 # --- what a slot is ----------------------------------------------------------
 #
@@ -109,11 +124,18 @@ usage:
   ng-slot.sh <slot> [--backend-slot <n>]   configure this worktree for that slot
   ng-slot.sh --auto [--backend-slot <n>]   configure it for the lowest free slot
   ng-slot.sh --up [<slot>] [--apps a,b]    configure if needed, then serve
+  ng-slot.sh --restart [--apps a,b]        bounce apps, keeping the rest serving
   ng-slot.sh --down                        stop what this worktree started
   ng-slot.sh --list                        every worktree's slot, and what is live
 
+Source changes need none of this: every app watches its own files and the
+libraries it consumes, and live reloads. --restart is for a changed .env (a slot
+move, or --backend-slot), which a running server cannot pick up.
+
 options:
-  --apps a,b,c        limit --up to these apps (default: all five)
+  --apps a,b,c        limit --up or --restart to these apps
+                      (--up default: all five; --restart default: whatever of
+                      this slot is currently running)
   --backend-slot <n>  which luna-shopper slot velista should talk to. It is NOT
                       this slot's number: the two numberings are independent, and
                       one backend can serve every front end slot at once. Left
@@ -361,7 +383,7 @@ require_config() {
 }
 
 serve_app() {
-  local app="$1" slot="$2" port="$3"
+  local app="$1" port="$2"
   local log="$RUN_DIR/$app.log" pidfile="$RUN_DIR/$app.pid"
   local -a cmd=(npx nx run "$app:serve" --port "$port" --publicHost "http://localhost:$port")
 
@@ -450,7 +472,7 @@ up() {
   local -a ports=()
   for app in "${wanted[@]}"; do
     port=$(port_for "$app" "$NG_SLOT")
-    serve_app "$app" "$NG_SLOT" "$port"
+    serve_app "$app" "$port"
     ports+=("$port")
   done
 
@@ -515,6 +537,144 @@ kill_port() {
   return $(( killed ? 0 : 1 ))
 }
 
+# Bounce some of this slot's apps, leaving the rest of it serving.
+#
+# Almost nothing needs this. Every app is served with watch and live reload on, so
+# a source change anywhere, this app's own files or a library it consumes,
+# recompiles and reaches the browser with no help. What does NOT reach a running
+# server is the environment: Nx loads `{projectRoot}/.env` into a task when it
+# starts it, and webpack evaluates `MFE_REMOTE_URLS` and the DefinePlugin's values
+# once, while building the config. So after `--backend-slot` or a slot move, the
+# server keeps serving the old URLs.
+#
+# That case is worth a verb of its own because it is invisible otherwise: rewriting
+# a .env does trigger a watch rebuild, and the rebuild silently reuses the values
+# read at startup. Nothing looks wrong; the app just talks to the wrong backend.
+#
+# `--down` would also fix it, at the cost of every app's first build. This bounces
+# only what is named and leaves the others up.
+restart() {
+  local apps_csv="$1" timeout="$2"
+
+  if ! require_config; then
+    echo "this worktree has no slot configured, so there is nothing to restart." >&2
+    return 1
+  fi
+
+  local -a wanted=()
+  local app port state
+  if [[ -n "$apps_csv" ]]; then
+    IFS=',' read -r -a wanted <<< "$apps_csv"
+    for app in "${wanted[@]}"; do
+      [[ -n "${BASE_PORT[$app]:-}" ]] || { echo "unknown app '$app'; known: ${APPS[*]}" >&2; return 2; }
+    done
+  else
+    # Default to whatever this slot currently has up, so a restart never quietly
+    # starts an app the worker had deliberately left out of --up.
+    for app in "${APPS[@]}"; do
+      port=$(port_for "$app" "$NG_SLOT")
+      state="$(probe_ports "$port" | cut -f2)"
+      [[ "$state" == "open" ]] && wanted+=("$app")
+    done
+    if (( ${#wanted[@]} == 0 )); then
+      echo "nothing of Angular slot $NG_SLOT is running; use --up to start it." >&2
+      return 1
+    fi
+  fi
+
+  mkdir -p "$RUN_DIR"
+  local -a ports=()
+  for app in "${wanted[@]}"; do
+    ports+=("$(port_for "$app" "$NG_SLOT")")
+  done
+
+  echo "==> stopping ${wanted[*]}"
+  stop_apps wanted ports || true
+
+  local -a started=()
+  for app in "${wanted[@]}"; do
+    port=$(port_for "$app" "$NG_SLOT")
+    serve_app "$app" "$port"
+    started+=("$port")
+  done
+  ports=("${started[@]}")
+
+  echo "==> waiting up to ${timeout}s for the restarted apps"
+  if wait_for_ports "$timeout" "${ports[@]}"; then
+    echo "restarted on Angular slot $NG_SLOT: ${wanted[*]}"
+    return 0
+  fi
+  echo "timed out; the processes are still running, see tools/dev/.run/*.log" >&2
+  return 1
+}
+
+# Stop the recorded wrapper processes, then free the ports, then free them again.
+#
+# Killing by port alone is not enough, and the gap is not theoretical: an app that
+# has been spawned but has not bound yet is invisible to a port sweep, so it
+# survives the stop and binds a moment later. That is how a `--down` followed by an
+# `--up` ends in "port 4300 is already open" with nothing visibly running.
+#
+# So: kill the recorded pid first, which stops the `npx` wrapper before it can hand
+# the port to a child, then sweep the ports for anything already listening, then
+# pause and sweep once more for whatever bound during the first pass.
+# Kill a recorded pid ONLY if it still looks like the process that was recorded.
+#
+# A .pid file outlives the process it names, and the operating system reuses pids.
+# Killing one unverified means killing whatever inherited the number, which on a
+# developer machine could be another worktree's dev server, the editor, or the
+# thing the developer is actually working in.
+#
+# The port sweep below is what actually guarantees the port is free. This is only
+# here to stop a wrapper spawning a replacement first, so declining to kill an
+# unrecognised pid costs nothing and removes the chance of killing a stranger.
+kill_recorded_pid() {
+  local pid="$1" cmdline=''
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+
+  # Where /proc exists the command line settles it outright.
+  if [[ -r "/proc/$pid/cmdline" ]]; then
+    cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+    case "$cmdline" in
+      *node*|*npx*|*npm*|*nx*) ;;
+      *) return 0 ;;
+    esac
+  fi
+
+  kill -TERM "$pid" 2>/dev/null || true
+  kill -KILL "$pid" 2>/dev/null || true
+}
+
+# Both arguments name arrays in the caller: the apps to stop, and their ports. It
+# is scoped to those names rather than sweeping the whole .run directory, because
+# `--restart --apps velista` must leave the shell's process, and its pid file,
+# alone.
+stop_apps() {
+  local -n _apps="$1"
+  local -n _ports="$2"
+  local app pidfile pid port freed=0 pass
+
+  for app in "${_apps[@]}"; do
+    pidfile="$RUN_DIR/$app.pid"
+    [[ -e "$pidfile" ]] || continue
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    [[ -n "$pid" ]] && kill_recorded_pid "$pid"
+    rm -f "$pidfile"
+  done
+
+  for pass in 1 2; do
+    for port in "${_ports[@]}"; do
+      if kill_port "$port"; then
+        echo "  freed $port"
+        freed=$(( freed + 1 ))
+      fi
+    done
+    (( pass == 1 )) && sleep 3
+  done
+
+  return $(( freed ? 0 : 1 ))
+}
+
 down() {
   if ! require_config; then
     echo "this worktree has no slot configured, so there is nothing of its own to stop." >&2
@@ -523,19 +683,9 @@ down() {
   fi
 
   echo "==> stopping Angular slot $NG_SLOT"
-  local port stopped=0
-  while IFS= read -r port; do
-    if kill_port "$port"; then
-      echo "  freed $port"
-      stopped=$(( stopped + 1 ))
-    fi
-  done < <(slot_ports "$NG_SLOT")
-
-  rm -f "$RUN_DIR"/*.pid 2>/dev/null || true
-
-  if (( stopped == 0 )); then
-    echo "  nothing was listening on this slot's ports"
-  fi
+  local -a ports=()
+  mapfile -t ports < <(slot_ports "$NG_SLOT")
+  stop_apps APPS ports || echo "  nothing was running on this slot's ports"
 
   # Say plainly if a port survived. A --down that reports success over a port it
   # could not free sends the next --up into a collision it was meant to prevent.
@@ -583,7 +733,7 @@ list() {
   echo
   echo "Angular dev slots (ports are the default plus slot*100)"
   echo
-  printf '  %-4s %-6s %-46s %s\n' 'SLOT' 'STATE' 'PORTS  shell/odtg/dsword/landing/velista' 'CLAIMED BY'
+  printf '  %-4s %-7s %-46s %s\n' 'SLOT' 'STATE' 'PORTS  shell/odtg/dsword/landing/velista' 'CLAIMED BY'
   for (( slot = 0; slot <= MAX_SLOT; slot++ )); do
     local -a ports=()
     mapfile -t ports < <(slot_ports "$slot")
@@ -621,7 +771,7 @@ list() {
 
     if [[ -z "$claim" ]]; then
       # Something is listening that no checkout of this repository configured.
-      printf '  %-4s %-6s %-46s %s\n' "$slot" "$state_label" "$ports_col" '(no worktree claims it)'
+      printf '  %-4s %-7s %-46s %s\n' "$slot" "$state_label" "$ports_col" '(no worktree claims it)'
       continue
     fi
 
@@ -630,10 +780,10 @@ list() {
     local first=1 line
     while IFS= read -r line; do
       if (( first )); then
-        printf '  %-4s %-6s %-46s %s\n' "$slot" "$state_label" "$ports_col" "$line"
+        printf '  %-4s %-7s %-46s %s\n' "$slot" "$state_label" "$ports_col" "$line"
         first=0
       else
-        printf '  %-4s %-6s %-46s %s\n' '' '' '' "$line"
+        printf '  %-4s %-7s %-46s %s\n' '' '' '' "$line"
       fi
     done <<< "$claim"
   done
@@ -659,6 +809,7 @@ while (( $# )); do
   case "$1" in
     --list) action='list'; shift ;;
     --up) action='up'; shift ;;
+    --restart) action='restart'; shift ;;
     --down) action='down'; shift ;;
     # --auto names the slot, not the verb, so `--up --auto` stays an --up.
     --auto) slot_arg='auto'; [[ -n "$action" ]] || action='configure'; shift ;;
@@ -694,6 +845,7 @@ fi
 case "${action:-}" in
   list) list ;;
   down) down ;;
+  restart) restart "$apps_csv" "$timeout" ;;
   up) up "$slot_arg" "$backend_slot" "$apps_csv" "$timeout" ;;
   # No --backend-slot means "work it out", never "the same number as this slot".
   configure) write_config "$slot_arg" "${backend_slot:-$(detect_backend_slot)}" ;;
