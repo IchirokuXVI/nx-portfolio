@@ -95,7 +95,7 @@ export class ZoneService {
    */
   async create(req: CreateZoneRequest): Promise<ZoneView> {
     try {
-      return await this.dataSource.transaction(async (manager) => {
+      const view = await this.dataSource.transaction(async (manager) => {
         const zone = await manager.getRepository(Zone).save(
           manager.getRepository(Zone).create({
             name: req.name,
@@ -117,6 +117,13 @@ export class ZoneService {
         );
         return toZoneView(zone);
       });
+      // Addressed to the creator and to no zone room (plan 0030, section 4.2):
+      // the room of a zone one second old contains nobody, not even the tab that
+      // asked for it, so routing this there would send it nowhere. Emitted after
+      // the transaction commits, so a zone that failed to be created announces
+      // nothing.
+      this.events.emitToUsers(RealtimeEvent.ZoneCreated, [req.userId], view);
+      return view;
     } catch (error) {
       if (this.isUniqueViolation(error)) {
         throw new ConflictException('Could not create the zone, please retry');
@@ -324,8 +331,19 @@ export class ZoneService {
     return target;
   }
 
+  /**
+   * An event about a membership goes to the zone **and** to the member it is
+   * about (plan 0030, section 4.1). The zone room is how everybody else learns
+   * of it; the user room is how the member learns of it when they do not hold
+   * that room, which a PENDING member never does and a kicked one has just
+   * stopped doing.
+   */
   private emitMember(event: RealtimeEvent, membership: ZoneMembership): void {
-    this.events.emit(event, membership.zoneId, toMembershipView(membership));
+    this.events.emitTo(
+      event,
+      { zoneId: membership.zoneId, userIds: [membership.userId] },
+      toMembershipView(membership)
+    );
   }
 
   /**

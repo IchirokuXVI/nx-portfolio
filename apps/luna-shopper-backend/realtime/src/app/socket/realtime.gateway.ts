@@ -11,6 +11,7 @@ import {
 import {
   listRoom,
   RealtimeClientMessage,
+  userRoom,
   zoneRoom,
   zoneStaffRoom,
   type EditLineSignal,
@@ -86,19 +87,25 @@ export class RealtimeGateway
   /**
    * Fan every relay message out to the rooms it targets, **on this pod only**.
    *
-   * `server.local.to(room)` rather than `server.to(room)`, and the difference is
+   * `server.local.to(...)` rather than `server.to(...)`, and the difference is
    * the whole of plan 0028 section 2.3. Every pod already received this message
    * on its own relay subscription, so every pod is about to emit it. A plain
    * `.to()` would ask the socket.io Redis adapter to carry the same event across
    * the pod boundary a second time, and each client would receive it once per
    * replica. The event crosses once, through the relay channel; the emit is
    * local.
+   *
+   * **All the rooms in one emit**, not one emit per room. Since plan 0030 a
+   * message routinely names two rooms one socket can both be in: an event about
+   * a member goes to the zone and to that member's own room, and the member is
+   * usually in both. Socket.io resolves an array of rooms to the union of the
+   * sockets in them and delivers once per socket; a loop delivers once per room,
+   * which is a double toast and a double refetch for exactly the person the
+   * event is about.
    */
   onModuleInit(): void {
     this.relay.stream$.subscribe((message) => {
-      for (const room of message.rooms) {
-        this.server.local.to(room).emit(message.event, message.payload);
-      }
+      this.server.local.to(message.rooms).emit(message.event, message.payload);
       if (message.correlationId) {
         this.logger.debug(
           { correlationId: message.correlationId, event: message.event },
@@ -108,10 +115,26 @@ export class RealtimeGateway
     });
   }
 
+  /**
+   * The one room a socket is put in rather than asking for it (plan 0030,
+   * section 2): `user:{userId}`, from the id the token it just presented
+   * carries.
+   *
+   * Three properties come from joining it here and each is deliberate. There is
+   * **no subscribe message and no access check**, because every other room is
+   * asked for and checked to establish a claim on a resource, whereas here the
+   * token is the claim and asking core "may this user hear about this user"
+   * would be a round trip to answer a tautology. There is **no refcount**, since
+   * nothing wants or releases this room; it lasts as long as the connection.
+   * And it is joined **before any subscribe can arrive**, so an event published
+   * in the same tick as a client connecting is not lost to a race between
+   * connecting and subscribing.
+   */
   async handleConnection(client: Socket): Promise<void> {
     try {
       const claims = await this.tokenVerifier.verify(this.tokenOf(client));
       client.data.userId = claims.sub;
+      await client.join(userRoom(claims.sub));
       this.presence.register(client.id, claims.sub);
     } catch {
       // Unauthenticated sockets never join a room; drop the connection.

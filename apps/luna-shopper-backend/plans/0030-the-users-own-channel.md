@@ -196,6 +196,17 @@ this one is a fan-out subject. If the shared string proves confusing in the stre
 configuration, the subject is `user.usernameChanged.broadcast`; decide it when the stream
 is configured, and write down which was chosen.
 
+**Chosen when it was built: `user.usernameChanged.broadcast`.** The shared string does
+not survive contact with the stream configuration, because the stream captures by
+subject on the same broker auth publishes to: `user.usernameChanged` in
+`DOMAIN_EVENT_SUBJECTS` pulls auth's identity event into the realtime consumer, which
+decodes it as a `DomainEvent`, finds no audience on it and logs section 3's fault on
+every rename. So the enum value stays `user.usernameChanged`, since that is the name a
+client listens on and the socket emits `DomainEvent.event` rather than the subject, and
+`domainEventSubject()` maps that one event to its `.broadcast` subject for the publish
+and the stream. The same function keys `domainEventContracts`, so the two envelopes are
+not two shapes behind one key in the schema registry either.
+
 ## 5. Access, and what a user room does not become
 
 The room is not a bypass. What may be sent to it is only what the person may see about
