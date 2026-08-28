@@ -1,6 +1,8 @@
 import {
   toComment,
   toLine,
+  toListAccessEntries,
+  toListPermissions,
   toMembership,
   toMyZone,
   toPage,
@@ -449,13 +451,106 @@ describe('toShoppingList', () => {
         zoneId: 'z1',
         name: 'Weekly',
         createdByUserId: 'u1',
+        autoApproveLines: true,
       })
     ).toEqual({
       id: 'l1',
       zoneId: 'z1',
       name: 'Weekly',
       createdByUserId: 'u1',
+      autoApproveLines: true,
     });
+  });
+
+  it('reads anything but a literal true as not auto-approving', () => {
+    // The safe direction: a list assumed to auto-approve would have its optimistic rows
+    // drawn already approved and corrected a frame later, which is the defect backend
+    // plan 0037 exists to remove, pointing the other way.
+    for (const raw of [undefined, null, 0, 1, 'true', {}]) {
+      expect(
+        toShoppingList({ id: 'l1', zoneId: 'z1', autoApproveLines: raw })
+          ?.autoApproveLines
+      ).toBe(false);
+    }
+  });
+});
+
+/**
+ * The set with no fallback (plan 0030, section 2).
+ *
+ * Every other enum in this app lands an unrecognised value on a defined member, because
+ * a single value has to be something. A set does not: it keeps what it understood and
+ * drops the rest, which is both strictly correct and the safe direction, since a client
+ * that does not know a permission draws no control for it.
+ */
+describe('toListPermissions', () => {
+  it('keeps the members it recognises, in the order they arrived', () => {
+    expect(toListPermissions(['READ', 'DECIDE'])).toEqual(['READ', 'DECIDE']);
+  });
+
+  it('drops an unrecognised member and keeps the rest', () => {
+    expect(
+      toListPermissions(['READ', 'TELEPORT', 'WRITE', 'read', 'MANAGE'])
+    ).toEqual(['READ', 'WRITE', 'MANAGE']);
+  });
+
+  it('drops members that are not strings at all', () => {
+    expect(
+      toListPermissions(['READ', 42, null, undefined, {}, ['WRITE']])
+    ).toEqual(['READ']);
+  });
+
+  it('answers the empty set for anything that is not an array', () => {
+    // Absent, unreadable, or an object where an array was promised: all of them mean
+    // the client knows of no permission, and the page reads that as read only rather
+    // than offering controls and learning from a refusal.
+    for (const raw of [undefined, null, 0, '', 'READ', {}, { 0: 'READ' }]) {
+      expect(toListPermissions(raw)).toEqual([]);
+    }
+  });
+
+  it('never throws, whatever it is handed', () => {
+    for (const raw of [Object.create(null), new Map(), Symbol('x')]) {
+      expect(() => toListPermissions(raw)).not.toThrow();
+    }
+  });
+});
+
+describe('toListAccessEntries', () => {
+  it('reads the endpoint envelope and drops an entry that names nobody', () => {
+    expect(
+      toListAccessEntries({
+        listId: 'l1',
+        entries: [
+          { membershipId: 'm1', permissions: ['READ', 'WRITE'] },
+          { permissions: ['READ'] },
+          { membershipId: 'm2', permissions: ['READ', 'TELEPORT'] },
+        ],
+      })
+    ).toEqual([
+      { membershipId: 'm1', permissions: ['READ', 'WRITE'] },
+      { membershipId: 'm2', permissions: ['READ'] },
+    ]);
+  });
+
+  it('keeps a row whose permissions are unreadable, with an empty set', () => {
+    // A row with no access is a real row in the share sheet: dropping it would hide a
+    // member the caller can grant access to.
+    expect(toListAccessEntries({ entries: [{ membershipId: 'm1' }] })).toEqual([
+      { membershipId: 'm1', permissions: [] },
+    ]);
+  });
+
+  it('accepts the bare array, which is the same fact in the PUT shape', () => {
+    expect(
+      toListAccessEntries([{ membershipId: 'm1', permissions: ['READ'] }])
+    ).toEqual([{ membershipId: 'm1', permissions: ['READ'] }]);
+  });
+
+  it('answers an empty list for anything unreadable', () => {
+    for (const raw of [undefined, null, 0, 'entries', {}, { entries: 3 }]) {
+      expect(toListAccessEntries(raw)).toEqual([]);
+    }
   });
 });
 

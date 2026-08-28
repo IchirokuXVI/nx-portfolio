@@ -10,19 +10,26 @@ export const LOCALE_SEGMENT = /^[a-z]{2}(-[a-z]{2})?$/i;
 export async function settle(page: Page): Promise<void> {
   await page
     .evaluate(async () => {
-      await document.fonts.ready;
-      await new Promise<void>((resolve) => {
+      let observer: MutationObserver | undefined;
+
+      const quietDom = new Promise<void>((resolve) => {
         let quiet = setTimeout(resolve, 400);
-        const observer = new MutationObserver(() => {
+        observer = new MutationObserver(() => {
           clearTimeout(quiet);
           quiet = setTimeout(resolve, 400);
         });
         observer.observe(document.body, { childList: true, subtree: true });
-        setTimeout(() => {
-          observer.disconnect();
-          resolve();
-        }, 8000);
       });
+
+      // One budget covers the whole wait, fonts included. `document.fonts.ready`
+      // has no timeout of its own and never rejects, so a font request that never
+      // comes back parks this evaluate until the *test* timeout fires. The cap
+      // used to sit on the quiet window alone, leaving the fonts await ahead of
+      // it unbounded.
+      const budget = new Promise<void>((resolve) => setTimeout(resolve, 8000));
+
+      await Promise.race([budget, document.fonts.ready.then(() => quietDom)]);
+      observer?.disconnect();
     })
     .catch(() => undefined);
 }

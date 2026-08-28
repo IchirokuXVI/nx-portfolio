@@ -12,7 +12,7 @@
   }
 
   @if (comments().length > 0) {
-    <ul class="comments">
+    <ul (scroll)="trackPosition(conversation)" #conversation class="comments">
       @for (comment of comments(); track comment.id) {
         <li class="comment">
           <lib-comment-row [comment]="comment" />
@@ -26,11 +26,20 @@
   }
 
   <!--
-    Offered to a reader too. `comment.add` requires only an approved membership on the
-    zone, not write access on the list, so this is the one control on the whole screen
-    that never depends on being a writer (section 3.2).
+    Drawn only for somebody who may say something. `comment.add` follows `WRITE` or
+    `DECIDE` now (backend plan 0036, section 4), and `0027` pinned this composer under
+    the conversation, which makes it the most prominent thing on the sheet and always in
+    view: precisely the control that must not be offered to somebody who cannot use it.
+
+    The note takes its **position** rather than the sheet simply ending after the last
+    comment, which would read as a conversation that failed to load (plan 0030,
+    section 3.1).
   -->
-  <lib-comment-composer (submitted)="send($event)" [busy]="sending()" />
+  @if (canComment()) {
+    <lib-comment-composer (submitted)="send($event)" [busy]="sending()" />
+  } @else {
+    <p class="read-only">{{ 'list.comments.readOnly' | rokuT }}</p>
+  }
 
   <button (click)="shell.requestDismiss()" class="cancel" type="button">
     {{ 'entry.cancel' | rokuT }}

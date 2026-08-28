@@ -1,6 +1,9 @@
 import { workspaceRoot } from '@nx/devkit';
 import { nxE2EPreset } from '@nx/playwright/preset';
 import { defineConfig, devices } from '@playwright/test';
+import { withProgressReporter } from '../../playwright.reporters';
+
+const preset = nxE2EPreset(__filename, { testDir: './src' });
 
 // Either variable points the suite at a server that is ALREADY running, so both
 // of them suppress the dev-server `webServer` below.
@@ -36,7 +39,10 @@ const baseURL =
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-  ...nxE2EPreset(__filename, { testDir: './src' }),
+  ...preset,
+  /* The preset's reporters are silent on a terminal, which on CI turns a running
+   * suite into a blank log. See playwright.reporters.ts. */
+  reporter: withProgressReporter(preset.reporter),
   /* The shell dev server is a single Node process serving the shell and the
    * lazily loaded remote as hundreds of unbundled dev chunks, and every worker
    * drives a browser that pulls all of them on each navigation. Playwright's
@@ -57,6 +63,18 @@ export default defineConfig({
     // The local reverse proxy serves self-signed TLS; accept it so an https
     // E2E_BASE_URL still works. Harmless for the http/dev-server defaults.
     ignoreHTTPSErrors: true,
+    /* Under the test runner both of these default to 0, and 0 means *no* limit
+     * rather than Playwright's documented 30s: the runner calls
+     * `setDefaultNavigationTimeout(0)` unconditionally, and a defined 0 wins over
+     * the built-in default (playwright/lib/index.js, then
+     * playwright-core/lib/client/timeoutSettings.js). So a navigation that never
+     * completes is stopped only by the *test* timeout. One unreachable page then
+     * costs a full 60s here, or the whole 300s budget in
+     * no-horizontal-scroll.spec.ts, and the preset's `retries: 2` pays that three
+     * times over. Bound them, so an unreachable page fails in seconds and the
+     * report names the URL instead of blaming the test for being slow. */
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
   },

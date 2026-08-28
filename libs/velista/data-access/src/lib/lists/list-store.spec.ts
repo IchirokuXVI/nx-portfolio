@@ -20,6 +20,8 @@ function list(
     createdByUserId: 'u1',
     lineCount: 12,
     readyCount: 7,
+    autoApproveLines: false,
+    myPermissions: ['READ', 'WRITE', 'DECIDE'],
     ...overrides,
   };
 }
@@ -167,6 +169,96 @@ describe('ListStore', () => {
       realtime.emit('list.deleted', { id: 'list-1', listId: 'list-1' });
 
       expect(store.listsIn(ZONE).map((row) => row.id)).toEqual(['list-2']);
+    });
+
+    describe('list.myAccessChanged (plan 0030, section 8)', () => {
+      it('rewrites the set in place, with no refetch', async () => {
+        // Rule G2 for this screen: the page redraws from the new set, so a control the
+        // caller may no longer press is gone before they press it. A refetch here would
+        // blink the lines of a page somebody is looking at.
+        const { store, lists, realtime } = await build([list('list-1')]);
+        await store.load(ZONE);
+        expect(lists.calls).toHaveLength(1);
+
+        realtime.emit('list.myAccessChanged', {
+          listId: 'list-1',
+          zoneId: ZONE,
+          permissions: ['READ'],
+        });
+
+        expect(store.listsIn(ZONE)[0].myPermissions).toEqual(['READ']);
+        expect(lists.calls).toHaveLength(1);
+      });
+
+      it('takes the list away when the set is empty', async () => {
+        // The existing `gone: 'unshared'` path: the page reaches it from the list no
+        // longer being in the zone's answer, and the event is the answer.
+        const { store, realtime } = await build([
+          list('list-1'),
+          list('list-2'),
+        ]);
+        await store.load(ZONE);
+
+        realtime.emit('list.myAccessChanged', {
+          listId: 'list-1',
+          zoneId: ZONE,
+          permissions: [],
+        });
+
+        expect(store.listsIn(ZONE).map((row) => row.id)).toEqual(['list-2']);
+      });
+
+      it('fetches the zone when the set grew from nothing', async () => {
+        // The case the room event could never deliver: somebody with no access was
+        // never in the list room. The event carries a permission set and not a list, so
+        // there is no name or counts to draw a row from.
+        const { store, lists, realtime } = await build([list('list-1')]);
+        await store.load(ZONE);
+        lists.setServed([list('list-1'), list('list-9', { name: 'Shared' })]);
+
+        realtime.emit('list.myAccessChanged', {
+          listId: 'list-9',
+          zoneId: ZONE,
+          permissions: ['READ', 'WRITE'],
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(lists.calls).toHaveLength(2);
+        expect(store.listsIn(ZONE).map((row) => row.id)).toEqual([
+          'list-1',
+          'list-9',
+        ]);
+      });
+
+      it('ignores a grant in a zone it has never loaded', async () => {
+        // Nothing of that zone is on screen, so there is nothing to make appear, and
+        // the next `load` will fetch it anyway.
+        const { store, lists, realtime } = await build([list('list-1')]);
+        await store.load(ZONE);
+
+        realtime.emit('list.myAccessChanged', {
+          listId: 'list-elsewhere',
+          zoneId: 'zone-elsewhere',
+          permissions: ['READ'],
+        });
+        await Promise.resolve();
+
+        expect(lists.calls).toHaveLength(1);
+      });
+
+      it('drops a payload with no zone id rather than acting on half of it', async () => {
+        const { store, lists, realtime } = await build([list('list-1')]);
+        await store.load(ZONE);
+
+        realtime.emit('list.myAccessChanged', {
+          listId: 'list-1',
+          permissions: [],
+        });
+
+        expect(store.listsIn(ZONE)).toHaveLength(1);
+        expect(lists.calls).toHaveLength(1);
+      });
     });
 
     it('refetches on accessChanged, because the event cannot say which way', async () => {

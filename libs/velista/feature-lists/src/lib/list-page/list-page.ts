@@ -1,4 +1,5 @@
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -7,6 +8,8 @@ import {
   inject,
   signal,
   untracked,
+  viewChild,
+  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -19,6 +22,7 @@ import {
   ListStore,
   MemberNames,
   presenceNames,
+  presencePeople,
   PresenceStore,
   REALTIME_CLIENT,
   SessionStore,
@@ -29,6 +33,7 @@ import {
   APP_BASE_PATH,
   type ListGoneReason,
   type ListPageState,
+  type ListViewerVm,
   type PresenceUser,
 } from '@portfolio/velista/models';
 import {
@@ -73,18 +78,21 @@ import { selectListState } from '../select-list-state';
  * wait for a heading before they see what to buy. So the header degrades and the body
  * does not, and the two effects below are separate for exactly that reason.
  *
- * ## Rule L3, made conditional
+ * ## Rule L3 is the server's now
  *
- * Core starts every line PENDING and only a zone OWNER or ADMIN may approve one, so
- * taken literally the owner of a two person household adds milk and watches it wait for
- * their own approval. The client follows a staff member's add with an approval of the
- * id that came back, with the caller's own permissions, so nothing is bypassed.
+ * This page used to follow an add by a staff member with an approval of the id that came
+ * back, because core started every line PENDING and only a zone OWNER or ADMIN could
+ * approve one, so the owner of a two person household added milk and watched it wait for
+ * their own approval. Backend plan 0037 section 2 creates the line APPROVED when its
+ * author holds `DECIDE`, or when the list auto-approves, so the second call is deleted
+ * rather than made conditional: it can no longer be needed, and a client that keeps a
+ * corrective write around for a case the server has closed is a client that will
+ * eventually perform it against a rule it does not know about.
  *
- * It fires **only when the created line actually came back PENDING**. The backend is
- * adding a zone option that auto approves a staff member's own line, and when it lands
- * the response is already APPROVED and this second call simply stops happening, with no
- * edit here. A failure of it is silent on purpose: the line exists, it is on the list,
- * and the only thing that did not happen is a state change nobody asked for.
+ * What is left of it is one argument to {@link LineStore.addLine}. The optimistic row
+ * has to be drawn with the approval the server is about to give it, from the same two
+ * facts the server uses, or the person who typed the line watches an approve button
+ * appear on it and vanish (plan 0030, section 5).
  *
  * ## Reorder is a mode, and it is page state
  *
@@ -132,12 +140,6 @@ export class ListPage {
 
   readonly reordering = signal(false);
 
-  /** Set once a write comes back `forbidden`, which is how a reader is discovered. */
-  private readonly _knownReader = signal(false);
-
-  /** Whether the reader notice has been shown. Once, per section 3.2. */
-  readonly readerNoticeShown = signal(false);
-
   /** The page's own failure, as a key. Distinct from a per row failure. */
   private readonly _errorKey = signal<string | null>(null);
   private readonly _correlationId = signal<string | null>(null);
@@ -159,27 +161,40 @@ export class ListPage {
 
   readonly composerBusy = signal(false);
 
+  private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
+
+  /**
+   * Bumped once per line this reader adds, and read by the render effect that follows
+   * the end of the list.
+   *
+   * A counter and not a boolean, because two adds in a row are the ordinary case here:
+   * somebody stands in the kitchen and enters six things, and a flag that is already
+   * true does not change, so the effect would run for the first item and never again.
+   */
+  private readonly _added = signal(0);
+
   readonly state = computed<ListPageState>(() => {
     const listId = this.listId();
     const zoneId = this.zoneId();
     const lines = this._lines.forList(listId)();
     const zone = this._zones.zoneById(zoneId);
+    const list = this._lists
+      .listsIn(zoneId)
+      .find((candidate) => candidate.id === listId);
 
     return selectListState({
-      list: this._lists
-        .listsIn(zoneId)
-        .find((candidate) => candidate.id === listId),
+      list,
       zoneName: zone?.name ?? null,
       lines: lines.lines,
       linesState: lines.state,
       linesComplete: lines.complete,
       writes: lines.writes,
       commentCounts: lines.commentCounts,
-      caller: {
-        userId: this._session.userId() ?? '',
-        isStaff: zone?.myRole === 'OWNER' || zone?.myRole === 'ADMIN',
-        knownReader: this._knownReader(),
-      },
+      // The server's answer, straight through. No zone role, no inference from a refused
+      // write, and nothing to reconcile between the two (plan 0030, section 3): staff
+      // already arrive holding all four, and a list that has not landed yet answers the
+      // empty set, which draws a read-only page for the frame before it does.
+      caller: { permissions: list?.myPermissions ?? [] },
       nameOf: (userId) => this._names.nameOf(zoneId, userId),
       reordering: this.reordering(),
       // Both from `PresenceStore`, and both answerable at last: this page announces
@@ -206,14 +221,34 @@ export class ListPage {
   });
 
   /**
-   * Who else is shopping this list, named and without the reader.
+   * Who else has this list open, named and without the reader.
    *
-   * The three joins are `presenceNames`, which the resume card makes as well: this is
-   * the screen that card points at, so the two say the same thing in the same words.
+   * The three joins are `presencePeople`, which is `presenceNames` with the user id
+   * kept: the two lookups below are made **by id**, and matching people back up by
+   * their names would put the wrong role on the second Ana in a group with two.
+   *
+   * Both lookups answer null freely and neither is waited for. The role is null until
+   * the zone's members land, and the arrival time is null for anybody first seen in the
+   * snapshot being read, which is every viewer on the first frame after a reconnection.
+   * The row draws both cases rather than holding the sentence back, because presence is
+   * advisory and a row that waited for a role would say nothing for the first second of
+   * every visit (plan 0004, section 6.7).
    */
-  private readonly _viewers = computed(() =>
-    this._named(this._presence.viewersOf(this.listId()))
-  );
+  private readonly _viewers = computed<readonly ListViewerVm[]>(() => {
+    const zoneId = this.zoneId();
+    const listId = this.listId();
+
+    return presencePeople(
+      this._presence.viewersOf(listId),
+      this._session.userId(),
+      (userId) => this._names.nameOf(zoneId, userId)
+    ).map((person) => ({
+      userId: person.userId,
+      name: person.name,
+      role: this._names.roleOf(zoneId, person.userId),
+      since: this._presence.viewerSince(listId, person.userId),
+    }));
+  });
 
   /**
    * Who is editing which line, named, by line id.
@@ -266,8 +301,6 @@ export class ListPage {
       untracked(() => {
         this._errorKey.set(null);
         this._gone.set(null);
-        this._knownReader.set(false);
-        this.readerNoticeShown.set(false);
         void this._loadLines(listId);
       });
     });
@@ -359,7 +392,55 @@ export class ListPage {
       );
     });
 
+    // The list follows the line this reader just added. `afterRenderEffect` because the
+    // row has to be in the DOM before the scroller can be measured, and because it runs
+    // in the browser and never on the server (plan 0001, D2).
+    //
+    // Only after an add of the reader's own. Somebody else's line arriving over the
+    // socket leaves the scroll alone: moving the page under a thumb that is reaching for
+    // a row is how the wrong thing gets ticked off in an aisle.
+    afterRenderEffect(() => {
+      // Read, so this runs again for the next thing entered in the same run.
+      const added = this._added();
+      const column = this._column()?.nativeElement;
+
+      if (added === 0 || column === undefined) {
+        return;
+      }
+
+      this._scrollToNewest(column);
+    });
+
     inject(DestroyRef).onDestroy(() => this.announcement.set(''));
+  }
+
+  /**
+   * Put the end of the list on screen.
+   *
+   * Which element scrolls depends on where the app is running, and the page cannot
+   * assume: mounted in the portfolio shell the column has a definite height and is the
+   * scroll container, standalone nothing above it sets one and the document scrolls
+   * instead (`list-page.scss` says why). So ask the column whether it overflows and fall
+   * back to the document, rather than picking one and being wrong in half the builds.
+   *
+   * Scrolling to the very end rather than bringing the row into view: at the end of the
+   * scroll the sticky composer has settled into its own place in the flow, so the newest
+   * line is directly above it. Anywhere short of that the composer floats over the last
+   * few pixels of the column and the row it was asked to reveal is the row behind it.
+   */
+  private _scrollToNewest(column: HTMLElement): void {
+    const scroller =
+      column.scrollHeight > column.clientHeight
+        ? column
+        : this._browser.document.scrollingElement;
+
+    scroller?.scrollTo({
+      top: scroller.scrollHeight,
+      // Instant. The row appeared on the same frame and it is one row away, so an
+      // animation here is a delay before somebody can type the next item, and this
+      // field is built for entering six things in a row.
+      behavior: 'auto',
+    });
   }
 
   /** Back to the group. A destination's back, not a sheet's dismiss. */
@@ -412,10 +493,15 @@ export class ListPage {
   /**
    * Tick a line off, or put it back.
    *
-   * The gesture the whole screen is built around. A reader gets the notice once and
-   * silence afterwards: the tick is the interaction model here, so a reader tapping and
-   * getting nothing at all would read as a broken app, and the same sentence on every
-   * tap would read as nagging (section 3.2).
+   * The gesture the whole screen is built around, and it is `DECIDE` rather than `WRITE`
+   * since plan 0030 section 4: saying the tin is in the trolley is deciding, not adding.
+   *
+   * The guard below is belt on top of braces and is silent. `LineRowVm.interactive`
+   * already follows `canDecide`, so a caller who may not tick has rows that emit nothing
+   * on a tap, and the sentence explaining that is on screen from the moment the page
+   * draws rather than appearing on the first tap. That is the whole of the change: the
+   * page used to discover a reader from a refusal and say so once, and now it knows
+   * before anybody touches anything (section 3.2).
    */
   async toggle(lineId: string): Promise<void> {
     const line = this._lines
@@ -426,11 +512,7 @@ export class ListPage {
     }
 
     const page = this.loaded();
-    if (page !== null && !page.abilities.canWrite) {
-      // A reader tapped a row. The notice appears once and later taps are silent:
-      // silence from the first tap would read as a broken app, and the sentence on
-      // every tap would read as nagging (section 3.2).
-      this.readerNoticeShown.set(true);
+    if (page !== null && !page.abilities.canDecide) {
       return;
     }
 
@@ -496,21 +578,34 @@ export class ListPage {
   }
 
   /**
-   * Add a line, and approve it if the caller is staff and it landed pending.
+   * Add a line.
    *
-   * Rule L3. The second call is skipped entirely when the response already says
-   * APPROVED, which is what the backend's forthcoming auto approve option will make the
-   * normal case, and its failure is swallowed rather than reported.
+   * One call, and no correction after it. The server decides the new line's approval
+   * from the adder's `DECIDE` and the list's `autoApproveLines` (backend plan 0037,
+   * section 2), and those are the two facts handed down here so the optimistic row is
+   * drawn the way the response is about to come back. Getting this wrong is not a stale
+   * row, it is an approve button flashing on somebody's own line for one frame, which is
+   * the defect plan 0030 section 5 exists to remove.
    */
   async add(entry: { content: string; quantity: number }): Promise<void> {
     const current = this.loaded();
     this.composerBusy.set(true);
 
+    // Before the call, not after it. `addLine` puts the optimistic row on screen
+    // synchronously and only then goes to the network, so both land in one change
+    // detection pass and the list follows the new row on the frame it appears rather
+    // than a round trip later.
+    this._added.update((count) => count + 1);
+
     const outcome = await this._lines.addLine(
       this.listId(),
       entry.content,
       entry.quantity,
-      this._session.userId() ?? ''
+      this._session.userId() ?? '',
+      {
+        canDecide: current?.abilities.canDecide ?? false,
+        autoApproveLines: current?.autoApproveLines ?? false,
+      }
     );
 
     this.composerBusy.set(false);
@@ -521,14 +616,6 @@ export class ListPage {
     }
 
     this.announcement.set(entry.content);
-
-    if (
-      current?.abilities.canDecide === true &&
-      outcome.line.approvalStatus === 'PENDING'
-    ) {
-      // Silent either way. See the class comment.
-      await this._lines.setApproval(outcome.line.id, 'APPROVED');
-    }
   }
 
   /** The inline failure notice was tapped. Retries the write that failed. */
@@ -682,13 +769,6 @@ export class ListPage {
     switch (listErrorEffect(error, operation)) {
       case 'gone':
         this._gone.set('unshared');
-        return true;
-      case 'read-only':
-        // Section 3.2, arriving late. Today this is the **only** way the client can
-        // learn the caller is a reader: `ListView` carries no role for them and there
-        // is no `GET /v1/lists/:id/access`. The composer leaves in place.
-        this._knownReader.set(true);
-        this.readerNoticeShown.set(true);
         return true;
       case 'reread':
         void this._lines.refresh(this.listId());

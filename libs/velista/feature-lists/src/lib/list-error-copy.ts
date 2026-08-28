@@ -66,9 +66,10 @@ export function listErrorKey(
         case 'list.manage':
           return 'list.error.roleChanged';
         default:
-          // A reader, or somebody whose access narrowed while the page was open. The
-          // page switches to read only **in place** rather than being replaced, which
-          // `listErrorEffect` reports separately.
+          // Somebody whose access narrowed while the page was open. The page keeps its
+          // shape and says this, and the redraw arrives separately over the socket. It
+          // is no longer how the client **discovers** a reader, which is what
+          // `myPermissions` took over (plan 0030, section 3).
           return 'list.error.readOnly';
       }
 
@@ -92,17 +93,23 @@ export function listErrorKey(
 /**
  * What a failure does to the page, beyond what it says.
  *
- * Separate from the copy because three of these change the page's **state** and the
+ * Separate from the copy because two of these change the page's **state** and the
  * sentence is only the visible half of that:
  *
- * - `read-only` is section 3.2 arriving late. The caller is a reader, the composer
- *   leaves, and this is the only way the client can learn that fact today: there is no
- *   `GET /v1/lists/:id/access` and `ListView` carries no role for the caller.
  * - `gone` is the list being deleted, or the caller's access to it withdrawn, which are
  *   indistinguishable and get the same treatment.
  * - `reread` is the silent reorder recovery.
+ *
+ * `read-only` was a third, and it is **deleted** rather than kept and made inert (plan
+ * 0030, section 3). It existed because a refused write was the only way the client could
+ * learn the caller was a reader, and it did two things: it set `_knownReader` on the
+ * page, and it swallowed the failure so nothing was said. The page draws from
+ * `myPermissions` now, so there is nothing structural left to apply, and keeping a case
+ * that only swallows would leave a refused write with no visible outcome at all. Falling
+ * through to `none` gives the sentence back: {@link listErrorKey} still answers
+ * `list.error.readOnly` for those two operations, and the page announces it.
  */
-export type ListErrorEffect = 'none' | 'read-only' | 'gone' | 'reread';
+export type ListErrorEffect = 'none' | 'gone' | 'reread';
 
 export function listErrorEffect(
   error: unknown,
@@ -121,17 +128,11 @@ export function listErrorEffect(
   }
 
   if (error.code === 'forbidden') {
-    switch (operation) {
-      case 'lines.read':
-        return 'gone';
-      case 'lines.write':
-      case 'comments':
-        return 'read-only';
-      default:
-        // A demoted staff member keeps the page and loses the decision buttons, which
-        // the abilities recompute from `myRole` once the zone refetches.
-        return 'none';
-    }
+    // Only a refused **read** changes the page. Everything else keeps the page it has
+    // and says something: a caller whose permissions narrowed under them is redrawn by
+    // `list.myAccessChanged` reaching `ListStore` (backend plan 0036, section 8), not by
+    // this client inferring the new set from which call happened to fail first.
+    return operation === 'lines.read' ? 'gone' : 'none';
   }
 
   return 'none';

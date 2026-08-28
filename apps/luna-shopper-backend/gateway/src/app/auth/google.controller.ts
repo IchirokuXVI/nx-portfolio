@@ -22,7 +22,6 @@ import {
   ERROR_CODES,
   getRequestContext,
   toSupportedLocale,
-  type ErrorCode,
   type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
 import type { GatewayConfig } from '../config/app-config';
@@ -37,6 +36,7 @@ import {
 } from './google-auth.guard';
 import { OptionalJwtAuthGuard } from './jwt-auth.guard';
 import type { CurrentUser } from './jwt.strategy';
+import { errorCodeOf } from './remote-problem';
 
 /**
  * The little of a response this controller uses, so the handler can be called
@@ -52,28 +52,6 @@ const LOCALE_PLACEHOLDER = '{locale}';
 
 /** The page in the app that reads the fragment (velista plan 0009, section 5.6). */
 const APP_CALLBACK_PATH = 'auth/callback';
-
-/** Every code the callback can hand the app, narrowed to the stable set. */
-const KNOWN_ERROR_CODES = new Set<string>(Object.values(ERROR_CODES));
-
-/**
- * The stable error code behind a failure, for the `#error=` the app reads.
- *
- * A rejected NATS call carries the house problem envelope a service already
- * produced, either bare or nested under `error` (plan 0004, section 2); anything
- * else is genuinely unexpected and is reported as such. Only codes from
- * `ERROR_CODES` are ever emitted, so what lands in the fragment is a value the
- * client can branch on rather than whatever a stack trace happened to say.
- */
-export function errorCodeOf(error: unknown): ErrorCode {
-  for (const candidate of [error, (error as { error?: unknown })?.error]) {
-    const code = (candidate as { code?: unknown })?.code;
-    if (typeof code === 'string' && KNOWN_ERROR_CODES.has(code)) {
-      return code as ErrorCode;
-    }
-  }
-  return ERROR_CODES.INTERNAL;
-}
 
 /**
  * Google login endpoints (plan 0005, section 4.4; plan 0023).

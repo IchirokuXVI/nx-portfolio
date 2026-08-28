@@ -267,9 +267,17 @@ describe('gateway OpenAPI document', () => {
       expect(
         byRoute('get', '/v1/zones')?.responses[unauthorized]
       ).toBeDefined();
+      // Genuinely open: no guard, and nothing to present a token to. `POST /v1/zones`
+      // is not the example it once was — a caller who sends an `Authorization` header
+      // there is claiming an identity, and a token that is expired, malformed, or
+      // names an account that no longer exists is refused with a 401 rather than
+      // treated as anonymous (plan 0020, and `asRejectedCredentials`).
+      expect(
+        byRoute('get', '/v1/zones/by-code/{code}')?.responses[unauthorized]
+      ).toBeUndefined();
       expect(
         byRoute('post', '/v1/zones')?.responses[unauthorized]
-      ).toBeUndefined();
+      ).toBeDefined();
     });
 
     it('a route with @SkipThrottle does not claim it can rate limit', () => {

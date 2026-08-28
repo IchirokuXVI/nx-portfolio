@@ -1,0 +1,173 @@
+// The host is the whole thing, sentence and panel, so the header places it by styling
+// the element it wrote. `position: relative` is what the panel hangs off, and it has to
+// be here rather than on `.row`: the panel is a sibling of the row, not a child, so
+// that opening it cannot change the row's own height.
+:host {
+  position: relative;
+  display: block;
+}
+
+// Nobody is present. No box, no flex item, no gap above it.
+:host(.empty) {
+  display: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-width: 0;
+}
+
+// A row, explicitly. The stack reads as a group of people standing together, and a
+// column of initials down the side of a sentence reads as a list with no heading.
+.avatars {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--app-avatar-md);
+  height: var(--app-avatar-md);
+  border: var(--app-avatar-ring) solid var(--app-surface-raised);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-attention-fg);
+  color: var(--app-surface-ground);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+
+  // Derived from the avatar rather than written as a number, so the overlap stays
+  // proportional if the size ever changes. A third is enough to read as a stack
+  // without hiding the initial behind it.
+  & + & {
+    margin-inline-start: calc(var(--app-avatar-md) / -3);
+  }
+}
+
+// The `+n` is a count, not a person, so it is drawn in the quiet surface a chip uses
+// rather than in the same tint as an initial. Somebody glancing at the stack should be
+// able to tell at a distance which bubbles are people.
+.avatar-more {
+  background: var(--app-surface-sunken);
+  color: var(--app-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+// Centred, and hard capped at two lines. Names are as long as people decide they are,
+// and the header sits above the lines somebody is reading: a sentence that grew to four
+// lines because three people have long names would push the shop off the screen.
+.sentence {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.disclose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  // Square on the touch target, so the arrow is as easy to hit as anything else on the
+  // screen even though the glyph inside it is small.
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  margin-inline-end: calc(var(--app-space-3) * -1);
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: var(--app-radius-full);
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.disclose-glyph {
+  display: flex;
+  font-size: var(--app-icon-md);
+  transition: transform var(--app-motion-fast) var(--app-motion-ease);
+}
+
+// Right when closed, down when open: the arrow says where the panel is, and it is the
+// same glyph turning rather than two icons swapping, so the direction reads as a
+// movement rather than as a change of subject.
+.disclose-glyph.turned {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disclose-glyph {
+    transition: none;
+  }
+}
+
+// Over the page, anchored to the arrow. The list rows below keep their positions, which
+// is the whole reason this is not an expanding section.
+.people {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: calc(100% + var(--app-space-2));
+  z-index: 2;
+  min-width: var(--app-menu-min-width);
+  max-inline-size: 100%;
+  max-block-size: 50svh;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--app-space-2);
+  list-style: none;
+  background: var(--app-surface-overlay);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  box-shadow: var(--app-elevation-2);
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: var(--app-space-2) var(--app-space-3);
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.person-name {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.person-when {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.person-role {
+  flex-shrink: 0;
+}

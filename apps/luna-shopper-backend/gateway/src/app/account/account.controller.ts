@@ -17,6 +17,7 @@ import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { asRejectedCredentials } from '../auth/remote-problem';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { UpdateProfileDto } from './account.dto';
@@ -30,6 +31,13 @@ import { UpdateProfileDto } from './account.dto';
  * works for temporary and registered users alike (both hold a token): auth then
  * emits `user.deleted` and core reacts by retiring memberships and marking owned
  * zones for deletion.
+ *
+ * Because every route here is keyed on that `userId` and on nothing else, an
+ * `auth` answer of "not found" can only ever mean one thing: the account the
+ * token names is gone. That is a statement about the credential rather than
+ * about a resource, so it leaves as a 401 (see {@link asRejectedCredentials}) —
+ * which is what lets a client holding a pair from before a deletion, or from
+ * before the database was reset, drop it instead of retrying it forever.
  */
 @ApiTags('account')
 @ApiBearerAuth('access-token')
@@ -38,12 +46,19 @@ import { UpdateProfileDto } from './account.dto';
 export class AccountController {
   constructor(private readonly nats: NatsClient) {}
 
+  /** Every call this controller makes, under the rule in the class comment. */
+  private aboutTheCaller<T>(subject: string, payload: object): Promise<T> {
+    return this.nats.send<T>(subject, payload).catch((error: unknown) => {
+      throw asRejectedCredentials(error);
+    });
+  }
+
   /** The caller's own profile, which is where the app bar gets a name to show. */
   @Get('me')
   @ApiContractResponse(AUTH_PATTERNS.getProfile)
   @ApiProblemResponses({ auth: true })
   me(@AuthUser() user: CurrentUser): Promise<UserProfileView> {
-    return this.nats.send<UserProfileView>(AUTH_PATTERNS.getProfile, {
+    return this.aboutTheCaller<UserProfileView>(AUTH_PATTERNS.getProfile, {
       userId: user.userId,
     });
   }
@@ -61,7 +76,7 @@ export class AccountController {
     @AuthUser() user: CurrentUser,
     @Body() dto: UpdateProfileDto
   ): Promise<UserProfileView> {
-    return this.nats.send<UserProfileView>(AUTH_PATTERNS.setUsername, {
+    return this.aboutTheCaller<UserProfileView>(AUTH_PATTERNS.setUsername, {
       userId: user.userId,
       username: dto.username,
       propagation: dto.propagation,
@@ -72,8 +87,9 @@ export class AccountController {
   @ApiContractResponse(AUTH_PATTERNS.deleteAccount)
   @ApiProblemResponses({ auth: true })
   remove(@AuthUser() user: CurrentUser): Promise<DeleteAccountResult> {
-    return this.nats.send<DeleteAccountResult>(AUTH_PATTERNS.deleteAccount, {
-      userId: user.userId,
-    });
+    return this.aboutTheCaller<DeleteAccountResult>(
+      AUTH_PATTERNS.deleteAccount,
+      { userId: user.userId }
+    );
   }
 }

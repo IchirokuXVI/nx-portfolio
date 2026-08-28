@@ -167,6 +167,77 @@ describe('PresenceStore', () => {
     expect(store.viewersOf('l1').length).toBe(1);
   });
 
+  describe('when it first saw somebody on a list', () => {
+    // No presence payload carries a timestamp, so the store's own first sighting is
+    // the only instant that exists. It has to survive the snapshots that follow, or
+    // the list header's panel would restart everybody's clock every few seconds.
+    it('keeps the first sighting across later snapshots', () => {
+      const { store, realtime } = setup();
+
+      realtime.emit('presence.listUpdated', {
+        listId: 'l1',
+        viewers: [{ userId: 'u2' }],
+        editors: [],
+      });
+
+      const first = store.viewerSince('l1', 'u2');
+      expect(first).not.toBeNull();
+
+      realtime.emit('presence.listUpdated', {
+        listId: 'l1',
+        viewers: [{ userId: 'u2' }, { userId: 'u3' }],
+        editors: [],
+      });
+
+      expect(store.viewerSince('l1', 'u2')).toEqual(first);
+      expect(store.viewerSince('l1', 'u3')).not.toBeNull();
+    });
+
+    it('has nothing to say about somebody it has not seen', () => {
+      const { store } = setup();
+
+      expect(store.viewerSince('l-unknown', 'u2')).toBeNull();
+    });
+
+    // Rebuilt from the snapshot rather than merged into it, for the reason the
+    // snapshot itself is not merged: somebody who left is not in the room, and an
+    // entry left behind is how they keep a running clock forever.
+    it('forgets somebody who left, so a return reads as a return', () => {
+      const { store, realtime } = setup();
+
+      realtime.emit('presence.listUpdated', {
+        listId: 'l1',
+        viewers: [{ userId: 'u2' }],
+        editors: [],
+      });
+      realtime.emit('presence.listUpdated', {
+        listId: 'l1',
+        viewers: [],
+        editors: [],
+      });
+
+      expect(store.viewerSince('l1', 'u2')).toBeNull();
+    });
+
+    // The arrival times describe how long somebody has been in a room this client is
+    // no longer watching. Keeping them would let a reconnection draw an hour of
+    // presence nobody observed.
+    it('drops them when the connection goes', () => {
+      const { store, realtime } = setup();
+
+      realtime.emit('presence.listUpdated', {
+        listId: 'l1',
+        viewers: [{ userId: 'u2' }],
+        editors: [],
+      });
+
+      realtime.setConnected(false);
+      TestBed.tick();
+
+      expect(store.viewerSince('l1', 'u2')).toBeNull();
+    });
+  });
+
   it('offers one list as a signal a container can hold', () => {
     const { store, realtime } = setup();
 

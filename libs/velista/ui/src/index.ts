@@ -41,6 +41,7 @@ export * from './lib/list/list-header';
 export * from './lib/list/list-notice';
 export * from './lib/list/quantity-stepper';
 export * from './lib/list/share-row';
+export * from './lib/presence/list-viewers';
 export * from './lib/presence/presence-row';
 export * from './lib/translations';
 export * from './lib/zone/confirm-sheet';

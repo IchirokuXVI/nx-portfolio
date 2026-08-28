@@ -164,8 +164,10 @@
 
 <!--
   The decisions sit under the row rather than inside it, because the row is one tap
-  target and two more inside it would make the whole thing unhittable. Staff only, and
-  only on a line that is actually waiting.
+  target and two more inside it would make the whole thing unhittable. `DECIDE` since
+  velista plan 0030, and only on a line that is actually waiting: approving stopped
+  being a property of the group and became a permission on the list, so the person who
+  walks the aisle can be the one who says what goes in the trolley.
 -->
 @if (line().decidable) {
   <div class="decisions">

@@ -29,7 +29,33 @@ export function presenceNames(
   me: string | null,
   nameOf: (userId: string) => string | null
 ): readonly string[] {
-  const names: string[] = [];
+  return presencePeople(users, me, nameOf).map((person) => person.name);
+}
+
+/** Somebody presence could name, with the id that named them kept. */
+export interface PresencePerson {
+  readonly userId: string;
+  readonly name: string;
+}
+
+/**
+ * The same three joins, with the user id kept alongside the name.
+ *
+ * The list header needs it: it draws a role and an arrival time beside each name, and
+ * both of those are looked up **by user id** afterwards. Discarding the id and then
+ * matching people back up by their names would break on two members called Ana, which
+ * nothing prevents, since a username is only unique within a zone if the backend says
+ * so and it does not.
+ *
+ * `presenceNames` is this function with the ids dropped, rather than a second copy of
+ * the rules. Every surface that only wants a sentence keeps calling it.
+ */
+export function presencePeople(
+  users: readonly PresenceUser[],
+  me: string | null,
+  nameOf: (userId: string) => string | null
+): readonly PresencePerson[] {
+  const people: PresencePerson[] = [];
 
   for (const user of users) {
     if (user.userId === me) {
@@ -38,11 +64,11 @@ export function presenceNames(
 
     const name = user.username !== '' ? user.username : nameOf(user.userId);
     if (name !== null && name !== '') {
-      names.push(name);
+      people.push({ userId: user.userId, name });
     }
   }
 
-  return names;
+  return people;
 }
 
 /**

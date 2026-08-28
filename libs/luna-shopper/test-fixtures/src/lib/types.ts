@@ -18,7 +18,7 @@ import type {
   ItemCategory,
   LineApprovalStatus,
   LineStatus,
-  ListRole,
+  ListPermission,
   LocalizedText,
   MembershipStatus,
   MergeRequestStatus,
@@ -87,13 +87,27 @@ export interface SeedList {
   zoneId: string;
   name: string;
   createdByUserId: string;
+  /** Whether a new line arrives already approved (plan 0037, section 3). */
+  autoApproveLines: boolean;
 }
 
+/**
+ * One membership's permissions on one list (plan 0036).
+ *
+ * A set rather than a role, and never empty: an empty set is a deleted row, so a
+ * seeded world states no access by having no row. Every non-empty set contains
+ * `READ`, which is the invariant `setAccess` maintains in the service and the
+ * fixtures have to honour or they would seed a world the service cannot produce.
+ *
+ * Zone OWNERs and ADMINs need no row at all. The demo world writes one for its
+ * owner anyway, because she is also the creator of both lists and creation writes
+ * the creator's row whoever they are; her access would be identical without it.
+ */
 export interface SeedListAccess {
   id: string;
   listId: string;
   membershipId: string;
-  role: ListRole;
+  permissions: ListPermission[];
 }
 
 export interface SeedLine {

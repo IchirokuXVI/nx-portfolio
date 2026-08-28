@@ -1,5 +1,6 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
+  Comment,
   Identity,
   Line,
   LineApprovalStatus,
@@ -556,6 +557,11 @@ export function fakeListStore(options: FakeListStateOptions = {}) {
         createdByUserId: 'u1',
         lineCount: 0,
         readyCount: 0,
+        autoApproveLines: false,
+        // All four, because the person who just created a list holds all four on it
+        // (backend plan 0036, section 2.5). A double that answered an empty set would
+        // have the page draw a read only banner over a list its reader had just made.
+        myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
       };
       lists.update((current) => [list, ...current]);
       return { state: 'created' as const, list };
@@ -636,6 +642,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     >
   >(new Map());
   const commentCounts = signal<ReadonlyMap<string, number>>(new Map());
+  /** Newest first, the wire's order, which is the order the real store keeps. */
+  const comments = signal<ReadonlyMap<string, readonly Comment[]>>(new Map());
   const loads = signal(0);
 
   const calls: LineWriteCall[] = [];
@@ -653,6 +661,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     isComplete: () => complete(),
     writeNoteOf: (lineId: string) => writes().get(lineId) ?? null,
     commentCountOf: (lineId: string) => commentCounts().get(lineId),
+    commentsOf: (lineId: string) => comments().get(lineId),
     forList: () =>
       computed(() => ({
         lines: lines(),
@@ -736,6 +745,19 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     recordCommentCount: (lineId: string, count: number) => {
       commentCounts.update((current) => new Map(current).set(lineId, count));
     },
+    recordComments: (lineId: string, page: readonly Comment[]) => {
+      comments.update((current) => new Map(current).set(lineId, page));
+      commentCounts.update((current) =>
+        new Map(current).set(lineId, page.length)
+      );
+    },
+    /** Prepends, because the real store holds the wire's newest first order. */
+    addComment: (comment: Comment) => {
+      comments.update((current) => {
+        const held = current.get(comment.lineId) ?? [];
+        return new Map(current).set(comment.lineId, [comment, ...held]);
+      });
+    },
     dismissNote: (lineId: string) => {
       writes.update((current) => {
         const next = new Map(current);
@@ -800,6 +822,16 @@ export function fakeMemberNames(
 
   return {
     nameOf: (_zoneId: string, userId: string) => names[userId] ?? null,
+    /**
+     * The role from whichever seeded membership carries this user id, or null.
+     *
+     * Read off `members` rather than taking a map of its own, so a fixture cannot seed
+     * a role for somebody the share sheet has never heard of. Null is the ordinary
+     * answer for a fake given only names, which is the state every screen is in before
+     * the members request lands.
+     */
+    roleOf: (_zoneId: string, userId: string) =>
+      members.find((member) => member.userId === userId)?.role ?? null,
     membersOf: () => members,
     ensure: async (zoneId: string) => {
       if (!asked.includes(zoneId)) {
@@ -825,6 +857,14 @@ export interface FakePresenceOptions {
   readonly viewers?: Readonly<Record<string, readonly string[]>>;
   /** List id to `userId -> lineId`, for who is editing what. */
   readonly editors?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /**
+   * List id to `userId -> when this client first saw them`, in epoch milliseconds.
+   *
+   * Absent is the interesting case rather than present: a viewer with no arrival time
+   * is what every page draws on its first frame and after every reconnection, so it is
+   * the state the header's panel has to read well.
+   */
+  readonly since?: Readonly<Record<string, Readonly<Record<string, number>>>>;
 }
 
 /**
@@ -849,6 +889,10 @@ export function fakePresenceStore(options: FakePresenceOptions = {}) {
   return {
     onlineIn: (zoneId: string) => users(options.online?.[zoneId]),
     viewersOf: (listId: string) => users(options.viewers?.[listId]),
+    viewerSince: (listId: string, userId: string) => {
+      const at = options.since?.[listId]?.[userId];
+      return at === undefined ? null : new Date(at);
+    },
     editorsOf,
     editorOfLine: (listId: string, lineId: string) =>
       editorsOf(listId).find((editor) => editor.lineId === lineId) ?? null,

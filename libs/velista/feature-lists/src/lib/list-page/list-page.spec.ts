@@ -27,6 +27,8 @@ import {
 import type {
   Line,
   LineRowVm,
+  ListPermission,
+  Membership,
   MyZone,
   ShoppingListSummary,
   ZoneRole,
@@ -44,6 +46,12 @@ const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
 const LIST_ID = '3c9a1d02-5f47-4b8e-9a1c-7d2e6b4f0a35';
 /** `provideFakeSessionStore` answers as this user, so the caller is the list's creator. */
 const ME = 'user-1';
+
+/** The permission sets plan 0030 section 4 tabulates, named as the plan names them. */
+const READ_ONLY: readonly ListPermission[] = ['READ'];
+const WRITER: readonly ListPermission[] = ['READ', 'WRITE'];
+const DECIDER: readonly ListPermission[] = ['READ', 'DECIDE'];
+const ADMIN: readonly ListPermission[] = ['READ', 'WRITE', 'DECIDE', 'MANAGE'];
 
 function zone(role: ZoneRole = 'MEMBER'): MyZone {
   return {
@@ -64,6 +72,18 @@ function zone(role: ZoneRole = 'MEMBER'): MyZone {
   };
 }
 
+/** One approved membership, which is where a viewer's role comes from. */
+function member(userId: string, username: string, role: ZoneRole): Membership {
+  return {
+    id: `m-${userId}`,
+    zoneId: ZONE_ID,
+    userId,
+    username,
+    role,
+    status: 'APPROVED',
+  };
+}
+
 function list(
   overrides: Partial<ShoppingListSummary> = {}
 ): ShoppingListSummary {
@@ -72,8 +92,12 @@ function list(
     zoneId: ZONE_ID,
     name: 'Weekly shop',
     createdByUserId: ME,
+    autoApproveLines: false,
     lineCount: 12,
     readyCount: 7,
+    // Everything, so a spec that is not about permissions reads as it did before plan
+    // 0030. One that is says so by passing `permissions`.
+    myPermissions: ADMIN,
     ...overrides,
   };
 }
@@ -97,6 +121,15 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
 
 interface Options {
   readonly role?: ZoneRole;
+  /**
+   * What the server says this caller may do on the list (plan 0030, section 3).
+   *
+   * It replaces `role` as the input every permission question on this page turns on.
+   * `role` survives for the one thing it is still about, which is the group, and no
+   * longer decides anything here: group staff arrive holding all four.
+   */
+  readonly permissions?: readonly ListPermission[];
+  readonly autoApproveLines?: boolean;
   readonly lists?: readonly ShoppingListSummary[];
   /** Defaults to `loaded`: a list opened from the group page, already cached. */
   readonly listsState?: 'idle' | 'loading' | 'loaded' | 'failed';
@@ -108,6 +141,14 @@ interface Options {
   readonly presence?: FakePresenceOptions;
   /** User id to the name they go by in this zone, since presence carries ids alone. */
   readonly names?: Readonly<Record<string, string>>;
+  /**
+   * The zone's memberships, which is where a role comes from.
+   *
+   * Separate from `names` rather than folded into it, because the two arrive from
+   * different requests in production and the header has to read well in the window
+   * where a name has resolved and a role has not.
+   */
+  readonly members?: readonly Membership[];
 }
 
 async function render(options: Options = {}): Promise<{
@@ -122,7 +163,12 @@ async function render(options: Options = {}): Promise<{
 
   const zones = fakeZoneStore({ zones: [zone(options.role ?? 'MEMBER')] });
   const lists = fakeListStore({
-    lists: options.lists ?? [list()],
+    lists: options.lists ?? [
+      list({
+        myPermissions: options.permissions ?? ADMIN,
+        autoApproveLines: options.autoApproveLines ?? false,
+      }),
+    ],
     state: options.listsState ?? 'loaded',
   });
   const lines = fakeLineStore({
@@ -146,7 +192,10 @@ async function render(options: Options = {}): Promise<{
       provideFakeListStore(lists),
       provideFakeLineStore(lines),
       provideFakeMemberNames(
-        fakeMemberNames({ 'user-toni': 'Toni', ...options.names })
+        fakeMemberNames(
+          { 'user-toni': 'Toni', ...options.names },
+          options.members ?? []
+        )
       ),
       // Plan 0022: the header's viewers and the editor on a row.
       provideFakePresenceStore(fakePresenceStore(options.presence)),
@@ -253,22 +302,22 @@ describe('ListPage', () => {
     });
   });
 
-  describe('rule L3: staff approve their own line as they add it', () => {
-    it('follows a staff add with an approval of the id that came back', async () => {
-      const { fixture, lines } = await render({ role: 'OWNER' });
+  // Plan 0030, section 5, and acceptance item 7. Rule L3 became the server's: a line is
+  // created APPROVED when its author holds DECIDE (backend plan 0037, section 2), so the
+  // work here is subtraction, and what is left to assert is that nothing follows the add.
+  describe('adding a line', () => {
+    it('adds, and never approves afterwards, for somebody who decides', async () => {
+      const { fixture, lines } = await render({ permissions: ADMIN });
 
       await fixture.componentInstance.add({ content: 'Milk', quantity: 2 });
 
       expect(lines.calls).toEqual([
         { kind: 'add', content: 'Milk', quantity: 2 },
-        { kind: 'approval', lineId: 'server-id', status: 'APPROVED' },
       ]);
     });
 
-    it('does not approve a plain member’s line', async () => {
-      // The rule is aimed at somebody else: it exists so a flatmate or a child can put
-      // something on the list and have it confirmed.
-      const { fixture, lines } = await render({ role: 'MEMBER' });
+    it('does not approve a writer’s line either', async () => {
+      const { fixture, lines } = await render({ permissions: WRITER });
 
       await fixture.componentInstance.add({ content: 'Milk', quantity: 1 });
 
@@ -277,18 +326,16 @@ describe('ListPage', () => {
       ]);
     });
 
-    it('skips the second call when the line already came back approved', async () => {
-      // The backend is adding a zone option that auto approves a staff member's own
-      // line. When it lands the response is already APPROVED and this stops happening
-      // on its own, with no edit to this page.
-      const { fixture, lines } = await render({ role: 'ADMIN' });
-      lines.setAddedApproval('APPROVED');
+    it('never approves anything on any frame, whatever came back', async () => {
+      // The defect this removes is one frame wide: a row that arrived PENDING grew two
+      // decision buttons and lost them again. There is no client-side approve left to
+      // fire, whatever the response says.
+      const { fixture, lines } = await render({ permissions: ADMIN });
+      lines.setAddedApproval('PENDING');
 
       await fixture.componentInstance.add({ content: 'Milk', quantity: 1 });
 
-      expect(lines.calls).toEqual([
-        { kind: 'add', content: 'Milk', quantity: 1 },
-      ]);
+      expect(lines.calls.some((call) => call.kind === 'approval')).toBe(false);
     });
 
     it('says nothing when the add itself fails', async () => {
@@ -359,38 +406,92 @@ describe('ListPage', () => {
     });
   });
 
-  describe('the read only state (section 3.2)', () => {
-    it('draws the composer for a caller not known to be a reader', async () => {
-      // Optimistic. There is no `GET /v1/lists/:id/access` and `ListView` carries no
-      // role for the caller, so hiding it until a write proved the permission would
-      // take the screen away from the people who use it.
-      const { fixture } = await render();
+  /**
+   * Plan 0030, section 3.2, and acceptance items 1, 2 and 5.
+   *
+   * Every one of these is drawn on arrival now, from `myPermissions`, rather than after
+   * a control has failed. The old versions of the first three each began by refusing a
+   * write, which was the only way the client could learn anything.
+   */
+  describe('what the page draws, from certainty', () => {
+    it('draws the composer for a writer', async () => {
+      const { fixture } = await render({ permissions: WRITER });
 
       expect(query(fixture, 'lib-line-composer')).not.toBeNull();
     });
 
-    it('takes the composer away once a write is refused, in place', async () => {
-      const { fixture, lines } = await render();
-      lines.setWriteOutcome('failed');
-      lines.setState('loaded', forbidden());
-
-      await fixture.componentInstance.toggle('ln-1');
-      fixture.detectChanges();
+    it('draws no composer for a read-only caller, and says why on arrival', async () => {
+      const { fixture } = await render({ permissions: READ_ONLY });
 
       expect(query(fixture, 'lib-line-composer')).toBeNull();
-      expect(query(fixture, 'lib-list-notice')).not.toBeNull();
+      expect(fixture.nativeElement.textContent).toContain(
+        'list.readOnly.banner'
+      );
     });
 
-    it('shows the reader notice once, on a tap, and not before', async () => {
-      const { fixture, lines } = await render();
+    it('leaves a read-only caller nothing to tap and everything to read', async () => {
+      const { fixture } = await render({ permissions: READ_ONLY });
+
+      expect(rows(fixture)[0]).toMatchObject({
+        interactive: false,
+        actions: ['comments'],
+        decidable: false,
+      });
+      // Everything on the list is still there to be read, which is the whole of READ.
+      expect(fixture.nativeElement.textContent).toContain('Sourdough loaf');
+    });
+
+    it('draws no composer for somebody who only decides', async () => {
+      const { fixture } = await render({ permissions: DECIDER });
+
+      expect(query(fixture, 'lib-line-composer')).toBeNull();
+    });
+
+    it('tells a writer who does the ticking, rather than looking broken', async () => {
+      // A screen that takes a new line and ignores a tap on it needs a sentence naming
+      // whose job that is, and it is not an apology (section 7).
+      const { fixture } = await render({ permissions: WRITER });
+
+      expect(fixture.nativeElement.textContent).toContain(
+        'list.ticking.notMine'
+      );
+      expect(fixture.nativeElement.textContent).not.toContain(
+        'list.readOnly.banner'
+      );
+    });
+
+    it('says neither thing to somebody who can do both', async () => {
+      const { fixture } = await render({ permissions: ADMIN });
+
       expect(query(fixture, 'lib-list-notice')).toBeNull();
+    });
 
-      lines.setWriteOutcome('failed');
-      lines.setState('loaded', forbidden());
+    it('gives a list admin the settings sheet, and a writer none', async () => {
+      // Acceptance item 5, and its mirror. The overflow that opens the sheet is drawn
+      // from `canManage` alone.
+      const admin = await render({ permissions: ADMIN });
+      expect(
+        admin.fixture.debugElement
+          .query(By.directive(ListHeader))
+          .componentInstance.hasMenu()
+      ).toBe(true);
+
+      const writer = await render({ permissions: WRITER });
+      expect(
+        writer.fixture.debugElement
+          .query(By.directive(ListHeader))
+          .componentInstance.hasMenu()
+      ).toBe(false);
+    });
+
+    it('does not tick a row for somebody who may not decide', async () => {
+      // The row emits nothing, and the guard behind it is silent belt on braces: the
+      // sentence explaining it is already on screen.
+      const { fixture, lines } = await render({ permissions: WRITER });
+
       await fixture.componentInstance.toggle('ln-1');
-      fixture.detectChanges();
 
-      expect(query(fixture, 'lib-list-notice')).not.toBeNull();
+      expect(lines.calls).toHaveLength(0);
     });
   });
 
@@ -484,7 +585,9 @@ describe('ListPage', () => {
         names: { u2: 'Ana' },
       });
 
-      expect(header(fixture).viewers).toEqual(['Ana']);
+      expect(header(fixture).viewers).toEqual([
+        { userId: 'u2', name: 'Ana', role: null, since: null },
+      ]);
     });
 
     // The caller is in the server's viewers, because this page now puts them there.
@@ -496,7 +599,52 @@ describe('ListPage', () => {
         names: { u1: 'Me', u2: 'Ana' },
       });
 
-      expect(header(fixture).viewers).toEqual(['Ana']);
+      expect(header(fixture).viewers.map((viewer) => viewer.name)).toEqual([
+        'Ana',
+      ]);
+    });
+
+    // The panel the header opens draws a role beside each name, and the only role the
+    // client can know for somebody else is their role in the zone: a list role is not
+    // broadcast and no endpoint answers it.
+    it('carries each viewer role from the zone memberships', async () => {
+      const { fixture } = await render({
+        presence: { viewers: { [LIST_ID]: ['u2'] } },
+        names: { u2: 'Ana' },
+        members: [member('u2', 'Ana', 'ADMIN')],
+      });
+
+      expect(header(fixture).viewers).toEqual([
+        { userId: 'u2', name: 'Ana', role: 'ADMIN', since: null },
+      ]);
+    });
+
+    // The members request is a second round trip, so there is a real window where a
+    // name has resolved and a role has not. Falling back to MEMBER would demote an
+    // owner for the length of it; the panel draws no chip instead.
+    it('leaves the role null rather than guessing while the members are in flight', async () => {
+      const { fixture } = await render({
+        presence: { viewers: { [LIST_ID]: ['u2'] } },
+        names: { u2: 'Ana' },
+        members: [],
+      });
+
+      expect(header(fixture).viewers[0]?.role).toBeNull();
+    });
+
+    // Nothing on the wire says when somebody opened the list, so the store's own first
+    // sighting is the only instant available and it is null until there is one.
+    it('carries when the client first saw each viewer', async () => {
+      const at = Date.parse('2026-08-28T15:04:00.000Z');
+      const { fixture } = await render({
+        presence: {
+          viewers: { [LIST_ID]: ['u2'] },
+          since: { [LIST_ID]: { u2: at } },
+        },
+        names: { u2: 'Ana' },
+      });
+
+      expect(header(fixture).viewers[0]?.since).toEqual(new Date(at));
     });
 
     it('says nothing rather than showing an id it could not resolve', async () => {
@@ -553,19 +701,4 @@ function rows(fixture: ComponentFixture<ListPage>) {
   return fixture.debugElement
     .query(By.directive(LineList))
     .componentInstance.lines() as readonly LineRowVm[];
-}
-
-/** A gateway `forbidden`, which is how a reader is discovered today. */
-function forbidden(): unknown {
-  // Built through the real class so `listErrorEffect` recognises it, which is the whole
-  // mechanism being asserted.
-  const { GatewayError } = jest.requireActual<
-    typeof import('@portfolio/velista/data-access')
-  >('@portfolio/velista/data-access');
-
-  return new GatewayError({
-    code: 'forbidden',
-    status: 403,
-    correlationId: 'ref-1',
-  });
 }

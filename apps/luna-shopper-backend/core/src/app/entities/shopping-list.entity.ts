@@ -21,4 +21,25 @@ export class ShoppingList extends BaseEntity {
 
   @Column({ type: 'uuid' })
   createdByUserId!: string;
+
+  /**
+   * Whether a new line on this list is approved the moment it is added (plan
+   * 0037, section 3).
+   *
+   * List configuration rather than a member's preference: changing it needs
+   * `MANAGE`, and it is per list rather than per zone because one household can
+   * perfectly well run a no questions asked weekly shop and a budgeted list for
+   * the big monthly one in the same group.
+   *
+   * It governs only what a **new** line starts as. Turning it on leaves existing
+   * pending lines pending, a `DECIDE` holder may still reject an auto approved
+   * line, and editing a rejected line still returns it to `PENDING` rather than
+   * straight back to `APPROVED`. It also turns off the quantity split of section
+   * 4, because a list that auto approves has decided approval carries no
+   * information on it and there is then nothing for a remainder line to preserve.
+   *
+   * Defaults to false, which is what every list created before this shipped had.
+   */
+  @Column({ type: 'boolean', default: false })
+  autoApproveLines!: boolean;
 }

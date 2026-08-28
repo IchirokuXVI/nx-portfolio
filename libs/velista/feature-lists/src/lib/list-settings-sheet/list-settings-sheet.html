@@ -36,10 +36,38 @@
     </button>
 
     <!--
-      Built, tested, and **not offered** until `GET /v1/lists/:id/access` exists. The
-      PUT replaces the whole access set, so a sheet that cannot read the current set can
-      only guess at it, and a wrong guess silently takes away somebody else's access
-      rather than failing loudly (section 5.5).
+      Above the share section, because it decides what happens to lines rather than to
+      people, and somebody reading downwards should settle how the list behaves before
+      settling who is on it (plan 0030, section 6.5).
+
+      It saves itself on the flip. The hint under it is what `aria-describedby` points
+      at, so the part that surprises people, that the lines already waiting are
+      unaffected, is read out with the control rather than found afterwards.
+    -->
+    <h3 class="section">{{ 'list.settings.approval' | rokuT }}</h3>
+
+    <div class="choice">
+      <label class="choice-label" for="list-settings-auto-approve">
+        <input
+          (change)="setAutoApprove($event)"
+          [checked]="autoApprove()"
+          [disabled]="submitting()"
+          aria-describedby="list-settings-auto-approve-hint"
+          class="checkbox"
+          id="list-settings-auto-approve"
+          type="checkbox"
+        />
+        <span>{{ 'list.settings.autoApprove.label' | rokuT }}</span>
+      </label>
+      <p class="choice-hint" id="list-settings-auto-approve-hint">
+        {{ 'list.settings.autoApprove.hint' | rokuT }}
+      </p>
+    </div>
+
+    <!--
+      Reachable at last. `GET /v1/lists/:id/access` exists, so the sheet can send a
+      complete set knowing what it is replacing, which is the one thing that kept this
+      switched off through plan 0012 section 5.5.
     -->
     @if (shareAvailable) {
       <h3 class="section">{{ 'list.settings.share' | rokuT }}</h3>
@@ -47,7 +75,11 @@
       <ul class="share">
         @for (member of shareRows(); track member.membershipId) {
           <li class="share-item">
-            <lib-share-row (changed)="changeAccess($event)" [member]="member" />
+            <lib-share-row
+              (changed)="changeAccess($event)"
+              [creator]="isCreator(member.membershipId)"
+              [member]="member"
+            />
           </li>
         }
       </ul>

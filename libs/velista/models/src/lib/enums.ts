@@ -19,7 +19,9 @@
  * deliberate and allowed: rule D4 asks that the model be **ours**, not that it differ.
  *
  * Every fallback below is chosen to be the **least dangerous** reading of an unknown
- * value, never the most convenient one.
+ * value, never the most convenient one. Two of them have no fallback at all and each
+ * says why where it is declared: one never maps **in** from the wire, and one is a set,
+ * where an unknown member has a better answer than any default could be.
  */
 
 /** A caller's role in a zone. Unknown falls back to the least privileged role. */
@@ -60,10 +62,28 @@ export const MEMBERSHIP_STATUSES = [
 export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 export const MEMBERSHIP_STATUS_FALLBACK: MembershipStatus = 'PENDING';
 
-/** Access to a single list. Unknown falls back to read only. */
-export const LIST_ROLES = ['READER', 'WRITER'] as const;
-export type ListRole = (typeof LIST_ROLES)[number];
-export const LIST_ROLE_FALLBACK: ListRole = 'READER';
+/**
+ * What a caller may do on one list, as a **set** rather than a single value.
+ *
+ * `READ` is implied by every other member and is also stored, so a set that has any
+ * permission in it has `READ` in it too (backend plan 0036, section 2.2). `WRITE` and
+ * `DECIDE` are deliberately independent: the flatmate who puts olive oil on the list on
+ * Tuesday and the flatmate who decides in the aisle on Saturday that it goes in the
+ * trolley are two different people, and neither is a subset of the other.
+ *
+ * **There is no fallback, and that is the whole difference from the enums above.** A
+ * role is one value, so something had to be picked for a value this build has never
+ * heard of, and `LIST_ROLE_FALLBACK` picked the least dangerous one. A set has a
+ * strictly correct answer instead: ignore the member it did not understand and keep the
+ * ones it did (velista plan 0030, section 2). Dropping is also the safe direction, twice
+ * over. A client that does not know a permission does not draw the control for it, and
+ * the server would refuse whatever that control had sent.
+ *
+ * The empty set follows from the same rule and means read only, which is why an absent
+ * or unreadable `myPermissions` maps to it rather than to anything optimistic.
+ */
+export const LIST_PERMISSIONS = ['READ', 'WRITE', 'DECIDE', 'MANAGE'] as const;
+export type ListPermission = (typeof LIST_PERMISSIONS)[number];
 
 /** Where a line has got to on the shopping trip. Unknown reads as not yet done. */
 export const LINE_STATUSES = ['PENDING', 'READY', 'NOT_AVAILABLE'] as const;

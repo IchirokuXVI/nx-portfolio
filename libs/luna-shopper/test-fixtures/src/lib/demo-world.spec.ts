@@ -1,6 +1,7 @@
 import {
   LineApprovalStatus,
   LineStatus,
+  ListPermission,
   MembershipStatus,
   UserKind,
   ZoneRole,
@@ -84,6 +85,32 @@ describe('demoWorld', () => {
     }
     expect(itemIds.has(ITEM_MILK_ID)).toBe(true);
     expect(itemIds.has(ITEM_BREAD_ID)).toBe(true);
+  });
+
+  it('holds one write-without-decide and one decide-without-write row', () => {
+    // Plan 0036, section 9. Those two are the states a single role could not
+    // express, so nothing exercised them before; the demo world is where they
+    // become concrete for every test that reads it.
+    const sets = core.listAccess.map((a) => new Set(a.permissions));
+    const writeOnly = sets.filter(
+      (s) => s.has(ListPermission.WRITE) && !s.has(ListPermission.DECIDE)
+    );
+    const decideOnly = sets.filter(
+      (s) => s.has(ListPermission.DECIDE) && !s.has(ListPermission.WRITE)
+    );
+
+    expect(writeOnly).toHaveLength(1);
+    expect(decideOnly).toHaveLength(1);
+  });
+
+  it('never stores a set without READ, and never stores an empty one', () => {
+    // The two invariants `setAccess` maintains (plan 0036, section 2.2). A seed
+    // that broke either would be a world the service cannot produce, which is
+    // the worst kind of fixture: every test against it passes and lies.
+    for (const access of core.listAccess) {
+      expect(access.permissions.length).toBeGreaterThan(0);
+      expect(access.permissions).toContain(ListPermission.READ);
+    }
   });
 
   it('keeps zone usernames unique', () => {

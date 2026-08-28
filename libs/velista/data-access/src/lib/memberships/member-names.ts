@@ -1,5 +1,10 @@
-import { inject, Injectable, signal } from '@angular/core';
-import type { Membership } from '@portfolio/velista/models';
+import { DestroyRef, inject, Injectable, signal } from '@angular/core';
+import type { Membership, ZoneRole } from '@portfolio/velista/models';
+import {
+  REALTIME_CLIENT,
+  type RealtimeClientI,
+} from '../realtime/realtime-client';
+import type { RealtimeEvent } from '../realtime/realtime-events';
 import {
   MEMBERSHIP_SERVICE,
   type MembershipServiceI,
@@ -39,13 +44,54 @@ import {
  * is made without a `statuses` parameter at all, which is the one form every caller may
  * make, and a departed member resolves only where the backend keeps the row visible.
  * A name that cannot be resolved is not an error and never renders as an id.
+ *
+ * ## It listens, because "once per session" was too long (plan 0026)
+ *
+ * `ensure` is idempotent for a good reason and was permanent for no reason: a zone
+ * asked for once was never asked again, so **somebody who joined the group afterwards
+ * had no name for the rest of the session**. Every surface drawn from a name then
+ * dropped them, quietly and by design, since `presenceNames` leaves out whoever it
+ * cannot name. The report that found this was an owner who accepted a request and
+ * then could not see the new member's presence indicator, but their comments and the
+ * lines they added were equally anonymous.
+ *
+ * The six membership events carry a whole `Membership`, username included, so keeping
+ * up costs no request at all: the name is in the event that announces the person. Only
+ * zones already asked for are updated. A zone nobody has loaded must not acquire a
+ * one entry cache from a passing event, because `membersOf` would then hand the share
+ * sheet a single row and look complete rather than empty.
  */
 @Injectable()
 export class MemberNames {
   private readonly _members = inject<MembershipServiceI>(MEMBERSHIP_SERVICE);
+  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
+  private readonly _destroyRef = inject(DestroyRef);
 
+  constructor() {
+    // By hand rather than `takeUntilDestroyed`, for the reason `PresenceStore` and
+    // both transports give: `@angular/core/rxjs-interop` is a secondary entry point
+    // module federation does not dedupe, so it throws `NG0203` from a service several
+    // remotes provide, with a perfectly correct DI graph.
+    const subscription = this._realtime.events.subscribe((event) =>
+      this._apply(event)
+    );
+    this._destroyRef.onDestroy(() => subscription.unsubscribe());
+  }
+
+  /**
+   * The whole membership per user, not merely the name.
+   *
+   * It held a `userId -> username` map until the list header started drawing a role
+   * beside each name. Two parallel signals would have been the smaller diff and the
+   * worse one: they are filled from the same rows by the same method, so the only thing
+   * a second map could ever do is disagree with the first.
+   *
+   * Still keyed by **user** id rather than membership id, which `_raw` already is: every
+   * caller here starts from a user id, because that is what a comment, a line and a
+   * presence payload carry.
+   */
   private readonly _byZone = signal<
-    ReadonlyMap<string, ReadonlyMap<string, string>>
+    ReadonlyMap<string, ReadonlyMap<string, Membership>>
   >(new Map());
 
   /** Zones whose request is in flight or done, so it is made once rather than per row. */
@@ -60,7 +106,22 @@ export class MemberNames {
    * neutral word, because to the person reading a comment they are the same fact.
    */
   nameOf(zoneId: string, userId: string): string | null {
-    return this._byZone().get(zoneId)?.get(userId) ?? null;
+    return this._byZone().get(zoneId)?.get(userId)?.username ?? null;
+  }
+
+  /**
+   * What that user is in that zone, or null.
+   *
+   * Null for the same three situations `nameOf` returns null for, and the caller draws
+   * nothing rather than falling back to MEMBER: the fallback in `enums.ts` exists to
+   * read an unrecognised value off the wire safely, and using it here would quietly
+   * demote an owner for as long as the members request is in flight.
+   *
+   * The **zone** role, which is the only one the client can know for somebody else. A
+   * per list role is not broadcast and there is no endpoint that answers it.
+   */
+  roleOf(zoneId: string, userId: string): ZoneRole | null {
+    return this._byZone().get(zoneId)?.get(userId)?.role ?? null;
   }
 
   /** Every member of a zone this cache knows, for the share sheet's rows. */
@@ -112,18 +173,67 @@ export class MemberNames {
 
   private readonly _raw = new Map<string, readonly Membership[]>();
 
+  /**
+   * Keep a cached zone current from the events that carry a membership.
+   *
+   * Nothing is ever **removed**, kick and ban included. The class comment's rule
+   * stands: a comment outlives its author's membership, and dropping the name would
+   * take it off everything they ever wrote. So a departure refreshes the row like any
+   * other event and the name survives it.
+   *
+   * `member.rejected` carries no membership and is not handled here, which the event
+   * union enforces rather than leaves to a comment.
+   */
+  private _apply(event: RealtimeEvent): void {
+    switch (event.type) {
+      case 'member.joined':
+      case 'member.approved':
+      case 'member.kicked':
+      case 'member.banned':
+      case 'member.roleChanged':
+      case 'member.usernameChanged': {
+        const { zoneId } = event.membership;
+        if (this._asked.has(zoneId)) {
+          this._absorb(zoneId, [event.membership]);
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /**
+   * Fold members into a zone's cache, **replacing** an existing row rather than
+   * appending to it.
+   *
+   * Replacing matters now that this is fed by events as well as by pages: an append
+   * would give the share sheet two rows for one person the moment somebody was renamed
+   * or promoted, and a rename would leave the old name in `membersOf` beside the new
+   * one. It also makes a re-delivered event free.
+   */
   private _absorb(zoneId: string, members: readonly Membership[]): void {
-    this._raw.set(zoneId, [...(this._raw.get(zoneId) ?? []), ...members]);
+    const byId = new Map(
+      (this._raw.get(zoneId) ?? []).map((member) => [member.id, member])
+    );
+    for (const member of members) {
+      byId.set(member.id, member);
+    }
+    this._raw.set(zoneId, [...byId.values()]);
 
     this._byZone.update((current) => {
-      const names = new Map(current.get(zoneId) ?? []);
+      const known = new Map(current.get(zoneId) ?? []);
       for (const member of members) {
+        // A nameless row is not indexed, which is the rule `nameOf` has always applied
+        // and it now governs the role too. That is the right way round: the role is
+        // drawn next to the name, so a role with no name to sit beside is not a thing
+        // any surface can render.
         if (member.username !== '') {
-          names.set(member.userId, member.username);
+          known.set(member.userId, member);
         }
       }
 
-      return new Map(current).set(zoneId, names);
+      return new Map(current).set(zoneId, known);
     });
   }
 }

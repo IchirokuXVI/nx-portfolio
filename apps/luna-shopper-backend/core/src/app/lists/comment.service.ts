@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  ListPermission,
   RealtimeEvent,
   type AddCommentRequest,
   type CommentPage,
@@ -11,11 +12,11 @@ import {
   clampPageSize,
   decodeCursor,
   encodeCursor,
+  ForbiddenException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { LineComment } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { ListAccessService } from './list-access.service';
 import { toCommentView } from './list.mappers';
 
@@ -30,18 +31,38 @@ export class CommentService {
     @InjectRepository(LineComment)
     private readonly comments: Repository<LineComment>,
     private readonly listAccess: ListAccessService,
-    private readonly zoneAuthz: ZoneAuthzService,
     private readonly events: CoreEventsPublisher
   ) {}
 
   /**
-   * Add a comment (plan 0007, section 2): any approved member of the zone may
-   * comment on a line.
+   * Add a comment (plan 0007, section 2; plan 0036, section 4). `WRITE` or
+   * `DECIDE`.
+   *
+   * It used to ask only for an approved zone membership, which was wrong at both
+   * ends (plan 0036, section 1.4): a caller with no access to the list at all
+   * could comment on its lines, and a caller who could see the list and nothing
+   * else could too. Read should mean read, comments included, and commenting
+   * should follow access to the list.
+   *
+   * Either of the two, because both describe somebody who takes part: the person
+   * who puts things on the list and the person who decides what goes in the
+   * trolley both have things to say about a line. `MANAGE` implies both in every
+   * grant this service writes, so it needs no third branch.
    */
   async add(req: AddCommentRequest): Promise<CommentView> {
     const line = await this.listAccess.getLine(req.lineId);
-    const list = await this.listAccess.getList(line.listId);
-    await this.zoneAuthz.requireApproved(list.zoneId, req.userId);
+    const { list, permissions } = await this.listAccess.resolve(
+      line.listId,
+      req.userId
+    );
+    if (
+      !permissions.has(ListPermission.WRITE) &&
+      !permissions.has(ListPermission.DECIDE)
+    ) {
+      throw new ForbiddenException(
+        'You can read this list but not write to it, comments included'
+      );
+    }
 
     const saved = await this.comments.save(
       this.comments.create({
@@ -56,9 +77,9 @@ export class CommentService {
   }
 
   /**
-   * List a line's comments (plan 0007, section 3): requires read access to the
-   * list. Fixed newest-to-oldest order (no caller-chosen ordering), cursor
-   * paginated.
+   * List a line's comments (plan 0007, section 3). `READ`, which is genuinely
+   * everything on a list a caller may see. Fixed newest-to-oldest order (no
+   * caller-chosen ordering), cursor paginated.
    */
   async list(req: ListCommentsRequest): Promise<CommentPage> {
     const line = await this.listAccess.getLine(req.lineId);

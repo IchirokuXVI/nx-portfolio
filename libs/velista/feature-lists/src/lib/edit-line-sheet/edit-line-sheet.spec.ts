@@ -7,11 +7,17 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   fakeLineStore,
+  fakeListStore,
   provideFakeLineStore,
+  provideFakeListStore,
   REALTIME_CLIENT,
   RealtimeMemory,
 } from '@portfolio/velista/data-access';
-import type { Line } from '@portfolio/velista/models';
+import type {
+  Line,
+  ListPermission,
+  ShoppingListSummary,
+} from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { EditLineSheet } from './edit-line-sheet';
@@ -46,10 +52,35 @@ function line(overrides: Partial<Line> = {}): Line {
   };
 }
 
-async function render(lines: readonly Line[] = [line()]): Promise<{
+const ADMIN: readonly ListPermission[] = ['READ', 'WRITE', 'DECIDE', 'MANAGE'];
+
+function list(
+  overrides: Partial<ShoppingListSummary> = {}
+): ShoppingListSummary {
+  return {
+    id: LIST_ID,
+    zoneId: ZONE_ID,
+    name: 'Weekly shop',
+    createdByUserId: 'u1',
+    autoApproveLines: false,
+    lineCount: 1,
+    readyCount: 0,
+    myPermissions: ADMIN,
+    ...overrides,
+  };
+}
+
+interface Options {
+  readonly lines?: readonly Line[];
+  /** The list this sheet's row belongs to, which is where the mode comes from. */
+  readonly list?: ShoppingListSummary;
+}
+
+async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<EditLineSheet>;
   realtime: RealtimeMemory;
 }> {
+  const lines = options.lines ?? [line()];
   TestBed.resetTestingModule();
 
   const realtime = new RealtimeMemory();
@@ -68,6 +99,9 @@ async function render(lines: readonly Line[] = [line()]): Promise<{
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeLineStore(fakeLineStore({ lines, state: 'loaded' })),
+      provideFakeListStore(
+        fakeListStore({ lists: [options.list ?? list()], state: 'loaded' })
+      ),
       { provide: REALTIME_CLIENT, useValue: realtime },
       {
         provide: Router,
@@ -118,8 +152,102 @@ describe('EditLineSheet', () => {
   // showing empty fields somebody could save over nothing, and there is no line to
   // announce, so it announces nothing.
   it('announces nothing when there is no line to edit', async () => {
-    const { realtime } = await render([]);
+    const { realtime } = await render({ lines: [] });
 
     expect(realtime.editedLines.has(LIST_ID)).toBe(false);
+  });
+
+  /**
+   * Plan 0030, section 4 and 4.1, and acceptance items 3, 4 and 6.
+   *
+   * Read off the DOM rather than off a signal, because the claim is about which fields
+   * a person can actually reach: "the quantity and nothing else" is a statement about a
+   * sheet, and a mode flag that was right while the template ignored it would pass.
+   */
+  describe('the two modes, and the warning', () => {
+    function host(fixture: ComponentFixture<EditLineSheet>): HTMLElement {
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it('makes every field live for a list admin, on an approved line', () => {
+      // Acceptance item 6: their edit sheet on an approved row is the full one.
+      return render().then(({ fixture }) => {
+        expect(
+          host(fixture).querySelector('#edit-line-content')
+        ).not.toBeNull();
+        expect(host(fixture).querySelector('.shown')).toBeNull();
+      });
+    });
+
+    it('shows the content and does not let it be edited, for DECIDE', async () => {
+      const { fixture } = await render({
+        list: list({ myPermissions: ['READ', 'DECIDE'] }),
+      });
+
+      expect(host(fixture).querySelector('#edit-line-content')).toBeNull();
+      expect(host(fixture).querySelector('.shown')?.textContent).toContain(
+        'Sourdough loaf'
+      );
+      // The stepper is still there: it is the one field the person in the aisle has.
+      expect(
+        host(fixture).querySelector('lib-quantity-stepper')
+      ).not.toBeNull();
+    });
+
+    it('closes rather than drawing a sheet whose save would be refused', async () => {
+      // A writer deep linked onto an approved row. The overflow would never have
+      // offered this, and a URL is not a permission (rule G2).
+      const { realtime } = await render({
+        list: list({ myPermissions: ['READ', 'WRITE'] }),
+      });
+
+      expect(realtime.editedLines.has(LIST_ID)).toBe(false);
+    });
+
+    it('says what a lower quantity is about to leave behind', async () => {
+      const { fixture } = await render({ lines: [line({ quantity: 3 })] });
+
+      fixture.componentInstance.quantity.set(1);
+      fixture.detectChanges();
+
+      expect(host(fixture).querySelector('.remainder')?.textContent).toContain(
+        'list.edit.remainder'
+      );
+    });
+
+    it('says nothing when the quantity goes up', async () => {
+      const { fixture } = await render({ lines: [line({ quantity: 1 })] });
+
+      fixture.componentInstance.quantity.set(3);
+      fixture.detectChanges();
+
+      expect(host(fixture).querySelector('.remainder')).toBeNull();
+    });
+
+    it('says nothing on a line nobody has agreed to yet', async () => {
+      // Nothing was approved, so nothing is being taken back: an ordinary edit.
+      const { fixture } = await render({
+        lines: [line({ quantity: 3, approvalStatus: 'PENDING' })],
+      });
+
+      fixture.componentInstance.quantity.set(1);
+      fixture.detectChanges();
+
+      expect(host(fixture).querySelector('.remainder')).toBeNull();
+    });
+
+    it('says nothing on a list that approves by itself', async () => {
+      // The split does not happen there, so the sentence would describe a row that
+      // never appears (backend plan 0037, section 4.5).
+      const { fixture } = await render({
+        lines: [line({ quantity: 3 })],
+        list: list({ autoApproveLines: true }),
+      });
+
+      fixture.componentInstance.quantity.set(1);
+      fixture.detectChanges();
+
+      expect(host(fixture).querySelector('.remainder')).toBeNull();
+    });
   });
 });

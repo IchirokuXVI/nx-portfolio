@@ -1,13 +1,14 @@
-import { Injectable, signal } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
 import type {
   Line,
   LineApprovalStatus,
   LineOrder,
   LineStatus,
+  ListPermission,
   Page,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
-import { SEED_USER_ID } from '../zones/static-zone-data';
+import { ListMemory } from '../lists/list-memory';
 import type { LineServiceI } from './line-service';
 import { SEED_LINES } from './static-line-data';
 
@@ -26,9 +27,29 @@ import { SEED_LINES } from './static-line-data';
  * - **Positions are integers with gaps**, exactly as deletes leave them on the server,
  *   so a reorder that renumbers only part of a list produces the collision rule L4
  *   exists to prevent rather than quietly working.
+ *
+ * ## It refuses what the server would refuse
+ *
+ * Since plan 0030 section 9. Every write asks `ListMemory.permissionsFor` and throws the
+ * same `GatewayError` the gateway's refusal arrives as, because the states worth
+ * exercising, a `WRITE`-only caller and a `DECIDE`-only caller, are exactly the ones
+ * that cost four accounts and a share sheet to reach for real. `ListMemory` owns the
+ * answer rather than this class recomputing it, so a line write and a list write cannot
+ * disagree about who the caller is.
+ *
+ * It also creates a line with the approval the server would give it (backend plan 0037,
+ * section 2), which is what lets the optimistic placeholder be checked against something
+ * rather than against a guess.
+ *
+ * One thing it cannot do: this fake emits no events, so the remainder line a quantity
+ * reduction splits off (backend plan 0037, section 4) appears on the next read rather
+ * than arriving as `line.added`. That is a limit of the fake and not of the rule, and it
+ * is worth knowing before reading a spec that reloads to see it.
  */
 @Injectable()
 export class LineMemory implements LineServiceI {
+  private readonly _lists = inject(ListMemory);
+
   private readonly _byList = signal<ReadonlyMap<string, readonly Line[]>>(
     new Map(Object.entries(SEED_LINES))
   );
@@ -45,6 +66,10 @@ export class LineMemory implements LineServiceI {
     listId: string,
     options?: { cursor?: string; limit?: number; order?: LineOrder }
   ): Promise<Page<Line>> {
+    // READ is genuinely everything a reader gets, lines included (backend plan 0036,
+    // section 4.3), so this is the only gate on the read path.
+    this._require(listId, 'READ');
+
     const ordered = order(this._lines(listId), options?.order ?? 'position');
     const limit = options?.limit ?? 100;
     const start =
@@ -58,12 +83,29 @@ export class LineMemory implements LineServiceI {
     };
   }
 
+  /**
+   * Put something on the list. `WRITE`, and the approval is decided here.
+   *
+   * The three rules of backend plan 0037 section 2, in their order. The adder holding
+   * `DECIDE` is the one that matters most, because it is the fix for the approve button
+   * that used to flash on the adder's own line: they are the person the approval would
+   * have been asked of, and adding the line is them giving it. Auto-approve is second and
+   * leaves the approver **null**, which is the honest record that nobody decided.
+   *
+   * `status` is `PENDING` in all three, because whether the group agreed to buy a thing
+   * and whether it is in the trolley are different questions.
+   */
   async addLine(
     listId: string,
     content: string,
     quantity?: number
   ): Promise<Line> {
+    const permissions = this._require(listId, 'WRITE');
     this._maybeFail();
+
+    const caller = this._lists.callerUserId();
+    const decides = permissions.includes('DECIDE');
+    const auto = this._lists.listById(listId)?.autoApproveLines === true;
 
     const existing = this._lines(listId);
     const line: Line = {
@@ -75,12 +117,10 @@ export class LineMemory implements LineServiceI {
       // One past the highest, never `length`. Deletes leave gaps and a list whose
       // positions collide is the bug rule L4 is about.
       position: existing.reduce((top, l) => Math.max(top, l.position), 0) + 1,
-      // Core starts every line here, whoever added it. Rule L3 is the client following
-      // that with an approval of its own, and this fake is what proves it happens.
-      approvalStatus: 'PENDING',
+      approvalStatus: decides || auto ? 'APPROVED' : 'PENDING',
       status: 'PENDING',
-      createdByUserId: SEED_CALLER,
-      approvedByUserId: null,
+      createdByUserId: caller,
+      approvedByUserId: decides ? caller : null,
       version: 1,
     };
 
@@ -88,33 +128,97 @@ export class LineMemory implements LineServiceI {
     return line;
   }
 
+  /**
+   * Change what a line says, or how many.
+   *
+   * Three different answers on an approved line, and the whole shape of the permission
+   * model is in them (backend plan 0036, section 4.1). `WRITE` may not touch it at all,
+   * because a writer whose line has been agreed to cannot quietly change what was agreed
+   * to. `DECIDE` may change the quantity and nothing else, which is the one thing a
+   * person in the aisle learns that the list did not know. `MANAGE` may change any field
+   * of any line, because a governed thing needs somebody who can fix it.
+   *
+   * Two further rules ride on the same call. Editing a `REJECTED` line puts it back to
+   * `PENDING` and clears the approver, on any edit and on any list, which is what makes a
+   * rejection a conversation rather than a dead end. And lowering the quantity of an
+   * `APPROVED` line splits off the remainder, unless the list auto-approves.
+   */
   async updateLine(
     lineId: string,
     changes: { content?: string; quantity?: number }
   ): Promise<Line> {
+    const line = this._lineOrThrow(lineId);
+    const permissions = this._permissionsFor(line.listId);
+    const approved = line.approvalStatus === 'APPROVED';
+
+    if (!permissions.includes('MANAGE')) {
+      if (approved) {
+        if (!permissions.includes('DECIDE') || changes.content !== undefined) {
+          throw memoryFailure('forbidden', 403);
+        }
+      } else if (!permissions.includes('WRITE')) {
+        throw memoryFailure('forbidden', 403);
+      }
+    }
+
+    // A floor of 1. "None of it was there" is `NOT_AVAILABLE` on the whole line, which is
+    // a control the same caller already has (backend plan 0037, section 4.4).
+    if (changes.quantity !== undefined && changes.quantity < 1) {
+      throw memoryFailure('validation_failed', 400);
+    }
+
     this._maybeFail();
-    return this._patch(lineId, (line) => ({
-      ...line,
-      content: changes.content ?? line.content,
-      quantity: changes.quantity ?? line.quantity,
+
+    const shortfall =
+      approved && changes.quantity !== undefined
+        ? line.quantity - changes.quantity
+        : 0;
+
+    const updated = this._patch(lineId, (current) => ({
+      ...current,
+      content: changes.content ?? current.content,
+      quantity: changes.quantity ?? current.quantity,
+      ...(current.approvalStatus === 'REJECTED'
+        ? {
+            approvalStatus: 'PENDING' as LineApprovalStatus,
+            approvedByUserId: null,
+          }
+        : {}),
     }));
+
+    if (
+      shortfall > 0 &&
+      this._lists.listById(line.listId)?.autoApproveLines !== true
+    ) {
+      this._split(updated, shortfall, line.approvedByUserId);
+    }
+
+    return updated;
   }
 
+  /** Tick it off, put it back, or mark it as not in the shop. `DECIDE`. */
   async setStatus(lineId: string, status: LineStatus): Promise<Line> {
+    const line = this._lineOrThrow(lineId);
+    this._require(line.listId, 'DECIDE');
     this._maybeFail();
-    return this._patch(lineId, (line) => ({ ...line, status }));
+    return this._patch(lineId, (current) => ({ ...current, status }));
   }
 
+  /** Approve, turn down, or put a turned down line back. `DECIDE`. */
   async setApproval(
     lineId: string,
     approvalStatus: LineApprovalStatus
   ): Promise<Line> {
+    const line = this._lineOrThrow(lineId);
+    this._require(line.listId, 'DECIDE');
     this._maybeFail();
-    return this._patch(lineId, (line) => ({
-      ...line,
+
+    const caller = this._lists.callerUserId();
+    return this._patch(lineId, (current) => ({
+      ...current,
       approvalStatus,
       approvedByUserId:
-        approvalStatus === 'APPROVED' ? SEED_CALLER : line.approvedByUserId,
+        approvalStatus === 'APPROVED' ? caller : current.approvedByUserId,
     }));
   }
 
@@ -130,6 +234,7 @@ export class LineMemory implements LineServiceI {
     listId: string,
     orderedLineIds: readonly string[]
   ): Promise<void> {
+    this._require(listId, 'WRITE');
     this._maybeFail();
 
     const lines = this._lines(listId);
@@ -139,7 +244,9 @@ export class LineMemory implements LineServiceI {
       }
     }
 
-    const positions = new Map(orderedLineIds.map((id, index) => [id, index + 1]));
+    const positions = new Map(
+      orderedLineIds.map((id, index) => [id, index + 1])
+    );
     this._write(
       listId,
       lines.map((line) => {
@@ -151,17 +258,24 @@ export class LineMemory implements LineServiceI {
     );
   }
 
+  /**
+   * Take it off the list, for everybody.
+   *
+   * `WRITE` reaches a `PENDING` or `REJECTED` line and stops there; deleting an approved
+   * line is `MANAGE`, and not `DECIDE`, because un-approving it first is the path a
+   * decider already has and it leaves the line's history saying what happened.
+   */
   async deleteLine(lineId: string): Promise<string> {
+    const line = this._lineOrThrow(lineId);
+    this._require(
+      line.listId,
+      line.approvalStatus === 'APPROVED' ? 'MANAGE' : 'WRITE'
+    );
     this._maybeFail();
 
-    const listId = this._listOf(lineId);
-    if (listId === null) {
-      throw memoryFailure('not_found', 404);
-    }
-
     this._write(
-      listId,
-      this._lines(listId).filter((line) => line.id !== lineId)
+      line.listId,
+      this._lines(line.listId).filter((current) => current.id !== lineId)
     );
     return lineId;
   }
@@ -174,6 +288,89 @@ export class LineMemory implements LineServiceI {
   /** Test seam: the next write throws this code, once. */
   failNextWrite(code: GatewayError['code']): void {
     this._nextWriteFails = code;
+  }
+
+  /**
+   * The check every write goes through, answering the set it just validated.
+   *
+   * `not_found` before `forbidden`, matching core, so a list the caller cannot see never
+   * leaks its existence through the difference between the two. Returning the set saves
+   * the one caller that needs a second membership test from asking twice.
+   */
+  private _require(
+    listId: string,
+    permission: ListPermission
+  ): readonly ListPermission[] {
+    const permissions = this._permissionsFor(listId);
+    if (!permissions.includes(permission)) {
+      throw memoryFailure(
+        permissions.length === 0 ? 'not_found' : 'forbidden',
+        permissions.length === 0 ? 404 : 403
+      );
+    }
+
+    return permissions;
+  }
+
+  private _permissionsFor(listId: string): readonly ListPermission[] {
+    return this._lists.permissionsFor(listId);
+  }
+
+  private _lineOrThrow(lineId: string): Line {
+    const listId = this._listOf(lineId);
+    const line =
+      listId === null
+        ? undefined
+        : this._lines(listId).find((candidate) => candidate.id === lineId);
+
+    if (line === undefined) {
+      throw memoryFailure('not_found', 404);
+    }
+
+    return line;
+  }
+
+  /**
+   * The remainder of a lowered approved quantity, written directly below the original.
+   *
+   * Its author is the **original line's** author and its approver is copied from it: the
+   * remainder is the unfilled part of that person's request, and attributing it to the
+   * shopper would put a line nobody asked for under the shopper's name (backend plan
+   * 0037, section 4.4).
+   *
+   * The position is the midpoint to the next line, or one past the original when it is
+   * last, so nothing else is renumbered and no concurrent reorder is invalidated. Two
+   * reductions leave two remainders and they are not merged: two trips found two
+   * shortfalls, and one row of four would say something that never happened.
+   */
+  private _split(
+    original: Line,
+    quantity: number,
+    approvedByUserId: string | null
+  ): void {
+    const lines = this._lines(original.listId);
+    const next = lines
+      .filter((line) => line.position > original.position)
+      .reduce<
+        number | null
+      >((lowest, line) => (lowest === null || line.position < lowest ? line.position : lowest), null);
+
+    const remainder: Line = {
+      id: newId(),
+      listId: original.listId,
+      content: original.content,
+      quantity,
+      itemId: original.itemId,
+      position:
+        next === null ? original.position + 1 : (original.position + next) / 2,
+      approvalStatus: 'APPROVED',
+      status: 'NOT_AVAILABLE',
+      createdByUserId: original.createdByUserId,
+      approvedByUserId,
+      version: 1,
+    };
+
+    this._write(original.listId, [...lines, remainder]);
   }
 
   private _maybeFail(): void {
@@ -227,9 +424,6 @@ export class LineMemory implements LineServiceI {
     this._byList.update((current) => new Map(current).set(listId, lines));
   }
 }
-
-/** Who this fake answers as. The seeded caller every other fake in this library uses. */
-const SEED_CALLER = SEED_USER_ID;
 
 function order(lines: readonly Line[], by: LineOrder): readonly Line[] {
   if (by === 'position') {

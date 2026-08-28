@@ -285,6 +285,45 @@ describe('ZoneStore', () => {
       expect([...realtime.rooms.keys()]).not.toContain('zone:z2:staff');
     });
 
+    it('asks for no room in a zone it has only requested to join', async () => {
+      // `refuse` stands in for the server, whose `checkZone` is `requireApproved` and
+      // so can only ever say no to a pending member. The ask is what mattered: a
+      // `{ ok: false }` is latched by `RoomRegistry` for the whole connection, and
+      // that latch is the permanent "not updating live right now" notice on a group
+      // somebody had just been let into (plan 0026).
+      realtime.refuse.add('z1');
+      zones = [zone({ myRole: 'MEMBER', myStatus: 'PENDING', lists: [] })];
+      await store.load();
+
+      expect([...realtime.rooms.keys()]).not.toContain('zone:z1');
+      expect([...store.staleZoneIds()]).toEqual([]);
+    });
+
+    it('joins the room when the approval arrives, without a reconnect', async () => {
+      // The regression test for the report. Being approved has to be enough; it used
+      // to take a page reload, because a reload is a new connection and a new
+      // connection was the only thing that cleared the latch.
+      realtime.refuse.add('z1');
+      zones = [zone({ myRole: 'MEMBER', myStatus: 'PENDING', lists: [] })];
+      await store.load();
+
+      // The server now admits them, exactly as it does once the owner accepts.
+      realtime.refuse.delete('z1');
+      zones = [zone({ myRole: 'MEMBER', myStatus: 'APPROVED', lists: [] })];
+      realtime.emit('member.approved', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'You',
+        role: 'MEMBER',
+        status: 'APPROVED',
+      });
+      await settle();
+
+      expect([...realtime.rooms.keys()]).toContain('zone:z1');
+      expect([...store.staleZoneIds()]).toEqual([]);
+    });
+
     it('leaves both rooms when a zone goes away', async () => {
       await store.load();
 

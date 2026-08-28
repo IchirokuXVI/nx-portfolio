@@ -66,10 +66,13 @@ import { ZoneStore } from './zones/zone-store';
  * `LineStore` (plan 0012) joins for `ListStore`'s reason, and `MemberNames` for the
  * same one: it resolves `MEMBERSHIP_SERVICE`, so at the root it would quietly serve
  * fixture names beside real comments. `LineMemory` and `CommentMemory` are here for
- * `ZoneMemory`'s reason, with a wrinkle worth knowing: neither injects anything at all,
- * so root scope would work for both, and they are listed here anyway so that every fake
- * in this library is installed in one place rather than two. `LineApi` and `CommentApi`
- * stay out, like every other real transport.
+ * `ZoneMemory`'s reason. `CommentMemory` injects nothing, so root scope would work for
+ * it and it is listed here anyway, to keep every fake in this library installed in one
+ * place rather than two. `LineMemory` **must** be here: since plan 0030 section 9 it
+ * injects `ListMemory` to ask what the caller may do on a list, and `ListMemory` reaches
+ * `TokenStore`. It asks rather than recomputing so that a line write and a list write
+ * cannot disagree about who the caller is. `LineApi` and `CommentApi` stay out, like
+ * every other real transport.
  *
  * `MembershipStore` (plan 0018) joins for `ZoneStore`'s reason as well: it resolves
  * both `MEMBERSHIP_SERVICE` and `REALTIME_CLIENT`, and it holds the rows the members

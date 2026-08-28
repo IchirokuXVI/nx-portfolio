@@ -1,6 +1,9 @@
 import { workspaceRoot } from '@nx/devkit';
 import { nxE2EPreset } from '@nx/playwright/preset';
 import { defineConfig, devices } from '@playwright/test';
+import { withProgressReporter } from '../../playwright.reporters';
+
+const preset = nxE2EPreset(__filename, { testDir: './src' });
 
 // These specs drive velista mounted under the shell, so baseURL is the shell's
 // origin by default. Paths in the specs carry their own mount and locale
@@ -26,12 +29,20 @@ const usesExternalServer = !!(explicitBaseURL || externalOrigin);
 const baseURL = explicitBaseURL || externalOrigin || 'http://localhost:4200';
 
 export default defineConfig({
-  ...nxE2EPreset(__filename, { testDir: './src' }),
+  ...preset,
+  /* The preset's reporters are silent on a terminal, which on CI turns a running
+   * suite into a blank log. See playwright.reporters.ts. */
+  reporter: withProgressReporter(preset.reporter),
   use: {
     baseURL,
     // The local reverse proxy serves self-signed TLS; accept it so an https
     // E2E_BASE_URL still works. Harmless for the http/dev-server defaults.
     ignoreHTTPSErrors: true,
+    /* Both default to 0 under the test runner, and 0 means *no* limit, so a
+     * navigation that never completes is bounded only by the test timeout. See
+     * apps/damoclesSword-e2e/playwright.config.ts for the full account. */
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
     trace: 'on-first-retry',
   },
   /* With neither BASE_URL nor E2E_BASE_URL set, run the shell dev server on the

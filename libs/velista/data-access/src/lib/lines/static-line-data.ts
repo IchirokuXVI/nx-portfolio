@@ -31,8 +31,18 @@ import { SEED_USER_ID } from '../zones/static-zone-data';
  *   row state at once: ready, not in the shop, waiting for approval, and turned down.
  * - `list-cleaning`, finished. Every line ready, which is the state that has no empty
  *   message and no work left, and it was created by somebody else.
- * - `list-sunday`, in a group where the caller is an ordinary member, which is the
- *   arrangement a `forbidden` on the first write is reachable from.
+ * - `list-sunday`, in a group where the caller is an ordinary member and holds `READ`
+ *   and nothing else, which is the read only screen of plan 0030 acceptance 1.
+ * - `list-pantry`, the same group, where the caller holds `WRITE` and not `DECIDE`. It
+ *   carries an approved line the caller may not touch at all, an unapproved one of their
+ *   own they may edit and delete, and a rejected one, which is the whole of what `WRITE`
+ *   reaches.
+ * - `list-market`, the same group, where the caller holds `DECIDE` and not `WRITE`. It
+ *   carries an approved line with a quantity worth lowering, which is the quantity-only
+ *   edit sheet and the split behind it, plus one line waiting and one turned down, for
+ *   the decision buttons and the restore.
+ * - `list-freezer`, the same group, where the caller holds all four without being group
+ *   staff. Short on purpose: it exists for the share sheet, not for its lines.
  */
 export const SEED_LINES: Readonly<Record<string, readonly Line[]>> = {
   'list-weekly': [
@@ -70,6 +80,46 @@ export const SEED_LINES: Readonly<Record<string, readonly Line[]>> = {
     ready('ln-c-02', 'list-cleaning', 'Sponges', 6, 2, 'user-toni'),
     ready('ln-c-03', 'list-cleaning', 'Floor cleaner', 1, 4, 'user-toni'),
     ready('ln-c-04', 'list-cleaning', 'Bin bags', 2, 5, 'user-toni'),
+  ],
+  // `WRITE` and no `DECIDE` (see `SEED_LIST_ACCESS`). Rosa decides on this one.
+  'list-pantry': [
+    ready('ln-p-01', 'list-pantry', 'Rice', 2, 1, 'user-mum'),
+    // Approved and therefore untouchable by `WRITE`: no edit, no delete, no tick.
+    todo('ln-p-02', 'list-pantry', 'Olive oil', 1, 2, 'user-mum'),
+    // The caller's own, still waiting. `WRITE` may edit it and delete it.
+    line('ln-p-03', 'list-pantry', 'Tinned tomatoes', 4, 3, {
+      approvalStatus: 'PENDING',
+      approvedByUserId: null,
+    }),
+    // Turned down, and editing it puts it back to PENDING (backend plan 0036,
+    // section 4.2), which is the thing that makes a rejection a conversation.
+    line('ln-p-04', 'list-pantry', 'Crisps', 1, 5, {
+      approvalStatus: 'REJECTED',
+      approvedByUserId: 'user-rosa',
+    }),
+  ],
+  // `DECIDE` and no `WRITE`. No composer, and no edit entry on an unapproved row.
+  'list-market': [
+    // Three where the shop has one. Lowering this to 1 is the split of backend plan
+    // 0037 section 4, and this list does not auto-approve, so the remainder is written.
+    todo('ln-m-01', 'list-market', 'Tinned tomatoes', 3, 1, 'user-dad'),
+    ready('ln-m-02', 'list-market', 'Bread', 1, 2, 'user-dad'),
+    line('ln-m-03', 'list-market', 'Coffee', 1, 4, {
+      approvalStatus: 'PENDING',
+      createdByUserId: 'user-rosa',
+      approvedByUserId: null,
+    }),
+    line('ln-m-04', 'list-market', 'Biscuits', 2, 5, {
+      approvalStatus: 'REJECTED',
+      createdByUserId: 'user-rosa',
+      approvedByUserId: 'user-dad',
+    }),
+  ],
+  // All four, without being group staff. Two lines, because this list is here for the
+  // share sheet rather than for anything on it.
+  'list-freezer': [
+    todo('ln-f-01', 'list-freezer', 'Peas', 2, 1),
+    ready('ln-f-02', 'list-freezer', 'Fish fingers', 1, 2),
   ],
   'list-sunday': [
     ready('ln-s-01', 'list-sunday', 'Leg of lamb', 1, 1, 'user-mum'),

@@ -69,9 +69,9 @@ describe('listErrorKey', () => {
     });
 
     it('still speaks up about a refused write', () => {
-      expect(listErrorKey(gateway('validation_failed', 400), 'lines.write')).toBe(
-        'list.error.failed'
-      );
+      expect(
+        listErrorKey(gateway('validation_failed', 400), 'lines.write')
+      ).toBe('list.error.failed');
     });
   });
 
@@ -126,27 +126,37 @@ describe('listErrorKey', () => {
 });
 
 /**
- * The structural half. Three of these change what the page **is** rather than what it
+ * The structural half. Two of these change what the page **is** rather than what it
  * says, which is why the effect is decided separately from the copy.
  */
 describe('listErrorEffect', () => {
-  it('turns a refused write into the read only state, in place', () => {
-    // Today this is the only way the client can learn the caller is a reader: there is
-    // no `GET /v1/lists/:id/access` and `ListView` carries no role for them.
+  it('leaves the page alone after a refused write, and lets the sentence out', () => {
+    // The `read-only` effect is gone with plan 0030 section 3: `myPermissions` is how
+    // the client learns the caller is a reader, so there is nothing structural left to
+    // apply, and a case that only swallowed the failure would leave a refused write with
+    // no visible outcome at all. `listErrorKey` still answers for it.
     expect(listErrorEffect(gateway('forbidden', 403), 'lines.write')).toBe(
-      'read-only'
+      'none'
+    );
+    expect(listErrorKey(gateway('forbidden', 403), 'lines.write')).toBe(
+      'list.error.readOnly'
     );
   });
 
   it('does the same for a refused comment', () => {
-    expect(listErrorEffect(gateway('forbidden', 403), 'comments')).toBe(
-      'read-only'
+    expect(listErrorEffect(gateway('forbidden', 403), 'comments')).toBe('none');
+    expect(listErrorKey(gateway('forbidden', 403), 'comments')).toBe(
+      'list.error.readOnly'
     );
   });
 
   it('takes the page away when the list cannot be read', () => {
-    expect(listErrorEffect(gateway('not_found', 404), 'lines.read')).toBe('gone');
-    expect(listErrorEffect(gateway('forbidden', 403), 'lines.read')).toBe('gone');
+    expect(listErrorEffect(gateway('not_found', 404), 'lines.read')).toBe(
+      'gone'
+    );
+    expect(listErrorEffect(gateway('forbidden', 403), 'lines.read')).toBe(
+      'gone'
+    );
   });
 
   it('rereads silently after a refused reorder', () => {
@@ -155,18 +165,19 @@ describe('listErrorEffect', () => {
     ).toBe('reread');
   });
 
-  it('leaves the page alone for a demoted staff member', () => {
-    // The page stays and the decision buttons leave, which the abilities recompute
-    // from `myRole` once the zone refetches. Nothing structural happens here.
+  it('leaves the page alone for a caller who lost DECIDE', () => {
+    // The page stays and the decision buttons leave, which the abilities recompute from
+    // `myPermissions` when `list.myAccessChanged` reaches `ListStore` (backend plan
+    // 0036, section 8). Nothing structural happens here.
     expect(listErrorEffect(gateway('forbidden', 403), 'lines.decide')).toBe(
       'none'
     );
   });
 
   it('does nothing for a failure that never reached the gateway', () => {
-    expect(listErrorEffect(new NetworkError('ref-3', 'lines.write'), 'lines.write')).toBe(
-      'none'
-    );
+    expect(
+      listErrorEffect(new NetworkError('ref-3', 'lines.write'), 'lines.write')
+    ).toBe('none');
   });
 });
 

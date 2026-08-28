@@ -5,6 +5,7 @@ import {
 } from '../../lib/messages/list.messages';
 import {
   array,
+  boolean,
   integer,
   JsonSchema,
   nonEmptyString,
@@ -22,6 +23,7 @@ export const LIST_SCHEMA_IDS = {
   listView: schemaId('list/ListView'),
   listCounts: schemaId('list/ListCounts'),
   listAccessEntry: schemaId('list/ListAccessEntry'),
+  listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
   commentView: schemaId('list/CommentView'),
   listPage: schemaId('list/ListPage'),
@@ -29,6 +31,7 @@ export const LIST_SCHEMA_IDS = {
   commentPage: schemaId('list/CommentPage'),
   createListRequest: schemaId('msg/list.create/request'),
   setAccessRequest: schemaId('msg/list.setAccess/request'),
+  getAccessRequest: schemaId('msg/list.getAccess/request'),
   updateListRequest: schemaId('msg/list.update/request'),
   listIdRequest: schemaId('msg/list.listId/request'),
   listListsRequest: schemaId('msg/list.list/request'),
@@ -67,15 +70,41 @@ const listView = object(
     name: nonEmptyString(),
     createdByUserId: nonEmptyString(),
     counts: ref(LIST_SCHEMA_IDS.listCounts),
+    autoApproveLines: boolean(),
+    myPermissions: array(ref(ENUM_IDS.listPermission)),
     ...timestamps,
   },
-  ['id', 'zoneId', 'name', 'createdByUserId', 'counts', ...timestampKeys]
+  [
+    'id',
+    'zoneId',
+    'name',
+    'createdByUserId',
+    'counts',
+    'autoApproveLines',
+    'myPermissions',
+    ...timestampKeys,
+  ]
 );
 
+// An empty `permissions` is no access, which `setAccess` stores as a deleted row
+// (plan 0036, section 2.2). So the array is allowed to be empty on the way in and
+// never comes back out of `getAccess` that way.
 const listAccessEntry = object(
   LIST_SCHEMA_IDS.listAccessEntry,
-  { membershipId: nonEmptyString(), role: ref(ENUM_IDS.listRole) },
-  ['membershipId', 'role']
+  {
+    membershipId: nonEmptyString(),
+    permissions: array(ref(ENUM_IDS.listPermission)),
+  },
+  ['membershipId', 'permissions']
+);
+
+const listAccessView = object(
+  LIST_SCHEMA_IDS.listAccessView,
+  {
+    listId: nonEmptyString(),
+    entries: array(ref(LIST_SCHEMA_IDS.listAccessEntry)),
+  },
+  ['listId', 'entries']
 );
 
 const lineView = object(
@@ -143,9 +172,19 @@ const setAccessRequest = object(
   },
   ['userId', 'listId', 'entries']
 );
+const getAccessRequest = object(
+  LIST_SCHEMA_IDS.getAccessRequest,
+  { userId: nonEmptyString(), listId: nonEmptyString() },
+  ['userId', 'listId']
+);
 const updateListRequest = object(
   LIST_SCHEMA_IDS.updateListRequest,
-  { userId: nonEmptyString(), listId: nonEmptyString(), name: string() },
+  {
+    userId: nonEmptyString(),
+    listId: nonEmptyString(),
+    name: string(),
+    autoApproveLines: boolean(),
+  },
   ['userId', 'listId']
 );
 const listIdRequest = object(
@@ -252,6 +291,7 @@ export const listSchemas: JsonSchema[] = [
   listCounts,
   listView,
   listAccessEntry,
+  listAccessView,
   lineView,
   commentView,
   listPage,
@@ -259,6 +299,7 @@ export const listSchemas: JsonSchema[] = [
   commentPage,
   createListRequest,
   setAccessRequest,
+  getAccessRequest,
   updateListRequest,
   listIdRequest,
   listListsRequest,
@@ -284,6 +325,10 @@ export const listMessageContracts: Record<
   [LIST_PATTERNS.setAccess]: {
     request: LIST_SCHEMA_IDS.setAccessRequest,
     response: COMMON_IDS.listIdResult,
+  },
+  [LIST_PATTERNS.getAccess]: {
+    request: LIST_SCHEMA_IDS.getAccessRequest,
+    response: LIST_SCHEMA_IDS.listAccessView,
   },
   [LIST_PATTERNS.update]: {
     request: LIST_SCHEMA_IDS.updateListRequest,

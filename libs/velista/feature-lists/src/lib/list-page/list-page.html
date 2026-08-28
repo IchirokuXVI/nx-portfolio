@@ -9,7 +9,7 @@
   [signedIn]="true"
 />
 
-<main class="page">
+<main #column class="page">
   <!--
     The string moves to the accessible name, so nothing is lost for a screen reader
     when the label becomes a glyph. In reorder mode this ends the mode rather than
@@ -80,12 +80,22 @@
 
   @if (current.kind === 'loaded') {
     <!--
-      Shown once, and only ever to somebody who tapped a row they cannot change. The
-      tick is the whole interaction model here, so silence would read as a broken app
-      and repetition would read as nagging (section 3.2).
+      One line, drawn on arrival from what the server said rather than after a control
+      has failed (plan 0030, section 3.2). Two callers need it and neither of them is
+      looking at a broken screen:
+
+      A read-only caller sees everything and can press nothing, so the page says why
+      once, at the top, instead of letting each control refuse in turn.
+
+      A `WRITE`-only caller has a full composer and rows that do not answer a tap,
+      because ticking off is `DECIDE` now. Without a sentence naming who does the
+      ticking, a screen that takes a new line and ignores a tap on it reads as broken
+      (section 7). Never both: read only is the absence of `WRITE`.
     -->
-    @if (readerNoticeShown() && !current.abilities.canWrite) {
-      <lib-list-notice messageKey="list.readOnly.notice" />
+    @if (current.abilities.readOnly) {
+      <lib-list-notice messageKey="list.readOnly.banner" />
+    } @else if (current.abilities.canWrite && !current.abilities.canDecide) {
+      <lib-list-notice messageKey="list.ticking.notMine" />
     }
 
     @if (current.empty) {
@@ -114,9 +124,10 @@
 </main>
 
 <!--
-  Pinned below the scrolling column, and **absent** rather than disabled for a reader:
-  a disabled text field at the bottom of the screen is an invitation that does not work
-  and costs a tap to find out (section 3.2).
+  Pinned to the bottom of the screen, and **absent** rather than disabled without
+  `WRITE`: a disabled text field at the bottom of the screen is an invitation that does
+  not work and costs a tap to find out (section 3.2). Drawn from certainty now, so it is
+  absent from the first frame rather than taken away after a refusal.
 
   It is also absent in reorder mode, where adding a line mid drag would insert a row
   into the order somebody is halfway through rewriting.
@@ -125,8 +136,8 @@
   @if (page.abilities.canWrite && !reordering()) {
     <lib-line-composer
       (submitted)="add($event)"
-      [takeFocus]="page.empty"
       [busy]="composerBusy()"
+      [takeFocus]="page.empty"
     />
   }
 }

@@ -9,8 +9,12 @@
  *           Carol (pending member, registered email), Temp (temporary user).
  *   Zone    "Weekly shop", owned by Alice, with Bob approved and Carol pending;
  *           Temp is an approved member so the merge path (Temp -> Bob) is valid.
- *   Lists   "Groceries" and "Hardware" under the zone; Alice writes both, Bob
- *           writes Groceries and reads Hardware.
+ *   Lists   "Groceries" and "Hardware" under the zone. Alice created both and
+ *           holds all four permissions on each; Bob holds read and write on
+ *           Groceries and read alone on Hardware; the guest holds read and
+ *           decide on Groceries. Write without decide and decide without write
+ *           are there deliberately (plan 0036, section 9): they are the two
+ *           states a single role could not express and nothing else exercises.
  *   Lines   Several across both line state machines (approvalStatus x status),
  *           with non sequential float positions (the reordering case), a couple
  *           linked to real catalog items, and two comments on the milk line.
@@ -23,7 +27,7 @@ import {
   ItemCategory,
   LineApprovalStatus,
   LineStatus,
-  ListRole,
+  ListPermission,
   MembershipStatus,
   MergeRequestStatus,
   UnitOfMeasure,
@@ -52,6 +56,7 @@ import {
   ACCESS_ALICE_HARDWARE_ID,
   ACCESS_BOB_GROCERIES_ID,
   ACCESS_BOB_HARDWARE_ID,
+  ACCESS_TEMP_GROCERIES_ID,
   ALICE_CREDENTIAL_ID,
   ALICE_ID,
   BOB_GOOGLE_SUBJECT,
@@ -197,30 +202,52 @@ const core: CoreSeed = {
       createdByUserId: ALICE_ID,
     }),
   ],
+  // Four permission sets, deliberately different from each other (plan 0036,
+  // section 9). Alice created both lists, so she holds all four on each; Bob adds
+  // to Groceries but does not decide what goes in the trolley, and reads Hardware
+  // and nothing more; the guest decides on Groceries but cannot put anything on
+  // it. The middle two are the states nothing exercised before this plan, and
+  // they are the two the whole set exists to make expressible.
   listAccess: [
     makeListAccess({
       id: ACCESS_ALICE_GROCERIES_ID,
       listId: LIST_GROCERIES_ID,
       membershipId: MEMBERSHIP_ALICE_ID,
-      role: ListRole.WRITER,
+      permissions: [
+        ListPermission.READ,
+        ListPermission.WRITE,
+        ListPermission.DECIDE,
+        ListPermission.MANAGE,
+      ],
     }),
     makeListAccess({
       id: ACCESS_ALICE_HARDWARE_ID,
       listId: LIST_HARDWARE_ID,
       membershipId: MEMBERSHIP_ALICE_ID,
-      role: ListRole.WRITER,
+      permissions: [
+        ListPermission.READ,
+        ListPermission.WRITE,
+        ListPermission.DECIDE,
+        ListPermission.MANAGE,
+      ],
     }),
     makeListAccess({
       id: ACCESS_BOB_GROCERIES_ID,
       listId: LIST_GROCERIES_ID,
       membershipId: MEMBERSHIP_BOB_ID,
-      role: ListRole.WRITER,
+      permissions: [ListPermission.READ, ListPermission.WRITE],
     }),
     makeListAccess({
       id: ACCESS_BOB_HARDWARE_ID,
       listId: LIST_HARDWARE_ID,
       membershipId: MEMBERSHIP_BOB_ID,
-      role: ListRole.READER,
+      permissions: [ListPermission.READ],
+    }),
+    makeListAccess({
+      id: ACCESS_TEMP_GROCERIES_ID,
+      listId: LIST_GROCERIES_ID,
+      membershipId: MEMBERSHIP_TEMP_ID,
+      permissions: [ListPermission.READ, ListPermission.DECIDE],
     }),
   ],
   lines: [

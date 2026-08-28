@@ -242,6 +242,7 @@
       "notAllowed": "No puedes entrar en este grupo. Habla con quien lo lleva",
       "tooMany": "Demasiados intentos. Espera un minuto e inténtalo de nuevo",
       "createClash": "Algo ha chocado por nuestra parte. Inténtalo otra vez",
+      "signedOut": "Se ha cerrado tu sesión. Vuelve a intentarlo para seguir",
       "failed": "No se ha podido enviar. Inténtalo de nuevo"
     },
     "accountLost": {
@@ -352,6 +353,17 @@
       "notLive": "No se está actualizando ahora",
       "back": "Volver al grupo"
     },
+    "presence": {
+      "one": "{{name}} está en la lista",
+      "two": "{{first}} y {{second}} están en la lista",
+      "more_one": "{{name}} y {{count}} más están en la lista",
+      "more_other": "{{name}} y {{count}} más están en la lista",
+      "show": "Ver quién está en la lista",
+      "hide": "Ocultar quién está en la lista",
+      "panelTitle": "En la lista",
+      "since": "desde las {{time}}",
+      "hereNow": "aquí ahora"
+    },
     "add": {
       "placeholder": "Añade algo",
       "action": "Añadir",
@@ -365,7 +377,10 @@
       "short": "La lista está vacía"
     },
     "readOnly": {
-      "notice": "Puedes ver esta lista, no cambiarla"
+      "banner": "Puedes ver esta lista, no cambiarla"
+    },
+    "ticking": {
+      "notMine": "Añade lo que haga falta. Marcar lo comprado es cosa de quien va a la tienda"
     },
     "line": {
       "awaitingApproval": "Esperando aprobación",
@@ -400,7 +415,9 @@
     "edit": {
       "title": "Cambiar esta línea",
       "content": "Qué es",
-      "save": "Guardar"
+      "save": "Guardar",
+      "remainder_one": "El que no traes se queda en la lista, marcado como que no estaba",
+      "remainder_other": "Los {{count}} que no traes se quedan en la lista, marcados como que no estaban"
     },
     "confirm": {
       "deleteLine": {
@@ -421,25 +438,29 @@
       "send": "Enviar",
       "empty": "Todavía nadie ha dicho nada",
       "someone": "Alguien del grupo",
-      "loading": "Cargando lo que se ha dicho"
+      "loading": "Cargando lo que se ha dicho",
+      "readOnly": "Puedes leer lo que se ha dicho, pero no escribir aquí"
     },
     "settings": {
       "title": "Ajustes de la lista",
       "name": "Nombre de la lista",
       "save": "Guardar",
       "share": "Quién puede usar esta lista",
+      "approval": "Líneas nuevas",
+      "autoApprove": {
+        "label": "Añadir sin preguntar",
+        "hint": "Las líneas nuevas entran directamente en la lista en vez de esperar aprobación. Las que ya estaban esperando se quedan como están"
+      },
       "delete": "Eliminar esta lista",
       "accessFor": "Qué puede hacer {{name}} con esta lista",
       "access": {
-        "none": "Sin acceso",
-        "reader": "Puede verla",
-        "writer": "Puede añadir y marcar",
-        "always": "Siempre tiene acceso",
-        "shortNone": "Nada",
-        "shortReader": "Ver",
-        "shortWriter": "Añadir",
-        "creator": "Empezó esta lista",
-        "staffNote": "Los administradores pueden abrir todas las listas"
+        "read": "Puede ver esta lista",
+        "write": "Puede añadir cosas",
+        "decide": "Puede marcar y decidir qué entra",
+        "manage": "Administra la lista",
+        "creator": "Creó esta lista",
+        "staffNote": "Los administradores del grupo siempre tienen acceso completo a todas las listas del grupo. Esto no se puede cambiar aquí",
+        "manageLocked": "Solo los administradores del grupo pueden nombrar administradores de lista"
       }
     },
     "gone": {

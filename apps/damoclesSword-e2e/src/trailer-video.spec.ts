@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
 import { expect, test } from './support/fixtures';
+import { fontsReady } from './support/locale-helpers';
 
 /**
  * Guards the layout promises the trailer video makes on the damoclesSword home
@@ -50,7 +51,7 @@ async function readTrailerBox(page: Page): Promise<TrailerBox> {
 
   // Web fonts can nudge the header height (and so the trailer's top); wait for
   // them so the geometry we read is final.
-  await page.evaluate(() => document.fonts.ready).catch(() => undefined);
+  await fontsReady(page);
 
   return page.evaluate((sel) => {
     const el = document.querySelector(sel) as HTMLElement;

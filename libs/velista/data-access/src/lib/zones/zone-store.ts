@@ -524,37 +524,63 @@ export class ZoneStore {
   }
 
   /**
-   * Join a room per visible zone.
+   * Join a room per visible zone the caller is actually **in**.
    *
    * Only zone rooms, deliberately. List and line events are broadcast to the zone room
    * as well as the list room (`realtime/src/app/consumer/jetstream.consumer.ts:182`),
    * so subscribing per zone already delivers everything `0003` needs for its live
    * counts. Subscribing to each list on the home screen as well would pay for the same
    * bytes twice.
+   *
+   * ## Approved only, and this is a bug fix (plan 0026)
+   *
+   * `myZones()` includes a zone the caller has only **requested** to join: a join
+   * request loads a pending summary so the dashboard can show the request it is
+   * waiting on. Asking for that zone's room is a guaranteed no, because `checkZone`
+   * on the server is `requireApproved`, and the answer is a `{ ok: false }` that
+   * `RoomRegistry` latches for the whole connection by design.
+   *
+   * So being approved did not fix it. The approval arrives on the caller's own
+   * channel (backend `0030`, section 4.1, which exists precisely because a pending
+   * member is not in the zone room where their approval is announced), `myStatus`
+   * flips, and this method runs again, and the zone is **already held**: the loops
+   * below see a room whose staff intent has not changed and do nothing at all. Even
+   * had they re-asked, the registry skips a latched zone. The group then showed the
+   * "not updating live right now" notice until the next connection, which is why
+   * reloading the page has always fixed it.
+   *
+   * Filtering here fixes both halves at once and needs no new mechanism. A pending
+   * zone is never asked for, so no refusal is ever latched and no false notice is
+   * ever drawn; and when the approval lands, the zone enters `wanted` for the first
+   * time and is subscribed fresh. Releasing on the way in is what makes it
+   * self-healing: the registry drops a zone's latch with its last holder, so even a
+   * refusal from some other cause is cleared by the standing changing.
    */
   private _syncRooms(): void {
     const wanted = new Map(
-      this.myZones().map((zone) => [
-        zone.id,
-        // Staff also join `zone:{id}:staff`, which is the only room that carries the
-        // governance fields on a counts broadcast. Without it an owner's join request
-        // row would go stale until the next full load, which is the one number on the
-        // card that most wants to be live.
-        //
-        // **Rule G3 (plan 0010, section 5.3): from `myRole`, never from the counts.**
-        // A non-null `pendingRequestCount` is also the backend's answer to "is this
-        // caller staff", and it was what decided this until `0010`. The two disagree
-        // for exactly as long as it matters: `member.roleChanged` updates `myRole`
-        // immediately and leaves the counts alone, and `myRole` is the one that is
-        // right straight away.
-        //
-        // The rule used to carry a second justification, that a demoted admin asking
-        // for a refused staff room raises a permanent false stale badge. That one is
-        // void: the server answers `zone.subscribe` with `{ ok: true }` whether or not
-        // the staff join happened, so a staff room cannot be refused at all (plan
-        // 0016, section 3.2). The reason above stands on its own and is enough.
-        zone.myRole === 'OWNER' || zone.myRole === 'ADMIN',
-      ])
+      this.myZones()
+        .filter((zone) => zone.myStatus === 'APPROVED')
+        .map((zone) => [
+          zone.id,
+          // Staff also join `zone:{id}:staff`, which is the only room that carries the
+          // governance fields on a counts broadcast. Without it an owner's join request
+          // row would go stale until the next full load, which is the one number on the
+          // card that most wants to be live.
+          //
+          // **Rule G3 (plan 0010, section 5.3): from `myRole`, never from the counts.**
+          // A non-null `pendingRequestCount` is also the backend's answer to "is this
+          // caller staff", and it was what decided this until `0010`. The two disagree
+          // for exactly as long as it matters: `member.roleChanged` updates `myRole`
+          // immediately and leaves the counts alone, and `myRole` is the one that is
+          // right straight away.
+          //
+          // The rule used to carry a second justification, that a demoted admin asking
+          // for a refused staff room raises a permanent false stale badge. That one is
+          // void: the server answers `zone.subscribe` with `{ ok: true }` whether or not
+          // the staff join happened, so a staff room cannot be refused at all (plan
+          // 0016, section 3.2). The reason above stands on its own and is enough.
+          zone.myRole === 'OWNER' || zone.myRole === 'ADMIN',
+        ])
     );
 
     for (const [zoneId, held] of this._rooms) {

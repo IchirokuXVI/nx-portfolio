@@ -1,0 +1,106 @@
+@if (viewers().length > 0) {
+  <div class="row">
+    <!--
+      The stack, in a row. It is `aria-hidden` because two letters are not a fact a
+      screen reader can read off: the sentence beside it says the same thing in words,
+      and it is the announced one.
+    -->
+    <span aria-hidden="true" class="avatars">
+      @for (initial of initials(); track $index) {
+        <span class="avatar">{{ initial }}</span>
+      }
+
+      @if (overflow() > 0) {
+        <span class="avatar avatar-more">+{{ overflow() }}</span>
+      }
+    </span>
+
+    <!--
+      Presence changes with nobody touching the screen, so it is announced politely
+      rather than silently swapped (plan 0003, section 7).
+
+      The three branches are three keys rather than one key assembled from a count,
+      because a key built at runtime cannot be found by grepping, which is how both a
+      translator's tooling and the next developer find them.
+    -->
+    <p aria-live="polite" class="sentence">
+      @if (viewers().length === 1) {
+        {{ 'list.presence.one' | rokuT: { name: first() } }}
+      } @else if (viewers().length === 2) {
+        {{ 'list.presence.two' | rokuT: { first: first(), second: second() } }}
+      } @else {
+        {{ 'list.presence.more' | rokuT: { name: first(), count: overflow() } }}
+      }
+    </p>
+
+    <button
+      (click)="toggle()"
+      [attr.aria-expanded]="open()"
+      [attr.aria-label]="
+        (open() ? 'list.presence.hide' : 'list.presence.show') | rokuT
+      "
+      #trigger
+      aria-haspopup="true"
+      class="disclose"
+      type="button"
+    >
+      <lib-chevron-right-icon [class.turned]="open()" class="disclose-glyph" />
+    </button>
+  </div>
+
+  <!--
+    Everybody, one per line: who they are, what they are in the group, and since when.
+
+    Drawn over the page rather than pushed into it. The lines below are what somebody is
+    reading in an aisle, and a disclosure that moved them down every time a curious
+    thumb hit the arrow would cost the reader their place on the screen this app exists
+    for.
+  -->
+  @if (open()) {
+    <ul [attr.aria-label]="'list.presence.panelTitle' | rokuT" class="people">
+      @for (viewer of viewers(); track viewer.userId) {
+        <li class="person">
+          <span aria-hidden="true" class="avatar">{{
+            initialOf(viewer.name)
+          }}</span>
+
+          <span class="who">
+            <span class="person-name">{{ viewer.name }}</span>
+
+            <!--
+              When this client first saw them, which is not when they opened the list:
+              no presence payload carries a timestamp. Somebody first seen in the
+              snapshot being read has no time at all yet and says so in words rather
+              than being given the current one, which would be a guess dressed as a
+              fact.
+            -->
+            @if (viewer.since !== null) {
+              <time
+                [attr.datetime]="viewer.since.toISOString()"
+                class="person-when"
+              >
+                {{
+                  'list.presence.since' | rokuT: { time: since(viewer.since) }
+                }}
+              </time>
+            } @else {
+              <span class="person-when">
+                {{ 'list.presence.hereNow' | rokuT }}
+              </span>
+            }
+          </span>
+
+          <!--
+            Absent rather than guessed while the zone's members are still arriving. The
+            enum's fallback exists to read an unrecognised value off the wire safely,
+            and using it here would demote an owner for as long as a request is in
+            flight.
+          -->
+          @if (viewer.role !== null) {
+            <lib-role-chip [role]="viewer.role" class="person-role" />
+          }
+        </li>
+      }
+    </ul>
+  }
+}
