@@ -126,8 +126,8 @@ export class PresenceRow {
    * Which key to render, resolved once so the template does not branch twice.
    *
    * A compact row always counts when it can. Its sentence is off screen and is read as
-   * part of the accessible name of the control it sits in, where "2 shopping now" is
-   * three useful words and a list of names is a paragraph.
+   * part of the accessible name of the control it sits in, where "2 people here now"
+   * is four useful words and a list of names is a paragraph.
    */
   readonly key = computed(() => {
     const crowd = this.countKey();

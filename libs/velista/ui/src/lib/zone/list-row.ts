@@ -51,7 +51,7 @@ import { PresenceRow } from '../presence/presence-row';
       </span>
 
       <!--
-        Who is shopping from this list: the dot and up to two initials, no names. A row
+        Who is here on this list: the dot and up to two initials, no names. A row
         has no space for a sentence and the header above already carries one, so the
         sentence is read but not drawn (plan 0022, section 3.3).
 
@@ -62,8 +62,8 @@ import { PresenceRow } from '../presence/presence-row';
       <lib-presence-row
         [compact]="true"
         [names]="list().viewers"
-        countKey="home.presence.onList"
-        messageKey="home.presence.shopping"
+        countKey="home.presence.hereCount"
+        messageKey="home.presence.here"
       />
 
       <lib-chevron-right-icon class="chevron" />

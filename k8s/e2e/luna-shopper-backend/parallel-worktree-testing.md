@@ -253,12 +253,13 @@ nx run luna-shopper-backend:observability:down    # removes only those four
 ```
 
 Both wrap `stack.sh -p observability {up,down}`, and `-p` accepts any profile in
-`compose.yml`. The two directions are not symmetric, which is deliberate: `up` is
-additive (the base stack plus the profile's containers), while `down` is scoped
-to the profile's own containers and keeps their volumes, so taking the telemetry
-down never takes the databases with it and never costs you the Prometheus
-history. `stack:down` is still the whole project including volumes, profiled
-containers and all.
+`compose.yml`. In both directions it means the same thing: operate on that
+profile and nothing else. So `observability:up` starts the four telemetry
+containers without touching the base stack and without migrating (run `stack:up`
+for that), and `observability:down` removes those four while keeping their
+volumes, so taking the telemetry down never takes the databases with it and
+never costs you the Prometheus history. `stack:down` is still the whole project
+including volumes, profiled containers and all.
 
 The same thing by hand, without the wrapper:
 

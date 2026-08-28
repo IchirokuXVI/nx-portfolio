@@ -141,6 +141,69 @@ if ! kubectl get clusterissuer letsencrypt-dns01 >/dev/null 2>&1; then
   echo >&2
 fi
 
+# ---------------------------------------------------------------------------
+# Is a previous run still holding the release?
+#
+# Helm sets pending-install (or pending-upgrade, or pending-rollback) for the
+# duration of an operation and only flips it to deployed or failed at the end. A
+# run that never reached the end leaves that status set forever: --wait sits on a
+# hook that cannot start, the terminal is closed or the timeout is reached, and
+# the release is stranded. Every later run then refuses with
+#
+#   Error: UPGRADE FAILED: another operation (install/upgrade/rollback) is in progress
+#
+# which describes a process that is no longer running.
+#
+# This earns a check of its own because the report below cannot see it.
+# current_version() reads the shell Deployment, and a release stranded on its
+# pre-install hook never created one, so the script says "Nothing deployed yet"
+# and Helm immediately says an operation is in progress. Those two read as a
+# contradiction, and they send you looking for a concurrent deploy that does not
+# exist rather than at the hook that actually stalled.
+#
+# `helm list --filter` rather than `helm status`: it answers with an empty list
+# instead of a non-zero exit when the release does not exist, which is the
+# ordinary first install and not a condition worth branching on.
+# ---------------------------------------------------------------------------
+# The trailing `|| true` is load bearing under `set -euo pipefail`. On a first
+# install there is no release, so `grep` matches nothing and exits 1, pipefail
+# promotes that to the pipeline's status, and `set -e` would kill the script
+# here with no output at all. That is a far worse failure than the one this
+# check exists to report, and it would hit the ordinary path rather than the
+# stuck one.
+RELEASE_STATUS="$(helm list --namespace "$NAMESPACE" --all \
+  --filter "^${RELEASE_NAME}\$" --output json 2>/dev/null \
+  | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
+
+case "$RELEASE_STATUS" in
+  pending-*)
+    echo "Release '${RELEASE_NAME}' is stuck in status '${RELEASE_STATUS}'." >&2
+    echo >&2
+    echo "A previous run started and never finished, so Helm still believes an" >&2
+    echo "operation is in progress and will refuse this one. Nothing is running" >&2
+    echo "now; the status is simply left over." >&2
+    echo >&2
+    if [ "$RELEASE_STATUS" = "pending-install" ]; then
+      # Revision 1 never completed, so there is no earlier revision to return to
+      # and a rollback would have nothing to roll back to. Uninstalling drops a
+      # release that never served anything.
+      echo "  helm uninstall ${RELEASE_NAME} --namespace ${NAMESPACE}" >&2
+    else
+      # A stalled upgrade has an earlier revision that did work, so returning to
+      # it is both possible and the smaller change.
+      echo "  helm rollback ${RELEASE_NAME} --namespace ${NAMESPACE}" >&2
+    fi
+    echo >&2
+    echo "Then find out why the last run stalled before retrying, or it strands" >&2
+    echo "again. A pre-install migration Job that cannot pull its image is the" >&2
+    echo "usual cause, and it names itself here:" >&2
+    echo >&2
+    echo "  kubectl get pods --namespace ${NAMESPACE}" >&2
+    echo "  kubectl describe pod --namespace ${NAMESPACE} <the pending pod>" >&2
+    exit 1
+    ;;
+esac
+
 PREVIOUS="$(current_version)"
 if [ -n "$PREVIOUS" ]; then
   echo "Currently serving: ${PREVIOUS}"
