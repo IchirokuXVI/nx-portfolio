@@ -7,6 +7,8 @@ import type {
   Membership,
   MembershipStatus,
   MyZone,
+  PresenceEditor,
+  PresenceUser,
   ProfileLoad,
   SessionTokens,
   ShoppingListSummary,
@@ -30,6 +32,7 @@ import {
   MEMBERSHIP_SERVICE,
   type MembershipServiceI,
 } from '../memberships/membership-service';
+import { PresenceStore } from '../presence/presence-store';
 import {
   ZoneStore,
   type MemberRename,
@@ -582,8 +585,16 @@ export interface FakeLineStateOptions {
 
 /** One write a page asked for, so a spec can assert what was sent and in what order. */
 export type LineWriteCall =
-  | { readonly kind: 'add'; readonly content: string; readonly quantity: number }
-  | { readonly kind: 'status'; readonly lineId: string; readonly status: LineStatus }
+  | {
+      readonly kind: 'add';
+      readonly content: string;
+      readonly quantity: number;
+    }
+  | {
+      readonly kind: 'status';
+      readonly lineId: string;
+      readonly status: LineStatus;
+    }
   | {
       readonly kind: 'approval';
       readonly lineId: string;
@@ -706,7 +717,9 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
 
     reorder: async (_listId: string, orderedLineIds: readonly string[]) => {
       calls.push({ kind: 'reorder', orderedLineIds });
-      return outcome === 'failed' ? ('failed' as const) : ('succeeded' as const);
+      return outcome === 'failed'
+        ? ('failed' as const)
+        : ('succeeded' as const);
     },
 
     deleteLine: async (lineId: string) => {
@@ -782,6 +795,60 @@ export function provideFakeMemberNames(
   store: ReturnType<typeof fakeMemberNames>
 ): Provider {
   return { provide: MemberNames, useValue: store };
+}
+
+/** Who a fake says is present, per zone and per list (plan 0017). */
+export interface FakePresenceOptions {
+  /** Zone id to the user ids online in it. */
+  readonly online?: Readonly<Record<string, readonly string[]>>;
+  /** List id to the user ids looking at it. */
+  readonly viewers?: Readonly<Record<string, readonly string[]>>;
+  /** List id to `userId -> lineId`, for who is editing what. */
+  readonly editors?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+}
+
+/**
+ * A `PresenceStore` holding whatever it was given, with no socket behind it.
+ *
+ * Takes user ids rather than `PresenceUser`s because that is what the wire carries:
+ * presence payloads have no username in them, so a double that accepted names would
+ * let a screen pass a test by rendering a field the server never sends
+ * (plan 0017, section 3.4).
+ */
+export function fakePresenceStore(options: FakePresenceOptions = {}) {
+  const users = (ids: readonly string[] = []): readonly PresenceUser[] =>
+    ids.map((userId) => ({ userId, username: '' }));
+
+  const editorsOf = (listId: string): readonly PresenceEditor[] =>
+    Object.entries(options.editors?.[listId] ?? {}).map(([userId, lineId]) => ({
+      userId,
+      username: '',
+      lineId,
+    }));
+
+  return {
+    onlineIn: (zoneId: string) => users(options.online?.[zoneId]),
+    viewersOf: (listId: string) => users(options.viewers?.[listId]),
+    editorsOf,
+    editorOfLine: (listId: string, lineId: string) =>
+      editorsOf(listId).find((editor) => editor.lineId === lineId) ?? null,
+    forList: (listId: string) =>
+      computed(() => ({
+        listId,
+        viewers: users(options.viewers?.[listId]),
+        editors: editorsOf(listId),
+      })),
+    clear: () => undefined,
+  };
+}
+
+export type FakePresenceStore = ReturnType<typeof fakePresenceStore>;
+
+/** {@link fakePresenceStore} bound to the real token. */
+export function provideFakePresenceStore(
+  store: FakePresenceStore = fakePresenceStore()
+): Provider {
+  return { provide: PresenceStore, useValue: store };
 }
 
 /** One recorded call to a faked membership service. */
@@ -1003,9 +1070,7 @@ export function fakeProfileStore(options: FakeProfileOptions = {}) {
         return { state: 'failed' as const, error: options.renameRejectsWith };
       }
 
-      profile.update((held) =>
-        held === null ? held : { ...held, username }
-      );
+      profile.update((held) => (held === null ? held : { ...held, username }));
       return { state: 'renamed' as const };
     },
 
@@ -1041,9 +1106,7 @@ export function provideFakeProfileStore(
  * A registered, confirmed account by default, because that is the screen most specs
  * are about; the guest and the unconfirmed states are one override each.
  */
-export function profileFor(
-  overrides: Partial<UserProfile> = {}
-): UserProfile {
+export function profileFor(overrides: Partial<UserProfile> = {}): UserProfile {
   return {
     userId: 'u1',
     kind: 'REGISTERED',

@@ -1,17 +1,25 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   AccountNotice,
+  fakeMemberNames,
+  fakePresenceStore,
   fakeZoneStore,
   provideAccountNotice,
   provideFakeAuthService,
+  provideFakeMemberNames,
+  provideFakePresenceStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
+  REALTIME_CLIENT,
   VERIFY_RESEND_AVAILABLE,
   ZoneStore,
   type FakeIdentity,
+  type FakePresenceOptions,
   type FakeZoneStore,
+  type RealtimeMemory,
   type ZoneEntry,
 } from '@portfolio/velista/data-access';
 import type { MyZone } from '@portfolio/velista/models';
@@ -20,6 +28,7 @@ import {
   provideVelistaTesting,
   StorageKeys,
 } from '@portfolio/velista/platform';
+import { ResumeListCard } from '@portfolio/velista/ui';
 import { HomePage } from './home-page';
 
 function zone(overrides: Partial<MyZone> = {}): MyZone {
@@ -51,6 +60,10 @@ interface Options {
   lastEntry?: ZoneEntry | null;
   /** What just happened to the account, which this page reports once (plan 0009). */
   accountNotice?: { kind: 'registered' | 'upgraded'; email: string };
+  /** Who the server says is present, which the resume card renders (plan 0017). */
+  presence?: FakePresenceOptions;
+  /** User id to the name they go by in the zone, since presence carries ids alone. */
+  names?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -93,6 +106,10 @@ async function render(
       // account, and offers another confirmation email once there is an endpoint.
       provideAccountNotice(),
       provideFakeAuthService(),
+      // Plan 0017: the resume card's presence row. Both are doubles for the same
+      // reason the store is, so a presence test changes one fact about the world.
+      provideFakePresenceStore(fakePresenceStore(options.presence)),
+      provideFakeMemberNames(fakeMemberNames(options.names)),
     ],
   }).compileComponents();
 
@@ -423,6 +440,74 @@ describe('HomePage', () => {
       const fixture = await render({ storage });
 
       expect(query(fixture, 'lib-resume-list-card')).toBeNull();
+    });
+
+    // Plan 0017, section 7. Three joins on one row, and each of the three is a way
+    // this can be quietly wrong, so each gets a test.
+    describe('who is shopping it', () => {
+      const storage = () => new Map([[StorageKeys.lastList, 'z1/l1']]);
+
+      /**
+       * Read off the card's input rather than out of the DOM, and deliberately: the
+       * testing translator returns the key without interpolating it, so the rendered
+       * sentence never contains a name whatever the container computed. The input is
+       * the boundary that matters anyway. The container resolves who is shopping; the
+       * card is a component that renders a list of names and is tested where it lives.
+       */
+      const shoppers = (fixture: ComponentFixture<HomePage>) =>
+        fixture.debugElement
+          .query(By.directive(ResumeListCard))
+          ?.componentInstance.list().shoppers;
+
+      it('names the other people looking at the list', async () => {
+        const fixture = await render({
+          storage: storage(),
+          presence: { viewers: { l1: ['u2'] } },
+          names: { u2: 'Ana' },
+        });
+
+        expect(shoppers(fixture)).toEqual(['Ana']);
+      });
+
+      // The reader is in the server's viewers only when they have the list open, and
+      // they do not here; the point is that the card would never count them anyway.
+      // A card that says you are shopping is wrong about the only thing it says.
+      it('leaves the reader out of it', async () => {
+        const fixture = await render({
+          storage: storage(),
+          presence: { viewers: { l1: ['u1', 'u2'] } },
+          names: { u1: 'Me', u2: 'Ana' },
+        });
+
+        expect(shoppers(fixture)).toEqual(['Ana']);
+      });
+
+      it('says nothing rather than showing an id it could not resolve', async () => {
+        const fixture = await render({
+          storage: storage(),
+          presence: { viewers: { l1: ['u2'] } },
+          names: {},
+        });
+
+        expect(shoppers(fixture)).toEqual([]);
+      });
+
+      it('holds the list room so the presence broadcast reaches it', async () => {
+        // `presence.listUpdated` is published to `list:{id}` and to no zone room, so
+        // this subscription is the only reason the row can ever be filled. Plan 0016
+        // says not to subscribe to a list for updates the zone already carries; this
+        // is the update it does not carry.
+        const fixture = await render({ storage: storage() });
+        const realtime = TestBed.inject(REALTIME_CLIENT) as RealtimeMemory;
+
+        expect(realtime.rooms).toContain('list:l1');
+
+        // Observing, not announcing: a dashboard is not a shop.
+        expect(realtime.viewedLists.has('l1')).toBe(false);
+
+        fixture.destroy();
+        expect(realtime.rooms).not.toContain('list:l1');
+      });
     });
   });
 

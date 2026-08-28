@@ -236,6 +236,170 @@ describe('RoomRegistry', () => {
     });
   });
 
+  /**
+   * Plan 0017. The presence half of the registry, and the ordering rule that governs
+   * it: an intent is only ever proposed for a list the connection is already in,
+   * because the server refuses one from a socket that is not in the room.
+   */
+  describe('presence', () => {
+    /** Accept whatever presence plan is outstanding, as a healthy server would. */
+    function settlePresence(): void {
+      const plan = registry.reconcilePresence();
+      for (const listId of plan.viewsToStart) {
+        registry.onViewStarted(listId);
+      }
+      for (const listId of plan.viewsToStop) {
+        registry.onViewStopped(listId);
+      }
+      for (const ask of plan.editsToStart) {
+        registry.onEditStarted(ask.listId, ask.lineId);
+      }
+      for (const listId of plan.editsToStop) {
+        registry.onEditStopped(listId);
+      }
+    }
+
+    it('takes the list room with the view, and gives both back together', () => {
+      const release = registry.acquireListView('l1');
+
+      expect(settle(registry).listsToSubscribe).toEqual(['l1']);
+      expect(registry.reconcilePresence().viewsToStart).toEqual(['l1']);
+
+      release();
+      expect(registry.reconcile().listsToUnsubscribe).toEqual(['l1']);
+    });
+
+    it('proposes no view until the room it depends on is joined', () => {
+      registry.acquireListView('l1');
+
+      // The subscribe has been asked for and not answered, so the view is not
+      // sendable yet: this is the ordering the transport's two phases exist for.
+      expect(registry.reconcile().listsToSubscribe).toEqual(['l1']);
+      expect(registry.reconcilePresence().viewsToStart).toEqual([]);
+
+      registry.onListSubscribed('l1');
+      expect(registry.reconcilePresence().viewsToStart).toEqual(['l1']);
+    });
+
+    it('keeps one room and one view for a viewer beside a plain subscriber', () => {
+      registry.acquireList('l1');
+      const viewer = registry.acquireListView('l1');
+      settle(registry);
+      settlePresence();
+
+      // The viewer leaves; the observer stays. The room is kept and the view stops.
+      viewer();
+      const plan = registry.reconcile();
+      expect(plan.listsToUnsubscribe).toEqual([]);
+      expect(registry.reconcilePresence().viewsToStop).toEqual(['l1']);
+    });
+
+    it('says nothing about presence when the room itself is going', () => {
+      // `list.unsubscribe` removes this socket's viewer and editor entries on the
+      // server, so an unview or a stop edit beside it buys two acks for nothing.
+      const release = registry.acquireListView('l1');
+      settle(registry);
+      settlePresence();
+      registry.setEditingLine('l1', 'line-1');
+      settlePresence();
+
+      release();
+      expect(registry.reconcile().listsToUnsubscribe).toEqual(['l1']);
+
+      const presence = registry.reconcilePresence();
+      expect(presence.viewsToStop).toEqual([]);
+      expect(presence.editsToStop).toEqual([]);
+    });
+
+    it('moves an edit to another line with no stop in between', () => {
+      registry.acquireListView('l1');
+      settle(registry);
+      settlePresence();
+
+      registry.setEditingLine('l1', 'line-1');
+      expect(registry.reconcilePresence().editsToStart).toEqual([
+        { listId: 'l1', lineId: 'line-1' },
+      ]);
+      registry.onEditStarted('l1', 'line-1');
+
+      registry.setEditingLine('l1', 'line-2');
+      const plan = registry.reconcilePresence();
+      expect(plan.editsToStart).toEqual([{ listId: 'l1', lineId: 'line-2' }]);
+      expect(plan.editsToStop).toEqual([]);
+    });
+
+    it('stops editing when the last viewer of the list leaves', () => {
+      const release = registry.acquireListView('l1');
+      registry.acquireList('l1');
+      settle(registry);
+      settlePresence();
+      registry.setEditingLine('l1', 'line-1');
+      settlePresence();
+
+      release();
+      expect(registry.reconcilePresence().editsToStop).toEqual(['l1']);
+    });
+
+    it('ignores an edit on a list nothing holds', () => {
+      registry.setEditingLine('l1', 'line-1');
+
+      expect(registry.reconcilePresence().editsToStart).toEqual([]);
+    });
+
+    it('keeps the joined entry when a stop fails, so the stop is retried', () => {
+      // The server still believes this client is editing. Forgetting locally is how
+      // the two ends stop agreeing, and nobody would ever say so again.
+      registry.acquireListView('l1');
+      settle(registry);
+      settlePresence();
+      registry.setEditingLine('l1', 'line-1');
+      settlePresence();
+
+      registry.setEditingLine('l1', null);
+      expect(registry.reconcilePresence().editsToStop).toEqual(['l1']);
+      registry.onPresenceAskFailed('l1');
+
+      expect(registry.reconcilePresence().editsToStop).toEqual(['l1']);
+    });
+
+    it('does not re-ask a refused view on the same connection', () => {
+      registry.acquireListView('l1');
+      settle(registry);
+
+      registry.onViewRefused('l1');
+      expect(registry.reconcilePresence().viewsToStart).toEqual([]);
+    });
+
+    it('asks again once the room is subscribed afresh', () => {
+      registry.acquireListView('l1');
+      settle(registry);
+      registry.onViewRefused('l1');
+
+      // The one event that can change the server's answer about a room we believe we
+      // are in is being put in it again.
+      registry.onListSubscribed('l1');
+      expect(registry.reconcilePresence().viewsToStart).toEqual(['l1']);
+    });
+
+    it('announces everything again on the next connection', () => {
+      registry.acquireListView('l1');
+      settle(registry);
+      settlePresence();
+      registry.setEditingLine('l1', 'line-1');
+      settlePresence();
+
+      registry.onDisconnected();
+
+      // Present nowhere, in no room, whatever the refcounts say. Rooms first.
+      expect(registry.reconcilePresence().viewsToStart).toEqual([]);
+      settle(registry);
+
+      const plan = registry.reconcilePresence();
+      expect(plan.viewsToStart).toEqual(['l1']);
+      expect(plan.editsToStart).toEqual([{ listId: 'l1', lineId: 'line-1' }]);
+    });
+  });
+
   describe('roomNames', () => {
     it('builds the names the server builds, from the desired state', () => {
       registry.acquireZone('z1', true);

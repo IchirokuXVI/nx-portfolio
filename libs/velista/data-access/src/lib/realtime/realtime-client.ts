@@ -71,8 +71,45 @@ export interface RealtimeClientI {
    */
   subscribeZone(zoneId: string, options?: RealtimeSubscribeOptions): () => void;
 
-  /** Join a list room, refcounted. See {@link subscribeZone}. */
+  /**
+   * Join a list room, refcounted. See {@link subscribeZone}.
+   *
+   * Observing, not announcing. A caller that also wants to be **seen** on the list
+   * calls {@link viewList} instead, which takes this subscription on its behalf.
+   */
   subscribeList(listId: string): () => void;
+
+  /**
+   * Announce that this client is looking at a list, refcounted. The release stops it.
+   *
+   * **Acquires the list room as well**, because the server refuses a presence intent
+   * from a socket that is not in `list:{id}`: it trusts the membership `list.subscribe`
+   * established rather than asking core a second time. Two subscriptions to express one
+   * fact is a thing a caller would get wrong, so the client holds both.
+   *
+   * The intent is re-announced on every reconnect for the reason rooms are re-joined:
+   * presence is per connection and lives on the server, so a socket that dropped and
+   * came back is present nowhere, however sure the app is that it is viewing a list.
+   *
+   * Advisory only (plan 0004, section 6.7). It may under report, and nothing
+   * destructive may ever be guarded by "nobody else is here".
+   */
+  viewList(listId: string): () => void;
+
+  /**
+   * Say which line of a list this client is editing, or null for none.
+   *
+   * State rather than a release, and deliberately unlike every other method here. The
+   * server holds exactly **one** edited line per socket per list: `presence.edit`
+   * overwrites the previous one and `presence.stopEdit` takes a list id and no line. A
+   * release closure would therefore be a lie the moment the editor moved on, because a
+   * stale one firing late would stop an edit that had already become a different line.
+   * Passing the current value, `null` included, is the only shape that cannot drift
+   * from what the server holds.
+   *
+   * Ignored for a list this client is not viewing, since the intent would be refused.
+   */
+  setEditingLine(listId: string, lineId: string | null): void;
 
   /**
    * Zones whose subscription the server refused, by **zone id**.

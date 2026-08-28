@@ -74,6 +74,30 @@ export class RealtimeMemory implements RealtimeClientI {
     return this._registry.acquireList(listId);
   }
 
+  viewList(listId: string): () => void {
+    return this._registry.acquireListView(listId);
+  }
+
+  setEditingLine(listId: string, lineId: string | null): void {
+    this._registry.setEditingLine(listId, lineId);
+  }
+
+  /**
+   * The lists this client is announcing itself on, and the line it is editing on each.
+   *
+   * Derived from the registry for `rooms`' reason exactly: a fake that maintained its
+   * own copy could claim an intent its own bookkeeping does not support, and the one
+   * behaviour most worth faking here is that a view rides on a list subscription and
+   * cannot be held without one.
+   */
+  get viewedLists(): ReadonlySet<string> {
+    return this._registry.viewedLists();
+  }
+
+  get editedLines(): ReadonlyMap<string, string> {
+    return this._registry.editedLines();
+  }
+
   /**
    * Push an event as if the server had sent it.
    *

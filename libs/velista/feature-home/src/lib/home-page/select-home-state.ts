@@ -33,6 +33,17 @@ export function selectHomeState(input: {
   loadState: 'idle' | 'loading' | 'loaded' | 'failed';
   correlationId: string | null;
   resumeListId: string | null;
+  /**
+   * Who else is looking at the resume list right now, already named and already
+   * without the reader (plan 0017, section 7).
+   *
+   * Names rather than ids, and resolved by the container: a presence payload carries a
+   * user id and nothing else, and the only place the API pairs an id with a name is a
+   * membership, which makes a name a fact about a **zone** rather than about a person.
+   * Resolving it here would need this function to know about `MemberNames`, and it is
+   * pure precisely so it does not know about anything.
+   */
+  resumeShoppers: readonly string[];
   /** Whether the guest has dismissed the banner in this session. */
   guestBannerDismissed: boolean;
 }): HomeState {
@@ -62,7 +73,7 @@ export function selectHomeState(input: {
 
   return {
     kind: 'populated',
-    resume: selectResume(zones, resumeListId),
+    resume: selectResume(zones, resumeListId, input.resumeShoppers),
     zones: zones.map(toZoneCard),
     guest,
   };
@@ -81,7 +92,8 @@ export function selectHomeState(input: {
  */
 function selectResume(
   zones: readonly MyZone[],
-  resumeListId: string | null
+  resumeListId: string | null,
+  shoppers: readonly string[]
 ): ResumeListVm | null {
   if (resumeListId === null) {
     return null;
@@ -114,9 +126,10 @@ function selectResume(
         zoneName: zone.name,
         lineCount: list.lineCount,
         readyCount: list.readyCount,
-        // Presence arrives over realtime and is advisory (plan 0004, section 6.7).
-        // Nothing has joined it to a list yet, so the card renders without it.
-        shoppers: [],
+        // Advisory, and it may be empty for two different reasons that render the
+        // same: nobody else is there, or nobody's name resolved (plan 0004, section
+        // 6.7). The card simply omits the row, which is the right answer to both.
+        shoppers,
       };
     }
   }

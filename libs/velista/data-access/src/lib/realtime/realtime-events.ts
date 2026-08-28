@@ -128,12 +128,28 @@ export const REALTIME_EVENT_NAMES = [
   'presence.listUpdated',
 ] as const;
 
-/** The messages the client sends. Each is acknowledged with `{ ok: boolean }`. */
+/**
+ * The messages the client sends. Each is acknowledged with `{ ok: boolean }`.
+ *
+ * The four presence intents (plan 0017) are peers of the subscriptions on the wire and
+ * not on the client: the server refuses `presence.view` and `presence.edit` from a
+ * socket that is not already in `list:{id}`, since it trusts the membership
+ * `list.subscribe` established rather than paying a second round trip to core. So an
+ * intent is always sent after the subscription that permits it, never beside it.
+ *
+ * There is no zone presence intent, and that is not an omission: `zone.subscribe` calls
+ * `presence.joinZone` inside its own handler, the same way it joins the staff room, so
+ * being subscribed to a zone **is** being present in it.
+ */
 export const REALTIME_CLIENT_MESSAGES = {
   zoneSubscribe: 'zone.subscribe',
   zoneUnsubscribe: 'zone.unsubscribe',
   listSubscribe: 'list.subscribe',
   listUnsubscribe: 'list.unsubscribe',
+  listView: 'presence.view',
+  listUnview: 'presence.unview',
+  lineEdit: 'presence.edit',
+  lineStopEdit: 'presence.stopEdit',
 } as const;
 
 /** Room names, built the same way the server builds them. */
