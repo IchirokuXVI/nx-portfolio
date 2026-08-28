@@ -20,10 +20,14 @@ import {
   USERNAME_MAX_LENGTH,
   USERNAME_MIN_LENGTH,
 } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import {
+  appPath,
+  membershipIdOf,
+  SheetNavigation,
+  zoneIdOf,
+} from '@portfolio/velista/platform';
 import { ConfirmSheet, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import { MemberListRefresh } from '../member-list-refresh';
-import { membershipIdOf, zoneIdOf } from '@portfolio/velista/platform';
 import {
   retryAfterClock,
   shouldRefetch,
@@ -58,6 +62,7 @@ export class MemberActionSheet {
   private readonly _members = inject<MembershipServiceI>(MEMBERSHIP_SERVICE);
   private readonly _zones = inject(ZoneStore);
   private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -166,7 +171,7 @@ export class MemberActionSheet {
   }
 
   async dismiss(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._sheet.dismiss(
       appPath(this._locale(), this._basePath, 'zones', this.zoneId(), 'members')
     );
   }

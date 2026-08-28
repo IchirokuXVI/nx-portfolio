@@ -1,7 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -16,7 +15,10 @@ import {
   TokenStore,
   type FakeProfileStore,
 } from '@portfolio/velista/data-access';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  provideVelistaTesting,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import { RenameAnnouncement } from '../rename-announcement';
 import { RenameSheet } from './rename-sheet';
 
@@ -28,7 +30,7 @@ interface Options {
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<RenameSheet>;
   profile: FakeProfileStore;
-  router: { navigateByUrl: jest.Mock };
+  sheets: { dismiss: jest.Mock; leaveTo: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
@@ -37,7 +39,10 @@ async function render(options: Options = {}): Promise<{
     profile: profileFor({ username }),
     renameRejectsWith: options.renameRejectsWith,
   });
-  const router = { navigateByUrl: jest.fn().mockResolvedValue(true) };
+  const sheets = {
+    dismiss: jest.fn().mockResolvedValue(undefined),
+    leaveTo: jest.fn().mockResolvedValue(undefined),
+  };
 
   await TestBed.configureTestingModule({
     imports: [RenameSheet, RokuTranslatorTestingModule.forTesting()],
@@ -48,7 +53,7 @@ async function render(options: Options = {}): Promise<{
       TokenStore,
       provideFakeProfileStore(profile),
       provideFakeSessionStore('REGISTERED', { username }),
-      { provide: Router, useValue: router },
+      { provide: SheetNavigation, useValue: sheets },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
     ],
   }).compileComponents();
@@ -58,7 +63,7 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, profile, router };
+  return { fixture, profile, sheets };
 }
 
 function field(fixture: ComponentFixture<RenameSheet>): HTMLInputElement {
@@ -232,7 +237,7 @@ describe('RenameSheet', () => {
     });
 
     it('leaves the sheet open, so the name is not lost', async () => {
-      const { fixture, router } = await render({
+      const { fixture, sheets } = await render({
         renameRejectsWith: new GatewayError({
           code: 'rate_limited',
           status: 429,
@@ -245,7 +250,7 @@ describe('RenameSheet', () => {
       primary(fixture).click();
       await fixture.whenStable();
 
-      expect(router.navigateByUrl).not.toHaveBeenCalled();
+      expect(sheets.dismiss).not.toHaveBeenCalled();
       expect(field(fixture).value).toBe('Marta R.');
     });
   });
@@ -308,13 +313,13 @@ describe('RenameSheet', () => {
 
   describe('when it succeeds', () => {
     it('closes back onto the account screen', async () => {
-      const { fixture, router } = await render();
+      const { fixture, sheets } = await render();
 
       type(fixture, 'Marta R.');
       primary(fixture).click();
       await fixture.whenStable();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/account');
+      expect(sheets.dismiss).toHaveBeenCalledWith('/velista/en/account');
     });
 
     it('tells the screen behind it, which is what gets announced', async () => {

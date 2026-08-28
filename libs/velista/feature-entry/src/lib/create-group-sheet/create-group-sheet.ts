@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -16,7 +16,7 @@ import {
   ZoneStore,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import {
   AccountLostPanel,
   AlertIcon,
@@ -62,7 +62,7 @@ export class CreateGroupSheet {
   private readonly _zones = inject(ZoneStore);
   private readonly _session = inject(SessionStore);
   private readonly _tokens = inject(TokenStore);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -109,8 +109,10 @@ export class CreateGroupSheet {
 
     if (outcome.state === 'created') {
       // Straight to the dashboard, where the group is already listed and the invite
-      // card is above it. The sheet is a route, so navigating away is what closes it.
-      await this._router.navigateByUrl(
+      // card is above it. The sheet is a route, so navigating away is what closes it,
+      // and it replaces its own entry rather than pushing, so the back button cannot
+      // return to a filled in form whose group already exists (plan 0031).
+      await this._sheet.leaveTo(
         appPath(this._locale(), this._basePath, 'home')
       );
       return;
@@ -130,7 +132,7 @@ export class CreateGroupSheet {
 
   /** Cancel, Escape, the scrim, and the back button all arrive here. */
   async dismiss(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._sheet.dismiss(
       returnPath(this._returnTo, this._locale(), this._basePath)
     );
   }
@@ -143,7 +145,7 @@ export class CreateGroupSheet {
    */
   async restart(): Promise<void> {
     this._tokens.clear();
-    await this._router.navigateByUrl(appPath(this._locale(), this._basePath));
+    await this._sheet.leaveTo(appPath(this._locale(), this._basePath));
   }
 
   onNameInput(event: Event): void {

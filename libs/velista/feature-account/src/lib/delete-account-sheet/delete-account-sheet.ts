@@ -5,7 +5,6 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -18,7 +17,7 @@ import {
   ZoneStore,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import { SheetShell, SpinnerIcon, WarningIcon } from '@portfolio/velista/ui';
 import {
   accountCorrelationId,
@@ -83,7 +82,7 @@ export class DeleteAccountSheet {
   private readonly _zones = inject(ZoneStore);
   private readonly _tokens = inject(TokenStore);
   private readonly _notice = inject(AccountNotice);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
 
@@ -167,7 +166,7 @@ export class DeleteAccountSheet {
       // one navigation: router state would survive a reload too, and coming back to
       // this URL tomorrow is not the moment to be told an account was deleted.
       this._notice.setDeleted();
-      await this._router.navigateByUrl(appPath(this._locale(), this._basePath));
+      await this._sheet.leaveTo(appPath(this._locale(), this._basePath));
     } finally {
       this.busy.set(false);
     }
@@ -175,7 +174,7 @@ export class DeleteAccountSheet {
 
   /** Cancel, Escape and the scrim. Blocked while the request is out. */
   async dismiss(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._sheet.dismiss(
       appPath(this._locale(), this._basePath, 'account')
     );
   }

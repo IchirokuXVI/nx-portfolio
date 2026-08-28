@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -12,7 +12,10 @@ import {
   type FakeZoneStore,
 } from '@portfolio/velista/data-access';
 import type { MyZone } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  provideVelistaTesting,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { GroupSettingsSheet } from './group-settings-sheet';
 
@@ -48,14 +51,14 @@ async function render(
 ): Promise<{
   fixture: ComponentFixture<GroupSettingsSheet>;
   zones: FakeZoneStore;
-  router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
+  sheets: { dismiss: jest.Mock; leaveTo: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
   const zones = fakeZoneStore({ zones: [zone()], respondToWrite });
-  const router = {
-    navigate: jest.fn().mockResolvedValue(true),
-    navigateByUrl: jest.fn().mockResolvedValue(true),
+  const sheets = {
+    dismiss: jest.fn().mockResolvedValue(undefined),
+    leaveTo: jest.fn().mockResolvedValue(undefined),
   };
   const map = convertToParamMap({ zoneId: ZONE_ID });
 
@@ -64,7 +67,7 @@ async function render(
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeZoneStore(zones),
-      { provide: Router, useValue: router },
+      { provide: SheetNavigation, useValue: sheets },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
         provide: ActivatedRoute,
@@ -82,17 +85,17 @@ async function render(
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, zones, router };
+  return { fixture, zones, sheets };
 }
 
 describe('GroupSettingsSheet', () => {
   describe('minting a new join code', () => {
     it('closes both sheets, so the group page is what is left on screen', async () => {
-      const { fixture, router } = await render();
+      const { fixture, sheets } = await render();
 
       await fixture.componentInstance.regenerate();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith(
+      expect(sheets.dismiss).toHaveBeenCalledWith(
         `/velista/en/zones/${ZONE_ID}`
       );
     });
@@ -106,7 +109,7 @@ describe('GroupSettingsSheet', () => {
     });
 
     it('keeps the confirm open and says why when it fails', async () => {
-      const { fixture, router } = await render(() => ({
+      const { fixture, sheets } = await render(() => ({
         state: 'failed',
         error: new GatewayError({
           code: 'forbidden',
@@ -119,7 +122,7 @@ describe('GroupSettingsSheet', () => {
       await fixture.componentInstance.regenerate();
       fixture.detectChanges();
 
-      expect(router.navigateByUrl).not.toHaveBeenCalled();
+      expect(sheets.dismiss).not.toHaveBeenCalled();
       expect(fixture.componentInstance.pending()).toBe('regenerate');
       expect(fixture.componentInstance.errorKey()).not.toBeNull();
     });

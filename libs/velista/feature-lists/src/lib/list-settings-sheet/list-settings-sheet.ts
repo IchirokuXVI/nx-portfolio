@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -26,7 +26,12 @@ import {
   type ListPermission,
   type ShareRowVm,
 } from '@portfolio/velista/models';
-import { appPath, listIdOf, zoneIdOf } from '@portfolio/velista/platform';
+import {
+  appPath,
+  listIdOf,
+  SheetNavigation,
+  zoneIdOf,
+} from '@portfolio/velista/platform';
 import { ShareRow, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import { listErrorKey } from '../list-error-copy';
 
@@ -83,7 +88,7 @@ export class ListSettingsSheet {
   private readonly _lines = inject(LineStore);
   private readonly _names = inject(MemberNames);
   private readonly _zones = inject(ZoneStore);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -344,8 +349,9 @@ export class ListSettingsSheet {
       await this._listService.deleteList(this.listId());
       this._lines.forget(this.listId());
       await this._lists.refresh(this.zoneId());
-      // To the group, not back to a list that no longer exists.
-      await this._router.navigateByUrl(
+      // To the group, not back to a list that no longer exists, and replacing this
+      // sheet's own entry so the back button cannot return to one either (plan 0031).
+      await this._sheet.leaveTo(
         appPath(this._locale(), this._basePath, 'zones', this.zoneId())
       );
     } catch (error) {
@@ -356,7 +362,7 @@ export class ListSettingsSheet {
 
   /** Cancel, Escape, the scrim, and the back button all arrive here. */
   async dismiss(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._sheet.dismiss(
       appPath(
         this._locale(),
         this._basePath,

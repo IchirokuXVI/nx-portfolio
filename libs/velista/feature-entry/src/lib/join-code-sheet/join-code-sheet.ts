@@ -5,14 +5,18 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import { TokenStore, ZoneStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import { appPath, BrowserFacade } from '@portfolio/velista/platform';
+import {
+  appPath,
+  BrowserFacade,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import {
   AccountLostPanel,
   AlertIcon,
@@ -56,7 +60,7 @@ export class JoinCodeSheet {
   private readonly _zones = inject(ZoneStore);
   private readonly _tokens = inject(TokenStore);
   private readonly _browser = inject(BrowserFacade);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -85,7 +89,7 @@ export class JoinCodeSheet {
     const outcome = await this._zones.joinZone(this.code());
 
     if (outcome.state === 'joined') {
-      await this._router.navigateByUrl(
+      await this._sheet.leaveTo(
         appPath(this._locale(), this._basePath, 'home')
       );
       return;
@@ -129,13 +133,13 @@ export class JoinCodeSheet {
   }
 
   async dismiss(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._sheet.dismiss(
       returnPath(this._returnTo, this._locale(), this._basePath)
     );
   }
 
   async restart(): Promise<void> {
     this._tokens.clear();
-    await this._router.navigateByUrl(appPath(this._locale(), this._basePath));
+    await this._sheet.leaveTo(appPath(this._locale(), this._basePath));
   }
 }
