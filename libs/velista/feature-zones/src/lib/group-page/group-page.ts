@@ -146,10 +146,30 @@ export class GroupPage {
    * Not to somebody still waiting, since handing out a code to a group you have not
    * been let into yourself would be odd, and not on an ownerless group, where the only
    * thing that matters is whether an admin takes it on.
+   *
+   * And not to an ordinary member. The code can only be **regenerated** by an owner or
+   * an admin, so the invite card is the same governance surface the Settings entry is,
+   * and on a member's screen it reads as an invitation to an action that is not theirs.
+   * `isStaff` is the fact Settings is drawn from too, so the two appear and disappear
+   * together, which is right: they are the two halves of governing a group. Because it
+   * comes from `myRole` and nothing else (**rule G2**), this is live — promoted, the
+   * card appears; demoted, it goes.
+   *
+   * This is a UI decision and deliberately not a permission (plan 0020, section 5.1).
+   * `ZoneView.joinCode` is still sent to every member, so a member's browser still
+   * holds the code and devtools will show it. That is accepted: the code is a low
+   * entropy invite string any member could get by asking, and the requirement is that
+   * the page not put a governance surface in front of somebody it does not belong to.
    */
   readonly showInvite = computed(() => {
     const kind = this.state().kind;
-    return kind !== 'error' && kind !== 'pending' && kind !== 'ownerless';
+    if (kind === 'error' || kind === 'pending' || kind === 'ownerless') {
+      return false;
+    }
+
+    // Read through `header` rather than off the union, because `loading` carries an
+    // optional one and there is nothing to decide from until it arrives.
+    return this.header()?.isStaff === true;
   });
 
   /**

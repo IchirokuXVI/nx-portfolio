@@ -6,7 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import type { MyZone, Zone } from '@portfolio/velista/models';
+import type { MyZone, Zone, ZoneRole } from '@portfolio/velista/models';
 import { SessionStore } from '../auth/session-store';
 import { Mutations } from '../mutations';
 import {
@@ -584,15 +584,49 @@ export class ZoneStore {
   private _apply(event: RealtimeEvent): void {
     switch (event.type) {
       case 'zone.updated':
-      case 'zone.ownershipChanged':
       case 'zone.markedForDeletion': {
+        this._patch(event.zone.id, (zone) => withZoneFields(zone, event.zone));
+        break;
+      }
+
+      case 'zone.ownershipChanged': {
+        // The zone's own fields, exactly as `zone.updated`, plus the one thing the
+        // payload states without saying it: a `ZoneView` says who owns the group now,
+        // and it cannot say what that makes the caller. Two memberships changed role
+        // and the transfer publishes no membership event for either (plan 0020,
+        // section 2), so the caller's own role is derived here from `ownerUserId`.
+        //
+        // Deriving it here is not a guess, and it does not become redundant once the
+        // server publishes those two events. `claimOwnership` already writes
+        // `myRole: 'OWNER'` after a successful claim rather than waiting to be told,
+        // so the store already holds that `ownerUserId` and `myRole` cannot disagree;
+        // asserting that for a local write and not for a remote one is how they came
+        // to disagree here. When backend `0029` lands, both writers compute the same
+        // value from the same fact, so the second one changes nothing.
+        const held = this._byId().get(event.zone.id);
+        if (held === undefined) {
+          // Same answer `_patch` gives: an event for a zone the caller never loaded
+          // is not news, and a record invented from it would have no name and no
+          // counts.
+          break;
+        }
+
+        const myRole = roleAfterOwnershipChange(
+          held.myRole,
+          event.zone.ownerUserId,
+          this._session.userId()
+        );
+
         this._patch(event.zone.id, (zone) => ({
-          ...zone,
-          name: event.zone.name,
-          joinCode: event.zone.joinCode,
-          status: event.zone.status,
-          ownerUserId: event.zone.ownerUserId,
+          ...withZoneFields(zone, event.zone),
+          myRole,
         }));
+
+        if (myRole !== held.myRole) {
+          // **Rule G3**, for the reason the `member.roleChanged` branch below gives:
+          // the staff room follows `myRole`, and this is now an event that moves it.
+          this._syncRooms();
+        }
         break;
       }
 
@@ -751,6 +785,48 @@ export class ZoneStore {
       this._rooms.delete(zoneId);
     }
   }
+}
+
+/**
+ * The zone's own fields, replaced from the `ZoneView` an event carried.
+ *
+ * Shared by the events that carry a whole zone, so the set of fields a broadcast is
+ * allowed to overwrite is written once. Deliberately not a spread of `next`: an event's
+ * `Zone` and the cached `MyZone` are different types, and a blanket merge would drop
+ * the caller's own standing and the counts every time somebody renamed the group.
+ */
+function withZoneFields(zone: MyZone, next: Zone): MyZone {
+  return {
+    ...zone,
+    name: next.name,
+    joinCode: next.joinCode,
+    status: next.status,
+    ownerUserId: next.ownerUserId,
+  };
+}
+
+/**
+ * The caller's role after somebody became the owner of a group they are in.
+ *
+ * Three cases, and only the second is worth an argument:
+ *
+ * - the new owner is the caller, so the caller is the owner;
+ * - the caller **was** the owner and somebody else is now, so the caller is an admin.
+ *   Not a guess: `ZoneService.transferOwnership` demotes the outgoing owner to `ADMIN`
+ *   unconditionally, in the same transaction that promotes the target;
+ * - otherwise the change was between two other people and says nothing about the
+ *   caller's own role.
+ */
+function roleAfterOwnershipChange(
+  current: ZoneRole,
+  ownerUserId: string | null,
+  myUserId: string | null
+): ZoneRole {
+  if (myUserId !== null && ownerUserId === myUserId) {
+    return 'OWNER';
+  }
+
+  return current === 'OWNER' ? 'ADMIN' : current;
 }
 
 function bumpMembers(zone: MyZone, by: number): MyZone {

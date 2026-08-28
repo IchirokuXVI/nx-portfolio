@@ -97,6 +97,19 @@
   color: var(--app-status-attention-fg);
 }
 
+// The same info tokens `RoleChip.chip-admin` uses, for the same reason: an admin has
+// powers, and reading as neither the owner nor an ordinary member is the whole job.
+// Without this the card drew Admin and Member as the same grey chip with different
+// text, so a promotion changed a word and nothing else (plan 0020, section 4). What
+// the card and the chip share is the token, not the component: the badge sits in a
+// name row beside a pending badge and a truncating name, and `RoleChip` already
+// records the decision to keep the two apart.
+.badge-admin {
+  border-color: var(--app-status-info-border);
+  background: var(--app-status-info-bg);
+  color: var(--app-status-info-fg);
+}
+
 .badge-pending {
   border-color: var(--app-status-neutral-border);
   background: var(--app-status-neutral-bg);
