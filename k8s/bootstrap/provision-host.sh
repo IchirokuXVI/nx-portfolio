@@ -294,16 +294,31 @@ fi
 if [ "$RUN_K3S" = true ]; then
   ADMIN_HOME="$(getent passwd "$ADMIN_USER" | cut -d: -f6)"
   CLONE="$ADMIN_HOME/nx-portfolio"
+
+  # The git work runs AS the admin user, not as root.
+  #
+  # git refuses to operate on a repository owned by somebody else ("detected
+  # dubious ownership"), and this script is root while the clone belongs to the
+  # admin account, so a second run would fail where the first succeeded. Adding
+  # a safe.directory exception for root would silence that, but it treats the
+  # symptom: root would keep writing root owned objects into a user's tree and
+  # relying on a chown afterwards to tidy up. Cloning and fetching as the owner
+  # keeps the tree consistently owned and needs no exception at all.
+  if [ -d "$CLONE" ]; then
+    # Reconcile anything an earlier run left root owned, before git runs as the
+    # user and cannot write it.
+    chown -R "$ADMIN_USER:$ADMIN_USER" "$CLONE"
+  fi
+
   if [ -d "$CLONE/.git" ]; then
     echo "==> updating the existing clone at $CLONE"
-    git -C "$CLONE" fetch --quiet origin "$REPO_REF"
-    git -C "$CLONE" checkout --quiet "$REPO_REF"
-    git -C "$CLONE" reset --hard --quiet "origin/$REPO_REF"
+    su - "$ADMIN_USER" -c "git -C '$CLONE' fetch --quiet origin '$REPO_REF' \
+      && git -C '$CLONE' checkout --quiet '$REPO_REF' \
+      && git -C '$CLONE' reset --hard --quiet 'origin/$REPO_REF'"
   else
     echo "==> cloning $REPO_URL ($REPO_REF) into $CLONE"
-    git clone --quiet --branch "$REPO_REF" "$REPO_URL" "$CLONE"
+    su - "$ADMIN_USER" -c "git clone --quiet --branch '$REPO_REF' '$REPO_URL' '$CLONE'"
   fi
-  chown -R "$ADMIN_USER:$ADMIN_USER" "$CLONE"
 
   echo "==> running install.sh --k3s"
   bash "$CLONE/k8s/bootstrap/install.sh" --k3s

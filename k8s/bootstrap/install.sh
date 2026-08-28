@@ -107,6 +107,28 @@ if [ "$INSTALL_K3S" = true ]; then
 
   # k3s reports ready before the API server accepts connections, so the steps
   # below would fail on a fresh install without waiting for the node.
+  #
+  # Two waits, because `kubectl wait --all` does not do what it looks like it
+  # does: given zero matching objects it fails immediately with "error: no
+  # matching resources found" instead of waiting for one to appear. On a fresh
+  # k3s the API server starts answering a few seconds before the kubelet
+  # registers its Node, and that gap is precisely the window this step exists to
+  # cover, so the object is polled for first and only then is its condition
+  # waited on. The symptom otherwise is an install that fails instantly on a
+  # cluster which is about to be perfectly healthy.
+  echo "==> waiting for the node to register"
+  waited=0
+  while [ -z "$(kubectl get nodes -o name 2>/dev/null)" ] && [ "$waited" -lt 300 ]; do
+    sleep 5
+    waited=$((waited + 5))
+  done
+  if [ -z "$(kubectl get nodes -o name 2>/dev/null)" ]; then
+    echo "No node registered after ${waited}s. k3s is installed but not healthy." >&2
+    echo "Check:  systemctl status k3s" >&2
+    echo "        journalctl -u k3s -n 50 --no-pager" >&2
+    exit 1
+  fi
+
   echo "==> waiting for the node to become Ready"
   kubectl wait --for=condition=Ready node --all --timeout=180s
 
