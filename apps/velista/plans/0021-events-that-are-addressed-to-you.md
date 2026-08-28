@@ -24,7 +24,7 @@ Three symptoms, one cause:
   is open.
 
 The cause is the whole of backend `0030` section 1: every room in this system is scoped to
-a resource, so nothing can be told to a *person*. This plan is what the client does once
+a resource, so nothing can be told to a _person_. This plan is what the client does once
 a person can be addressed.
 
 ## 2. What the client does not have to build
@@ -67,7 +67,7 @@ nothing half formed reaches a store.
 
 ### 4.1 The shape both of these share
 
-Both events say *a zone is now yours* and neither carries a zone the dashboard can draw.
+Both events say _a zone is now yours_ and neither carries a zone the dashboard can draw.
 `MyZone` needs `myRole`, `myStatus`, `counts` and a list preview; a `ZoneView` has none of
 them, and a `MembershipView` has two of them.
 
@@ -139,7 +139,7 @@ carries no zone id and is still not applied; `MembershipStore` removes its row b
 `SessionStore.username` is:
 
 ```ts
-this._profile.username() ?? (identity.username || null)
+this._profile.username() ?? (identity.username || null);
 ```
 
 Rule A2 (`ProfileStore`'s header): the profile owns the name, the token is the fallback,
@@ -165,10 +165,7 @@ hand** with `DestroyRef` teardown and not with `takeUntilDestroyed`:
 
 ```ts
 const subscription = this._realtime.events.subscribe((event) => {
-  if (
-    event.type === 'user.usernameChanged' &&
-    event.userId === this._session.userId()
-  ) {
+  if (event.type === 'user.usernameChanged' && event.userId === this._session.userId()) {
     this._profile.update((p) => (p === null ? p : { ...p, username: event.username }));
   }
 });
@@ -177,8 +174,14 @@ this._destroyRef.onDestroy(() => subscription.unsubscribe());
 
 `@angular/core/rxjs-interop` is a secondary entry point module federation does not dedupe,
 so `takeUntilDestroyed` in a service several remotes provide throws `NG0203` with a
-perfectly correct DI graph. `PresenceStore`, `ZoneStore`, `RealtimeSocket` and
-`RealtimeMemory` are all written this way and all say so; this is the fifth.
+perfectly correct DI graph. `PresenceStore`, `MembershipStore` and `RealtimeSocket` are all
+written this way and all say so; this is the fifth.
+
+`ZoneStore` was **not**, despite being named here as though it were: it still piped
+through `takeUntilDestroyed`, which is the one import this rule forbids, in a store four
+remotes provide. It was corrected in the same change, since this plan edits that file
+anyway and leaving it would have left the only counterexample to the rule sitting beside
+a comment restating it.
 
 Three details that are not incidental:
 
@@ -196,6 +199,26 @@ against provider order rather than assuming: both are provided by the app layer 
 (rule D5), and neither injects `ProfileStore`, so there is no cycle. `SessionStore` reads
 `ProfileStore`, one way, as it already does.
 
+> **Corrected while building.** That last paragraph was wrong twice, and the DI graph
+> says so at boot rather than subtly:
+>
+> - `SessionStore` **does** inject `ProfileStore`. That is how rule A2 is applied, and
+>   it is stated three paragraphs above this one. So `ProfileStore` cannot inject
+>   `SessionStore` back. It reads the id off `TokenStore` instead, which is where
+>   `SessionStore.userId` gets it from anyway: `userId` is `tokens.userId` for every
+>   non-anonymous identity, so this is the same value one link earlier in the same chain.
+> - Injecting `REALTIME_CLIENT` closes a second cycle,
+>   `SessionStore -> ProfileStore -> REALTIME_CLIENT -> SessionStore`, because
+>   `RealtimeSocket` injected `SessionStore` for R1's `isAuthenticated` check. It now
+>   asks `TokenStore.hasSession()`, which is the same predicate: `SessionStore`'s is
+>   `tokens() !== null` and so is this one.
+>
+> The rule that falls out, and the reason both are recorded here rather than fixed
+> quietly: **the realtime client sits below the session, so everything on that path asks
+> the token store directly.** Anything `SessionStore` depends on cannot depend on the
+> socket. Angular catches this as NG0200 on the first injection, so it fails loudly, but
+> it fails at boot for the whole app rather than in the store that caused it.
+
 ### 5.3 The per zone name is already live
 
 `member.usernameChanged` reaches `MembershipStore`, which applies it with its five siblings
@@ -210,11 +233,11 @@ deliberately two.
 `0018` section 2 is the standing answer to "does every event reach a screen". These rows
 are added to it when this plan lands:
 
-| Event                     | Rendered by                    | Applied by                | State                |
-| ------------------------- | ------------------------------ | ------------------------- | -------------------- |
-| `zone.created`            | the dashboard's zone list      | `ZoneStore` (load)        | Live                 |
-| `user.usernameChanged`    | the app bar, the account page  | `ProfileStore`            | Live                 |
-| `member.approved` (me)    | the zone card, the group page  | `ZoneStore` (patch + load)| Live                 |
+| Event                  | Rendered by                   | Applied by                 | State |
+| ---------------------- | ----------------------------- | -------------------------- | ----- |
+| `zone.created`         | the dashboard's zone list     | `ZoneStore` (load)         | Live  |
+| `user.usernameChanged` | the app bar, the account page | `ProfileStore`             | Live  |
+| `member.approved` (me) | the zone card, the group page | `ZoneStore` (patch + load) | Live  |
 
 And `0018` section 6, which says the account screen is stale for want of a backend
 decision, is rewritten to say the decision was taken and where.

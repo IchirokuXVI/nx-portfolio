@@ -1,12 +1,14 @@
+import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import type { UserProfile, UsernameScope } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
-import { GatewayError } from '../errors';
-import { Mutations } from '../mutations';
+import { ApiUrl } from '../api-url';
 import { SessionStore } from '../auth/session-store';
 import { TokenStore } from '../auth/token-store';
-import { ApiUrl } from '../api-url';
-import { provideHttpClient } from '@angular/common/http';
+import { GatewayError } from '../errors';
+import { Mutations } from '../mutations';
+import { REALTIME_CLIENT } from '../realtime/realtime-client';
+import { RealtimeMemory } from '../realtime/realtime-memory';
 import { ACCOUNT_SERVICE, type AccountServiceI } from './account-service';
 import { ProfileStore } from './profile-store';
 
@@ -23,13 +25,15 @@ function profile(overrides: Partial<UserProfile> = {}): UserProfile {
 }
 
 /** An `AccountServiceI` that records what it was asked, with no transport. */
-function fakeAccount(options: {
-  profile?: UserProfile;
-  getRejectsWith?: unknown;
-  setRejectsWith?: unknown;
-  /** What the server answers to a rename, which is not what was sent. */
-  normalizeTo?: string;
-} = {}) {
+function fakeAccount(
+  options: {
+    profile?: UserProfile;
+    getRejectsWith?: unknown;
+    setRejectsWith?: unknown;
+    /** What the server answers to a rename, which is not what was sent. */
+    normalizeTo?: string;
+  } = {}
+) {
   const calls: { method: string; username?: string; scope?: UsernameScope }[] =
     [];
   let held = options.profile ?? profile();
@@ -63,6 +67,7 @@ function setUp(service: ReturnType<typeof fakeAccount>): {
   store: ProfileStore;
   session: SessionStore;
   tokens: TokenStore;
+  realtime: RealtimeMemory;
 } {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
@@ -75,6 +80,7 @@ function setUp(service: ReturnType<typeof fakeAccount>): {
       ProfileStore,
       SessionStore,
       { provide: ACCOUNT_SERVICE, useValue: service },
+      { provide: REALTIME_CLIENT, useExisting: RealtimeMemory },
     ],
   });
 
@@ -82,7 +88,19 @@ function setUp(service: ReturnType<typeof fakeAccount>): {
     store: TestBed.inject(ProfileStore),
     session: TestBed.inject(SessionStore),
     tokens: TestBed.inject(TokenStore),
+    realtime: TestBed.inject(RealtimeMemory),
   };
+}
+
+/** A signed-in pair for `u1`, whose name is deliberately not the profile's. */
+function signIn(tokens: TokenStore, username = 'Stale'): void {
+  tokens.set({
+    userId: 'u1',
+    kind: 'REGISTERED',
+    username,
+    accessToken: 'access',
+    refreshToken: 'refresh',
+  });
 }
 
 describe('ProfileStore', () => {
@@ -222,6 +240,113 @@ describe('ProfileStore', () => {
       await store.load();
 
       await store.rename('Marta   R.', 'MY_GROUPS_TOO');
+
+      expect(store.profile()?.username).toBe('Marta R.');
+    });
+  });
+
+  /**
+   * Plan 0021, section 5. Rule A2 is true in the tab that did the renaming and was
+   * exactly backwards in a second one, and not for fifteen minutes but for as long as
+   * that tab stayed open: the profile held the old name, the refreshed pair carried
+   * the new one, and the profile is preferred, so the fallback that exists to prevent
+   * staleness was unreachable precisely where it would have helped.
+   */
+  describe('a global rename arriving from another tab', () => {
+    it('applies the new name, so the app bar and the account screen agree', async () => {
+      const { store, session, tokens, realtime } = setUp(fakeAccount());
+      signIn(tokens);
+      await store.load();
+      expect(session.username()).toBe('Marta');
+
+      realtime.emit('user.usernameChanged', {
+        userId: 'u1',
+        username: 'Marta R.',
+      });
+
+      expect(store.profile()?.username).toBe('Marta R.');
+      expect(session.username()).toBe('Marta R.');
+    });
+
+    it('leaves a null profile null, so the token stays the fallback', async () => {
+      // The event carries a name and not a profile. Inventing one would hand
+      // `SessionStore` a name to prefer over a pair that is already correct, and would
+      // have to invent an email verification state and a created date besides.
+      const { store, session, tokens, realtime } = setUp(fakeAccount());
+      signIn(tokens, 'FromToken');
+
+      realtime.emit('user.usernameChanged', {
+        userId: 'u1',
+        username: 'Marta R.',
+      });
+
+      expect(store.profile()).toBeNull();
+      expect(session.username()).toBe('FromToken');
+    });
+
+    it('ignores a rename addressed to somebody else', async () => {
+      // The room makes it the caller's and the store does not take that on faith: a
+      // client that trusts routing to be its authorization is one server bug away
+      // from wearing somebody else's name.
+      const { store, tokens, realtime } = setUp(fakeAccount());
+      signIn(tokens);
+      await store.load();
+
+      realtime.emit('user.usernameChanged', {
+        userId: 'someone-else',
+        username: 'Intruder',
+      });
+
+      expect(store.profile()?.username).toBe('Marta');
+    });
+
+    it('is a no-op in the tab that did the renaming', async () => {
+      // It fires there too, after `rename` has already written the response. Writing
+      // the same string twice costs nothing, and suppressing it would need a flag
+      // tracking which of the store's own actions caused which event.
+      const { store, session, tokens, realtime } = setUp(
+        fakeAccount({ normalizeTo: 'Marta R.' })
+      );
+      signIn(tokens);
+      await store.load();
+      await store.rename('Marta   R.', 'MY_GROUPS_TOO');
+
+      realtime.emit('user.usernameChanged', {
+        userId: 'u1',
+        username: 'Marta R.',
+      });
+
+      expect(store.profile()?.username).toBe('Marta R.');
+      expect(session.username()).toBe('Marta R.');
+    });
+
+    it('reads the id without SessionStore, which it cannot inject', async () => {
+      // `SessionStore` injects **this** store to apply rule A2, so reaching back for
+      // it would close a DI cycle. The id comes off the token pair instead, which is
+      // where `SessionStore.userId` gets it from anyway. Asserted by resolving this
+      // store in an injector that has no `SessionStore` in it at all.
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideVelistaTesting(),
+          provideHttpClient(),
+          ApiUrl,
+          Mutations,
+          TokenStore,
+          ProfileStore,
+          { provide: ACCOUNT_SERVICE, useValue: fakeAccount() },
+          { provide: REALTIME_CLIENT, useExisting: RealtimeMemory },
+        ],
+      });
+
+      const store = TestBed.inject(ProfileStore);
+      signIn(TestBed.inject(TokenStore));
+      await store.load();
+
+      TestBed.inject(RealtimeMemory).emit('user.usernameChanged', {
+        userId: 'u1',
+        username: 'Marta R.',
+      });
 
       expect(store.profile()?.username).toBe('Marta R.');
     });

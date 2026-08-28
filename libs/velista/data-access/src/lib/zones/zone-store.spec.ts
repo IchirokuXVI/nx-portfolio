@@ -32,6 +32,19 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
   };
 }
 
+/**
+ * Let a load a realtime handler started settle.
+ *
+ * The two branches plan 0021 adds call `void this.loadZone(...)` rather than awaiting
+ * it, because an event handler has nobody to await it: the point is that the card
+ * corrects itself without anything on screen having asked.
+ */
+async function settle(): Promise<void> {
+  for (let tick = 0; tick < 5; tick += 1) {
+    await Promise.resolve();
+  }
+}
+
 describe('ZoneStore', () => {
   let store: ZoneStore;
   let realtime: RealtimeMemory;
@@ -443,6 +456,173 @@ describe('ZoneStore', () => {
       realtime.emit('zone.teleported', { id: 'z1' });
 
       expect(store.myZones()).toHaveLength(2);
+    });
+  });
+
+  /**
+   * Plan 0021. Three things the server could not tell this client at all, because
+   * every room in the system is scoped to a resource and none of them was addressed to
+   * a person. What arrives is a signal; the load is the answer, since neither event
+   * carries a zone the dashboard can draw.
+   */
+  describe('events addressed to the caller', () => {
+    it('puts a group created in another tab at the top of the dashboard', async () => {
+      await store.load();
+      zones = [
+        ...zones,
+        zone({ id: 'z3', name: 'The Boat', joinCode: 'BOAT9999' }),
+      ];
+
+      realtime.emit('zone.created', {
+        id: 'z3',
+        name: 'The Boat',
+        joinCode: 'BOAT9999',
+        status: 'ACTIVE',
+        ownerUserId: 'user-me',
+      });
+      await settle();
+
+      // Loaded rather than composed: a `ZoneView` has no counts and no list preview,
+      // and inventing them is what `_patch` drops an event rather than do.
+      expect(getCalls).toEqual(['z3']);
+      expect(store.myZones().map((z) => z.id)).toEqual(['z3', 'z1', 'z2']);
+      expect(store.zoneById('z3')?.counts.memberCount).toBe(3);
+    });
+
+    it('ignores a creation that is not the caller own', async () => {
+      // A client that trusts routing to be its authorization is one server bug away
+      // from rendering somebody else's group.
+      await store.load();
+
+      realtime.emit('zone.created', {
+        id: 'z9',
+        name: 'Not Mine',
+        joinCode: 'NOTMINE1',
+        status: 'ACTIVE',
+        ownerUserId: 'someone-else',
+      });
+      await settle();
+
+      expect(getCalls).toEqual([]);
+      expect(store.myZones().map((z) => z.id)).toEqual(['z1', 'z2']);
+    });
+
+    it('fills a pending card in when the approval arrives', async () => {
+      // A zone the caller was PENDING in was listed as a pending summary: its counts
+      // are the pending view's and `toZoneCard` renders its lists empty by
+      // definition. Flipping the status alone makes the card tappable and opens onto
+      // a group page with nothing in it.
+      zones = [zone({ myRole: 'MEMBER', myStatus: 'PENDING', lists: [] })];
+      await store.load();
+
+      zones = [
+        zone({
+          myRole: 'MEMBER',
+          myStatus: 'APPROVED',
+          lists: [{ id: 'l1', name: 'Weekly', lineCount: 4, readyCount: 1 }],
+        }),
+      ];
+      realtime.emit('member.approved', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'You',
+        role: 'MEMBER',
+        status: 'APPROVED',
+      });
+      await settle();
+
+      expect(store.zoneById('z1')?.myStatus).toBe('APPROVED');
+      expect(getCalls).toEqual(['z1']);
+      expect(store.zoneById('z1')?.lists.map((l) => l.id)).toEqual(['l1']);
+    });
+
+    it('produces a card for a zone this device never listed', async () => {
+      // The request was made on another device and approved before this one ever
+      // listed its zones. `loadZone` is a fetch and an upsert, not a patch, so it
+      // works for a zone the store has never seen.
+      realtime.emit('member.approved', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'You',
+        role: 'MEMBER',
+        status: 'APPROVED',
+      });
+      await settle();
+
+      expect(getCalls).toEqual(['z1']);
+      expect(store.zoneById('z1')?.name).toBe('Flat 3B');
+    });
+
+    it('does not spend a request on an approval it already holds', async () => {
+      // A redelivery, or an approval for a zone already approved. Without the guard
+      // on the previous status this is one request per event.
+      await store.load();
+
+      realtime.emit('member.approved', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'You',
+        role: 'OWNER',
+        status: 'APPROVED',
+      });
+      await settle();
+
+      expect(getCalls).toEqual([]);
+    });
+
+    it('does not load when somebody else is approved', async () => {
+      await store.load();
+
+      realtime.emit('member.approved', {
+        id: 'm2',
+        zoneId: 'z1',
+        userId: 'someone-else',
+        username: 'Ines',
+        role: 'MEMBER',
+        status: 'APPROVED',
+      });
+      await settle();
+
+      expect(getCalls).toEqual([]);
+    });
+
+    it('drops a half formed creation or rename rather than acting on it', async () => {
+      // Rule D4 for the two new payloads: nothing half formed reaches a store, and a
+      // count is left behind so a shape the mapper does not expect is findable.
+      await store.load();
+
+      realtime.emit('zone.created', {
+        name: 'no id at all',
+        ownerUserId: 'user-me',
+      });
+      realtime.emit('user.usernameChanged', { userId: 'user-me' });
+      realtime.emit('user.usernameChanged', { username: 'Dani' });
+      realtime.emit('user.usernameChanged', 'not an object');
+      await settle();
+
+      expect(getCalls).toEqual([]);
+      expect([...realtime.droppedEvents().entries()]).toEqual([
+        ['zone.created', 1],
+        ['user.usernameChanged', 3],
+      ]);
+    });
+
+    it('leaves the global username alone, since ProfileStore owns it', async () => {
+      await store.load();
+
+      realtime.emit('user.usernameChanged', {
+        userId: 'user-me',
+        username: 'Dani',
+      });
+      await settle();
+
+      // Applied by nothing here, and specifically not dropped as unmappable: a
+      // dropped event is how this reaches production looking live and being stale.
+      expect(realtime.droppedEvents().size).toBe(0);
+      expect(getCalls).toEqual([]);
     });
   });
 

@@ -25,6 +25,22 @@ import type {
  *   "status changed" event to listen for.
  */
 export type RealtimeEvent =
+  | {
+      /**
+       * A zone the caller has just created (backend plan 0030, section 4.2).
+       *
+       * Addressed to the creator's own sessions rather than broadcast into the new
+       * zone's room, which at that moment contains nobody: the tab that created it
+       * has not subscribed, and no other member exists yet.
+       *
+       * The payload is the `ZoneView` the create endpoint answers, so it is the same
+       * shape `zone.updated` carries and deliberately **not** a `MyZoneView`. It has
+       * no counts and no list preview, and the store loads the zone rather than
+       * inventing them.
+       */
+      readonly type: 'zone.created';
+      readonly zone: Zone;
+    }
   | { readonly type: 'zone.updated'; readonly zone: Zone }
   | { readonly type: 'zone.ownershipChanged'; readonly zone: Zone }
   | { readonly type: 'zone.markedForDeletion'; readonly zone: Zone }
@@ -73,6 +89,24 @@ export type RealtimeEvent =
       readonly userId: string;
     }
   | {
+      /**
+       * The caller's **global** username changed (backend plan 0030, section 4.3),
+       * addressed to their own sessions.
+       *
+       * Its sibling `member.usernameChanged` is the per zone name and stays a separate
+       * event, because the two names are deliberately two (backend plan 0018). This is
+       * the one that reaches a user who is in no zone at all, and it is the reason a
+       * second tab no longer holds the old name for as long as it stays open.
+       *
+       * The id and the name, and deliberately not a `UserProfile`: the payload carries
+       * those two fields and nothing else, so mapping it into a profile would invent an
+       * email verification state and a created date the wire never sent (rule D4).
+       */
+      readonly type: 'user.usernameChanged';
+      readonly userId: string;
+      readonly username: string;
+    }
+  | {
       readonly type: 'list.created' | 'list.updated';
       readonly list: ShoppingList;
     }
@@ -100,6 +134,7 @@ export type RealtimeEvent =
 
 /** Every event name the server can send. Used to filter before mapping. */
 export const REALTIME_EVENT_NAMES = [
+  'zone.created',
   'zone.updated',
   'zone.deleted',
   'zone.countsUpdated',
@@ -112,6 +147,7 @@ export const REALTIME_EVENT_NAMES = [
   'member.banned',
   'member.roleChanged',
   'member.usernameChanged',
+  'user.usernameChanged',
   'list.created',
   'list.updated',
   'list.deleted',

@@ -25,30 +25,39 @@ All 26 events, against the data source that renders them. `REALTIME_EVENT_NAMES`
 backend's `RealtimeEvent` enum already agree exactly, so nothing arrives unmapped and
 nothing is listened for that cannot come; the column that matters is the last one.
 
-| Event                                                 | Rendered by                      | Applied by               | State                                   |
-| ----------------------------------------------------- | -------------------------------- | ------------------------ | --------------------------------------- |
-| `zone.updated`                                        | zone cards, group page           | `ZoneStore`              | Live                                    |
-| `zone.ownershipChanged`                               | zone cards, group page           | `ZoneStore`              | Live                                    |
-| `zone.markedForDeletion`                              | zone cards                       | `ZoneStore`              | Live                                    |
-| `zone.deleted`                                        | zone cards, group page           | `ZoneStore`              | Live                                    |
-| `zone.countsUpdated`                                  | member and list counts, requests | `ZoneStore`              | Live                                    |
-| `list.created`                                        | list rows, zone list count       | `ListStore`, `ZoneStore` | Live                                    |
-| `list.updated`                                        | list rows                        | `ListStore`              | Live                                    |
-| `list.deleted`                                        | list rows                        | `ListStore`              | Live                                    |
-| `list.accessChanged`                                  | list rows                        | `ListStore` (refresh)    | Live                                    |
-| `line.added` / `.updated` / `.deleted` / `.reordered` | list page lines                  | `LineStore`              | Live                                    |
-| `comment.added`                                       | the **comment count** on a line  | `LineStore`              | Live                                    |
-| `comment.added`                                       | the **comments sheet**           | nothing                  | **Gap 2**                               |
-| `member.joined`                                       | zone member count                | `ZoneStore`              | Live                                    |
-| `member.usernameChanged`                              | members screen rows              | page, via a news channel | Live, by a mechanism this plan replaces |
-| `member.approved`                                     | members screen rows              | nothing                  | **Gap 1**                               |
-| `member.kicked` / `.banned`                           | members screen rows              | nothing                  | **Gap 1**                               |
-| `member.roleChanged`                                  | members screen rows              | nothing                  | **Gap 1**                               |
-| `member.joined` (PENDING)                             | the join request queue           | nothing                  | **Gap 1**                               |
-| `member.rejected`                                     | the join request queue           | nothing                  | **Gap 1**                               |
-| `merge.requested` / `.approved` / `.rejected`         | nothing                          | nothing                  | **No screen, section 5**                |
-| `presence.zoneUpdated`                                | resume card                      | `PresenceStore`          | Live (`0017`)                           |
-| `presence.listUpdated`                                | resume card                      | `PresenceStore`          | Live (`0017`)                           |
+The last three rows were added by `0021`, and they are of a different kind from the rest:
+this plan's gaps were events that arrived and reached nothing, while those were events the
+server had no way to send at all, because every room in the system is scoped to a resource
+and nothing could be addressed to a person. They are listed here so this table stays the
+one standing answer to "does every event reach a screen".
+
+| Event                                                 | Rendered by                      | Applied by                 | State                                   |
+| ----------------------------------------------------- | -------------------------------- | -------------------------- | --------------------------------------- |
+| `zone.updated`                                        | zone cards, group page           | `ZoneStore`                | Live                                    |
+| `zone.ownershipChanged`                               | zone cards, group page           | `ZoneStore`                | Live                                    |
+| `zone.markedForDeletion`                              | zone cards                       | `ZoneStore`                | Live                                    |
+| `zone.deleted`                                        | zone cards, group page           | `ZoneStore`                | Live                                    |
+| `zone.countsUpdated`                                  | member and list counts, requests | `ZoneStore`                | Live                                    |
+| `list.created`                                        | list rows, zone list count       | `ListStore`, `ZoneStore`   | Live                                    |
+| `list.updated`                                        | list rows                        | `ListStore`                | Live                                    |
+| `list.deleted`                                        | list rows                        | `ListStore`                | Live                                    |
+| `list.accessChanged`                                  | list rows                        | `ListStore` (refresh)      | Live                                    |
+| `line.added` / `.updated` / `.deleted` / `.reordered` | list page lines                  | `LineStore`                | Live                                    |
+| `comment.added`                                       | the **comment count** on a line  | `LineStore`                | Live                                    |
+| `comment.added`                                       | the **comments sheet**           | nothing                    | **Gap 2**                               |
+| `member.joined`                                       | zone member count                | `ZoneStore`                | Live                                    |
+| `member.usernameChanged`                              | members screen rows              | page, via a news channel   | Live, by a mechanism this plan replaces |
+| `member.approved`                                     | members screen rows              | nothing                    | **Gap 1**                               |
+| `member.kicked` / `.banned`                           | members screen rows              | nothing                    | **Gap 1**                               |
+| `member.roleChanged`                                  | members screen rows              | nothing                    | **Gap 1**                               |
+| `member.joined` (PENDING)                             | the join request queue           | nothing                    | **Gap 1**                               |
+| `member.rejected`                                     | the join request queue           | nothing                    | **Gap 1**                               |
+| `zone.created`                                        | the dashboard's zone list        | `ZoneStore` (load)         | Live (`0021`)                           |
+| `member.approved` (the caller's own)                  | the zone card, the group page    | `ZoneStore` (patch + load) | Live (`0021`)                           |
+| `user.usernameChanged`                                | the app bar, the account screen  | `ProfileStore`             | Live (`0021`)                           |
+| `merge.requested` / `.approved` / `.rejected`         | nothing                          | nothing                    | **No screen, section 5**                |
+| `presence.zoneUpdated`                                | resume card                      | `PresenceStore`            | Live (`0017`)                           |
+| `presence.listUpdated`                                | resume card                      | `PresenceStore`            | Live (`0017`)                           |
 
 Note the shape of both gaps: they are the two places where a **list of records is held as
 page state**, and neither is an oversight in the store layer. The stores apply everything
@@ -136,19 +145,32 @@ This is the difference the plan's rule turns on: an event with no screen is a **
 that has not been built, and an event with a screen that ignores it is a **bug**. Only the
 second kind is in scope here.
 
-## 6. The account screen, and why it is not on the list
+## 6. The account screen, and the decision it was waiting on
+
+> **Superseded by `0021` and backend `0030`.** The decision this section left open was
+> taken; what follows records what was true when this plan was written, and where it
+> ended up.
 
 A global username change has an event, `user.usernameChanged`, and the account screen
-would be the place to render it. It is not a gap, because that event never leaves the
-broker: the identity events are auth talking to core, they are deliberately absent from
-`DOMAIN_EVENT_SUBJECTS`, and the realtime service therefore never fans one out to a
-socket. What does reach a client is `member.usernameChanged`, once per affected
-membership, which is the per zone half of the same rename and is now applied by
+would be the place to render it. It was not a gap in **this** plan, because that event
+never left the broker: the identity events are auth talking to core, they are deliberately
+absent from `DOMAIN_EVENT_SUBJECTS`, and the realtime service therefore never fanned one
+out to a socket. What did reach a client is `member.usernameChanged`, once per affected
+membership, which is the per zone half of the same rename and is applied by
 `MembershipStore`.
 
-So the account screen is not stale for want of a client change. Making it live would mean
+So the account screen was not stale for want of a client change. Making it live meant
 publishing an identity event to the socket, which is a backend decision and a backend
-plan.
+plan, and the plan is backend `0030`: core re-publishes the identity event as a domain
+event addressed to the renamed user's own sessions, and `ProfileStore` applies it
+(`0021` section 5). The two names stay deliberately two, live by two mechanisms.
+
+It is worth recording why this one was more than a fifteen minute staleness. Rule A2 makes
+`ProfileStore` the owner of the name and the token pair the fallback. In a second tab that
+is backwards: the profile holds the pre-rename name, the refreshed pair carries the new
+one, and the profile wins, so the fallback that exists to prevent staleness is unreachable
+exactly where it would have helped. Without the event, that tab is wrong for as long as it
+stays open.
 
 ## 7. What changed while building it
 
