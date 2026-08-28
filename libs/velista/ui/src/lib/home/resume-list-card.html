@@ -48,15 +48,16 @@
     }
 
     <!--
-      Who is shopping it, drawn by the component that draws the same fact on a group
-      card and in the list's own header, so the four read as one idea (plan 0022).
-      It renders nothing when nobody is there, which is also the answer before the
-      first broadcast and the instant the socket drops.
+      Who is here, drawn by the component that draws the same fact on a group card and
+      on a group's own page, in the same words: "here now" says the one thing every one
+      of these surfaces actually knows, and it reads the same whether the room is a
+      group or a list (plan 0022). It renders nothing when nobody is there, which is
+      also the answer before the first broadcast and the instant the socket drops.
     -->
     <lib-presence-row
       [names]="list().shoppers"
       class="presence"
-      messageKey="home.presence.shopping"
+      messageKey="home.presence.here"
     />
   </button>
 </section>

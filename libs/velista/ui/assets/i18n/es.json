@@ -309,14 +309,10 @@
       "ready": "{{ready}} de {{total}} listos"
     },
     "presence": {
-      "shopping": "{{names}} están comprando ahora",
-      "shoppingCount_one": "{{count}} comprando ahora",
-      "shoppingCount_other": "{{count}} comprando ahora",
-      "onList_one": "{{count}} persona comprando ahora",
-      "onList_other": "{{count}} personas comprando ahora",
-      "inGroup": "{{names}} están aquí ahora",
-      "inGroupCount_one": "{{count}} persona aquí ahora",
-      "inGroupCount_other": "{{count}} personas aquí ahora"
+      "here_one": "{{names}} está aquí ahora",
+      "here_other": "{{names}} están aquí ahora",
+      "hereCount_one": "{{count}} persona aquí ahora",
+      "hereCount_other": "{{count}} personas aquí ahora"
     },
     "guest": {
       "title": "Estás comprando como invitado",

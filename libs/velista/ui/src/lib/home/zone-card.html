@@ -34,8 +34,8 @@
   -->
   <lib-presence-row
     [names]="zone().online"
-    countKey="home.presence.inGroupCount"
-    messageKey="home.presence.inGroup"
+    countKey="home.presence.hereCount"
+    messageKey="home.presence.here"
   />
 
   @if (zone().waitingOn; as owner) {
@@ -112,15 +112,15 @@
             }
 
             <!--
-              Who is shopping from this row: the dot and up to two initials, no names.
+              Who is here on this row: the dot and up to two initials, no names.
               A row has no space for a sentence and the group's own page carries one,
               so the sentence is off screen rather than absent (plan 0022, section 3.3).
             -->
             <lib-presence-row
               [compact]="true"
               [names]="list.viewers"
-              countKey="home.presence.onList"
-              messageKey="home.presence.shopping"
+              countKey="home.presence.hereCount"
+              messageKey="home.presence.here"
             />
           </button>
         </li>
