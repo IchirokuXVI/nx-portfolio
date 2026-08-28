@@ -1,6 +1,9 @@
 import { workspaceRoot } from '@nx/devkit';
 import { nxE2EPreset } from '@nx/playwright/preset';
 import { defineConfig, devices } from '@playwright/test';
+import { withProgressReporter } from '../../playwright.reporters';
+
+const preset = nxE2EPreset(__filename, { testDir: './src' });
 
 // landingV2 renders only through the shell (CLAUDE.md) and mounts at the
 // locale root, so baseURL points at the shell's /en, never port 4204 directly.
@@ -37,13 +40,21 @@ const baseURL =
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-  ...nxE2EPreset(__filename, { testDir: './src' }),
+  ...preset,
+  /* The preset's reporters are silent on a terminal, which on CI turns a running
+   * suite into a blank log. See playwright.reporters.ts. */
+  reporter: withProgressReporter(preset.reporter),
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     baseURL,
     // The local reverse proxy serves self-signed TLS; accept it so an https
     // E2E_BASE_URL still works. Harmless for the http/dev-server defaults.
     ignoreHTTPSErrors: true,
+    /* Both default to 0 under the test runner, and 0 means *no* limit, so a
+     * navigation that never completes is bounded only by the test timeout. See
+     * apps/damoclesSword-e2e/playwright.config.ts for the full account. */
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
   },

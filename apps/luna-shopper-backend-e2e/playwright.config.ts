@@ -1,5 +1,8 @@
 import { nxE2EPreset } from '@nx/playwright/preset';
 import { defineConfig, devices } from '@playwright/test';
+import { withProgressReporter } from '../../playwright.reporters';
+
+const preset = nxE2EPreset(__filename, { testDir: './src' });
 
 /**
  * End-to-end tests for the Luna Shopper backend (plan 0010, section 1). They hit
@@ -19,7 +22,12 @@ export const REALTIME_URL =
   process.env['E2E_REALTIME_URL'] || 'http://localhost:3001';
 
 export default defineConfig({
-  ...nxE2EPreset(__filename, { testDir: './src' }),
+  ...preset,
+  // The preset's reporters are silent on a terminal, which on CI turns a running
+  // suite into a blank log. See playwright.reporters.ts. This suite happened to
+  // look fine there only because it skips itself without a stack, and the skip
+  // summary flushes the buffered characters straight away.
+  reporter: withProgressReporter(preset.reporter),
   // One retry in CI, not the preset's two (plan 0015, section 8). A broker hop
   // and an SSE stream make a first attempt worth retrying once; a test that only
   // passes on the third go is telling us something we should not paper over.

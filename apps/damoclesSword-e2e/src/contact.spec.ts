@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
 import { expect, test } from './support/fixtures';
+import { fontsReady } from './support/locale-helpers';
 
 /**
  * Contact page (damoclesSword) checks:
@@ -27,7 +28,7 @@ function contactUrl(baseURL: string | undefined): string {
 async function gotoContact(page: Page, baseURL: string | undefined) {
   await page.goto(contactUrl(baseURL));
   await page.locator(PUBLISHING).waitFor({ state: 'attached', timeout: 30000 });
-  await page.evaluate(() => document.fonts.ready).catch(() => undefined);
+  await fontsReady(page);
 }
 
 test('renders the three contact sections', async ({ page, baseURL }) => {
