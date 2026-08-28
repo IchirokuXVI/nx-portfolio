@@ -35,8 +35,16 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       NATS_URL: nats://nats:4222
+      # Required, not optional (plan 0028, section 5): the gateway validates it at
+      # boot and refuses to start without it, because a gateway that comes up with
+      # no working rate limiter is worse than one that does not come up. Compose
+      # service name and internal port, like NATS above, since the host port a
+      # worktree slot publishes is irrelevant inside this network.
+      REDIS_URL: redis://redis:6379
       LOG_LEVEL: debug
       CORS_ORIGINS: http://localhost:4200
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
@@ -77,8 +85,14 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       NATS_URL: nats://nats:4222
+      # Realtime holds four pieces of shared state in Redis rather than in the
+      # pod (the socket.io adapter, the relay channel, presence, and the throttle
+      # and dedupe counters), so this is what makes more than one replica correct.
+      REDIS_URL: redis://redis:6379
       LOG_LEVEL: debug
       CORS_ORIGINS: http://localhost:4200
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
