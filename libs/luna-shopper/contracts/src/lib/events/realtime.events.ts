@@ -43,6 +43,17 @@ export enum RealtimeEvent {
   ListUpdated = 'list.updated',
   ListDeleted = 'list.deleted',
   ListAccessChanged = 'list.accessChanged',
+  /**
+   * One person's own permissions on one list changed (plan 0036, section 8),
+   * addressed to that person's sessions.
+   *
+   * The companion of {@link ListAccessChanged} and not a replacement for it. That
+   * one goes to the list room and says only that the table changed, which is
+   * adequate for everybody who **kept** access and useless for the two people the
+   * change is actually about: it names nobody, and somebody who has just been
+   * granted access was never in the room to receive it.
+   */
+  ListMyAccessChanged = 'list.myAccessChanged',
   LineAdded = 'line.added',
   LineUpdated = 'line.updated',
   LineReordered = 'line.reordered',
@@ -103,6 +114,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.ListUpdated,
   RealtimeEvent.ListDeleted,
   RealtimeEvent.ListAccessChanged,
+  RealtimeEvent.ListMyAccessChanged,
   RealtimeEvent.LineAdded,
   RealtimeEvent.LineUpdated,
   RealtimeEvent.LineReordered,

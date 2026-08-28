@@ -58,18 +58,30 @@ export const SEED_ZONES: readonly MyZone[] = [
     myStatus: 'APPROVED',
     counts: {
       memberCount: 4,
-      listCount: 1,
+      // Four, because this is the group where the caller is an ordinary member and
+      // therefore the only one where their list permissions are their own. There is one
+      // list per permission state; `SEED_LIST_ACCESS` says which is which.
+      listCount: 4,
       // Null, not zero: this caller is not staff in this zone, so the backend
       // does not tell them who is waiting (backend plan 0017, section 6).
       pendingRequestCount: null,
       firstPendingRequesterName: null,
     },
+    // Up to three, as the backend sends (backend plan 0017), so the fourth list is
+    // reachable from the group page rather than from the card.
     lists: [
       {
         id: 'list-sunday',
         name: 'Sunday lunch',
         lineCount: 9,
         readyCount: 2,
+      },
+      { id: 'list-pantry', name: 'Pantry top up', lineCount: 4, readyCount: 1 },
+      {
+        id: 'list-market',
+        name: 'Saturday market',
+        lineCount: 4,
+        readyCount: 1,
       },
     ],
   },

@@ -3,8 +3,7 @@ import {
   LINE_APPROVAL_STATUSES,
   LINE_STATUS_FALLBACK,
   LINE_STATUSES,
-  LIST_ROLE_FALLBACK,
-  LIST_ROLES,
+  LIST_PERMISSIONS,
   MEMBERSHIP_STATUS_FALLBACK,
   MEMBERSHIP_STATUSES,
   USER_KIND_FALLBACK,
@@ -16,6 +15,7 @@ import {
   type Comment,
   type Line,
   type ListAccessEntry,
+  type ListPermission,
   type ListPresence,
   type ListPreview,
   type Membership,
@@ -202,7 +202,41 @@ export function toShoppingListSummary(
     return null;
   }
 
-  return { ...list, ...readListCounts(raw) };
+  return {
+    ...list,
+    ...readListCounts(raw),
+    myPermissions: toListPermissions(raw['myPermissions']),
+  };
+}
+
+/**
+ * A permission set off the wire, from `ListView.myPermissions` or an access entry.
+ *
+ * **Unrecognised members are dropped, and there is no fallback.** Rule D4 usually asks
+ * for the least dangerous reading of a value this build has never heard of, and for a
+ * single-valued enum something has to be picked. A set has a strictly correct answer
+ * instead: keep the members it understood and ignore the rest (plan 0030, section 2).
+ * That is also the safe direction twice over, since a client that does not know a
+ * permission draws no control for it and the server would refuse what that control sent.
+ *
+ * An absent field, a `null`, a string, an object, anything that is not an array: the
+ * **empty set**, which the page reads as read only. It is the one default here and it is
+ * the conservative one. The old `canWrite` guessed the other way and found out from a
+ * refused write, which was defensible with one control to be wrong about and is not with
+ * nine.
+ *
+ * Duplicates are kept as they arrive rather than deduplicated: every reader asks
+ * `includes`, so a repeated member costs nothing, and rewriting the server's answer to
+ * tidy it would be the mapper deciding something.
+ */
+export function toListPermissions(raw: unknown): ListPermission[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw.filter((member): member is ListPermission =>
+    (LIST_PERMISSIONS as readonly string[]).includes(member as string)
+  );
 }
 
 /** From `MembershipView`. Also arrives on every `member.*` realtime event. */
@@ -249,6 +283,11 @@ export function toShoppingList(raw: unknown): ShoppingList | null {
     zoneId,
     name: strOr(raw['name'], ''),
     createdByUserId: strOr(raw['createdByUserId'], ''),
+    // False for anything that is not literally `true`, which is the safe reading: a
+    // list that is assumed to auto-approve would have its optimistic rows drawn already
+    // approved and corrected a frame later, which is the defect backend plan 0037 is
+    // about, in the other direction.
+    autoApproveLines: raw['autoApproveLines'] === true,
   };
 }
 
@@ -441,17 +480,25 @@ export function toDeletedId(raw: unknown): string | null {
 }
 
 /**
- * From the `entries` of a list access document.
+ * From `ListAccessView` (`GET /v1/lists/:id/access`), which lands with backend plan
+ * 0036 section 6 gated on `MANAGE`.
  *
- * Written against the `GET /v1/lists/:id/access` that plan 0012 section 5.6 asks for
- * and that does not exist yet, which is why it is tolerant about the envelope: the
- * endpoint may answer the bare array or the `{ entries }` object the PUT accepts, and
- * both are the same fact. An entry with no membership id is dropped, per the rule at
- * the top of this file: it names nobody, so no row can be drawn for it.
+ * It answers `{ listId, entries }`, and only the entries are read: the list id is the
+ * one the caller asked about, so carrying it up would be handing the sheet back the
+ * argument it passed in. A bare array is still accepted, because it is the same fact in
+ * the same shape the `PUT` takes and refusing a payload this function could plainly read
+ * would cost the caller the whole sheet.
+ *
+ * Group staff are absent from it by construction and that is not a gap: they hold all
+ * four permissions on every list in the zone by derivation, and the sheet builds their
+ * rows from `MembershipStore`, which is the fresher copy.
+ *
+ * An entry with no membership id is dropped, per the rule at the top of this file: it
+ * names nobody, so no row can be drawn for it. An entry whose permissions are missing or
+ * unreadable is **kept, with an empty set**, because a row with no access is a real row
+ * in this sheet and dropping it would hide a member the caller can grant access to.
  */
-export function toListAccessEntries(
-  raw: unknown
-): readonly ListAccessEntry[] {
+export function toListAccessEntries(raw: unknown): readonly ListAccessEntry[] {
   const items = Array.isArray(raw)
     ? raw
     : isRecord(raw)
@@ -473,6 +520,6 @@ function toListAccessEntry(raw: unknown): ListAccessEntry | null {
 
   return {
     membershipId,
-    role: oneOf(raw['role'], LIST_ROLES, LIST_ROLE_FALLBACK),
+    permissions: toListPermissions(raw['permissions']),
   };
 }

@@ -2,12 +2,13 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   LineApprovalStatus,
   LineStatus,
-  ListRole,
+  ListPermission,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -50,6 +51,19 @@ export class UpdateListDto {
   @MinLength(1)
   @MaxLength(120)
   name?: string;
+
+  /**
+   * Whether a new line on this list arrives already approved (plan 0037,
+   * section 3).
+   *
+   * List configuration rather than a preference, so core gates it on `MANAGE`,
+   * and it governs only what a **new** line starts as: turning it on leaves the
+   * lines already pending exactly where they are.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  autoApproveLines?: boolean;
 }
 
 export class ListAccessEntryDto {
@@ -57,9 +71,26 @@ export class ListAccessEntryDto {
   @IsUUID()
   membershipId!: string;
 
-  @ApiProperty({ enum: ListRole })
-  @IsEnum(ListRole)
-  role!: ListRole;
+  /**
+   * The whole of what this membership may do on the list, replacing the single
+   * `ListRole` (plan 0036, section 2). `setAccess` sets the row outright rather
+   * than patching it, so this array is the complete answer for that membership.
+   *
+   * **An empty array is valid and is how access is revoked** (section 5, rule
+   * 5): core deletes the row rather than storing a zero-permission one, so no
+   * `ArrayNotEmpty` here. Duplicates are refused because the value is a set and
+   * a repeated member says nothing a single one does not.
+   */
+  @ApiProperty({
+    enum: ListPermission,
+    isArray: true,
+    description:
+      'The complete permission set for this membership. Empty revokes access.',
+  })
+  @IsArray()
+  @ArrayUnique()
+  @IsEnum(ListPermission, { each: true })
+  permissions!: ListPermission[];
 }
 
 export class SetListAccessDto {

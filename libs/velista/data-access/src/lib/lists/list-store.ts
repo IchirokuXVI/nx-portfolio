@@ -6,7 +6,10 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import type { ShoppingListSummary } from '@portfolio/velista/models';
+import type {
+  ListPermission,
+  ShoppingListSummary,
+} from '@portfolio/velista/models';
 import { Mutations } from '../mutations';
 import {
   REALTIME_CLIENT,
@@ -166,6 +169,13 @@ export class ListStore {
    * alternative: dropping the list would flicker it off screen for somebody whose
    * access only widened, and keeping it would leave a list on screen that they can no
    * longer open (plan 0010, section 5.2).
+   *
+   * `list.myAccessChanged` is its addressed counterpart and does **not** replace it
+   * (velista plan 0030, section 8). It carries the caller's own new set on the user
+   * channel, so it can be applied rather than asked about, and it reaches somebody who
+   * was never in the list room. The room event keeps refetching for everybody else,
+   * which is the right answer for people whose own access did not change at all and who
+   * are looking at counts that may have.
    */
   private _apply(event: RealtimeEvent): void {
     switch (event.type) {
@@ -180,11 +190,18 @@ export class ListStore {
         }
 
         this._upsertPartial(list.zoneId, list.id, (existing) => ({
-          ...(existing ?? { lineCount: 0, readyCount: 0 }),
+          // `myPermissions` is kept from the row this store already holds and is empty
+          // for a list it is hearing about for the first time. A broadcast to a room
+          // cannot say something different to each person in it, so this payload has no
+          // per caller set to carry, and empty is the safe reading: the card draws, and
+          // the page corrects it from the load or refresh it runs when somebody opens
+          // the list.
+          ...(existing ?? { lineCount: 0, readyCount: 0, myPermissions: [] }),
           id: list.id,
           zoneId: list.zoneId,
           name: list.name,
           createdByUserId: list.createdByUserId,
+          autoApproveLines: list.autoApproveLines,
         }));
         break;
       }
@@ -211,6 +228,36 @@ export class ListStore {
         break;
       }
 
+      case 'list.myAccessChanged': {
+        if (event.permissions.length === 0) {
+          // Nothing left, so the list leaves the cache and the page reading it reaches
+          // the `gone: 'unshared'` state it already has for a list that is no longer in
+          // the zone's answer. No refetch: the event is the answer, and asking again
+          // would only confirm it a round trip later.
+          this._removeList(event.listId);
+          break;
+        }
+
+        if (this._setMyPermissions(event.listId, event.permissions)) {
+          // A set that shrank, or grew, on a list already on screen. Patched in place so
+          // `selectAbilities` redraws from it on the next frame, which is rule G2 for
+          // this screen: a control the caller may no longer press is gone before they
+          // press it. Again no refetch, and here that matters more, because the page is
+          // open and a reload would blink the lines.
+          break;
+        }
+
+        // The caller has just been **given** access to a list this store has never seen.
+        // The event carries a permission set and not a list, so there is no name and no
+        // counts to draw a row from, and the zone is refetched to get them. This is the
+        // case `list.accessChanged` could never deliver: somebody with no access was
+        // never in the list room to hear it.
+        if (this._byZone().has(event.zoneId)) {
+          void this.refresh(event.zoneId);
+        }
+        break;
+      }
+
       case 'line.added':
       case 'line.updated':
       case 'line.deleted':
@@ -227,6 +274,36 @@ export class ListStore {
         // Zone, member, merge and presence traffic. `ZoneStore` owns all of it.
         break;
     }
+  }
+
+  /**
+   * Rewrite one list's `myPermissions` in place, reporting whether it was there to
+   * rewrite.
+   *
+   * The boolean is the point: the caller has a genuinely different job for a list this
+   * store does not hold, and a method that quietly did nothing would leave a granted
+   * list invisible until the next navigation.
+   */
+  private _setMyPermissions(
+    listId: string,
+    permissions: readonly ListPermission[]
+  ): boolean {
+    const zoneId = this._zoneOf(listId);
+    if (zoneId === null) {
+      return false;
+    }
+
+    this._byZone.update((current) => {
+      const lists = current.get(zoneId) ?? [];
+      return new Map(current).set(
+        zoneId,
+        lists.map((list) =>
+          list.id === listId ? { ...list, myPermissions: permissions } : list
+        )
+      );
+    });
+
+    return true;
   }
 
   private _zoneOf(listId: string): string | null {

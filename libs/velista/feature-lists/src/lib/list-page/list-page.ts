@@ -78,18 +78,21 @@ import { selectListState } from '../select-list-state';
  * wait for a heading before they see what to buy. So the header degrades and the body
  * does not, and the two effects below are separate for exactly that reason.
  *
- * ## Rule L3, made conditional
+ * ## Rule L3 is the server's now
  *
- * Core starts every line PENDING and only a zone OWNER or ADMIN may approve one, so
- * taken literally the owner of a two person household adds milk and watches it wait for
- * their own approval. The client follows a staff member's add with an approval of the
- * id that came back, with the caller's own permissions, so nothing is bypassed.
+ * This page used to follow an add by a staff member with an approval of the id that came
+ * back, because core started every line PENDING and only a zone OWNER or ADMIN could
+ * approve one, so the owner of a two person household added milk and watched it wait for
+ * their own approval. Backend plan 0037 section 2 creates the line APPROVED when its
+ * author holds `DECIDE`, or when the list auto-approves, so the second call is deleted
+ * rather than made conditional: it can no longer be needed, and a client that keeps a
+ * corrective write around for a case the server has closed is a client that will
+ * eventually perform it against a rule it does not know about.
  *
- * It fires **only when the created line actually came back PENDING**. The backend is
- * adding a zone option that auto approves a staff member's own line, and when it lands
- * the response is already APPROVED and this second call simply stops happening, with no
- * edit here. A failure of it is silent on purpose: the line exists, it is on the list,
- * and the only thing that did not happen is a state change nobody asked for.
+ * What is left of it is one argument to {@link LineStore.addLine}. The optimistic row
+ * has to be drawn with the approval the server is about to give it, from the same two
+ * facts the server uses, or the person who typed the line watches an approve button
+ * appear on it and vanish (plan 0030, section 5).
  *
  * ## Reorder is a mode, and it is page state
  *
@@ -137,12 +140,6 @@ export class ListPage {
 
   readonly reordering = signal(false);
 
-  /** Set once a write comes back `forbidden`, which is how a reader is discovered. */
-  private readonly _knownReader = signal(false);
-
-  /** Whether the reader notice has been shown. Once, per section 3.2. */
-  readonly readerNoticeShown = signal(false);
-
   /** The page's own failure, as a key. Distinct from a per row failure. */
   private readonly _errorKey = signal<string | null>(null);
   private readonly _correlationId = signal<string | null>(null);
@@ -181,22 +178,23 @@ export class ListPage {
     const zoneId = this.zoneId();
     const lines = this._lines.forList(listId)();
     const zone = this._zones.zoneById(zoneId);
+    const list = this._lists
+      .listsIn(zoneId)
+      .find((candidate) => candidate.id === listId);
 
     return selectListState({
-      list: this._lists
-        .listsIn(zoneId)
-        .find((candidate) => candidate.id === listId),
+      list,
       zoneName: zone?.name ?? null,
       lines: lines.lines,
       linesState: lines.state,
       linesComplete: lines.complete,
       writes: lines.writes,
       commentCounts: lines.commentCounts,
-      caller: {
-        userId: this._session.userId() ?? '',
-        isStaff: zone?.myRole === 'OWNER' || zone?.myRole === 'ADMIN',
-        knownReader: this._knownReader(),
-      },
+      // The server's answer, straight through. No zone role, no inference from a refused
+      // write, and nothing to reconcile between the two (plan 0030, section 3): staff
+      // already arrive holding all four, and a list that has not landed yet answers the
+      // empty set, which draws a read-only page for the frame before it does.
+      caller: { permissions: list?.myPermissions ?? [] },
       nameOf: (userId) => this._names.nameOf(zoneId, userId),
       reordering: this.reordering(),
       // Both from `PresenceStore`, and both answerable at last: this page announces
@@ -303,8 +301,6 @@ export class ListPage {
       untracked(() => {
         this._errorKey.set(null);
         this._gone.set(null);
-        this._knownReader.set(false);
-        this.readerNoticeShown.set(false);
         void this._loadLines(listId);
       });
     });
@@ -497,10 +493,15 @@ export class ListPage {
   /**
    * Tick a line off, or put it back.
    *
-   * The gesture the whole screen is built around. A reader gets the notice once and
-   * silence afterwards: the tick is the interaction model here, so a reader tapping and
-   * getting nothing at all would read as a broken app, and the same sentence on every
-   * tap would read as nagging (section 3.2).
+   * The gesture the whole screen is built around, and it is `DECIDE` rather than `WRITE`
+   * since plan 0030 section 4: saying the tin is in the trolley is deciding, not adding.
+   *
+   * The guard below is belt on top of braces and is silent. `LineRowVm.interactive`
+   * already follows `canDecide`, so a caller who may not tick has rows that emit nothing
+   * on a tap, and the sentence explaining that is on screen from the moment the page
+   * draws rather than appearing on the first tap. That is the whole of the change: the
+   * page used to discover a reader from a refusal and say so once, and now it knows
+   * before anybody touches anything (section 3.2).
    */
   async toggle(lineId: string): Promise<void> {
     const line = this._lines
@@ -511,11 +512,7 @@ export class ListPage {
     }
 
     const page = this.loaded();
-    if (page !== null && !page.abilities.canWrite) {
-      // A reader tapped a row. The notice appears once and later taps are silent:
-      // silence from the first tap would read as a broken app, and the sentence on
-      // every tap would read as nagging (section 3.2).
-      this.readerNoticeShown.set(true);
+    if (page !== null && !page.abilities.canDecide) {
       return;
     }
 
@@ -581,11 +578,14 @@ export class ListPage {
   }
 
   /**
-   * Add a line, and approve it if the caller is staff and it landed pending.
+   * Add a line.
    *
-   * Rule L3. The second call is skipped entirely when the response already says
-   * APPROVED, which is what the backend's forthcoming auto approve option will make the
-   * normal case, and its failure is swallowed rather than reported.
+   * One call, and no correction after it. The server decides the new line's approval
+   * from the adder's `DECIDE` and the list's `autoApproveLines` (backend plan 0037,
+   * section 2), and those are the two facts handed down here so the optimistic row is
+   * drawn the way the response is about to come back. Getting this wrong is not a stale
+   * row, it is an approve button flashing on somebody's own line for one frame, which is
+   * the defect plan 0030 section 5 exists to remove.
    */
   async add(entry: { content: string; quantity: number }): Promise<void> {
     const current = this.loaded();
@@ -601,7 +601,11 @@ export class ListPage {
       this.listId(),
       entry.content,
       entry.quantity,
-      this._session.userId() ?? ''
+      this._session.userId() ?? '',
+      {
+        canDecide: current?.abilities.canDecide ?? false,
+        autoApproveLines: current?.autoApproveLines ?? false,
+      }
     );
 
     this.composerBusy.set(false);
@@ -612,14 +616,6 @@ export class ListPage {
     }
 
     this.announcement.set(entry.content);
-
-    if (
-      current?.abilities.canDecide === true &&
-      outcome.line.approvalStatus === 'PENDING'
-    ) {
-      // Silent either way. See the class comment.
-      await this._lines.setApproval(outcome.line.id, 'APPROVED');
-    }
   }
 
   /** The inline failure notice was tapped. Retries the write that failed. */
@@ -773,13 +769,6 @@ export class ListPage {
     switch (listErrorEffect(error, operation)) {
       case 'gone':
         this._gone.set('unshared');
-        return true;
-      case 'read-only':
-        // Section 3.2, arriving late. Today this is the **only** way the client can
-        // learn the caller is a reader: `ListView` carries no role for them and there
-        // is no `GET /v1/lists/:id/access`. The composer leaves in place.
-        this._knownReader.set(true);
-        this.readerNoticeShown.set(true);
         return true;
       case 'reread':
         void this._lines.refresh(this.listId());

@@ -10,6 +10,12 @@ import { LineStore } from './line-store';
 const LIST = 'list-1';
 const ME = 'user-me';
 
+/**
+ * The approval facts an add carries, for a caller who decides nothing on a list that
+ * asks. It is the ordinary case and the one the placeholder must draw as `PENDING`.
+ */
+const ASKS_FIRST = { canDecide: false, autoApproveLines: false };
+
 function line(id: string, overrides: Partial<Line> = {}): Line {
   return {
     id,
@@ -194,7 +200,7 @@ describe('LineStore', () => {
       const { store } = await build();
       await store.load(LIST);
 
-      const adding = store.addLine(LIST, 'Milk', 2, ME);
+      const adding = store.addLine(LIST, 'Milk', 2, ME, ASKS_FIRST);
 
       // Already on screen, under a client key, because there is no server id yet.
       expect(store.linesIn(LIST)).toHaveLength(1);
@@ -207,7 +213,7 @@ describe('LineStore', () => {
       const { store } = await build();
       await store.load(LIST);
 
-      const outcome = await store.addLine(LIST, 'Milk', 2, ME);
+      const outcome = await store.addLine(LIST, 'Milk', 2, ME, ASKS_FIRST);
 
       expect(outcome.state).toBe('added');
       expect(store.linesIn(LIST)).toHaveLength(1);
@@ -219,7 +225,7 @@ describe('LineStore', () => {
       // against a row that had none, so the store remembers the ids it minted.
       const { store, realtime } = await build();
       await store.load(LIST);
-      await store.addLine(LIST, 'Milk', 2, ME);
+      await store.addLine(LIST, 'Milk', 2, ME, ASKS_FIRST);
 
       realtime.emit(
         'line.added',
@@ -238,6 +244,50 @@ describe('LineStore', () => {
       expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['a', 'theirs']);
     });
 
+    it('draws the placeholder as PENDING when the adder cannot decide', async () => {
+      const { store } = await build();
+      await store.load(LIST);
+
+      const adding = store.addLine(LIST, 'Milk', 2, ME, ASKS_FIRST);
+
+      expect(store.linesIn(LIST)[0].approvalStatus).toBe('PENDING');
+      expect(store.linesIn(LIST)[0].approvedByUserId).toBeNull();
+      await adding;
+    });
+
+    it('draws it approved, by the adder, when the adder holds DECIDE', async () => {
+      // Backend plan 0037 section 2, rule 1: they are the person the approval would
+      // have been asked of, so adding the line is them giving it. Drawing PENDING here
+      // is the approve button that flashes on your own line.
+      const { store } = await build();
+      await store.load(LIST);
+
+      const adding = store.addLine(LIST, 'Milk', 2, ME, {
+        canDecide: true,
+        autoApproveLines: false,
+      });
+
+      expect(store.linesIn(LIST)[0].approvalStatus).toBe('APPROVED');
+      expect(store.linesIn(LIST)[0].approvedByUserId).toBe(ME);
+      await adding;
+    });
+
+    it('draws it approved with no approver on an auto-approving list', async () => {
+      // Rule 2. Nobody decided: the list is configured not to ask, and a null approver
+      // is the honest record of that.
+      const { store } = await build();
+      await store.load(LIST);
+
+      const adding = store.addLine(LIST, 'Milk', 2, ME, {
+        canDecide: false,
+        autoApproveLines: true,
+      });
+
+      expect(store.linesIn(LIST)[0].approvalStatus).toBe('APPROVED');
+      expect(store.linesIn(LIST)[0].approvedByUserId).toBeNull();
+      await adding;
+    });
+
     it('takes the row away again when the add fails', async () => {
       // Unlike an edit there is nothing to snap back to: the line never existed, and
       // leaving it would be an item somebody believes is on a shared list.
@@ -245,7 +295,7 @@ describe('LineStore', () => {
       await store.load(LIST);
       lines.failNext(new Error('offline'));
 
-      const outcome = await store.addLine(LIST, 'Milk', 1, ME);
+      const outcome = await store.addLine(LIST, 'Milk', 1, ME, ASKS_FIRST);
 
       expect(outcome.state).toBe('failed');
       expect(store.linesIn(LIST)).toHaveLength(0);

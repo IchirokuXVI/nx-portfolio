@@ -16,6 +16,7 @@ import {
 import {
   COMMENT_SERVICE,
   LineStore,
+  ListStore,
   MemberNames,
   SessionStore,
   type CommentServiceI,
@@ -33,6 +34,7 @@ import {
 } from '@portfolio/velista/platform';
 import { CommentComposer, CommentRow, SheetShell } from '@portfolio/velista/ui';
 import { listErrorKey } from '../list-error-copy';
+import { selectAbilities } from '../select-list-state';
 
 /**
  * How far from the bottom still counts as being at the newest comment.
@@ -45,12 +47,22 @@ const AT_NEWEST_SLACK_PX = 32;
 /**
  * What people have said about one line.
  *
- * ## The one place a reader can act
+ * ## A reader may read it and may not write in it
  *
- * `comment.add` requires only an approved membership on the zone, not write access on
- * the list. That is the backend's choice rather than this client's, and it is the
- * reason the comment affordance stays on every row even in the read only state: it is
- * the single thing somebody with read access can actually do (section 3.2).
+ * `comment.add` used to require only an approved membership on the zone, which made this
+ * the one thing a reader could really do. Backend plan 0036 section 4 narrows it to
+ * `WRITE` or `DECIDE`, so read now means read here as well, and this is the visible
+ * removal plan 0030 section 3.1 flags: somebody with `READER` on a list today can
+ * comment on it and will not be able to afterwards.
+ *
+ * The sheet still **opens** for everybody who holds `READ`, and the row's overflow still
+ * carries the entry that opens it, because reading what the group said about a line is
+ * part of seeing the list. What goes is the composer, and its position is taken by a
+ * line saying why. `0027` has just pinned that composer under the conversation, which
+ * makes it the most prominent thing on the sheet and always in view, and that is
+ * precisely the control that must not be drawn for somebody who cannot use it. Putting
+ * the note **where it was** rather than simply dropping it also stops the sheet ending
+ * in nothing, which reads like a conversation that failed to load.
  *
  * ## Names come from the zone, not from the comment
  *
@@ -86,6 +98,7 @@ const AT_NEWEST_SLACK_PX = 32;
 export class CommentsSheet {
   private readonly _comments = inject<CommentServiceI>(COMMENT_SERVICE);
   private readonly _lines = inject(LineStore);
+  private readonly _lists = inject(ListStore);
   private readonly _names = inject(MemberNames);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
@@ -140,6 +153,23 @@ export class CommentsSheet {
   readonly empty = computed(
     () => !this.loading() && this.comments().length === 0
   );
+
+  /**
+   * Whether this caller may say anything, from the same four tests the page uses.
+   *
+   * Read from `ListStore` rather than handed down, because this is a routed child and is
+   * reachable by a deep link on a list whose page never drew. An unloaded list answers
+   * the empty set and therefore no composer, which is the safe direction: a composer that
+   * appears once the list lands is a sheet filling in, and one that vanishes after
+   * somebody has typed into it is a sheet losing their sentence.
+   */
+  readonly canComment = computed(() => {
+    const list = this._lists
+      .listsIn(this.zoneId())
+      .find((candidate) => candidate.id === this.listId());
+
+    return selectAbilities(list?.myPermissions ?? []).canComment;
+  });
 
   private readonly _scroller =
     viewChild<ElementRef<HTMLElement>>('conversation');

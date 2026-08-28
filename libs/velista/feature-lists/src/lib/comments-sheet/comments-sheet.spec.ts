@@ -9,14 +9,20 @@ import {
 import {
   COMMENT_SERVICE,
   fakeLineStore,
+  fakeListStore,
   fakeMemberNames,
   provideFakeLineStore,
+  provideFakeListStore,
   provideFakeMemberNames,
   provideFakeSessionStore,
   type CommentServiceI,
   type FakeLineStore,
 } from '@portfolio/velista/data-access';
-import type { Comment } from '@portfolio/velista/models';
+import type {
+  Comment,
+  ListPermission,
+  ShoppingListSummary,
+} from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { CommentsSheet } from './comments-sheet';
@@ -45,8 +51,22 @@ const NEWEST_FIRST = [
   comment('c-1', 'which bread?', 30),
 ];
 
+function list(permissions: readonly ListPermission[]): ShoppingListSummary {
+  return {
+    id: LIST_ID,
+    zoneId: ZONE_ID,
+    name: 'Weekly shop',
+    createdByUserId: 'user-1',
+    autoApproveLines: false,
+    lineCount: 1,
+    readyCount: 0,
+    myPermissions: permissions,
+  };
+}
+
 async function render(
-  page: readonly Comment[] = NEWEST_FIRST
+  page: readonly Comment[] = NEWEST_FIRST,
+  permissions: readonly ListPermission[] = ['READ', 'WRITE']
 ): Promise<{ fixture: ComponentFixture<CommentsSheet>; lines: FakeLineStore }> {
   TestBed.resetTestingModule();
 
@@ -67,6 +87,9 @@ async function render(
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeLineStore(lines),
+      provideFakeListStore(
+        fakeListStore({ lists: [list(permissions)], state: 'loaded' })
+      ),
       provideFakeMemberNames(fakeMemberNames({ 'user-toni': 'Toni' })),
       provideFakeSessionStore('REGISTERED'),
       { provide: COMMENT_SERVICE, useValue: comments },
@@ -140,5 +163,54 @@ describe('CommentsSheet', () => {
 
     expect(bodies(fixture)).toEqual([]);
     expect(fixture.debugElement.query(By.css('.comments'))).toBeNull();
+  });
+
+  /**
+   * Plan 0030, section 3.1, and acceptance item 1.
+   *
+   * The sheet opens for everybody who holds READ and the composer is what leaves, in
+   * its place rather than simply gone: `0027` pinned it under the conversation, which
+   * makes it the most prominent thing here and always in view, and that is exactly the
+   * control that must not be drawn for somebody who cannot use it.
+   */
+  describe('who may say something', () => {
+    it('draws the composer for a writer', async () => {
+      const { fixture } = await render(NEWEST_FIRST, ['READ', 'WRITE']);
+
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer'))
+      ).not.toBeNull();
+      expect(fixture.debugElement.query(By.css('.read-only'))).toBeNull();
+    });
+
+    it('draws it for somebody who only decides, too', async () => {
+      const { fixture } = await render(NEWEST_FIRST, ['READ', 'DECIDE']);
+
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer'))
+      ).not.toBeNull();
+    });
+
+    it('still shows a reader the conversation, and not the composer', async () => {
+      const { fixture } = await render(NEWEST_FIRST, ['READ']);
+
+      expect(bodies(fixture)).toEqual([
+        'which bread?',
+        'the sourdough one',
+        'and olives',
+      ]);
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer'))
+      ).toBeNull();
+    });
+
+    it('puts the note where the composer was, so the sheet does not end in nothing', async () => {
+      const { fixture } = await render(NEWEST_FIRST, ['READ']);
+
+      expect(
+        fixture.debugElement.query(By.css('.read-only'))?.nativeElement
+          .textContent
+      ).toContain('list.comments.readOnly');
+    });
   });
 });

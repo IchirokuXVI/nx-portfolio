@@ -1,5 +1,6 @@
 import type {
   ListAccessEntry,
+  ListPermission,
   Membership,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
@@ -121,44 +122,105 @@ export const SEED_LISTS: Readonly<
     list('list-weekly', 'zone-flat', 'Weekly shop', SEED_USER_ID, 12, 7),
     list('list-cleaning', 'zone-flat', 'Cleaning', 'user-toni', 4, 4),
   ],
+  // Four lists in the one group where the caller is an **ordinary member**, which is
+  // the only group where their list permissions are their own rather than derived from
+  // being staff. One list per permission state, and the reason each exists is on its
+  // access row below.
   'zone-parents': [
     list('list-sunday', 'zone-parents', 'Sunday lunch', 'user-mum', 9, 2),
+    list('list-pantry', 'zone-parents', 'Pantry top up', 'user-mum', 4, 1, {
+      autoApproveLines: true,
+    }),
+    list('list-market', 'zone-parents', 'Saturday market', 'user-dad', 4, 1),
+    list('list-freezer', 'zone-parents', 'Freezer', SEED_USER_ID, 2, 1),
   ],
 };
 
 /**
- * Who can read and write each seeded list, by membership id.
+ * What each membership may do on each seeded list, by membership id.
  *
- * There is no `GET /v1/lists/:id/access` yet (plan 0012, section 5.5), so nothing
- * against a real gateway can produce this and the share sheet is built entirely
- * against these rows. It is keyed by **membership** and not by user, because that is
- * what the `PUT` payload names and what the sheet therefore has to send back.
+ * Keyed by **membership** and not by user, because that is what the `PUT` payload names
+ * and what the share sheet therefore has to send back. `ListMemory` reads these and
+ * **enforces** them, so a refusal here is the refusal the real gateway gives, and the
+ * four permission states are reachable with no backend at all. Against a real gateway
+ * they need four accounts, a group and a share sheet, which is the whole argument for
+ * plan 0030 section 9.
  *
- * Note who is missing. Toni is an admin of `zone-flat` and holds **no row on
- * `list-weekly`**, which is the arrangement the plan's read only state is really
- * about: `requireRead` lets a zone admin open any list in their zone, and
- * `requireWrite` has no such bypass, so Toni can open that list and cannot add a line
- * to it. A fixture that gave every admin write access would make that unreachable, and
- * it is the case the screen is most likely to get wrong.
+ * ## Group staff have no rows here, on purpose
+ *
+ * A zone `OWNER` or `ADMIN` holds all four permissions on every list in their zone,
+ * derived at check time and never stored (backend plan 0036, section 2.4). So Toni, an
+ * admin of `zone-flat`, has no row on `list-weekly` and can still do everything to it,
+ * and Mum and Dad have no rows on the lists they created in `zone-parents`.
+ *
+ * That is the change that makes `zone-parents` carry the interesting states. The seeded
+ * caller is an ordinary `MEMBER` there and staff everywhere else they have lists, so it
+ * is the only group where their own permissions decide anything.
+ *
+ * ## One list per state
+ *
+ * - `list-sunday`: `READ` alone. Every line, no composer, no tick, no overflow, one
+ *   banner. Plan 0030 acceptance 1.
+ * - `list-pantry`: `WRITE` and no `DECIDE`, which nothing had ever rendered. A full
+ *   composer, rows that do not answer a tap, no decision buttons, and edit and delete on
+ *   unapproved lines only. It also auto-approves, so a line the caller adds arrives
+ *   `APPROVED` with **no** approver, which is the only place rule 2 of backend plan 0037
+ *   section 2 is reachable on its own.
+ * - `list-market`: `DECIDE` and no `WRITE`, the other state nothing had rendered. Ticks,
+ *   approvals, rejections and restores, no composer, no edit entry on an unapproved row,
+ *   and the quantity-only edit sheet on an approved one. It does not auto-approve, so it
+ *   is where lowering an approved quantity splits.
+ * - `list-freezer`: all four, held by somebody who is **not** group staff. The share
+ *   sheet opened by a list admin who cannot appoint another one, with every List admin
+ *   box drawn, disabled and explained.
+ * - `list-weekly` and `list-cleaning` sit in `zone-flat`, which the caller owns, so they
+ *   are the everything-permitted case reached the other way, by derivation.
  */
 export const SEED_LIST_ACCESS: Readonly<
   Record<string, readonly ListAccessEntry[]>
 > = {
-  // Created by the seeded caller, who was given WRITER in the same transaction, plus
-  // one other member who was shared in.
+  // Created by the seeded caller, whose row got all four in the same transaction
+  // (backend plan 0036, section 2.5), plus one member shared in as a plain reader.
+  // Toni is an admin of the zone and needs no row.
   'list-weekly': [
-    { membershipId: 'm-flat-me', role: 'WRITER' },
-    { membershipId: 'm-flat-marta', role: 'READER' },
+    access('m-flat-me', ['READ', 'WRITE', 'DECIDE', 'MANAGE']),
+    access('m-flat-marta', ['READ']),
   ],
-  // Toni's list, shared with the caller as a writer.
+  // Toni's list. The caller is the zone owner, so their row is beside the point here;
+  // it is kept as the ordinary shared-in grant `shareWithZone` writes.
   'list-cleaning': [
-    { membershipId: 'm-flat-toni', role: 'WRITER' },
-    { membershipId: 'm-flat-me', role: 'WRITER' },
+    access('m-flat-toni', ['READ', 'WRITE', 'DECIDE', 'MANAGE']),
+    access('m-flat-me', ['READ', 'WRITE', 'DECIDE']),
   ],
-  // The caller is a plain member of `zone-parents` and can only read this one, which
-  // is the state section 3.2 draws: every line, no composer, one notice on first tap.
-  'list-sunday': [{ membershipId: 'm-parents-me', role: 'READER' }],
+  // Read only, in a group where the caller is an ordinary member.
+  'list-sunday': [
+    access('m-parents-me', ['READ']),
+    access('m-parents-rosa', ['READ', 'WRITE', 'DECIDE']),
+  ],
+  // The `WRITE`-only caller. Rosa can decide on the same list, which is what makes the
+  // caption naming who does the ticking true rather than decorative.
+  'list-pantry': [
+    access('m-parents-me', ['READ', 'WRITE']),
+    access('m-parents-rosa', ['READ', 'WRITE', 'DECIDE']),
+  ],
+  // The `DECIDE`-only caller: in the aisle, not writing the list.
+  'list-market': [
+    access('m-parents-me', ['READ', 'DECIDE']),
+    access('m-parents-rosa', ['READ', 'WRITE']),
+  ],
+  // A list admin who is not group staff, on a list they created themselves.
+  'list-freezer': [
+    access('m-parents-me', ['READ', 'WRITE', 'DECIDE', 'MANAGE']),
+    access('m-parents-rosa', ['READ', 'WRITE', 'DECIDE']),
+  ],
 };
+
+function access(
+  membershipId: string,
+  permissions: readonly ListPermission[]
+): ListAccessEntry {
+  return { membershipId, permissions };
+}
 
 function member(
   id: string,
@@ -192,7 +254,22 @@ function list(
   name: string,
   createdByUserId: string,
   lineCount: number,
-  readyCount: number
+  readyCount: number,
+  overrides: Partial<ShoppingListSummary> = {}
 ): ShoppingListSummary {
-  return { id, zoneId, name, createdByUserId, lineCount, readyCount };
+  return {
+    id,
+    zoneId,
+    name,
+    createdByUserId,
+    lineCount,
+    readyCount,
+    autoApproveLines: false,
+    // Empty here and never read: `myPermissions` is the one field on a list that is
+    // about the reader rather than the list, so a fixture cannot hold it. `ListMemory`
+    // stamps the caller's real set on every list it hands out, worked out from
+    // `SEED_LIST_ACCESS` and the caller's zone role, which is what the gateway does.
+    myPermissions: [],
+    ...overrides,
+  };
 }

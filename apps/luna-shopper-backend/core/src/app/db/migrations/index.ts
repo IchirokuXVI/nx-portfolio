@@ -1,4 +1,5 @@
 import { InitialCoreSchema1756000100000 } from './1756000100000-InitialCoreSchema';
+import { ListPermissionsAndAutoApprove1756000200000 } from './1756000200000-ListPermissionsAndAutoApprove';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -9,4 +10,7 @@ import { InitialCoreSchema1756000100000 } from './1756000100000-InitialCoreSchem
  * and report success without creating anything. See the auth index for the full
  * reasoning; this file is the same decision for core.
  */
-export const CORE_MIGRATIONS = [InitialCoreSchema1756000100000];
+export const CORE_MIGRATIONS = [
+  InitialCoreSchema1756000100000,
+  ListPermissionsAndAutoApprove1756000200000,
+];

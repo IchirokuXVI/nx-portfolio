@@ -504,8 +504,19 @@ describe('contract schemas', () => {
           name: 'Groceries',
           createdByUserId: 'u',
           counts: { lineCount: 0, readyCount: 0 },
+          autoApproveLines: false,
+          myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('list.getAccess returns the stored rows only (plan 0036, section 6)', () => {
+      expect(
+        validateMessageResponse('list.getAccess', {
+          listId: 'l',
+          entries: [{ membershipId: 'm', permissions: ['READ', 'DECIDE'] }],
         }).valid
       ).toBe(true);
     });

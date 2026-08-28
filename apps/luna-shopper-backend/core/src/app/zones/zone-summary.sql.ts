@@ -39,8 +39,25 @@ export const ZONE_LIST_PREVIEW_LIMIT = 3;
 /**
  * The single definition of "a list this caller may read" (plan 0017, section
  * 3.2), which mirrors `ListAccessService.requireRead`: an APPROVED membership,
- * and then either manager status (the list's creator, or a zone OWNER/ADMIN, who
- * can always see a list they govern) or an explicit `list_access` row.
+ * and then either the derived staff grant (a zone OWNER or ADMIN holds all four
+ * permissions on every list in their zone) or a `list_access` row that actually
+ * carries `READ`.
+ *
+ * Two clauses that used to be here are gone with plan 0036.
+ *
+ * **The creator is no longer named.** `sl."createdByUserId" = m."userId"` made a
+ * creator's access derived, and therefore exactly as irrevocable as staff status.
+ * The migration writes them an ordinary row holding all four instead, so a group
+ * admin can rewrite it like any other, down to and including deleting it (section
+ * 2.5). `createdByUserId` stays on the list and stays the honest answer to who
+ * made it; it simply stops being an authorization input.
+ *
+ * **The bare `EXISTS` is no longer enough.** A row is a set now, so the probe
+ * asks for `READ` literally. It can rely on finding it in any set that grants
+ * anything, because `setAccess` adds `READ` to every non-empty set it stores and
+ * stores an empty one as a deleted row (section 2.2). The test costs an array
+ * containment check on a row already located by `uq_list_access`, evaluated after
+ * the index lookup on one row, which is why no GIN index is added (section 3.2).
  *
  * It is written once and interpolated into both the count and the preview, which
  * is what stops a card reading "3 lists" above a preview showing one. A PENDING
@@ -50,10 +67,11 @@ const READABLE_LIST = `
   m.status = 'APPROVED'
   AND (
     m.role IN ('OWNER', 'ADMIN')
-    OR sl."createdByUserId" = m."userId"
     OR EXISTS (
       SELECT 1 FROM "list_access" la
-      WHERE la."listId" = sl.id AND la."membershipId" = m.id
+      WHERE la."listId" = sl.id
+        AND la."membershipId" = m.id
+        AND 'READ' = ANY(la."permissions")
     )
   )
 `;

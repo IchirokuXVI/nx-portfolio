@@ -557,6 +557,11 @@ export function fakeListStore(options: FakeListStateOptions = {}) {
         createdByUserId: 'u1',
         lineCount: 0,
         readyCount: 0,
+        autoApproveLines: false,
+        // All four, because the person who just created a list holds all four on it
+        // (backend plan 0036, section 2.5). A double that answered an empty set would
+        // have the page draw a read only banner over a list its reader had just made.
+        myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
       };
       lists.update((current) => [list, ...current]);
       return { state: 'created' as const, list };

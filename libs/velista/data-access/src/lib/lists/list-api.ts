@@ -73,8 +73,26 @@ export class ListApi implements ListServiceI {
     return required(toShoppingListSummary(body), 'lists.create');
   }
 
-  async updateList(listId: string, name: string): Promise<ShoppingListSummary> {
-    const request: UpdateListRequest = { name };
+  /**
+   * Rename or reconfigure, sending **only** the fields the caller named.
+   *
+   * Built key by key rather than spread from `changes`, because the gateway validates
+   * with `forbidNonWhitelisted` and an explicit `undefined` is still an own property:
+   * `{ name: undefined }` serializes to `{}` here but would carry the key through any
+   * intermediate that enumerates it. This also keeps a rename from ever carrying an
+   * `autoApproveLines` the person did not touch, which on this endpoint is somebody
+   * else's setting being overwritten (backend plan 0037, section 3).
+   */
+  async updateList(
+    listId: string,
+    changes: UpdateListRequest
+  ): Promise<ShoppingListSummary> {
+    const request: UpdateListRequest = {
+      ...(changes.name === undefined ? {} : { name: changes.name }),
+      ...(changes.autoApproveLines === undefined
+        ? {}
+        : { autoApproveLines: changes.autoApproveLines }),
+    };
 
     const body = await firstValueFrom(
       this._http.patch<unknown>(this._list(listId), request, {
@@ -99,10 +117,14 @@ export class ListApi implements ListServiceI {
     listId: string,
     entries: readonly ListAccessEntry[]
   ): Promise<ShoppingListSummary> {
+    // Rebuilt field by field rather than passed through, because a mapped model is
+    // never sent back (rule D4, and the note at the top of `requests.ts`). The array is
+    // copied for the same reason the fields are: what goes on the wire is this
+    // function's own object, not a reference into a store.
     const request: SetListAccessRequest = {
       entries: entries.map((entry) => ({
         membershipId: entry.membershipId,
-        role: entry.role,
+        permissions: [...entry.permissions],
       })),
     };
 
@@ -116,13 +138,13 @@ export class ListApi implements ListServiceI {
   }
 
   /**
-   * Who can read and write this list.
+   * What each membership may do on this list, from the route backend plan 0036
+   * section 6 lands.
    *
-   * Written against the route section 5.6 asks for and **not reachable today**:
-   * `LIST_ACCESS_READABLE` is false, so nothing calls it and the share sheet is not
-   * offered. It is here rather than absent because the shape is already decided (the
-   * same `entries` the PUT accepts) and writing it now is what makes the endpoint
-   * landing a one line flag change instead of a new feature.
+   * `MANAGE` only, so a caller without it gets a `forbidden` here rather than an empty
+   * answer, and the sheet that called it is a sheet they should not have been able to
+   * open. Group staff are not in the response by construction; the sheet adds their rows
+   * from `MembershipStore`.
    */
   async getListAccess(listId: string): Promise<readonly ListAccessEntry[]> {
     const body = await firstValueFrom(

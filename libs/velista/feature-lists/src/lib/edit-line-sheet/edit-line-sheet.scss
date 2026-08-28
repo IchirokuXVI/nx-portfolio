@@ -17,6 +17,29 @@
   }
 }
 
+// The content in `quantity` mode: present, readable, and plainly not a field. It sits
+// where the input would, at the input's size, so the sheet does not jump between the two
+// modes for anybody who sees both.
+.shown {
+  margin: 0;
+  padding-block: var(--app-space-2);
+  font-size: var(--app-text-md);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+// What the save is about to do, drawn in the sheet's caution colour rather than its
+// error colour: nothing has gone wrong, and the person is about to do this on purpose.
+.remainder {
+  margin: var(--app-space-4) 0 0;
+  padding: var(--app-space-3);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
 .spinning {
   font-size: var(--app-icon-sm);
 }

@@ -1,7 +1,7 @@
 import type {
   LineApprovalStatus,
   LineStatus,
-  ListRole,
+  ListPermission,
   MembershipStatus,
   UserKind,
   ZoneRole,
@@ -131,6 +131,21 @@ export interface ShoppingList {
   readonly zoneId: string;
   readonly name: string;
   readonly createdByUserId: string;
+  /**
+   * Whether a new line on this list arrives already approved (backend plan 0037).
+   *
+   * List **configuration**, not a fact about the caller, which is why it sits here
+   * beside the name rather than with `myPermissions`: everybody looking at this list
+   * gets the same answer, and it therefore rides on the realtime `list.updated` payload
+   * like the name does.
+   *
+   * The client reads it for exactly one thing, and it is not a rule it enforces: an
+   * optimistic row has to be drawn with the approval the server is about to give it, or
+   * the person who typed the line watches an approve button appear on it and vanish
+   * (velista plan 0030, section 5). The server decides; this is what lets the frame
+   * before the response tell the truth.
+   */
+  readonly autoApproveLines: boolean;
 }
 
 /**
@@ -145,6 +160,22 @@ export interface ShoppingList {
 export interface ShoppingListSummary extends ShoppingList {
   readonly lineCount: number;
   readonly readyCount: number;
+  /**
+   * What **this caller** may do on this list, including the derived group staff grant
+   * (backend plan 0036, section 7).
+   *
+   * Here rather than on `ShoppingList` because it is the one field on the payload that
+   * is about the reader and not about the list. `ShoppingList` is what a realtime
+   * `list.created` or `list.updated` carries, and a broadcast to a room cannot say
+   * something different to each person in it, so a per caller set on that shape would
+   * be a field nothing could fill honestly.
+   *
+   * An empty set is no access at all, and the list page reads it as such rather than
+   * offering controls and learning from a refusal (velista plan 0030, section 3.2).
+   * That is why it is a plain array with no null: "not known yet" is not a state this
+   * app has, because every endpoint that answers with a list answers with the set too.
+   */
+  readonly myPermissions: readonly ListPermission[];
 }
 
 /**
@@ -178,10 +209,24 @@ export interface Comment {
   readonly createdAt: Date;
 }
 
-/** Who a list is shared with, and how. */
+/**
+ * Who a list is shared with, and what they may do.
+ *
+ * Keyed by **membership** and not by user, because that is what `PUT .../access` names
+ * and therefore what the share sheet has to send back.
+ *
+ * Group staff are absent by construction: they hold all four permissions on every list
+ * in the zone, derived rather than stored, so there is no row for them to be in
+ * (backend plan 0036, section 2.4). The sheet draws their rows from `MembershipStore`,
+ * which is the fresher copy of that fact.
+ *
+ * An **empty `permissions` array is a revocation**, not "leave this row alone". It is
+ * how the same call both grants and removes, which is what lets the sheet have one save
+ * button (backend plan 0036, section 5, rule 5).
+ */
 export interface ListAccessEntry {
   readonly membershipId: string;
-  readonly role: ListRole;
+  readonly permissions: readonly ListPermission[];
 }
 
 /** Someone currently connected. Advisory only, see plan 0004 section 6.7. */

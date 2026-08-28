@@ -1,20 +1,33 @@
 import type {
   Line,
   ListPageState,
+  ListPermission,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
 import { selectListState, type ListStateInput } from './select-list-state';
 
 /**
- * Plan 0012 section 8, the half that is a property of the data rather than of the DOM.
+ * Plan 0012 section 8, the half that is a property of the data rather than of the DOM,
+ * and plan 0030's whole permission matrix on top of it.
  *
  * Every one of these would otherwise need a component, a fixture and a query. They are
  * assertions about what the page **is**, so they are made against the function that
- * decides it, which is the entire reason that function is pure and exported.
+ * decides it, which is the entire reason that function is pure and exported. That is
+ * doubly true of the matrix: acceptance items 1 to 3, 5 and 6 each describe a caller
+ * holding one combination of four permissions, and four accounts and a share sheet is
+ * exactly what section 10 says not to need for them.
  */
 
 const ME = 'user-me';
 const LIST_ID = 'list-1';
+
+/** The four callers plan 0030 section 4 tabulates, named the way the plan names them. */
+const READ_ONLY: readonly ListPermission[] = ['READ'];
+const WRITER: readonly ListPermission[] = ['READ', 'WRITE'];
+const DECIDER: readonly ListPermission[] = ['READ', 'DECIDE'];
+const BOTH: readonly ListPermission[] = ['READ', 'WRITE', 'DECIDE'];
+/** Group staff, and a list admin who was granted the rest beside it, look the same. */
+const ADMIN: readonly ListPermission[] = ['READ', 'WRITE', 'DECIDE', 'MANAGE'];
 
 function line(overrides: Partial<Line> = {}): Line {
   return {
@@ -41,12 +54,19 @@ function list(
     zoneId: 'zone-1',
     name: 'Weekly shop',
     createdByUserId: ME,
+    autoApproveLines: false,
     lineCount: 12,
     readyCount: 7,
+    myPermissions: ADMIN,
     ...overrides,
   };
 }
 
+/**
+ * The default caller holds everything, which keeps every spec that is not about
+ * permissions reading as it did before plan 0030. A spec that **is** about them says so
+ * by naming one of the five sets above.
+ */
 function select(overrides: Partial<ListStateInput> = {}): ListPageState {
   return selectListState({
     list: list(),
@@ -56,7 +76,7 @@ function select(overrides: Partial<ListStateInput> = {}): ListPageState {
     linesComplete: true,
     writes: new Map(),
     commentCounts: new Map(),
-    caller: { userId: ME, isStaff: false, knownReader: false },
+    caller: { permissions: ADMIN },
     nameOf: () => null,
     reordering: false,
     viewers: [],
@@ -233,87 +253,224 @@ describe('selectListState', () => {
     });
   });
 
-  describe('who may do what', () => {
-    it('offers the composer to a caller not known to be a reader', () => {
-      // Optimistic, and it has to be: `ListView` carries no role for the caller and
-      // there is no `GET /v1/lists/:id/access`, so the only person the client can know
-      // is a writer is the one who created the list.
-      const state = select({
-        caller: { userId: 'somebody-else', isStaff: false, knownReader: false },
-      });
+  // Plan 0030, section 3. Four membership tests on the set the server sent, and nothing
+  // inferred from a zone role or from a refusal.
+  describe('the abilities, from the permission set', () => {
+    function abilities(permissions: readonly ListPermission[]) {
+      return loaded(select({ caller: { permissions } })).abilities;
+    }
 
-      expect(loaded(state).abilities.canWrite).toBe(true);
-    });
-
-    it('takes the composer away once a write has been refused', () => {
-      const state = select({
-        caller: { userId: 'reader', isStaff: false, knownReader: true },
-      });
-
-      expect(loaded(state).abilities).toMatchObject({
+    it('reads an empty set as read only, and says so once', () => {
+      // The deliberate inversion of the old optimism (section 3.2). An absent or
+      // unreadable `myPermissions` arrives here as the empty set for this reason.
+      expect(abilities([])).toEqual({
         canWrite: false,
-        knownReader: true,
+        canDecide: false,
+        canComment: false,
+        canManage: false,
+        readOnly: true,
       });
     });
 
-    it('leaves a reader nothing tappable and only the comment affordance', () => {
+    it('reads READ alone the same way', () => {
+      expect(abilities(READ_ONLY).readOnly).toBe(true);
+    });
+
+    it('gives a writer the composer and not the tick', () => {
+      expect(abilities(WRITER)).toMatchObject({
+        canWrite: true,
+        canDecide: false,
+        readOnly: false,
+      });
+    });
+
+    it('gives a decider the tick and not the composer', () => {
+      expect(abilities(DECIDER)).toMatchObject({
+        canWrite: false,
+        canDecide: true,
+      });
+    });
+
+    it('lets both of them comment, and a reader not', () => {
+      // The new restriction, and a visible removal for anybody holding READER today
+      // (section 3.1). `comment.add` follows WRITE or DECIDE now.
+      expect(abilities(WRITER).canComment).toBe(true);
+      expect(abilities(DECIDER).canComment).toBe(true);
+      expect(abilities(READ_ONLY).canComment).toBe(false);
+    });
+
+    it('does not read MANAGE as any of the other three', () => {
+      // Backend plan 0036's call site table is what the server enforces: `line.add`
+      // asks for WRITE and `comment.add` for WRITE or DECIDE. Widening these would draw
+      // a composer the server refuses every use of, which is what rule G2 forbids.
+      // What MANAGE really buys is per row, and the edit and delete specs below have it.
+      expect(abilities(['READ', 'MANAGE'])).toMatchObject({
+        canWrite: false,
+        canDecide: false,
+        canComment: false,
+        canManage: true,
+        readOnly: false,
+      });
+    });
+
+    it('takes no notice of who created the list', () => {
+      // The creator's power is an ordinary access row now (backend plan 0036, section
+      // 2.5), so their id decides nothing here and a group admin can revoke it.
       const state = select({
-        caller: { userId: 'reader', isStaff: false, knownReader: true },
-      });
-
-      expect(loaded(state).lines[0]).toMatchObject({
-        interactive: false,
-        actions: ['comments'],
-      });
-    });
-
-    it('lets the creator manage the list', () => {
-      expect(loaded(select()).abilities.canManage).toBe(true);
-    });
-
-    it('lets zone staff manage a list they did not create', () => {
-      // `requireManage` is the creator, a zone admin, or the owner, which is a
-      // different rule from the write access that gates lines.
-      const state = select({
-        list: list({ createdByUserId: 'somebody-else' }),
-        caller: { userId: ME, isStaff: true, knownReader: false },
-      });
-
-      expect(loaded(state).abilities.canManage).toBe(true);
-    });
-
-    it('does not let a plain writer rename a list they did not create', () => {
-      const state = select({
-        list: list({ createdByUserId: 'somebody-else' }),
-        caller: { userId: ME, isStaff: false, knownReader: false },
+        list: list({ createdByUserId: ME, myPermissions: READ_ONLY }),
+        caller: { permissions: READ_ONLY },
       });
 
       expect(loaded(state).abilities.canManage).toBe(false);
+    });
+
+    it('drops an unrecognised permission rather than defaulting it', () => {
+      // The mapper owns that (rule D4), and this is the half of it this function has to
+      // agree with: a set it did not fully understand still answers for what it did.
+      const state = select({
+        caller: {
+          permissions: ['READ', 'WRITE', 'TELEPORT'] as ListPermission[],
+        },
+      });
+
+      expect(loaded(state).abilities).toMatchObject({
+        canWrite: true,
+        canDecide: false,
+        canManage: false,
+      });
+    });
+  });
+
+  // Acceptance items 1, 2, 3, 5 and 6. One caller per description, and the whole row
+  // asserted rather than one field of it, because the failure these guard against is a
+  // control left on screen beside the ones that were correctly removed.
+  describe('what a row offers, per permission (section 4)', () => {
+    const pending = line({ approvalStatus: 'PENDING' });
+    const rejected = line({ approvalStatus: 'REJECTED' });
+    const missing = line({ status: 'NOT_AVAILABLE' });
+
+    function row(
+      permissions: readonly ListPermission[],
+      lines: readonly Line[] = [line()]
+    ) {
+      return loaded(select({ caller: { permissions }, lines })).lines[0];
+    }
+
+    it('leaves a read-only caller the conversation and nothing else', () => {
+      // Section 3.1 over acceptance item 1: the overflow is the only way into the
+      // comments sheet, and a reader keeps reading it. What they lose is the composer
+      // inside it, which is the sheet's business rather than the row's.
+      expect(row(READ_ONLY)).toMatchObject({
+        interactive: false,
+        actions: ['comments'],
+        editScope: null,
+        decidable: false,
+        restorable: false,
+      });
+    });
+
+    it('gives a writer a pending line to edit and delete, and no tick', () => {
+      expect(row(WRITER, [pending])).toMatchObject({
+        interactive: false,
+        actions: ['edit', 'comments', 'delete'],
+        editScope: 'full',
+        decidable: false,
+      });
+    });
+
+    it('lets a writer edit and delete a turned down line too', () => {
+      expect(row(WRITER, [rejected])).toMatchObject({
+        actions: ['edit', 'comments', 'delete'],
+        editScope: 'full',
+      });
+    });
+
+    it('keeps a writer away from an approved line entirely', () => {
+      // A writer whose line has been agreed to cannot quietly change what was agreed to
+      // (backend plan 0036, section 4.1).
+      expect(row(WRITER)).toMatchObject({
+        actions: ['comments'],
+        editScope: null,
+      });
+    });
+
+    it('gives a decider the tick, the decisions, and no edit on a pending row', () => {
+      expect(row(DECIDER, [pending])).toMatchObject({
+        interactive: true,
+        actions: ['markNotAvailable', 'comments'],
+        editScope: null,
+        decidable: true,
+      });
+    });
+
+    it('gives a decider the quantity and nothing else on an approved row', () => {
+      expect(row(DECIDER)).toMatchObject({
+        actions: ['edit', 'markNotAvailable', 'comments'],
+        editScope: 'quantity',
+      });
+    });
+
+    it('never lets a decider delete an approved line', () => {
+      expect(row(DECIDER).actions).not.toContain('delete');
+      expect(row(BOTH).actions).not.toContain('delete');
+    });
+
+    it('gives a list admin every field of every line, and the delete', () => {
+      expect(row(ADMIN)).toMatchObject({
+        interactive: true,
+        actions: ['edit', 'markNotAvailable', 'comments', 'delete'],
+        editScope: 'full',
+      });
+      expect(row(ADMIN, [pending]).editScope).toBe('full');
+    });
+
+    it('offers putting a line back once it is marked as missing', () => {
+      expect(row(BOTH, [missing]).actions).toContain('markPending');
+      expect(row(BOTH, [missing]).actions).not.toContain('markNotAvailable');
+    });
+
+    it('offers marking it missing to nobody without DECIDE', () => {
+      // Saying what the shop had is deciding rather than writing (section 4).
+      expect(row(WRITER, [pending]).actions).not.toContain('markNotAvailable');
+    });
+
+    it('keeps editScope and the edit entry in step, on every combination', () => {
+      // The invariant `LineRowVm.editScope` states, asserted rather than trusted,
+      // because the two fields are read by two different components.
+      for (const permissions of [READ_ONLY, WRITER, DECIDER, BOTH, ADMIN]) {
+        for (const candidate of [line(), pending, rejected, missing]) {
+          const one = row(permissions, [candidate]);
+          expect(one.actions.includes('edit')).toBe(one.editScope !== null);
+        }
+      }
     });
   });
 
   describe('deciding a suggested line', () => {
     const awaiting = line({ approvalStatus: 'PENDING' });
 
-    it('offers the two decisions to staff, on a waiting line', () => {
+    it('offers the two decisions on a waiting line, to DECIDE', () => {
       const state = select({
         lines: [awaiting],
-        caller: { userId: ME, isStaff: true, knownReader: false },
+        caller: { permissions: DECIDER },
       });
 
       expect(loaded(state).lines[0].decidable).toBe(true);
     });
 
-    it('offers them to nobody else', () => {
-      const state = select({ lines: [awaiting] });
+    it('offers them to a writer, who is not the one deciding', () => {
+      const state = select({
+        lines: [awaiting],
+        caller: { permissions: WRITER },
+      });
 
       expect(loaded(state).lines[0].decidable).toBe(false);
     });
 
-    it('offers staff a way to put a turned down line back', () => {
+    it('offers a way to put a turned down line back', () => {
       const state = select({
         lines: [line({ approvalStatus: 'REJECTED' })],
-        caller: { userId: ME, isStaff: true, knownReader: false },
+        caller: { permissions: DECIDER },
       });
 
       expect(loaded(state).lines[0]).toMatchObject({
@@ -323,11 +480,7 @@ describe('selectListState', () => {
     });
 
     it('does not offer a decision on a line that is already settled', () => {
-      const state = select({
-        caller: { userId: ME, isStaff: true, knownReader: false },
-      });
-
-      expect(loaded(state).lines[0]).toMatchObject({
+      expect(loaded(select()).lines[0]).toMatchObject({
         decidable: false,
         restorable: false,
       });
@@ -396,12 +549,22 @@ describe('selectListState', () => {
     });
 
     it('is unavailable to a reader', () => {
-      const state = select({
-        lines: two,
-        caller: { userId: 'reader', isStaff: false, knownReader: true },
-      });
+      const state = select({ lines: two, caller: { permissions: READ_ONLY } });
 
       expect(loaded(state).canReorder).toBe(false);
+    });
+
+    it('follows WRITE, not the tick', () => {
+      // Reordering rewrites what the list asks for rather than what the shop had, so it
+      // stayed with `canWrite` when ticking moved to `canDecide` (section 4).
+      expect(
+        loaded(select({ lines: two, caller: { permissions: DECIDER } }))
+          .canReorder
+      ).toBe(false);
+      expect(
+        loaded(select({ lines: two, caller: { permissions: WRITER } }))
+          .canReorder
+      ).toBe(true);
     });
 
     it('is pointless on a single line and is not offered', () => {
@@ -418,15 +581,20 @@ describe('selectListState', () => {
     });
   });
 
-  describe('the overflow', () => {
-    it('offers marking a line as missing, and putting it back once it is', () => {
-      expect(loaded(select()).lines[0].actions).toContain('markNotAvailable');
+  // Acceptance item 7, and plan 0030 section 5. The page passes `autoApproveLines` to
+  // `LineStore.addLine`, which builds the placeholder with the approval the server is
+  // about to give it, so it has to reach the loaded state at all.
+  describe('the list configuration the page has to hand down', () => {
+    it('carries the list auto-approve setting through', () => {
+      const state = select({ list: list({ autoApproveLines: true }) });
 
-      const missing = select({ lines: [line({ status: 'NOT_AVAILABLE' })] });
-      expect(loaded(missing).lines[0].actions).toContain('markPending');
-      expect(loaded(missing).lines[0].actions).not.toContain(
-        'markNotAvailable'
-      );
+      expect(loaded(state).autoApproveLines).toBe(true);
+    });
+
+    it('answers false while the list itself has not landed', () => {
+      // The safe direction: a placeholder drawn PENDING and corrected to APPROVED is a
+      // row settling down, and the reverse is an approve button flashing.
+      expect(loaded(select({ list: undefined })).autoApproveLines).toBe(false);
     });
   });
 
