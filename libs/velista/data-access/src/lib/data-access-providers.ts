@@ -14,6 +14,7 @@ import { ListMemory } from './lists/list-memory';
 import { ListStore } from './lists/list-store';
 import { MemberNames } from './memberships/member-names';
 import { MembershipMemory } from './memberships/membership-memory';
+import { MembershipStore } from './memberships/membership-store';
 import { PresenceStore } from './presence/presence-store';
 import { ZoneMemory } from './zones/zone-memory';
 import { ZoneStore } from './zones/zone-store';
@@ -70,6 +71,11 @@ import { ZoneStore } from './zones/zone-store';
  * in this library is installed in one place rather than two. `LineApi` and `CommentApi`
  * stay out, like every other real transport.
  *
+ * `MembershipStore` (plan 0018) joins for `ZoneStore`'s reason as well: it resolves
+ * both `MEMBERSHIP_SERVICE` and `REALTIME_CLIENT`, and it holds the rows the members
+ * screen renders, which used to be page state and therefore learned about one event out
+ * of seven.
+ *
  * `PresenceStore` (plan 0017) joins for `ZoneStore`'s reason a fourth time: it
  * resolves `REALTIME_CLIENT`, so at the root it would listen to that token's default
  * while every other store applied events from the socket the app bound, and it would
@@ -100,5 +106,6 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   LineStore,
   CommentMemory,
   MemberNames,
+  MembershipStore,
   PresenceStore,
 ];
