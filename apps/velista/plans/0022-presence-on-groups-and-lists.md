@@ -3,6 +3,10 @@
 > Prerequisite reading: `0017` (presence over the socket, which built all of this) and
 > `0004` section 6.7 (presence is advisory).
 >
+> Companion plan: `luna-shopper-backend/plans/0031`, which adds the zone level list
+> presence section 3.3 renders. Everything else here ships without it; section 6 says so
+> per section.
+>
 > Verified against the source on 2026-08-28.
 
 ## 1. Goal
@@ -117,23 +121,27 @@ Both the group page's `ListRow` and the zone card's inline list rows gain a view
 indicator: the dot and up to two initials, no names, because a row has no space for a
 sentence and the group page's header already carries one.
 
-This one has a cost that must be stated rather than discovered, because it is the only
-place in this plan where a decision is genuinely arguable:
+This one does **not** come from the list room, and the group page does not subscribe per
+row. `presence.listUpdated` reaches only sockets in `list:{id}`, so a screen showing eight
+lists would need eight subscriptions to light eight dots.
 
-> **List presence requires the list room**, and a screen showing eight lists would need
-> eight subscriptions to light eight rows.
+It comes from `presence.zoneListsUpdated`, which backend `0031` adds: one summary per
+zone, naming each list with viewers, **addressed to the recipient** and carrying only the
+lists that recipient may read. The per recipient part is not a refinement, it is the
+reason the event has the shape it has: list read access is opt in per membership, so a
+summary broadcast to the zone room would tell a member that a list they may not read
+exists and that named colleagues are in it.
 
-So the group page does **not** subscribe per row. It renders the indicator for a list only
-when `PresenceStore` already holds a snapshot for it, which happens when the caller has
-the list open elsewhere, or opened it recently enough that the room is still held. In
-practice that means the indicator is usually absent on this screen, and that is the correct
-trade: an absent indicator is honest ("we are not saying"), and eight subscriptions per
-group page is a real cost paid on every open for a decoration.
+On the client that means one more event and no new subscription at all. `PresenceStore`
+gains `_zoneLists`, a map of zone id to the per list viewer sets, applied on
+`presence.zoneListsUpdated` as a whole-snapshot replace like its two siblings, and read by
+`viewersOfListInZone(zoneId, listId)`. The group page and the dashboard card both render
+from that rather than from `viewersOf`, which stays what it is: the answer for a list this
+client actually holds the room for.
 
-The alternative, a zone-level "who is in which list" summary in the counts broadcast, is
-the right long-term answer and is **not** built here. It is a backend change (one more
-field on `BroadcastZoneCounts`, computed from the presence keys the realtime service
-already holds) and it belongs in a backend plan. Section 6 records it.
+The two can disagree for a moment, and the rule when they do is **prefer `viewersOf`**: it
+comes from the list's own room and is the more direct observation. On the list page they
+will always agree, because that page holds the room.
 
 ### 3.4 The list page: viewers in the header, and the editor on the line
 
@@ -155,8 +163,13 @@ per section 3.
 
 ## 4. What the stores and pages need
 
-- `PresenceStore` is unchanged. Every method this plan calls already exists, and the two
-  that were never called (`editorOfLine`, and `viewersOf` in anger) are called now.
+- `PresenceStore` gains exactly one thing: `_zoneLists` and `viewersOfListInZone`, applied
+  from `presence.zoneListsUpdated` (section 3.3). Everything else this plan calls already
+  exists, and the two methods that were never called (`editorOfLine`, and `viewersOf` in
+  anger) are called now. The new map is cleared by the same disconnect effect that clears
+  the other two, for the same reason.
+- `REALTIME_EVENT_NAMES` and the mapper gain `presence.zoneListsUpdated`, and the union
+  stays exactly in step with the backend's enum as it has since `0016`.
 - `ListPage` and the group page inject `PresenceStore`. Both are containers in rule D1's
   sense already, so this adds a store to a page that owns stores, not to a component.
 - `HomePage` already injects it.
@@ -165,6 +178,7 @@ per section 3.
   reason they exist.
 - `store-doubles.ts` already ships `fakePresenceStore` with `online`, `viewers` and
   `editors` options, so every spec in this plan is driven by data rather than by a mock.
+  It gains a `zoneLists` option beside them.
 
 ## 5. The empty case, everywhere
 
@@ -179,12 +193,18 @@ indicator disappears at once. That is correct and it is deliberate, since `0016`
 existing "not updating right now" notices on the group page and the list header are not
 duplicated per indicator. One statement per screen that the screen is not live is enough.
 
-## 6. Deliberately not built
+## 6. Sequencing, and what is deliberately not built
 
-- **Zone-level list presence in the counts broadcast** (section 3.3). It would let a group
-  page light every list row without a subscription per row. Backend change, backend plan,
-  and the client work here is designed so that adding it later changes where the data comes
-  from and not what is drawn.
+Sections 2, 3.1, 3.2 and 3.4 need no server change: announcing intent is a client call the
+server already accepts, and zone presence is already arriving for every group on the
+dashboard with nothing reading it. They ship first and independently.
+
+Section 3.3 needs backend `0031`, which needs backend `0030` for the user room it delivers
+into. Until `0031` lands, the list-row indicator simply never has data and never draws,
+which is section 5's rule working as intended rather than a broken state to guard against.
+
+Not built:
+
 - **Any enforcement.** No locks, no warnings, no disabled controls. Section 3.
 - **Presence on the members screen.** A row there is a membership, which is a durable fact;
   overlaying a live dot on it invites reading absence as something meaningful about the
@@ -206,3 +226,6 @@ duplicated per indicator. One statement per screen that the screen is not live i
    "not updating right now" notices are the only explanation shown.
 6. `viewList` and `editLine` each have at least one production caller, and a spec asserts
    the release runs on destroy.
+7. After backend `0031`: a group page lights the row of a list somebody else has open
+   while holding no subscription to that list, and a member with no access to that list
+   sees nothing and receives nothing naming it.
