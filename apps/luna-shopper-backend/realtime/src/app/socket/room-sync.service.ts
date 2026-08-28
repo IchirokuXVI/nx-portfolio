@@ -1,5 +1,6 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import {
+  listPresenceRoom,
   listRoom,
   parseRoom,
   zoneRoom,
@@ -121,9 +122,15 @@ export class RoomSyncService implements OnModuleInit {
       // `list.accessChanged` holds several of them.
       const answers = new Map<string, Promise<boolean>>();
 
+      // `admit` re-asks one question per user rather than one per room, so it
+      // keeps its own memo of readable sets.
+      const readable = new Map<string, Promise<string[]>>();
+
       for (const socket of this.localSockets(directive)) {
         if (directive.direction === 'evict') {
           await this.evict(socket, answers);
+        } else if (directive.zoneId) {
+          await this.admit(socket, directive.zoneId, readable);
         }
       }
     } catch (err) {
@@ -181,20 +188,62 @@ export class RoomSyncService implements OnModuleInit {
         // The socket's own id room, which no access question governs.
         continue;
       }
-      if (await this.allowed(userId, room, parsed, answers)) {
+      if (await this.allowed(userId, parsed, answers)) {
         continue;
       }
       await this.leave(socket, parsed);
     }
   }
 
+  /**
+   * The mirror of {@link evict}: re-ask which of a zone's lists this socket may
+   * read, and join the presence rooms it is missing (plan 0032, section 4.2).
+   *
+   * A list created while somebody is already subscribed is the case this exists
+   * for. Invalidating the cached set is not enough on its own, because nothing
+   * would then put the already subscribed sockets into the new list's presence
+   * room until they happened to re-subscribe, which on a long lived mobile
+   * connection can be hours.
+   */
+  private async admit(
+    socket: Socket,
+    zoneId: string,
+    readable: Map<string, Promise<string[]>>
+  ): Promise<void> {
+    const userId = socket.data.userId as string | undefined;
+    if (!userId) {
+      return;
+    }
+
+    let listIds = readable.get(userId);
+    if (!listIds) {
+      listIds = this.coreAccess.recheckZoneLists(userId, zoneId);
+      readable.set(userId, listIds);
+    }
+
+    for (const listId of await listIds) {
+      const room = listPresenceRoom(listId);
+      if (!socket.rooms.has(room)) {
+        await socket.join(room);
+      }
+    }
+  }
+
+  /**
+   * Memoized by the question rather than by the room, which matters for a list:
+   * `list:{id}` and `list:{id}:presence` are two rooms gated by one answer, and
+   * keying on the room name would ask core the same thing twice.
+   */
   private allowed(
     userId: string,
-    room: string,
     parsed: ParsedRoom,
     answers: Map<string, Promise<boolean>>
   ): Promise<boolean> {
-    const key = `${userId}|${room}`;
+    const key =
+      parsed.kind === 'zone' || parsed.kind === 'zoneStaff'
+        ? `${userId}|${parsed.kind}|${parsed.zoneId}`
+        : `${userId}|list|${parsed.listId}`;
+
     const known = answers.get(key);
     if (known) {
       return known;
@@ -212,6 +261,7 @@ export class RoomSyncService implements OnModuleInit {
       case 'zoneStaff':
         return this.coreAccess.recheckZoneStaff(userId, parsed.zoneId);
       case 'list':
+      case 'listPresence':
         return this.coreAccess.recheckList(userId, parsed.listId);
     }
   }
@@ -233,6 +283,12 @@ export class RoomSyncService implements OnModuleInit {
         // Removes the viewer and drops any line the socket was editing, and
         // rebroadcasts, so the line is not left locked to somebody who is gone.
         await this.presence.unviewList(socket.id, parsed.listId);
+        return;
+      case 'listPresence':
+        // Being in the presence room is not being present: it is hearing about
+        // whoever is. So there is nothing to remove from a room here, only the
+        // subscription itself (plan 0032, section 3).
+        await socket.leave(listPresenceRoom(parsed.listId));
         return;
     }
   }

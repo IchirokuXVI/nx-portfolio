@@ -1,4 +1,5 @@
 import {
+  listPresenceRoom,
   listRoom,
   RealtimeEvent,
   zoneRoom,
@@ -239,9 +240,12 @@ describe('list.accessChanged', () => {
     payload: { listId: LIST },
   };
 
-  it('sweeps the room the payload names, which names nobody', async () => {
+  it('sweeps both of the list rooms, since the payload names nobody', async () => {
     expect(sweepsFor(event)).toEqual([
-      { direction: 'evict', rooms: [listRoom(LIST)] },
+      {
+        direction: 'evict',
+        rooms: [listRoom(LIST), listPresenceRoom(LIST)],
+      },
     ]);
   });
 

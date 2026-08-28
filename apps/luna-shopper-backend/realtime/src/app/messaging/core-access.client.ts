@@ -17,11 +17,21 @@ import {
   ACCESS_CACHE_TTL_SECONDS,
   listAccessKey,
   zoneAccessKey,
+  zoneListsAccessKey,
   zoneStaffAccessKey,
 } from '../realtime/constants';
 
 /** Injection token for the realtime service's request/reply client to core. */
 export const CORE_ACCESS_CLIENT = 'CORE_ACCESS_CLIENT';
+
+/**
+ * What a `zone.subscribe` needs to know: whether the caller is in the zone, and
+ * which of its lists they may read (plan 0032, section 4.1).
+ */
+export interface ZoneSubscriptionAccess {
+  allowed: boolean;
+  listIds: string[];
+}
 
 /** How an allow and a deny are stored. Both are cached; see the class comment. */
 const ALLOW = '1';
@@ -90,6 +100,43 @@ export class CoreAccessClient {
     return this.cached(zoneAccessKey(zoneId), userId, () =>
       this.check(REALTIME_ACCESS_PATTERNS.checkZone, req)
     );
+  }
+
+  /**
+   * The zone check, plus the lists that same check already answered for (plan
+   * 0032, section 4.1).
+   *
+   * What `zone.subscribe` uses. Core resolves both from one membership lookup, so
+   * this is a field on an answer rather than a second call, and the two halves
+   * are cached separately under the zone's name: the yes/no where every other
+   * yes/no lives, the id set beside it. A cached allow with no cached set is a
+   * miss, because half an answer cannot be acted on.
+   *
+   * The plain {@link checkZone} stays as it was, for SSE, which has no rooms to
+   * join per list and should not pay for a set it will not use.
+   */
+  async checkZoneWithLists(
+    userId: string,
+    zoneId: string
+  ): Promise<ZoneSubscriptionAccess> {
+    const [allowed, listIds] = await Promise.all([
+      this.readAnswer(zoneAccessKey(zoneId), userId),
+      this.readListIds(zoneId, userId),
+    ]);
+
+    if (allowed !== undefined && listIds !== undefined) {
+      return { allowed, listIds };
+    }
+    return this.askZoneWithLists(userId, zoneId);
+  }
+
+  /**
+   * The same answer, asked of core rather than the cache, for the join sweep
+   * (plan 0032, section 4.2). See {@link recheckZone} for why a sweep does not
+   * read through the cache.
+   */
+  async recheckZoneLists(userId: string, zoneId: string): Promise<string[]> {
+    return (await this.askZoneWithLists(userId, zoneId)).listIds;
   }
 
   /**
@@ -165,7 +212,14 @@ export class CoreAccessClient {
    */
   async invalidateZone(zoneId: string): Promise<void> {
     await this.redis.tryCommand(
-      (client) => client.del(zoneAccessKey(zoneId), zoneStaffAccessKey(zoneId)),
+      (client) =>
+        client.del(
+          zoneAccessKey(zoneId),
+          zoneStaffAccessKey(zoneId),
+          // The readable list set is keyed by the same zone name precisely so it
+          // goes with them (plan 0032, section 4.1).
+          zoneListsAccessKey(zoneId)
+        ),
       `access invalidate zone ${zoneId}`
     );
   }
@@ -190,16 +244,65 @@ export class CoreAccessClient {
     userId: string,
     resolve: () => Promise<boolean>
   ): Promise<boolean> {
+    const hit = await this.readAnswer(key, userId);
+    return hit ?? this.fresh(key, userId, resolve);
+  }
+
+  /** A cached yes or no, or `undefined` for a miss and for an unreadable cache. */
+  private async readAnswer(
+    key: string,
+    userId: string
+  ): Promise<boolean | undefined> {
     const hit = await this.redis.tryCommand(
       (client) => client.hget(key, userId),
       `access read ${key}`
     );
+    return hit === ALLOW || hit === DENY ? hit === ALLOW : undefined;
+  }
 
-    if (hit === ALLOW || hit === DENY) {
-      return hit === ALLOW;
+  /**
+   * A cached readable list set, or `undefined` for a miss.
+   *
+   * An entry that will not parse is treated as a miss rather than as an empty
+   * set: an empty set is a real answer, meaning the caller may read none of the
+   * zone's lists, and serving it from a bad write would silently unlight every
+   * row on their group page.
+   */
+  private async readListIds(
+    zoneId: string,
+    userId: string
+  ): Promise<string[] | undefined> {
+    const hit = await this.redis.tryCommand(
+      (client) => client.hget(zoneListsAccessKey(zoneId), userId),
+      `access read lists ${zoneId}`
+    );
+    if (!hit) {
+      return undefined;
     }
+    try {
+      return JSON.parse(hit) as string[];
+    } catch {
+      return undefined;
+    }
+  }
 
-    return this.fresh(key, userId, resolve);
+  /** Ask core the zone question, and remember both halves of what it said. */
+  private async askZoneWithLists(
+    userId: string,
+    zoneId: string
+  ): Promise<ZoneSubscriptionAccess> {
+    const req: CheckZoneAccessRequest = { userId, zoneId };
+    const result = await this.send(REALTIME_ACCESS_PATTERNS.checkZone, req);
+    const listIds = [...(result.listIds ?? [])];
+
+    await this.remember(zoneAccessKey(zoneId), userId, result.allowed ? ALLOW : DENY);
+    await this.remember(
+      zoneListsAccessKey(zoneId),
+      userId,
+      JSON.stringify(listIds)
+    );
+
+    return { allowed: result.allowed, listIds };
   }
 
   /** Ask core, remember what it said, and answer it. The miss path, and the sweep's. */
@@ -209,19 +312,30 @@ export class CoreAccessClient {
     resolve: () => Promise<boolean>
   ): Promise<boolean> {
     const allowed = await resolve();
+    await this.remember(key, userId, allowed ? ALLOW : DENY);
+    return allowed;
+  }
 
+  /** Write one cached answer under a resource's key. */
+  private async remember(
+    key: string,
+    userId: string,
+    value: string
+  ): Promise<void> {
     await this.redis.tryCommand(async (client) => {
-      await client.hset(key, userId, allowed ? ALLOW : DENY);
+      await client.hset(key, userId, value);
       // NX: only when the key has no expiry yet, so the window runs from the
       // first cached answer rather than from the most recent write.
       await client.expire(key, ACCESS_CACHE_TTL_SECONDS, 'NX');
     }, `access write ${key}`);
-
-    return allowed;
   }
 
   private async check(subject: string, payload: object): Promise<boolean> {
-    const result = await traceNatsSend(subject, () => {
+    return (await this.send(subject, payload)).allowed;
+  }
+
+  private send(subject: string, payload: object): Promise<AccessCheckResult> {
+    return traceNatsSend(subject, () => {
       const record = new NatsRecordBuilder(payload)
         .setHeaders(buildNatsHeaders({ correlationId: randomUUID() }))
         .build();
@@ -229,6 +343,5 @@ export class CoreAccessClient {
         this.client.send<AccessCheckResult>(subject, record)
       );
     });
-    return result.allowed;
   }
 }

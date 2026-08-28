@@ -1,4 +1,5 @@
 import {
+  listPresenceRoom,
   listRoom,
   RealtimeEvent,
   zoneRoom,
@@ -51,10 +52,25 @@ export function sweepsFor(envelope: DomainEvent): RelayDirective[] {
       return [{ direction: 'evict', rooms: [zoneRoom(zoneId)] }];
 
     // The payload is `{ listId }` and names nobody, which is the fact that makes
-    // the whole design a sweep rather than a difference. Everyone in the room is
-    // re-checked and whoever now answers no is removed.
+    // the whole design a sweep rather than a difference. Everyone in both of the
+    // list's rooms is re-checked and whoever now answers no is removed.
     case RealtimeEvent.ListAccessChanged:
-      return listId ? [{ direction: 'evict', rooms: [listRoom(listId)] }] : [];
+      return listId
+        ? [
+            {
+              direction: 'evict',
+              rooms: [listRoom(listId), listPresenceRoom(listId)],
+            },
+          ]
+        : [];
+
+    // The mirror image (plan 0032, section 4.2). Invalidating the readable set
+    // does not join anybody to anything: the sockets already subscribed to the
+    // zone are not in the new list's presence room, and nothing would put them
+    // there until they re-subscribed, which on a long lived mobile connection can
+    // be hours. So the zone's sockets are swept the other way.
+    case RealtimeEvent.ListCreated:
+      return [{ direction: 'admit', rooms: [zoneRoom(zoneId)], zoneId }];
 
     default:
       return [];

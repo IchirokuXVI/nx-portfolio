@@ -4,6 +4,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import {
+  listPresenceRoom,
   listRoom,
   RealtimeEvent,
   zoneRoom,
@@ -432,8 +433,12 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
       viewers,
       editors: dedupeEditors(editors),
     };
+    // Both rooms (plan 0032, section 3). The list room is whoever has it open;
+    // the presence room is everyone in the zone who may read it, so a group page
+    // can show who is shopping from each row. One payload, no per recipient
+    // variation, and nobody who may not read the list is in either room.
     this.relay.publish({
-      rooms: [listRoom(listId)],
+      rooms: [listRoom(listId), listPresenceRoom(listId)],
       event: RealtimeEvent.PresenceListUpdated,
       payload,
     });
