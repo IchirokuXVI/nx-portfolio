@@ -116,6 +116,37 @@ describe('a token whose account is gone', () => {
       expect(calledWith(send, AUTH_PATTERNS.createTemporaryUser)).toBe(false);
     });
 
+    it.each([
+      [
+        'creating',
+        (c: ZoneController) =>
+          c.create(caller, { name: 'Home', username: 'Mamá' }),
+        ZONE_PATTERNS.create,
+      ],
+      [
+        'joining',
+        (c: ZoneController) =>
+          c.join(caller, { joinCode: 'ABCD1234', username: 'Mamá' }),
+        ZONE_PATTERNS.join,
+      ],
+    ])(
+      'refuses a request that names itself when %s, too',
+      async (_name, call, pattern) => {
+        // The gap this closes. Naming yourself in the body used to skip the one
+        // call that confirms you exist, so a token belonging to nobody could
+        // write a zone owned by nobody — data no one can reach, delete, or be
+        // removed from, created by a request that answered 201. Supplying a
+        // username decides what core records, never whether the caller is real.
+        const { send } = build();
+
+        await expect(
+          call(new ZoneController({ send } as never))
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+
+        expect(calledWith(send, pattern)).toBe(false);
+      }
+    );
+
     it('still mints a guest for a caller who presented no token at all', async () => {
       // The rule is about a token that names nobody, not about being anonymous.
       // Somebody with no session has an account made for them, as always.

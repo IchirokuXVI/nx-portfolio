@@ -75,17 +75,29 @@ export class ZoneController {
    * Resolves the caller, minting a temporary user when none is authenticated, and
    * resolves the username core should record (plan 0018, section 9).
    *
-   * A supplied `username` wins and costs nothing extra. When it is omitted the
-   * caller's global username is used, resolved by whichever branch applies: an
-   * anonymous caller's name comes back on the `AuthTokens` from the mint that
-   * just happened, so no second call is made; an authenticated caller costs one
-   * `auth.getProfile` hop, on the two rarest operations in the product and only
-   * when the client left the field out.
+   * A supplied `username` wins; when it is omitted the caller's global username
+   * is used. An anonymous caller's name comes back on the `AuthTokens` from the
+   * mint that just happened, so that branch makes no second call.
    *
-   * That hop is also the one place these two routes learn whether the account
-   * behind the token still exists, and a token naming a deleted user is answered
-   * 401 rather than 404. See {@link asRejectedCredentials} for why the difference
-   * decides whether the client can ever recover.
+   * **An authenticated caller always costs one `auth.getProfile` hop, whether or
+   * not they named themselves.** It used to be skipped when the body carried a
+   * `username`, since the name it fetches would only be thrown away — and that
+   * read the hop as being about the name, when it is also the only moment either
+   * of these routes checks that the account behind the token exists at all. A
+   * signature that verifies and an `exp` in the future do not say that: the two
+   * come apart whenever an account is deleted inside the access token's lifetime,
+   * or a database is reset under a client still holding a pair from before it.
+   *
+   * Skipping it therefore bought one hop, on the two rarest operations in the
+   * product, at the price of letting a token that names nobody write a zone owned
+   * by a user who does not exist — data nobody can ever reach, delete or be
+   * removed from, created by a request that answered 201. The hop is worth more
+   * than that, so it is unconditional, and the name it returns is used only when
+   * the body did not supply one.
+   *
+   * A token naming a deleted user leaves here as a 401 rather than a 404; see
+   * {@link asRejectedCredentials} for why that difference decides whether the
+   * client can ever recover.
    */
   private async resolveIdentity(
     user: CurrentUser | undefined,
@@ -102,15 +114,15 @@ export class ZoneController {
         tokens,
       };
     }
-    if (suppliedUsername) {
-      return { userId: user.userId, username: suppliedUsername };
-    }
     const profile = await this.nats
       .send<UserProfileView>(AUTH_PATTERNS.getProfile, { userId: user.userId })
       .catch((error: unknown) => {
         throw asRejectedCredentials(error);
       });
-    return { userId: user.userId, username: profile.username };
+    return {
+      userId: user.userId,
+      username: suppliedUsername ?? profile.username,
+    };
   }
 
   @Post()
