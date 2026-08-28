@@ -413,6 +413,68 @@ describe('ZoneStore', () => {
       expect(store.myZones()[1].myRole).toBe('ADMIN');
     });
 
+    // Plan 0020, section 2. An ownership transfer changes two memberships and
+    // publishes no membership event for either, so the caller's own role is derived
+    // from `ownerUserId`. All three cases, because the middle one is the damaging
+    // half: an old owner left holding `OWNER` is offered Delete group and Transfer
+    // ownership, and every press of either is a forbidden.
+
+    it('makes the caller the owner when the group is handed to them', () => {
+      realtime.emit('zone.ownershipChanged', {
+        id: 'z2',
+        name: "Mum and Dad's",
+        joinCode: 'FLAT3B',
+        status: 'ACTIVE',
+        ownerUserId: 'user-me',
+      });
+
+      expect(store.myZones()[1].myRole).toBe('OWNER');
+    });
+
+    it('demotes the outgoing owner to admin when the group goes to somebody else', () => {
+      realtime.emit('zone.ownershipChanged', {
+        id: 'z1',
+        name: 'Flat 3B',
+        joinCode: 'FLAT3B',
+        status: 'ACTIVE',
+        ownerUserId: 'someone-else',
+      });
+
+      // What `transferOwnership` writes in the same transaction, so this is the
+      // server's own answer rather than a guess.
+      expect(store.myZones()[0].myRole).toBe('ADMIN');
+      expect(store.myZones()[0].ownerUserId).toBe('someone-else');
+    });
+
+    it('leaves the caller role alone when the transfer is between two other people', () => {
+      realtime.emit('zone.ownershipChanged', {
+        id: 'z2',
+        name: "Mum and Dad's",
+        joinCode: 'FLAT3B',
+        status: 'ACTIVE',
+        ownerUserId: 'someone-else',
+      });
+
+      expect(store.myZones()[1].myRole).toBe('MEMBER');
+    });
+
+    it('joins the staff room on becoming the owner', () => {
+      // **Rule G3.** Without the re-sync a new owner would not receive the governance
+      // counts until the next full load, so the group's join requests would be
+      // invisible to the only person who can act on them.
+      expect([...realtime.rooms.keys()]).not.toContain('zone:z2:staff');
+
+      realtime.emit('zone.ownershipChanged', {
+        id: 'z2',
+        name: "Mum and Dad's",
+        joinCode: 'FLAT3B',
+        status: 'ACTIVE',
+        ownerUserId: 'user-me',
+      });
+
+      expect([...realtime.rooms.keys()]).toContain('zone:z2:staff');
+    });
+
     it('counts a new list against the zone', () => {
       realtime.emit('list.created', {
         id: 'l9',

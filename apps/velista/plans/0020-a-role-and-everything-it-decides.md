@@ -216,9 +216,32 @@ that is wrong for the length of a deploy window.
 
 ## 7. What was found while building it
 
-_To be filled in when section 3's reproduction runs. If the promote-to-admin path turns
-out to be section 4 all along, say so here in one sentence; if it is a real transport or
-mapper defect, say which hop and what fixed it._
+**It was section 4 all along.** The promote-to-admin path is not broken anywhere: the
+role arrives, the store writes it, and the dashboard card had no way to show that it
+had.
+
+The reproduction was run at spec level rather than with two browsers, and that turned out
+to be enough to answer the question, because three of the four hops are already
+observable there. `RealtimeMemory.emit` puts the payload through the **real**
+`toRealtimeEvent`, so a spec that emits a `MembershipView` for `member.roleChanged`
+exercises the mapper and the drop counter exactly as the socket does — the mapper does
+not return null for it, and `ZoneStore` patches `myRole` (`zone-store.spec.ts`, "updates
+the caller own role in place", which predates this plan and still passes).
+`selectHomeState` reads `role: zone.myRole` straight through to the card. So the store is
+correct, the view model is correct, and what the card then drew for `ADMIN` was
+`<span class="badge">` — byte for byte what it drew for `MEMBER`, because `.badge-admin`
+did not exist in `zone-card.scss`. A promotion changed one word in a chip that stayed the
+same colour, which is precisely the report.
+
+The one hop not exercised here is the first: whether the frame reaches a promoted
+member's socket at all. That needs the two live sessions section 3 describes and was not
+run. It is worth saying plainly rather than implying it was: if a promotion is ever again
+reported as invisible **after** this plan, that hop is the remaining suspect and the
+socket log is where to start. Everything downstream of it is now covered by a spec.
+
+`zone-card.spec.ts` is new and exists for this: it asserts the three roles draw three
+distinct badges, on classes rather than on computed colour, since jsdom does not apply
+the stylesheet.
 
 ## 8. Acceptance
 

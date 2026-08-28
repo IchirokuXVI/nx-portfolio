@@ -128,7 +128,9 @@
             }}</span>
           }
           @case ('ADMIN') {
-            <span class="badge">{{ 'zone.role.admin' | rokuT }}</span>
+            <span class="badge badge-admin">{{
+              'zone.role.admin' | rokuT
+            }}</span>
           }
           @default {
             <span class="badge">{{ 'zone.role.member' | rokuT }}</span>
