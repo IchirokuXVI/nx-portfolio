@@ -7,8 +7,8 @@ Postgres, NATS, Redis, Mailpit) and five services on fixed ports; two checkouts
 that each `docker compose up` and `nx serve` will otherwise fight over the same
 ports, container names, and database volumes.
 
-The Angular apps have the same problem and the same answer, on the same slot
-numbers: see `tools/dev/README.md`.
+The Angular apps have the same problem and the same answer, on their own separate
+slot numbering: see `tools/dev/README.md`.
 
 ## What actually collides (and what does not)
 
@@ -132,6 +132,31 @@ to stop the containers instead and keep the databases.
 ```sh
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down
 ```
+
+### Editing code: you do not restart anything
+
+`nx serve` here is `@nx/js:node`, whose `watch` defaults to true, so **a change to
+a service or to a library it consumes rebuilds and restarts that one process by
+itself**. Nothing needs stopping to see your work, and the other four services and
+the databases are untouched.
+
+The exception is a rewritten **`.env`**: Nx loads `{projectRoot}/.env` into a task
+when it _starts_ it, so a new `PORT`, a new database URL, a changed `CORS_ORIGINS`
+or `APP_BASE_URL` needs the process replaced. That is `--restart`, which **leaves
+the compose stack and its volumes alone** so bouncing a service never costs you
+the data you have been working with:
+
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart                    # all five
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart --services gateway # just one
+```
+
+| you changed                               | what to do                                        |
+| ----------------------------------------- | ------------------------------------------------- |
+| a service, a controller, a shared library | nothing, `nx serve` restarts it                   |
+| a `.env` (a slot move, `--app-slot`)      | `--restart`                                       |
+| an entity or a migration                  | `nx run luna-shopper-backend-<svc>:migration:run` |
+| `compose.yml`                             | `--down` then `--up`                              |
 
 `-p observability` on either verb adds or removes the traces and metrics stack;
 see the section below.

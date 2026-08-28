@@ -35,12 +35,14 @@ tools/dev/ng-slot.sh --list          # every worktree's slot, and what is live
 tools/dev/ng-slot.sh --auto          # claim the lowest free slot
 tools/dev/ng-slot.sh --up            # claim one if needed, then serve everything
 tools/dev/ng-slot.sh --up --apps shell,velista
+tools/dev/ng-slot.sh --restart       # bounce apps, keeping the rest serving
 tools/dev/ng-slot.sh --down          # stop what this worktree started
 ```
 
 ```powershell
 ./tools/dev/ng-slot.ps1 -List
 ./tools/dev/ng-slot.ps1 -Up -Apps shell,velista
+./tools/dev/ng-slot.ps1 -Restart -Apps velista
 ./tools/dev/ng-slot.ps1 -Down
 ```
 
@@ -48,6 +50,46 @@ tools/dev/ng-slot.sh --down          # stop what this worktree started
 exit means the slot is genuinely serving. It refuses to start over a port that is
 already busy rather than half starting the slot. Logs and pids land in
 `tools/dev/.run/`, all git ignored.
+
+## Editing code: you do not restart anything
+
+**Every app is served with watch and live reload on, and each watches its own
+sources _and_ the libraries it consumes.** Editing `libs/velista/...` recompiles
+velista and reaches the browser on its own. Nothing needs stopping, and no build
+has to be paid for twice.
+
+Because the apps are independent processes here, a change to one remote rebuilds
+**only that remote**; the other four are untouched and the shell picks the new
+remote up on the next page load. (Measured: editing a `libs/velista` template
+recompiled velista while the shell's compile count stayed where it was.)
+
+So `--down` is for finishing with a slot, not for checking your work.
+
+### The one thing live reload cannot pick up
+
+A rewritten **`.env`**. Nx loads `{projectRoot}/.env` into a task when it _starts_
+it, and webpack evaluates `MFE_REMOTE_URLS` and the `DefinePlugin` values once,
+while building its config. So after `--backend-slot` or a slot move, a running
+server keeps serving the old URLs.
+
+That is worth a verb of its own because it is invisible otherwise: rewriting the
+file **does** trigger a watch rebuild, and the rebuild silently reuses the values
+read at startup. Nothing looks wrong; the app just talks to the wrong backend.
+
+```sh
+tools/dev/ng-slot.sh --restart --apps velista   # ~15s, and the shell stays up
+```
+
+With no `--apps`, `--restart` bounces whatever of this slot is currently running,
+so it never quietly starts an app you left out of `--up`.
+
+| you changed                                                     | what to do               |
+| --------------------------------------------------------------- | ------------------------ |
+| a component, template, style, or any library                    | nothing, it live reloads |
+| a route table, a provider, a DI token                           | nothing, it live reloads |
+| `.env` (a slot move, `--backend-slot`)                          | `--restart`              |
+| `project.json`, a webpack config, `module-federation.config.ts` | `--restart`              |
+| adding a whole new remote                                       | `--down` then `--up`     |
 
 ## Which backend velista talks to
 
