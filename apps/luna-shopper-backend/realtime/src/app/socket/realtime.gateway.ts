@@ -22,6 +22,7 @@ import { TokenVerifierService } from '../auth/token-verifier.service';
 import { CoreAccessClient } from '../messaging/core-access.client';
 import { PresenceService } from '../presence/presence.service';
 import { EventRelayService } from '../relay/event-relay.service';
+import { RoomSyncService } from './room-sync.service';
 
 interface ZoneSubscription {
   zoneId: string;
@@ -80,6 +81,7 @@ export class RealtimeGateway
     private readonly coreAccess: CoreAccessClient,
     private readonly presence: PresenceService,
     private readonly relay: EventRelayService,
+    private readonly roomSync: RoomSyncService,
     private readonly logger: Logger
   ) {}
 
@@ -95,6 +97,10 @@ export class RealtimeGateway
    * local.
    */
   onModuleInit(): void {
+    // Only a gateway is handed the socket server, and only something holding it
+    // can take a room away from a socket (plan 0031).
+    this.roomSync.bind(this.server);
+
     this.relay.stream$.subscribe((message) => {
       for (const room of message.rooms) {
         this.server.local.to(room).emit(message.event, message.payload);

@@ -28,6 +28,44 @@ export function listRoom(listId: string): string {
 }
 
 /**
+ * What a room name refers to, once read back apart (plan 0031, section 4).
+ *
+ * The eviction sweep is handed the rooms a socket holds, as strings, and has to
+ * turn each one back into the access question that admitted it. Reading them
+ * apart here, next to the builders, is what stops the two drifting: a room shape
+ * added above with no case below is a room nothing can re-check, and the sweep
+ * would leave a socket in it forever without ever saying so.
+ */
+export type ParsedRoom =
+  | { kind: 'zone'; zoneId: string }
+  | { kind: 'zoneStaff'; zoneId: string }
+  | { kind: 'list'; listId: string };
+
+/**
+ * Read a room name back into the access question that gates it, or `undefined`
+ * for a name this service did not build.
+ *
+ * Socket.io puts every socket in a room named after its own id, so `undefined`
+ * is an ordinary answer here rather than a fault, and the sweep passes over it.
+ */
+export function parseRoom(room: string): ParsedRoom | undefined {
+  const parts = room.split(':');
+
+  if (parts[0] === RealtimeRoom.Zone) {
+    if (parts.length === 2) {
+      return { kind: 'zone', zoneId: parts[1] };
+    }
+    if (parts.length === 3 && parts[2] === 'staff') {
+      return { kind: 'zoneStaff', zoneId: parts[1] };
+    }
+  }
+  if (parts[0] === RealtimeRoom.List && parts.length === 2) {
+    return { kind: 'list', listId: parts[1] };
+  }
+  return undefined;
+}
+
+/**
  * Access checks the realtime service asks core before adding a socket to a room
  * (plan 0009, section 5). They mirror the socket rooms: a zone check gates the
  * `zone:` room, a list check gates the `list:` room. Core resolves membership and

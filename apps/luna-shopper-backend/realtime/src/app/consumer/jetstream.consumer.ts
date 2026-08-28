@@ -43,6 +43,7 @@ import {
   EVENT_STREAM_NAME,
 } from '../realtime/constants';
 import { EventRelayService } from '../relay/event-relay.service';
+import { sweepsFor } from './sweeps';
 
 /**
  * The wire shape NestJS's NATS transport puts on an emitted event: the subject as
@@ -325,6 +326,26 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
       runWithRequestContext({ correlationId }, fanOut);
     } else {
       fanOut();
+    }
+
+    this.sweep(envelope);
+  }
+
+  /**
+   * Ask every pod to re-check the rooms this event may have changed the answer
+   * for (plan 0031, sections 5 and 6).
+   *
+   * **After the fan out and not before**, which is the detail to get right. A
+   * member kicked from a zone learns about it through the zone room; evicting
+   * them first would remove them from the room carrying the news and leave their
+   * client sitting on a group it no longer belongs to with no idea why. Fanning
+   * out first means the notification lands, the cooperative unsubscribe usually
+   * happens on its own, and the sweep is the backstop that makes it not matter
+   * whether it did.
+   */
+  private sweep(envelope: DomainEvent): void {
+    for (const directive of sweepsFor(envelope)) {
+      this.relay.publishDirective(directive);
     }
   }
 

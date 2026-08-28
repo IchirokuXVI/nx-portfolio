@@ -192,7 +192,9 @@ describe('access cache invalidation', () => {
   function consumerOver(redis: FakeRedis, access: CoreAccessClient) {
     return new JetStreamConsumer(
       {} as never,
-      { publish: jest.fn() } as never,
+      // The sweep directives are plan 0031's, asserted in its own specs; here
+      // they only need somewhere to go.
+      { publish: jest.fn(), publishDirective: jest.fn() } as never,
       { client: { set: jest.fn().mockResolvedValue('OK') } } as never,
       access,
       { warn: jest.fn(), error: jest.fn(), log: jest.fn() } as never

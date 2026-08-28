@@ -114,6 +114,25 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
     );
   }
 
+  /**
+   * The ids of this pod's sockets that belong to a user (plan 0031, section 7).
+   *
+   * The eviction sweep needs "which of my sockets are this person's", and this
+   * map is already the answer: it is the per pod half whose union lives in
+   * Redis. Nothing about its shape changes to serve the read, and a linear pass
+   * is right for it, because a sweep runs on a kick or a role change rather than
+   * on traffic.
+   */
+  socketsOf(userId: string): string[] {
+    const found: string[] = [];
+    for (const [socketId, socket] of this.sockets) {
+      if (socket.userId === userId) {
+        found.push(socketId);
+      }
+    }
+    return found;
+  }
+
   /** Remember an authenticated socket so later signals can resolve its user. */
   register(socketId: string, userId: string): void {
     this.sockets.set(socketId, {

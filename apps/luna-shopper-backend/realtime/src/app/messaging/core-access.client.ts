@@ -116,6 +116,45 @@ export class CoreAccessClient {
   }
 
   /**
+   * The same three questions, asked of core rather than of the cache, and the
+   * cached answer replaced with what core said (plan 0031, section 4).
+   *
+   * The eviction sweep uses these rather than the cached readers above, for two
+   * reasons that are really one. A kick invalidates the zone's entries and
+   * nothing else, because the event names no list and this service has no way to
+   * enumerate a zone's lists; so `access:list:{id}` still holds the allow it
+   * cached for a member who has just lost the whole zone, and a sweep reading
+   * through the cache would confirm exactly the answer it exists to overturn.
+   * Writing what core said back is the other half: without it the sweep would
+   * remove the socket from the room and the client's next subscribe would be let
+   * straight back in by the same stale entry.
+   *
+   * It is affordable because of where it runs. These fire on a kick, a ban, a
+   * role change, a zone deletion or an access change, over the handful of
+   * sockets those concern, and never on ordinary traffic.
+   */
+  recheckZone(userId: string, zoneId: string): Promise<boolean> {
+    const req: CheckZoneAccessRequest = { userId, zoneId };
+    return this.fresh(zoneAccessKey(zoneId), userId, () =>
+      this.check(REALTIME_ACCESS_PATTERNS.checkZone, req)
+    );
+  }
+
+  recheckZoneStaff(userId: string, zoneId: string): Promise<boolean> {
+    const req: CheckZoneAccessRequest = { userId, zoneId };
+    return this.fresh(zoneStaffAccessKey(zoneId), userId, () =>
+      this.check(REALTIME_ACCESS_PATTERNS.checkZoneStaff, req)
+    );
+  }
+
+  recheckList(userId: string, listId: string): Promise<boolean> {
+    const req: CheckListAccessRequest = { userId, listId };
+    return this.fresh(listAccessKey(listId), userId, () =>
+      this.check(REALTIME_ACCESS_PATTERNS.checkList, req)
+    );
+  }
+
+  /**
    * Drop every cached answer about a zone, both plain access and governance.
    *
    * Called on any membership or zone event. Deliberately broader than the event
@@ -160,6 +199,15 @@ export class CoreAccessClient {
       return hit === ALLOW;
     }
 
+    return this.fresh(key, userId, resolve);
+  }
+
+  /** Ask core, remember what it said, and answer it. The miss path, and the sweep's. */
+  private async fresh(
+    key: string,
+    userId: string,
+    resolve: () => Promise<boolean>
+  ): Promise<boolean> {
     const allowed = await resolve();
 
     await this.redis.tryCommand(async (client) => {
