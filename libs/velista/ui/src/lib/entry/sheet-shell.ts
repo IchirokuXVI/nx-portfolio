@@ -19,6 +19,11 @@ import {
  * close it, which is the behaviour the whole decision turns on. `dismiss` therefore
  * means "go back", and the container is the thing that knows where back is.
  *
+ * It means it literally: every container answers this output through `SheetNavigation`,
+ * which pops the entry the sheet was opened with rather than navigating to the page
+ * underneath. Navigating there pushes, which left the sheet's URL in the stack with the
+ * page on top of it, and the next back press opened the panel again (plan 0031).
+ *
  * ## What it owns, and why it is not four components
  *
  * Everything here is modal behaviour, and modal behaviour that is split up stops

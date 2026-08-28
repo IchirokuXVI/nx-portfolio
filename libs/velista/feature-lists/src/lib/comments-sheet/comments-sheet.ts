@@ -8,7 +8,7 @@ import {
   viewChild,
   type ElementRef,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -30,6 +30,7 @@ import {
   appPath,
   lineIdOf,
   listIdOf,
+  SheetNavigation,
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import { CommentComposer, CommentRow, SheetShell } from '@portfolio/velista/ui';
@@ -101,7 +102,7 @@ export class CommentsSheet {
   private readonly _lists = inject(ListStore);
   private readonly _names = inject(MemberNames);
   private readonly _session = inject(SessionStore);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -236,7 +237,7 @@ export class CommentsSheet {
 
   /** Cancel, Escape, the scrim, and the back button all arrive here. */
   async dismiss(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._sheet.dismiss(
       appPath(
         this._locale(),
         this._basePath,

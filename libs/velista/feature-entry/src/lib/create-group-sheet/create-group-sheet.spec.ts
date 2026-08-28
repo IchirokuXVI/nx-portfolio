@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -16,7 +16,10 @@ import {
   type ZoneEntryOutcome,
   type ZoneMutationCall,
 } from '@portfolio/velista/data-access';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  provideVelistaTesting,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import { CreateGroupSheet } from './create-group-sheet';
 
 /** Never settles, which is how the submitting state is reached rather than faked. */
@@ -33,13 +36,16 @@ interface Options {
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<CreateGroupSheet>;
   store: FakeZoneStore;
-  router: { navigateByUrl: jest.Mock };
+  sheets: { dismiss: jest.Mock; leaveTo: jest.Mock };
   tokens: { clear: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
   const store = fakeZoneStore({ respond: options.respond });
-  const router = { navigateByUrl: jest.fn().mockResolvedValue(true) };
+  const sheets = {
+    dismiss: jest.fn().mockResolvedValue(undefined),
+    leaveTo: jest.fn().mockResolvedValue(undefined),
+  };
   const tokens = { clear: jest.fn() };
 
   await TestBed.configureTestingModule({
@@ -48,7 +54,7 @@ async function render(options: Options = {}): Promise<{
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeZoneStore(store),
       provideFakeSessionStore(options.identity ?? 'TEMPORARY'),
-      { provide: Router, useValue: router },
+      { provide: SheetNavigation, useValue: sheets },
       { provide: TokenStore, useValue: tokens },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
@@ -64,7 +70,7 @@ async function render(options: Options = {}): Promise<{
   fixture.detectChanges();
   await fixture.whenStable();
 
-  return { fixture, store, router, tokens };
+  return { fixture, store, sheets, tokens };
 }
 
 function query(fixture: ComponentFixture<CreateGroupSheet>, selector: string) {
@@ -127,13 +133,13 @@ describe('CreateGroupSheet', () => {
     });
 
     it('lands on the dashboard, where the group and its code are waiting', async () => {
-      const { fixture, router } = await render();
+      const { fixture, sheets } = await render();
       type(fixture, 'Flat 3B');
 
       (query(fixture, '.primary') as HTMLButtonElement).click();
       await fixture.whenStable();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
+      expect(sheets.leaveTo).toHaveBeenCalledWith('/velista/en/home');
     });
 
     it('tells a guest that an account is being made, while it happens', async () => {
@@ -168,7 +174,7 @@ describe('CreateGroupSheet', () => {
 
     it('cannot be dismissed or cancelled once the request has gone', async () => {
       // The write has already left, so offering to back out of it would be a lie.
-      const { fixture, router } = await render({
+      const { fixture, sheets } = await render({
         respond: inFlight,
       });
       type(fixture, 'Flat 3B');
@@ -178,7 +184,7 @@ describe('CreateGroupSheet', () => {
 
       expect(query(fixture, '.cancel')).toBeNull();
       (query(fixture, '.scrim') as HTMLButtonElement).click();
-      expect(router.navigateByUrl).not.toHaveBeenCalled();
+      expect(sheets.dismiss).not.toHaveBeenCalled();
     });
 
     it('keeps the button named while it is busy', async () => {
@@ -246,7 +252,7 @@ describe('CreateGroupSheet', () => {
     it('covers the sheet entirely when the guest account is gone', async () => {
       // Rule D3 refused to send. An inline message would leave the primary offering
       // to make exactly the duplicate account the rule exists to prevent.
-      const { fixture, tokens, router } = await render({
+      const { fixture, tokens, sheets } = await render({
         respond: () => ({ state: 'guest-account-lost' }),
       });
       type(fixture, 'Flat 3B');
@@ -260,25 +266,25 @@ describe('CreateGroupSheet', () => {
 
       (query(fixture, '.action') as HTMLButtonElement).click();
       expect(tokens.clear).toHaveBeenCalled();
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en');
+      expect(sheets.leaveTo).toHaveBeenCalledWith('/velista/en');
     });
   });
 
   describe('closing', () => {
     it('goes back to the front door when it was opened over it', async () => {
-      const { fixture, router } = await render({ returnTo: 'landing' });
+      const { fixture, sheets } = await render({ returnTo: 'landing' });
 
       (query(fixture, '.cancel') as HTMLButtonElement).click();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en');
+      expect(sheets.dismiss).toHaveBeenCalledWith('/velista/en');
     });
 
     it('goes back to the dashboard when it was opened over that', async () => {
-      const { fixture, router } = await render({ returnTo: 'home' });
+      const { fixture, sheets } = await render({ returnTo: 'home' });
 
       (query(fixture, '.cancel') as HTMLButtonElement).click();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
+      expect(sheets.dismiss).toHaveBeenCalledWith('/velista/en/home');
     });
   });
 });

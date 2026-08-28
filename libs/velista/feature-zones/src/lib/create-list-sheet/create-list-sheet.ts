@@ -5,14 +5,18 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import { ListStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, LIST_NAME_MAX_LENGTH } from '@portfolio/velista/models';
-import { appPath, zoneIdOf } from '@portfolio/velista/platform';
+import {
+  appPath,
+  SheetNavigation,
+  zoneIdOf,
+} from '@portfolio/velista/platform';
 import { SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import { zoneErrorKey } from '../zone-error-copy';
 
@@ -49,7 +53,7 @@ import { zoneErrorKey } from '../zone-error-copy';
 })
 export class CreateListSheet {
   private readonly _lists = inject(ListStore);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -105,7 +109,7 @@ export class CreateListSheet {
 
   /** Cancel, Escape, the scrim, and the back button all arrive here. */
   async dismiss(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._sheet.dismiss(
       appPath(this._locale(), this._basePath, 'zones', this.zoneId())
     );
   }

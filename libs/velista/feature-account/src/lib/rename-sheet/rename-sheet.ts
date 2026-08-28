@@ -5,7 +5,6 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -18,7 +17,7 @@ import {
   USERNAME_SCOPE_DEFAULT,
   type UsernameScope,
 } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import { SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import { accountFailure, asClock } from '../account-error-copy';
 import { RenameAnnouncement } from '../rename-announcement';
@@ -72,7 +71,7 @@ import { RenameAnnouncement } from '../rename-announcement';
 export class RenameSheet {
   private readonly _profile = inject(ProfileStore);
   private readonly _session = inject(SessionStore);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _announcement = inject(RenameAnnouncement);
@@ -173,7 +172,7 @@ export class RenameSheet {
    * first time one is added.
    */
   async dismiss(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._sheet.dismiss(
       appPath(this._locale(), this._basePath, 'account')
     );
   }
