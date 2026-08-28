@@ -3,7 +3,12 @@ import { JwtService } from '@nestjs/jwt';
 import { AUTH_PATTERNS, UserKind } from '@portfolio/luna-shopper/contracts';
 import { ERROR_CODES } from '@portfolio/luna-shopper/platform';
 import { generateKeyPairSync } from 'node:crypto';
-import { GoogleAuthGuard, stateOf } from './google-auth.guard';
+import {
+  GoogleAuthGuard,
+  GoogleCallbackGuard,
+  hasAuthorizationCode,
+  stateOf,
+} from './google-auth.guard';
 import { GoogleController } from './google.controller';
 import { OptionalJwtAuthGuard } from './jwt-auth.guard';
 import { JwtStrategy, type CurrentUser } from './jwt.strategy';
@@ -392,6 +397,106 @@ describe('the callback with Google unconfigured (plan 0026)', () => {
       error: ERROR_CODES.NOT_CONFIGURED,
     });
     // Nothing was asked of auth: there is no flow to complete.
+    expect(send).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The guard on the callback, and the reason a bare hit on the route used to end
+ * at Google (plan 0023, section 3.3).
+ *
+ * `passport-oauth2` has one `authenticate` for both halves of the dance and
+ * picks by looking for a code on the request. With none it starts the flow,
+ * so the callback answered a request Google never sent with a 302 to the consent
+ * screen: an accidental second `GET /v1/auth/google` that skips the state mint,
+ * and a `Location` on Google's origin where the app expects its own. Worse, that
+ * redirect happens inside `canActivate`, so nothing below it runs and none of
+ * the tests above could see it.
+ */
+describe('the callback guard, on a request Google did not send', () => {
+  const contextFor = (query: Record<string, unknown>) =>
+    ({
+      switchToHttp: () => ({ getRequest: () => ({ query }) }),
+    }) as unknown as ExecutionContext;
+
+  /** `AuthGuard('google')`, the mixin class both Google guards extend. */
+  const passportGuard = Object.getPrototypeOf(GoogleCallbackGuard.prototype);
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('does not start a flow for a request carrying no code', () => {
+    const dance = jest.spyOn(passportGuard, 'canActivate');
+    const guard = new GoogleCallbackGuard(configService);
+
+    expect(guard.canActivate(contextFor({ state: 'never-minted' }))).toBe(true);
+    // Never asked. Asking is what produced the redirect to Google.
+    expect(dance).not.toHaveBeenCalled();
+  });
+
+  it('treats a refusal at the consent screen the same way', () => {
+    // `error` and no code. Passport would fail the request and `handleRequest`
+    // would turn that into no user, so this is the same answer one step shorter.
+    const dance = jest.spyOn(passportGuard, 'canActivate');
+    const guard = new GoogleCallbackGuard(configService);
+
+    expect(guard.canActivate(contextFor({ error: 'access_denied' }))).toBe(
+      true
+    );
+    expect(dance).not.toHaveBeenCalled();
+  });
+
+  it('runs the dance once there is a code to exchange', () => {
+    const dance = jest
+      .spyOn(passportGuard, 'canActivate')
+      .mockReturnValue(true);
+    const guard = new GoogleCallbackGuard(configService);
+
+    expect(
+      guard.canActivate(contextFor({ code: 'from-google', state: 's' }))
+    ).toBe(true);
+    expect(dance).toHaveBeenCalled();
+  });
+
+  it('skips the dance with Google unset, whatever the request carries', () => {
+    // Plan 0026: there is no strategy registered under `'google'` at all, so
+    // the dance would throw and the filter would render a 500 on this origin.
+    const dance = jest.spyOn(passportGuard, 'canActivate');
+    const guard = new GoogleCallbackGuard(unconfiguredConfigService);
+
+    expect(guard.canActivate(contextFor({ code: 'from-google' }))).toBe(true);
+    expect(dance).not.toHaveBeenCalled();
+  });
+
+  it('reads a repeated code parameter, which arrives as an array, as none', () => {
+    expect(hasAuthorizationCode({ query: { code: ['a', 'b'] } })).toBe(false);
+    expect(hasAuthorizationCode({ query: { code: 'a' } })).toBe(true);
+    expect(hasAuthorizationCode(undefined)).toBe(false);
+  });
+});
+
+/**
+ * What the handler makes of the request the guard just let through, which is the
+ * assertion the e2e suite makes over HTTP.
+ */
+describe('the callback, on a request Google did not send', () => {
+  it('redirects into the app with an error rather than off to Google', async () => {
+    const send = jest.fn();
+    const controller = new GoogleController({ send } as never, configService);
+
+    const result = await controller.callback({
+      query: { state: 'never-minted' },
+    });
+
+    expect(result.statusCode).toBe(HttpStatus.FOUND);
+    expect(result.url.startsWith('https://app.example/')).toBe(true);
+    expect(result.url.split('#')[0].endsWith('/auth/callback')).toBe(true);
+    expect(fragmentOf(result.url)).toEqual({
+      error: ERROR_CODES.UNAUTHORIZED,
+    });
+    // No state was ever minted, so there is nothing to consume and no login to
+    // attempt. The flow ends here, in the app.
     expect(send).not.toHaveBeenCalled();
   });
 });

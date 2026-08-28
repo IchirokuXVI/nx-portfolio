@@ -82,6 +82,12 @@ test.describe('Luna Shopper Google sign in', () => {
     // once. The response must still be a redirect into the app: a page rendered
     // on the API's origin is one the user has no way back from, and the app never
     // learns the flow ended.
+    //
+    // It is also the one case a unit test cannot reach, which is why it is here.
+    // `passport-oauth2` reads a request with no code as a request to start the
+    // flow, so with credentials set the callback used to answer this with a 302
+    // to Google's consent screen, from inside the guard, before any of the
+    // controller ran. The guard now asks for a code first.
     const ctx = await request.newContext({
       baseURL: GATEWAY_URL,
       maxRedirects: 0,
