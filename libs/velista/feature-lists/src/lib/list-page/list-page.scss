@@ -1,15 +1,54 @@
 @use '../list-page';
 
+// A screen tall page, so the composer at the end of it is at the bottom of the screen
+// rather than under the last line of a two item list.
+//
+// `block-size: 100%` alone cannot do that: standalone there is no definite height above
+// this host for the percentage to resolve against, so it degrades to `auto` and the page
+// is as tall as what is in it. The minimum is the viewport less the one inset between
+// the two, `.app-main`'s bottom safe area, which keeps a notched phone from gaining a
+// document scroll the height of its home indicator. Mounted in the shell the percentage
+// does resolve and is already at least this, so the minimum never binds.
 :host {
   display: flex;
   flex-direction: column;
   block-size: 100%;
+  min-block-size: calc(100dvh - var(--app-safe-bottom));
 }
 
-// The column scrolls and the composer below it does not, which is what makes the
-// field reachable with a thumb no matter how long the list is.
+// Whether this column is the scroll container depends on where the app is running,
+// and both answers are fine. Mounted in the portfolio shell it is: the shell's host is
+// a flex container, so the app's own host is a stretched flex item with a definite
+// height, `.app-main` resolves its `100%` against it and so does this page's host.
+// Standalone nothing above sets a height, `block-size: 100%` degrades to `auto`, and
+// the document scrolls instead. `overflow-y` stays because it is load bearing in the
+// first case; the composer is pinned by `position: sticky`, which is correct in both.
 .page {
   @include list-page.page;
+}
+
+// Always at the bottom of the screen, which is what makes the field reachable with a
+// thumb no matter how long the list is.
+//
+// Sticky rather than fixed. Fixed would take it out of the flow and leave the last line
+// of a full list underneath it forever, with no honest way to reserve the space, since
+// the composer's height is one row of text plus whatever the safe area inset is on this
+// device. Sticky keeps the box in the flow: it floats at the bottom edge while there is
+// still list below, and settles into its own place at the end of the scroll, where the
+// newest line sits directly above it rather than behind it.
+//
+// It is a sibling of the column rather than a child, so when the column is the scroller
+// this rule does nothing and the composer is simply the last row of the host.
+lib-line-composer {
+  // A component host is an inline box until something says otherwise, and `sticky` on
+  // an inline box is ignored. Set here rather than on the component, so nothing else
+  // that renders a composer changes shape because this page needed it pinned.
+  display: block;
+  position: sticky;
+  inset-block-end: 0;
+  // Above the rows it floats over. The composer paints its own surface, so without a
+  // stacking order a row's own raised background can show through it.
+  z-index: 1;
 }
 
 .back {

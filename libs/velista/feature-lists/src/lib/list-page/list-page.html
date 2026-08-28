@@ -9,7 +9,7 @@
   [signedIn]="true"
 />
 
-<main class="page">
+<main #column class="page">
   <!--
     The string moves to the accessible name, so nothing is lost for a screen reader
     when the label becomes a glyph. In reorder mode this ends the mode rather than
@@ -114,7 +114,7 @@
 </main>
 
 <!--
-  Pinned below the scrolling column, and **absent** rather than disabled for a reader:
+  Pinned to the bottom of the screen, and **absent** rather than disabled for a reader:
   a disabled text field at the bottom of the screen is an invitation that does not work
   and costs a tap to find out (section 3.2).
 
@@ -125,8 +125,8 @@
   @if (page.abilities.canWrite && !reordering()) {
     <lib-line-composer
       (submitted)="add($event)"
-      [takeFocus]="page.empty"
       [busy]="composerBusy()"
+      [takeFocus]="page.empty"
     />
   }
 }
