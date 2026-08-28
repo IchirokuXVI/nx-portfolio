@@ -3,9 +3,9 @@
 > Prerequisite reading: `0010` (the group page, rules G2 and G3) and `0018` section 2
 > (the audit rule this plan reuses).
 >
-> Companion plan: `luna-shopper-backend/plans/0029`, which withholds the join code from
-> a caller who may not use it and emits the two role changes an ownership transfer
-> currently swallows. Section 6 says which half is which and what order they land in.
+> Companion plan: `luna-shopper-backend/plans/0029`, which emits the two role changes an
+> ownership transfer currently swallows. Section 6 says which half is which and what
+> order they land in.
 >
 > Verified against the source on 2026-08-28.
 
@@ -17,7 +17,7 @@ of a count. This plan takes the rule at its word in the two places it is not hon
 - **`myRole` is wrong after an ownership transfer**, on both people's screens, because
   the two role changes it makes are never published. Every control the old owner sees
   afterwards fails against a role they no longer hold.
-- **Two things `myRole` decides are not decided by it at all**: the join code is drawn
+- **Two things `myRole` decides are not decided by it at all**: the invite card is drawn
   for everybody, and being an admin is drawn identically to being a member on the
   dashboard.
 
@@ -153,7 +153,7 @@ and truncating name, and `RoleChip`'s own header already records the decision to
 two apart rather than give the component a variant per caller. What is shared is the
 design token, not the component, and that is enough for the two to agree.
 
-## 5. The join code is shown to people who cannot regenerate it
+## 5. The invite card is drawn for people who cannot govern the group
 
 `GroupPage.showInvite` (`feature-zones/src/lib/group-page/group-page.ts:150`) is:
 
@@ -162,13 +162,11 @@ const kind = this.state().kind;
 return kind !== 'error' && kind !== 'pending' && kind !== 'ownerless';
 ```
 
-Every approved member of an active group therefore sees the invite card, the code and the
-Share the link button. Ordinary members should not: inviting is a governance action here,
-the code can only be **regenerated** by an owner or an admin
-(`ZoneService.regenerateJoinCode` requires `[OWNER, ADMIN]`), and a member who hands the
-code around cannot undo it.
-
-### 5.1 The client half
+Every approved member of an active group therefore gets the invite card, the code and the
+Share the link button. It belongs to the people who govern the group: the code can only be
+**regenerated** by an owner or an admin (`ZoneService.regenerateJoinCode` requires
+`[OWNER, ADMIN]`), so it is the same governance surface the settings entry is, and it
+reads on an ordinary member's screen as an invitation to an action that is not theirs.
 
 `showInvite` gains `&& header.isStaff`. `isStaff` is already on `GroupHeaderVm`, already
 computed in `toHeader` from `myRole` alone, and already documented there as rule G2. It is
@@ -181,37 +179,39 @@ automatically live: promoted to admin, the card appears; demoted, it goes. `Grou
 gets a spec for both directions driven by a role event, because "it disappears on the next
 reload" is exactly the behaviour that would satisfy a lazier test and not the requirement.
 
-### 5.2 The server half is the real fix (backend `0029`)
+### 5.1 This is a UI decision, and deliberately not a permission
 
-Hiding the card leaves the code itself in the client. `ZoneView.joinCode` is a non-nullable
-string on every zone response and on every `zone.updated` / `zone.ownershipChanged`
-payload, so an ordinary member's browser holds it and anyone opening devtools reads it.
-A permission enforced only by a template is not enforced.
+Worth writing down, because the shape of the change invites the opposite reading and a
+later reader would otherwise "finish" it.
 
-Backend `0029` makes `joinCode` nullable and fills it only for a caller who manages the
-zone, exactly as `pendingRequestCount` already works. The principle is already written
-down in `select-group-state.ts` and this plan reuses it verbatim:
+`ZoneView.joinCode` stays a non-nullable string sent to every member. An ordinary
+member's browser therefore still holds the code, and anybody who opens devtools can read
+it. **That is accepted and it is not a defect.** The code is a low entropy invite string
+that any member could also obtain by asking, and the requirement here is that the group
+page does not put a governance surface in front of somebody it does not belong to, not
+that the code be kept from them.
 
-> `pendingRequestCount` is non-null only for a caller the backend considers staff, so
-> **the value is the permission** and nothing here re-derives it from a role.
+So this plan does **not** make `joinCode` nullable, does not gate it in the backend
+mapper, and does not split the zone-view events across the plain and staff rooms. The
+version of this section that did all three was written and removed: it was a contract
+change, an OpenAPI regeneration and a two-room fan out, bought for a value that is not a
+secret.
 
-**Once that lands**, this app's `joinCode` becomes `string | null`, `toZone` maps it with
-`nullableStr`, and `showInvite` is `header.joinCode !== null`: the value, not a second
-opinion about a role. The `isStaff` check in 5.1 is the interim, and this plan's last task
-is to replace it rather than keep both. Which is also the order they must land in: the
-client tolerates a null before the server can send one, never after.
+If that judgement is ever revisited, the pattern to copy is `pendingRequestCount`, whose
+rule `select-group-state.ts` already states: "the value is the permission and nothing here
+re-derives it from a role." Until then, `isStaff` is the whole of it.
 
 ## 6. Sequencing with the backend
 
-| Step | Where     | What                                                                  |
-| ---- | --------- | --------------------------------------------------------------------- |
-| 1    | this plan | Sections 3 and 4, and 5.1. Nothing here needs the server to change.    |
-| 2    | this plan | Section 2.3's client half. Correct on its own, on today's server.      |
-| 3    | `0029`    | The two `member.roleChanged` emits, and a nullable `joinCode`.         |
-| 4    | this plan | `joinCode: string \| null` in the models, and 5.2 replacing 5.1.       |
+| Step | Where     | What                                                                    |
+| ---- | --------- | ----------------------------------------------------------------------- |
+| 1    | this plan | Sections 3, 4 and 5. Nothing here needs the server to change.           |
+| 2    | this plan | Section 2.3's client half. Correct on its own, on today's server.       |
+| 3    | `0029`    | The two `member.roleChanged` emits an ownership transfer owes.          |
 
-Steps 1 and 2 are shippable with no backend deploy, which matters: staging deploys only
-the affected projects, so a client that requires a server change to be correct is a client
+Every step of this plan is shippable with no backend deploy, and `0029` is shippable with
+no client deploy. That is not a coincidence and it matters: staging deploys only the
+affected projects, so a client that requires a server change to be correct is a client
 that is wrong for the length of a deploy window.
 
 ## 7. What was found while building it
@@ -233,5 +233,5 @@ mapper defect, say which hop and what fixed it._
    group's owner and admins still do.
 5. Promoting that member to admin makes the invite card appear without a reload, and
    demoting them makes it go.
-6. After backend `0029`, an ordinary member's `GET /v1/zones/{id}` response carries
-   `joinCode: null`, and the app renders correctly against it.
+6. No backend deploy is needed for any of the above except criteria 1 and 2, which need
+   `0029`. Nothing in this plan changes a request or a response shape.

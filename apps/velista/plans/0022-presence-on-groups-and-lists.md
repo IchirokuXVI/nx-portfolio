@@ -3,6 +3,10 @@
 > Prerequisite reading: `0017` (presence over the socket, which built all of this) and
 > `0004` section 6.7 (presence is advisory).
 >
+> Companion plan: `luna-shopper-backend/plans/0032`, which delivers list presence to a
+> group's members so section 3.3 has something to draw. Everything else here ships
+> without it; section 6 says so per section.
+>
 > Verified against the source on 2026-08-28.
 
 ## 1. Goal
@@ -117,23 +121,24 @@ Both the group page's `ListRow` and the zone card's inline list rows gain a view
 indicator: the dot and up to two initials, no names, because a row has no space for a
 sentence and the group page's header already carries one.
 
-This one has a cost that must be stated rather than discovered, because it is the only
-place in this plan where a decision is genuinely arguable:
+The group page does **not** subscribe per row, and it does not have to, because of what
+backend `0032` changes on the server: a socket that subscribes to a zone is joined to
+`list:{id}:presence` for every list in it that the caller may read, and
+`presence.listUpdated` is emitted there as well as into the list's own room.
 
-> **List presence requires the list room**, and a screen showing eight lists would need
-> eight subscriptions to light eight rows.
+**So this section needs no client change beyond rendering.** The client sends no new
+message, holds no new subscription, and learns no new event: `presence.listUpdated` is
+already in `REALTIME_EVENT_NAMES`, already mapped, and already applied by
+`PresenceStore._lists`. `viewersOf(listId)` simply starts having answers for lists this
+client has not opened, because the server started sending them.
 
-So the group page does **not** subscribe per row. It renders the indicator for a list only
-when `PresenceStore` already holds a snapshot for it, which happens when the caller has
-the list open elsewhere, or opened it recently enough that the room is still held. In
-practice that means the indicator is usually absent on this screen, and that is the correct
-trade: an absent indicator is honest ("we are not saying"), and eight subscriptions per
-group page is a real cost paid on every open for a decoration.
+That is the whole of it, and it is worth noticing how much of this plan's earlier draft
+went away. Getting the room right on the server removed a store field, a new event, a new
+mapper branch and a rule for reconciling two disagreeing sources.
 
-The alternative, a zone-level "who is in which list" summary in the counts broadcast, is
-the right long-term answer and is **not** built here. It is a backend change (one more
-field on `BroadcastZoneCounts`, computed from the presence keys the realtime service
-already holds) and it belongs in a backend plan. Section 6 records it.
+The rows therefore read from `viewersOf(listId)` exactly as the list page's header does,
+and section 5's rule covers the case where the answer is empty: the indicator is absent,
+which is correct both when nobody is there and before the first broadcast arrives.
 
 ### 3.4 The list page: viewers in the header, and the editor on the line
 
@@ -157,6 +162,8 @@ per section 3.
 
 - `PresenceStore` is unchanged. Every method this plan calls already exists, and the two
   that were never called (`editorOfLine`, and `viewersOf` in anger) are called now.
+- `REALTIME_EVENT_NAMES`, the mapper and the event union are unchanged. Nothing in this
+  plan adds an event.
 - `ListPage` and the group page inject `PresenceStore`. Both are containers in rule D1's
   sense already, so this adds a store to a page that owns stores, not to a component.
 - `HomePage` already injects it.
@@ -165,6 +172,8 @@ per section 3.
   reason they exist.
 - `store-doubles.ts` already ships `fakePresenceStore` with `online`, `viewers` and
   `editors` options, so every spec in this plan is driven by data rather than by a mock.
+  Section 3.3 is tested by putting viewers on a list the fake was never told the page had
+  open, which is exactly what `0032` makes real.
 
 ## 5. The empty case, everywhere
 
@@ -179,12 +188,20 @@ indicator disappears at once. That is correct and it is deliberate, since `0016`
 existing "not updating right now" notices on the group page and the list header are not
 duplicated per indicator. One statement per screen that the screen is not live is enough.
 
-## 6. Deliberately not built
+## 6. Sequencing, and what is deliberately not built
 
-- **Zone-level list presence in the counts broadcast** (section 3.3). It would let a group
-  page light every list row without a subscription per row. Backend change, backend plan,
-  and the client work here is designed so that adding it later changes where the data comes
-  from and not what is drawn.
+Sections 2, 3.1, 3.2 and 3.4 need no server change: announcing intent is a client call the
+server already accepts, and zone presence is already arriving for every group on the
+dashboard with nothing reading it. They ship first and independently.
+
+Section 3.3 needs backend `0032`, which needs backend `0031` (eviction), because `0032`
+joins rooms the client never asked for and therefore cannot release. Until `0032` lands,
+`viewersOf` simply answers empty for a list this client has not opened, the indicator does
+not draw, and that is section 5's rule working as intended rather than a broken state to
+guard against. No client code is conditional on it.
+
+Not built:
+
 - **Any enforcement.** No locks, no warnings, no disabled controls. Section 3.
 - **Presence on the members screen.** A row there is a membership, which is a durable fact;
   overlaying a live dot on it invites reading absence as something meaningful about the
@@ -206,3 +223,6 @@ duplicated per indicator. One statement per screen that the screen is not live i
    "not updating right now" notices are the only explanation shown.
 6. `viewList` and `editLine` each have at least one production caller, and a spec asserts
    the release runs on destroy.
+7. After backend `0032`: a group page lights the row of a list somebody else has open
+   while holding no subscription to that list, and a member with no access to that list
+   sees nothing and receives nothing naming it. No client change ships with it.
