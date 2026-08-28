@@ -12,6 +12,7 @@ import {
 import { PresenceService } from '../presence/presence.service';
 import { EventRelayService } from '../relay/event-relay.service';
 import { RealtimeGateway } from '../socket/realtime.gateway';
+import { RoomSyncService } from '../socket/room-sync.service';
 import { SseController } from '../sse/sse.controller';
 
 /**
@@ -54,6 +55,7 @@ import { SseController } from '../sse/sse.controller';
     TokenVerifierService,
     CoreAccessClient,
     RealtimeGateway,
+    RoomSyncService,
   ],
 })
 export class RealtimeModule {}

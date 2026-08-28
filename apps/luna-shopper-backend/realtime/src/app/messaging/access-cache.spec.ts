@@ -10,6 +10,7 @@ import {
   ACCESS_CACHE_TTL_SECONDS,
   listAccessKey,
   zoneAccessKey,
+  zoneListsAccessKey,
   zoneStaffAccessKey,
 } from '../realtime/constants';
 import { JetStreamConsumer } from '../consumer/jetstream.consumer';
@@ -188,31 +189,33 @@ describe('the access check cache', () => {
   });
 });
 
+function consumerOver(redis: FakeRedis, access: CoreAccessClient) {
+  return new JetStreamConsumer(
+    {} as never,
+    // The sweep directives are plan 0031's, asserted in its own specs; here they
+    // only need somewhere to go.
+    { publish: jest.fn(), publishDirective: jest.fn() } as never,
+    { client: { set: jest.fn().mockResolvedValue('OK') } } as never,
+    access,
+    { warn: jest.fn(), error: jest.fn(), log: jest.fn() } as never
+  );
+}
+
+function deliver(
+  consumer: JetStreamConsumer,
+  envelope: DomainEvent
+): Promise<void> {
+  const codec = JSONCodec();
+  return (
+    consumer as unknown as { handle: (m: unknown) => Promise<void> }
+  ).handle({
+    subject: envelope.event,
+    data: codec.encode({ pattern: envelope.event, data: envelope }),
+    headers: undefined,
+  });
+}
+
 describe('access cache invalidation', () => {
-  function consumerOver(redis: FakeRedis, access: CoreAccessClient) {
-    return new JetStreamConsumer(
-      {} as never,
-      { publish: jest.fn() } as never,
-      { client: { set: jest.fn().mockResolvedValue('OK') } } as never,
-      access,
-      { warn: jest.fn(), error: jest.fn(), log: jest.fn() } as never
-    );
-  }
-
-  function deliver(
-    consumer: JetStreamConsumer,
-    envelope: DomainEvent
-  ): Promise<void> {
-    const codec = JSONCodec();
-    return (
-      consumer as unknown as { handle: (m: unknown) => Promise<void> }
-    ).handle({
-      subject: envelope.event,
-      data: codec.encode({ pattern: envelope.event, data: envelope }),
-      headers: undefined,
-    });
-  }
-
   /** The exit criterion behind the cache: a kick is not survived by the cache. */
   it('drops a zone answer the moment a member is kicked', async () => {
     const redis = new FakeRedis();
@@ -309,5 +312,124 @@ describe('access cache invalidation', () => {
     await access.checkZone('u1', 'z1');
     // A rename moves no access, so the cache stands.
     expect(send).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The readable list set (plan 0032, section 4.1), which rides on the zone answer
+ * and is cached beside it under the same zone name.
+ */
+describe('the readable list set', () => {
+  function zoneClient(redis: FakeRedis, listIds = ['l1', 'l2']) {
+    const send = jest.fn().mockReturnValue(of({ allowed: true, listIds }));
+    const access = new CoreAccessClient(
+      { send } as never,
+      redis as unknown as RedisService
+    );
+    return { access, send };
+  }
+
+  it('comes back with the zone answer, from one call to core', async () => {
+    const redis = new FakeRedis();
+    const { access, send } = zoneClient(redis);
+
+    expect(await access.checkZoneWithLists('u1', 'z1')).toEqual({
+      allowed: true,
+      listIds: ['l1', 'l2'],
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0]).toBe(REALTIME_ACCESS_PATTERNS.checkZone);
+  });
+
+  it('is cached, so a second subscribe makes no further core call', async () => {
+    const redis = new FakeRedis();
+    const { access, send } = zoneClient(redis);
+
+    await access.checkZoneWithLists('u1', 'z1');
+    await access.checkZoneWithLists('u1', 'z1');
+
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('fills the plain zone answer too, so a later checkZone is a hit', async () => {
+    const redis = new FakeRedis();
+    const { access, send } = zoneClient(redis);
+
+    await access.checkZoneWithLists('u1', 'z1');
+    expect(await access.checkZone('u1', 'z1')).toBe(true);
+
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a cached yes with no cached set as a miss', async () => {
+    // Half an answer cannot be acted on: the presence rooms would not be joined.
+    const redis = new FakeRedis();
+    const { access, send } = zoneClient(redis);
+
+    await access.checkZone('u1', 'z1');
+    await access.checkZoneWithLists('u1', 'z1');
+
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('stores an empty set as a real answer rather than as a miss', async () => {
+    // "You may read none of this zone's lists" is an answer, and serving it as a
+    // miss would put a core round trip on every subscribe of every such member.
+    const redis = new FakeRedis();
+    const { access, send } = zoneClient(redis, []);
+
+    expect((await access.checkZoneWithLists('u1', 'z1')).listIds).toEqual([]);
+    expect((await access.checkZoneWithLists('u1', 'z1')).listIds).toEqual([]);
+
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('lives under the zone key, so a zone invalidation takes it', async () => {
+    const redis = new FakeRedis();
+    const { access, send } = zoneClient(redis);
+
+    await access.checkZoneWithLists('u1', 'z1');
+    expect(redis.hashes.has(zoneListsAccessKey('z1'))).toBe(true);
+
+    await access.invalidateZone('z1');
+    await access.checkZoneWithLists('u1', 'z1');
+
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('is dropped by the three list events that change it', async () => {
+    // They change the set without changing zone access, which is why they had to
+    // be added to ACCESS_INVALIDATING_EVENTS for this cache rather than the other.
+    for (const event of [
+      RealtimeEvent.ListCreated,
+      RealtimeEvent.ListDeleted,
+      RealtimeEvent.ListAccessChanged,
+    ]) {
+      const redis = new FakeRedis();
+      const { access, send } = zoneClient(redis);
+      const consumer = consumerOver(redis, access);
+
+      await access.checkZoneWithLists('u1', 'z1');
+      await deliver(consumer, {
+        event,
+        eventId: `e-${event}`,
+        zoneId: 'z1',
+        listId: 'l1',
+        payload: {},
+      });
+      await access.checkZoneWithLists('u1', 'z1');
+
+      expect(send).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  it('re-asks core for the join sweep rather than reading the cache', async () => {
+    const redis = new FakeRedis();
+    const { access, send } = zoneClient(redis);
+
+    await access.checkZoneWithLists('u1', 'z1');
+    expect(await access.recheckZoneLists('u1', 'z1')).toEqual(['l1', 'l2']);
+
+    expect(send).toHaveBeenCalledTimes(2);
   });
 });

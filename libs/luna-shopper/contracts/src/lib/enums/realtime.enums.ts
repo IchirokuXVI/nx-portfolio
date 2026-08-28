@@ -5,7 +5,10 @@
  * String values are the wire format and must stay stable.
  */
 
-/** Room name prefixes. A socket joins `zone:{zoneId}` and `list:{listId}` rooms. */
+/**
+ * Room name prefixes. A socket joins `zone:{zoneId}` and `list:{listId}` rooms,
+ * and is put in `user:{userId}` for it (plan 0030, section 2).
+ */
 export enum RealtimeRoom {
   Zone = 'zone',
   /**
@@ -17,6 +20,13 @@ export enum RealtimeRoom {
    */
   ZoneStaff = 'zone:staff',
   List = 'list',
+  /**
+   * The one room whose subject is a person rather than a resource (plan 0030).
+   * A socket is joined to it at connection from the id its token carries, so
+   * unlike the three above it is never asked for and never authorized: the token
+   * is the claim, and it was verified a line earlier.
+   */
+  User = 'user',
 }
 
 /**

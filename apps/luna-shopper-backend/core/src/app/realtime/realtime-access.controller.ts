@@ -31,13 +31,29 @@ export class RealtimeAccessController {
     private readonly listAccess: ListAccessService
   ) {}
 
+  /**
+   * The zone check also answers which of the zone's lists the caller may read
+   * (plan 0032, section 4.1), so the realtime service can join a presence room
+   * per list without a second round trip.
+   *
+   * The ids are fetched only once the membership check has passed, so a caller
+   * with no business in the zone is answered `{ allowed: false }` without a
+   * second query being run on their behalf.
+   */
   @MessagePattern(REALTIME_ACCESS_PATTERNS.checkZone)
   async checkZone(
     @Payload() req: CheckZoneAccessRequest
   ): Promise<AccessCheckResult> {
-    return this.check(() =>
+    const result = await this.check(() =>
       this.zoneAuthz.requireApproved(req.zoneId, req.userId)
     );
+    if (!result.allowed) {
+      return result;
+    }
+    return {
+      allowed: true,
+      listIds: await this.listAccess.readableListIds(req.zoneId, req.userId),
+    };
   }
 
   /**

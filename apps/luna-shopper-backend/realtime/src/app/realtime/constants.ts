@@ -81,6 +81,12 @@ export const ACCESS_CACHE_TTL_SECONDS = 60;
  * had to buy off before it was allowed to exist. When a new membership or zone
  * event is added to `RealtimeEvent`, add it here unless it demonstrably cannot
  * change an access answer.
+ *
+ * **This set now guards two caches** (plan 0032, section 4.1): the yes/no answers
+ * and the readable list set behind {@link zoneListsAccessKey}. Every entry above
+ * moves the first and therefore the second; the three list events at the end
+ * move only the second, and are here because it is the same `DEL`. Each entry
+ * below says which answer it is for.
  */
 export const ACCESS_INVALIDATING_EVENTS: ReadonlySet<RealtimeEvent> = new Set([
   // Membership, which is what zone access is resolved from.
@@ -98,6 +104,13 @@ export const ACCESS_INVALIDATING_EVENTS: ReadonlySet<RealtimeEvent> = new Set([
   // A merge implies a kick for the source membership (plan 0008), so it moves
   // access for two users at once.
   RealtimeEvent.MergeApproved,
+  // The three that change which lists a member may read without changing whether
+  // they are in the zone at all (plan 0032, section 4.1). They are here for the
+  // readable list set; the yes/no answers they drop alongside it are collateral,
+  // and cost a round trip rather than a wrong answer.
+  RealtimeEvent.ListCreated,
+  RealtimeEvent.ListDeleted,
+  RealtimeEvent.ListAccessChanged,
 ]);
 
 /**
@@ -109,6 +122,14 @@ export const zoneAccessKey = (zoneId: string) => `access:zone:${zoneId}`;
 export const zoneStaffAccessKey = (zoneId: string) =>
   `access:zonestaff:${zoneId}`;
 export const listAccessKey = (listId: string) => `access:list:${listId}`;
+
+/**
+ * Which of a zone's lists a caller may read (plan 0032, section 4.1). The same
+ * shape as the three above, so the same `DEL` on the zone's name drops it, and
+ * the fields hold a JSON array of ids rather than a yes or a no.
+ */
+export const zoneListsAccessKey = (zoneId: string) =>
+  `access:zonelists:${zoneId}`;
 
 export const zonePresenceKey = (zoneId: string) => `presence:zone:${zoneId}`;
 export const listViewersKey = (listId: string) =>
