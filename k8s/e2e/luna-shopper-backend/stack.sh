@@ -235,6 +235,12 @@ bootstrap_config() {
     openssl pkey -in "$KEYPAIR" -pubout -out "${KEYPAIR%.key}.pub" 2>/dev/null
   fi
 
+  # Readable by the `node` user the images run as, for the reason luna-slot.sh
+  # spells out where it generates the same pair. Applied to an existing key too,
+  # not only one this branch just wrote.
+  if [[ -f "$KEYPAIR" ]]; then chmod 0644 "$KEYPAIR"; fi
+  if [[ -f "${KEYPAIR%.key}.pub" ]]; then chmod 0644 "${KEYPAIR%.key}.pub"; fi
+
   if (( ${#missing[@]} == 0 )); then
     return 0
   fi
