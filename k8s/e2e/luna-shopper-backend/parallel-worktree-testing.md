@@ -2,19 +2,22 @@
 
 This is the procedure for developing or testing more than one Luna Shopper
 change in parallel, each in its own git worktree, without the copies colliding.
-It exists because the backend has fixed, shared infrastructure ports (two
-Postgres, NATS, Mailpit) and four services on fixed ports; two checkouts that
-each `docker compose up` and `nx serve` will otherwise fight over the same
+It exists because the backend has fixed, shared infrastructure ports (three
+Postgres, NATS, Redis, Mailpit) and five services on fixed ports; two checkouts
+that each `docker compose up` and `nx serve` will otherwise fight over the same
 ports, container names, and database volumes.
+
+The Angular apps have the same problem and the same answer, on the same slot
+numbers: see `tools/dev/README.md`.
 
 ## What actually collides (and what does not)
 
-| Kind of work | Needs infra? | Parallel safe out of the box? |
-| --- | --- | --- |
-| `nx lint`, `nx build`, **unit tests** (`nx test`) | no | **Yes.** Pure compute, no ports, no DB. Run in every worktree at once; the only limit is CPU. |
-| Integration tests (real Postgres + NATS) | yes | Only with an isolated stack — see slots below. |
-| e2e (Playwright driving gateway + realtime) | yes, plus the four services running | Only with an isolated stack **and** an isolated service port band. |
-| Live manual smoke (`nx serve` + curl / ws) | yes, same as e2e | Same as e2e. |
+| Kind of work                                      | Needs infra?                        | Parallel safe out of the box?                                                                 |
+| ------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| `nx lint`, `nx build`, **unit tests** (`nx test`) | no                                  | **Yes.** Pure compute, no ports, no DB. Run in every worktree at once; the only limit is CPU. |
+| Integration tests (real Postgres + NATS)          | yes                                 | Only with an isolated stack — see slots below.                                                |
+| e2e (Playwright driving gateway + realtime)       | yes, plus the four services running | Only with an isolated stack **and** an isolated service port band.                            |
+| Live manual smoke (`nx serve` + curl / ws)        | yes, same as e2e                    | Same as e2e.                                                                                  |
 
 So the cheap 90%, lint/build/unit, needs nothing special: give each worktree its
 own `node_modules` (see setup) and run. Only work that talks to real Postgres,
@@ -28,8 +31,11 @@ others:
 - every host port becomes its default **+ N&times;100**,
 - the compose project (its containers, network, and named volumes) becomes
   `luna-slot<N>`, so nothing is shared with another slot,
-- the four services listen on `3000..3003 + N*100`, and their `.env` files are
-  pointed at that slot's Postgres / NATS / SMTP ports.
+- the five services listen on `3000..3004 + N*100`, and their `.env` files are
+  pointed at that slot's Postgres / NATS / Redis / SMTP ports.
+
+The front end slots (`tools/dev/ng-slot.sh`) are a **separate** numbering that
+this one does not imply; see the section below.
 
 **Slot 0 is reserved for your own local development** — it is the original
 single stack (default ports, project name `luna-shopper-backend`) that your primary
@@ -39,21 +45,24 @@ already using. Worker slots therefore start at **1** (1, 2, 3, …). A lone
 worktree that is your own dev environment still just uses the plain default
 workflow (no slot flag needed = slot 0).
 
-| | slot 0 (yours) | slot 1 | slot 2 | slot 3 |
-| --- | --- | --- | --- | --- |
-| compose project | `luna-shopper-backend` | `luna-slot1` | `luna-slot2` | `luna-slot3` |
-| auth-db | 5432 | 5532 | 5632 | 5732 |
-| core-db | 5433 | 5533 | 5633 | 5733 |
-| nats (client / mon) | 4222 / 8222 | 4322 / 8322 | 4422 / 8422 | 4522 / 8522 |
-| smtp / mailpit ui | 1025 / 8025 | 1125 / 8125 | 1225 / 8225 | 1325 / 8325 |
-| gateway | 3000 | 3100 | 3200 | 3300 |
-| realtime | 3001 | 3101 | 3201 | 3301 |
-| auth | 3002 | 3102 | 3202 | 3302 |
-| core | 3003 | 3103 | 3203 | 3303 |
-| otlp (http / grpc) | 4318 / 4317 | 4418 / 4417 | 4518 / 4517 | 4618 / 4617 |
-| jaeger ui | 16686 | 16786 | 16886 | 16986 |
-| prometheus | 9090 | 9190 | 9290 | 9390 |
-| grafana | 3010 | 3110 | 3210 | 3310 |
+|                     | slot 0 (yours)         | slot 1       | slot 2       | slot 3       |
+| ------------------- | ---------------------- | ------------ | ------------ | ------------ |
+| compose project     | `luna-shopper-backend` | `luna-slot1` | `luna-slot2` | `luna-slot3` |
+| auth-db             | 5432                   | 5532         | 5632         | 5732         |
+| core-db             | 5433                   | 5533         | 5633         | 5733         |
+| catalog-db          | 5434                   | 5534         | 5634         | 5734         |
+| nats (client / mon) | 4222 / 8222            | 4322 / 8322  | 4422 / 8422  | 4522 / 8522  |
+| redis               | 6379                   | 6479         | 6579         | 6679         |
+| smtp / mailpit ui   | 1025 / 8025            | 1125 / 8125  | 1225 / 8225  | 1325 / 8325  |
+| gateway             | 3000                   | 3100         | 3200         | 3300         |
+| realtime            | 3001                   | 3101         | 3201         | 3301         |
+| auth                | 3002                   | 3102         | 3202         | 3302         |
+| core                | 3003                   | 3103         | 3203         | 3303         |
+| catalog             | 3004                   | 3104         | 3204         | 3304         |
+| otlp (http / grpc)  | 4318 / 4317            | 4418 / 4417  | 4518 / 4517  | 4618 / 4617  |
+| jaeger ui           | 16686                  | 16786        | 16886        | 16986        |
+| prometheus          | 9090                   | 9190         | 9290         | 9390         |
+| grafana             | 3010                   | 3110         | 3210         | 3310         |
 
 Slot 0 (first column) is **yours** — reserved for your own development; workers
 use slots 1 and up. The step of 100 is larger than the spread of the base ports,
@@ -75,13 +84,64 @@ cmd //c "mklink /J node_modules D:\\Projects\\nx-portfolio\\node_modules"
 
 (On a POSIX host: `ln -s ../..//node_modules node_modules`, adjusting the path.)
 
-## Configure and run a slot
+## Which slots are already taken
 
-From the **root of the worktree** you want to place on slot N:
+Before claiming one, ask. `--list` reads every checkout from `git worktree list`,
+reads the slot each one claims out of its own `.env.slot`, and then probes the
+ports to say whether anything is actually answering:
 
 ```sh
-# writes .env.slot (compose) + every service .env, and a dev JWT keypair if absent
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list   # or: ...luna-slot.ps1 -List
+```
+
+```
+  SLOT COMPOSE PROJECT      INFRA     SERVICES  OBSERV  CLAIMED BY
+  0    luna-shopper-backend 8/8       5/5       0/5     D:/Projects/nx-portfolio
+  1    luna-slot1           8/8       5/5       0/5     D:/Projects/.../worktrees/my-branch  (this one)
+```
+
+A claim and a listener are both checked because either alone would lie: a
+worktree configured but not started would collide the moment it does, and an open
+port nobody claims is something outside this repository that would collide right
+now. `OBSERV 0/5` is normal, the profile is opt in.
+
+## Configure and run a slot
+
+From the **root of the worktree** you want to place on slot N, one command does
+all of it: write the `.env` files, bring the compose stack up and wait on its
+healthchecks, run every migration, then serve all five services.
+
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up 1   # or: ...luna-slot.ps1 -Up 1
+```
+
+Leave the number off and it takes the lowest free slot, so an agent that has just
+made a worktree needs one command and no bookkeeping:
+
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up
+```
+
+`--up` waits for all five to listen before it returns, so a zero exit means the
+slot is genuinely serving rather than merely spawned. Logs and pids go to
+`k8s/e2e/luna-shopper-backend/.run/`, git ignored. `--down` is its inverse: it
+frees the five service ports, then takes the compose stack down **with its
+volumes**, which is what `stack.sh down` has always meant here. Pass `--keep-data`
+to stop the containers instead and keep the databases.
+
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down
+```
+
+`-p observability` on either verb adds or removes the traces and metrics stack;
+see the section below.
+
+The steps are still available one at a time, and `--up` is exactly their sum:
+
+```sh
+# just write .env.slot (compose) + every service .env, and a dev JWT keypair if absent
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh 1        # or: ...luna-slot.ps1 1
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --auto   # ...or the lowest free one
 
 # bring up this slot's isolated infra (own containers + volumes)
 docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \
@@ -90,19 +150,47 @@ docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \
 # run migrations for this slot's databases, then serve / test
 npx nx run luna-shopper-backend-auth:migration:run
 npx nx run luna-shopper-backend-core:migration:run
-npx nx serve luna-shopper-backend-gateway     # + realtime / auth / core, all on slot ports
+npx nx serve luna-shopper-backend-gateway     # + realtime / auth / core / catalog
 ```
 
 `luna-slot.{sh,ps1}` is idempotent: re-run it with the same N to refresh the
 files, or a different N to move the worktree to another slot. Everything it
 writes is git ignored, so it never shows up in a diff or a commit.
 
-Tear a slot down (removes only that slot's containers and volumes):
+## The front end slots are a separate numbering
+
+`tools/dev/ng-slot.{sh,ps1}` does all of this for the Angular apps with the same
+arithmetic, but **the two numbers are independent and must not be assumed equal**.
+A front end on slot 5 may point at a backend on slot 1, or 2, or 8, and **several
+front end slots may point at one backend at the same time**. That last case is the
+common one: most front end work needs a backend running, not a backend of its own,
+so when nobody is changing the backend every front end worktree can use the single
+instance that happens to be up.
+
+Two consequences, and they pull in opposite directions:
+
+- **`CORS_ORIGINS` is a list**, so `luna-slot` writes **every** front end slot's
+  two origins, not this slot's. A backend has no way to know which front ends will
+  call it and no reason to care, and an origin it was not told about fails with a
+  CORS error that says nothing about slots. Twenty entries in a git ignored file
+  removes the whole class of problem. (It used to be hardcoded to `localhost:4200`,
+  so any front end past slot 0 got a gateway that refused its own browser.)
+- **`APP_BASE_URL` and the two `MAIL_*_BASE_URL` are singular**: they are where
+  the Google callback and the verification links send a browser, and a redirect
+  can only have one target. So they name one front end, chosen with
+  `--app-slot <n>` and defaulting to 0, the shared one. Only the OAuth and mail
+  round trips are affected by getting it wrong; ordinary API calls from any slot
+  work regardless.
 
 ```sh
-docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \
-  -f k8s/e2e/luna-shopper-backend/compose.yml down -v
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up 1 --app-slot 5
+bash tools/dev/ng-slot.sh --up 5 --backend-slot 1
 ```
+
+On the front end side the backend is worked out rather than assumed when
+`--backend-slot` is left off: a choice already recorded, else the luna slot this
+same worktree runs, else the only gateway listening, else slot 0. See
+`tools/dev/README.md`.
 
 ### Traces and metrics, per slot
 
