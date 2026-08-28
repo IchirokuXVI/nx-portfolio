@@ -1,4 +1,5 @@
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -7,6 +8,8 @@ import {
   inject,
   signal,
   untracked,
+  viewChild,
+  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -158,6 +161,18 @@ export class ListPage {
   readonly announcement = signal('');
 
   readonly composerBusy = signal(false);
+
+  private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
+
+  /**
+   * Bumped once per line this reader adds, and read by the render effect that follows
+   * the end of the list.
+   *
+   * A counter and not a boolean, because two adds in a row are the ordinary case here:
+   * somebody stands in the kitchen and enters six things, and a flag that is already
+   * true does not change, so the effect would run for the first item and never again.
+   */
+  private readonly _added = signal(0);
 
   readonly state = computed<ListPageState>(() => {
     const listId = this.listId();
@@ -359,7 +374,55 @@ export class ListPage {
       );
     });
 
+    // The list follows the line this reader just added. `afterRenderEffect` because the
+    // row has to be in the DOM before the scroller can be measured, and because it runs
+    // in the browser and never on the server (plan 0001, D2).
+    //
+    // Only after an add of the reader's own. Somebody else's line arriving over the
+    // socket leaves the scroll alone: moving the page under a thumb that is reaching for
+    // a row is how the wrong thing gets ticked off in an aisle.
+    afterRenderEffect(() => {
+      // Read, so this runs again for the next thing entered in the same run.
+      const added = this._added();
+      const column = this._column()?.nativeElement;
+
+      if (added === 0 || column === undefined) {
+        return;
+      }
+
+      this._scrollToNewest(column);
+    });
+
     inject(DestroyRef).onDestroy(() => this.announcement.set(''));
+  }
+
+  /**
+   * Put the end of the list on screen.
+   *
+   * Which element scrolls depends on where the app is running, and the page cannot
+   * assume: mounted in the portfolio shell the column has a definite height and is the
+   * scroll container, standalone nothing above it sets one and the document scrolls
+   * instead (`list-page.scss` says why). So ask the column whether it overflows and fall
+   * back to the document, rather than picking one and being wrong in half the builds.
+   *
+   * Scrolling to the very end rather than bringing the row into view: at the end of the
+   * scroll the sticky composer has settled into its own place in the flow, so the newest
+   * line is directly above it. Anywhere short of that the composer floats over the last
+   * few pixels of the column and the row it was asked to reveal is the row behind it.
+   */
+  private _scrollToNewest(column: HTMLElement): void {
+    const scroller =
+      column.scrollHeight > column.clientHeight
+        ? column
+        : this._browser.document.scrollingElement;
+
+    scroller?.scrollTo({
+      top: scroller.scrollHeight,
+      // Instant. The row appeared on the same frame and it is one row away, so an
+      // animation here is a delay before somebody can type the next item, and this
+      // field is built for entering six things in a row.
+      behavior: 'auto',
+    });
   }
 
   /** Back to the group. A destination's back, not a sheet's dismiss. */
@@ -505,6 +568,12 @@ export class ListPage {
   async add(entry: { content: string; quantity: number }): Promise<void> {
     const current = this.loaded();
     this.composerBusy.set(true);
+
+    // Before the call, not after it. `addLine` puts the optimistic row on screen
+    // synchronously and only then goes to the network, so both land in one change
+    // detection pass and the list follows the new row on the frame it appears rather
+    // than a round trip later.
+    this._added.update((count) => count + 1);
 
     const outcome = await this._lines.addLine(
       this.listId(),

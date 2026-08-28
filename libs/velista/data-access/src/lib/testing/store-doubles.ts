@@ -1,5 +1,6 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
+  Comment,
   Identity,
   Line,
   LineApprovalStatus,
@@ -636,6 +637,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     >
   >(new Map());
   const commentCounts = signal<ReadonlyMap<string, number>>(new Map());
+  /** Newest first, the wire's order, which is the order the real store keeps. */
+  const comments = signal<ReadonlyMap<string, readonly Comment[]>>(new Map());
   const loads = signal(0);
 
   const calls: LineWriteCall[] = [];
@@ -653,6 +656,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     isComplete: () => complete(),
     writeNoteOf: (lineId: string) => writes().get(lineId) ?? null,
     commentCountOf: (lineId: string) => commentCounts().get(lineId),
+    commentsOf: (lineId: string) => comments().get(lineId),
     forList: () =>
       computed(() => ({
         lines: lines(),
@@ -735,6 +739,19 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
 
     recordCommentCount: (lineId: string, count: number) => {
       commentCounts.update((current) => new Map(current).set(lineId, count));
+    },
+    recordComments: (lineId: string, page: readonly Comment[]) => {
+      comments.update((current) => new Map(current).set(lineId, page));
+      commentCounts.update((current) =>
+        new Map(current).set(lineId, page.length)
+      );
+    },
+    /** Prepends, because the real store holds the wire's newest first order. */
+    addComment: (comment: Comment) => {
+      comments.update((current) => {
+        const held = current.get(comment.lineId) ?? [];
+        return new Map(current).set(comment.lineId, [comment, ...held]);
+      });
     },
     dismissNote: (lineId: string) => {
       writes.update((current) => {

@@ -1,9 +1,12 @@
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
   inject,
   signal,
+  viewChild,
+  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
@@ -32,6 +35,14 @@ import { CommentComposer, CommentRow, SheetShell } from '@portfolio/velista/ui';
 import { listErrorKey } from '../list-error-copy';
 
 /**
+ * How far from the bottom still counts as being at the newest comment.
+ *
+ * Roughly a line of text: sub pixel scroll positions and a part scrolled row both leave
+ * a gap of a few pixels at what any reader would call the bottom.
+ */
+const AT_NEWEST_SLACK_PX = 32;
+
+/**
  * What people have said about one line.
  *
  * ## The one place a reader can act
@@ -55,6 +66,15 @@ import { listErrorKey } from '../list-error-copy';
  * The **count**, though, goes to `LineStore`, because the row underneath draws it and
  * this is the only moment the client ever learns it: nothing on the wire carries a
  * comment count.
+ *
+ * ## It reads like a chat, which the wire order does not
+ *
+ * The endpoint answers newest first and `LineStore` keeps that order, because it is the
+ * order the next page continues from. A conversation is read the other way round:
+ * oldest at the top, the newest thing said at the bottom, and the view opens there
+ * rather than at the beginning. So `comments` reverses, and the scroller is put at the
+ * bottom by hand, since a scroll box starts at the top and nothing in the markup asks
+ * it to start anywhere else.
  */
 @Component({
   selector: 'lib-comments-sheet',
@@ -101,26 +121,67 @@ export class CommentsSheet {
         .find((line) => line.id === this.lineId())?.content ?? ''
   );
 
+  /** Oldest first, so the conversation reads downwards and ends at the newest line. */
   readonly comments = computed<readonly CommentRowVm[]>(() => {
     const zoneId = this.zoneId();
     const me = this._session.userId();
 
-    return this._raw().map((comment) => ({
-      id: comment.id,
-      author: this._names.nameOf(zoneId, comment.authorUserId),
-      body: comment.body,
-      createdAt: comment.createdAt,
-      mine: comment.authorUserId === me,
-    }));
+    return this._raw()
+      .map((comment) => ({
+        id: comment.id,
+        author: this._names.nameOf(zoneId, comment.authorUserId),
+        body: comment.body,
+        createdAt: comment.createdAt,
+        mine: comment.authorUserId === me,
+      }))
+      .reverse();
   });
 
   readonly empty = computed(
     () => !this.loading() && this.comments().length === 0
   );
 
+  private readonly _scroller =
+    viewChild<ElementRef<HTMLElement>>('conversation');
+
+  /**
+   * Whether the reader is sitting at the newest comment.
+   *
+   * A plain field and not a signal on purpose: the render effect below reads it, and a
+   * signal would make every scroll event re-run that effect and take the scrollbar back
+   * off somebody who was reading further up.
+   */
+  private _atNewest = true;
+
   constructor() {
     void this._names.ensure(this.zoneId());
     void this._load();
+
+    // The conversation opens at its end, and stays there while new comments arrive,
+    // unless the reader has scrolled up to read something older. `afterRenderEffect`
+    // rather than `effect`, because the rows have to exist before they can be measured,
+    // and it runs in the browser and never on the server (plan 0001, D2).
+    afterRenderEffect(() => {
+      const list = this._scroller()?.nativeElement;
+
+      // Read so the effect re-runs when somebody says something, here or on the socket.
+      const said = this.comments().length;
+
+      if (list === undefined || said === 0 || !this._atNewest) {
+        return;
+      }
+
+      list.scrollTop = list.scrollHeight;
+    });
+  }
+
+  /**
+   * Follow the scrollbar, so a reader who has gone up to read an older comment is not
+   * dragged back down the moment the next one lands.
+   */
+  trackPosition(list: HTMLElement): void {
+    const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+    this._atNewest = fromBottom <= AT_NEWEST_SLACK_PX;
   }
 
   async send(body: string): Promise<void> {
@@ -131,9 +192,10 @@ export class CommentsSheet {
       const comment = await this._comments.addComment(this.lineId(), body);
       // The same call `comment.added` makes, and an upsert rather than an append for
       // that reason: this comment arrives twice, once here and once on the socket.
-      // Prepended by the store, because the endpoint answers newest first and the
-      // sheet draws that order. Optimism is not needed: a comment has no state to
-      // reconcile and the round trip is one request with nothing racing it.
+      // Prepended by the store, which holds the wire's newest first order; the sheet
+      // reverses it, so this lands at the bottom of the screen. Optimism is not needed:
+      // a comment has no state to reconcile and the round trip is one request with
+      // nothing racing it.
       this._lines.addComment(comment);
     } catch (error) {
       this.errorKey.set(listErrorKey(error, 'comments'));

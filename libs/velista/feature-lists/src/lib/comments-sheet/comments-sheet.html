@@ -12,7 +12,7 @@
   }
 
   @if (comments().length > 0) {
-    <ul class="comments">
+    <ul (scroll)="trackPosition(conversation)" #conversation class="comments">
       @for (comment of comments(); track comment.id) {
         <li class="comment">
           <lib-comment-row [comment]="comment" />
