@@ -76,7 +76,7 @@ test.describe('velista landing page', () => {
 
     // A router navigation, not a reload: the URL carries the new locale and the
     // strings follow it without a round trip.
-    await expect(page).toHaveURL(/\/es\/velista\/?$/);
+    await expect(page).toHaveURL(/\/velista\/es\/?$/);
     await expect(trigger).toHaveText('ES');
     await expect(page.locator('.menu')).toHaveCount(0);
     expect(await appText(page)).not.toMatch(RAW_KEY);
@@ -107,7 +107,7 @@ test.describe('velista landing page', () => {
     // back to the front door, and the locale segment survives the redirect.
     await page.goto('/velista/es/home');
 
-    await expect(page).toHaveURL(/\/es\/velista\/?$/);
+    await expect(page).toHaveURL(/\/velista\/es\/?$/);
   });
 
   test('the content column is centred on a wide viewport', async ({ page }) => {

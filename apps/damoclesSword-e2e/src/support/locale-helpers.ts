@@ -11,26 +11,69 @@ export const LOCALE_SEGMENT = /^[a-z]{2}(-[a-z]{2})?$/i;
 export async function settle(page: Page): Promise<void> {
   await page
     .evaluate(async () => {
-      await document.fonts.ready;
-      await new Promise<void>((resolve) => {
+      let observer: MutationObserver | undefined;
+
+      const quietDom = new Promise<void>((resolve) => {
         let quiet = setTimeout(resolve, 400);
-        const observer = new MutationObserver(() => {
+        observer = new MutationObserver(() => {
           clearTimeout(quiet);
           quiet = setTimeout(resolve, 400);
         });
         observer.observe(document.body, { childList: true, subtree: true });
-        setTimeout(() => {
-          observer.disconnect();
-          resolve();
-        }, 8000);
       });
+
+      // One budget covers the whole wait, fonts included. `document.fonts.ready`
+      // has no timeout of its own and never rejects, so a font request that goes
+      // out and never comes back (a host the runner cannot reach, most likely)
+      // parks this evaluate until the *test* timeout fires. The cap used to sit
+      // on the quiet window alone, which left the fonts await ahead of it
+      // completely unbounded, and a suite stuck that way reads as a hang rather
+      // than as a slow page.
+      const budget = new Promise<void>((resolve) => setTimeout(resolve, 8000));
+
+      await Promise.race([budget, document.fonts.ready.then(() => quietDom)]);
+      observer?.disconnect();
     })
     .catch(() => undefined);
 }
 
-/** The locale in the first path segment of the current URL. */
-export function currentUrlLocale(page: Page): string {
-  return new URL(page.url()).pathname.split('/').filter(Boolean)[0] ?? '';
+/**
+ * `document.fonts.ready`, bounded, for the specs that want the webfonts applied
+ * but not the DOM quiet window that `settle` adds. The bound is the point: see
+ * the note in `settle`.
+ */
+export async function fontsReady(page: Page): Promise<void> {
+  await page
+    .evaluate(async () => {
+      await Promise.race([
+        document.fonts.ready.then(() => undefined),
+        new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+      ]);
+    })
+    .catch(() => undefined);
+}
+
+/** Where this app is mounted, and so how many segments precede its locale. */
+export const MOUNT = '/damoclesSword';
+
+/**
+ * The locale segment of the current URL, which sits directly **after** the
+ * mount: `/damoclesSword/en`, not `/en/damoclesSword`.
+ *
+ * Reading segment 0 was correct until plan 0003 swapped that order, after which
+ * it returned `damoclesSword` and every caller compared a locale against the
+ * mount name. `language-switch.spec.ts` then picked `en` as the locale to switch
+ * *to* while already on `en`, "switched" the page to the language it was
+ * showing, and failed on the content having not changed, which looked like an
+ * app defect and was not.
+ *
+ * The identical helper in apps/landing-v2-e2e is right as written: landingV2
+ * mounts at the empty path, so segment 0 genuinely is its locale.
+ */
+export function currentUrlLocale(page: Page, mount: string = MOUNT): string {
+  const segments = new URL(page.url()).pathname.split('/').filter(Boolean);
+  const depth = mount.split('/').filter(Boolean).length;
+  return segments[depth] ?? '';
 }
 
 /**

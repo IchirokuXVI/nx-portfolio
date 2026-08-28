@@ -262,6 +262,12 @@ jobs:
 
       - name: Run affected e2e against the staging stack
         if: ${{ steps.get-affected-e2e.outputs.projects != '' }}
+        # The job inherits GitHub's 6 hour default, which is no bound at all for a
+        # suite that can stall: one stalled run reached 2h10m before a person
+        # killed it by hand. A healthy pass over every affected frontend suite is
+        # a few minutes, so a run anywhere near this ceiling is wedged and should
+        # fail on its own while the log is still worth reading.
+        timeout-minutes: 45
         env:
           E2E_BASE_URL: https://staging.ichirokuxvi.com
         run: |
@@ -326,6 +332,9 @@ jobs:
 
       - name: Luna Shopper e2e against the built images
         if: ${{ steps.luna-affected.outputs.projects != '' }}
+        # Same reasoning as the frontend e2e step above: a stall here would
+        # otherwise run against the job's 6 hour default.
+        timeout-minutes: 30
         env:
           # A skip, an empty suite, or a stack that fails to come up fails the job
           # — and therefore blocks the deploy.
