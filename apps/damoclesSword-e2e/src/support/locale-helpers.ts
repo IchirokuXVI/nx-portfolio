@@ -28,9 +28,27 @@ export async function settle(page: Page): Promise<void> {
     .catch(() => undefined);
 }
 
-/** The locale in the first path segment of the current URL. */
+/** This app's mount, which every URL here carries ahead of the locale. */
+const MOUNT = 'damoclesSword';
+
+/**
+ * The locale of the current URL, which is the segment **after** the mount
+ * (`/damoclesSword/en`) rather than the leading one.
+ *
+ * Reading segment 0 is what this did before, and it survived the plan 0003
+ * reorder unnoticed because nothing here asserts the locale directly: it
+ * returned `damoclesSword`, which matches no locale, so the caller picked the
+ * locale it was already on and switched `en` to `en`. The URL assertion then
+ * passed trivially and the spec failed on the content comparison instead,
+ * reporting a page that had genuinely not changed.
+ *
+ * The identical helper in `landing-v2-e2e` still reads segment 0 and is right
+ * to: landingV2 mounts at the empty path, so there the locale really does lead.
+ */
 export function currentUrlLocale(page: Page): string {
-  return new URL(page.url()).pathname.split('/').filter(Boolean)[0] ?? '';
+  const segments = new URL(page.url()).pathname.split('/').filter(Boolean);
+
+  return (segments[0] === MOUNT ? segments[1] : segments[0]) ?? '';
 }
 
 /**
