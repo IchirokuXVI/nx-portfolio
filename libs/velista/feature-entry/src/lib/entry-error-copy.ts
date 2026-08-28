@@ -37,6 +37,15 @@ export function entryErrorKey(
     return 'entry.error.tooMany';
   }
 
+  // The credentials this request carried were refused and have been deleted, so the
+  // caller is signed out and the same tap will now work. A guest never reaches this:
+  // `ZoneApi` answers that case with `guest-account-lost` and the whole panel, because
+  // for a guest there is nothing left to sign back in to. Before the split for the same
+  // reason as the throttle, since being signed out is not about the operation.
+  if (error.code === 'unauthorized') {
+    return 'entry.error.signedOut';
+  }
+
   if (operation === 'zones.create') {
     // The only specific one on a create, and it is not the person's fault: two zones
     // drew the same join code. So the copy says so, and the primary stays enabled.

@@ -242,6 +242,7 @@
       "notAllowed": "No puedes entrar en este grupo. Habla con quien lo lleva",
       "tooMany": "Demasiados intentos. Espera un minuto e inténtalo de nuevo",
       "createClash": "Algo ha chocado por nuestra parte. Inténtalo otra vez",
+      "signedOut": "Se ha cerrado tu sesión. Vuelve a intentarlo para seguir",
       "failed": "No se ha podido enviar. Inténtalo de nuevo"
     },
     "accountLost": {

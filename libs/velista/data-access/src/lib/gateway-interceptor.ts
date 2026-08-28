@@ -112,9 +112,18 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
  * One retry, and only one.
  *
  * `ensureFreshToken` already refreshes proactively, so a 401 here means the token was
- * rejected despite looking valid: revoked, or signed by a key that has rotated. The
- * retry is sent with `SKIP_AUTH` semantics for its own error handling, so a second 401
- * ends the request instead of starting another refresh.
+ * rejected despite looking valid: revoked, signed by a key that has rotated, or naming
+ * an account that no longer exists. The retry is sent with `SKIP_AUTH` semantics for
+ * its own error handling, so a second 401 ends the request instead of starting another
+ * refresh.
+ *
+ * **Either way out of here that is still a 401 deletes the stored pair**, which is the
+ * invariant the whole path exists for: a session the server will not accept must not
+ * survive in the browser, or the next attempt fails identically and so does every one
+ * after it. A failed refresh clears in `TokenStore`; a refresh that succeeded and was
+ * *still* refused is cleared here, because a token minted a moment ago and rejected on
+ * the same tick says the identity behind it is gone rather than that the credential
+ * was stale.
  */
 function retryAfterRefresh(
   req: HttpRequest<unknown>,
@@ -150,6 +159,14 @@ function retryAfterRefresh(
       }
 
       connection.reportReachable();
+
+      if (error.status === 401) {
+        // Refused twice, the second time holding a pair issued between the two. See
+        // the note above: nothing about this session is usable, so it is deleted here
+        // rather than left to be presented again.
+        tokens.clear();
+      }
+
       return throwError(() =>
         toGatewayError(error.error, error.status, correlationId)
       );

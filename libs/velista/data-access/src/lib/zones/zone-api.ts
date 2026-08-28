@@ -4,12 +4,14 @@ import type {
   MyZone,
   MyZoneOrder,
   Page,
+  SessionTokens,
   Zone,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
 import { TokenStore } from '../auth/token-store';
+import { GatewayError } from '../errors';
 import {
   toDeletedId,
   toMembership,
@@ -84,6 +86,11 @@ export class ZoneApi implements ZoneServiceI {
    * guest account. Refreshing first still saves that round trip, and the interceptor's
    * error path cannot tell a lost guest identity from a signed out user, which is the
    * distinction the caller needs.
+   *
+   * The gate cannot catch every case, and {@link _lostTheAccountWeSent} is the other
+   * half. A token that is signed by the current key and has not expired passes it, and
+   * the account it names may still be gone: deleted, or wiped with the database it
+   * lived in. Only the server knows, so that one is answered afterwards.
    */
   async createZone(
     name: string,
@@ -94,17 +101,27 @@ export class ZoneApi implements ZoneServiceI {
       return { state: 'guest-account-lost' };
     }
 
-    const body = await firstValueFrom(
-      this._http.post<unknown>(
-        this._urls.gateway('/v1/zones'),
-        // `username` is omitted rather than sent empty when the caller has no
-        // per-zone name in mind: the backend fills it from their global username,
-        // and the validation pipe runs with `forbidNonWhitelisted`, so a stray
-        // `undefined` is not something to be casual about.
-        username === undefined ? { name } : { name, username },
-        { context: operation('zones.create') }
-      )
-    );
+    const presented = this._tokens.tokens();
+
+    let body: unknown;
+    try {
+      body = await firstValueFrom(
+        this._http.post<unknown>(
+          this._urls.gateway('/v1/zones'),
+          // `username` is omitted rather than sent empty when the caller has no
+          // per-zone name in mind: the backend fills it from their global username,
+          // and the validation pipe runs with `forbidNonWhitelisted`, so a stray
+          // `undefined` is not something to be casual about.
+          username === undefined ? { name } : { name, username },
+          { context: operation('zones.create') }
+        )
+      );
+    } catch (error) {
+      if (this._lostTheAccountWeSent(error, presented)) {
+        return { state: 'guest-account-lost' };
+      }
+      throw error;
+    }
 
     this._persistMintedTokens(body);
 
@@ -118,20 +135,30 @@ export class ZoneApi implements ZoneServiceI {
     return { state: 'created', zone };
   }
 
-  /** `POST /v1/zones/join`. Same handshake and the same rule D3 gate. */
+  /** `POST /v1/zones/join`. Same handshake, the same rule D3 gate, the same net. */
   async joinZone(joinCode: string, username?: string): Promise<ZoneJoinResult> {
     const authorized = await this._tokens.authorizeOptionalAuthCall();
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
     }
 
-    const body = await firstValueFrom(
-      this._http.post<unknown>(
-        this._urls.gateway('/v1/zones/join'),
-        username === undefined ? { joinCode } : { joinCode, username },
-        { context: operation('zones.join') }
-      )
-    );
+    const presented = this._tokens.tokens();
+
+    let body: unknown;
+    try {
+      body = await firstValueFrom(
+        this._http.post<unknown>(
+          this._urls.gateway('/v1/zones/join'),
+          username === undefined ? { joinCode } : { joinCode, username },
+          { context: operation('zones.join') }
+        )
+      );
+    } catch (error) {
+      if (this._lostTheAccountWeSent(error, presented)) {
+        return { state: 'guest-account-lost' };
+      }
+      throw error;
+    }
 
     this._persistMintedTokens(body);
 
@@ -228,6 +255,37 @@ export class ZoneApi implements ZoneServiceI {
     if (tokens !== null) {
       this._tokens.set(tokens);
     }
+  }
+
+  /**
+   * Whether this failure is rule D3's case arriving after the fact: we sent a guest
+   * identity, the server refused it, and the interceptor has since dropped the pair.
+   *
+   * The gate in `authorizeOptionalAuthCall` reads the only thing a client can read,
+   * which is whether the access token has expired. A token can be unexpired and still
+   * name nobody — the account was deleted, or the database it lived in was reset — and
+   * the gateway answers that with a 401 (backend `asRejectedCredentials`), because a
+   * token naming a deleted user is an invalid token rather than a missing resource.
+   * The interceptor then tries to refresh, fails, and deletes the stored pair, so by
+   * the time this runs the session is already gone.
+   *
+   * Three conditions, and each is load bearing. **A 401** and not any failure: a 404
+   * on a join is "no zone has that code", which is the person's own typo. **No session
+   * left**, so a 401 the app recovered from by refreshing is not reported as a lost
+   * account. **A pair we actually presented, and a `TEMPORARY` one**: with nothing sent
+   * there was no account to lose, and a registered user has credentials to sign back in
+   * with, which is a different sentence and not this screen's.
+   */
+  private _lostTheAccountWeSent(
+    error: unknown,
+    presented: SessionTokens | null
+  ): boolean {
+    return (
+      presented?.kind === 'TEMPORARY' &&
+      error instanceof GatewayError &&
+      error.status === 401 &&
+      !this._tokens.hasSession()
+    );
   }
 }
 

@@ -13,6 +13,7 @@ import { APP_API_CONFIG, type SessionTokens } from '@portfolio/velista/models';
 import {
   ConnectionState,
   provideFakeBrowserFacade,
+  StorageKeys,
 } from '@portfolio/velista/platform';
 import { anonymous } from './auth/http-context';
 import { TokenStore } from './auth/token-store';
@@ -314,6 +315,47 @@ describe('gatewayInterceptor', () => {
 
       const error = (await failure) as GatewayError;
       expect(error.code).toBe('unauthorized');
+      // A pair issued between the two 401s and refused by the second one is not a
+      // stale credential, it is a rejected identity. Keeping it would send it again.
+      expect(tokens.tokens()).toBeNull();
+      expect(storage.has(StorageKeys.session)).toBe(false);
+    });
+
+    it('deletes the stored credentials when a token that still looks valid is refused', async () => {
+      // The database behind the API was reset under a client that is still holding a
+      // pair from before it. Nothing about that pair looks wrong from here: the
+      // signature verifies and the expiry is an hour out, so it is sent, and only the
+      // server can say that the account it names no longer exists. It answers 401
+      // rather than 404 precisely so this path is reachable.
+      tokens.set(pair(freshToken(), 'TEMPORARY'));
+      expect(storage.get(StorageKeys.session)).toBeDefined();
+
+      const failure = expectFailure(
+        http.post(`${GATEWAY}/v1/zones`, { name: 'Flat 3B' })
+      );
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush(
+          { code: 'unauthorized' },
+          { status: 401, statusText: 'Unauthorized' }
+        );
+      await tick();
+
+      // The refresh token was in that database too, so there is no way back.
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/refresh`)
+        .flush(
+          { code: 'unauthorized' },
+          { status: 401, statusText: 'Unauthorized' }
+        );
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).toBe('unauthorized');
+      // The whole point. Left in place, the next attempt presents the same dead pair
+      // and fails identically, and so does every attempt after it.
+      expect(tokens.tokens()).toBeNull();
+      expect(storage.has(StorageKeys.session)).toBe(false);
     });
 
     it('clears the session when the refresh itself is rejected', async () => {

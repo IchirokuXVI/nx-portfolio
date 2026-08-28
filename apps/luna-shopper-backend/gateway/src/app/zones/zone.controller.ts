@@ -30,6 +30,7 @@ import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { asRejectedCredentials } from '../auth/remote-problem';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
@@ -80,6 +81,11 @@ export class ZoneController {
    * just happened, so no second call is made; an authenticated caller costs one
    * `auth.getProfile` hop, on the two rarest operations in the product and only
    * when the client left the field out.
+   *
+   * That hop is also the one place these two routes learn whether the account
+   * behind the token still exists, and a token naming a deleted user is answered
+   * 401 rather than 404. See {@link asRejectedCredentials} for why the difference
+   * decides whether the client can ever recover.
    */
   private async resolveIdentity(
     user: CurrentUser | undefined,
@@ -99,10 +105,11 @@ export class ZoneController {
     if (suppliedUsername) {
       return { userId: user.userId, username: suppliedUsername };
     }
-    const profile = await this.nats.send<UserProfileView>(
-      AUTH_PATTERNS.getProfile,
-      { userId: user.userId }
-    );
+    const profile = await this.nats
+      .send<UserProfileView>(AUTH_PATTERNS.getProfile, { userId: user.userId })
+      .catch((error: unknown) => {
+        throw asRejectedCredentials(error);
+      });
     return { userId: user.userId, username: profile.username };
   }
 
@@ -115,7 +122,11 @@ export class ZoneController {
     description:
       'The new zone. `tokens` is present when the caller was anonymous.',
   })
-  @ApiProblemResponses({ body: true })
+  // `auth: true` on an optionally authenticated route is not a contradiction: a
+  // caller who presents a token is claiming an identity, and a token that is
+  // expired, malformed or names a deleted account is a 401 rather than a silent
+  // fall through to anonymous (plan 0020).
+  @ApiProblemResponses({ auth: true, body: true })
   async create(
     @AuthUser() user: CurrentUser | undefined,
     @Body() dto: CreateZoneDto
@@ -141,7 +152,12 @@ export class ZoneController {
     description:
       'The pending membership. `tokens` is present when the caller was anonymous.',
   })
-  @ApiProblemResponses({ body: true, membership: true, conflict: true })
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    membership: true,
+    conflict: true,
+  })
   async join(
     @AuthUser() user: CurrentUser | undefined,
     @Body() dto: JoinZoneDto

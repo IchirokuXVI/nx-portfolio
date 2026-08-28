@@ -242,6 +242,7 @@
       "notAllowed": "You cannot join this group. Ask whoever runs it",
       "tooMany": "Too many tries. Wait a minute and try again",
       "createClash": "Something clashed on our side. Try that again",
+      "signedOut": "You have been signed out. Try that again to carry on",
       "failed": "That did not go through. Try again"
     },
     "accountLost": {
