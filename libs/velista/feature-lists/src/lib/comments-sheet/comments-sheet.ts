@@ -28,11 +28,7 @@ import {
   listIdOf,
   zoneIdOf,
 } from '@portfolio/velista/platform';
-import {
-  CommentComposer,
-  CommentRow,
-  SheetShell,
-} from '@portfolio/velista/ui';
+import { CommentComposer, CommentRow, SheetShell } from '@portfolio/velista/ui';
 import { listErrorKey } from '../list-error-copy';
 
 /**
@@ -85,7 +81,17 @@ export class CommentsSheet {
   readonly sending = signal(false);
   readonly errorKey = signal<string | null>(null);
 
-  private readonly _raw = signal<readonly Comment[]>([]);
+  /**
+   * The conversation, from `LineStore` (plan 0018, gap 2).
+   *
+   * It was a signal here, and that was the bug: the sheet appended the comment the
+   * reader posted, `comment.added` from anybody else went to the line's count and
+   * nowhere near this list, and two people talking on one line is the ordinary case
+   * for this product. The rows live beside the count and the event now.
+   */
+  private readonly _raw = computed<readonly Comment[]>(
+    () => this._lines.commentsOf(this.lineId()) ?? []
+  );
 
   /** What the sheet is titled: the line it is about, by name. */
   readonly lineName = computed(
@@ -123,11 +129,12 @@ export class CommentsSheet {
 
     try {
       const comment = await this._comments.addComment(this.lineId(), body);
-      // Prepended, because the endpoint answers newest first and the sheet draws that
-      // order. Optimism is not needed here: a comment has no state to reconcile and
-      // the round trip is one request with nothing racing it.
-      this._raw.update((current) => [comment, ...current]);
-      this._recordCount();
+      // The same call `comment.added` makes, and an upsert rather than an append for
+      // that reason: this comment arrives twice, once here and once on the socket.
+      // Prepended by the store, because the endpoint answers newest first and the
+      // sheet draws that order. Optimism is not needed: a comment has no state to
+      // reconcile and the round trip is one request with nothing racing it.
+      this._lines.addComment(comment);
     } catch (error) {
       this.errorKey.set(listErrorKey(error, 'comments'));
     } finally {
@@ -154,25 +161,14 @@ export class CommentsSheet {
       const page = await this._comments.listComments(this.lineId(), {
         limit: 50,
       });
-      this._raw.set(page.items);
-      this._recordCount();
+      // Rows and count together, since a loaded page is the only honest source of
+      // either and setting one without the other lets a row claim a number its own
+      // list disagrees with.
+      this._lines.recordComments(this.lineId(), page.items);
     } catch (error) {
       this.errorKey.set(listErrorKey(error, 'comments'));
     } finally {
       this.loading.set(false);
     }
-  }
-
-  /**
-   * Tell the store what the row should show.
-   *
-   * The only honest source of a comment count there is: `LineView` has no such field
-   * and neither does anything else on the wire, so the row shows a number exactly when
-   * somebody has opened this sheet and nothing at all otherwise. A count from a paged
-   * response is the count of what was fetched, so it is recorded only when the whole
-   * conversation arrived.
-   */
-  private _recordCount(): void {
-    this._lines.recordCommentCount(this.lineId(), this._raw().length);
   }
 }

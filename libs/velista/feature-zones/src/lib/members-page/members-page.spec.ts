@@ -9,6 +9,7 @@ import {
   fakeMembershipService,
   fakeZoneStore,
   GatewayError,
+  MembershipStore,
   provideFakeMembershipService,
   provideFakeSessionStore,
   provideFakeZoneStore,
@@ -124,6 +125,11 @@ async function render(options: Options = {}): Promise<{
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeZoneStore(zones),
       provideFakeMembershipService(members),
+      // The real store, not a double (plan 0018). It resolves the faked membership
+      // service and the in-memory realtime client that are already here, so every test
+      // below drives the page through the same rows the app uses, and a membership
+      // event pushed at the fake reaches this screen the way it reaches the real one.
+      MembershipStore,
       provideFakeSessionStore('REGISTERED', { userId: ME }),
       { provide: REALTIME_CLIENT, useValue: realtime },
       { provide: Router, useValue: router },
@@ -243,43 +249,139 @@ describe('MembersPage', () => {
    * entirely, which made `MATCHING_ZONES` a propagation nothing could observe: the
    * server renamed the memberships and every open members screen kept the old name.
    */
-  describe('when a member is renamed elsewhere', () => {
-    it('changes the row in place, with no refetch', async () => {
-      const { fixture, zones, members } = await render();
-      const before = members.calls.filter(
-        (call) => call.method === 'listMembers'
-      ).length;
+  /**
+   * Plan 0018. Six membership events change these rows and this screen used to apply
+   * one of them. Every case here pushes the raw payload at the in-memory client, so it
+   * goes through the same mapper and the same store a socket payload would.
+   */
+  describe('when the members change elsewhere', () => {
+    /** How many pages of members have been asked for, to prove an event costs none. */
+    const listCalls = (members: FakeMembershipService) =>
+      members.calls.filter((call) => call.method === 'listMembers').length;
 
-      zones.setMemberRename({
-        zoneId: ZONE_ID,
-        membershipId: 'm-marta',
-        username: 'Mamá',
-      });
+    async function settle(
+      fixture: ComponentFixture<MembersPage>
+    ): Promise<void> {
       fixture.detectChanges();
       await fixture.whenStable();
       fixture.detectChanges();
+    }
+
+    it('changes a renamed row in place, with no refetch', async () => {
+      const { fixture, realtime, members } = await render();
+      const before = listCalls(members);
+
+      realtime.emit('member.usernameChanged', {
+        ...member('m-marta', 'Mamá', 'MEMBER'),
+      });
+      await settle(fixture);
 
       expect(text(fixture)).toContain('Mamá');
       expect(text(fixture)).not.toContain('Marta');
       // The whole point: the event carries the new name in full, so a page of members
       // per rename would be a request storm for something already in hand.
-      expect(
-        members.calls.filter((call) => call.method === 'listMembers')
-      ).toHaveLength(before);
+      expect(listCalls(members)).toBe(before);
     });
 
     it('ignores a rename in another group', async () => {
-      const { fixture, zones } = await render();
+      const { fixture, realtime } = await render();
 
-      zones.setMemberRename({
+      realtime.emit('member.usernameChanged', {
+        ...member('m-marta', 'Mamá', 'MEMBER'),
         zoneId: 'some-other-zone',
-        membershipId: 'm-marta',
-        username: 'Mamá',
       });
-      fixture.detectChanges();
-      await fixture.whenStable();
-      fixture.detectChanges();
+      await settle(fixture);
 
+      expect(text(fixture)).toContain('Marta');
+    });
+
+    // The worst of the set before this plan: the row stayed, with a working actions
+    // menu whose every entry failed against a membership the server had deleted.
+    it('takes away a member who was kicked', async () => {
+      const { fixture, realtime, members } = await render();
+      const before = listCalls(members);
+
+      realtime.emit('member.kicked', {
+        ...member('m-marta', 'Marta', 'MEMBER'),
+        status: 'KICKED',
+      });
+      await settle(fixture);
+
+      expect(text(fixture)).not.toContain('Marta');
+      expect(listCalls(members)).toBe(before);
+    });
+
+    it('takes away a member who was banned', async () => {
+      const { fixture, realtime } = await render();
+
+      realtime.emit('member.banned', {
+        ...member('m-toni', 'Toni', 'ADMIN'),
+        status: 'BANNED',
+      });
+      await settle(fixture);
+
+      expect(text(fixture)).not.toContain('Toni');
+    });
+
+    it('moves a request into the members when another admin approves it', async () => {
+      const { fixture, realtime } = await render();
+
+      realtime.emit('member.approved', {
+        ...waiting('m-ines', 'Ines'),
+        status: 'APPROVED',
+      });
+      await settle(fixture);
+
+      // Same row, different section: the payload is the membership in its new state,
+      // and the sections are a filter over one list.
+      const pending = fixture.nativeElement.querySelectorAll(
+        'lib-pending-request-row'
+      );
+      expect(pending.length).toBe(0);
+      expect(text(fixture)).toContain('Ines');
+    });
+
+    it('empties the queue when another admin rejects a request', async () => {
+      const { fixture, realtime } = await render();
+
+      // `{ id, userId }` and no zone, which is why the zone summary cannot use it. A
+      // row can: an id is unique and is all a removal needs.
+      realtime.emit('member.rejected', { id: 'm-ines', userId: 'u-m-ines' });
+      await settle(fixture);
+
+      expect(text(fixture)).not.toContain('Ines');
+    });
+
+    it('shows a new request the moment somebody asks to join', async () => {
+      const { fixture, realtime } = await render();
+
+      realtime.emit('member.joined', { ...waiting('m-new', 'Bruno') });
+      await settle(fixture);
+
+      expect(text(fixture)).toContain('Bruno');
+    });
+
+    it('keeps a pending arrival away from an ordinary member', async () => {
+      // Rule G2: this screen asked for APPROVED alone, so an event about a status it
+      // may not see is not an update to hide, it is a row that must never appear.
+      const { fixture, realtime } = await render({ myRole: 'MEMBER' });
+
+      realtime.emit('member.joined', { ...waiting('m-new', 'Bruno') });
+      await settle(fixture);
+
+      expect(text(fixture)).not.toContain('Bruno');
+    });
+
+    it('changes a role in place when somebody else changes it', async () => {
+      const { fixture, realtime, members } = await render();
+      const before = listCalls(members);
+
+      realtime.emit('member.roleChanged', {
+        ...member('m-marta', 'Marta', 'ADMIN'),
+      });
+      await settle(fixture);
+
+      expect(listCalls(members)).toBe(before);
       expect(text(fixture)).toContain('Marta');
     });
   });

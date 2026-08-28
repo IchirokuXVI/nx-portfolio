@@ -185,9 +185,9 @@ export class MergeService {
     const view = toMergeRequestView(saved);
     // Approval implies the source was removed from the zone (section 5).
     this.events.emit(RealtimeEvent.MergeApproved, merge.zoneId, view);
-    this.events.emit(
+    this.events.emitTo(
       RealtimeEvent.MemberKicked,
-      merge.zoneId,
+      { zoneId: merge.zoneId, userIds: [source.userId] },
       toMembershipView(source)
     );
     return view;

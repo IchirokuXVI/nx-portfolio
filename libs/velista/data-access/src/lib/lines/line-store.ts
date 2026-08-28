@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
+  Comment,
   Line,
   LineApprovalStatus,
   LineStatus,
@@ -93,6 +94,22 @@ export class LineStore {
   );
 
   /**
+   * The comments themselves, per line, for the lines whose sheet has been opened
+   * (plan 0018, gap 2).
+   *
+   * They were sheet state, which meant the sheet appended only the comment the reader
+   * posted and `comment.added` from anybody else went to the count and nowhere else.
+   * Two people commenting on one line is the ordinary case for this product, and the
+   * second person's comment did not appear.
+   *
+   * Keyed by line rather than by list, because that is the unit a sheet opens on and
+   * the unit the event names.
+   */
+  private readonly _comments = signal<ReadonlyMap<string, readonly Comment[]>>(
+    new Map()
+  );
+
+  /**
    * Server ids this store minted itself, so their own echo is not drawn twice.
    *
    * A plain `Set` rather than a signal: nothing renders from it, and it exists purely
@@ -137,6 +154,17 @@ export class LineStore {
 
   commentCountOf(lineId: string): number | undefined {
     return this._commentCounts().get(lineId);
+  }
+
+  /**
+   * One line's comments, newest first, or undefined when none have been loaded.
+   *
+   * Undefined rather than an empty array, and the difference carries the whole of the
+   * rule below: a line whose comments have never been read is not a line with no
+   * comments, and an event must not turn the first into the second.
+   */
+  commentsOf(lineId: string): readonly Comment[] | undefined {
+    return this._comments().get(lineId);
   }
 
   /** A signal view of one list, for a container that reads it in a computed. */
@@ -356,7 +384,10 @@ export class LineStore {
    */
   async deleteLine(
     lineId: string
-  ): Promise<{ readonly state: 'deleted' | 'failed'; readonly error?: unknown }> {
+  ): Promise<{
+    readonly state: 'deleted' | 'failed';
+    readonly error?: unknown;
+  }> {
     const listId = this._listOf(lineId);
     const before = this._byList().get(listId ?? '') ?? [];
     if (listId === null) {
@@ -429,6 +460,53 @@ export class LineStore {
     this._commentCounts.update((current) =>
       new Map(current).set(lineId, count)
     );
+  }
+
+  /**
+   * The page of comments a sheet just read, which also fixes the count.
+   *
+   * One call for both, because a loaded page is the only honest source of either and
+   * setting one without the other is how a row comes to claim a number its own list
+   * disagrees with.
+   */
+  recordComments(lineId: string, comments: readonly Comment[]): void {
+    this._comments.update((current) => new Map(current).set(lineId, comments));
+    this.recordCommentCount(lineId, comments.length);
+  }
+
+  /**
+   * Put one comment at the top of a line's list, once.
+   *
+   * **An upsert, not an append**, and that is the point rather than caution: a comment
+   * the reader posts arrives twice, as the response to the POST and again as
+   * `comment.added` on the socket, so anything less shows it twice. The reader's own
+   * optimistic insert and the event therefore call the same method.
+   *
+   * A line whose comments were never loaded is left alone, the same rule the count
+   * follows: starting a list from an event would show one comment for a line with
+   * nine.
+   */
+  addComment(comment: Comment): void {
+    const current = this._comments().get(comment.lineId);
+    if (current === undefined) {
+      return;
+    }
+
+    if (current.some((existing) => existing.id === comment.id)) {
+      this._comments.update((map) =>
+        new Map(map).set(
+          comment.lineId,
+          current.map((existing) =>
+            existing.id === comment.id ? comment : existing
+          )
+        )
+      );
+      return;
+    }
+
+    const next = [comment, ...current];
+    this._comments.update((map) => new Map(map).set(comment.lineId, next));
+    this.recordCommentCount(comment.lineId, next.length);
   }
 
   /** Clear a failed or overwritten notice, which the caller dismisses. */
@@ -610,6 +688,16 @@ export class LineStore {
 
       case 'comment.added': {
         const { comment } = event;
+
+        // Where the sheet has been opened, the comment joins the list and the count
+        // follows from its length, so the two cannot disagree. This is the half that
+        // was missing before plan 0018: the count moved and an open sheet did not,
+        // so somebody watching the conversation saw the number go up and no comment.
+        if (this._comments().has(comment.lineId)) {
+          this.addComment(comment);
+          break;
+        }
+
         const known = this._commentCounts().get(comment.lineId);
         // Incremented only where a count is already known. Starting one at 1 from an
         // event would claim a line with nine comments has one, which is worse than

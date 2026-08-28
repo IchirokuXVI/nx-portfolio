@@ -66,29 +66,6 @@ export interface ZoneDeparture {
 }
 
 /**
- * A member whose name inside a zone has just changed (plan 0015, section 5.8).
- *
- * The store holds zone **summaries** and not member rows, so it has no row of its own
- * to patch: the members list is page state, deliberately, for the reason `MembersPage`
- * records. What it can do is what it already does for a departure — record the fact so
- * that whichever screen cares can act on it — and that is what this is.
- *
- * The alternative was a second realtime subscription inside the members page. This is
- * the same shape as {@link ZoneDeparture} instead, so every screen in the app still
- * learns about the stream through a store rather than one of them growing its own
- * pipeline.
- *
- * Not cleared by its reader, unlike a departure: it is applied rather than announced,
- * so there is nothing to say twice and nothing for a second screen to miss. Each event
- * simply replaces it.
- */
-export interface MemberRename {
-  readonly zoneId: string;
-  readonly membershipId: string;
-  readonly username: string;
-}
-
-/**
  * How a governance write ended.
  *
  * `MutationOutcome`'s three cases collapsed to two, deliberately: none of these
@@ -133,7 +110,6 @@ export class ZoneStore {
   private readonly _lastEntry = signal<ZoneEntry | null>(null);
   private readonly _lastCodeChange = signal<string | null>(null);
   private readonly _departure = signal<ZoneDeparture | null>(null);
-  private readonly _memberRename = signal<MemberRename | null>(null);
 
   /**
    * How the load of one specific zone is going, keyed by id.
@@ -176,14 +152,6 @@ export class ZoneStore {
 
   /** The zone just lost, or null. Cleared by whoever reports it. */
   readonly departure = this._departure.asReadonly();
-
-  /**
-   * The member just renamed, or null. See {@link MemberRename}.
-   *
-   * This is what makes rule A3's choice observable: without it a rename that propagated
-   * to the groups changed every member list on the server and nothing on screen.
-   */
-  readonly memberRename = this._memberRename.asReadonly();
 
   /** How the load of one particular zone is going, for the group page's skeleton. */
   readonly zoneState = this._zoneState.asReadonly();
@@ -713,24 +681,12 @@ export class ZoneStore {
         break;
       }
 
-      case 'member.usernameChanged': {
-        // Nothing on a zone card renders a member's name, so no `_patch` here: what
-        // this event changes lives on the members screen, which holds its rows as page
-        // state. Recording it is how that screen learns, the same way a departure
-        // reaches a group page (plan 0015, section 5.8).
-        //
-        // Not filtered to zones the store holds, unlike `zone.deleted`: a members
-        // screen reached by deep link is open on a zone whose summary may not have
-        // arrived yet, and dropping the event would leave that screen stale for the
-        // one case it is least able to recover from.
-        const { membership } = event;
-        this._memberRename.set({
-          zoneId: membership.zoneId,
-          membershipId: membership.id,
-          username: membership.username,
-        });
+      case 'member.usernameChanged':
+        // Nothing on a zone card renders a member's name, so there is nothing here to
+        // patch. This used to be recorded on a one shot channel for the members screen
+        // to read; `MembershipStore` owns those rows now and applies this event with
+        // the other five, so the channel had one writer and no readers (plan 0018).
         break;
-      }
 
       case 'member.rejected':
         // Carries no zone id, so there is nothing to apply it to. The count corrects

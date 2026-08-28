@@ -75,10 +75,11 @@ export class MembershipService {
       throw new ValidationException('That member is not pending approval');
     }
     await this.memberships.delete({ id: target.id });
-    this.events.emit(RealtimeEvent.MemberRejected, req.zoneId, {
-      id: target.id,
-      userId: target.userId,
-    });
+    this.events.emitTo(
+      RealtimeEvent.MemberRejected,
+      { zoneId: req.zoneId, userIds: [target.userId] },
+      { id: target.id, userId: target.userId }
+    );
     await this.counts.emitZoneCounts(req.zoneId);
     return { id: target.id };
   }
@@ -175,7 +176,19 @@ export class MembershipService {
     return toMembershipView(saved);
   }
 
+  /**
+   * The zone hears it, and so does the member it is about (plan 0030, section
+   * 4.1). Approval is the case that needs it: `checkZone` refuses a PENDING
+   * member the zone room, so the person being approved is the one participant
+   * not in the room where their own approval is announced. Kick and ban gain the
+   * same guarantee against a race they win today only by timing, since the
+   * realtime service invalidates its access cache before fanning out.
+   */
   private emit(event: RealtimeEvent, membership: ZoneMembership): void {
-    this.events.emit(event, membership.zoneId, toMembershipView(membership));
+    this.events.emitTo(
+      event,
+      { zoneId: membership.zoneId, userIds: [membership.userId] },
+      toMembershipView(membership)
+    );
   }
 }

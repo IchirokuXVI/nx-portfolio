@@ -6,6 +6,14 @@
  */
 export enum RealtimeEvent {
   // Zones (plan 0006)
+  /**
+   * A zone was created (plan 0030, section 4.2). Addressed to the creator alone
+   * and to no zone room: nobody is in the new zone's room, so routing it there
+   * would send it nowhere. The payload is the {@link ZoneView} the endpoint
+   * returns, which is enough for another of the creator's tabs to identify the
+   * zone and ask for the rest.
+   */
+  ZoneCreated = 'zone.created',
   ZoneUpdated = 'zone.updated',
   ZoneDeleted = 'zone.deleted',
   ZoneMarkedForDeletion = 'zone.markedForDeletion',
@@ -54,6 +62,19 @@ export enum RealtimeEvent {
   // from {@link DOMAIN_EVENT_SUBJECTS} (nothing feeds them into JetStream).
   PresenceZoneUpdated = 'presence.zoneUpdated',
   PresenceListUpdated = 'presence.listUpdated',
+
+  /**
+   * A user's global username changed (plan 0030, section 4.3), addressed to that
+   * user's own sessions and to nothing else.
+   *
+   * It shares its string with the identity event auth publishes
+   * ({@link IDENTITY_EVENTS.userUsernameChanged}) and is not the same message:
+   * that one is service to service, carries its own envelope and is consumed by
+   * core, which re publishes it here as a domain event for the fan out. The
+   * string is shared because this value is what a client listens on, and the two
+   * are kept off each other's streams by {@link domainEventSubject}.
+   */
+  UserUsernameChanged = 'user.usernameChanged',
 }
 
 /**
@@ -65,6 +86,7 @@ export enum RealtimeEvent {
  * publisher. Keep in sync when a new domain event is added above.
  */
 export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
+  RealtimeEvent.ZoneCreated,
   RealtimeEvent.ZoneUpdated,
   RealtimeEvent.ZoneDeleted,
   RealtimeEvent.ZoneMarkedForDeletion,
@@ -89,21 +111,58 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.MergeRequested,
   RealtimeEvent.MergeApproved,
   RealtimeEvent.MergeRejected,
+  RealtimeEvent.UserUsernameChanged,
 ] as const;
 
 /**
- * The envelope every domain event shares: which zone it belongs to (the realtime
- * fan out is scoped per zone) and an id for idempotent consumers. List, line and
- * comment events also carry the `listId` so the realtime service can route them
- * to the `list:{listId}` room without having to know each payload's shape (plan
- * 0009, section 6). The `payload` is event specific.
+ * The NATS subject a domain event is published on and captured under, which is
+ * the event's own name for all but one of them.
+ *
+ * The exception is {@link RealtimeEvent.UserUsernameChanged}, and plan 0030
+ * section 4.3 asks for the choice to be made here and written down. It is
+ * `user.usernameChanged.broadcast`, because auth already publishes an identity
+ * event on the bare `user.usernameChanged`: capturing that subject into the
+ * realtime stream would pull auth's service to service message into the fan out
+ * consumer, which would decode it as a {@link DomainEvent}, find no audience on
+ * it and log a fault on every rename. The client facing name is untouched, since
+ * the socket emits {@link DomainEvent.event} and not the subject.
+ */
+export function domainEventSubject(event: RealtimeEvent): string {
+  return event === RealtimeEvent.UserUsernameChanged
+    ? `${event}.broadcast`
+    : event;
+}
+
+/** {@link DOMAIN_EVENT_SUBJECTS} as the stream captures them. */
+export const DOMAIN_EVENT_STREAM_SUBJECTS: readonly string[] =
+  DOMAIN_EVENT_SUBJECTS.map(domainEventSubject);
+
+/**
+ * The envelope every domain event shares: an id for idempotent consumers, and
+ * the **audience** the producer states so the consumer can route without knowing
+ * a single payload shape (plan 0009, section 6; plan 0030, section 3).
+ *
+ * Every field of that audience is optional and at least one must be set. An
+ * envelope naming none of them reaches nobody, and the consumer drops it as a
+ * fault rather than fanning it out to an empty room list: it is the one mistake
+ * an optional `zoneId` makes possible, and a silent no-op is how it would be
+ * found six months later by somebody wondering why one event never arrives.
  */
 export interface DomainEvent<T = unknown> {
   event: RealtimeEvent;
   /** Unique id for dedupe on the consumer (at-least-once delivery). */
   eventId: string;
-  zoneId: string;
+  /** The `zone:{zoneId}` room, when the event belongs to a zone. */
+  zoneId?: string;
   /** Present on list-scoped events (list/line/comment) for `list:` room routing. */
   listId?: string;
+  /**
+   * Users whose own sessions must hear this whatever rooms they hold (plan 0030,
+   * section 3.1). Stated by the producer, which built the payload and knows
+   * whose membership it is; a consumer that reached into a payload for a
+   * `userId` would be right for six membership events and wrong the first time a
+   * payload named a user for some other reason.
+   */
+  userIds?: readonly string[];
   payload: T;
 }

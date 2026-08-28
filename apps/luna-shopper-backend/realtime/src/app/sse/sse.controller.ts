@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   listRoom,
+  userRoom,
   zoneRoom,
   zoneStaffRoom,
   type AccessTokenClaims,
@@ -77,6 +78,11 @@ export class SseController {
    * Authorize on subscribe, then relay the room's events. The authorization runs
    * inside `defer` so it happens per connection when the client subscribes; a
    * denial errors the stream and closes the connection before any event is sent.
+   *
+   * Every stream also carries the caller's own `user:{userId}` room (plan 0030,
+   * section 2). Plan 0009's guarantee is that the two transports deliver
+   * identical payloads off one relay, and a room only the socket half could be
+   * in would break that quietly, in the transport nobody develops against.
    */
   private authorizedStream(
     req: Request,
@@ -86,9 +92,11 @@ export class SseController {
     extraRooms?: (userId: string) => Promise<string[]>
   ): Observable<MessageEvent> {
     return defer(() => this.authorize(req, queryToken, check)).pipe(
-      switchMap(async (claims) =>
-        extraRooms ? [...rooms, ...(await extraRooms(claims.sub))] : rooms
-      ),
+      switchMap(async (claims) => [
+        ...rooms,
+        userRoom(claims.sub),
+        ...(extraRooms ? await extraRooms(claims.sub) : []),
+      ]),
       switchMap((subscribed) =>
         this.relay.stream$.pipe(
           filter((message) =>

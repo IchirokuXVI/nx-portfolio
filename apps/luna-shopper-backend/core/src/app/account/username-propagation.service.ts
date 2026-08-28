@@ -5,6 +5,7 @@ import {
   RealtimeEvent,
   UsernamePropagation,
   type UserUsernameChangedEvent,
+  type UserUsernameChangedPayload,
 } from '@portfolio/luna-shopper/contracts';
 import { runOnce } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
@@ -38,8 +39,31 @@ export class UsernamePropagationService {
 
   /** Handle `user.usernameChanged`, at most once per change. */
   async handleUsernameChanged(event: UserUsernameChangedEvent): Promise<void> {
-    await runOnce(this.store, `user.usernameChanged:${event.eventId}`, () =>
-      this.apply(event)
+    await runOnce(
+      this.store,
+      `user.usernameChanged:${event.eventId}`,
+      async () => {
+        await this.apply(event);
+
+        /**
+         * The rename, re published as a domain event addressed to the person who
+         * made it (plan 0030, section 4.3). Auth's identity event never enters the
+         * realtime stream, so without this a user's other tabs never hear that
+         * their own name changed, and the per zone `member.usernameChanged` events
+         * above cover only the zones they are in.
+         *
+         * Outside {@link apply}, and so outside its GLOBAL_ONLY early return,
+         * because GLOBAL_ONLY is precisely the mode in which no membership changed
+         * and therefore the mode in which this is the only event those tabs will
+         * ever see. Inside `runOnce`, so a JetStream redelivery does not publish it
+         * twice.
+         */
+        this.events.emitToUsers<UserUsernameChangedPayload>(
+          RealtimeEvent.UserUsernameChanged,
+          [event.userId],
+          { userId: event.userId, username: event.newUsername }
+        );
+      }
     );
   }
 

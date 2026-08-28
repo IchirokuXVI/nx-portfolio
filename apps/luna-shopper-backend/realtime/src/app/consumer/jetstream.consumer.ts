@@ -6,9 +6,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { context as otelContext } from '@opentelemetry/api';
 import {
-  DOMAIN_EVENT_SUBJECTS,
+  DOMAIN_EVENT_STREAM_SUBJECTS,
   listRoom,
   RealtimeEvent,
+  userRoom,
   zoneRoom,
   zoneStaffRoom,
   type DomainEvent,
@@ -43,6 +44,7 @@ import {
   EVENT_STREAM_NAME,
 } from '../realtime/constants';
 import { EventRelayService } from '../relay/event-relay.service';
+import { sweepsFor } from './sweeps';
 
 /**
  * The wire shape NestJS's NATS transport puts on an emitted event: the subject as
@@ -55,12 +57,25 @@ interface NatsEventPacket {
   data: DomainEvent;
 }
 
+/** Backoff between rebuilds of a consume loop that ended. Exponential, capped. */
+const CONSUME_RETRY_BASE_MS = 1_000;
+const CONSUME_RETRY_CAP_MS = 30_000;
+
+/**
+ * How long JetStream waits before redelivering a message this pod failed on.
+ *
+ * A delay rather than an immediate `nak`, because the failures worth retrying are
+ * transient (a Redis blip, a broker hiccup) and an undelayed redelivery of a
+ * message that fails deterministically is a hot loop.
+ */
+const MESSAGE_RETRY_MS = 5_000;
+
 /**
  * Consumes the domain events from JetStream and hands them to the relay (plan
  * 0009, section 4).
  *
  * It attaches a durable consumer to a stream that captures exactly the domain
- * event subjects ({@link DOMAIN_EVENT_SUBJECTS}). Durable means the cursor
+ * event subjects ({@link DOMAIN_EVENT_STREAM_SUBJECTS}). Durable means the cursor
  * survives a restart and JetStream replays anything missed while the pod was
  * down. Delivery is at-least-once, so the relay is made idempotent here by
  * dropping any event id seen recently. The correlation id rides on the message
@@ -94,7 +109,7 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     // Fire and forget: the consume loop runs for the life of the process.
     void this.consumeLoop();
     this.logger.log(
-      `realtime consuming ${DOMAIN_EVENT_SUBJECTS.length} domain event subjects from JetStream stream ${EVENT_STREAM_NAME}`
+      `realtime consuming ${DOMAIN_EVENT_STREAM_SUBJECTS.length} domain event subjects from JetStream stream ${EVENT_STREAM_NAME}`
     );
   }
 
@@ -106,7 +121,7 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
 
   /** Create the event stream, or widen its subjects if it already exists. */
   private async ensureStream(jsm: JetStreamManager): Promise<void> {
-    const subjects = DOMAIN_EVENT_SUBJECTS as unknown as string[];
+    const subjects = [...DOMAIN_EVENT_STREAM_SUBJECTS];
     try {
       await jsm.streams.info(EVENT_STREAM_NAME);
       await jsm.streams.update(EVENT_STREAM_NAME, { subjects });
@@ -134,27 +149,112 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
+  /**
+   * Consume for the life of the process, rebuilding the subscription whenever it
+   * ends.
+   *
+   * ## Why this is a loop and not a `for await`
+   *
+   * It used to be one pass: build the iterator, iterate, and log if it threw. Both
+   * ways out of that were terminal. A throw from {@link handle} left the catch and
+   * returned; an iterator that simply **ended**, which a dropped connection or a
+   * missed heartbeat is enough to do, returned with no error to log at all. Either
+   * way the process stayed up and healthy in every way anyone was measuring: the
+   * socket server kept accepting connections, presence kept broadcasting, rooms
+   * kept being joined, and not one domain event was ever fanned out again.
+   *
+   * That is the worst shape a failure can take here. Nothing is down, so nothing
+   * restarts and no probe fails; the app simply stops being live, for everybody,
+   * until somebody notices by hand that their groups do not update. It was found
+   * exactly that way, with the durable consumer sitting 26 messages behind and its
+   * `num_waiting` at zero: nobody was pulling.
+   *
+   * So the loop owns its own recovery. The subscription is rebuilt after a backoff,
+   * and the backoff resets on any pass that actually delivered something, since
+   * that is the proof the connection works.
+   */
   private async consumeLoop(): Promise<void> {
-    if (!this.connection) {
-      return;
+    let attempt = 0;
+
+    while (!this.draining) {
+      try {
+        const handled = await this.consumeUntilItEnds();
+        attempt = handled > 0 ? 0 : attempt + 1;
+        if (!this.draining) {
+          this.logger.warn(
+            { handled },
+            'realtime JetStream consume loop ended, rebuilding it'
+          );
+        }
+      } catch (err) {
+        attempt += 1;
+        if (!this.draining) {
+          this.logger.error(
+            { err },
+            'realtime JetStream consume loop failed, rebuilding it'
+          );
+        }
+      }
+
+      if (this.draining) {
+        return;
+      }
+
+      await this.pause(
+        Math.min(
+          CONSUME_RETRY_CAP_MS,
+          CONSUME_RETRY_BASE_MS * 2 ** (attempt - 1)
+        )
+      );
     }
+  }
+
+  /**
+   * One subscription's worth of messages. Answers how many it handled.
+   *
+   * **A message that fails must not end this.** The handler already swallows the
+   * failures it knows about, so an exception reaching here is an unexpected one,
+   * and taking the whole fan out down for the process is never the right answer to
+   * a single bad event. It is naked instead, with a delay, and the next message is
+   * taken: the broker redelivers it while everybody else's updates keep flowing.
+   */
+  private async consumeUntilItEnds(): Promise<number> {
+    if (!this.connection) {
+      return 0;
+    }
+
     const consumer = await this.connection
       .jetstream()
       .consumers.get(EVENT_STREAM_NAME, EVENT_CONSUMER_NAME);
-    this.messages = await consumer.consume();
-    try {
-      for await (const message of this.messages) {
+    const messages = await consumer.consume();
+    this.messages = messages;
+
+    let handled = 0;
+    for await (const message of messages) {
+      try {
         // Awaited, so the dedupe claim settles before the next message is
         // handled and before this one is acked. It also keeps the fan out in
         // stream order, which the synchronous version got for free.
         await this.handle(message);
         message.ack();
+      } catch (err) {
+        this.logger.error(
+          { err, subject: message.subject },
+          'realtime failed to handle an event, retrying it later'
+        );
+        message.nak(MESSAGE_RETRY_MS);
       }
-    } catch (err) {
-      if (!this.draining) {
-        this.logger.error({ err }, 'realtime JetStream consume loop failed');
-      }
+      handled += 1;
     }
+
+    return handled;
+  }
+
+  /** Sleep, without holding the process open if shutdown is what ends the wait. */
+  private pause(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms).unref?.();
+    });
   }
 
   private async handle(message: JsMsg): Promise<void> {
@@ -187,21 +287,31 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
      * The latency from receiving the event to pushing it is recorded alongside,
      * from the same place, so span and metric cannot disagree.
      */
+    const rooms = this.roomsFor(envelope);
+    if (rooms.length === 0) {
+      // Unreachable from any producer today, and written anyway (plan 0030,
+      // section 3): an optional `zoneId` makes an unaddressed envelope possible
+      // for the first time, and fanning one out to an empty room list is a
+      // silent no-op somebody finds six months later wondering why one event
+      // never arrives. Acked and dropped, since a redelivery would be just as
+      // unaddressed, and logged as the fault it is.
+      this.logger.error(
+        { event: envelope.event, eventId: envelope.eventId },
+        'realtime dropped an event addressed to nobody'
+      );
+      return;
+    }
+
     const fanOut = () => {
       const scope = beginConsumerSpan(message.subject, message.headers);
       const startedAt = Date.now();
       try {
         otelContext.with(scope.context, () => {
-          // Zone/membership/merge events reach the zone room; list-scoped events
-          // reach both the list room and the zone room, for a zone-level list
-          // index (section 6).
-          const rooms = [zoneRoom(envelope.zoneId)];
-          if (envelope.listId) {
-            rooms.push(listRoom(envelope.listId));
-          }
-
           if (envelope.event === RealtimeEvent.ZoneCountsUpdated) {
-            this.fanOutZoneCounts(envelope, correlationId);
+            // Zone scoped by definition; one without a zone is the fault above.
+            if (envelope.zoneId) {
+              this.fanOutZoneCounts(envelope.zoneId, envelope, correlationId);
+            }
             return;
           }
 
@@ -228,6 +338,52 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     } else {
       fanOut();
     }
+
+    this.sweep(envelope);
+  }
+
+  /**
+   * Ask every pod to re-check the rooms this event may have changed the answer
+   * for (plan 0031, sections 5 and 6).
+   *
+   * **After the fan out and not before**, which is the detail to get right. A
+   * member kicked from a zone learns about it through the zone room; evicting
+   * them first would remove them from the room carrying the news and leave their
+   * client sitting on a group it no longer belongs to with no idea why. Fanning
+   * out first means the notification lands, the cooperative unsubscribe usually
+   * happens on its own, and the sweep is the backstop that makes it not matter
+   * whether it did.
+   */
+  private sweep(envelope: DomainEvent): void {
+    for (const directive of sweepsFor(envelope)) {
+      this.relay.publishDirective(directive);
+    }
+  }
+
+  /**
+   * The rooms an envelope's audience names (plan 0030, section 3).
+   *
+   * The producer states the audience and this routes on it, without ever looking
+   * inside a payload: zone and membership events name a zone, list, line and
+   * comment events name a list as well (so a zone level list index hears them
+   * too, section 6), and an event whose subject is a person names the people
+   * whose own sessions must hear it whatever rooms they hold.
+   *
+   * An empty answer means the producer named nobody, which the caller treats as
+   * a fault.
+   */
+  private roomsFor(envelope: DomainEvent): string[] {
+    const rooms: string[] = [];
+    if (envelope.zoneId) {
+      rooms.push(zoneRoom(envelope.zoneId));
+    }
+    if (envelope.listId) {
+      rooms.push(listRoom(envelope.listId));
+    }
+    for (const userId of envelope.userIds ?? []) {
+      rooms.push(userRoom(userId));
+    }
+    return rooms;
   }
 
   /**
@@ -243,20 +399,21 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
    * zeroes.
    */
   private fanOutZoneCounts(
+    zoneId: string,
     envelope: DomainEvent,
     correlationId?: string
   ): void {
     const payload = envelope.payload as ZoneCountsUpdatedPayload;
 
     this.relay.publish({
-      rooms: [zoneStaffRoom(envelope.zoneId)],
+      rooms: [zoneStaffRoom(zoneId)],
       event: envelope.event,
       payload,
       correlationId,
     });
 
     this.relay.publish({
-      rooms: [zoneRoom(envelope.zoneId)],
+      rooms: [zoneRoom(zoneId)],
       event: envelope.event,
       payload: {
         ...payload,
@@ -293,7 +450,7 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
   private async invalidateAccessCache(envelope: DomainEvent): Promise<void> {
     const invalidatesZone = ACCESS_INVALIDATING_EVENTS.has(envelope.event);
 
-    if (invalidatesZone) {
+    if (invalidatesZone && envelope.zoneId) {
       await this.coreAccess.invalidateZone(envelope.zoneId);
     }
     if (envelope.listId) {

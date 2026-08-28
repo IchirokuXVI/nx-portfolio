@@ -58,7 +58,7 @@ function makeQueryBuilder(rows: Partial<ZoneMembership>[]) {
 function build(rows: Partial<ZoneMembership>[], firstSeen = true) {
   const qb = makeQueryBuilder(rows);
   const memberships = { createQueryBuilder: jest.fn(() => qb) };
-  const events = { emit: jest.fn() };
+  const events = { emit: jest.fn(), emitToUsers: jest.fn() };
   const store = { firstSeen: jest.fn(async () => firstSeen) };
   const service = new UsernamePropagationService(
     memberships as never,
@@ -185,11 +185,62 @@ describe('UsernamePropagationService (plan 0018, section 4.4)', () => {
 
     expect(memberships.createQueryBuilder).not.toHaveBeenCalled();
     expect(events.emit).not.toHaveBeenCalled();
+    expect(events.emitToUsers).not.toHaveBeenCalled();
   });
 
   it('dedupes on the event id, not on the pair of names', async () => {
     const { service, store } = build([membership()]);
     await service.handleUsernameChanged(event({ eventId: 'abc' }));
     expect(store.firstSeen).toHaveBeenCalledWith('user.usernameChanged:abc');
+  });
+});
+
+/**
+ * The rename, addressed to the person who made it (plan 0030, section 4.3).
+ *
+ * GLOBAL_ONLY is the case that carries this suite. It is the mode in which no
+ * membership changed, so it is the mode in which this event is the only thing a
+ * user's other tabs will ever hear about their own new name, and a user with no
+ * zones at all has no other room it could arrive in.
+ */
+describe('UsernamePropagationService re-publishes the rename to the user', () => {
+  it.each([
+    UsernamePropagation.GLOBAL_ONLY,
+    UsernamePropagation.MATCHING_ZONES,
+    UsernamePropagation.ALL_ZONES,
+  ])('%s reaches the renamed user', async (propagation) => {
+    const { service, events } = build([membership({ username: 'Swift Sail' })]);
+
+    await service.handleUsernameChanged(event({ propagation }));
+
+    expect(events.emitToUsers).toHaveBeenCalledTimes(1);
+    expect(events.emitToUsers).toHaveBeenCalledWith(
+      RealtimeEvent.UserUsernameChanged,
+      ['u1'],
+      { userId: 'u1', username: 'Vela Rápida' }
+    );
+  });
+
+  it('reaches a user who is in no zone at all', async () => {
+    const { service, events } = build([]);
+
+    await service.handleUsernameChanged(
+      event({ propagation: UsernamePropagation.ALL_ZONES })
+    );
+
+    expect(events.emit).not.toHaveBeenCalled();
+    expect(events.emitToUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishes once per identity event under redelivery', async () => {
+    const { service, events, store } = build([membership()]);
+    store.firstSeen
+      .mockImplementationOnce(async () => true)
+      .mockImplementationOnce(async () => false);
+
+    await service.handleUsernameChanged(event({ eventId: 'e1' }));
+    await service.handleUsernameChanged(event({ eventId: 'e1' }));
+
+    expect(events.emitToUsers).toHaveBeenCalledTimes(1);
   });
 });

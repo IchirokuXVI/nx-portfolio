@@ -419,12 +419,18 @@ jobs:
       # releases, one chart. Adding a secret rather than renaming both keeps the
       # production workflow untouched, which matters because production is the one
       # that is currently working.
+      #
+      # The chart lands in the deploy user's home rather than /root. SSH_DEPLOY_USER
+      # is an unprivileged account: it owns nothing outside its home and holds no
+      # sudo. Nothing below needs any, because k3s writes its kubeconfig world
+      # readable (k8s/bootstrap/install.sh) and helm and kubectl are all a deploy
+      # runs.
       # ---------------------------------------------------------------------------
       - name: Sync chart to the staging host
         if: steps.deploy-target.outputs.configured == 'true'
         run: |
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
-            ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }}:/root/k8s/
+            ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }}:~/k8s/
 
       # A deploy that cannot possibly work is rejected in seconds here rather than
       # diagnosed in minutes from a crashloop (k8s plan 0006, section 3).
@@ -433,7 +439,7 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
-            "bash /root/k8s/bootstrap/provision-release.sh --check --env staging"
+            "bash ~/k8s/bootstrap/provision-release.sh --check --env staging"
 
       - name: Deploy staging via Helm
         if: steps.deploy-target.outputs.configured == 'true'
@@ -467,11 +473,11 @@ jobs:
             # then the Deployments rolling with a readiness probe whose
             # initialDelaySeconds is 5 and periodSeconds 10, on a single node
             # pulling images.
-            helm upgrade --install nx-portfolio /root/k8s/helm \
+            helm upgrade --install nx-portfolio $HOME/k8s/helm \
               --namespace nx-portfolio \
               --create-namespace \
-              --values /root/k8s/helm/values.yaml \
-              --values /root/k8s/helm/values.staging.yaml \
+              --values $HOME/k8s/helm/values.yaml \
+              --values $HOME/k8s/helm/values.staging.yaml \
               --atomic --timeout 10m
 
             # The staging tag is mutable, so a plain upgrade will not restart the

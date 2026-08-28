@@ -35,7 +35,6 @@ import {
 import { PresenceStore } from '../presence/presence-store';
 import {
   ZoneStore,
-  type MemberRename,
   type ZoneDeparture,
   type ZoneEntry,
   type ZoneEntryOutcome,
@@ -146,7 +145,6 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
   const lastEntry = signal<ZoneEntry | null>(options.lastEntry ?? null);
   const departure = signal<ZoneDeparture | null>(options.departure ?? null);
   const lastCodeChange = signal<string | null>(options.lastCodeChange ?? null);
-  const memberRename = signal<MemberRename | null>(null);
 
   /**
    * How the load of each individual zone is going (plan 0010).
@@ -244,8 +242,6 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
 
     // ---------------------------------------------------------- plan 0015
 
-    memberRename: memberRename.asReadonly(),
-
     /**
      * Drive a live rename at a members screen that is already mounted.
      *
@@ -254,7 +250,6 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
      * spec proves it by calling this and asserting the row changed while `loadCount`
      * stood still.
      */
-    setMemberRename: (next: MemberRename | null) => memberRename.set(next),
 
     lastCodeChange: lastCodeChange.asReadonly(),
     clearLastCodeChange: () => lastCodeChange.set(null),

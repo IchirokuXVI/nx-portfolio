@@ -33,6 +33,23 @@ OUT_PATH=""
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHART_DIR="$REPO_ROOT/k8s/helm"
 
+# ---------------------------------------------------------------------------
+# The kubeconfig, for the CI deploy user's sake.
+#
+# CI reaches this script as `ssh host "bash ~/k8s/bootstrap/..."`, which is non
+# interactive, so none of the shell profile that would export KUBECONFIG runs.
+# Without this the script fails at its first kubectl as the deploy user while
+# working perfectly by hand, which is the worst shape a failure can take.
+#
+# k3s puts its kubeconfig at the path below and install.sh makes it readable by
+# every local user (--write-kubeconfig-mode 644), so no sudo is involved. The
+# readability test keeps a laptop run, where that file does not exist, on its
+# own ~/.kube/config instead of pointing it at nothing.
+# ---------------------------------------------------------------------------
+if [ -z "${KUBECONFIG:-}" ] && [ -r /etc/rancher/k3s/k3s.yaml ]; then
+  export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+fi
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --env)       ENVIRONMENT="$2"; shift 2 ;;
@@ -189,8 +206,20 @@ kubectl apply -f "$REPO_ROOT/k8s/namespace.yaml"
 # ---------------------------------------------------------------------------
 existing() {
   # Prints the current value of one key, or nothing.
-  kubectl -n "$NAMESPACE" get secret "$1" -o "jsonpath={.data.$2}" 2>/dev/null \
-    | { base64 -d 2>/dev/null || true; }
+  #
+  # It must also SUCCEED when there is nothing, which the obvious one line
+  # version does not. `kubectl get secret` exits non zero for a Secret that does
+  # not exist, `set -o pipefail` carries that status through the decoder, and
+  # `VALUE="$(existing ...)"` therefore aborted the whole script under `set -e`.
+  # Silently, because the error text goes to /dev/null. The effect was that
+  # provisioning a fresh namespace died at the first key it looked for, right
+  # after "Resolving credentials...", with no output and no clue. An absent
+  # Secret is the normal case on a new cluster, not an error, so it returns
+  # empty and succeeds.
+  local encoded
+  encoded="$(kubectl -n "$NAMESPACE" get secret "$1" -o "jsonpath={.data.$2}" 2>/dev/null || true)"
+  [ -n "$encoded" ] || return 0
+  printf '%s' "$encoded" | base64 -d 2>/dev/null || true
 }
 
 keep_or_generate() {
