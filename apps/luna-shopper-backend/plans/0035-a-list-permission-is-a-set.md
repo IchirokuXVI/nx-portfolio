@@ -1,0 +1,434 @@
+# 0035: a list permission is a set, not a role
+
+> Prerequisite reading: `0007` section 1 (`list_access` as the access table) and section
+> 4 (the three `require*` checks), `0017` section 3.2 (`READABLE_LIST`, the one
+> definition of a readable list), and `0034` (what creating a list grants).
+>
+> Companion plans: `0036`, which takes approval away from the client once this plan has
+> a permission to hang it on, and `velista/plans/0027`, which is the screen half.
+>
+> Verified against the source on 2026-08-28.
+
+## 1. What the model says today
+
+`ListAccess.role` is a `ListRole`, and `ListRole` has two members, `READER` and
+`WRITER`. Everything a caller may do on a list is decided from that one column plus the
+caller's `ZoneRole`, in three methods on `ListAccessService`:
+
+- `requireRead` (`list-access.service.ts:69`): an approved membership, and then either
+  manager status or any `list_access` row.
+- `requireWrite` (`:110`): an approved membership and a row whose role is exactly
+  `WRITER`. **No manager bypass.**
+- `requireManage` (`:126`): the list's creator, or a zone `OWNER`/`ADMIN`. Never a row.
+
+Four things that model cannot say, each of which is a bug somebody has already hit.
+
+### 1.1 A group admin can open a list they cannot add a line to
+
+`READABLE_LIST` (`zone-summary.sql.ts:49`) lets `OWNER` and `ADMIN` read every list in
+the zone, and `requireManage` lets them rename, share and delete one. `requireWrite`
+lets them do neither of the two things the screen is actually for: add a line, tick one
+off. The frontend documents the consequence rather than fixing it, because it cannot:
+`ListAbilitiesVm` (`velista/models/src/lib/list-view.ts`) carries three separate
+booleans and says in its own doc comment that a zone `OWNER` can rename and delete a
+list they cannot add a single line to.
+
+Group admins are supposed to have **full access to every list in their zone**. Today
+they have an odd, unexplainable subset of it.
+
+### 1.2 Approving is not a list permission at all
+
+`LineService.setApproval` (`line.service.ts:127`) asks `zoneAuthz.requireRole(zoneId,
+userId, [OWNER, ADMIN])`. Approval is therefore a property of the **group**, not of the
+list, and cannot be delegated. The person who actually walks the aisle is exactly the
+person who should be allowed to say "yes, that one goes in", and today they can only be
+allowed to by being made an admin of the whole group.
+
+### 1.3 Ticking off and writing are the same permission, and should not be
+
+`setStatus` (`:144`) requires `WRITER`, the same as `add` (`:79`) and `delete` (`:191`).
+So there is no way to describe the flatmate who does the shop but does not decide what
+goes on the list, which is the commonest arrangement this product has.
+
+### 1.4 There is no state between "can do everything" and "can do nothing"
+
+`CommentService.add` (`comment.service.ts:41`) asks only for an approved zone
+membership, so a caller with no access to a list at all can comment on its lines, and a
+caller with `READER` can too. Meanwhile `READER` is otherwise inert. The two ends are
+both wrong: read should mean read, and commenting should follow access to the list.
+
+## 2. The permission set
+
+`ListRole` is replaced by `ListPermission`, and a `list_access` row holds a **set** of
+them rather than one:
+
+```ts
+export enum ListPermission {
+  READ = 'READ',
+  WRITE = 'WRITE',
+  DECIDE = 'DECIDE',
+  MANAGE = 'MANAGE',
+}
+```
+
+| Permission | What it grants |
+| --- | --- |
+| `READ` | See the list and everything on it: lines with both their statuses, comments, the presence of other viewers and editors, the counts, the name. Write nothing, **including comments**. |
+| `WRITE` | Add lines. Edit and delete lines that are `PENDING` or `REJECTED`. Reorder. Comment. |
+| `DECIDE` | Approve, reject and un-approve lines. Set a line's item status to `PENDING`, `READY` or `NOT_AVAILABLE`. Change the quantity of an **approved** line, and nothing else about it. Comment. |
+| `MANAGE` | Everything above, plus grant and revoke other people's permissions on this list, change its configuration, rename it and delete it. |
+
+One reading of the requirement is recorded here rather than left implicit. It describes
+the person who can see everything and write nothing as having "just write access", and
+then describes write access, one sentence later, as creating lines, editing unapproved
+ones and commenting. The two cannot both be true, and the first is read here as
+**read**: it is the only reading under which the second sentence, and the requirement's
+own rule that every other permission implies read, both stand.
+
+### 2.1 A set, because these are not a ladder
+
+`WRITE` and `DECIDE` are independent. Somebody may hold either alone, and the two
+describe different people: the flatmate who adds "olive oil" to the list on Tuesday, and
+the flatmate who is in the shop on Saturday deciding that the olive oil goes in the
+trolley and that they are out of tinned tomatoes. Ordering them would force one of those
+two people to be a subset of the other, and neither is.
+
+`READ` and `MANAGE` are the two ends and could have been ordinal, but a set that is
+ordered at the ends and unordered in the middle is worse than a set, so all four are
+stored the same way and every check asks whether one member is present.
+
+### 2.2 `READ` is implied, and also stored
+
+Any permission implies `READ`, per the requirement. That invariant is enforced at the
+**write** boundary rather than at every read: `setAccess` adds `READ` to any non-empty
+set it is given, so a stored set that lacks `READ` cannot exist. Every predicate that
+asks "may this caller see the list" therefore asks for `READ` literally and nothing has
+to remember to imply it.
+
+The other half of the invariant: **an empty set is not stored, it is a deleted row.**
+Revoking everything removes the `list_access` row. "No row" is then the single
+representation of no access, which is what keeps `READABLE_LIST` a one line predicate
+and stops a zero-permission row silently satisfying an `EXISTS`.
+
+### 2.3 `MANAGE`, and why the enum member is not called `ADMIN`
+
+The requirement asks for a better name than "edit list properties" and suggests "list
+admin". The **user-facing** name is List admin, in `velista/plans/0027`. The enum member
+is `MANAGE` for one reason: `ZoneRole.ADMIN` already exists in the same codebase and
+frequently in the same expression. A line reading `role === ADMIN` beside one reading
+`permissions.includes(ADMIN)` is a misreading waiting to happen, and the two mean
+different things about different scopes. `MANAGE` also continues a word this service
+already uses: `requireManage` is the check it will gate.
+
+### 2.4 Group staff hold all four, always, and it is never stored
+
+A zone `OWNER` or `ADMIN` holds `{READ, WRITE, DECIDE, MANAGE}` on **every list in the
+zone**, derived from `ZoneRole` at check time. Not written to `list_access`, not
+revocable, and not returned as an entry by `GET .../access`.
+
+Derived rather than stored because a stored grant would need writing when somebody is
+promoted, for every list that exists, and unwriting when they are demoted, and the two
+would drift the first time either path failed halfway. Deriving it makes promotion a
+single `UPDATE` on one membership row that is instantly correct everywhere, which is
+what it already is.
+
+The consequence the requirement asks for follows for free: **a list admin cannot revoke
+a group admin's access**, because there is nothing to revoke. `setAccess` rejects an
+entry naming a staff membership rather than quietly dropping it, so the caller is told
+rather than left believing they did something.
+
+### 2.5 A group admin can revoke a list creator's permissions
+
+The other direction is asked for explicitly and needs a change to how the creator's
+power is held. Today the creator's manage right is derived from
+`ShoppingList.createdByUserId` inside `isManager` (`list-access.service.ts:50`), which
+makes it exactly as irrevocable as staff status.
+
+So the creator's power becomes an ordinary **row**: `ListService.create` writes their
+`list_access` row with `{READ, WRITE, DECIDE, MANAGE}` instead of `WRITER`, and the
+`createdByUserId` clause is removed from `isManager`, from `READABLE_LIST`, and from
+`ListService.list`'s inline copy of the predicate (`list.service.ts:250`). A group admin
+can then rewrite that row like any other, down to and including deleting it.
+
+`createdByUserId` stays on the entity. It is still the honest answer to who made the
+list, it is still what the frontend attributes a list to, and `0036` uses it. It simply
+stops being an authorization input.
+
+### 2.6 What `shareWithZone` grants
+
+`0034` grants every other approved membership `WRITER`, and argues at length (its
+section 2.2) that a shared list is shopped from and a reader cannot shop. That argument
+survives intact and now has the vocabulary it wanted: the grant becomes
+`{READ, WRITE, DECIDE}`. The group can add lines and can tick them off. `MANAGE` is not
+in it, because governing the list is the thing the creator kept.
+
+## 3. Storage and migration
+
+`list_access.role` (`list_role` enum) is replaced by `list_access.permissions`, a
+`list_permission[]` that is `NOT NULL` with no default. A new migration beside the
+squashed baseline (`1756000100000-InitialCoreSchema.ts`, plan `0025`), not an edit to
+it: the baseline is deployed.
+
+The migration:
+
+1. creates the `list_permission` enum type,
+2. adds `permissions list_permission[] NOT NULL DEFAULT '{}'`,
+3. backfills `READER` to `{READ}` and `WRITER` to `{READ,WRITE,DECIDE}`,
+4. inserts or widens a row for every list's creator so it contains all four,
+5. deletes any row left with an empty set,
+6. drops the default, drops `role`, drops the `list_role` type,
+7. adds a GIN index on `permissions` only if section 3.2 turns out to need one.
+
+`down` reverses it lossily: `MANAGE`-or-`WRITE` becomes `WRITER`, anything else becomes
+`READER`. Stated rather than hidden, because a rollback that quietly promotes readers
+would be worse than one that is known to flatten.
+
+### 3.1 Why `WRITER` backfills to `{READ, WRITE, DECIDE}` and not `{READ, WRITE}`
+
+This is the one migration decision worth arguing about, because it **widens** existing
+grants: today's `WRITER` cannot approve a line, and afterwards they can.
+
+The alternative narrows instead, and narrowing is the worse failure here. Today's
+`WRITER` can already set a line to `READY`, which is the ticking-off gesture the whole
+screen exists for; `DECIDE` is where that gesture now lives. Backfilling to
+`{READ, WRITE}` would take ticking away from every existing member of every existing
+group at once, with no notice and no error message that explains it, and the list would
+simply stop working for them. The widening, by contrast, is visible in the share sheet
+the day it lands and is one tap to undo.
+
+Put plainly: a migration may hand somebody a permission they can be seen to have and
+asked to give back. It may not silently remove the one they use every week.
+
+### 3.2 Cost
+
+Every predicate gains an array containment test on a row it was already fetching.
+`READ = ANY(permissions)` on a `list_access` row already located by
+`uq_list_access (listId, membershipId)` is evaluated after the index lookup, on one row,
+which is not measurable. `READABLE_LIST`'s `EXISTS` is unchanged in shape. No new index
+is added speculatively; if the zone summary ever shows one is needed, GIN on
+`permissions` is the answer and it is one migration.
+
+## 4. What each check becomes
+
+`ListAccessService` grows one private resolver and expresses every public check through
+it:
+
+```ts
+/** The caller's effective permissions on a list. Empty means no access at all. */
+async permissionsFor(list: ShoppingList, userId: string): Promise<Set<ListPermission>>
+```
+
+It resolves the membership once, returns all four for staff, and otherwise returns the
+row's set, or an empty set. Every `require*` method is then one membership test against
+it, and there is exactly one place that knows staff are special.
+
+| Method | Was | Becomes |
+| --- | --- | --- |
+| `requireRead` | row exists, or manager | holds `READ` |
+| `requireWrite` | row role is `WRITER` | holds `WRITE` |
+| `requireManage` | creator or zone staff | holds `MANAGE` |
+| *(new)* `requireDecide` | did not exist | holds `DECIDE` |
+| `readableListIds` | `READABLE_LIST` | `READABLE_LIST`, rewritten for the array |
+
+And the call sites:
+
+| Operation | Was | Becomes |
+| --- | --- | --- |
+| `line.add` | `WRITER` | `WRITE` |
+| `line.update` | `WRITER`, any line | `WRITE` on a `PENDING`/`REJECTED` line; `DECIDE` for the quantity of an `APPROVED` line and nothing else (`0036` section 4) |
+| `line.delete` | `WRITER`, any line | `WRITE` on a `PENDING`/`REJECTED` line; `MANAGE` for any line |
+| `line.reorder` | `WRITER` | `WRITE` |
+| `line.setStatus` | `WRITER` | `DECIDE` |
+| `line.setApproval` | zone `OWNER`/`ADMIN` | `DECIDE` |
+| `comment.add` | approved membership | `WRITE` or `DECIDE` |
+| `comment.list` | read access | `READ` |
+| `list.update` / `list.delete` / `list.setAccess` | creator or zone staff | `MANAGE` |
+
+### 4.1 An approved line is edited by un-approving it
+
+`WRITE` covers `PENDING` and `REJECTED` lines only, per the requirement, and `DECIDE`
+covers exactly one field on an `APPROVED` one. Nobody, group admin included, may edit
+the **content** of an approved line in place.
+
+That is deliberate and it is not a gap. `DECIDE` includes putting a line back to
+`PENDING`, so the path exists and reads correctly: un-approve, edit, approve. Somebody
+holding both permissions does it in three taps, and the line's approval state says what
+happened, which is the point of having approval at all. A silent in-place edit of an
+approved line is precisely the thing approval is supposed to prevent.
+
+`MANAGE` is given the extra right to **delete** any line regardless of approval, because
+otherwise an approved line that should never have existed has no removal path at all
+short of deleting the list.
+
+### 4.2 Editing a rejected line puts it back to `PENDING`
+
+Required, and it is what makes rejection a conversation rather than a dead end. On
+`line.update`, when the line's `approvalStatus` is `REJECTED`, the save also sets
+`approvalStatus` to `PENDING` and clears `approvedByUserId`. A `PENDING` line stays
+`PENDING`. An `APPROVED` line is not reachable by this path at all (section 4.1).
+
+This happens on **any** edit, including a quantity-only one, and including on a list
+that auto-approves (`0036` section 3): the option decides what a **new** line starts as,
+and a rejection somebody made on purpose is not undone by an edit.
+
+### 4.3 `READ` is genuinely everything else
+
+The requirement asks that a read-only caller see everything, and it is worth writing
+down what everything is, because the answer is currently spread over four plans: the
+list's name and configuration, its lines with `approvalStatus`, `status`, quantity,
+position and author, its comments, its counts (`0017`), who is viewing it and who is
+editing which line (`0022`, `0032`). All of those already flow from `requireRead` or
+from `readableListIds`, so `READ` needs no new plumbing.
+
+The one thing `READ` does **not** include is the access table itself. `GET .../access`
+is `MANAGE` (section 6). Who else can write to a list is governance, not content.
+
+## 5. `setAccess`, and who may grant what
+
+`SetListAccessRequest.entries` becomes `{ membershipId, permissions: ListPermission[] }`.
+The handler (`list.service.ts:166`) keeps its upsert-per-entry shape and gains four
+rules, applied in this order:
+
+1. **The caller holds `MANAGE`.** Unchanged in spirit, narrower in fact: it is now a
+   permission rather than creator-or-staff.
+2. **An entry naming a zone `OWNER` or `ADMIN` is rejected**, with a message saying group
+   admins always have full access to every list. It is refused even when the caller is
+   themselves staff, because the row would be meaningless either way; the difference the
+   requirement draws between a list admin and a group admin is about **other** rows, not
+   about staff rows.
+3. **`READ` is added to any non-empty set.** Section 2.2.
+4. **An empty set deletes the row.** Section 2.2. This is how access is revoked, and it
+   is the same call, so a share sheet has one save button rather than a save and a
+   remove.
+
+A list admin who is not group staff may otherwise grant and revoke anything, including
+`MANAGE`, and including on the creator's row. A group admin may do the same. That is the
+whole of the asymmetry the requirement asks for: **staff rows are untouchable, every
+other row is not, and the creator's row is an ordinary row** (section 2.5).
+
+### 5.1 Not a partial update
+
+`setAccess` replaces each named membership's set outright and leaves unnamed memberships
+alone. It is not `PATCH` semantics on the set (no add-these, remove-those), because a
+share sheet holds the whole answer for a row in front of the person pressing save, and
+two ways to express the same change is two ways for it to be expressed wrongly.
+
+## 6. Reading the access table back
+
+`GET /v1/lists/:id/access` lands, gated on `MANAGE`, returning:
+
+```ts
+{ listId: string; entries: { membershipId: string; permissions: ListPermission[] }[] }
+```
+
+Stored rows only. Group staff are absent by construction (section 2.4) and the client
+already knows who they are from `MembershipStore`, so putting them in the payload would
+be a second, staler copy of a fact the caller has.
+
+This endpoint is the missing half of a feature that is already written: `velista`'s
+share sheet, its `ListApi.getListAccess`, and its tests all exist behind the
+`LIST_ACCESS_READABLE` constant, waiting for exactly this route
+(`velista/plans/0012` section 5.5). `PUT` without `GET` is why: a sheet that cannot read
+the current set would revoke everybody it did not happen to include.
+
+## 7. The caller's own permissions ride on `ListView`
+
+`ListView` gains `myPermissions: ListPermission[]`, the caller's effective set including
+the derived staff grant, filled by every path that returns a `ListView`: `create`,
+`update`, and each item of `list`.
+
+This is the change that lets the screen stop guessing. Today `ListAbilitiesVm.canWrite`
+is **optimistic**: the client offers the composer to everybody, and discovers a reader
+by having their first write refused. That was the right call when the server told it
+nothing, and it is the wrong call the moment the server can, because with four
+permissions the number of controls a caller might be offered and refused goes from one
+to most of the screen.
+
+It rides on `ListView` rather than on a second request because it is per-caller data
+about a resource the caller is already fetching, and a separate round trip would let the
+two disagree for exactly as long as it took.
+
+`ListPage` is a page of `ListView`, so the dashboard and the group page get it too, for
+free, in the query they already run.
+
+## 8. When permissions change, the screen changes
+
+`velista/plans/0020` states the rule this section obeys, about zone roles:
+
+> A role is a permission. If the server changes it, the screen showing what it permits
+> changes with it, without being asked. A control left on screen for somebody who may no
+> longer press it is not a cosmetic problem: every press of it is an error.
+
+`setAccess` already emits `RealtimeEvent.ListAccessChanged` to the list room with
+`{ listId }` and nothing else, which `room-sync.service.ts:35` calls out as the awkward
+case: the payload names nobody, so every client in the room re-syncs. That is adequate
+for people who **kept** access and useless for the two people it is actually about.
+
+So `setAccess` additionally emits, on the **user channel** (`0030`), one event per
+affected membership:
+
+```
+list.myAccessChanged -> { listId, zoneId, permissions: ListPermission[] }
+```
+
+Addressed to the user behind the membership, carrying their new effective set, including
+an empty array for somebody who just lost the list entirely. Three things then work
+without a refresh: a client whose set shrank redraws the screen it is on from the new
+set, a client that lost access leaves for the `gone` state velista already has, and a
+client that just **gained** access learns about it at all, which the room event by
+construction cannot tell them because they were never in the room.
+
+`ListAccessChanged` stays as it is. It still correctly says "the access table for this
+list changed" to the people watching it, and `sweeps.ts:65` still uses it to re-evaluate
+rooms.
+
+## 9. Contracts, docs and fixtures
+
+- `libs/luna-shopper/contracts`: `ListPermission` replaces `ListRole` in
+  `enums/list.enums.ts`, `enums.schemas.ts`, `ListAccessEntry`, `SetListAccessRequest`,
+  `ListView`, plus a new `GetListAccessRequest`/`ListAccessView`.
+- `libs/luna-shopper/test-fixtures`: `demo-world.ts`, `factories.ts` and `types.ts` all
+  name `ListRole` and all need the new shape. The demo world is the right place to make
+  the four permissions concrete: give it one member holding `WRITE` alone and one
+  holding `DECIDE` alone, because those two are the states nothing currently exercises.
+- **Regenerate the OpenAPI document** (`npx nx run luna-shopper-backend-gateway:openapi`)
+  and commit it. `openapi-document.spec.ts` fails on a stale one, so a forgotten
+  regeneration is a red PR.
+
+## 10. What is deliberately not built
+
+- **A zone-wide default permission set for new lists.** `0034`'s checkbox already
+  carries the answer and remembers nothing, which is the version that cannot get out of
+  step. Unchanged.
+- **Retroactive grants when a member is approved.** Still the share sheet's job, still
+  the same gap `0034` section 2.4 names.
+- **Per-line permissions.** Nobody asked, and the approval state machine already
+  provides the per-line answer.
+- **A `MANAGE` holder editing an approved line in place.** Section 4.1.
+- **Permission groups or named roles built out of the four.** A share sheet with four
+  checkboxes is legible; a share sheet with four checkboxes and five presets built from
+  them is not.
+
+## 11. Acceptance
+
+1. A zone admin who has never been granted anything on a list opens it, adds a line,
+   ticks it off, approves somebody else's, renames the list and changes who may use it.
+   All six succeed.
+2. A member holding `{READ}` sees every line, every comment, the counts and the presence
+   indicators. Every write they attempt is refused, **comments included**.
+3. A member holding `{READ, WRITE}` adds a line, edits a pending one, deletes a rejected
+   one, comments, and is refused when they try to approve a line, set one to `READY`, or
+   touch an approved line.
+4. A member holding `{READ, DECIDE}` approves a line, rejects one, sets one to
+   `NOT_AVAILABLE`, comments, and is refused when they try to add a line or edit an
+   unapproved one.
+5. Editing a `REJECTED` line returns it to `PENDING` and clears its approver.
+6. A list admin who is not group staff tries to revoke a group admin's access and is
+   refused with a message naming the reason. A group admin revokes the list creator's
+   access entirely, and the creator's next request for the list is a 403.
+7. `GET /v1/lists/:id/access` returns the stored rows to a `MANAGE` holder and 403s for
+   a `WRITE` holder. Group staff appear in no entry.
+8. Changing a member's permissions while they have the list open redraws their screen
+   without a refresh, and revoking them entirely moves them off it.
+9. The migration runs against a database holding both `READER` and `WRITER` rows and
+   produces sets matching section 3; every list's creator holds `MANAGE` afterwards.
