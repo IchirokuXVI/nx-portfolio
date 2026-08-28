@@ -4,8 +4,8 @@ import {
   HttpStatus,
   Logger,
   Post,
-  Redirect,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -37,6 +37,15 @@ import {
 } from './google-auth.guard';
 import { OptionalJwtAuthGuard } from './jwt-auth.guard';
 import type { CurrentUser } from './jwt.strategy';
+
+/**
+ * The little of a response this controller uses, so the handler can be called
+ * with a double rather than an Express response.
+ */
+interface RedirectResponse {
+  setHeader(name: string, value: string): unknown;
+  status(code: number): { end(): unknown };
+}
 
 /** Substituted with the flow's locale; see `APP_BASE_URL` in the gateway config. */
 const LOCALE_PLACEHOLDER = '{locale}';
@@ -161,7 +170,6 @@ export class GoogleController {
    */
   @Get('callback')
   @UseGuards(GoogleCallbackGuard)
-  @Redirect()
   @ApiFoundResponse({
     description:
       'Redirects to the app. On success the token pair rides in the URL fragment (`#accessToken=…&refreshToken=…&userId=…&kind=…&username=…`); on any failure the fragment is `#error=<code>`. There is no response body either way.',
@@ -172,8 +180,31 @@ export class GoogleController {
   // client author looking for a response that never arrives.
   @ApiProblemResponses()
   async callback(
-    @Req() req: { user?: GoogleProfile; query?: Record<string, unknown> }
-  ): Promise<{ url: string; statusCode: number }> {
+    @Req() req: { user?: GoogleProfile; query?: Record<string, unknown> },
+    @Res() res: RedirectResponse
+  ): Promise<void> {
+    const { url, statusCode } = await this.resolveCallback(req);
+    // Written by hand rather than through `@Redirect()`, which reaches Express's
+    // `res.redirect` and gets a courtesy body with it: `Found. Redirecting to
+    // <url>`, url and all. On the success path that url carries the token pair
+    // in its fragment, so the one route that must never put those in a body on
+    // this origin was putting them in one, in the response Google's redirect
+    // landed on. A browser discards it and follows the header either way, so
+    // there is nothing to lose by leaving it out.
+    res.setHeader('Location', url);
+    res.status(statusCode).end();
+  }
+
+  /**
+   * Where the callback ends up, as a plain value: the app URL to send the
+   * browser to and the status to send it with. Split from the handler so the
+   * decision is testable without a response to write into, and so the writing
+   * stays the three lines above it.
+   */
+  async resolveCallback(req: {
+    user?: GoogleProfile;
+    query?: Record<string, unknown>;
+  }): Promise<{ url: string; statusCode: number }> {
     if (!req.user) {
       // Two ways to get here, and they deserve different codes.
       //
