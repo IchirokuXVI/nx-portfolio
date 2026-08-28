@@ -1,0 +1,86 @@
+<!--
+  `dismissible` is false while the request is out, and here that is the strongest case
+  in the app for it: the delete has already gone, and closing would leave somebody
+  unable to see whether their account still exists (section 3.4).
+-->
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!busy()"
+  #shell
+  labelledBy="account-delete-title"
+>
+  <h2 class="title" id="account-delete-title">
+    <lib-warning-icon aria-hidden="true" class="glyph" />
+    <span>{{ 'account.delete.title' | rokuT }}</span>
+  </h2>
+
+  <p class="body">{{ 'account.delete.body' | rokuT }}</p>
+
+  <!--
+    The consequence that belongs to other people, counted from the cache with no
+    request. Absent entirely for somebody who owns no group, rather than rendered with a
+    zero: for them it is simply not true (section 5.7).
+
+    It does not say **when** an owned group is finally deleted, because nothing reports
+    the grace period. That is recorded as a gap rather than guessed at (section 5.10).
+  -->
+  @if (ownedCount() > 0) {
+    <p class="consequence">
+      {{ 'account.delete.ownedZones' | rokuT: { count: ownedCount() } }}
+    </p>
+  }
+
+  <p class="aside">{{ 'account.delete.authored' | rokuT }}</p>
+
+  <form (submit)="onSubmit($event)">
+    <!--
+      The typed confirmation, and the second and last one in this app. What is typed is
+      the person's **own** name, which is on screen the whole time: it is deliberate
+      friction, not a spelling test, and it is the same gesture in both languages, which
+      a typed `DELETE` is not (section 7).
+    -->
+    <label class="label" for="account-delete-field">
+      {{ 'account.delete.typeName' | rokuT }}
+    </label>
+    <input
+      (input)="onTyped($event)"
+      [attr.placeholder]="username()"
+      [readonly]="busy()"
+      [value]="typed()"
+      autocapitalize="off"
+      autocomplete="off"
+      autocorrect="off"
+      class="field"
+      id="account-delete-field"
+      spellcheck="false"
+      type="text"
+    />
+
+    @if (failure(); as problem) {
+      <p class="error" role="alert">
+        <span>{{ problem.key | rokuT: { wait: problem.wait } }}</span>
+        @if (correlationId(); as reference) {
+          <span class="reference">{{ reference }}</span>
+        }
+      </p>
+    }
+
+    <button
+      [attr.aria-busy]="busy()"
+      [disabled]="!canDelete()"
+      class="primary destructive"
+      type="submit"
+    >
+      @if (busy()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ 'account.delete.confirm' | rokuT }}</span>
+    </button>
+  </form>
+
+  @if (!busy()) {
+    <button (click)="shell.requestDismiss()" class="cancel" type="button">
+      {{ 'entry.cancel' | rokuT }}
+    </button>
+  }
+</lib-sheet-shell>

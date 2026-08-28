@@ -1,0 +1,244 @@
+// The colour half of layer 2 (plan 0002, section 4).
+//
+// A theme is nothing but a redefinition of these roles. It adds no selector, no
+// component override and no extra rule: swapping `theme-night` for `theme-day` on
+// the app root is the entire mechanism, which is what makes rule T1 worth
+// enforcing. Everything theme independent lives in `_semantic.scss`.
+//
+// Both themes are first class. This is not a light theme bolted on later: the app
+// is used in a dim kitchen and in a bright supermarket routinely, and the mock for
+// every page is checked in both.
+//
+// No literal colours here. Every value resolves to a layer 1 primitive, including
+// the tints, which are derived from a ramp's `-rgb` companion rather than being
+// hand mixed into a second hex.
+
+// How strongly a status colour tints a surface. One pair for both themes: the
+// derivation runs over a different primitive per theme, and a 10% fill with a 26%
+// hairline lands in the same visual place over near black and over white. These
+// are alphas rather than colours, so they are not literals in the T1 sense.
+$app-status-fill: 10%;
+$app-status-line: 26%;
+
+/// The status block, factored out because it is five roles times three variants
+/// and writing it twice invites the two themes to drift.
+///
+/// Each role takes two arguments rather than one, because a status resolves to a
+/// **different primitive per theme depending on the job**: the `-fg` is text and
+/// needs 4.5:1, while the `-bg` and `-border` are a fill and a hairline and need
+/// only 3:1. On Day those pull apart far enough that one ramp step cannot serve
+/// both, so the caller passes the text colour and the tint source separately.
+@mixin app-status(
+  $success-fg,
+  $success-rgb,
+  $danger-fg,
+  $danger-rgb,
+  $attention-fg,
+  $attention-rgb,
+  $info-fg,
+  $info-rgb,
+  $neutral-fg,
+  $neutral-rgb
+) {
+  --app-status-success-fg: #{$success-fg};
+  --app-status-success-bg: rgb(#{$success-rgb} / #{$app-status-fill});
+  --app-status-success-border: rgb(#{$success-rgb} / #{$app-status-line});
+
+  --app-status-danger-fg: #{$danger-fg};
+  --app-status-danger-bg: rgb(#{$danger-rgb} / #{$app-status-fill});
+  --app-status-danger-border: rgb(#{$danger-rgb} / #{$app-status-line});
+
+  --app-status-attention-fg: #{$attention-fg};
+  --app-status-attention-bg: rgb(#{$attention-rgb} / #{$app-status-fill});
+  --app-status-attention-border: rgb(#{$attention-rgb} / #{$app-status-line});
+
+  --app-status-info-fg: #{$info-fg};
+  --app-status-info-bg: rgb(#{$info-rgb} / #{$app-status-fill});
+  --app-status-info-border: rgb(#{$info-rgb} / #{$app-status-line});
+
+  --app-status-neutral-fg: #{$neutral-fg};
+  --app-status-neutral-bg: rgb(#{$neutral-rgb} / #{$app-status-fill});
+  --app-status-neutral-border: rgb(#{$neutral-rgb} / #{$app-status-line});
+}
+
+/// Honoured by every theme (section 4.5). `more` is the only direction worth
+/// handling: a user who asks for less contrast is served by Night already.
+///
+/// Included at the tail of each theme rather than once on the app root, and that
+/// is not a style choice. A theme's declarations sit on `:host(.theme-x)`, which
+/// outranks `:host`, so the same overrides applied to the root would simply lose
+/// to the active theme and the preference would silently do nothing. A new theme
+/// has to include this the same way.
+@mixin app-contrast-preferences {
+  @media (prefers-contrast: more) {
+    // Hairlines stop being hairlines, and muted text stops being muted. Both are
+    // the first things to disappear for a user who asked for more contrast.
+    --app-border-subtle: var(--app-border-strong);
+    --app-text-muted: var(--app-text-secondary);
+    --app-focus-ring-width: 3px;
+  }
+}
+
+/// Night. The default, and the better read in a dim kitchen or at night.
+@mixin app-theme-night {
+  // Not a token: this is what tells the browser to draw its own parts to match,
+  // meaning the scrollbar, a date picker, an autofilled field, the caret. Set on
+  // the app root rather than on the document, because the extraction contract's
+  // item 1 forbids styling anything outside this host while the app is a remote.
+  color-scheme: dark;
+
+  --app-surface-ground: var(--app-ink-950);
+  --app-surface-raised: var(--app-ink-850);
+  --app-surface-overlay: var(--app-ink-800);
+  --app-surface-sunken: var(--app-ink-900);
+
+  --app-text-primary: var(--app-neutral-50);
+  --app-text-secondary: var(--app-neutral-300);
+  // neutral-400 rather than neutral-500. The contrast check is why: neutral-500
+  // clears 4.5:1 on the ground by a hair and then fails at 3.99:1 on a raised
+  // card, which is exactly where metadata sits. See `contrast.spec.ts`.
+  --app-text-muted: var(--app-neutral-400);
+  --app-text-on-action: var(--app-ink-950);
+
+  --app-border-subtle: rgb(var(--app-white-rgb) / 8%);
+  // 35%, not the 18% the plan sketched. `border-strong` is the outline that
+  // identifies an input, so WCAG's 3:1 non-text floor applies to it; 18% white
+  // over any of the four surfaces lands around 1.7:1. 35% clears 3:1 on all of
+  // them. `border-subtle`, a row separator, stays decorative and stays at 8%.
+  --app-border-strong: rgb(var(--app-white-rgb) / 35%);
+  // Sky rather than the accent. A ring in the action colour would say "primary
+  // action" in a place that means "the keyboard is here", and the two are worth
+  // keeping apart on a screen where the amber button is the thing being focused.
+  --app-focus-ring: var(--app-sky-400);
+
+  // Rule T2: the label on an action fill is always dark ink. Amber with white
+  // text is about 1.9:1 and fails badly; amber with ink-950 is about 11:1. The
+  // token exists so this cannot be gotten wrong by accident.
+  --app-action-bg: var(--app-amber-500);
+  --app-action-bg-hover: var(--app-amber-400);
+  --app-action-bg-pressed: var(--app-amber-600);
+  --app-action-fg: var(--app-ink-950);
+  --app-action-quiet-fg: var(--app-amber-500);
+
+  // Depth on a dark ground is a lighter surface, not a shadow: a shadow over near
+  // black is invisible. The surface ramp does most of that work already, so what
+  // is left for these tokens is the top edge highlight that separates a raised
+  // thing from what is behind it, plus a real shadow at the overlay level where
+  // the sheet has to detach from the page.
+  --app-elevation-1: inset 0 1px 0 0 rgb(var(--app-white-rgb) / 4%);
+  --app-elevation-2:
+    inset 0 1px 0 0 rgb(var(--app-white-rgb) / 6%),
+    0 8px 24px rgb(var(--app-ink-950-rgb) / 55%);
+
+  // What a sheet lays over the page it covers, and the shadow that lifts its edge
+  // off it (plan 0008, rule E1). Heavy enough that the page beneath reads as
+  // context rather than as something still being offered: on a near black ground
+  // a light scrim would be invisible and the sheet would look like part of the
+  // page. The shadow is separate from `--app-elevation-2` because it throws
+  // upward, which nothing else in the app does.
+  --app-scrim: rgb(var(--app-ink-950-rgb) / 74%);
+  --app-sheet-shadow: 0 -18px 40px rgb(var(--app-ink-950-rgb) / 42%);
+
+  // The soft corner the unauthenticated surface is lit from: amber at the centre
+  // falling through violet to nothing. Channel for channel the mock's, through the
+  // primitives that already hold those numbers, so it is a role rather than a
+  // gradient written into one component's stylesheet where no theme could reach it.
+  --app-ambient-glow: radial-gradient(
+    circle,
+    rgb(var(--app-amber-500-rgb) / 15%) 0%,
+    rgb(var(--app-violet-400-rgb) / 9%) 44%,
+    rgb(var(--app-ink-950-rgb) / 0%) 72%
+  );
+
+  @include app-status(
+    var(--app-mint-400),
+    var(--app-mint-400-rgb),
+    var(--app-coral-400),
+    var(--app-coral-400-rgb),
+    var(--app-violet-400),
+    var(--app-violet-400-rgb),
+    var(--app-sky-400),
+    var(--app-sky-400-rgb),
+    // A PENDING line, where nothing has happened yet, is muted by definition, so
+    // it resolves to the same colour muted text does rather than to a fifth hue.
+    var(--app-neutral-400),
+    var(--app-white-rgb)
+  );
+
+  @include app-contrast-preferences;
+}
+
+/// Day. High contrast light, for a bright supermarket.
+@mixin app-theme-day {
+  color-scheme: light;
+
+  --app-surface-ground: var(--app-neutral-50);
+  --app-surface-raised: var(--app-white);
+  --app-surface-overlay: var(--app-white);
+  --app-surface-sunken: var(--app-neutral-100);
+
+  --app-text-primary: var(--app-ink-900);
+  --app-text-secondary: var(--app-neutral-600);
+  // neutral-550 exists for this one role. neutral-500 reaches only 4.09:1 on the
+  // Day ground and 4.35:1 on a white card, both under the floor, and neutral-600
+  // is already secondary so reusing it would collapse two steps into one.
+  --app-text-muted: var(--app-neutral-550);
+  --app-text-on-action: var(--app-ink-950);
+
+  --app-border-subtle: var(--app-neutral-200);
+  // neutral-500, not the neutral-300 the plan sketched, for the reason Night's is
+  // 35% rather than 18%: an input outline has to clear 3:1, and neutral-300 on a
+  // white card is 1.7:1. This is two ramp steps below `border-subtle` on purpose.
+  --app-border-strong: var(--app-neutral-500);
+  --app-focus-ring: var(--app-sky-600);
+
+  // Identical to Night on purpose (section 4.3). The most important control in
+  // the app looks the same wherever the user is, which is worth more than theme
+  // purity. Only the quiet variant changes, because amber-500 as *text* on white
+  // is 1.9:1 and amber-800 is 5.6:1.
+  --app-action-bg: var(--app-amber-500);
+  --app-action-bg-hover: var(--app-amber-400);
+  --app-action-bg-pressed: var(--app-amber-600);
+  --app-action-fg: var(--app-ink-950);
+  --app-action-quiet-fg: var(--app-amber-800);
+
+  --app-elevation-1:
+    0 1px 2px rgb(var(--app-ink-900-rgb) / 4%),
+    0 2px 6px rgb(var(--app-ink-900-rgb) / 5%);
+  --app-elevation-2:
+    0 2px 4px rgb(var(--app-ink-900-rgb) / 5%),
+    0 12px 28px rgb(var(--app-ink-900-rgb) / 10%);
+
+  // Lighter than Night's, because on a light page the sheet is already separated
+  // by its own shadow and a 74% scrim would read as the lights going out.
+  --app-scrim: rgb(var(--app-ink-900-rgb) / 42%);
+  --app-sheet-shadow: 0 -12px 32px rgb(var(--app-ink-900-rgb) / 16%);
+
+  // None, on purpose and not by omission: `DayTheme.dc.html` draws no glow, because
+  // the ramps that read as warmth on near black read as a stain on white. The role
+  // is still defined here so the contract stays complete and a component can use it
+  // without asking which theme is on.
+  --app-ambient-glow: none;
+
+  @include app-status(
+    // The 700s, not the 400s. A bright ramp that carries Night is close to
+    // unreadable as text on white: mint-400 on white is about 1.9:1. The bright
+    // value stays correct for a fill or a progress bar in either theme, where
+    // only 3:1 is required, which is why the tints below still run off the 600s.
+    var(--app-mint-700),
+    var(--app-mint-600-rgb),
+    var(--app-coral-700),
+    var(--app-coral-600-rgb),
+    var(--app-violet-700),
+    var(--app-violet-600-rgb),
+    var(--app-sky-700),
+    var(--app-sky-600-rgb),
+    // neutral-600, a step darker than Day's muted text. A neutral chip's own fill
+    // is ink at 10%, which darkens the ground under it just enough that
+    // neutral-550 drops to 4.09:1 inside the chip it is supposed to label.
+    var(--app-neutral-600),
+    var(--app-ink-900-rgb)
+  );
+
+  @include app-contrast-preferences;
+}

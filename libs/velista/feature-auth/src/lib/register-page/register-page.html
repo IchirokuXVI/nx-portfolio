@@ -1,0 +1,73 @@
+<lib-auth-screen
+  (back)="back()"
+  [backLabel]="'auth.back' | rokuT"
+  [lede]="'auth.register.body' | rokuT"
+  [title]="'auth.register.title' | rokuT"
+>
+  <form (submit)="onSubmit($event)" class="form">
+    <lib-email-field
+      [(value)]="email"
+      [describedBy]="error()?.placement === 'password' ? null : errorId"
+      [invalid]="error() !== null && error()?.placement !== 'password'"
+      [label]="'auth.field.email' | rokuT"
+      [placeholder]="'auth.field.emailPlaceholder' | rokuT"
+      [readOnly]="submitting()"
+      fieldId="register-email"
+    />
+
+    <!-- The minimum is on screen from the start rather than only on rejection: a
+         person choosing a password they are about to be told is too short has been
+         made to do the work twice (section 5.1). -->
+    <lib-password-field
+      [(value)]="password"
+      [describedBy]="error()?.placement === 'email' ? null : errorId"
+      [hideLabel]="'auth.field.hidePassword' | rokuT"
+      [invalid]="error() !== null && error()?.placement !== 'email'"
+      [label]="'auth.field.password' | rokuT"
+      [placeholder]="'auth.field.passwordPlaceholder' | rokuT"
+      [readOnly]="submitting()"
+      [rule]="'auth.field.passwordRule' | rokuT"
+      [showLabel]="'auth.field.showPassword' | rokuT"
+      autocomplete="new-password"
+      fieldId="register-password"
+    />
+
+    @if (error(); as rejection) {
+      <!-- A `conflict` offers a route rather than only a refusal, and the route
+           carries the typed address with it. -->
+      <lib-form-error
+        (action)="signIn()"
+        [actionLabel]="
+          rejection.action === 'signIn'
+            ? ('auth.error.emailTakenAction' | rokuT)
+            : null
+        "
+        [message]="rejection.key | rokuT"
+        [messageId]="errorId"
+      />
+    }
+
+    <button
+      [attr.aria-busy]="submitting()"
+      [disabled]="!canSubmit()"
+      class="primary"
+      type="submit"
+    >
+      @if (submitting()) {
+        <lib-spinner-icon class="glyph" />
+      }
+      {{ 'auth.register.submit' | rokuT }}
+    </button>
+  </form>
+
+  @if (googleOffered()) {
+    <lib-google-option (continueWithGoogle)="continueWithGoogle()" />
+  }
+
+  <p authFooter class="footer">
+    {{ 'auth.register.haveOne' | rokuT }}
+    <button (click)="signIn()" class="footer-link" type="button">
+      {{ 'auth.signIn.submit' | rokuT }}
+    </button>
+  </p>
+</lib-auth-screen>

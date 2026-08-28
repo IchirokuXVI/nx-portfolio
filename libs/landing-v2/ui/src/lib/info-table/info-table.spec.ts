@@ -2,7 +2,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TranslatedInfoFact } from '@portfolio/landing-v2/models';
 import { InfoTable } from './info-table';
 
-function makeFact(overrides: Partial<TranslatedInfoFact> = {}): TranslatedInfoFact {
+function makeFact(
+  overrides: Partial<TranslatedInfoFact> = {}
+): TranslatedInfoFact {
   return {
     id: '1',
     factId: '1',

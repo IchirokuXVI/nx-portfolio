@@ -1,0 +1,84 @@
+{
+  "name": "luna-shopper-backend",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/luna-shopper-backend/tools",
+  "projectType": "application",
+  "tags": [],
+  "// ": "Umbrella project for the Luna Shopper backend (plans 0013, 0015). It has no build; it hosts the cross-service test-data orchestrator targets (seed / db:snapshot / db:restore) and the stack targets that wrap compose + migrations + a suite in one command. The services themselves — luna-shopper-backend-auth, -core, -catalog, -gateway, -realtime — are their own nested projects under this directory. Pass args after `--`, e.g. `nx run luna-shopper-backend:db:snapshot -- --label initial`.",
+  "targets": {
+    "stack:bootstrap": {
+      "executor": "nx:run-commands",
+      "// ": "Writes whatever a local stack needs and does not have: the six git ignored service .env files (from the slot 0 defaults) and the throwaway dev JWT keypair. Idempotent, and never overwrites a file that already exists. stack:up runs it first, so this is only needed to configure a checkout without starting anything.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh bootstrap"
+      }
+    },
+    "stack:up": {
+      "executor": "nx:run-commands",
+      "// ": "Plan 0015, section 4. Configures the checkout first (see stack:bootstrap), then brings the compose stack up honoring .env.slot, waits on every healthcheck (`up --wait`, never a sleep), and runs migration:run for auth, core and catalog.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh up"
+      }
+    },
+    "stack:down": {
+      "executor": "nx:run-commands",
+      "// ": "Tears the stack down INCLUDING volumes, so nothing survives between runs. This is the whole project, so it takes any profiled containers (observability, test) with it.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh down"
+      }
+    },
+    "observability:up": {
+      "executor": "nx:run-commands",
+      "// ": "Plan 0016, section 9. stack:up plus the opt-in `observability` compose profile: the OTLP collector, Jaeger, Prometheus and Grafana. Prints the URLs it just published, on this slot's ports. The services already point at the collector (luna-slot.sh writes OTEL_EXPORTER_OTLP_ENDPOINT into each service .env), so nothing else has to change for spans to start landing.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh -p observability up"
+      }
+    },
+    "observability:down": {
+      "executor": "nx:run-commands",
+      "// ": "Removes ONLY the four observability containers and leaves the databases, NATS and Mailpit running. Unlike stack:down it also keeps the volumes, so the Prometheus history and any Grafana dashboard survive. Use stack:down to take everything down instead.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh -p observability down"
+      }
+    },
+    "test-integration:stack": {
+      "executor": "nx:run-commands",
+      "// ": "stack:up, then run-many -t test-integration with LUNA_INTEGRATION=1, then stack:down in a guaranteed cleanup step — the suite's exit code survives the teardown. This is the same sequence CI runs.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh test-integration"
+      }
+    },
+    "e2e:stack": {
+      "executor": "nx:run-commands",
+      "// ": "stack:up, build and start the five services, gate on /health/ready, run the Playwright suite, then stop the services and tear the stack down whatever happened.",
+      "cache": false,
+      "options": {
+        "command": "bash k8s/e2e/luna-shopper-backend/stack.sh e2e"
+      }
+    },
+    "seed": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper-backend/tools/db/seed.js"
+      }
+    },
+    "db:snapshot": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper-backend/tools/db/snapshot.js"
+      }
+    },
+    "db:restore": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node apps/luna-shopper-backend/tools/db/restore.js"
+      }
+    }
+  }
+}

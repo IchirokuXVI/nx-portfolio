@@ -1,18 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { LANDING_V2_DATA_ACCESS_PROVIDERS } from '@portfolio/landing-v2/data-access';
+import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { LandingV2Wrapper } from './landing-v2-wrapper';
-
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-      addNamespace: jest.fn(),
-      addTranslations: jest.fn(),
-      removeNamespace: jest.fn(),
-    },
-  };
-});
 
 describe('LandingV2Wrapper', () => {
   let component: LandingV2Wrapper;
@@ -21,7 +11,11 @@ describe('LandingV2Wrapper', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LandingV2Wrapper],
-      providers: [provideRouter([])],
+      providers: [
+        provideRouter([]),
+        provideRokuTranslatorTesting(),
+        ...LANDING_V2_DATA_ACCESS_PROVIDERS,
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LandingV2Wrapper);

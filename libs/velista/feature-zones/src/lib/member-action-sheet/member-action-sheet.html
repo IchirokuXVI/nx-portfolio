@@ -1,0 +1,77 @@
+@if (action === 'rename') {
+  <!--
+    Not a confirm: it needs a field. It is also the one action on this screen an
+    ordinary member may take, and only on their own row (section 5.4).
+  -->
+  <lib-sheet-shell
+    (dismiss)="dismiss()"
+    [dismissible]="!busy()"
+    #shell
+    labelledBy="member-rename-title"
+  >
+    <h2 class="title" id="member-rename-title">
+      {{ 'zone.confirm.rename.title' | rokuT }}
+    </h2>
+    <p class="body">{{ 'zone.confirm.rename.body' | rokuT }}</p>
+
+    <label class="label" for="member-rename-name">
+      {{ 'zone.confirm.rename.label' | rokuT }}
+    </label>
+    <input
+      (input)="onTypedName($event)"
+      [attr.maxlength]="maxLength"
+      [disabled]="busy()"
+      [value]="typedName()"
+      autocomplete="off"
+      class="field"
+      id="member-rename-name"
+      type="text"
+    />
+
+    <!--
+      `{{wait}}` is the server's own number, and only `zone.error.tooManyRenames` reads
+      it. Passing it to every key here is harmless: i18next drops an interpolation
+      nothing references, and branching on the key would be a switch in a template that
+      has to stay in step with `zoneErrorKey` (rule A4, plan 0015).
+    -->
+    @if (errorKey(); as key) {
+      <p class="error" role="alert">{{ key | rokuT: { wait: errorWait() } }}</p>
+    }
+
+    <button
+      (click)="confirm()"
+      [attr.aria-busy]="busy()"
+      [disabled]="!canRename()"
+      class="primary"
+      type="button"
+    >
+      @if (busy()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ 'zone.confirm.rename.action' | rokuT }}</span>
+    </button>
+
+    @if (!busy()) {
+      <button (click)="shell.requestDismiss()" class="cancel" type="button">
+        {{ 'entry.cancel' | rokuT }}
+      </button>
+    }
+  </lib-sheet-shell>
+} @else {
+  <!--
+    Remove, block, and hand the group over. Each takes something away that the person
+    cannot get back on their own, which is what earns the confirm (section 5.7). None
+    of them types a name: that friction is reserved for deleting a group.
+  -->
+  <lib-confirm-sheet
+    (confirm)="confirm()"
+    (dismiss)="dismiss()"
+    [body]="bodyKey() | rokuT"
+    [busy]="busy()"
+    [confirmLabel]="actionKey() | rokuT"
+    [destructive]="destructive()"
+    [errorKey]="errorKey()"
+    [title]="titleKey() | rokuT: { name: memberName() }"
+    titleId="member-action-title"
+  />
+}

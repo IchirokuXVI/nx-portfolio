@@ -1,0 +1,19 @@
+@use '../credential-form' as credential;
+
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+@include credential.credential-form;
+
+.keepsafe {
+  margin-block-end: var(--app-space-7);
+}
+
+// The only footer in this library that is not an alternative account. It is a way
+// out, so it takes the muted colour rather than the accent that says "go here next".
+.quiet {
+  color: var(--app-text-secondary);
+  font-weight: 500;
+}

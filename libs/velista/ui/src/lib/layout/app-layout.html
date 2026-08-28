@@ -1,0 +1,17 @@
+<!--
+  The app's chrome lives here: header, navigation and footer arrive with the page
+  plans. Until then this is just the frame every route renders into.
+-->
+<main class="app-main">
+  <router-outlet></router-outlet>
+</main>
+
+@if (offline()) {
+  <!--
+    Blocking, and shared by every page rather than owned by one, which is why it is
+    here and not in the home page (plan 0003, section 3.1). Rendered over the outlet
+    rather than instead of it, so the page behind keeps its scroll position and its
+    component state for when the reload is deferred by an open dialog.
+  -->
+  <lib-connection-lost (reload)="reloadNow()" />
+}

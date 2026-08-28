@@ -1,0 +1,43 @@
+<div class="page">
+  <lib-app-bar
+    (localeChange)="switchLocale($event)"
+    [bordered]="false"
+    [locale]="localeLabel()"
+    [locales]="locales"
+    [signedIn]="false"
+  />
+
+  <!--
+    Said once, and only after a delete (plan 0015, section 5.7). It is not a success
+    note and must not be toned as one: nothing good just happened, something asked for
+    did. Cleared as it is read, so a reload of this URL does not repeat it.
+  -->
+  @if (accountDeleted) {
+    <p class="notice" role="status">{{ 'account.delete.done' | rokuT }}</p>
+  }
+
+  <lib-home-hero />
+
+  <lib-list-preview-card
+    [lines]="previewLines()"
+    [listName]="'home.preview.listName' | rokuT"
+    [shoppingNow]="2"
+    [zoneName]="'home.preview.zoneName' | rokuT"
+  />
+
+  <div class="spacer"></div>
+
+  <lib-auth-actions
+    (continueWithGoogle)="continueWithGoogle()"
+    (createZone)="createZone()"
+    (joinZone)="joinZone()"
+    (signInWithEmail)="signInWithEmail()"
+  />
+</div>
+
+<!--
+  Where a sheet renders (plan 0008, rule E1). Outside `.page` on purpose: a sheet is
+  fixed to the viewport and covers this screen, so nesting it inside the layout that
+  pushes the entry actions into thumb reach would make it part of that layout.
+-->
+<router-outlet></router-outlet>

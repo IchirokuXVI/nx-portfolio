@@ -1,0 +1,18 @@
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+// Nothing but a spinner. This page is a redirect that happens to be rendered, and it
+// is on screen for one frame; a heading would be read out and then taken away.
+.working {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 100%;
+  color: var(--app-text-secondary);
+}
+
+.spinner {
+  font-size: var(--app-icon-lg);
+}

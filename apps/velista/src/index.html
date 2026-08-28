@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>velista</title>
+    <base href="/" />
+    <!--
+      `interactive-widget=resizes-content` is what keeps a bottom sheet's primary
+      button above the on-screen keyboard (plan 0008, section 7). Without it Chrome on
+      Android resizes only the visual viewport, so an element fixed to the bottom stays
+      pinned under the keyboard; iOS Safari already moves fixed elements above it.
+
+      This document is the standalone build's, and the portfolio shell's `index.html`
+      carries the same attribute for the mounted one. Both are needed and neither is
+      redundant: only one of the two documents ships in each mode.
+    -->
+    <meta
+      content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
+      name="viewport"
+    />
+    <link href="favicon.ico" rel="icon" type="image/x-icon" />
+
+    <!--
+      What makes this an app you can keep on a home screen (plan 0013, part C).
+
+      These tags ship only in the standalone document. The portfolio shell serves its
+      own `index.html` for the mounted build, and velista's manifest there would claim
+      a scope on somebody else's origin.
+
+      `theme_color` in the manifest and this `theme-color` are the same `#0a0c14`,
+      which is `--app-ink-950` and the ink the mark is drawn in. The manifest takes one
+      colour and the app has two themes, so it matches Night, which is the default: an
+      amber status bar above a near black app reads as a rendering bug (D7).
+
+      The apple touch icon is a `link` rather than a manifest entry because iOS does
+      not read the manifest reliably for Add to Home Screen.
+    -->
+    <link href="manifest.webmanifest" rel="manifest" />
+    <meta content="#0a0c14" name="theme-color" />
+    <link href="apple-touch-icon.png" rel="apple-touch-icon" />
+  </head>
+  <body>
+    <app-velista-root></app-velista-root>
+  </body>
+</html>

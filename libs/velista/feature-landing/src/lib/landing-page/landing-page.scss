@@ -1,0 +1,57 @@
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+// Duplicated from `home-page.scss` rather than shared through a partial: plan 0002
+// keeps component layout in the component, and three lines of flex column is cheaper
+// to read twice than to import.
+.page {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100%;
+  position: relative;
+  // Most of the glow is outside the page, so the corner is a quarter circle rather
+  // than a ball stuck to the edge. On `.page` and not on the host: the sheet outlet
+  // is a sibling of this element for exactly this class of reason, and a clipped
+  // host would clip a fixed sheet's scrim.
+  overflow: hidden;
+
+  // The mock's warm corner. A pseudo element, so it costs no element and can never
+  // be tabbed to or clicked through. Both the ramp and the geometry are tokens: Day
+  // resolves the image to `none` and the corner is simply not painted.
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block-start: var(--app-glow-inset-block-start);
+    inset-inline-end: var(--app-glow-inset-inline-end);
+    inline-size: var(--app-glow-size);
+    block-size: var(--app-glow-size);
+    border-radius: var(--app-radius-full);
+    background-image: var(--app-ambient-glow);
+    pointer-events: none;
+  }
+}
+
+// This screen does not scroll. It is deliberately one screen, on the theory that the
+// entry actions matter more than persuasion (plan 0003, open question 3), so the
+// spacer takes whatever room is left and pushes the four ways in down into thumb
+// reach instead of letting the page grow past the fold.
+.spacer {
+  flex: 1;
+  min-block-size: var(--app-space-6);
+}
+
+// The one sentence after a delete (plan 0015, section 5.7). Neutral, not a success
+// tone: nothing good just happened, something asked for did. Quiet enough that it does
+// not compete with the hero it sits above, and gone entirely on the next visit.
+.notice {
+  margin: 0 var(--app-space-5);
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}

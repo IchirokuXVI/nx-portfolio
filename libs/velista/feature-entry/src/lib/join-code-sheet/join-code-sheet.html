@@ -1,0 +1,63 @@
+@if (accountLost()) {
+  <lib-account-lost-panel (restart)="restart()" />
+} @else {
+  <lib-sheet-shell
+    (dismiss)="dismiss()"
+    [dismissible]="!submitting()"
+    #shell
+    labelledBy="join-zone-title"
+  >
+    <h2 class="title" id="join-zone-title">
+      {{ 'entry.joinZone.title' | rokuT }}
+    </h2>
+    <p class="body">{{ 'entry.joinZone.body' | rokuT }}</p>
+
+    <label class="label" for="join-zone-code">
+      {{ 'entry.joinZone.label' | rokuT }}
+    </label>
+
+    <lib-join-code-field
+      (pasteCode)="paste()"
+      [(value)]="code"
+      [errorId]="errorKey() === null ? null : 'join-zone-error'"
+      [invalid]="errorKey() !== null"
+      [readOnly]="submitting()"
+      fieldId="join-zone-code"
+    />
+
+    <div class="meta">
+      <!-- The rule is stated before it can be broken, and the message after a
+           rejection repeats it, because that is when it is actually read. -->
+      <span class="hint">{{ 'entry.joinZone.hint' | rokuT }}</span>
+      <span class="counter">{{ code().length }} / 8</span>
+    </div>
+
+    @if (errorKey(); as key) {
+      <p class="error" id="join-zone-error" role="alert">
+        <lib-alert-icon aria-hidden="true" class="glyph" />
+        {{ key | rokuT }}
+      </p>
+    }
+
+    <button
+      (click)="submit()"
+      [attr.aria-busy]="submitting()"
+      [disabled]="!canSubmit()"
+      class="primary"
+      type="button"
+    >
+      @if (submitting()) {
+        <lib-spinner-icon class="glyph" />
+        {{ 'entry.joinZone.submitting' | rokuT }}
+      } @else {
+        {{ 'entry.joinZone.submit' | rokuT }}
+      }
+    </button>
+
+    @if (!submitting()) {
+      <button (click)="shell.requestDismiss()" class="cancel" type="button">
+        {{ 'entry.cancel' | rokuT }}
+      </button>
+    }
+  </lib-sheet-shell>
+}

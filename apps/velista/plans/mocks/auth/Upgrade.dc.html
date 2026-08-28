@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- UPGRADE FORM -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SECURE MY ACCOUNT &middot; the same user, kept</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <div style="display: flex; align-items: center; gap: 4px; padding: 12px 12px 4px;">
+        <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.5 5.5L8 12l6.5 6.5"/>
+          </svg>
+        </button>
+      </div>
+
+      <div style="flex: 1; padding: 8px 24px 24px; display: flex; flex-direction: column;">
+
+        <h1 style="margin: 0 0 8px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Keep what you have</h1>
+        <p style="margin: 0 0 22px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Add an email and a password to the account already on this phone. Nothing moves and nothing is lost.</p>
+
+        <div style="display: flex; gap: 11px; align-items: flex-start; padding: 14px 15px; border-radius: 16px; background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.22); margin-bottom: 26px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" aria-hidden="true">
+            <circle cx="12" cy="12" r="9.2" stroke="#34d399" stroke-width="1.7"/>
+            <path d="M8.2 12.2l2.6 2.6 5-5.2" stroke="#34d399" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div style="font-size: 12.5px; line-height: 1.5; color: #e4e7f1;">Your 2 groups and everything in them stay exactly where they are. This is the same account, with a way back into it.</div>
+        </div>
+
+        <label for="email-u" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Email</label>
+        <div id="email-u" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 15px; margin-bottom: 18px;">
+          <span style="font-size: 16px; color: #f7f8fc;">marta@example.com</span>
+        </div>
+
+        <label for="pass-u" style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Password</label>
+        <div id="pass-u" style="height: 52px; border-radius: 14px; background: #11141f; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 8px 0 15px; gap: 10px; margin-bottom: 26px;">
+          <span style="flex: 1; font-size: 17px; letter-spacing: 0.2em; color: #f7f8fc;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+          <button type="button" style="width: 40px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Show password">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/>
+              <circle cx="12" cy="12" r="2.9"/>
+            </svg>
+          </button>
+        </div>
+
+        <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Secure my account</button>
+
+        <div style="flex: 1;"></div>
+
+        <div style="display: flex; align-items: center; justify-content: center; height: 44px;">
+          <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Not now</span>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- DONE -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">DONE &middot; the banner is gone, and that is the reward</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+            <g transform="translate(-0.25 0.732) scale(0.98)">
+              <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+              <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+              <path d="M12.8 8.1c.47-.4.98.4 1.45 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M12.9 10.6c.43-.42.87.42 1.3 0s.87.42 1.3 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M13 13.1c.63-.45 1.27.45 1.9 0s1.27.45 1.9 0" stroke="#ffb454" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+            </g>
+          </svg>
+          <span style="font-family: 'Marcellus', Georgia, serif; font-size: 21px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+        </div>
+        <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650; color: #c2c8db;">M</div>
+      </div>
+
+      <div style="flex: 1; overflow: hidden; padding: 20px 20px 0;">
+
+        <div style="display: flex; gap: 11px; align-items: center; padding: 14px 16px; border-radius: 16px; background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.22); margin-bottom: 26px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style="flex: none;" aria-hidden="true">
+            <circle cx="12" cy="12" r="9.2" stroke="#34d399" stroke-width="1.7"/>
+            <path d="M8.2 12.2l2.6 2.6 5-5.2" stroke="#34d399" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div style="font-size: 13.5px; line-height: 1.45; color: #e4e7f1;">Your account is secured. Sign in anywhere with marta@example.com.</div>
+        </div>
+
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #98a0bb; margin-bottom: 12px;">Your groups</div>
+
+        <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.06); padding: 17px 18px; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px;">
+            <span style="font-size: 16.5px; font-weight: 650;">Flat 3B</span>
+            <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: #ffb454; background: rgba(255,180,84,0.13); border-radius: 999px; padding: 4px 9px;">OWNER</span>
+          </div>
+          <div style="font-size: 13px; color: #98a0bb;">3 members &middot; 2 lists</div>
+        </div>
+
+        <div style="border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.06); padding: 17px 18px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px;">
+            <span style="font-size: 16.5px; font-weight: 650;">Casa de mis padres</span>
+            <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; color: #98a0bb; background: rgba(255,255,255,0.07); border-radius: 999px; padding: 4px 9px;">MEMBER</span>
+          </div>
+          <div style="font-size: 13px; color: #98a0bb;">4 members &middot; 1 list</div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

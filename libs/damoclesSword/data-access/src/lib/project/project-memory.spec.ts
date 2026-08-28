@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
+import { DAMOCLES_DATA_ACCESS_PROVIDERS } from '../data-access-providers';
 import { ProjectMemory } from './project-memory';
 import { PROJECTS } from './static-project-data';
 
@@ -7,7 +8,14 @@ describe('ProjectMemory', () => {
   let service: ProjectMemory;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    // The app's provider set, plus the class under test by name. The set binds each
+    // token to its implementation with `provideService`, which is what these
+    // services resolve each other through; `useClass` does not also make the class
+    // injectable by name, and this spec is about the implementation rather than the
+    // interface, so it asks for it directly (plan 0005 D5).
+    TestBed.configureTestingModule({
+      providers: [...DAMOCLES_DATA_ACCESS_PROVIDERS, ProjectMemory],
+    });
     service = TestBed.inject(ProjectMemory);
   });
 
@@ -37,7 +45,9 @@ describe('ProjectMemory', () => {
     const starlit = projects.find((p) => p.label === 'STARLIT: ASCENSION');
 
     expect(starlit?.locale).toBe('en');
-    expect(starlit?.description).toContain('Starlit: Ascension is a VR Shooter');
+    expect(starlit?.description).toContain(
+      'Starlit: Ascension is a VR Shooter'
+    );
   });
 
   it('gives the STARLIT: ASCENSION game a right-positioned video and top-right logo', async () => {

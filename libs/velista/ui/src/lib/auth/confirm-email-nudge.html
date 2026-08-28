@@ -1,0 +1,30 @@
+<aside class="nudge">
+  <lib-mail-icon aria-hidden="true" class="mark" />
+
+  <div class="text">
+    <h2 class="title">{{ 'auth.nudge.title' | rokuT }}</h2>
+    <p class="body">{{ 'auth.nudge.body' | rokuT: { email: email() } }}</p>
+
+    @if (resendOffered()) {
+      <lib-resend-sentence
+        (resend)="resend.emit()"
+        [state]="resendState()"
+        [waitSeconds]="resendWaitSeconds()"
+        class="resend"
+        promptKey="auth.resend.prompt"
+      />
+    }
+  </div>
+
+  <!-- 44 by 44 even though the glyph is 16px (plan 0009, section 7). The mock draws
+       the target smaller; a dismiss that is hard to hit is a card that never goes
+       away, and this one is meant to be dismissible. -->
+  <button
+    (click)="dismiss.emit()"
+    [attr.aria-label]="'auth.nudge.dismiss' | rokuT"
+    class="dismiss"
+    type="button"
+  >
+    <lib-close-icon class="dismiss-glyph" />
+  </button>
+</aside>

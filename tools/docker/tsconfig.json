@@ -1,7 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "module": "commonjs"
+    "module": "commonjs",
+    // Paired with the commonjs module above: the workspace default is
+    // moduleResolution "bundler", which tsc rejects for a commonjs build
+    // (TS5095). Same pairing the other tsc-built projects use.
+    "moduleResolution": "node"
   },
   "files": [],
   "include": [],

@@ -1,0 +1,211 @@
+# Tier 2 overlay: the five Luna Shopper services as their BUILT IMAGES, on top of
+# the infrastructure in compose.yml (plan 0015, section 2).
+#
+# Tier 1 (the pull request gate) runs the services as plain `node dist/.../main.js`
+# processes, which is fast and tests everything except the image itself. This
+# overlay is the other half: it runs the image, so the things only an image can
+# get wrong are covered — entrypoint, non root user, the runtime `npm install`,
+# baked config, and SIGTERM reaching PID 1. `docker-ci.yml` already builds these
+# images on the way to staging, so running the suite against them before the
+# `helm upgrade` costs the stack boot and the suite, not a rebuild, and it turns
+# the staging deploy into a gated one.
+#
+# It is an overlay, never a standalone file, so compose.yml stays the single
+# definition of what the infrastructure IS:
+#
+#   docker compose -f k8s/e2e/luna-shopper-backend/compose.yml \
+#                  -f k8s/e2e/luna-shopper-backend/compose.apps.yml up -d --wait
+#
+# Inside the compose network the services reach each other and the backing
+# services by compose service name on their INTERNAL ports, so the host port
+# offsets a worktree slot applies are irrelevant here. Only the published ports
+# (which the Playwright suite on the host talks to) follow the slot.
+#
+# Migrations are NOT run by this file. They are applied from the checkout against
+# the published database ports, the same way `stack.sh up` does it, because the
+# migration CLI is a repo tool rather than something baked into the images.
+#
+# Override LUNA_IMAGE_PREFIX / LUNA_IMAGE_TAG to point at other images (a release
+# version instead of the mutable `staging` tag).
+
+services:
+  gateway:
+    image: ${LUNA_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/luna-shopper-backend-gateway:${LUNA_IMAGE_TAG:-staging}
+    restart: 'no'
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      LOG_LEVEL: debug
+      CORS_ORIGINS: http://localhost:4200
+      AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
+      PORT: '3000'
+      # Google sign in at the gateway (plan 0023). The credentials are fictional:
+      # no suite here can complete a real consent screen, and what the stack does
+      # need is for the routes to be live so the state mint and the refusal of a
+      # bad state are exercised against a running gateway.
+      GOOGLE_CLIENT_ID: e2e-client-id.apps.googleusercontent.com
+      GOOGLE_CLIENT_SECRET: e2e-client-secret
+      GOOGLE_CALLBACK_URL: http://localhost:3000/v1/auth/google/callback
+      # Where the callback sends the browser back. `{locale}` is substituted with
+      # the locale the flow started in; the app lives under a path that follows
+      # the locale segment, so a plain prefix could not express it.
+      APP_BASE_URL: http://localhost:4200/{locale}/velista
+      # Names this container on every span and metric (plan 0016, section 4.2).
+      # Tracing stays off unless OTEL_ENABLED and an endpoint are supplied, so
+      # this tier runs unchanged without a collector.
+      OTEL_SERVICE_NAME: luna-shopper-backend-gateway
+      DEPLOYMENT_ENVIRONMENT: development
+    ports:
+      - '${LUNA_GATEWAY_PORT:-3000}:3000'
+    volumes:
+      - ../../../apps/luna-shopper-backend/secrets:/run/secrets/luna:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:3000/health/ready\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  realtime:
+    image: ${LUNA_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/luna-shopper-backend-realtime:${LUNA_IMAGE_TAG:-staging}
+    restart: 'no'
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      LOG_LEVEL: debug
+      CORS_ORIGINS: http://localhost:4200
+      AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
+      PORT: '3001'
+      OTEL_SERVICE_NAME: luna-shopper-backend-realtime
+      DEPLOYMENT_ENVIRONMENT: development
+    ports:
+      - '${LUNA_REALTIME_PORT:-3001}:3001'
+    volumes:
+      - ../../../apps/luna-shopper-backend/secrets:/run/secrets/luna:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:3001/health/ready\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  auth:
+    image: ${LUNA_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/luna-shopper-backend-auth:${LUNA_IMAGE_TAG:-staging}
+    restart: 'no'
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    environment:
+      NATS_URL: nats://nats:4222
+      LOG_LEVEL: debug
+      CORS_ORIGINS: http://localhost:4200
+      AUTH_DB_URL: postgres://luna_auth:luna_auth@auth-db:5432/luna_auth
+      AUTH_JWT_PRIVATE_KEY_FILE: /run/secrets/luna/jwt.key
+      AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
+      AUTH_JWT_KID: dev-1
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 30d
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      SMTP_USER: ''
+      SMTP_PASS: ''
+      MAIL_FROM: Luna Shopper <no-reply@luna.localhost>
+      MAIL_VERIFY_BASE_URL: http://localhost:4200/verify-email
+      MAIL_RESET_BASE_URL: http://localhost:4200/reset-password
+      GOOGLE_CLIENT_ID: e2e-client-id.apps.googleusercontent.com
+      GOOGLE_CLIENT_SECRET: e2e-client-secret
+      GOOGLE_CALLBACK_URL: http://localhost:3000/auth/google/callback
+      PORT: '3002'
+      OTEL_SERVICE_NAME: luna-shopper-backend-auth
+      DEPLOYMENT_ENVIRONMENT: development
+    ports:
+      - '${LUNA_AUTH_PORT:-3002}:3002'
+    volumes:
+      - ../../../apps/luna-shopper-backend/secrets:/run/secrets/luna:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:3002/health/ready\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  core:
+    image: ${LUNA_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/luna-shopper-backend-core:${LUNA_IMAGE_TAG:-staging}
+    restart: 'no'
+    depends_on:
+      core-db:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      LOG_LEVEL: debug
+      CORS_ORIGINS: http://localhost:4200
+      CORE_DB_URL: postgres://luna_core:luna_core@core-db:5432/luna_core
+      AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
+      ZONE_REAPER_ENABLED: 'false'
+      PORT: '3003'
+      OTEL_SERVICE_NAME: luna-shopper-backend-core
+      DEPLOYMENT_ENVIRONMENT: development
+    ports:
+      - '${LUNA_CORE_PORT:-3003}:3003'
+    volumes:
+      - ../../../apps/luna-shopper-backend/secrets:/run/secrets/luna:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:3003/health/ready\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  catalog:
+    image: ${LUNA_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/luna-shopper-backend-catalog:${LUNA_IMAGE_TAG:-staging}
+    restart: 'no'
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      LOG_LEVEL: debug
+      CORS_ORIGINS: http://localhost:4200
+      CATALOG_DB_URL: postgres://luna_catalog:luna_catalog@catalog-db:5432/luna_catalog
+      AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
+      PLATFORM_ADMIN_USER_IDS: ''
+      PORT: '3004'
+      OTEL_SERVICE_NAME: luna-shopper-backend-catalog
+      DEPLOYMENT_ENVIRONMENT: development
+    ports:
+      - '${LUNA_CATALOG_PORT:-3004}:3004'
+    volumes:
+      - ../../../apps/luna-shopper-backend/secrets:/run/secrets/luna:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:3004/health/ready\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20

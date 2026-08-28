@@ -13,54 +13,54 @@
 #   127.0.0.1 portfolio.localhost mfe.localhost
 #
 # The shell image must be built with MFE_BASE_URL=http://mfe.localhost so it loads
-# its remotes through the reverse proxy on the local micro-frontend host.
+# its remotes through the gateway on the local micro-frontend host.
+#
+# Chrome and Edge resolve *.localhost to loopback internally, so the browser may
+# reach these hosts with no hosts file entry. The Windows resolver does not, so
+# curl, Node and Playwright still need the entries above.
 #
 # If you cannot edit the hosts file, use k8s/helm/values.localhost.yaml instead:
 # it serves everything through a single `localhost` host + port forward, no admin
 # and no DNS changes required.
 
 # Use the locally built dev images without reaching for a registry.
-productionImageTag: dev
+imageTag: dev
 appImagePullPolicy: IfNotPresent
 
-# Docker Desktop ships a `hostpath` default StorageClass, not k3s's `local-path`.
-certsVolume:
-  storageClassName: hostpath
+# Route through the gateway, but with self signed certificates: the hosts have no
+# public DNS, so ACME would only fail and burn rate limits. Same objects as
+# production, only the issuer name differs.
+#
+# Requires the cluster bootstrap once:
+#   ./k8s/bootstrap/install.ps1 -Issuer selfsigned
+gateway:
+  enabled: true
+  className: eg
+  tls:
+    enabled: true
+    issuer: selfsigned
+    # Everything here is plain HTTP; redirecting would just break it.
+    redirectHttp: false
 
-# No public DNS locally: skip Let's Encrypt (self-signed dummy certs are enough)
-# and skip the MetalLB pool (Docker Desktop surfaces the proxy on localhost).
-certbot:
-  enabled: false
+# Docker Desktop surfaces LoadBalancer services on localhost, and the pool's
+# public IP is not routable here.
 metallb:
-  enabled: false
-
-# Keep the local deploy to the single production-labelled set on local hostnames.
-staging:
   enabled: false
 
 apps:
   - name: shell
-    env: production
     image: nx-portfolio/shell
     host: portfolio.localhost
     path: /
-  - name: landing
-    env: production
-    image: nx-portfolio/landing
-    host: mfe.localhost
-    path: /landing
   - name: odontogram
-    env: production
     image: nx-portfolio/odontogram
     host: mfe.localhost
     path: /odontogram
   - name: damoclessword
-    env: production
     image: nx-portfolio/damoclessword
     host: mfe.localhost
     path: /damoclesSword
   - name: landingv2
-    env: production
     image: nx-portfolio/landingv2
     host: mfe.localhost
     path: /landingV2

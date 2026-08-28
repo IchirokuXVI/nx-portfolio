@@ -1,0 +1,62 @@
+<header [class.bordered]="bordered()" class="bar">
+  <div class="lockup">
+    <lib-brand-wordmark class="wordmark" />
+  </div>
+
+  @if (signedIn()) {
+    <div class="actions">
+      <button
+        (click)="openSearch.emit()"
+        [attr.aria-label]="'home.action.search' | rokuT"
+        class="icon-button"
+        type="button"
+      >
+        <lib-search-icon class="glyph" />
+      </button>
+
+      <button
+        (click)="account.emit()"
+        [attr.aria-label]="'home.action.account' | rokuT"
+        class="icon-button"
+        type="button"
+      >
+        <span aria-hidden="true" class="avatar">{{
+          accountInitial() ?? '·'
+        }}</span>
+      </button>
+    </div>
+  } @else {
+    <div class="locale-menu">
+      <button
+        (click)="toggleMenu()"
+        [attr.aria-expanded]="hasMenu() ? menuOpen() : null"
+        [attr.aria-haspopup]="hasMenu() ? 'menu' : null"
+        [attr.aria-label]="'home.action.changeLocale' | rokuT"
+        #localeTrigger
+        class="locale"
+        type="button"
+      >
+        <span aria-hidden="true">{{ locale() }}</span>
+        @if (hasMenu()) {
+          <lib-chevron-down-icon [class.open]="menuOpen()" class="chevron" />
+        }
+      </button>
+
+      @if (menuOpen()) {
+        <div class="menu" role="menu">
+          @for (option of locales(); track option) {
+            <button
+              (click)="pick(option)"
+              [attr.aria-current]="isCurrent(option) ? 'true' : null"
+              class="menu-item"
+              role="menuitem"
+              type="button"
+            >
+              {{ option.toLocaleUpperCase() }}
+            </button>
+          }
+        </div>
+      }
+    </div>
+  }
+</header>

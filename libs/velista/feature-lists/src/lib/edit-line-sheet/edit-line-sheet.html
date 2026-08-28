@@ -1,0 +1,49 @@
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!submitting()"
+  #shell
+  labelledBy="edit-line-title"
+>
+  <h2 class="title" id="edit-line-title">{{ 'list.edit.title' | rokuT }}</h2>
+
+  <label class="label" for="edit-line-content">
+    {{ 'list.edit.content' | rokuT }}
+  </label>
+  <input
+    (input)="onContentInput($event)"
+    [attr.maxlength]="maxLength"
+    [value]="content()"
+    autocomplete="off"
+    class="field"
+    id="edit-line-content"
+    type="text"
+  />
+
+  <div class="quantity-row">
+    <span class="label">{{ 'list.add.quantity' | rokuT }}</span>
+    <lib-quantity-stepper [(value)]="quantity" [disabled]="submitting()" />
+  </div>
+
+  @if (errorKey(); as key) {
+    <p class="error" role="alert">{{ key | rokuT }}</p>
+  }
+
+  <button
+    (click)="submit()"
+    [attr.aria-busy]="submitting()"
+    [disabled]="!canSubmit()"
+    class="primary"
+    type="button"
+  >
+    @if (submitting()) {
+      <lib-spinner-icon class="spinning" />
+    }
+    <span>{{ 'list.edit.save' | rokuT }}</span>
+  </button>
+
+  @if (!submitting()) {
+    <button (click)="shell.requestDismiss()" class="cancel" type="button">
+      {{ 'entry.cancel' | rokuT }}
+    </button>
+  }
+</lib-sheet-shell>

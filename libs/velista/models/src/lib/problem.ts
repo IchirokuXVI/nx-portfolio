@@ -1,0 +1,81 @@
+/**
+ * The backend's RFC 7807 problem document, re-declared.
+ *
+ * **This duplication is forced, not chosen.** The real definition lives in
+ * `@portfolio/luna-shopper/platform`, which pulls NestJS, pino and `node:crypto`, so
+ * it is never safe in a browser bundle. It is the one place in this app where copying
+ * a backend type is the correct answer rather than a shortcut (plan 0004, section 4.4).
+ *
+ * Kept in sync by hand with
+ * `libs/luna-shopper/platform/src/lib/errors/problem-details.ts` and
+ * `libs/luna-shopper/platform/src/lib/errors/error-codes.ts`.
+ */
+
+/** Every error code the gateway can return. Seven, and they map one to one onto status. */
+export const ERROR_CODES = [
+  'validation_failed',
+  'unauthorized',
+  'forbidden',
+  'not_found',
+  'conflict',
+  'rate_limited',
+  'internal',
+] as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[number];
+
+/**
+ * An unrecognised code reads as `internal`: something went wrong and the app has no
+ * specific handling for it, which is exactly what a code from a newer backend means.
+ */
+export const ERROR_CODE_FALLBACK: ErrorCode = 'internal';
+
+/**
+ * The wire shape of a problem document.
+ *
+ * Note what is **not** useful here. `message` is localized but generic: the backend's
+ * catalog holds exactly one message per code, so every 409 in the product reads "That
+ * request conflicts with the current state". `detail` carries the specific reason and
+ * is untranslated developer text. Neither is what the user should read; the app keys
+ * its own copy per code and operation (plan 0004, section 4.5).
+ */
+export interface ProblemDetails {
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly code: ErrorCode;
+  /** Untranslated developer detail. Goes in the support blob, never on screen. */
+  readonly detail?: string;
+  /** Localized but generic. A fallback for copy, not the copy. */
+  readonly message: string;
+  readonly correlationId: string;
+  /** Present only for `validation_failed`. Used for its keys, not its strings. */
+  readonly errors?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * How long the caller must wait, in seconds, on a `rate_limited`.
+   *
+   * **In the body rather than in a `Retry-After` header, and that is forced.**
+   * `main.ts` calls `enableCors({ origin, credentials: true })` with no
+   * `exposedHeaders`, so a browser reading this API cross origin can see only the
+   * CORS safelisted response headers, and `Retry-After` is not one of them. It is the
+   * same reasoning that already puts the correlation id in the body (plan 0004,
+   * section 4.6).
+   *
+   * Optional, because most throttled routes do not need the client to render a clock
+   * and only the resend flow does (plan 0009, rule C3). Absent means "we were not
+   * told", which is a state the UI has to have an answer for rather than a number it
+   * may invent.
+   */
+  readonly retryAfterSeconds?: number;
+}
+
+/**
+ * The header the gateway reads an inbound correlation id from.
+ *
+ * The client mints and sends this rather than waiting for one back, because the
+ * gateway returns the id in the **body** of a problem document and in no response
+ * header at all, and a request that never arrived has no body. `0003` promises a
+ * copyable reference on its error state, and this is what makes that keepable in the
+ * case the user is most likely to be reporting (plan 0004, section 4.6).
+ */
+export const CORRELATION_ID_HEADER = 'x-correlation-id';

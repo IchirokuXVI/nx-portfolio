@@ -1,4 +1,5 @@
-import { expect, Page, test } from '@playwright/test';
+import { Page } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 import { settle, usableLocales } from './support/locale-helpers';
 
 /**
@@ -51,11 +52,20 @@ function normalizePath(pathname: string): string {
   return clean === '' ? '/' : clean;
 }
 
-/** Swap the leading locale segment of a route path for another locale. */
-function withLocale(path: string, locale: string): string {
+/**
+ * Swap this app's locale segment for another locale.
+ *
+ * The locale sits **below** the mount now (`/damoclesSword/en/about`), so the
+ * segment to replace is the one after the mount rather than the first one. Swapping
+ * index 0 would replace `damoclesSword` itself and crawl a different app entirely.
+ */
+function withLocale(path: string, locale: string, mount: string): string {
   const segments = path.split('/').filter(Boolean);
-  if (segments.length === 0) return `/${locale}`;
-  segments[0] = locale;
+  const index = mount.split('/').filter(Boolean).length;
+
+  if (segments.length <= index) return `${mount}/${locale}`;
+
+  segments[index] = locale;
   return '/' + segments.join('/');
 }
 
@@ -143,13 +153,27 @@ for (const viewport of viewports) {
     page,
     baseURL,
   }) => {
+    // One test here is a whole crawl: every discovered route is loaded once to
+    // read its links and then once more per non-default locale, so the work is
+    // routes x locales navigations, each followed by a settle. Today that is
+    // already 15 navigations, and the crawl exists precisely so that new routes
+    // are picked up without editing this file, so a fixed per-test budget goes
+    // stale the moment the app grows one more page. Scale
+    // the budget with the crawl's own ceiling instead.
+    test.setTimeout(MAX_ROUTES * 6_000);
+
     expect(
       baseURL,
       'baseURL must be configured in playwright.config.ts'
     ).toBeTruthy();
 
     const scope = normalizePath(new URL(baseURL as string).pathname);
-    const defaultLocale = scope.split('/').filter(Boolean)[0];
+    // `scope` is `/damoclesSword/en`: the mount, then the locale below it. It used
+    // to be `/en/damoclesSword`, so the two were the other way round and the locale
+    // was segment 0 (plan 0003).
+    const scopeSegments = scope.split('/').filter(Boolean);
+    const mount = `/${scopeSegments[0]}`;
+    const defaultLocale = scopeSegments[1];
 
     // The usable-locale set is app config (viewport-independent), so discover it
     // once, up front, at a wide viewport where the switcher's options are laid
@@ -194,7 +218,7 @@ for (const viewport of viewports) {
       // Measure the same route in every locale. The default locale is already
       // loaded from the link-discovery navigation above, so probe it in place.
       for (const locale of locales) {
-        const localeRoute = withLocale(route, locale);
+        const localeRoute = withLocale(route, locale, mount);
         if (locale !== defaultLocale) {
           await page.goto(localeRoute);
           await settle(page);

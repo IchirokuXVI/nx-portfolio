@@ -1,0 +1,122 @@
+@use '../styles/tokens' as tokens;
+
+:host {
+  display: block;
+}
+
+// Bordered in the action colour rather than the subtle line every other card uses.
+// It is the one thing on the dashboard that has just appeared and has something the
+// person is expected to do with it, and it stops being the loudest thing on screen
+// as soon as they leave the page.
+.card {
+  padding: var(--app-space-6);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-elevation-1);
+
+  // A code that has just replaced an older one. The sentence in the live region is
+  // what actually says so; this is the second signal and never the only one. The
+  // border goes to the solid attention colour rather than the card gaining a tint,
+  // because the tint token is a 10% fill and would let the page ground through a
+  // surface that has a sunken field sitting on it.
+  &.is-new {
+    border-color: var(--app-status-attention-fg);
+  }
+}
+
+.title {
+  margin: 0 0 var(--app-space-hair);
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0 0 var(--app-space-5);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.code-row {
+  display: flex;
+  gap: var(--app-space-4);
+}
+
+.code {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  block-size: var(--app-code-field-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font-family: var(--app-font-mono);
+  font-size: var(--app-code-size);
+  letter-spacing: var(--app-code-tracking);
+  // The tracking adds a gap after the last character, which visually pushes the
+  // code left of centre. Half of it back, so it sits where it looks centred.
+  text-indent: var(--app-code-tracking);
+}
+
+.copy {
+  flex: none;
+  inline-size: var(--app-code-field-height);
+  block-size: var(--app-code-field-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--app-field-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:active {
+    background: var(--app-action-bg-pressed);
+  }
+
+  @include tokens.app-focus-ring;
+}
+
+.share {
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin-block-start: var(--app-space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-3);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include tokens.app-focus-ring;
+}
+
+.copied {
+  margin: 0;
+  min-block-size: var(--app-space-6);
+  padding-block-start: var(--app-space-3);
+  font-size: var(--app-text-xs);
+  color: var(--app-status-success-fg);
+  text-align: center;
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+}

@@ -1,0 +1,22 @@
+// Sized by the caller through `font-size`, or by setting a width on the host.
+// Deliberately not a size input: an icon that follows its text is one less thing
+// to keep in sync, and the two places the mark appears next to the wordmark need
+// exactly that.
+:host {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  color: inherit;
+  flex-shrink: 0;
+}
+
+// The asset carries its own `width="100%" height="100%"` and
+// `stroke="currentColor"`, so nothing here has to reach inside it with
+// `::ng-deep` to make either work. `currentColor` resolves at all only because
+// the SVG is inlined rather than referenced through an `<img>`, which would
+// resolve the keyword against the file's own initial colour instead.
+.mark {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}

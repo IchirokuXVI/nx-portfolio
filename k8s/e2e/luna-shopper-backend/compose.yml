@@ -1,0 +1,324 @@
+# Luna Shopper local development stack (plan 0002, section 2).
+#
+# Dev only. It brings up the backing services the four Luna Shopper apps need so
+# they can be run locally with `nx serve luna-shopper-backend-<svc>` against real
+# dependencies. It deliberately does NOT run the apps themselves: those are built
+# and served by Nx, which gives fast rebuilds and debugging.
+#
+# Run it from this folder (or point -f at it). nx serve runs from the workspace
+# root and reaches these on localhost, so the compose file's location does not
+# matter to the services:
+#
+#   docker compose -f k8s/e2e/luna-shopper-backend/compose.yml up -d
+#   cp apps/luna-shopper-backend/.env.luna-shopper-backend.example \
+#      apps/luna-shopper-backend/.env.luna-shopper-backend   # then fill in the keypair
+#   npx nx serve luna-shopper-backend-auth      # and gateway / core / realtime
+#
+# There are two separate Postgres instances on purpose: auth and core each own a
+# private database and never share one, so the "no shared database" rule holds
+# even locally. Redis is here as of plan 0028, and it is the cache, the presence
+# store and the socket backplane; the services are only correct at more than one
+# replica because it exists.
+
+# The project name (container/network/volume namespace) is overridable so that
+# several git worktrees can each run a fully isolated copy of this stack at the
+# same time. Set COMPOSE_PROJECT_NAME (and the matching LUNA_*_PORT overrides)
+# to a per worktree "slot"; see parallel-worktree-testing.md. Left unset, every
+# default below reproduces the original single stack workflow unchanged.
+name: ${COMPOSE_PROJECT_NAME:-luna-shopper-backend}
+
+services:
+  # Auth service database.
+  auth-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_auth
+      POSTGRES_PASSWORD: luna_auth
+      POSTGRES_DB: luna_auth
+    ports:
+      - '${LUNA_AUTH_DB_PORT:-5432}:5432'
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_auth']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Core service database. A separate instance (and a separate port) from auth.
+  core-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_core
+      POSTGRES_PASSWORD: luna_core
+      POSTGRES_DB: luna_core
+    ports:
+      - '${LUNA_CORE_DB_PORT:-5433}:5432'
+    volumes:
+      - core-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_core']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Catalog service database. A separate instance (and port) from auth and core,
+  # so the "no shared database" rule holds even locally (plan 0012).
+  catalog-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_catalog
+      POSTGRES_PASSWORD: luna_catalog
+      POSTGRES_DB: luna_catalog
+    ports:
+      - '${LUNA_CATALOG_DB_PORT:-5434}:5432'
+    volumes:
+      - catalog-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_catalog']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --- Opt-in test databases (plan 0013, section 3.1) -----------------------
+  # A dedicated database per service so a test run never touches the developer's
+  # own dev data. They are gated behind the `test` profile, so a plain `up` never
+  # starts them; bring them up with:
+  #   docker compose --profile test -f k8s/e2e/luna-shopper-backend/compose.yml up -d
+  # Then run any db target with LUNA_ENV=test (which loads each .env.test). A
+  # separate instance and port per service keeps the "no shared database" rule.
+  auth-db-test:
+    image: postgres:16-alpine
+    profiles: ['test']
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_auth
+      POSTGRES_PASSWORD: luna_auth
+      POSTGRES_DB: luna_auth_test
+    ports:
+      - '${LUNA_AUTH_DB_TEST_PORT:-5442}:5432'
+    volumes:
+      - auth-db-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_auth']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  core-db-test:
+    image: postgres:16-alpine
+    profiles: ['test']
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_core
+      POSTGRES_PASSWORD: luna_core
+      POSTGRES_DB: luna_core_test
+    ports:
+      - '${LUNA_CORE_DB_TEST_PORT:-5443}:5432'
+    volumes:
+      - core-db-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_core']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  catalog-db-test:
+    image: postgres:16-alpine
+    profiles: ['test']
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_catalog
+      POSTGRES_PASSWORD: luna_catalog
+      POSTGRES_DB: luna_catalog_test
+    ports:
+      - '${LUNA_CATALOG_DB_TEST_PORT:-5444}:5432'
+    volumes:
+      - catalog-db-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_catalog']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Message broker with JetStream enabled from day one (durable streams, at least
+  # once delivery, replay). The store directory is a named volume so streams
+  # survive a restart, mirroring the persistent volume the cluster uses.
+  #   4222 client / 8222 monitoring
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command: ['-js', '-sd', '/data', '-m', '8222']
+    ports:
+      - '${LUNA_NATS_PORT:-4222}:4222'
+      - '${LUNA_NATS_MONITOR_PORT:-8222}:8222'
+    volumes:
+      - nats-data:/data
+    # `docker compose up --wait` blocks on healthchecks, and it is what the stack
+    # targets and both CI tiers use instead of a sleep (plan 0015, section 4).
+    # Without a check here compose calls NATS started the moment the container
+    # runs, and a migration or a service can connect to a broker that is not
+    # listening yet — exactly the intermittent flake that gets a CI suite
+    # disabled. `/healthz` on the monitoring port is the broker's own answer to
+    # "am I ready"; wget is BusyBox's, from the alpine base.
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget --spider -q http://127.0.0.1:8222/healthz || exit 1',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Cache, presence store and socket backplane (plan 0028). It holds the
+  # socket.io adapter's channels, the relay channel, presence, the throttle
+  # counters, the JetStream dedupe window and the access check cache.
+  #
+  # No volume, deliberately: everything in it is either ephemeral by nature or
+  # reconstructible, so Redis restarting empty is a brief loosening of rate
+  # limits and a presence resync rather than data loss. The cluster template
+  # makes the same choice, and this stack exists to have the same shape.
+  #
+  # `maxmemory-policy volatile-lru` matches the cluster too: every key this plan
+  # defines carries a TTL, and restricting eviction to those means pressure can
+  # never drop a key that was meant to be held.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      [
+        'redis-server',
+        '--maxmemory',
+        '128mb',
+        '--maxmemory-policy',
+        'volatile-lru',
+        '--save',
+        '',
+        '--appendonly',
+        'no',
+      ]
+    ports:
+      - '${LUNA_REDIS_PORT:-6379}:6379'
+    # Same reasoning as the NATS check above: `up --wait` must not call Redis
+    # started before it can answer, or a service races it at boot.
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Local SMTP catcher so confirmation emails are viewable without a real
+  # provider. Mailpit is the maintained drop in for Mailhog.
+  #   1025 SMTP / 8025 web UI (http://localhost:8025)
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '${LUNA_SMTP_PORT:-1025}:1025'
+      - '${LUNA_MAILPIT_UI_PORT:-8025}:8025'
+
+  # --- Opt-in observability stack (plan 0016, section 9) ---------------------
+  # Gated behind the `observability` profile, so a plain `up` never starts them.
+  # Bring them up with:
+  #   docker compose --profile observability -f k8s/e2e/luna-shopper-backend/compose.yml up -d
+  # Then point the services at the collector, which is what makes them emit at
+  # all (telemetry is off when unconfigured):
+  #   OTEL_ENABLED=true
+  #   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+  # Those belong in each service's own apps/luna-shopper-backend/<svc>/.env, not
+  # the shared file: the SDK starts before Nest and reads process.env, and Nx
+  # loads a project's own .env while nothing loads the shared one. luna-slot.sh
+  # and luna-slot.ps1 write them there for you, on this slot's ports.
+  #
+  # Being able to watch a trace cross the broker on a laptop is most of this
+  # plan's practical value: it turns "the list page feels slow" into a picture
+  # within seconds.
+
+  # The single ingestion point, mirroring the topology the cluster is expected to
+  # grow. It receives traces over OTLP and scrapes the five services' /metrics.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    profiles: ['observability']
+    restart: unless-stopped
+    command: ['--config=/etc/otelcol/config.yaml']
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      # The services run on the host under `nx serve`, on this slot's ports. The
+      # collector expands these in its own config, which is how the scrape follows
+      # the slot harness without a generated targets file.
+      LUNA_GATEWAY_PORT: ${LUNA_GATEWAY_PORT:-3000}
+      LUNA_REALTIME_PORT: ${LUNA_REALTIME_PORT:-3001}
+      LUNA_AUTH_PORT: ${LUNA_AUTH_PORT:-3002}
+      LUNA_CORE_PORT: ${LUNA_CORE_PORT:-3003}
+      LUNA_CATALOG_PORT: ${LUNA_CATALOG_PORT:-3004}
+    extra_hosts:
+      # Docker Desktop resolves this already; on Linux it has to be asked for.
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '${LUNA_OTLP_GRPC_PORT:-4317}:4317'
+      - '${LUNA_OTLP_HTTP_PORT:-4318}:4318'
+    depends_on:
+      - jaeger
+
+  # Trace viewing. Accepts OTLP directly, so the collector forwards rather than
+  # translating, and the trace backend stays swappable.
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    profiles: ['observability']
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    ports:
+      - '${LUNA_JAEGER_UI_PORT:-16686}:16686'
+
+  # Scrapes the collector, which has already gathered the five services. One
+  # static target here keeps prometheus.yml free of per slot knowledge.
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    profiles: ['observability']
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      # Short retention: this is a laptop, not a monitoring cluster.
+      - '--storage.tsdb.retention.time=6h'
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - '${LUNA_PROMETHEUS_PORT:-9090}:9090'
+    depends_on:
+      - otel-collector
+
+  # Optional dashboards. Anonymous admin access, because it is a dev container
+  # with no data worth protecting.
+  grafana:
+    image: grafana/grafana:11.4.0
+    profiles: ['observability']
+    restart: unless-stopped
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: 'true'
+    volumes:
+      - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/luna.yml:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - '${LUNA_GRAFANA_PORT:-3010}:3000'
+    depends_on:
+      - prometheus
+
+volumes:
+  auth-db-data:
+  core-db-data:
+  catalog-db-data:
+  auth-db-test-data:
+  core-db-test-data:
+  catalog-db-test-data:
+  nats-data:
+  prometheus-data:
+  grafana-data:

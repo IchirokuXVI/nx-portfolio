@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { DAMOCLES_DATA_ACCESS_PROVIDERS } from '@portfolio/damoclesSword/data-access';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { SectionProjectsDetailed } from './section-projects-detailed';
 
@@ -9,7 +10,12 @@ describe('SectionProjectsDetailed', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [SectionProjectsDetailed],
-      providers: [provideRokuTranslatorTesting()],
+      providers: [
+        // The data-access services stopped being `providedIn: 'root'` when the
+        // app took ownership of its providers (plan 0005 D5).
+        ...DAMOCLES_DATA_ACCESS_PROVIDERS,
+        provideRokuTranslatorTesting(),
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SectionProjectsDetailed);

@@ -1,0 +1,66 @@
+<!--
+  aria-hidden, and that is deliberate. This is decoration: every line in it is
+  invented, none of it is actionable, and a screen reader user gets nothing from
+  hearing three fake groceries read out before the two buttons that matter. The hero
+  above already says what the product does in words.
+-->
+<div aria-hidden="true" class="card">
+  <div class="head">
+    <div class="titles">
+      <span class="list-name">{{ listName() }}</span>
+      <span class="zone-name">{{ zoneName() }}</span>
+    </div>
+
+    @if (shoppingNow() > 0) {
+      <div class="presence">
+        <span class="dot"></span>
+        <span class="presence-text">{{
+          'home.presence.shoppingCount' | rokuT: { count: shoppingNow() }
+        }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="lines">
+    @for (line of lines(); track line.content) {
+      <div class="line">
+        @switch (line.status) {
+          @case ('READY') {
+            <lib-check-circle-icon class="status status-ready" />
+          }
+          @case ('NOT_AVAILABLE') {
+            <lib-x-circle-icon class="status status-missing" />
+          }
+          @default {
+            <lib-circle-icon class="status status-pending" />
+          }
+        }
+
+        <div class="content">
+          <span [class.done]="line.status === 'READY'" class="text">{{
+            line.content
+          }}</span>
+
+          <!--
+            The status is a text label as well as a colour and an icon. Plan 0002
+            section 11: colour is never the only carrier of meaning, which also covers
+            reading a red and green list with colour blindness.
+
+            Removed the status text for now because it was cluttering the UI and the icons are
+            already conveying the status. If we add more statuses in the future, we may
+            want to bring this back, but for now the icons are sufficient.
+          -->
+          <!-- @if (line.status === 'NOT_AVAILABLE') {
+            <span class="chip">{{ 'line.status.notAvailable' | rokuT }}</span>
+          } -->
+        </div>
+
+        <span class="quantity">{{ line.quantity }}</span>
+
+        @if (line.by; as initial) {
+          <span class="by">{{ initial }}</span>
+        }
+      </div>
+    }
+  </div>
+</div>

@@ -1,0 +1,144 @@
+<!--
+  `(account)` was unbound here until plan 0015, which is a defect rather than a design:
+  the button was drawn, focusable and named, and did nothing. `(openSearch)` stays
+  unbound and stays a defect, because search is not built and recording it in three more
+  places is not progress (section 4.4).
+-->
+<lib-app-bar
+  (account)="openAccount()"
+  [accountInitial]="accountInitial()"
+  [signedIn]="true"
+/>
+
+<main class="page">
+  <!-- The string moves to the accessible name, so nothing is lost for a screen
+       reader when the label becomes a glyph. -->
+  <button
+    (click)="back()"
+    [attr.aria-label]="'zone.detail.back' | rokuT"
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
+  </button>
+
+  <!--
+    One union, read once. The page cannot render two states at once, which is what a
+    handful of independent booleans eventually does.
+
+    Each state is its own `@if` on `current.kind` rather than an `@else if` chain,
+    because a chain does not narrow a discriminated union far enough for the compiler
+    to accept the branches that carry extra fields.
+  -->
+  @let current = state();
+
+  @if (current.kind === 'error') {
+    <lib-error-state
+      (retry)="retry()"
+      [body]="'home.error.body' | rokuT"
+      [correlationId]="current.correlationId"
+      [title]="'zone.error.notAvailable' | rokuT"
+    />
+  } @else {
+    <!--
+      The header comes from the cache when the caller arrived from the dashboard, so
+      the common path shows a named group immediately and skeletons only the rows.
+      Null only on a deep link, where there is nothing cached to draw one from.
+    -->
+    @if (header(); as group) {
+      <lib-group-header
+        (openMembers)="openMembers()"
+        (openSettings)="openSettings()"
+        [group]="group"
+      />
+    }
+
+    @if (current.kind === 'loading') {
+      <lib-row-skeleton [count]="3" labelKey="zone.detail.loading" />
+    }
+
+    @if (current.kind === 'pending') {
+      <!--
+        Nothing was requested to render this. Core answers `forbidden` to the lists and
+        the members alike for a caller who is not approved, and being refused twice is
+        how somebody ends up reading an error panel about a situation that is not an
+        error (section 3.3).
+      -->
+      <section class="state">
+        <h2 class="state-title">{{ 'zone.detail.pending.title' | rokuT }}</h2>
+        <p class="state-body">{{ 'zone.detail.pending.body' | rokuT }}</p>
+      </section>
+    }
+
+    @if (current.kind === 'ownerless') {
+      <lib-ownerless-panel
+        (claim)="claim()"
+        [busy]="claiming()"
+        [canClaim]="current.canClaim"
+        [errorKey]="claimErrorKey()"
+      />
+    }
+
+    @if (current.kind === 'empty') {
+      <!--
+        Two empties that mean opposite things, and they must not look the same. The
+        primary is on both: any approved member may make the first list, so the button
+        is honest for a plain member too (section 5.5).
+      -->
+      @if (current.reason === 'no-lists') {
+        <lib-empty-state
+          [body]="'zone.detail.empty.body' | rokuT"
+          [title]="'zone.detail.empty.title' | rokuT"
+        >
+          <button (click)="newList()" class="primary" type="button">
+            {{ 'zone.detail.newList' | rokuT }}
+          </button>
+        </lib-empty-state>
+      } @else {
+        <!--
+          This group has lists and none is shared with this person. Telling them "No
+          lists yet" would be false and faintly insulting, so the copy asks them to
+          speak to somebody instead (section 3.2).
+        -->
+        <lib-empty-state
+          [body]="'zone.detail.noAccess.body' | rokuT"
+          [title]="'zone.detail.noAccess.title' | rokuT"
+        >
+          <button (click)="newList()" class="primary" type="button">
+            {{ 'zone.detail.newList' | rokuT }}
+          </button>
+        </lib-empty-state>
+      }
+    }
+
+    @if (current.kind === 'loaded') {
+      <section class="lists">
+        <div class="lists-head">
+          <h2 class="section-title">{{ 'zone.detail.lists' | rokuT }}</h2>
+          <button (click)="newList()" class="quiet" type="button">
+            {{ 'zone.detail.newList' | rokuT }}
+          </button>
+        </div>
+
+        @for (list of current.lists; track list.id) {
+          <lib-list-row (open)="openList($event)" [list]="list" />
+        }
+      </section>
+    }
+
+    @if (showInvite() && header(); as group) {
+      <lib-invite-card
+        (copyCode)="copyCode(group.joinCode)"
+        (share)="shareCode(group.joinCode)"
+        [copied]="codeCopied()"
+        [isNew]="codeIsNew()"
+        [joinCode]="group.joinCode"
+        [shareable]="canShare"
+        [zoneName]="group.name"
+      />
+    }
+  }
+</main>
+
+<!-- The sheets this page covers: a new list, and the group's settings (rule E1). -->
+<router-outlet />

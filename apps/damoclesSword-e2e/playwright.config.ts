@@ -12,8 +12,8 @@ const dockerOrigin = process.env['E2E_BASE_URL'];
 const baseURL =
   process.env['BASE_URL'] ||
   (dockerOrigin
-    ? `${dockerOrigin}/en/damoclesSword`
-    : 'http://localhost:4200/en/damoclesSword');
+    ? `${dockerOrigin}/damoclesSword/en`
+    : 'http://localhost:4200/damoclesSword/en');
 
 /**
  * Read environment variables from file.
@@ -26,6 +26,20 @@ const baseURL =
  */
 export default defineConfig({
   ...nxE2EPreset(__filename, { testDir: './src' }),
+  /* The shell dev server is a single Node process serving the shell and the
+   * lazily loaded remote as hundreds of unbundled dev chunks, and every worker
+   * drives a browser that pulls all of them on each navigation. Playwright's
+   * default worker count (half the logical cores) saturates it: navigations
+   * queue past the test timeout and the listen backlog overflows outright
+   * ("page.goto: Could not connect to server"). That is why the suite fails from
+   * the CLI but passes in UI mode, which runs a single worker. Cap the workers
+   * so the dev server stays responsive; the preset already pins CI to one. */
+  workers: process.env.CI ? 1 : 4,
+  /* Specs here drive a lazily mounted remote behind a dev server, so a single
+   * navigation carries a lot more than a static page would. 30s is the
+   * Playwright default and leaves no room for that; the crawl in
+   * no-horizontal-scroll.spec.ts raises its own budget further still. */
+  timeout: 60_000,
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     baseURL,

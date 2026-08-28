@@ -1,0 +1,33 @@
+// Shared by every icon in this library.
+//
+// Sized by the caller through `font-size`, or by setting a width on the host.
+// Deliberately not a size input: an icon that follows its text is one less thing to
+// keep in sync, and it is what lets an icon inside a button scale with the button's
+// own type at 200% zoom without anybody remembering to pass a number.
+:host {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  color: inherit;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+// The one icon that moves. Its duration is a motion token, which is what makes
+// `prefers-reduced-motion` stop it: the token collapses to zero and the arc stands
+// still, while `aria-busy` on the button it sits in keeps saying what is happening.
+:host(.spinning) .icon {
+  animation: icon-spin var(--app-motion-slow) linear infinite;
+}
+
+@keyframes icon-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}

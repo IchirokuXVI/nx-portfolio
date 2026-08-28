@@ -1,0 +1,91 @@
+{
+  "title": "Velista Home Artboards",
+  "lede": "The approved design for plan <code>0003</code>, the home page, and its split into a front door and a dashboard in <code>0007</code>. Phone only, 390 by 844. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Anonymous (first open)"
+    },
+    {
+      "file": "Authenticated.dc.html",
+      "x": 490,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Signed in (returning)"
+    },
+    {
+      "file": "TemporaryAccount.dc.html",
+      "x": 980,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Guest account + pending group"
+    },
+    {
+      "file": "DayTheme.dc.html",
+      "x": 1470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Day theme (signed in)"
+    },
+    {
+      "file": "Brand.dc.html",
+      "x": 1960,
+      "y": 0,
+      "w": 980,
+      "h": 800,
+      "title": "Velista mark and wordmark"
+    },
+    {
+      "file": "States.dc.html",
+      "x": 0,
+      "y": 1000,
+      "w": 1330,
+      "h": 970,
+      "title": "Empty / no connection / error"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -170,
+      "w": 430,
+      "text": "Home page, plan 0003.\nPhone only, 390x844. No desktop design is planned.\nThe home route IS the landing page: anonymous visitors get the front door, signed in users get their groups.\nTop row is the Night theme. Bottom row covers empty, no connection and error."
+    },
+    {
+      "id": "velista",
+      "x": 470,
+      "y": -170,
+      "w": 430,
+      "text": "Named Velista: the person sailing the velero.\nThe mark is a small sailboat whose one oversized sail is a sheet of paper with scribbled lines. The sail IS the shopping list, which is what carries you along.\nSee the brand artboard on the right for the size tests."
+    },
+    {
+      "id": "vocabulary",
+      "x": 940,
+      "y": -170,
+      "w": 430,
+      "text": "DECIDED: the UI says \"group\" in English and \"grupo\" in Spanish. The CODE keeps saying zone, everywhere: the API, the enums, the routes, the contracts and even the translation KEYS are unchanged.\nSo group is purely a translation value. Never rename a zone symbol in code to match the UI word."
+    },
+    {
+      "id": "connection",
+      "x": 1960,
+      "y": 860,
+      "w": 460,
+      "text": "TEMPORARY connection handling, by decision.\nNo offline queue, no background sync, no service worker. Losing the network shows one blocking screen, and the page reloads itself when the connection returns.\nThis is knowingly weak for a shopping list used in a supermarket. It is a placeholder until the PWA work lands, not the final answer."
+    },
+    {
+      "id": "join-requests",
+      "x": 1960,
+      "y": 1080,
+      "w": 460,
+      "text": "The join request row names the FIRST requester, then adds \"and X more want to join\" only when there is more than one. The Home card shows the multi case; with a single request it reads \"Ines wants to join\"."
+    }
+  ]
+}

@@ -33,13 +33,6 @@ services:
       VIRTUAL_HOST: 'ichirokuxvi.com'
       VIRTUAL_PATH: '/'
 
-  landing:
-    image: nx-portfolio/landing:latest
-    environment:
-      VIRTUAL_HOST: 'mfe.ichirokuxvi.com'
-      VIRTUAL_DEST: '/'
-      VIRTUAL_PATH: '/landing'
-
   odontogram:
     image: nx-portfolio/odontogram:latest
     environment:

@@ -1,0 +1,172 @@
+@use '../account-page' as page;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.page {
+  @include page.page;
+}
+
+.back {
+  @include page.back;
+}
+
+.back-glyph {
+  @include page.back-glyph;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+// Visually hidden, and never `display: none`: a region that is not rendered is not
+// announced. This is how a rename made behind a sheet is reported to somebody who
+// cannot see the name change.
+.live {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+// A group of rows, with its own heading. No card, no border: the hairlines between the
+// rows are the structure, which is what keeps the screen reading as a list of facts
+// rather than as a stack of panels.
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.hint {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.nudge {
+  margin: 0;
+  padding-block-end: var(--app-space-5);
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.note {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+// The profile failed. One line, and the screen carries on around it, because sign out
+// below has to keep working (section 3.1).
+.failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-4);
+  margin: 0;
+  padding-block: var(--app-space-5);
+  border-block-end: 1px solid var(--app-border-subtle);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.quiet {
+  @include page.quiet-action;
+}
+
+.skeleton {
+  margin: 0;
+  padding-block: var(--app-space-5);
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.skeleton-bar {
+  display: block;
+  inline-size: 60%;
+  block-size: var(--app-space-6);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-raised);
+}
+
+// The guest's primary, and the only card on either screen. The same attention roles
+// `GuestUpgradeBanner` already uses on the dashboard, so the two places that ask
+// somebody to secure their account read as the same offer rather than as two.
+.upgrade {
+  display: flex;
+  flex-direction: column;
+  padding: var(--app-space-6) var(--app-space-5);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-status-attention-bg);
+}
+
+.upgrade-title {
+  margin: 0 0 var(--app-space-3);
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.upgrade-body {
+  margin: 0 0 var(--app-space-5);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.primary {
+  @include page.primary-action;
+
+  inline-size: 100%;
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin: 0;
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-status-danger-border);
+  border-radius: var(--app-field-radius);
+  background: var(--app-status-danger-bg);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
+// The support reference, quieter than the sentence it belongs to: it is for a bug
+// report rather than for the person reading it.
+.reference {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+// Pushes the exit to the bottom on a tall phone and collapses on a short one, so the
+// destructive row is never the thing under the thumb by accident.
+.spacer {
+  flex: 1;
+  min-block-size: var(--app-space-5);
+}
+
+.exit {
+  display: flex;
+  flex-direction: column;
+  padding-block-start: var(--app-space-3);
+  border-block-start: 1px solid var(--app-border-subtle);
+}

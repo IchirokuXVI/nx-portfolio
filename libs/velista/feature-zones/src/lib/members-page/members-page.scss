@@ -1,0 +1,92 @@
+@use '../zone-page';
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.page {
+  @include zone-page.page;
+}
+
+.back {
+  @include zone-page.back;
+}
+
+.back-glyph {
+  @include zone-page.back-glyph;
+}
+
+// Visually hidden, and never `display: none`: a region that is not rendered is not
+// announced. This is how a row leaving is reported to somebody who cannot see it.
+.live {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--app-text-xl);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.error {
+  margin: 0;
+  padding: var(--app-space-4);
+  background: var(--app-status-danger-bg);
+  border: 1px solid var(--app-status-danger-border);
+  border-radius: var(--app-field-radius);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
+.pending,
+.members {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.section-title {
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+}
+
+// A hairline between rows and none above the first, so the group reads as one card
+// rather than as a stack of separate ones.
+.row-item + .row-item {
+  border-top: 1px solid var(--app-border-subtle);
+}
+
+.quiet {
+  @include zone-page.quiet-action;
+}
+
+.more {
+  align-self: center;
+}

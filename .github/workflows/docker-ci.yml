@@ -36,20 +36,30 @@ jobs:
 
     env:
       GH_TOKEN: ${{ github.token }}
-      PORTFOLIO_DOCKER_REGISTRY: ghcr.io/ichirokuxvi
-      PORTFOLIO_DOCKER_SKIP_LOGIN: true
+      DOCKER_REGISTRY: ghcr.io/ichirokuxvi
+      DOCKER_SKIP_LOGIN: true
       # Use the GitHub Actions cache backend (type=gha) for every docker build,
       # instead of the local-dir cache + actions/cache tarball round-trip. Needs the
       # docker-container buildx driver (set up below) and the Actions runtime env
       # (exposed below).
-      PORTFOLIO_DOCKER_CACHE: gha
+      DOCKER_BUILD_CACHE: gha
       # Export only the final image layers to the cache. The app images' builder
       # stage (the `nx build`) re-runs every commit regardless, so caching it buys
       # little; `min` writes less. Flip back to `max` to compare.
-      PORTFOLIO_DOCKER_CACHE_MODE: min
+      DOCKER_BUILD_CACHE_MODE: min
       # Where the shell loads its remotes from on staging. Baked into the shell
       # bundle at build time (ignored by the other, environment-agnostic apps).
       STAGING_MFE_BASE_URL: https://mfe.staging.ichirokuxvi.com
+      # ...and the remotes that are not on that host. velista is served from its own
+      # origin (plan 0013), which no base URL can produce, so it names itself here and
+      # overrides the base derived tuple. Per remote overrides win over the base, so
+      # the other three are unaffected and stay unlisted.
+      STAGING_MFE_REMOTE_URLS: velista=https://velista.staging.ichirokuxvi.com
+      # Which backend the staging velista image talks to (velista plan 0014).
+      # velista is the only app that reads these; every other one ignores them,
+      # exactly as MFE_BASE_URL is ignored by every app except the shell.
+      STAGING_LUNA_GATEWAY_URL: https://api.staging.ichirokuxvi.com
+      STAGING_LUNA_REALTIME_URL: https://rt.staging.ichirokuxvi.com
 
     steps:
       # Checkout full history so Nx can detect changes
@@ -109,7 +119,7 @@ jobs:
       # caches. Other images use the default per-image scope.
       - name: Build main docker builder
         env:
-          PORTFOLIO_DOCKER_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
+          DOCKER_BUILD_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
         run: npx nx build docker/builder --configuration=production
 
       - name: Get last successful commit on current branch
@@ -163,15 +173,17 @@ jobs:
           echo "affected_testable_apps=$affected_testable_apps" >> "$GITHUB_OUTPUT"
           echo "affected_apps_tobuild=$affected_apps_tobuild" >> "$GITHUB_OUTPUT"
 
-          # Staging kubernetes deployment names are the lowercased app names with a
-          # `-staging` suffix (see k8s/helm/values.yaml). Used to roll them below.
-          affected_staging=$(echo "$affected_apps_tobuild" | tr ',' '\n' | sed '/^$/d' | tr '[:upper:]' '[:lower:]' | sed 's/$/-staging/' | paste -sd' ' -)
-          echo "affected_staging=$affected_staging" >> "$GITHUB_OUTPUT"
+          # The deployment name is now just the lowercased project name. The
+          # `-staging` suffix went away with the env dimension (k8s plan 0002):
+          # staging is a different cluster, not a differently named half of the
+          # same release, so deriving a name by string surgery is over.
+          affected_deployments=$(echo "$affected_apps_tobuild" | tr ',' '\n' | sed '/^$/d' | tr '[:upper:]' '[:lower:]' | paste -sd' ' -)
+          echo "affected_deployments=$affected_deployments" >> "$GITHUB_OUTPUT"
 
           echo "Affected apps to build: $affected_apps_tobuild"
-          echo "Affected staging deployments: $affected_staging"
+          echo "Affected deployments: $affected_deployments"
 
-      # Build affected static docker apps (builder base, local http server, proxy, certbot)
+      # Build affected static docker apps (builder base, local http server)
       - name: Build affected docker apps
         if: ${{ steps.get-affected-apps.outputs.affected_docker_apps != '' }}
         run: |
@@ -188,17 +200,20 @@ jobs:
             npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_testable_apps }}
 
       # Build & push affected micro-frontends under the mutable `staging` tag.
-      # The shell reads MFE_BASE_URL; the other apps ignore it.
+      # The shell reads MFE_BASE_URL and MFE_REMOTE_URLS; the other apps ignore both.
       - name: Build & push staging images
         if: ${{ steps.get-affected-apps.outputs.affected_apps_tobuild != '' }}
         env:
-          PORTFOLIO_IMAGE_TAG: staging
+          DOCKER_IMAGE_TAG: staging
           MFE_BASE_URL: ${{ env.STAGING_MFE_BASE_URL }}
+          MFE_REMOTE_URLS: ${{ env.STAGING_MFE_REMOTE_URLS }}
+          LUNA_GATEWAY_URL: ${{ env.STAGING_LUNA_GATEWAY_URL }}
+          LUNA_REALTIME_URL: ${{ env.STAGING_LUNA_REALTIME_URL }}
         run: |
           npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}
 
       # ---------------------------------------------------------------------------
-      # e2e against the exact staging images that were just pushed. k8s/e2e/compose.yml
+      # e2e against the exact staging images that were just pushed. k8s/e2e/portfolio-frontend/compose.yml
       # stands up the shell + remotes behind a reverse proxy on the staging hostnames
       # (mirroring the Kubernetes topology), so the real staging shell — which bakes
       # the staging MFE host — is tested unchanged. Runs after the push and before the
@@ -218,9 +233,9 @@ jobs:
             affected_e2e=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$all_e2e" | paste -sd, -)
           fi
 
-          # landing-e2e / odontogram-e2e are excluded (pre-existing tsconfig/spec
-          # breakage; see k8s/README.md).
-          affected_e2e=$(echo "$affected_e2e" | tr ',' '\n' | sed '/^$/d' | grep -vE '^(landing-e2e|odontogram-e2e)$' | paste -sd, -)
+          # odontogram-e2e is excluded (pre-existing tsconfig/spec breakage; see
+          # k8s/README.md).
+          affected_e2e=$(echo "$affected_e2e" | tr ',' '\n' | sed '/^$/d' | grep -vE '^(odontogram-e2e)$' | paste -sd, -)
 
           echo "projects=$affected_e2e" >> "$GITHUB_OUTPUT"
           echo "Affected e2e projects: $affected_e2e"
@@ -235,7 +250,7 @@ jobs:
           # staging hostnames resolve to the local reverse proxy.
           echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
 
-          docker compose -f k8s/e2e/compose.yml up -d --pull always
+          docker compose -f k8s/e2e/portfolio-frontend/compose.yml up -d --pull always
 
           # Wait for the shell to answer through the proxy.
           for i in $(seq 1 45); do
@@ -271,46 +286,240 @@ jobs:
 
       - name: Tear down the staging e2e stack
         if: ${{ always() && steps.get-affected-e2e.outputs.projects != '' }}
-        run: docker compose -f k8s/e2e/compose.yml down -v || true
+        run: docker compose -f k8s/e2e/portfolio-frontend/compose.yml down -v || true
+
+      # ---------------------------------------------------------------------------
+      # Tier 2 of plan 0015: the Luna Shopper backend e2e suite against the five
+      # images that were just built and pushed, not against `node dist/...`.
+      #
+      # The pull request gate (pr.yml's verify-infra) already proved the
+      # application logic on this commit; what it could not prove is the image —
+      # entrypoint, non root user, the runtime dependency install, baked config,
+      # and SIGTERM reaching PID 1. Those images exist by this point in the job, so
+      # this costs the stack boot and the suite, not a rebuild.
+      #
+      # It runs BEFORE the helm upgrade, so a red suite stops the deploy and a
+      # broken image never reaches staging. That is what makes the staging deploy
+      # gated rather than optimistic.
+      # ---------------------------------------------------------------------------
+      - name: Are any Luna Shopper backend images affected
+        id: luna-affected
+        run: |
+          # `nx show projects` prints a JSON array when stdout is not a TTY and one
+          # name per line when it is, so the upstream output can arrive either as
+          # `a,b` or as `["a","b"]`. Strip the JSON punctuation before splitting so
+          # this reads the same list either way.
+          luna=$(echo "${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}" \
+            | tr -d '[]" ' | tr ',' '\n' | sed '/^$/d' \
+            | grep -E '^luna-shopper-backend-' | paste -sd, - || true)
+          echo "projects=$luna" >> "$GITHUB_OUTPUT"
+          echo "Affected Luna Shopper backend images: ${luna:-(none)}"
+
+      - name: Configure the Luna Shopper service environment
+        if: ${{ steps.luna-affected.outputs.projects != '' }}
+        run: |
+          # Writes the service .env files (which the migration CLI reads) and a
+          # throwaway JWT keypair the images mount. One definition of what a
+          # service needs to boot, shared with local development.
+          bash k8s/e2e/luna-shopper-backend/luna-slot.sh 0
+          rm -f k8s/e2e/luna-shopper-backend/.env.slot
+
+      - name: Luna Shopper e2e against the built images
+        if: ${{ steps.luna-affected.outputs.projects != '' }}
+        env:
+          # A skip, an empty suite, or a stack that fails to come up fails the job
+          # — and therefore blocks the deploy.
+          LUNA_REQUIRE_STACK: '1'
+          COMPOSE_PROJECT_NAME: luna-tier2-${{ github.run_id }}
+          LUNA_IMAGE_PREFIX: ghcr.io/${{ env.REPO_LOWERCASE }}
+          LUNA_IMAGE_TAG: staging
+          E2E_SEED: '1'
+        run: |
+          npx playwright install --with-deps chromium
+          # Pull all five at the staging tag: only the affected ones were rebuilt
+          # in this run, and the rest are the staging images currently deployed,
+          # which is exactly the combination about to be rolled out.
+          docker compose -f k8s/e2e/luna-shopper-backend/compose.yml \
+            -f k8s/e2e/luna-shopper-backend/compose.apps.yml pull
+          bash k8s/e2e/luna-shopper-backend/stack.sh e2e-images
+
+      - name: Upload Luna Shopper tier 2 diagnostics
+        if: ${{ failure() && steps.luna-affected.outputs.projects != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: luna-shopper-tier2-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            test-output/luna-shopper-backend/
+            dist/.playwright/apps/luna-shopper-backend-e2e/
+
+      - name: Tear down the Luna Shopper tier 2 stack
+        if: ${{ always() && steps.luna-affected.outputs.projects != '' }}
+        env:
+          COMPOSE_PROJECT_NAME: luna-tier2-${{ github.run_id }}
+        run: |
+          docker compose -f k8s/e2e/luna-shopper-backend/compose.yml \
+            -f k8s/e2e/luna-shopper-backend/compose.apps.yml down -v --remove-orphans || true
+
+      # Is there a staging host to deploy to?
+      #
+      # Everything above (build, test, e2e, push) stands on its own: the staging
+      # images are in the registry and the suites have run. Only the SSH steps
+      # below need a machine, and staging is the environment most likely not to
+      # have one, since it is disposable by design and gets stood down whenever it
+      # is not earning its keep.
+      #
+      # Without this gate, no staging host turns every push to main red at the
+      # first ssh call, hiding whether the build and the tests actually passed.
+      # With it, the run stays green and says plainly that it did not deploy.
+      #
+      # Secrets are read through `env` rather than interpolated into the script,
+      # which keeps a secret's contents out of the shell command line.
+      - name: Is a staging host configured
+        id: deploy-target
+        env:
+          DEPLOY_HOST: ${{ secrets.SSH_DEPLOY_HOST_STAGING }}
+          DEPLOY_USER: ${{ secrets.SSH_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+        run: |
+          missing=""
+          [ -n "$DEPLOY_HOST" ] || missing="$missing SSH_DEPLOY_HOST_STAGING"
+          [ -n "$DEPLOY_USER" ] || missing="$missing SSH_DEPLOY_USER"
+          [ -n "$DEPLOY_KEY" ]  || missing="$missing SSH_DEPLOY_KEY"
+
+          if [ -z "$missing" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Staging host is configured; the deploy will run."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Staging deploy skipped::Affected images were built, tested and pushed under the staging tag, but no deploy ran because these repository secrets are unset:$missing. Staging is currently stood down; set them to bring it back."
+            {
+              echo "### Staging deploy skipped"
+              echo
+              echo "Affected images were built, tested and pushed under the \`staging\` tag."
+              echo "No host was deployed to because these secrets are unset:"
+              echo
+              for s in $missing; do echo "- \`$s\`"; done
+              echo
+              echo "Staging is disposable by design (k8s plan 0002), so this is expected"
+              echo "while no staging machine exists. Set the secrets to bring it back."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Set up SSH for deployment
+        if: steps.deploy-target.outputs.configured == 'true'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
 
-      - name: Sync chart and deploy staging via Helm
+      # ---------------------------------------------------------------------------
+      # Everything below targets SSH_DEPLOY_HOST_STAGING, a different machine from
+      # production's SSH_DEPLOY_HOST (k8s plan 0002, section 3). Two clusters, two
+      # releases, one chart. Adding a secret rather than renaming both keeps the
+      # production workflow untouched, which matters because production is the one
+      # that is currently working.
+      # ---------------------------------------------------------------------------
+      - name: Sync chart to the staging host
+        if: steps.deploy-target.outputs.configured == 'true'
         run: |
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
-            ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:/root/k8s/
+            ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }}:/root/k8s/
 
+      # A deploy that cannot possibly work is rejected in seconds here rather than
+      # diagnosed in minutes from a crashloop (k8s plan 0006, section 3).
+      - name: Preflight the staging Secrets
+        if: steps.deploy-target.outputs.configured == 'true'
+        run: |
           ssh -o StrictHostKeyChecking=no \
-            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
-            "bash -s -- '${{ steps.get-affected-apps.outputs.affected_staging }}'" << 'EOF'
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
+            "bash /root/k8s/bootstrap/provision-release.sh --check --env staging"
+
+      - name: Deploy staging via Helm
+        if: steps.deploy-target.outputs.configured == 'true'
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
+            "bash -s -- '${{ steps.get-affected-apps.outputs.affected_deployments }}'" << 'EOF'
             set -e
-            AFFECTED_STAGING="$1"
+            AFFECTED="$1"
 
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-            PROD_TAG_FILE=/root/helm-live/prod-tag.yaml
 
-            # Preserve the live production version across staging deploys.
-            EXTRA_VALUES=""
-            if [ -f "$PROD_TAG_FILE" ]; then
-              EXTRA_VALUES="--values $PROD_TAG_FILE"
-            fi
+            # No prod-tag.yaml plumbing any more. It existed only because a
+            # staging deploy and a production deploy shared one release, so the
+            # staging upgrade had to avoid clobbering the pinned production
+            # version. Two releases on two clusters cannot collide.
+            echo "Applying chart (staging)..."
 
-            echo "Applying chart (staging enabled, production version preserved)..."
-            helm upgrade nx-portfolio /root/k8s/helm \
+            # --atomic implies --wait and rolls back on failure, which is exactly
+            # right for the environment whose purpose is to absorb failures: a
+            # broken staging deploy leaves staging on the last good revision
+            # instead of half migrated. Without --wait, `helm upgrade` returns as
+            # soon as the API server accepts the manifests, so the job went green
+            # while pods crashlooped or a rollout hung forever.
+            #
+            # It also covers the migration Jobs for free: they are pre-upgrade
+            # hooks, so a migration that fails through its backoffLimit fails the
+            # upgrade before any new pod takes traffic.
+            #
+            # 10m is chosen against the slowest real path: three migration Jobs,
+            # then the Deployments rolling with a readiness probe whose
+            # initialDelaySeconds is 5 and periodSeconds 10, on a single node
+            # pulling images.
+            helm upgrade --install nx-portfolio /root/k8s/helm \
               --namespace nx-portfolio \
               --create-namespace \
               --values /root/k8s/helm/values.yaml \
-              $EXTRA_VALUES
+              --values /root/k8s/helm/values.staging.yaml \
+              --atomic --timeout 10m
 
             # The staging tag is mutable, so a plain upgrade will not restart the
-            # staging pods; roll the affected ones so they re-pull the new image.
-            for dep in $AFFECTED_STAGING; do
+            # pods; roll the affected ones so they re-pull the new image.
+            #
+            # Two loops, not one: all restarts are requested before any is
+            # awaited, so the rollouts overlap instead of serialising.
+            for dep in $AFFECTED; do
               echo "Restarting deployment/$dep ..."
-              kubectl rollout restart "deployment/$dep" -n nx-portfolio || true
+              kubectl rollout restart "deployment/$dep" -n nx-portfolio
+            done
+
+            # And then actually observe them. `rollout restart` is asynchronous by
+            # design: it patches the pod template annotation and returns, so the
+            # loop above asks for restarts and sees none of them. This is the half
+            # --wait cannot cover, because the restarts happen after Helm has
+            # finished. `rollout status` exits non zero on timeout, which fails
+            # the step, which is the entire point.
+            #
+            # The `|| true` that used to be here is gone: a restart that cannot be
+            # requested is a real failure, and now that deployment names are just
+            # the lowercased project names, a mismatch is a bug rather than a
+            # naming quirk to tolerate.
+            for dep in $AFFECTED; do
+              kubectl rollout status "deployment/$dep" -n nx-portfolio --timeout=5m
             done
 
             echo "Staging deployment complete."
+          EOF
+
+      # A failed deploy otherwise leaves a Helm error and nothing else. Events are
+      # the part that matters and the part people forget: ImagePullBackOff against
+      # a private GHCR package, a PVC that cannot bind, and a failing readiness
+      # probe all announce themselves there and nowhere else.
+      - name: Diagnose the failed deploy
+        if: failure() && steps.deploy-target.outputs.configured == 'true'
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
+            "bash -s" << 'EOF'
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            kubectl -n nx-portfolio get pods -o wide || true
+            kubectl -n nx-portfolio get events --sort-by=.lastTimestamp | tail -40 || true
+            for p in $(kubectl -n nx-portfolio get pods \
+                  --field-selector=status.phase!=Running -o name 2>/dev/null); do
+              echo "::group::$p"
+              kubectl -n nx-portfolio describe "$p" | tail -30 || true
+              kubectl -n nx-portfolio logs "$p" --tail=50 --all-containers || true
+              echo "::endgroup::"
+            done
           EOF

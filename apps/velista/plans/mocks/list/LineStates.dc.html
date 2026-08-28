@@ -1,0 +1,230 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 960px; height: 1230px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; color: #f7f8fc;">
+
+  <div style="display: flex; gap: 40px; align-items: flex-start;">
+
+    <!-- ================= COLUMN 1: the two state machines ================= -->
+    <div style="width: 420px;">
+      <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb; margin-bottom: 14px;">THE TWO STATE MACHINES &middot; approval, and the trip</div>
+
+      <!-- measured specimen -->
+      <div style="margin-bottom: 10px; font-size: 11.5px; color: #6f7899;">The ordinary row, measured</div>
+      <div style="position: relative; width: 390px; background: #161a28; border-radius: 4px; margin-bottom: 6px;">
+        <div style="height: 56px; padding: 0 4px 0 16px; display: flex; align-items: center; gap: 12px;">
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
+          <span style="flex: 1 1 auto; font-size: 16px;">Sourdough loaf</span>
+          <div style="flex: 0 0 auto; width: 44px; height: 44px; border: 1px dashed rgba(96,165,250,0.5); border-radius: 6px; display: flex; align-items: center; justify-content: center; gap: 3px;">
+            <span style="width: 3px; height: 3px; border-radius: 50%; background: #6f7899;"></span>
+            <span style="width: 3px; height: 3px; border-radius: 50%; background: #6f7899;"></span>
+            <span style="width: 3px; height: 3px; border-radius: 50%; background: #6f7899;"></span>
+          </div>
+        </div>
+      </div>
+      <div style="width: 390px; display: flex; font-size: 11px; color: #60a5fa; margin-bottom: 22px;">
+        <span style="width: 16px;"></span>
+        <span style="width: 24px; text-align: center;">24</span>
+        <span style="width: 12px;"></span>
+        <span style="flex: 1 1 auto;">the whole row is the target &middot; 56 tall</span>
+        <span style="width: 44px; text-align: center;">44</span>
+      </div>
+
+      <div style="width: 390px; background: #161a28; border-radius: 4px; overflow: hidden;">
+
+        <!-- 1 -->
+        <div style="height: 56px; padding: 0 4px 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
+          <span style="flex: 1 1 auto; font-size: 16px;">Approved, still to buy</span>
+          <span style="flex: 0 0 auto; margin-right: 12px; font-size: 11px; color: #6f7899;">APPROVED / PENDING</span>
+        </div>
+
+        <!-- 2 -->
+        <div style="height: 56px; padding: 0 4px 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgb(52 211 153 / 6%);">
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; background: #34d399; display: flex; align-items: center; justify-content: center;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span style="flex: 1 1 auto; font-size: 16px; color: #98a0bb; text-decoration: line-through;">In the trolley</span>
+          <span style="flex: 0 0 auto; margin-right: 12px; font-size: 11px; color: #34d399;">APPROVED / READY</span>
+        </div>
+
+        <!-- 3 -->
+        <div style="min-height: 72px; padding: 11px 4px 11px 16px; display: flex; align-items: flex-start; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgb(251 113 133 / 6%);">
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; margin-top: 2px; border-radius: 50%; border: 1.5px solid #fb7185; display: flex; align-items: center; justify-content: center;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17L17 7" stroke="#fb7185" stroke-width="2" stroke-linecap="round"/></svg>
+          </span>
+          <div style="flex: 1 1 auto;">
+            <div style="font-size: 16px; color: #98a0bb; text-decoration: line-through;">They did not have it</div>
+            <div style="margin-top: 3px; font-size: 12.5px; color: #fb7185;">Not in the shop</div>
+          </div>
+          <span style="flex: 0 0 auto; margin-right: 12px; font-size: 11px; color: #fb7185;">APPROVED / NOT_AVAILABLE</span>
+        </div>
+
+        <!-- 4 -->
+        <div style="position: relative; min-height: 72px; padding: 11px 4px 11px 16px; display: flex; align-items: flex-start; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgb(167 139 250 / 7%);">
+          <span style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #a78bfa;"></span>
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; margin-top: 2px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
+          <div style="flex: 1 1 auto;">
+            <div style="font-size: 16px;">Somebody suggested this</div>
+            <div style="margin-top: 3px; font-size: 12.5px; color: #a78bfa;">Waiting for approval &middot; Ana</div>
+          </div>
+          <span style="flex: 0 0 auto; margin-right: 12px; font-size: 11px; color: #a78bfa;">PENDING / any</span>
+        </div>
+
+        <!-- 5 -->
+        <div style="position: relative; padding: 11px 12px 11px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgb(167 139 250 / 7%);">
+          <span style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #a78bfa;"></span>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
+            <span style="flex: 1 1 auto; font-size: 16px;">The same, to an owner or admin</span>
+          </div>
+          <div style="margin-top: 9px; padding-left: 36px; display: flex; align-items: center; gap: 8px;">
+            <span style="flex: 1 1 auto; font-size: 12.5px; color: #a78bfa;">Waiting for approval</span>
+            <span style="height: 36px; padding: 0 16px; border-radius: 10px; background: #ffb454; color: #0a0c14; font-size: 14px; font-weight: 650; display: flex; align-items: center;">Add it</span>
+            <span style="height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.35); color: #c2c8db; font-size: 14px; font-weight: 550; display: flex; align-items: center;">Not this</span>
+          </div>
+        </div>
+
+        <!-- 6 -->
+        <div style="min-height: 72px; padding: 11px 4px 11px 16px; display: flex; align-items: flex-start; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; margin-top: 2px; border-radius: 50%; border: 1.5px dashed #525a78;"></span>
+          <div style="flex: 1 1 auto;">
+            <div style="font-size: 16px; color: #6f7899; text-decoration: line-through;">Turned down, and still here</div>
+            <div style="margin-top: 3px; font-size: 12.5px; color: #6f7899;">Turned down</div>
+          </div>
+          <span style="flex: 0 0 auto; margin-right: 12px; font-size: 11px; color: #6f7899;">REJECTED / any</span>
+        </div>
+
+        <!-- 7 -->
+        <div style="min-height: 72px; padding: 11px 12px 11px 16px; display: flex; align-items: center; gap: 12px;">
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px dashed #525a78;"></span>
+          <div style="flex: 1 1 auto;">
+            <div style="font-size: 16px; color: #6f7899; text-decoration: line-through;">The same, to staff</div>
+            <div style="margin-top: 3px; font-size: 12.5px; color: #6f7899;">Turned down</div>
+          </div>
+          <span style="flex: 0 0 auto; height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.35); color: #c2c8db; font-size: 14px; font-weight: 550; display: flex; align-items: center;">Put it back</span>
+        </div>
+
+      </div>
+
+      <div style="width: 390px; margin-top: 18px; font-size: 12.5px; line-height: 1.55; color: #98a0bb;">
+        The colour is never the only signal. READY strikes the text through, NOT_AVAILABLE
+        adds a caption, and the ring differs in shape in all four states, so the row still
+        reads in monochrome.
+      </div>
+    </div>
+
+    <!-- ================= COLUMN 2: writes ================= -->
+    <div style="width: 420px;">
+      <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb; margin-bottom: 14px;">A WRITE THAT HAS NOT LANDED &middot; plan 0004, section 7.2</div>
+
+      <div style="width: 390px; background: #161a28; border-radius: 4px; overflow: hidden;">
+
+        <!-- in flight -->
+        <div style="height: 56px; padding: 0 4px 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgb(52 211 153 / 6%); opacity: 0.7;">
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; background: #34d399; display: flex; align-items: center; justify-content: center;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span style="flex: 1 1 auto; font-size: 16px; color: #98a0bb; text-decoration: line-through;">Ticked, request in flight</span>
+          <span style="flex: 0 0 auto; margin-right: 12px; font-size: 11px; color: #6f7899;">70%, still tappable</span>
+        </div>
+
+        <!-- failed -->
+        <div style="padding: 11px 12px 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
+            <span style="flex: 1 1 auto; font-size: 16px;">Snapped back</span>
+          </div>
+          <div style="margin-top: 9px; margin-left: 36px; padding: 8px 12px; border-radius: 10px; background: rgb(251 113 133 / 10%); border: 1px solid rgb(251 113 133 / 26%); display: flex; align-items: center; gap: 8px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#fb7185" stroke-width="1.9"/><path d="M12 7.5v5.5M12 16.4v.1" stroke="#fb7185" stroke-width="2" stroke-linecap="round"/></svg>
+            <span style="flex: 1 1 auto; font-size: 13px; color: #fb7185;">That did not save. Tap to try again</span>
+          </div>
+        </div>
+
+        <!-- overwritten -->
+        <div style="padding: 11px 12px 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
+            <span style="flex: 1 1 auto; font-size: 16px;">Oat milk, the big one</span>
+          </div>
+          <div style="margin-top: 9px; margin-left: 36px; padding: 8px 12px; border-radius: 10px; background: rgb(96 165 250 / 10%); border: 1px solid rgb(96 165 250 / 26%); display: flex; align-items: center; gap: 8px;">
+            <span style="flex: 1 1 auto; font-size: 13px; color: #c2c8db;">Marc changed this while you were editing</span>
+            <span style="flex: 0 0 auto; font-size: 13px; font-weight: 600; color: #60a5fa;">OK</span>
+          </div>
+        </div>
+
+        <!-- optimistic add -->
+        <div style="height: 56px; padding: 0 4px 0 16px; display: flex; align-items: center; gap: 12px; opacity: 0.7;">
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
+          <span style="flex: 1 1 auto; font-size: 16px;">Just typed, no server id yet</span>
+          <span style="flex: 0 0 auto; margin-right: 12px; font-size: 11px; color: #6f7899;">keyed by a client key</span>
+        </div>
+
+      </div>
+
+      <div style="width: 390px; margin: 18px 0 26px; font-size: 12.5px; line-height: 1.55; color: #98a0bb;">
+        A confirmed write shows <strong style="color: #f7f8fc; font-weight: 600;">nothing</strong>.
+        The feedback was the change. Only the two failures below it are drawn, and both are
+        inline on the row rather than in a toast, because a toast about a row is read after
+        the row has scrolled away.
+      </div>
+
+      <div style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb; margin-bottom: 14px;">TWO MORE THE ROW HAS TO HANDLE</div>
+
+      <div style="width: 390px; background: #161a28; border-radius: 4px; overflow: hidden;">
+
+        <!-- long content -->
+        <div style="min-height: 56px; padding: 10px 4px 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
+          <span style="flex: 1 1 auto; font-size: 16px; line-height: 1.3;">Something for Marc that has no dairy in it at all, ask at the counter</span>
+          <div style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
+            <span style="width: 3px; height: 3px; border-radius: 50%; background: #6f7899;"></span>
+            <span style="width: 3px; height: 3px; border-radius: 50%; background: #6f7899;"></span>
+            <span style="width: 3px; height: 3px; border-radius: 50%; background: #6f7899;"></span>
+          </div>
+        </div>
+
+        <!-- comments -->
+        <div style="height: 56px; padding: 0 4px 0 16px; display: flex; align-items: center; gap: 12px;">
+          <span style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
+          <span style="flex: 1 1 auto; font-size: 16px;">Chorizo</span>
+          <span style="flex: 0 0 auto; display: flex; align-items: center; gap: 4px; color: #60a5fa;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z" stroke="#60a5fa" stroke-width="1.9" stroke-linejoin="round"/></svg>
+            <span style="font-size: 13px; font-variant-numeric: tabular-nums;">2</span>
+          </span>
+          <div style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
+            <span style="width: 3px; height: 3px; border-radius: 50%; background: #6f7899;"></span>
+            <span style="width: 3px; height: 3px; border-radius: 50%; background: #6f7899;"></span>
+            <span style="width: 3px; height: 3px; border-radius: 50%; background: #6f7899;"></span>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="width: 390px; margin-top: 18px; font-size: 12.5px; line-height: 1.55; color: #98a0bb;">
+        Content wraps to two lines and then truncates. A quantity of one is not drawn, and a
+        comment count of zero is not drawn: neither is information, and both would put a
+        number on every row in the list.
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

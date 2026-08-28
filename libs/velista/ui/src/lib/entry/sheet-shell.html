@@ -1,0 +1,31 @@
+<!--
+  The scrim is a real button rather than a div with a click handler, so tapping it is
+  a control the platform understands and the template needs no keyboard handler bolted
+  onto a non interactive element. It is deliberately out of the tab order: Escape and
+  the sheet's own Cancel are the keyboard paths out, and a focusable scrim would put
+  an unnamed stop between the two ends of the trap. Hidden from assistive technology
+  for the same reason: `aria-modal` on the panel already says everything outside it is
+  unavailable, and a second way to say "close" would just be one more thing to hear.
+-->
+<button
+  (click)="requestDismiss()"
+  [disabled]="!dismissible() || closing()"
+  aria-hidden="true"
+  class="scrim"
+  tabindex="-1"
+  type="button"
+></button>
+
+<div
+  [attr.aria-labelledby]="labelledBy()"
+  [class.closing]="closing()"
+  aria-modal="true"
+  class="panel"
+  role="dialog"
+>
+  <!-- Decorative. The gesture it advertises is the back button, which is a system
+       control and not something this element can offer. -->
+  <span aria-hidden="true" class="handle"></span>
+
+  <ng-content />
+</div>

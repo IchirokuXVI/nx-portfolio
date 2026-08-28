@@ -9,7 +9,8 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
-  ProjectMemory,
+  PROJECT_SERVICE,
+  ProjectServiceI,
   ProjectTag,
   TranslatedProject,
 } from '@portfolio/damoclesSword/data-access';
@@ -46,7 +47,11 @@ function toDetailedProject(project: TranslatedProject): DetailedProject {
   styleUrl: './section-projects-detailed.scss',
 })
 export class SectionProjectsDetailed implements OnInit {
-  private readonly _projectServ = inject(ProjectMemory);
+  // The token, like `section-projects` beside it, rather than the concrete
+  // `ProjectMemory`. The app binds the token with `provideService`, which provides the
+  // implementation under the token and not under its own class name, so injecting the
+  // class was reaching a root provided instance that no longer exists (rule D5).
+  private readonly _projectServ: ProjectServiceI = inject(PROJECT_SERVICE);
   private readonly _i18n = inject(RokuTranslatorService);
   private readonly _destroyRef = inject(DestroyRef);
 

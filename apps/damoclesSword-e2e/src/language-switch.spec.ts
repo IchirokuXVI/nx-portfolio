@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 import {
   currentUrlLocale,
   settle,
@@ -25,11 +25,14 @@ test.describe('damoclesSword language switcher', () => {
     // viewport-independent, so this keeps the test deterministic across engines
     // without depending on the mobile hamburger nav's open/close animation.
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/en/damoclesSword');
+    await page.goto('/damoclesSword/en');
     await settle(page);
 
     const locales = await usableLocales(page);
-    test.skip(locales.length < 2, 'needs at least two usable locales to switch');
+    test.skip(
+      locales.length < 2,
+      'needs at least two usable locales to switch'
+    );
 
     const from = currentUrlLocale(page);
     const to = locales.find((l) => l !== from) as string;
@@ -58,7 +61,7 @@ test.describe('damoclesSword language switcher', () => {
     await openOptions.getByRole('button', { name: to }).first().click();
 
     // URL locale segment updates without a reload.
-    await page.waitForURL(new RegExp(`/${to}/damoclesSword`));
+    await page.waitForURL(new RegExp(`/damoclesSword/${to}(/|$)`));
     await settle(page);
 
     const marker = await page.evaluate(
@@ -71,9 +74,19 @@ test.describe('damoclesSword language switcher', () => {
     expect(after).not.toBe(before);
 
     // The choice is persisted per app: visiting the locale-less path redirects
-    // back to the chosen locale.
+    // back to the chosen locale. This is the guard's **insert** case, which the
+    // shell used to perform on this app's behalf before its bundle had loaded and
+    // which the app now does itself (plan 0003).
     await page.goto('/damoclesSword');
     await settle(page);
-    await expect(page).toHaveURL(new RegExp(`/${to}/damoclesSword`));
+    await expect(page).toHaveURL(new RegExp(`/damoclesSword/${to}(/|$)`));
+
+    // And the **replace** case: a locale-shaped segment the app does not support is
+    // consumed, not preserved, and the resolved locale takes the slot. With the two
+    // above, all three rows of the guard's table are covered end to end.
+    await page.goto('/damoclesSword/zz');
+    await settle(page);
+    await expect(page).toHaveURL(new RegExp(`/damoclesSword/${to}(/|$)`));
+    await expect(page).not.toHaveURL(/\/zz(\/|$)/);
   });
 });

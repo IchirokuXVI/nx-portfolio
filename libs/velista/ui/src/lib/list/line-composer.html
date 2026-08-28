@@ -1,0 +1,42 @@
+<!--
+  A form, so Enter on the field submits without a keydown handler and the phone's
+  keyboard offers a Go key rather than a newline.
+-->
+<form (ngSubmit)="submit()" class="composer">
+  <div class="field-wrap">
+    <input
+      (input)="onInput($event)"
+      [attr.aria-label]="'list.add.placeholder' | rokuT"
+      [attr.maxlength]="maxLength"
+      [placeholder]="'list.add.placeholder' | rokuT"
+      [value]="content()"
+      #field
+      autocomplete="off"
+      class="field"
+      enterkeyhint="send"
+      name="content"
+      type="text"
+    />
+
+    <!--
+      Only past 350. A live region so the number is announced as it approaches, and
+      `polite` so it never interrupts the character being typed.
+    -->
+    @if (showCounter()) {
+      <span aria-live="polite" class="counter">
+        {{ content().length }}/{{ maxLength }}
+      </span>
+    }
+  </div>
+
+  <lib-quantity-stepper [(value)]="quantity" [disabled]="busy()" />
+
+  <button
+    [attr.aria-label]="'list.add.action' | rokuT"
+    [disabled]="!canSubmit() || busy()"
+    class="send"
+    type="submit"
+  >
+    <lib-plus-icon class="send-glyph" />
+  </button>
+</form>

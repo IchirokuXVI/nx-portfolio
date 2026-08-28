@@ -1,0 +1,83 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-height: var(--app-member-row-height);
+  padding: var(--app-space-3) var(--app-space-4);
+  background: var(--app-status-attention-bg);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-card-radius);
+  flex-wrap: wrap;
+}
+
+.row[aria-busy='true'] .name,
+.row[aria-busy='true'] .avatar {
+  opacity: 0.55;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--app-avatar-lg);
+  height: var(--app-avatar-lg);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-overlay);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The gap is the point. These are the two controls a mis-tap cannot be taken back
+// from, so a thumb aiming at one must not be able to reach the other (section 7).
+.answers {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  flex-shrink: 0;
+}
+
+.answer {
+  min-height: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.approve {
+  background: var(--app-action-bg);
+  border: 1px solid transparent;
+  color: var(--app-text-on-action);
+}
+
+// Quieter than approve, and not styled as destructive: turning somebody down is an
+// answer rather than damage, and they can ask again.
+.reject {
+  background: transparent;
+  border: 1px solid var(--app-border-strong);
+  color: var(--app-text-secondary);
+}

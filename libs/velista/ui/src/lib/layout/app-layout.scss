@@ -1,0 +1,123 @@
+@use '../styles/tokens' as tokens;
+
+// The display face, vendored rather than linked (plan 0002, section 6). A Google
+// Fonts stylesheet is a render blocking request to a third party for a screen the
+// user wants immediately, on supermarket signal. `font-display: swap` means the
+// text is readable in Georgia from the first paint either way.
+//
+// Declared here, in the one component guaranteed to exist exactly once, rather
+// than in a partial. `@font-face` registers globally whatever stylesheet it sits
+// in, so a partial that two components `@use` would emit it twice; and a relative
+// `url()` inside a partial is resolved by the bundler against the entry
+// stylesheet rather than against the partial, which makes the path a trap the
+// moment a component at another depth includes it.
+//
+// One known fragility, the same one the Audiowide font in `libs/damoclesSword/ui`
+// lives with: under module federation these files are emitted by whichever build
+// compiles this stylesheet, and a component style is injected into the *shell's*
+// document. If the shell ever stops bundling this library the URL 404s. That is
+// survivable by design here, because the fallback stack leads with Georgia
+// precisely for this case: it is wide and available everywhere, so a failed load
+// degrades to similar proportions rather than collapsing the lockup.
+@font-face {
+  font-family: 'Marcellus';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../../../assets/fonts/marcellus-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+
+// English and Spanish both live entirely in the latin subset above, so this one
+// is never fetched today. It is here so that adding a third locale does not
+// silently drop the display face mid-word.
+@font-face {
+  font-family: 'Marcellus';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../../../assets/fonts/marcellus-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+// Token scope. Plan 0001's extraction contract, item 4: the app's tokens live on
+// its own root element, never on `:root`, so the portfolio shell's global styles
+// and this app's tokens cannot reach each other. On extraction this becomes
+// `:root` and nothing else changes.
+//
+// Plan 0002 writes it as `.app-root { … }`. Under Angular's emulated
+// encapsulation a class selector in this stylesheet is rewritten to match a
+// *descendant*, not the host, so the same rule written literally would land on
+// nothing. `:host` is that selector translated, and the class is still on the
+// element for anything outside the component to key off.
+// Under module federation this element is a direct **flex item** of the portfolio
+// shell's own host, which is `display: flex` (`apps/shell/src/app/app.scss`), because
+// the velista route is componentless at the shell level. Without a `flex` declaration
+// the item takes `flex: 0 1 auto` and sizes to its content, so `.app-main`'s 480px
+// column was being centred inside a box that was itself 480px wide and pinned to the
+// start of the row: content at the left edge, and the app's ground colour not filling
+// the viewport (plan 0007, section 5).
+//
+// `flex: 1` is harmless in the standalone build, where the host is not a flex item and
+// the declaration is simply ignored.
+//
+// `min-block-size` was `100%`, which is the same class of mistake on the other axis: a
+// percentage height against a parent with no definite height resolves to `auto`.
+// `100dvh` is what the shell already uses for its own host and what `styles.scss` uses
+// on `body`.
+:host {
+  @include tokens.app-root;
+
+  display: block;
+  flex: 1;
+  // So a wide child cannot push the flex item past the viewport.
+  min-inline-size: 0;
+  min-block-size: 100dvh;
+  background: var(--app-surface-ground);
+  color: var(--app-text-primary);
+  font-family: var(--app-font-sans);
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+}
+
+// A theme is a class on the app root that redefines the semantic colour layer,
+// and nothing else (section 4). Both are always present in the stylesheet; which
+// one wins is the class the component binds.
+:host(.theme-night) {
+  @include tokens.app-theme-night;
+}
+
+:host(.theme-day) {
+  @include tokens.app-theme-day;
+}
+
+.app-main {
+  // Phone first (plan 0001, D3): the layout starts at the small screen and every
+  // wider breakpoint is an addition, never the other way round.
+  //
+  // Section 8: this is not a scroll container, and no page below it may become
+  // one. Scrolling is page level, because nested scroll areas fight the user on
+  // a touch device.
+  display: block;
+  // Insets, so content is not swallowed by a notch in landscape and a bottom
+  // action bar is not hidden behind the home indicator.
+  padding-right: var(--app-safe-right);
+  padding-left: var(--app-safe-left);
+  padding-bottom: var(--app-safe-bottom);
+  height: 100%;
+
+  // Section 8: wide screens are not designed, only kept from breaking. One
+  // centred column of about 480px is the phone layout given room to breathe,
+  // which costs one media query rather than a second design. A shopping list
+  // stretched across 1900px is unusable.
+  @include tokens.app-from(tokens.$app-breakpoint-md) {
+    max-width: tokens.$app-content-max;
+    margin-inline: auto;
+  }
+}

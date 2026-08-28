@@ -1,0 +1,32 @@
+<div class="actions">
+  <button (click)="createZone.emit()" class="button primary" type="button">
+    <lib-plus-icon class="glyph" />
+    {{ 'home.action.createZone' | rokuT }}
+  </button>
+
+  <button (click)="joinZone.emit()" class="button secondary" type="button">
+    <lib-join-code-icon class="glyph" />
+    {{ 'home.action.joinCode' | rokuT }}
+  </button>
+
+  <p class="explainer">{{ 'home.zoneExplainer' | rokuT }}</p>
+
+  <div aria-hidden="true" class="divider">
+    <span class="rule"></span>
+    <span class="or">{{ 'home.or' | rokuT }}</span>
+    <span class="rule"></span>
+  </div>
+
+  <button
+    (click)="continueWithGoogle.emit()"
+    class="button google"
+    type="button"
+  >
+    <lib-google-icon class="glyph" />
+    {{ 'home.action.google' | rokuT }}
+  </button>
+
+  <button (click)="signInWithEmail.emit()" class="button link" type="button">
+    {{ 'home.action.emailSignIn' | rokuT }}
+  </button>
+</div>

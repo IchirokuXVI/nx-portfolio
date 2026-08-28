@@ -1,4 +1,5 @@
 import { ModuleFederationConfig } from '@nx/module-federation';
+import { sharedSingletons } from '../../module-federation.shared';
 
 const config: ModuleFederationConfig = {
   name: 'shell',
@@ -14,19 +15,14 @@ const config: ModuleFederationConfig = {
    * declare module 'my-external-remote';
    *
    */
-  remotes: ['landing', 'odontogram', 'damoclesSword', 'landingV2'],
-  shared: (lib, _config) => {
-    // roku-translator is a singleton as it holds the current locale and i18next instance
-    // We want all micro-frontends to use the same instance to avoid configuration issues
-    // and to be able to change the locale from the shell and have it reflected in the remotes
-    if (lib === '@portfolio/localization/roku-translator') {
-      return {
-        singleton: true,
-        strictVersion: true,
-        requiredVersion: 'auto',
-      };
-    }
-  },
+  remotes: ['odontogram', 'damoclesSword', 'landingV2', 'velista'],
+  /**
+   * One `RokuTranslator` across the shell and every remote, so the locale is a
+   * property of the page rather than of whichever bundle asked. See
+   * `module-federation.shared.ts`, which also records why the rule that used to live
+   * here never matched the library it named.
+   */
+  shared: sharedSingletons,
 };
 
 /**

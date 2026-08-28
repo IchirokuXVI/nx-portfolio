@@ -1,0 +1,291 @@
+// Layer 2 of the token architecture (plan 0002, section 2), plus layer 3.
+//
+// Layer 2 is what components actually use, and a theme is nothing but a
+// redefinition of it. The **colour** half of layer 2 therefore lives in
+// `_themes.scss`, because its values differ per theme and nowhere else. What is
+// here is the half that does not: type, space, radius, motion, and the layout
+// constants. Those are the same in a dim kitchen and in a bright supermarket, so
+// duplicating them into each theme would only create two places to drift.
+//
+// The colour roles a theme must define, listed here so the contract has one home
+// even though the values do not:
+//
+//   Surfaces   --app-surface-ground | -raised | -overlay | -sunken
+//   Text       --app-text-primary | -secondary | -muted | -on-action
+//   Lines      --app-border-subtle | -strong, --app-focus-ring
+//   Action     --app-action-bg | -bg-hover | -bg-pressed | -fg | -quiet-fg
+//   Status     --app-status-{success,danger,attention,info,neutral}-{fg,bg,border}
+//   Elevation  --app-elevation-1 | -2
+//   Ambient    --app-ambient-glow
+//
+// `Ambient` is a background image rather than a colour, and it is `none` on Day:
+// the ramps that read as warmth on near black read as a stain on white. It is
+// still a role both themes define, so a component can use it without asking which
+// theme is on.
+//
+// There is deliberately no `warning` role (section 4.4): an amber brand action and
+// an amber warning are hard to tell apart, and on a shopping list row that
+// ambiguity does the most damage. What a warning would have covered is split into
+// `danger` (destructive, and NOT_AVAILABLE) and `attention` (anything awaiting a
+// human decision, which is the far commoner case here).
+
+// Breakpoints. Base is the phone; these are the only two that exist, because
+// nothing above them is designed (section 8). `lg` and `xl` are absent on purpose
+// rather than by omission: adding one would invite a layout nobody has drawn.
+$app-breakpoint-sm: 480px;
+$app-breakpoint-md: 768px;
+
+// The width the phone layout is allowed to grow to on a wide screen. Section 8:
+// wide screens are not designed, they are only kept from breaking, and one
+// centred column of about this width is the phone layout given room to breathe.
+// A shopping list stretched to 1900px is unusable.
+$app-content-max: 480px;
+
+/// Media query helper, so a component never writes a raw breakpoint value.
+/// @param {Length} $from - one of the two breakpoints above.
+@mixin app-from($from) {
+  @media (min-width: $from) {
+    @content;
+  }
+}
+
+@mixin app-semantic {
+  // ---------------------------------------------------------------- Type
+  //
+  // System stack, no webfont (section 6). On a phone on supermarket signal a
+  // webfont is a render blocking download for a screen the user wants now, and
+  // the system stack is already on the device and looks native.
+  --app-font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace;
+  // Permitted in exactly two places, both on the unauthenticated surface: the
+  // wordmark and the public home page's hero headline. Georgia leads the
+  // fallbacks deliberately, being wide and available everywhere, so a failed
+  // font load degrades to similar proportions rather than collapsing the lockup.
+  --app-font-display: 'Marcellus', Georgia, 'Times New Roman', serif;
+
+  --app-text-2xs: 11px; // Dense metadata only, never body copy
+  --app-text-xs: 12px; // Timestamps, helper text
+  --app-text-sm: 14px; // Secondary copy, chips
+  --app-text-base: 16px; // Body. Never smaller for input fields, see rule T3
+  --app-text-lg: 18px; // List line labels, the thing read while shopping
+  --app-text-xl: clamp(20px, 5vw, 24px); // Section headings
+  --app-text-2xl: clamp(24px, 7vw, 32px); // Page titles
+  --app-text-3xl: clamp(30px, 9vw, 44px); // Home hero only
+
+  --app-leading-body: 1.5;
+  --app-leading-heading: 1.2;
+
+  // A short word in a wide serif still needs air between the characters to read
+  // as a mark. The hero does not inherit this: at 41px the same value is far too
+  // loose, so the two are set separately on purpose (section 6).
+  --app-tracking-wordmark: 0.05em;
+  --app-tracking-display: 0.005em;
+
+  // ---------------------------------------------------------------- Space
+  //
+  // 4px base. Eleven steps, starting at zero so that "no gap" is expressible as a
+  // token and a component never needs a bare `0` alongside tokenised values.
+  --app-space-1: 0;
+  --app-space-2: 4px;
+  --app-space-3: 8px;
+  --app-space-4: 12px;
+  --app-space-5: 16px;
+  --app-space-6: 20px;
+  --app-space-7: 24px;
+  --app-space-8: 32px;
+  --app-space-9: 40px;
+  --app-space-10: 48px;
+  --app-space-11: 64px;
+
+  // ---------------------------------------------------------------- Radius
+  //
+  // Soft rather than sharp: this is a domestic, shared, everyday product, not a
+  // technical dashboard.
+  --app-radius-sm: 8px;
+  --app-radius-md: 12px;
+  --app-radius-lg: 16px;
+  --app-radius-xl: 24px;
+  --app-radius-full: 999px;
+
+  // ---------------------------------------------------------------- Motion
+  //
+  // All three collapse to zero under `prefers-reduced-motion`, via
+  // `app-motion-preferences` below. That is not optional politeness here: motion
+  // on a list several people are editing at once is genuinely disorienting.
+  --app-motion-fast: 120ms;
+  --app-motion-base: 200ms;
+  --app-motion-slow: 320ms;
+  --app-motion-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  // Anything arriving from another user gets a distinctly gentler entrance than
+  // something the user did themselves, so that "the list changed under me" is
+  // legible rather than startling.
+  --app-motion-remote: 420ms;
+
+  // ---------------------------------------------------------------- Touch
+  //
+  // 44 by 44 CSS pixels, including the checkbox that marks a line as bought.
+  // That control is tapped dozens of times per trip, one handed, often while
+  // holding something else.
+  --app-touch-target: 44px;
+
+  // The focus ring's geometry. Its colour is a theme's job and lives in
+  // `_themes.scss`; how thick it is and how far it stands off is not. The offset
+  // is what keeps the ring legible on the amber primary button, by putting most
+  // of the stroke on the surface behind rather than on the fill.
+  --app-focus-ring-width: 2px;
+  --app-focus-ring-offset: 2px;
+
+  // Safe area insets, so a bottom action bar is not hidden behind the home
+  // indicator. Read through tokens rather than `env()` at each call site, both
+  // because it is easy to forget one and because a test environment that does
+  // not understand `env()` still gets a usable zero.
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-right: env(safe-area-inset-right, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-safe-left: env(safe-area-inset-left, 0px);
+
+  // ------------------------------------------------- Layer 3, component tokens
+  //
+  // Only where a component needs a knob a theme might want to turn on its own.
+  // Anything a theme would never touch belongs above, as a plain semantic token.
+  --app-button-radius: var(--app-radius-md);
+  --app-button-height: 52px;
+  --app-control-height: var(--app-touch-target);
+  --app-line-row-height: 56px;
+  --app-chip-radius: var(--app-radius-full);
+  --app-card-radius: var(--app-radius-lg);
+  --app-field-radius: var(--app-radius-md);
+  // Rule T3: iOS Safari zooms the viewport when a focused input is under 16px,
+  // which on a phone form is a jarring, hard to undo jump. This is a floor, so a
+  // field may set a larger size but reads this one to know where the floor is.
+  --app-field-font-size: var(--app-text-base);
+
+  // Icon sizes. An icon is sized by `font-size` because every one of them is 1em
+  // square, so these are a type scale for glyphs rather than a set of box sizes.
+  // Three steps only: inside a dense row, beside body text, and inside a button.
+  --app-icon-sm: 17px;
+  --app-icon-md: 20px;
+  --app-icon-lg: 30px;
+  // The mark on an empty or error panel, which is illustration rather than icon.
+  --app-icon-display: 56px;
+
+  // Round things that hold an initial: a member avatar, and the stacked avatars on
+  // the resume card. Two sizes, because a group's tile is a square and is bigger.
+  --app-avatar-sm: 22px;
+  --app-avatar-md: 24px;
+  --app-avatar-lg: 30px;
+  --app-tile-size: 38px;
+  // The ring that separates one stacked avatar from the one behind it. Not a
+  // hairline: it has to read as a gap at a glance, so it is exempt from nothing.
+  --app-avatar-ring: 2px;
+
+  // The presence dot. No artwork, so it is a token and a CSS circle rather than an
+  // icon component and an SVG file.
+  --app-dot-size: 6px;
+
+  // Rows. A list row inside a card is shorter than a standalone line row, because
+  // it is a preview of a list rather than a thing being worked on.
+  --app-list-row-height: 40px;
+  --app-preview-row-height: 38px;
+  --app-attention-row-height: 36px;
+  // A member row is a whole row about a person rather than a preview, and it has to
+  // hold a 44 square menu button with air around it (plan 0010, section 7). Its own
+  // token rather than a reuse of --app-line-row-height, which happens to be the same
+  // number today and is about a shopping line.
+  --app-member-row-height: 56px;
+  // The edge on the leading side of a line waiting for approval (plan 0012,
+  // section 3.4). Not a hairline and deliberately not exempt from the pixel rule: it
+  // has to read as a coloured bar at arm's length in a supermarket, which is a
+  // different job from separating two surfaces, so it gets a token of its own rather
+  // than a number in one stylesheet.
+  --app-line-accent-width: 3px;
+  // A row menu wide enough for its longest item on one line. "Hacer miembro normal"
+  // and "Remove and block" both have to fit without wrapping, and a menu that resized
+  // itself per row would shift under the finger between one row and the next.
+  --app-menu-min-width: 200px;
+
+  // The progress bar on the resume card.
+  --app-progress-height: 6px;
+
+  // Padding for a chip, whose vertical inset is smaller than any space step: a
+  // status pill that used --app-space-1 would be a lozenge.
+  --app-chip-padding-block: 2px;
+  // The gap between a title and the metadata line directly under it, tighter than
+  // the smallest space step because they read as one block.
+  --app-space-hair: 3px;
+
+  // The bottom sheet (plan 0008, rule E1). Its colours are a theme's job and live
+  // in `_themes.scss`; its geometry is not, and is the same in both.
+  //
+  // The radius is a little larger than `--app-radius-xl` on purpose: a sheet's top
+  // corners are the largest curve in the app, and matching a card here would make
+  // the panel read as a card that happened to be at the bottom of the screen.
+  --app-sheet-radius: 22px;
+  --app-sheet-handle-width: 38px;
+  --app-sheet-handle-height: 4px;
+  // How far a sheet is allowed to grow before it scrolls inside itself. Anything
+  // taller than this stops being a sheet over a page and becomes a page.
+  --app-sheet-max-height: 86svh;
+
+  // The ambient glow's geometry, which is theme independent the way the sheet's is:
+  // Day paints nothing there, but where it would be painted is the same. The values
+  // are `Main.dc.html`'s, which draws it as a 360 circle bleeding off the top right
+  // corner, so most of it is outside the page and what shows is one soft quarter.
+  --app-glow-size: 360px;
+  --app-glow-inset-block-start: -150px;
+  --app-glow-inset-inline-end: -110px;
+
+  // A join code, which is read aloud and typed character by character. The tracking
+  // is what makes that possible and is the whole reason it is not body type: a
+  // monospace run at normal tracking reads as one word rather than eight letters.
+  --app-code-tracking: 0.2em;
+  --app-code-size: 21px;
+  --app-code-size-lg: 26px;
+  // Taller than a button, because the field holds the tracked-out code and a 52px
+  // box crowds it. The paste button beside it matches, so the row squares off.
+  --app-code-field-height: 56px;
+
+  // Google's sign-in button, which is deliberately **not** themed. Their branding
+  // guidelines fix the surface and the mark, so this is the one surface in the app
+  // whose colours must not follow Night or Day.
+  //
+  // It is a component token rather than a primitive reached for from a component,
+  // which keeps rule T1 exactly true: components never name layer 1, and the one
+  // exception is declared here, once, where somebody looking for exceptions will
+  // find it. Both values are intentionally the same in both themes.
+  --app-google-button-bg: var(--app-neutral-50);
+  --app-google-button-fg: var(--app-ink-900);
+}
+
+/// The focus ring, as a mixin rather than as three declarations a component
+/// copies. Section 11 requires a visible ring on every interactive element and
+/// makes the ring a token so it cannot be quietly removed; this is the other half
+/// of that, so no component has to remember `outline-offset` or reach for
+/// `outline: none` to fix a ring that was drawn too tight.
+@mixin app-focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+/// User preference handling (section 4.5). Applied on the same element the tokens
+/// are scoped to, so both stay together.
+///
+/// Zeroing the tokens is the whole mechanism, and deliberately so. The blanket
+/// `*, *::before, *::after { animation-duration: 0.01ms !important }` that usually
+/// accompanies this cannot work from here: under Angular's emulated encapsulation
+/// the universal selector is rewritten to match only this component's own template
+/// elements, so it would reach nothing that matters while reading as though it
+/// covered everything. The token is the honest version, and `token-hygiene.spec.ts`
+/// is what keeps a component from writing a raw duration that escapes it.
+@mixin app-motion-preferences {
+  @media (prefers-reduced-motion: reduce) {
+    --app-motion-fast: 0ms;
+    --app-motion-base: 0ms;
+    --app-motion-slow: 0ms;
+    --app-motion-remote: 0ms;
+  }
+}

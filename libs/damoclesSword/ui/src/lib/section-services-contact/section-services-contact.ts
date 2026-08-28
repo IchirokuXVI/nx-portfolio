@@ -6,7 +6,12 @@ import { SectionLayout } from '../section-layout/section-layout';
 
 @Component({
   selector: 'lib-damocles-sword-section-services-contact',
-  imports: [RokuTranslatorPipe, SectionLayout, ContactForm, DoubleBorderedTitle],
+  imports: [
+    RokuTranslatorPipe,
+    SectionLayout,
+    ContactForm,
+    DoubleBorderedTitle,
+  ],
   templateUrl: './section-services-contact.html',
   styleUrl: './section-services-contact.scss',
 })

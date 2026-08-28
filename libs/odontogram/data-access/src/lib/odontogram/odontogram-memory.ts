@@ -10,7 +10,7 @@ import {
 } from './odontogram-service';
 import { ODONTOGRAMS } from './static-odontograms-data';
 
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class OdontogramMemory implements OdontogramServiceI {
   private _odontograms: Map<string, Odontogram>;
   private _inMemoryFilter = new InMemoryFilter<

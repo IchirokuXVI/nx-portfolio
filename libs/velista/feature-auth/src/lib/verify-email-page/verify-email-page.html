@@ -1,0 +1,44 @@
+@switch (state()) {
+  @case ('working') {
+    <!-- Brief and centred. The token is already being spent; there is nothing to
+         press and nothing to read yet, so there is nothing else on screen. -->
+    <div class="working">
+      <lib-spinner-icon class="spinner" />
+      <span class="sr-only">{{ 'auth.verify.working' | rokuT }}</span>
+    </div>
+  }
+
+  @case ('confirmed') {
+    <lib-outcome-screen
+      (action)="goToGroups()"
+      [actionLabel]="'auth.verify.toGroups' | rokuT"
+      [body]="confirmedBodyKey() | rokuT: { email: email() }"
+      [title]="'auth.verify.confirmedTitle' | rokuT"
+      tone="confirmed"
+    />
+  }
+
+  @case ('expired') {
+    <lib-outcome-screen
+      (action)="goToGroups()"
+      [actionLabel]="'auth.verify.toGroups' | rokuT"
+      [body]="'auth.verify.expiredBody' | rokuT"
+      [title]="'auth.verify.expiredTitle' | rokuT"
+      tone="expired"
+    >
+      <!-- Under the explanation rather than inside a card, because there is no card
+           here. Absent for an anonymous viewer: resending needs to know whose address
+           to send to, and somebody who opened this link on a phone that never signed
+           in cannot say (section 5.7). -->
+      @if (resendOffered()) {
+        <lib-resend-sentence
+          (resend)="resend()"
+          [state]="resendState()"
+          [waitSeconds]="resendWaitSeconds()"
+          class="resend"
+          promptKey="auth.resend.promptExpired"
+        />
+      }
+    </lib-outcome-screen>
+  }
+}

@@ -1,0 +1,57 @@
+# Production (plan 0002).
+#
+#   helm upgrade nx-portfolio k8s/helm --namespace nx-portfolio \
+#     --values k8s/helm/values.yaml --values k8s/helm/values.production.yaml
+#
+# In practice this is passed by k8s/helm/deploy-release.sh, which also pins
+# `imageTag` to the release version being deployed.
+#
+# This file holds only what genuinely differs between the two clusters. Compare
+# it against values.staging.yaml: the two should read as the same keys with
+# different answers, and anything appearing in one but not the other is either a
+# deliberate production-only concern (backups) or a drift to fix.
+
+baseDomain: ichirokuxvi.com
+environment: production
+
+# The production VPS. MetalLB advertises this address, so it is the machine the
+# five production DNS records resolve to.
+ipAddress: 46.62.204.230
+
+# Overwritten per deploy by deploy-release.sh with the immutable release version
+# (e.g. "1.1.3"). `latest` is the floor, so a hand run `helm upgrade` with this
+# file and nothing else still deploys something coherent.
+imageTag: latest
+
+lunaShopperBackend:
+  config:
+    logLevel: info
+    # Both origins, because after plan 0013 both can be serving velista: the
+    # portfolio at `/velista` and velista's own host. Comma separated, and the
+    # gateway splits and trims it. Plan 0013 section 9 claimed CORS was
+    # unaffected by the move; it is not. The gateway was never same origin with
+    # the app, but it allows an explicit list of hosts, so an origin that is not
+    # on the list has every request blocked. Once D5's redirect lands the
+    # portfolio entry can go.
+    corsOrigins: https://ichirokuxvi.com,https://velista.ichirokuxvi.com
+    authJwtKid: prod-1
+    # The path the gateway actually serves: its controllers are versioned, so the
+    # callback lives under /v1. It must match a URI pre-registered with Google
+    # exactly, which is why it is spelled out rather than derived from baseDomain.
+    googleCallbackUrl: https://api.ichirokuxvi.com/v1/auth/google/callback
+    # Where the Google callback hands the browser back (plan 0023, section 3.4).
+    # `{locale}` is substituted with the locale the flow started in.
+    #
+    # velista's own origin, and the locale is the **first** segment, which is the
+    # canonical URL D5 wants the flow to land on: shell plan 0003 gave each app
+    # ownership of the segment below its own mount, and on a standalone origin
+    # the mount is empty, so the rule degenerates to `/{locale}`.
+    appBaseUrl: https://velista.ichirokuxvi.com/{locale}
+    mailFrom: Luna Shopper <no-reply@ichirokuxvi.com>
+    mailVerifyBaseUrl: https://ichirokuxvi.com/verify-email
+    mailResetBaseUrl: https://ichirokuxvi.com/reset-password
+
+  # Nightly pg_dump off the node (plan 0005). Production only: staging holds
+  # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.
+  backups:
+    enabled: true

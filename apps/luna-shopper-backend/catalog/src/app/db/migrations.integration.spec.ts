@@ -1,0 +1,83 @@
+import {
+  describeIntegration,
+  requiredEnv,
+} from '@portfolio/luna-shopper/test-fixtures/jest';
+import { DataSource } from 'typeorm';
+import { CATALOG_ENTITIES, Supermarket } from '../entities';
+
+/**
+ * Real-Postgres integration test (plan 0010, section 1; plan 0015, section 3.3).
+ * Runs only with LUNA_INTEGRATION=1 against the compose stack's catalog database,
+ * after `nx run luna-shopper-backend-catalog:migration:run` has applied the
+ * committed migrations. Catalog owns its own database and its own migrations, so
+ * it carries the same schema risk auth and core do; this is the spec that puts it
+ * inside the net rather than beside it.
+ *
+ * It proves the migrated schema matches the entities: the expected tables exist
+ * and a Supermarket round-trips through the jsonb localized name column, which a
+ * mocked repository cannot validate honestly.
+ */
+describeIntegration('catalog schema (real Postgres)', () => {
+  let dataSource: DataSource;
+
+  beforeAll(async () => {
+    dataSource = new DataSource({
+      type: 'postgres',
+      url: requiredEnv('CATALOG_DB_URL'),
+      entities: CATALOG_ENTITIES,
+      synchronize: false,
+    });
+    await dataSource.initialize();
+  });
+
+  afterAll(async () => {
+    await dataSource?.destroy();
+  });
+
+  it('has the catalog tables the migration creates', async () => {
+    const rows = await dataSource.query(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`
+    );
+    const names = new Set(rows.map((r: { table_name: string }) => r.table_name));
+    for (const table of [
+      'supermarkets',
+      'supermarket_locations',
+      'items',
+      'supermarket_items',
+    ]) {
+      expect(names.has(table)).toBe(true);
+    }
+  });
+
+  it('has the enum types the item columns depend on', async () => {
+    const rows = await dataSource.query(
+      `SELECT typname FROM pg_type WHERE typtype = 'e'`
+    );
+    const names = new Set(rows.map((r: { typname: string }) => r.typname));
+    expect(names.has('item_category')).toBe(true);
+    expect(names.has('unit_of_measure')).toBe(true);
+  });
+
+  it('round-trips a Supermarket through the jsonb localized name column', async () => {
+    const supermarkets = dataSource.getRepository(Supermarket);
+    const saved = await supermarkets.save(
+      supermarkets.create({
+        name: { en: 'Integration Market', es: 'Mercado de Integración' },
+        logoUrl: null,
+        websiteUrl: null,
+      })
+    );
+    try {
+      const found = await supermarkets.findOneOrFail({
+        where: { id: saved.id },
+      });
+      expect(found.name).toEqual({
+        en: 'Integration Market',
+        es: 'Mercado de Integración',
+      });
+      expect(found.logoUrl).toBeNull();
+    } finally {
+      await supermarkets.delete({ id: saved.id });
+    }
+  });
+});

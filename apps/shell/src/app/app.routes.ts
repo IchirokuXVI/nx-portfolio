@@ -1,48 +1,44 @@
-import { localeGuard } from '@portfolio/localization/rokutranslator-angular';
 import { Route } from '@angular/router';
-import { NotFoundComponent } from '@portfolio/shared/ui';
 
 export const appRoutes: Route[] = [
   {
-    // Plain locale segment; localeGuard checks it is a valid locale and, when it
-    // is not (an app path or the bare root), redirects to /{guess}/{path}. The
-    // route is componentless, so children render in the shell's root outlet.
-    path: ':locale',
-    canActivate: [localeGuard],
-    children: [
-      {
-        path: 'odontogram',
-        title: 'app-title',
-        data: { titleNs: 'odontogram/ui', titleFallback: 'Odontogram' },
-        loadChildren: () =>
-          import('odontogram/Routes').then((m) => m.remoteRoutes),
-      },
-      {
-        path: 'damoclesSword',
-        title: 'app-title',
-        data: { titleNs: 'damoclesSword', titleFallback: "Damocle'Sword" },
-        loadChildren: () =>
-          import('damoclesSword/Routes').then((m) => m.remoteRoutes),
-      },
-      {
-        path: '',
-        title: 'app-title',
-        data: { titleNs: 'landingV2', titleFallback: 'Portfolio' },
-        loadChildren: () =>
-          import('landingV2/Routes').then((m) => m.remoteRoutes),
-      },
-      {
-        path: '**',
-        title: 'app-title',
-        data: { titleNs: 'landingV2', titleFallback: 'Portfolio' },
-        component: NotFoundComponent,
-      },
-    ],
+    // **Migrated (plan 0003): odontogram owns its own locale segment**, so it mounts
+    // at the top level and its own guard settles the locale below `/odontogram`.
+    // It sets its own document title too, which is why there is no `titleNs` here.
+    path: 'odontogram',
+    loadChildren: () => import('odontogram/Routes').then((m) => m.remoteRoutes),
   },
   {
-    // No locale (including the bare root): localeGuard redirects to /{guess}/...
-    path: '**',
-    canActivate: [localeGuard],
-    component: NotFoundComponent,
+    // **Migrated (plan 0003): damoclesSword owns its own locale segment**, so it
+    // mounts at the top level and its own guard settles the locale below
+    // `/damoclesSword`. It sets its own document title too.
+    path: 'damoclesSword',
+    loadChildren: () =>
+      import('damoclesSword/Routes').then((m) => m.remoteRoutes),
+  },
+  {
+    // **Migrated (plan 0003): velista owns its own locale segment**, so it mounts at
+    // the top level and its own guard settles the locale below `/velista`. It sets
+    // its own document title too.
+    path: 'velista',
+    loadChildren: () => import('velista/Routes').then((m) => m.remoteRoutes),
+  },
+  {
+    // **Migrated (plan 0003): landingV2 owns its own locale segment.** Its mount is
+    // empty, so its URLs are unchanged at `/{locale}/...`; what changed is who
+    // decides, and the shell now inserts nothing on its behalf.
+    //
+    // **Must stay BELOW every mounted app.** An empty path route with `loadChildren`
+    // is not terminal: it consumes no segments and then offers the whole path to its
+    // own table, so placed above the entries for `odontogram` and the rest it would
+    // swallow them and render landingV2's not found page instead. `app.routes.spec.ts`
+    // asserts the order rather than leaving it to review.
+    //
+    // `isLocaleSegment` cannot be used to disambiguate `/en` from `/velista` here and
+    // must not be reached for: a two letter app mount would be indistinguishable from
+    // a locale, and the ordering rule is correct however the mounts happen to be
+    // spelled today.
+    path: '',
+    loadChildren: () => import('landingV2/Routes').then((m) => m.remoteRoutes),
   },
 ];

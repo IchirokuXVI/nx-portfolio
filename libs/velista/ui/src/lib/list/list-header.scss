@@ -1,0 +1,103 @@
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+}
+
+.titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// A skeleton the width of a plausible name, not of the longest possible one: a bar
+// that fills the screen and is then replaced by "Weekly shop" reads as a layout jump.
+.name-skeleton {
+  display: block;
+  inline-size: 9ch;
+  block-size: 1.4em;
+  background: var(--app-surface-sunken);
+  border-radius: var(--app-radius-sm);
+}
+
+.in-group {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.header-actions {
+  display: flex;
+  gap: var(--app-space-1);
+  flex-shrink: 0;
+}
+
+.header-action {
+  min-height: var(--app-touch-target);
+  padding: 0 var(--app-space-3);
+  background: none;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.progress-line {
+  margin: var(--app-space-3) 0 var(--app-space-1);
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-secondary);
+}
+
+.progress {
+  block-size: var(--app-progress-height);
+  background: var(--app-surface-sunken);
+  border-radius: var(--app-radius-full);
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  block-size: 100%;
+  background: var(--app-status-success-fg);
+  border-radius: var(--app-radius-full);
+  transition: inline-size var(--app-motion-fast) var(--app-motion-ease);
+}
+
+// The bar follows a tick, and a tick is instant. Under reduced motion it simply is
+// the new width, with no travel to watch.
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill {
+    transition: none;
+  }
+}
+
+.stale {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+.stale-glyph {
+  font-size: var(--app-icon-sm);
+}

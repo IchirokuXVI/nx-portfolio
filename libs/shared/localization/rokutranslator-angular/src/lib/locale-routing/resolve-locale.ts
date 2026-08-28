@@ -1,11 +1,16 @@
-import { RokuTranslator } from '@portfolio/localization/rokutranslator';
+import { canonicalLocale } from '@portfolio/localization/rokutranslator';
 import { readAppLocale } from './app-locale-storage';
 
 /** Last-resort locale when nothing else resolves. */
 const FALLBACK_LOCALE = 'en';
 
+/**
+ * The canonical form, from the free function rather than a translator instance.
+ * Resolving a locale is what runs *before* an app has adopted one, so it must not
+ * need the instance that adoption configures (plan 0005 D7).
+ */
 function fmt(locale: string | null | undefined): string {
-  return locale ? RokuTranslator.formatLocale(locale) : '';
+  return locale ? canonicalLocale(locale) : '';
 }
 
 /** First browser locale, formatted, without any supported-list filtering. */
@@ -35,7 +40,8 @@ export function resolveDesiredLocale(params: {
   defaultLocale?: string;
 }): string {
   const supported = params.supportedLocales.map((l) => fmt(l));
-  const isSupported = (locale: string) => !!locale && supported.includes(locale);
+  const isSupported = (locale: string) =>
+    !!locale && supported.includes(locale);
 
   const url = fmt(params.urlLocale);
   if (isSupported(url)) {

@@ -1,0 +1,30 @@
+// The chip never shrinks. A long name beside it truncates instead, so the role stays
+// readable at 320px in both languages (plan 0003, section 4.1).
+.chip {
+  display: inline-block;
+  flex-shrink: 0;
+  padding: var(--app-chip-padding-block) var(--app-space-2);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.chip-owner {
+  border-color: var(--app-status-attention-border);
+  background: var(--app-status-attention-bg);
+  color: var(--app-status-attention-fg);
+}
+
+// An admin is somebody with powers, and reading as neither the owner nor an ordinary
+// member is the whole job. Info rather than attention: attention means "this wants a
+// decision from you", which a role does not.
+.chip-admin {
+  border-color: var(--app-status-info-border);
+  background: var(--app-status-info-bg);
+  color: var(--app-status-info-fg);
+}

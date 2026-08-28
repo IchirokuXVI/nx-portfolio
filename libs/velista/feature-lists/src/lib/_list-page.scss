@@ -1,0 +1,90 @@
+// The page furniture this library shares.
+//
+// A copy of `feature-zones/_zone-page.scss`'s column and back button rather than an
+// import of it, and that is not an oversight: Sass resolves `@use` against the
+// filesystem rather than against this workspace's TypeScript path aliases, so a mixin
+// cannot cross a library boundary. The header of that file says the same thing about
+// `AuthScreen`. A caret that looks identical on three surfaces is written three times
+// on purpose, because the alternative is a layout framework in `ui` that takes a page's
+// entire shape as inputs.
+
+@mixin focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// One column, and **no bottom safe area padding**, which is the one way this differs
+// from the zone pages: the composer is pinned below this column and owns that inset
+// itself. Adding it here as well would leave a gap the height of a home indicator
+// between the last line and the field.
+@mixin page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  flex: 1;
+  padding: var(--app-space-5);
+  padding-block-end: var(--app-space-5);
+  overflow-y: auto;
+}
+
+@mixin back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-inline-start: calc(var(--app-space-2) * -1);
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+@mixin back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+@mixin primary-action {
+  min-block-size: var(--app-button-height);
+  padding-inline: var(--app-space-6);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include focus-ring;
+}
+
+@mixin quiet-action {
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-3);
+  background: transparent;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include focus-ring;
+}

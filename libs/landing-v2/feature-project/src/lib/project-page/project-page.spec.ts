@@ -4,33 +4,23 @@ import {
   convertToParamMap,
   provideRouter,
 } from '@angular/router';
-import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
-import { BehaviorSubject } from 'rxjs';
+import { LANDING_V2_DATA_ACCESS_PROVIDERS } from '@portfolio/landing-v2/data-access';
+import {
+  provideRokuTranslatorTesting,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
+import { BehaviorSubject, Subject } from 'rxjs';
 import { ProjectPage } from './project-page';
-
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-      addNamespace: jest.fn(),
-      addTranslations: jest.fn(),
-      removeNamespace: jest.fn(),
-      // RokuTranslatorService.t() delegates to the singleton; the resolved
-      // content components render real `| rokuT` pipe usages (unlike
-      // LandingV2Wrapper's spec, gated behind Landing's own compReady with
-      // no explicit `whenStable()` wait), so this needs to be callable too.
-      t: jest.fn((key: string) => key),
-    },
-  };
-});
 
 /** A paramMap$ we can push new slugs into, to exercise route-param reuse
  * (the router reuses this component across `projects/:slug` navigations —
  * see project-page.ts). */
 function createFixture(
   slug: string
-): [ComponentFixture<ProjectPage>, BehaviorSubject<ReturnType<typeof convertToParamMap>>] {
+): [
+  ComponentFixture<ProjectPage>,
+  BehaviorSubject<ReturnType<typeof convertToParamMap>>,
+] {
   const paramMap$ = new BehaviorSubject(convertToParamMap({ slug }));
 
   TestBed.configureTestingModule({
@@ -38,6 +28,10 @@ function createFixture(
     providers: [
       provideRokuTranslatorTesting(),
       provideRouter([]),
+      // The in-memory services stopped being `providedIn: 'root'` when the app took
+      // ownership of its providers, so a spec installs them the way the app does
+      // rather than relying on root scope (plan 0005 D5).
+      ...LANDING_V2_DATA_ACCESS_PROVIDERS,
       { provide: ActivatedRoute, useValue: { paramMap: paramMap$ } },
     ],
   });
@@ -112,7 +106,41 @@ describe('ProjectPage', () => {
   });
 
   it('does not render (or throw) before the i18n namespace has loaded', () => {
-    const [fixture] = createFixture('portfolio');
+    // A translator whose `loaded$` has **not** emitted, which is the whole premise
+    // of the gate under test. The shared testing double reports ready synchronously,
+    // so it cannot express "not loaded yet"; it used to be overridden here by the
+    // real service that `LandingV2UiModule` provided through `withConfig`, and that
+    // moved to the app with plan 0005 D11. Stating the pending service outright says
+    // what the test needs instead of depending on which provider happened to win.
+    const pending = new Subject<boolean>();
+
+    TestBed.configureTestingModule({
+      imports: [ProjectPage],
+      providers: [
+        provideRokuTranslatorTesting(),
+        provideRouter([]),
+        ...LANDING_V2_DATA_ACCESS_PROVIDERS,
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            paramMap: new BehaviorSubject(
+              convertToParamMap({ slug: 'portfolio' })
+            ),
+          },
+        },
+        {
+          provide: RokuTranslatorService,
+          useValue: {
+            loaded$: pending.asObservable(),
+            loaded: () => false,
+            locale: () => 'en',
+            t: (key: string) => key,
+          },
+        },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ProjectPage);
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;

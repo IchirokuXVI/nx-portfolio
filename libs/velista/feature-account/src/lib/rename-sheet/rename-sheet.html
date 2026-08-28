@@ -1,0 +1,129 @@
+<!--
+  `dismissible` is false while the request is out, which is the one state where closing
+  is genuinely wrong: the write has already gone, so dismissing would leave the person
+  unable to see what happened to their own name (plan 0008, section 3.1).
+-->
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!busy()"
+  #shell
+  labelledBy="account-rename-title"
+>
+  <h2 class="title" id="account-rename-title">
+    {{ 'account.name.change' | rokuT }}
+  </h2>
+  <p class="body">{{ 'account.name.hint' | rokuT }}</p>
+
+  <!--
+    A real `<form>` with a submit button, so the phone keyboard's Go key works with no
+    separate handler. `autocomplete="nickname"` and `enterkeyhint="done"` are the other
+    half of that (section 7).
+  -->
+  <form (submit)="onSubmit($event)">
+    <label class="label" for="account-rename-field">
+      {{ 'account.name.label' | rokuT }}
+    </label>
+    <input
+      (input)="onTyped($event)"
+      [attr.aria-describedby]="
+        failure() ? 'account-rename-error' : 'account-rename-rule'
+      "
+      [attr.aria-invalid]="failure() ? 'true' : null"
+      [attr.maxlength]="maxLength"
+      [readonly]="busy()"
+      [value]="typed()"
+      autocapitalize="words"
+      autocomplete="nickname"
+      class="field"
+      enterkeyhint="done"
+      id="account-rename-field"
+      type="text"
+    />
+
+    <p class="meta" id="account-rename-rule">
+      <span>{{ 'account.name.rule' | rokuT }}</span>
+      <span class="count">{{ length() }} / {{ maxLength }}</span>
+    </p>
+
+    @if (failure(); as problem) {
+      <p class="error" id="account-rename-error" role="alert">
+        {{ problem.key | rokuT: { wait: problem.wait } }}
+      </p>
+    }
+
+    <!--
+      **Rule A3.** A real radio group, labelled by the sheet's heading, and not two
+      buttons that look chosen. Both options are always visible: a disclosure that hides
+      the non default one hides the consequence (section 7).
+
+      The two labels never name the enum. `ALL_ZONES` is absent because there is no
+      screen that could show what it would overwrite.
+    -->
+    <fieldset [disabled]="busy()" class="scopes">
+      <legend class="visually-hidden">
+        {{ 'account.name.change' | rokuT }}
+      </legend>
+
+      <label [class.picked]="scope() === 'MY_GROUPS_TOO'" class="scope">
+        <input
+          (change)="pick('MY_GROUPS_TOO')"
+          [checked]="scope() === 'MY_GROUPS_TOO'"
+          class="radio"
+          name="account-rename-scope"
+          type="radio"
+          value="MY_GROUPS_TOO"
+        />
+        <span class="scope-body">
+          <span class="scope-title">
+            {{ 'account.name.scope.matching' | rokuT }}
+          </span>
+          <span class="scope-hint">
+            {{ 'account.name.scope.matchingHint' | rokuT }}
+          </span>
+        </span>
+      </label>
+
+      <label [class.picked]="scope() === 'ONLY_HERE'" class="scope">
+        <input
+          (change)="pick('ONLY_HERE')"
+          [checked]="scope() === 'ONLY_HERE'"
+          class="radio"
+          name="account-rename-scope"
+          type="radio"
+          value="ONLY_HERE"
+        />
+        <span class="scope-body">
+          <span class="scope-title">
+            {{ 'account.name.scope.globalOnly' | rokuT }}
+          </span>
+          <span class="scope-hint">
+            {{ 'account.name.scope.globalOnlyHint' | rokuT }}
+          </span>
+        </span>
+      </label>
+    </fieldset>
+
+    <button
+      [attr.aria-busy]="busy()"
+      [disabled]="!canSave()"
+      class="primary"
+      type="submit"
+    >
+      @if (busy()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ 'account.name.save' | rokuT }}</span>
+    </button>
+  </form>
+
+  <!--
+    Through the shell rather than emitting straight out, so Cancel plays the same fall
+    the scrim and Escape do. The shell owns the exit animation because it is the thing
+    that can hold the navigation back long enough to draw it.
+  -->
+  @if (!busy()) {
+    <button (click)="shell.requestDismiss()" class="cancel" type="button">
+      {{ 'entry.cancel' | rokuT }}
+    </button>
+  }
+</lib-sheet-shell>

@@ -1,0 +1,45 @@
+.comment {
+  padding: var(--app-space-3);
+  background: var(--app-surface-sunken);
+  border-radius: var(--app-card-radius);
+}
+
+// The caller's own, set apart by surface rather than by alignment: a chat style right
+// aligned bubble would suggest a conversation in real time, which this is not.
+.comment.mine {
+  background: var(--app-status-info-bg);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+  margin-block-end: var(--app-space-hair);
+}
+
+.author {
+  font-size: var(--app-text-xs);
+  font-weight: 500;
+  color: var(--app-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.when {
+  flex-shrink: 0;
+  font-size: var(--app-text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+}
+
+.body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+  // A comment is free text somebody typed, so it wraps where it must rather than
+  // overflowing on a long word.
+  overflow-wrap: anywhere;
+}

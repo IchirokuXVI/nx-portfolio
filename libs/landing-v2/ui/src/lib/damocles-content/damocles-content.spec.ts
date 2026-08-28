@@ -4,19 +4,6 @@ import { TranslatedProject } from '@portfolio/landing-v2/models';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { DamoclesContent } from './damocles-content';
 
-// DamoclesContent renders DetailPageShell, whose `| rokuT` pipes read the
-// translator singleton; mock it so it resolves in isolation, mirroring
-// project-page.spec.ts's mock.
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-      changeLocale: jest.fn(),
-    },
-  };
-});
-
 function makeProject(
   overrides: Partial<TranslatedProject> = {}
 ): TranslatedProject {
@@ -54,7 +41,7 @@ describe('DamoclesContent', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it("renders the project title and the live-app link", () => {
+  it('renders the project title and the live-app link', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('.detail-page__title')?.textContent).toBe(
       "Damocle'Sword"

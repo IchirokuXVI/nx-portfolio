@@ -1,4 +1,5 @@
-import { expect, Page, test } from '@playwright/test';
+import { Page } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 
 /**
  * Guards the layout promises the trailer video makes on the damoclesSword home

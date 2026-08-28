@@ -1,14 +1,14 @@
 # Zero-setup local override for Docker Desktop Kubernetes — "port" variant (default).
 #
 # Each app is exposed on its own LoadBalancer port: shell on 80, remotes on
-# 8081-8084. Docker Desktop publishes each LoadBalancer on localhost:<port>, so no
+# 8082-8084. Docker Desktop publishes each LoadBalancer on localhost:<port>, so no
 # hosts-file entries, no admin, and no reverse proxy are needed.
 #
 # Because the remote ports do NOT match the remotes' dev-serve ports (4201-4204),
 # the shell image must be told where its remotes live, via MFE_REMOTE_URLS (a
 # per-remote map). Build the shell with:
 #
-#   MFE_REMOTE_URLS="landing=http://localhost:8081,odontogram=http://localhost:8082,damoclesSword=http://localhost:8083,landingV2=http://localhost:8084" \
+#   MFE_REMOTE_URLS="odontogram=http://localhost:8082,damoclesSword=http://localhost:8083,landingV2=http://localhost:8084" \
 #     npx nx run shell:build:docker --configuration=development
 #
 #   helm upgrade --install nx-portfolio k8s/helm \
@@ -25,24 +25,20 @@
 #
 # Alternatives:
 #   - values.localhost-mfe.yaml : single localhost host, remotes under /mfe/<remote>,
-#     behind the reverse proxy (shell built with MFE_BASE_URL=http://localhost/mfe).
+#     behind the gateway (shell built with MFE_BASE_URL=http://localhost/mfe).
 #   - values.local.yaml         : portfolio.localhost / mfe.localhost hostnames,
 #     closest to production, but needs hosts-file entries (admin).
 
 # Use the locally built dev images without reaching for a registry.
-productionImageTag: dev
+imageTag: dev
 appImagePullPolicy: IfNotPresent
 
-# Port mode exposes each app directly, so the reverse proxy (and its certs / MetalLB
-# pool) is not needed.
-reverseProxy:
-  enabled: false
-certbot:
+# Port mode exposes each app directly, so the routing layer is not needed at all:
+# no Gateway object, no Gateway API CRDs, no cert-manager, and therefore no
+# k8s/bootstrap run. This stays the zero setup path.
+gateway:
   enabled: false
 metallb:
-  enabled: false
-
-staging:
   enabled: false
 
 # `lbPort` turns each app's Service into a LoadBalancer on that port (see
@@ -51,22 +47,14 @@ staging:
 # does not bake its own URL.
 apps:
   - name: shell
-    env: production
     image: nx-portfolio/shell
     lbPort: 80
-  - name: landing
-    env: production
-    image: nx-portfolio/landing
-    lbPort: 8081
   - name: odontogram
-    env: production
     image: nx-portfolio/odontogram
     lbPort: 8082
   - name: damoclessword
-    env: production
     image: nx-portfolio/damoclessword
     lbPort: 8083
   - name: landingv2
-    env: production
     image: nx-portfolio/landingv2
     lbPort: 8084

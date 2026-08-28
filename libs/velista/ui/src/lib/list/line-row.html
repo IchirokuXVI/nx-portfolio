@@ -1,0 +1,187 @@
+<!--
+  The row is a `checkbox` and its accessible name is the content plus the quantity.
+  The captions are in `aria-describedby` rather than in the name, so "Waiting for
+  approval" is available on demand and is not read out every time focus touches the
+  row (section 7).
+
+  In reorder mode the role is **dropped** rather than kept and dishonoured: the row is
+  not a checkbox while ticking off is off, and claiming otherwise would announce a
+  control that does nothing.
+-->
+<div
+  (click)="onRowClick()"
+  (keydown)="onRowKeydown($event)"
+  [attr.aria-busy]="line().write === 'pending' ? 'true' : null"
+  [attr.aria-checked]="reordering() ? null : checked()"
+  [attr.aria-describedby]="line().captionKey === null ? null : 'cap-' + line().id"
+  [attr.aria-label]="reordering() ? null : accessibleName()"
+  [attr.role]="reordering() ? null : 'checkbox'"
+  [attr.tabindex]="reordering() || !line().interactive ? null : 0"
+  [class.inert]="!line().interactive && !reordering()"
+  [class.in-flight]="line().write === 'pending'"
+  [class.struck]="line().struck"
+  [class.awaiting]="line().approvalStatus === 'PENDING'"
+  [class.turned-down]="line().approvalStatus === 'REJECTED'"
+  class="row"
+>
+  @if (reordering()) {
+    <!--
+      The grip is a real button with real keys on it. Up and down move the row and each
+      step is announced through the page's live region, because a grip that only
+      answered a pointer would put the manual order out of reach of anybody without a
+      working one (section 7).
+    -->
+    <span class="grip-wrap">
+      <button
+        (click)="move('moveUp')"
+        [attr.aria-label]="'list.reorder.moveUp' | rokuT: { name: line().content }"
+        [disabled]="!canMoveUp()"
+        class="grip-step"
+        type="button"
+      >
+        <span aria-hidden="true">&#9650;</span>
+      </button>
+
+      <lib-grip-icon class="grip" />
+
+      <button
+        (click)="move('moveDown')"
+        [attr.aria-label]="
+          'list.reorder.moveDown' | rokuT: { name: line().content }
+        "
+        [disabled]="!canMoveDown()"
+        class="grip-step"
+        type="button"
+      >
+        <span aria-hidden="true">&#9660;</span>
+      </button>
+    </span>
+  } @else {
+    <lib-line-state-control
+      [approvalStatus]="line().approvalStatus"
+      [status]="line().status"
+      class="state"
+    />
+  }
+
+  <span class="body">
+    <span class="content">{{ line().content }}</span>
+
+    @if (line().captionKey !== null) {
+      <span [id]="'cap-' + line().id" class="caption">
+        {{ line().captionKey! | rokuT }}
+      </span>
+    }
+  </span>
+
+  <!--
+    Drawn only above one, and in tabular numerals so a column of them lines up. A
+    quantity of 1 is the overwhelming majority and writing "x1" on every row would be
+    noise that makes the rows that matter harder to find (section 4.7).
+  -->
+  @if (line().quantity > 1) {
+    <span aria-hidden="true" class="quantity">&times;{{ line().quantity }}</span>
+  }
+
+  @if (line().commentCount !== undefined && line().commentCount! > 0) {
+    <span aria-hidden="true" class="comment-count">
+      <lib-comment-icon class="comment-glyph" />
+      {{ line().commentCount }}
+    </span>
+  }
+
+  <!--
+    No actions means no trigger at all, not a disabled one. `MemberRow` makes the same
+    choice for the same reason: a disabled control implies a permission that is merely
+    unavailable right now.
+  -->
+  @if (!reordering() && line().actions.length > 0) {
+    <span class="menu-wrap">
+      <button
+        (click)="toggleMenu(); $event.stopPropagation()"
+        [attr.aria-expanded]="menuOpen()"
+        [attr.aria-label]="'list.line.menuFor' | rokuT: { name: line().content }"
+        #trigger
+        aria-haspopup="menu"
+        class="trigger"
+        type="button"
+      >
+        <lib-ellipsis-icon class="trigger-glyph" />
+      </button>
+
+      @if (menuOpen()) {
+        <ul
+          [attr.aria-label]="'list.line.menuFor' | rokuT: { name: line().content }"
+          class="menu"
+          role="menu"
+        >
+          @for (action of line().actions; track action) {
+            <li role="none">
+              <button
+                (click)="choose(action); $event.stopPropagation()"
+                [class.destructive]="isDestructive(action)"
+                class="item"
+                role="menuitem"
+                type="button"
+              >
+                {{ labelKey(action) | rokuT }}
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </span>
+  }
+</div>
+
+<!--
+  The decisions sit under the row rather than inside it, because the row is one tap
+  target and two more inside it would make the whole thing unhittable. Staff only, and
+  only on a line that is actually waiting.
+-->
+@if (line().decidable) {
+  <div class="decisions">
+    <button
+      (click)="choose('approve')"
+      class="decision approve"
+      type="button"
+    >
+      {{ 'list.line.approve' | rokuT }}
+    </button>
+    <button (click)="choose('reject')" class="decision reject" type="button">
+      {{ 'list.line.reject' | rokuT }}
+    </button>
+  </div>
+}
+
+@if (line().restorable) {
+  <div class="decisions">
+    <button (click)="choose('restore')" class="decision" type="button">
+      {{ 'list.line.restore' | rokuT }}
+    </button>
+  </div>
+}
+
+<!--
+  Inline, under the row it is about, and never a toast: a toast about a row is read
+  after the row has scrolled away (section 3.3). Tapping it retries.
+-->
+@if (line().write === 'failed') {
+  <button (click)="retry.emit(line().id)" class="notice failed" type="button">
+    {{ 'list.line.failed' | rokuT }}
+  </button>
+}
+
+@if (line().write === 'overwritten') {
+  <button
+    (click)="dismiss.emit(line().id)"
+    class="notice overwritten"
+    type="button"
+  >
+    @if (line().overwrittenBy !== null) {
+      {{ 'list.line.overwritten' | rokuT: { name: line().overwrittenBy } }}
+    } @else {
+      {{ 'list.line.overwrittenBySomeone' | rokuT }}
+    }
+  </button>
+}

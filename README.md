@@ -3,10 +3,10 @@
 A personal portfolio built as an **Angular module-federation micro-frontend system** inside an [Nx](https://nx.dev) monorepo, shipped with a custom Nx Docker build/push toolchain and deployed to a **k3s** cluster via **Helm**.
 
 - **`shell`** — host application. Owns the router and lazy-loads the remotes at runtime.
-- **`landing`, `odontogram`, `damoclesSword`** — remote micro-frontends, each exposing its routes via `./Routes` (module federation). They render **only through the shell**: a remote served on its own port shows a blank page (see note below).
+- **`odontogram`, `damoclesSword`, `landingV2`, `velista`** — remote micro-frontends, each exposing its routes via `./Routes` (module federation). They render **only through the shell**: a remote served on its own port shows a blank page (see note below).
 - **`apps/docker/*`** — non-Angular Nx "app" projects that wrap a Dockerfile (`builder`, `reverse-proxy`, `certbot`, `local-http-server`).
 - **`tools/docker`** — custom Nx plugin (`@portfolio/docker`) providing the `build`/`push` executors behind every `build:docker` target.
-- **`libs/<scope>/*`** — libraries grouped by scope (`shared`, `damoclesSword`, `landing`, `odontogram`).
+- **`libs/<scope>/*`** — libraries grouped by scope (`shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`).
 - **`k8s/`** — Kubernetes manifests + the Helm chart deployed by CI.
 
 For architecture and coding conventions see [`CLAUDE.md`](./CLAUDE.md).
@@ -16,7 +16,7 @@ For architecture and coding conventions see [`CLAUDE.md`](./CLAUDE.md).
 Everything runs through Nx (`npx nx ...`); there are no top-level npm scripts.
 
 ```sh
-npx nx serve shell           # host + its dev remotes (odontogram, landing)
+npx nx serve shell           # host + its dev remotes (odontogram, landingV2)
 npx nx serve damoclesSword   # a single remote standalone
 npx nx build shell           # production build (default configuration)
 
@@ -42,7 +42,7 @@ Three GitHub Actions workflows, one per boundary:
 | Workflow | Trigger | Does |
 | --- | --- | --- |
 | **`pr.yml`** | PR into `main` or `dev` | lint + unit-test the affected projects (against the PR's target branch). Fast pre-merge feedback. |
-| **`docker-ci.yml`** | push to `main` | unit-test affected, build + push affected staging images, e2e them (`k8s/e2e/compose.yml`), deploy staging. |
+| **`docker-ci.yml`** | push to `main` | unit-test affected, build + push affected staging images, e2e them (`k8s/e2e/portfolio-frontend/compose.yml`), deploy staging. |
 | **`release.yml`** | GitHub Release published | test all apps, build + push all production images, deploy production. |
 
 **Testing model.** Tests run at every stage rather than once. The PR runs unit tests
@@ -68,7 +68,7 @@ push to main
   ├─ Build affected static-docker apps            (nx run-many -t build)
   ├─ Test affected apps inside the builder image  (nx run-many -t test)
   ├─ Build & push affected Angular apps           (nx run-many -t build:docker)
-  ├─ e2e the staging images                       (k8s/e2e/compose.yml — gates the deploy)
+  ├─ e2e the staging images                       (k8s/e2e/portfolio-frontend/compose.yml — gates the deploy)
   └─ Deploy: rsync k8s/ to the host + `helm upgrade`
 ```
 
@@ -98,8 +98,8 @@ That SHA becomes `--base` (with `--head=${{ github.sha }}`) for three separate `
 
 ### Images & registry
 
-- Registry: **`ghcr.io/ichirokuxvi`** (env `PORTFOLIO_DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>` and tagged `latest` in the `production` configuration.
-- The workflow logs in with `docker/login-action` using the built-in `GITHUB_TOKEN`, so the executor is told to skip its own login via `PORTFOLIO_DOCKER_SKIP_LOGIN=true`.
+- Registry: **`ghcr.io/ichirokuxvi`** (env `DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>` and tagged `latest` in the `production` configuration.
+- The workflow logs in with `docker/login-action` using the built-in `GITHUB_TOKEN`, so the executor is told to skip its own login via `DOCKER_SKIP_LOGIN=true`.
 - `push` only happens for targets whose `production` configuration sets `pushToRegistry: true` (see each app's `project.json`).
 - Tests run _inside_ `ghcr.io/<repo-lowercase>/builder:latest` — the builder image is rebuilt first so tests use the current toolchain.
 
@@ -168,9 +168,10 @@ From `values.apps`:
 | App             | Host                  | Path             |
 | --------------- | --------------------- | ---------------- |
 | `shell`         | `ichirokuxvi.com`     | `/`              |
-| `landing`       | `mfe.ichirokuxvi.com` | `/landing`       |
 | `odontogram`    | `mfe.ichirokuxvi.com` | `/odontogram`    |
 | `damoclessword` | `mfe.ichirokuxvi.com` | `/damoclesSword` |
+| `landingv2`     | `mfe.ichirokuxvi.com` | `/landingV2`     |
+| `velista`       | `mfe.ichirokuxvi.com` | `/velista`       |
 
 DNS for both hosts must point at `46.62.204.230`.
 

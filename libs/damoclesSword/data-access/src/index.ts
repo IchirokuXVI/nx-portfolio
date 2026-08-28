@@ -4,6 +4,7 @@ export * from './lib/asset/asset-service';
 export * from './lib/contact/contact-message';
 export * from './lib/contact/contact-mock';
 export * from './lib/contact/contact-service';
+export * from './lib/data-access-providers';
 export * from './lib/news/news';
 export * from './lib/news/news-memory';
 export * from './lib/news/news-service';

@@ -9,19 +9,6 @@ import { TranslatedProject } from '@portfolio/landing-v2/models';
 import { provideRokuTranslatorTesting } from '@portfolio/localization/rokutranslator-angular';
 import { PortfolioContent } from './portfolio-content';
 
-// PortfolioContent renders DetailPageShell, whose `| rokuT` pipes read the
-// translator singleton; mock it so it resolves in isolation, mirroring
-// project-page.spec.ts's mock.
-jest.mock('@portfolio/localization/rokutranslator', () => {
-  return {
-    RokuTranslator: {
-      getLocale: jest.fn().mockReturnValue('en'),
-      onLocaleChange: jest.fn().mockReturnValue(() => undefined),
-      changeLocale: jest.fn(),
-    },
-  };
-});
-
 function makeProject(
   overrides: Partial<TranslatedProject> = {}
 ): TranslatedProject {
@@ -99,9 +86,7 @@ describe('PortfolioContent', () => {
 
     // The swap collapses, changes content while collapsed, then grows: flush
     // the collapse timer and the grow's animation frame.
-    host
-      .querySelector<HTMLButtonElement>('.portfolio-reveal__button')
-      ?.click();
+    host.querySelector<HTMLButtonElement>('.portfolio-reveal__button')?.click();
     tick(500);
     fixture.detectChanges();
     host = fixture.nativeElement as HTMLElement;
@@ -124,9 +109,7 @@ describe('PortfolioContent', () => {
     ).toBe('true');
 
     // Collapsing restores the highlight view.
-    host
-      .querySelector<HTMLButtonElement>('.portfolio-reveal__button')
-      ?.click();
+    host.querySelector<HTMLButtonElement>('.portfolio-reveal__button')?.click();
     tick(500);
     fixture.detectChanges();
     host = fixture.nativeElement as HTMLElement;

@@ -2,13 +2,16 @@ import { TestBed } from '@angular/core/testing';
 import { Odontogram } from '@portfolio/odontogram/models';
 import { NotFoundResourceError } from '@portfolio/shared/data-access';
 import { firstValueFrom } from 'rxjs';
+import { ODONTOGRAM_DATA_ACCESS_PROVIDERS } from '../data-access-providers';
 import { OdontogramMemory } from './odontogram-memory';
 import { runSharedOdontogramServiceTests } from './odontogram-service.shared-spec';
 
 function serviceFactory() {
   TestBed.configureTestingModule({
     imports: [],
-    providers: [],
+    // Named explicitly: the memory services stopped being `providedIn: 'root'`
+    // when the app took ownership of its providers (plan 0005 D5).
+    providers: [...ODONTOGRAM_DATA_ACCESS_PROVIDERS, OdontogramMemory],
   });
 
   const service = TestBed.inject(OdontogramMemory);

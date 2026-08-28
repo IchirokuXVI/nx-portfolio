@@ -1,0 +1,65 @@
+<!--
+  `dismissible` is false while the request is out. That is the one state where closing
+  is genuinely wrong: the write has already gone, so dismissing would leave the person
+  unable to see what happened to a group that may now be deleted (plan 0008,
+  section 3.1).
+-->
+<lib-sheet-shell
+  (dismiss)="dismiss.emit()"
+  [dismissible]="!busy()"
+  [labelledBy]="titleId()"
+  #shell
+>
+  <h2 [id]="titleId()" class="title">{{ title() }}</h2>
+  <p class="body">{{ body() }}</p>
+
+  @if (errorKey(); as key) {
+    <p aria-live="polite" class="error" role="status">{{ key | rokuT }}</p>
+  }
+
+  @if (confirmWith(); as expected) {
+    <label [attr.for]="titleId() + '-typed'" class="label">
+      {{ confirmWithLabel() }}
+    </label>
+    <input
+      (input)="onTyped($event)"
+      [disabled]="busy()"
+      [id]="titleId() + '-typed'"
+      [value]="typed()"
+      autocapitalize="off"
+      autocomplete="off"
+      autocorrect="off"
+      class="field"
+      spellcheck="false"
+      type="text"
+    />
+  }
+
+  <div class="actions">
+    <button
+      (click)="submit()"
+      [attr.aria-busy]="busy()"
+      [class.destructive]="destructive()"
+      [disabled]="!canConfirm()"
+      class="primary"
+      type="button"
+    >
+      @if (busy()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ confirmLabel() }}</span>
+    </button>
+
+    <!--
+      Through the shell rather than emitting straight out, so Cancel plays the same
+      fall the scrim and Escape do. The shell owns the exit animation because it is
+      the thing that can hold the navigation back long enough to draw it; a button
+      that emitted `dismiss` itself would change the route on the next frame.
+    -->
+    @if (!busy()) {
+      <button (click)="shell.requestDismiss()" class="cancel" type="button">
+        {{ 'entry.cancel' | rokuT }}
+      </button>
+    }
+  </div>
+</lib-sheet-shell>

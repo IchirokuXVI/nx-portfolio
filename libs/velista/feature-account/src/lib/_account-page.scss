@@ -1,0 +1,101 @@
+// The page furniture this library's one screen uses.
+//
+// A mixin file rather than a component in `ui`, for the reason `feature-zones`'
+// `_zone-page.scss` gives: what is shared here is a column, its padding, a back button
+// and two button shapes, and a component taking all of that as inputs would be a layout
+// framework by the end of it.
+//
+// Sass resolves `@use` against the filesystem rather than against this workspace's
+// TypeScript path aliases, so a mixin cannot cross a library boundary. That is why this
+// is a third copy of the same shapes rather than an import of the second, and why the
+// focus ring is written out rather than taken from `ui`'s Sass. The ring's *geometry*
+// is a token precisely so the three copies cannot disagree about it.
+
+@mixin focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// One column. The width cap is `AppLayout`'s and is deliberately not repeated here: it
+// is a fact about the app's shell rather than about a page, and two places that both
+// narrow the column is how one of them ends up wrong (plan 0002, section 8).
+@mixin page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+  flex: 1;
+  padding: var(--app-space-5);
+  padding-block-end: calc(var(--app-space-10) + var(--app-safe-bottom));
+  overflow-y: auto;
+}
+
+// A destination's back, not a sheet's dismiss: this screen is reached by deep link as
+// readily as from the dashboard, so there may be no history entry behind it and the
+// control has to be a real navigation (plan 0009, section 4.1).
+//
+// The negative inline start margin keeps the glyph optically aligned with the content
+// below it. The button is wider than the caret, so without it the caret sits indented
+// from the column it heads.
+@mixin back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-inline-start: calc(var(--app-space-2) * -1);
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+@mixin back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+@mixin primary-action {
+  min-block-size: var(--app-button-height);
+  padding-inline: var(--app-space-6);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include focus-ring;
+}
+
+// A secondary action beside a line of copy. Quiet on purpose: the rows are what the
+// screen is for.
+@mixin quiet-action {
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-3);
+  background: transparent;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include focus-ring;
+}

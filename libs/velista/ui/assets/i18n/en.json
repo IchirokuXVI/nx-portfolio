@@ -1,0 +1,511 @@
+{
+  "app-title": "Velista",
+  "vocabulary": {
+    "zone": "Group",
+    "zones": "Groups"
+  },
+  "zone": {
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Member"
+    },
+    "status": {
+      "pending": "PENDING"
+    },
+    "detail": {
+      "back": "Back",
+      "loading": "Loading this group",
+      "lists": "Lists",
+      "members": "Members",
+      "newList": "New list",
+      "settings": "Group settings",
+      "stale": "Not updating live right now",
+      "empty": {
+        "title": "No lists yet",
+        "body": "Start one and everyone here can shop from it"
+      },
+      "noAccess": {
+        "title": "Nothing shared with you yet",
+        "body": "This group has lists, and none of them are shared with you. Ask someone here to add you, or start your own"
+      },
+      "pending": {
+        "title": "Waiting to be let in",
+        "body": "Whoever runs the group decides. The lists appear here as soon as they do"
+      },
+      "gone": {
+        "kicked": "You are no longer in that group",
+        "deleted": "That group was deleted"
+      }
+    },
+    "ownerless": {
+      "title": "This group has no owner",
+      "body": "Whoever set it up deleted their account. It will be deleted unless an admin takes it on",
+      "claim": "Take this group on",
+      "askAdmin": "Ask an admin here to take it on"
+    },
+    "members": {
+      "title": "Members of {{name}}",
+      "loading": "Loading the members",
+      "requests": "Waiting to join",
+      "approve": "Let in",
+      "reject": "Turn down",
+      "remove": "Remove from group",
+      "ban": "Remove and block",
+      "makeAdmin": "Make admin",
+      "makeMember": "Make an ordinary member",
+      "transfer": "Hand the group over",
+      "rename": "Change name here",
+      "you": "You",
+      "menuFor": "More options for {{name}}",
+      "more": "Show more",
+      "approved": "{{name}} is in the group",
+      "rejected": "{{name}} was turned down"
+    },
+    "confirm": {
+      "remove": {
+        "title": "Remove {{name}}?",
+        "body": "They lose this group and its lists. They can ask to join again with the code",
+        "action": "Remove from group"
+      },
+      "ban": {
+        "title": "Remove and block {{name}}?",
+        "body": "They lose this group and cannot ask to join again, even with the code",
+        "action": "Remove and block"
+      },
+      "transfer": {
+        "title": "Hand the group to {{name}}?",
+        "body": "They become the owner and you become an admin. Only they can hand it back",
+        "action": "Hand it over"
+      },
+      "regenerate": {
+        "title": "Make a new code?",
+        "body": "The old code stops working, so anyone you already sent it to will need the new one",
+        "action": "Make a new code"
+      },
+      "delete": {
+        "title": "Delete {{name}}?",
+        "body": "Every list in this group goes, for everyone in it. This cannot be undone",
+        "typeName": "Type the group's name to confirm",
+        "action": "Delete this group"
+      },
+      "rename": {
+        "title": "Change name here",
+        "body": "This is the name the other people in this group see. It changes nothing anywhere else",
+        "label": "Name in this group",
+        "action": "Save"
+      }
+    },
+    "settings": {
+      "title": "Group settings",
+      "rename": "Group name",
+      "save": "Save",
+      "regenerate": "Make a new join code",
+      "delete": "Delete this group"
+    },
+    "newList": {
+      "title": "Name the list",
+      "body": "Anyone in this group can start a list. You can rename it later",
+      "label": "List name",
+      "placeholder": "Weekly shop",
+      "submit": "Create list"
+    },
+    "error": {
+      "notAvailable": "This group is not available to you. It may have been deleted, or you may have been removed",
+      "roleChanged": "Your role in this group changed",
+      "alreadyClaimed": "Somebody else has already taken this group on",
+      "tooManyRenames": "Too many name changes. You can change it again in {{wait}}",
+      "failed": "That did not go through. Try again"
+    }
+  },
+  "line": {
+    "status": {
+      "notAvailable": "NOT AVAILABLE"
+    }
+  },
+  "connection": {
+    "lost": {
+      "title": "You have lost connection",
+      "body": "Check your wifi or mobile data. This page reloads on its own as soon as you are back.",
+      "reload": "Reload now"
+    }
+  },
+  "auth": {
+    "back": "Back",
+    "signIn": {
+      "title": "Welcome back",
+      "body": "Sign in and your groups come with you, on any phone",
+      "submit": "Sign in",
+      "newHere": "New here?",
+      "createAccount": "Create an account"
+    },
+    "register": {
+      "title": "Make an account",
+      "body": "So your lists are not tied to one phone",
+      "submit": "Create account",
+      "haveOne": "Already have one?"
+    },
+    "upgrade": {
+      "title": "Keep what you have",
+      "body": "Add an email and a password to the account already on this phone. Nothing moves and nothing is lost",
+      "keepsafe_one": "Your group and everything in it stay exactly where they are. This is the same account, with a way back into it",
+      "keepsafe_other": "Your {{count}} groups and everything in them stay exactly where they are. This is the same account, with a way back into it",
+      "submit": "Secure my account",
+      "later": "Not now",
+      "done": "Your account is secured. Sign in anywhere with {{email}}"
+    },
+    "field": {
+      "email": "Email",
+      "password": "Password",
+      "emailPlaceholder": "you@example.com",
+      "passwordPlaceholder": "Your password",
+      "passwordRule": "At least 8 characters",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password"
+    },
+    "verify": {
+      "working": "Confirming your email",
+      "confirmedTitle": "Email confirmed",
+      "confirmedBody": "{{email}} is yours. You can sign in with it on any phone",
+      "confirmedBodyNoEmail": "Your email is confirmed. You can sign in with it on any phone",
+      "expiredTitle": "That link has run out",
+      "expiredBody": "Confirmation links last a short while and work once. Nothing is wrong with your account: signing in and everything else works exactly the same",
+      "toGroups": "Go to my groups"
+    },
+    "nudge": {
+      "title": "Confirm your email",
+      "body": "We sent a link to {{email}}. You can carry on without it, but confirming keeps the account yours",
+      "dismiss": "Dismiss"
+    },
+    "resend": {
+      "prompt": "Did not get it?",
+      "promptExpired": "Still want to confirm it?",
+      "action": "Send it again",
+      "sent": "Sent again. You can ask for another in {{wait}}",
+      "sentNoWait": "Sent again. Give it a minute to arrive",
+      "refused": "Too many requests. You can ask for another in {{wait}}",
+      "refusedNoWait": "Too many requests. Try again in a while"
+    },
+    "error": {
+      "badCredentials": "That email and password do not match. Check both and try again",
+      "emailTaken": "That email already has an account",
+      "emailTakenAction": "Sign in instead",
+      "badEmail": "That does not look like an email address",
+      "shortPassword": "Passwords need at least 8 characters",
+      "tooMany": "Too many tries. Wait a minute and try again"
+    }
+  },
+  "entry": {
+    "createZone": {
+      "title": "Name your group",
+      "body": "A group is the household or flatmates you share lists with. You can change the name later",
+      "label": "Group name",
+      "placeholder": "Home",
+      "submit": "Create group",
+      "submitting": "Creating",
+      "mintingAccount": "We are setting up an account on this phone so the group has an owner. You can add an email to it whenever you like"
+    },
+    "joinZone": {
+      "title": "Enter the code",
+      "body": "Whoever set the group up can find its code on the group's page",
+      "label": "Join code",
+      "hint": "Letters and numbers. Never O, I or L",
+      "submit": "Ask to join",
+      "submitting": "Asking",
+      "paste": "Paste"
+    },
+    "joinLink": {
+      "title": "Someone wants you on their list",
+      "body": "Ask to join, and whoever runs the group lets you in. You will see the group and its lists once they do",
+      "codeLabel": "The code in your link",
+      "decline": "Not now",
+      "guestNotice": "Asking makes an account on this phone. Add an email to it later so you do not lose it"
+    },
+    "invite": {
+      "title": "{{name}} is yours",
+      "body": "Send this code to the people you shop with. They enter it to ask to join",
+      "copy": "Copy code",
+      "copied": "Copied",
+      "newCode": "This is your new code. The old one has stopped working",
+      "share": "Share the link"
+    },
+    "asked": {
+      "title": "You asked to join {{name}}",
+      "body": "Whoever runs the group decides. This page updates the moment they do, and the group opens up below"
+    },
+    "cancel": "Cancel",
+    "error": {
+      "noSuchZone": "No group has that code. Check it with whoever sent it. Codes never use O, I or L",
+      "alreadyAsked": "You have already asked to join this group",
+      "notAllowed": "You cannot join this group. Ask whoever runs it",
+      "tooMany": "Too many tries. Wait a minute and try again",
+      "createClash": "Something clashed on our side. Try that again",
+      "failed": "That did not go through. Try again"
+    },
+    "accountLost": {
+      "title": "We lost the account on this phone",
+      "body": "Your groups were tied to this phone and we cannot reach them any more. You can start again, and adding an email next time means this cannot happen",
+      "restart": "Start again"
+    }
+  },
+  "home": {
+    "loading": "Loading your groups",
+    "or": "OR",
+    "hero": {
+      "headline": {
+        "top": "One list.",
+        "bottom": "Everyone in sync."
+      },
+      "body": "Shared shopping lists for the people you actually shop with. Changes show up on everyone's phone as they happen."
+    },
+    "preview": {
+      "listName": "Weekly shop",
+      "zoneName": "Home",
+      "line": {
+        "milk": {
+          "content": "Milk",
+          "quantity": "2 L"
+        },
+        "bread": {
+          "content": "Bread",
+          "quantity": "1"
+        },
+        "tomatoes": {
+          "content": "Tomatoes"
+        }
+      }
+    },
+    "action": {
+      "createZone": "Create a group",
+      "joinCode": "Join with a code",
+      "google": "Continue with Google",
+      "emailSignIn": "Sign in with email",
+      "newZone": "New group",
+      "newList": "New list",
+      "search": "Search",
+      "account": "Your account",
+      "changeLocale": "Change language"
+    },
+    "zoneExplainer": "A group is the household or flatmates you share lists with. You can start without an account.",
+    "section": {
+      "resume": "Pick up where you left off",
+      "zones": "Your groups"
+    },
+    "zone": {
+      "members_one": "{{count}} member",
+      "members_other": "{{count}} members",
+      "lists_one": "{{count}} list",
+      "lists_other": "{{count}} lists"
+    },
+    "list": {
+      "items_one": "{{count}} item",
+      "items_other": "{{count}} items"
+    },
+    "progress": {
+      "ready": "{{ready}} of {{total}} ready"
+    },
+    "presence": {
+      "shopping": "{{names}} are shopping now",
+      "shoppingCount_one": "{{count}} shopping now",
+      "shoppingCount_other": "{{count}} shopping now"
+    },
+    "guest": {
+      "title": "You are shopping as a guest",
+      "body": "This phone is the only thing holding your account. Add an email or Google to keep your groups and lists if you lose it.",
+      "secure": "Secure my account",
+      "later": "Not now"
+    },
+    "pending": {
+      "waiting": "Waiting to be let in"
+    },
+    "request": {
+      "wantsToJoin": {
+        "one": "{{name}} wants to join",
+        "many": "{{name}} and {{count}} more want to join"
+      },
+      "review": "Review"
+    },
+    "empty": {
+      "title": "No groups yet",
+      "body": "A group is the household or flatmates you share lists with. Start one, or join someone else's with their code."
+    },
+    "error": {
+      "title": "We could not load your groups",
+      "body": "Something went wrong on our side. Nothing you saved has been lost.",
+      "retry": "Try again",
+      "reference": "ref {{correlationId}}",
+      "copyReference": "Copy reference"
+    }
+  },
+  "list": {
+    "header": {
+      "inGroup": "in {{name}}",
+      "ready": "{{ready}} of {{total}} ready",
+      "notLive": "Not updating right now",
+      "back": "Back to the group"
+    },
+    "add": {
+      "placeholder": "Add something",
+      "action": "Add",
+      "quantity": "How many",
+      "more": "One more",
+      "fewer": "One fewer"
+    },
+    "empty": {
+      "title": "Nothing on this list yet",
+      "body": "Write the first thing and everyone here sees it"
+    },
+    "readOnly": {
+      "notice": "You can read this list, not change it"
+    },
+    "line": {
+      "awaitingApproval": "Waiting for approval",
+      "rejected": "Turned down",
+      "notAvailable": "Not in the shop",
+      "approve": "Add it",
+      "reject": "Not this",
+      "restore": "Put it back",
+      "markNotAvailable": "Mark as not in the shop",
+      "markPending": "Put it back on the list",
+      "edit": "Change this",
+      "comments": "What people said",
+      "delete": "Take off the list",
+      "menuFor": "More for {{name}}",
+      "overwritten": "{{name}} changed this while you were editing",
+      "overwrittenBySomeone": "Somebody else changed this while you were editing",
+      "failed": "That did not save. Tap to try again",
+      "move": "Move",
+      "movedTo": "Moved to position {{position}} of {{total}}"
+    },
+    "reorder": {
+      "enter": "Put them in order",
+      "title": "Put them in order",
+      "body": "Drag by the grip. Ticking off is off while you are in here",
+      "done": "Done",
+      "started": "Putting them in order. Ticking off is off",
+      "ended": "Finished putting them in order",
+      "moveUp": "Move {{name}} up",
+      "moveDown": "Move {{name}} down"
+    },
+    "edit": {
+      "title": "Change this line",
+      "content": "What is it",
+      "save": "Save"
+    },
+    "confirm": {
+      "deleteLine": {
+        "title": "Take {{name}} off the list?",
+        "body": "It goes for everyone, along with anything said about it",
+        "action": "Take it off"
+      },
+      "deleteList": {
+        "title": "Delete {{name}}?",
+        "body": "Every line on it goes, for everyone in the group. This cannot be undone",
+        "typeName": "Type the list's name to confirm",
+        "action": "Delete this list"
+      }
+    },
+    "comments": {
+      "title": "About {{name}}",
+      "placeholder": "Say something about this",
+      "send": "Send",
+      "empty": "Nothing said about this yet",
+      "someone": "Someone in the group",
+      "loading": "Loading what people said"
+    },
+    "settings": {
+      "title": "List settings",
+      "name": "List name",
+      "save": "Save",
+      "share": "Who can use this list",
+      "delete": "Delete this list",
+      "accessFor": "What {{name}} can do with this list",
+      "access": {
+        "none": "No access",
+        "reader": "Can read",
+        "writer": "Can add and tick off",
+        "always": "Always has access",
+        "shortNone": "None",
+        "shortReader": "Read",
+        "shortWriter": "Add & tick",
+        "creator": "Started this list",
+        "staffNote": "Admins can open every list"
+      }
+    },
+    "gone": {
+      "deleted": "That list was deleted",
+      "unshared": "That list is no longer shared with you"
+    },
+    "error": {
+      "notAvailable": "This list is not available to you. It may have been deleted, or it may no longer be shared with you",
+      "readOnly": "You can read this list, not change it",
+      "roleChanged": "Your role in this group changed",
+      "tooFast": "Slow down for a moment and try again",
+      "failed": "That did not work. Try again in a moment"
+    }
+  },
+  "account": {
+    "title": "Your account",
+    "back": "Back",
+    "section": {
+      "you": "You",
+      "access": "Getting in"
+    },
+    "name": {
+      "label": "Name",
+      "hint": "This is the name other people in your groups see",
+      "change": "Change name",
+      "rule": "Between 2 and 40 characters",
+      "scope": {
+        "matching": "Change it in my groups too",
+        "matchingHint": "Groups where you chose a different name keep it",
+        "globalOnly": "Only here",
+        "globalOnlyHint": "Every group keeps the name it has now"
+      },
+      "save": "Save name",
+      "saved": "Your name is now {{name}}"
+    },
+    "email": {
+      "label": "Email",
+      "confirmed": "Confirmed",
+      "unconfirmed": "Not confirmed",
+      "loading": "Loading your email",
+      "failed": "We could not read your account details",
+      "retry": "Try again"
+    },
+    "password": {
+      "label": "Password",
+      "action": "Change your password",
+      "body": "We send a link to {{email}}. Using it signs you out on your other phones, and keeps you signed in here",
+      "sent": "If that address has a password, a link is on its way"
+    },
+    "signOut": {
+      "action": "Sign out",
+      "body": "Signs you out on this phone. Your other phones stay signed in"
+    },
+    "guest": {
+      "title": "This account lives on this phone",
+      "body": "There is no email and no password on it yet, so it cannot be opened anywhere else, and clearing this browser's data would end it",
+      "secure": "Secure this account",
+      "deleteNote": "Until it is secured, deleting is the only other way this account ends"
+    },
+    "delete": {
+      "action": "Delete your account",
+      "title": "Delete your account?",
+      "body": "Your email, your password and your name go for good. This cannot be undone",
+      "ownedZones_one": "You own 1 group. It will be deleted unless an admin in it takes it on",
+      "ownedZones_other": "You own {{count}} groups. They will be deleted unless an admin in each takes them on",
+      "authored": "What you added to other people's lists stays, with your name taken off it",
+      "typeName": "Type your name to confirm",
+      "confirm": "Delete my account",
+      "done": "Your account is gone"
+    },
+    "error": {
+      "tooManyRenames": "Too many name changes. You can change it again in {{wait}}",
+      "tooManyResets": "Too many requests. You can ask for another in {{wait}}",
+      "badName": "Names are 2 to 40 characters, and can use letters, numbers, spaces and . _ ' -",
+      "gone": "That account no longer exists",
+      "failed": "That did not go through. Try again"
+    }
+  }
+}

@@ -1,0 +1,75 @@
+@use '../styles/tokens' as tokens;
+
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100%;
+  padding-block-start: var(--app-safe-top);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  padding: var(--app-space-4) var(--app-space-4) var(--app-space-2);
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  @include tokens.app-focus-ring;
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+// The column the form lives in. `flex: 1` plus the spacer inside is what pins the
+// footer to the bottom without it being fixed: a fixed footer would sit on top of the
+// keyboard on Android rather than above it.
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--app-space-3) var(--app-space-7)
+    calc(var(--app-space-7) + var(--app-safe-bottom));
+}
+
+// The display face, which plan 0002 permits in exactly two places, both on the
+// unauthenticated surface. These screens are the second of them: everything here is
+// reached before there is an account, or in order to make one.
+.title {
+  margin: 0 0 var(--app-space-3);
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+  letter-spacing: var(--app-tracking-display);
+  color: var(--app-text-primary);
+}
+
+.lede {
+  margin: 0 0 var(--app-space-8);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+.spacer {
+  flex: 1;
+  min-block-size: var(--app-space-8);
+}

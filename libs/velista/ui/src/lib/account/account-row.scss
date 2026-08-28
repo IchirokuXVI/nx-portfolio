@@ -1,0 +1,110 @@
+:host {
+  display: block;
+}
+
+// The button and the plain element share every rule, so a row that becomes tappable
+// does not also change size. The reset on the button is what makes that possible.
+.row {
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  padding: var(--app-space-5) var(--app-space-1);
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  color: var(--app-text-primary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.static {
+  cursor: default;
+}
+
+.divided {
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.body {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+}
+
+.label {
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+// An email is the one value here that can be longer than the row, and wrapping it
+// would push the confirmation chip onto a second line. Truncating keeps the row a row;
+// the full address is still in the accessible name and in the password row's sentence.
+.value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+}
+
+// A labelled row's value is the answer to the label, so it carries a little more
+// weight than an action row's own words, which are already the whole line.
+.strong {
+  font-size: var(--app-text-lg);
+}
+
+.detail {
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  white-space: normal;
+}
+
+// Coral, and never coral alone: the label on a destructive row always says what it
+// does, so the meaning survives the styling being removed (section 7).
+.destructive {
+  font-weight: 600;
+
+  .value {
+    color: var(--app-status-danger-fg);
+  }
+}
+
+.chevron {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+.chip {
+  flex: none;
+  padding: var(--app-chip-padding-block) var(--app-space-3);
+  border-radius: var(--app-chip-radius);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ok {
+  background: var(--app-status-success-bg);
+  color: var(--app-status-success-fg);
+}
+
+// Violet rather than coral. An unconfirmed address is not a failure and must not read
+// as one: the account works, and confirming is something still to do (plan 0009).
+.pending {
+  background: var(--app-status-attention-bg);
+  color: var(--app-status-attention-fg);
+}

@@ -1,0 +1,75 @@
+@use '../styles/tokens' as tokens;
+
+:host {
+  display: block;
+}
+
+// The quiet treatment, not the attention one. The guest banner beside it warns about
+// something that can genuinely lose the person's data; this asks for something
+// optional, and if the two looked alike neither would be read.
+.nudge {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-4);
+  padding: var(--app-space-5);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+.mark {
+  flex: none;
+  margin-block-start: 1px;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-secondary);
+}
+
+.text {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.title {
+  margin: 0 0 var(--app-space-2);
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+  // The address can be long and has no spaces to break at, so it wraps mid word
+  // rather than pushing the card wider than the screen.
+  overflow-wrap: anywhere;
+}
+
+.resend {
+  margin-block-start: var(--app-space-3);
+}
+
+.dismiss {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  // Pulled back so a 44px target does not add 44px of padding to a card whose
+  // content is shorter than that.
+  margin: calc(-1 * var(--app-space-3)) calc(-1 * var(--app-space-3)) 0 0;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  @include tokens.app-focus-ring;
+}
+
+.dismiss-glyph {
+  font-size: var(--app-icon-sm);
+}

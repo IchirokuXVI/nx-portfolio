@@ -74,7 +74,7 @@ const expectedBuildCommand =
   `docker buildx build ` +
   `-f ${path.join('apps/my-test-project/Dockerfile')} ` +
   `-t my-test-registry/my-test-image:latest -t my-test-registry/my-test-image:0.0.1 ` +
-  `--build-arg testArg="testValue" --build-arg NODE_ENV="test" --build-arg NX_APP="my-test-project" --build-arg TARGET_REGISTRY="my-test-registry/" ` +
+  `--build-arg testArg="testValue" --build-arg NX_APP="my-test-project" --build-arg TARGET_REGISTRY="my-test-registry/" ` +
   `--cache-from=type=local,src="${path.join(`/tmp/docker-cache/.buildx-${simpleHash(options.imageName)}`)}" --cache-to=type=local,dest="${path.join(`/tmp/docker-cache-new/.buildx-${simpleHash(options.imageName)}`)}",mode=max ` +
   `${path.join('apps/my-test-project')} ` +
   `--load`;

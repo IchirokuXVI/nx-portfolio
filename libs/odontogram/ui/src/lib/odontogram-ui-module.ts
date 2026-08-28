@@ -1,27 +1,29 @@
 import { NgModule } from '@angular/core';
 import { RokuTranslatorModule } from '@portfolio/localization/rokutranslator-angular';
-import { ODONTOGRAM_AVAILABLE_LOCALES } from './odontogram-locales';
 import { OdontogramSectorsView } from './odontogram-sectors-view/odontogram-sectors-view';
 import { SingleToothImage } from './single-tooth-image/single-tooth-image';
 import { ToothTreatmentDetailedForm } from './tooth-treatment-detailed-form/tooth-treatment-detailed-form';
 import { ToothTreatmentsModal } from './tooth-treatments-modal/tooth-treatments-modal';
 
+/**
+ * This library's components, plus plain `RokuTranslatorModule` for the `| rokuT`
+ * pipe.
+ *
+ * It used to carry `RokuTranslatorModule.withConfig`, which made this module the
+ * place odontogram's translations were configured *and* the place a hand written
+ * namespace dispatcher lived. Both moved: the descriptors to `translations.ts` next
+ * to the assets they read, and the `provideRokuTranslator` call to
+ * `apps/odontogram/src/app/translation-providers.ts` (plan 0005 D11).
+ *
+ * The reason is not tidiness. Providers on an NgModule imported by a component reach
+ * that component's own injector, not the route injector its pages are created
+ * against, and never the app injector where `provideHttpClient` and the locale guard
+ * live. The guard has to reach this app's translator to adopt a locale before
+ * anything renders, and from here it could not.
+ */
 @NgModule({
   imports: [
-    RokuTranslatorModule.withConfig({
-      locales: ODONTOGRAM_AVAILABLE_LOCALES,
-      defaultNamespace: 'odontogram/ui',
-      namespaces: ['odontogram/models'],
-      loader: (locale, namespace: string | undefined) => {
-        if (namespace === 'odontogram/models') {
-          return import('@portfolio/odontogram/models-localization').then(
-            (m) => (m as Record<string, Record<string, string>>)[locale]
-          );
-        }
-
-        return import(`../../assets/i18n/${locale}.json`);
-      },
-    }),
+    RokuTranslatorModule,
     OdontogramSectorsView,
     ToothTreatmentsModal,
     SingleToothImage,
@@ -30,7 +32,4 @@ import { ToothTreatmentsModal } from './tooth-treatments-modal/tooth-treatments-
   declarations: [],
   exports: [OdontogramSectorsView],
 })
-export class OdontogramUiModule {
-  // The `odontogram/models` namespace is registered by RokuTranslatorService from
-  // the `namespaces` config above; no manual RokuTranslator.addNamespace needed.
-}
+export class OdontogramUiModule {}

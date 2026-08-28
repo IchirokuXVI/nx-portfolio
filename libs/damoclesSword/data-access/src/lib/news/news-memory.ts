@@ -13,9 +13,7 @@ import { NEWS_TRANSLATIONS } from './static-news-translation-data';
  * to a URL. Swap for an HTTP-backed implementation of {@link ./news-service}'s
  * `NewsServiceI` once the server exists.
  */
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable()
 export class NewsMemory implements NewsServiceI {
   private readonly _assets = inject(ASSET_SERVICE);
   private _news = NEWS;
@@ -45,9 +43,7 @@ export class NewsMemory implements NewsServiceI {
       const resolved: News = {
         id: news.id,
         icon: news.icon,
-        image: news.imageAsset
-          ? this._assets.get(news.imageAsset)
-          : undefined,
+        image: news.imageAsset ? this._assets.get(news.imageAsset) : undefined,
       };
 
       return { ...resolved, ...translation } as News & NewsTranslation;

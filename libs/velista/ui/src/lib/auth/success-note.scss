@@ -1,0 +1,33 @@
+:host {
+  display: block;
+}
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-4);
+  margin: 0;
+  padding: var(--app-space-4) var(--app-space-5);
+  border: 1px solid var(--app-status-success-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-status-success-bg);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  // The sentence itself stays in body colour rather than green: the tick and the
+  // panel carry the tone, and green prose is harder to read than it looks.
+  color: var(--app-text-primary);
+  text-wrap: pretty;
+}
+
+.glyph {
+  flex: none;
+  margin-block-start: 1px;
+  font-size: var(--app-icon-sm);
+  color: var(--app-status-success-fg);
+}
+
+.text {
+  flex: 1;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}

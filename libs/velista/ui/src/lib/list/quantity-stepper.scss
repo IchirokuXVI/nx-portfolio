@@ -1,0 +1,44 @@
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-hair);
+  background: var(--app-surface-sunken);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+}
+
+// 44 square, like every other target on this screen.
+.step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: var(--app-radius-full);
+  font: inherit;
+  font-size: var(--app-text-lg);
+  color: var(--app-text-primary);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// Tabular and a fixed minimum, so stepping from 9 to 10 does not shove the buttons.
+.value {
+  min-width: 2ch;
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+  text-align: center;
+}

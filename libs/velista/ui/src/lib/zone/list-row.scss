@@ -1,0 +1,54 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  width: 100%;
+  min-height: var(--app-member-row-height);
+  padding: var(--app-space-3) var(--app-space-4);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.glyph {
+  flex-shrink: 0;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--app-text-lg);
+  font-weight: 500;
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.chevron {
+  flex-shrink: 0;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}

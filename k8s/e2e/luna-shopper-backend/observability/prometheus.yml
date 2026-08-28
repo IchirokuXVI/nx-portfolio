@@ -1,0 +1,22 @@
+# Prometheus for local development (plan 0016, section 9).
+#
+# It has exactly one target: the collector, which does the scraping of the five
+# services and re-exposes what it gathered. That indirection is deliberate. The
+# services' host ports move with the slot harness, and the collector can expand
+# environment variables in its own config while Prometheus cannot, so keeping the
+# per slot knowledge on the collector side leaves this file static.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: ['otel-collector:8889']
+
+  # The collector's own health and pipeline metrics, which is where a dropped
+  # batch shows up.
+  - job_name: otel-collector-internal
+    static_configs:
+      - targets: ['otel-collector:8888']

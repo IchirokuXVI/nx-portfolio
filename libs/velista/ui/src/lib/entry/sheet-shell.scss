@@ -1,0 +1,80 @@
+// The sheet covers the page it was opened over, so it is fixed to the viewport
+// rather than positioned inside whatever the host page's layout happens to be.
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: block;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  border: none;
+  padding: 0;
+  background: var(--app-scrim);
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+// Anchored to the bottom, which is where a thumb is, and where the mock draws it.
+//
+// `max-block-size` plus its own scroll is what keeps the sheet a sheet when the
+// content grows: a rejected code adds a message, and Spanish runs longer than
+// English, so the panel has to be able to grow without ever pushing its primary
+// button off the screen. The keyboard itself is handled a level up: the mock draws
+// the sheet sitting above the keyboard band, which iOS Safari does on its own by
+// moving fixed elements with the visual viewport, and which Chrome on Android needs
+// `interactive-widget=resizes-content` for. That attribute belongs to the document,
+// so it is set in both `index.html` files, the shell's and this app's standalone one.
+.panel {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  max-block-size: var(--app-sheet-max-height);
+  overflow-y: auto;
+  padding: var(--app-space-4) var(--app-space-6)
+    calc(var(--app-space-7) + var(--app-safe-bottom));
+  background: var(--app-surface-raised);
+  border-start-start-radius: var(--app-sheet-radius);
+  border-start-end-radius: var(--app-sheet-radius);
+  box-shadow: var(--app-sheet-shadow);
+
+  // The rise. A transform, so it is composited, and so it is one declaration to
+  // skip: under `prefers-reduced-motion` the motion token is zero and the panel is
+  // simply there (plan 0002, section 4.5). No fade on the scrim, which would dim
+  // the page twice.
+  animation: sheet-rise var(--app-motion-base) var(--app-motion-ease);
+
+  // The fall, played while the shell holds the navigation back. `forwards`, so the
+  // panel stays down for the frames between the animation ending and the route
+  // change landing.
+  &.closing {
+    animation: sheet-fall var(--app-motion-base) var(--app-motion-ease) forwards;
+  }
+}
+
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-fall {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+.handle {
+  display: block;
+  inline-size: var(--app-sheet-handle-width);
+  block-size: var(--app-sheet-handle-height);
+  margin: 0 auto var(--app-space-6);
+  border-radius: var(--app-radius-full);
+  background: var(--app-border-strong);
+}

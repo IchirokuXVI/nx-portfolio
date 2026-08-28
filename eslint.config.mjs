@@ -22,7 +22,19 @@ export default [
         'error',
         {
           enforceBuildableLibDependency: true,
-          allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?js$'],
+          allow: [
+            '^.*/eslint(\\.base)?\\.config\\.[cm]?js$',
+            // The module federation share rule, imported by the shell's and every
+            // remote's `module-federation.config.ts`. Build configuration rather than
+            // application code: it never reaches a bundle, and it has to be one file
+            // precisely because a `shared` callback governs only its own build, so the
+            // rule means nothing unless all six configs say the same thing. The
+            // boundary this rule protects is between apps, and this crosses no such
+            // boundary.
+            // Matched as the import is written, extensionless, the same way the
+            // eslint entry above is.
+            '^.*/module-federation\\.shared$',
+          ],
           depConstraints: [
             {
               sourceTag: '*',

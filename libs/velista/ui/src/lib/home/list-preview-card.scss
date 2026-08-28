@@ -1,0 +1,134 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  margin: var(--app-space-5) var(--app-space-5) 0;
+  padding: var(--app-space-3) var(--app-space-4);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+}
+
+.titles {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-3);
+  min-width: 0;
+}
+
+.list-name {
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+.zone-name {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.presence {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  flex-shrink: 0;
+}
+
+// A dot, not an icon: it carries no shape of its own and a two-line CSS circle beats
+// a component plus an SVG file for something with no artwork in it.
+.dot {
+  width: var(--app-dot-size);
+  height: var(--app-dot-size);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-success-fg);
+}
+
+.presence-text {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-secondary);
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-height: var(--app-preview-row-height);
+}
+
+.status {
+  font-size: var(--app-icon-md);
+}
+
+.status-ready {
+  color: var(--app-status-success-fg);
+}
+
+.status-missing {
+  color: var(--app-status-danger-fg);
+}
+
+.status-pending {
+  color: var(--app-text-muted);
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.text {
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.done {
+  color: var(--app-text-muted);
+  text-decoration: line-through;
+}
+
+.chip {
+  flex-shrink: 0;
+  padding: var(--app-chip-padding-block) var(--app-space-2);
+  border: 1px solid var(--app-status-danger-border);
+  border-radius: var(--app-chip-radius);
+  color: var(--app-status-danger-fg);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.quantity {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.by {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--app-avatar-sm);
+  height: var(--app-avatar-sm);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-info-bg);
+  color: var(--app-status-info-fg);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+}

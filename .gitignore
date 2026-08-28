@@ -34,6 +34,30 @@ yarn-error.log
 testem.log
 /typings
 
+# Local dev config/secrets (Luna Shopper). The tracked .env.development /
+# .env.production only hold NODE_ENV; these git ignored files carry local runtime
+# config and secrets. Only the .example files are committed. See
+# apps/luna-shopper-backend/.env.luna-shopper-backend.example and each apps/luna-shopper-backend/<svc>/.env.example.
+/.env
+/.env.local
+apps/luna-shopper-backend/.env.luna-shopper-backend
+apps/luna-shopper-backend/*/.env
+# Opt-in test database URLs (plan 0013); only the .env.test.example files are committed.
+apps/luna-shopper-backend/*/.env.test
+# pg_dump snapshots written by luna-shopper-backend:db:snapshot (plan 0013, section 3.2).
+apps/luna-shopper-backend/.snapshots/
+# Per worktree compose slot file written by luna-slot.sh / luna-slot.ps1.
+k8s/e2e/luna-shopper-backend/.env.slot
+# Jest JSON summaries and per service logs from the stack targets (plan 0015);
+# CI reads them to prove the infra-backed suites actually executed, then uploads
+# them as failure artifacts. Nothing here is worth committing.
+/test-output
+# Local dev JWT keypair lives here (out of any .env); the dir is kept via .gitkeep.
+apps/luna-shopper-backend/secrets/*
+!apps/luna-shopper-backend/secrets/.gitkeep
+jwt.key
+jwt.pub
+
 # System Files
 .DS_Store
 Thumbs.db
@@ -52,3 +76,7 @@ Thumbs.db
 .claude/settings.local.json
 .nx/polygraph
 .nx/self-healing
+
+# The live ddclient config carries a Cloudflare API token that can rewrite every
+# record in the zone. Only the .example next to it is committed.
+docker/ddns/config/

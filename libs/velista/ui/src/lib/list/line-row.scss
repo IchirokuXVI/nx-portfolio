@@ -1,0 +1,300 @@
+:host {
+  display: block;
+  position: relative;
+}
+
+// Raises the row above its neighbours only while its menu is open, so the menu paints
+// over the rows below. `MemberRow` does the same, on the host, for the same reason:
+// a parent stylesheet cannot reach inside this component's encapsulation.
+:host(.menu-open) {
+  z-index: 1;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  width: 100%;
+  min-height: var(--app-line-row-height);
+  padding: var(--app-space-2) var(--app-space-3);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// A reader's row. Still readable, still selectable, and it does not pretend to be a
+// control: no pointer, no hover, nothing that promises a tap will do something.
+.row.inert {
+  cursor: default;
+}
+
+// A write is in flight. 70%, and **still tappable**: blocking it would make the app
+// feel slow on exactly the connection it was designed for (section 3.3).
+.row.in-flight {
+  opacity: 0.7;
+}
+
+// The violet edge on the leading side of a line nobody has decided on yet.
+.row.awaiting {
+  border-inline-start: var(--app-line-accent-width) solid
+    var(--app-status-attention-fg);
+}
+
+.row.turned-down {
+  background: var(--app-surface-sunken);
+}
+
+.state {
+  flex-shrink: 0;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  flex: 1;
+  min-width: 0;
+}
+
+.content {
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Struck through **and** muted, so the state survives a monochrome screen. Colour is
+// never the only signal on this row (section 7).
+.row.struck .content {
+  text-decoration: line-through;
+  color: var(--app-text-muted);
+}
+
+// Only three things produce a caption, and an ordinary row never grows one.
+.caption {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+.row.awaiting .caption {
+  color: var(--app-status-attention-fg);
+}
+
+.row.unavailable .caption {
+  color: var(--app-status-danger-fg);
+}
+
+// Tabular, so a column of quantities lines up rather than wandering with the digits.
+.quantity {
+  flex-shrink: 0;
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-secondary);
+}
+
+.comment-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-hair);
+  flex-shrink: 0;
+  font-size: var(--app-text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+}
+
+.comment-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+// 44 square. The only separate target in the row, and the reason it can be one at all
+// is that there is exactly one of it (section 4.7).
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: var(--app-radius-full);
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.trigger-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.menu {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: calc(100% + var(--app-space-1));
+  z-index: 2;
+  min-width: var(--app-menu-min-width);
+  margin: 0;
+  padding: var(--app-space-1);
+  list-style: none;
+  background: var(--app-surface-overlay);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  box-shadow: var(--app-elevation-2);
+}
+
+.item {
+  display: block;
+  width: 100%;
+  min-height: var(--app-touch-target);
+  padding: var(--app-space-2) var(--app-space-3);
+  background: none;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  text-align: start;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// Styling only. The entry also says "Take off the list" in its own words, so the
+// meaning survives a colourblind reader (section 7).
+.item.destructive {
+  color: var(--app-status-danger-fg);
+}
+
+.decisions {
+  display: flex;
+  gap: var(--app-space-2);
+  padding: var(--app-space-2) var(--app-space-3) 0;
+}
+
+.decision {
+  min-height: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.decision.approve {
+  border-color: var(--app-status-success-border);
+  color: var(--app-status-success-fg);
+}
+
+.decision.reject {
+  border-color: var(--app-status-danger-border);
+  color: var(--app-status-danger-fg);
+}
+
+// Under the row it is about, full width, and tappable because tapping it retries.
+.notice {
+  display: block;
+  width: 100%;
+  min-height: var(--app-touch-target);
+  margin-block-start: var(--app-space-1);
+  padding: var(--app-space-2) var(--app-space-3);
+  background: none;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  font: inherit;
+  font-size: var(--app-text-2xs);
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.notice.failed {
+  background: var(--app-status-danger-bg);
+  color: var(--app-status-danger-fg);
+}
+
+.notice.overwritten {
+  background: var(--app-status-info-bg);
+  color: var(--app-status-info-fg);
+}
+
+.grip-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--app-text-muted);
+}
+
+.grip {
+  font-size: var(--app-icon-md);
+}
+
+// Small on screen and 44 wide in the hit area, which is what `min-width` plus the
+// negative margins buy: the arrows read as a hint and are still hittable.
+.grip-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--app-touch-target);
+  min-height: var(--app-space-5);
+  padding: 0;
+  background: none;
+  border: 0;
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// Rows fade rather than slide, the drag ghost does not tilt, and nobody else's reorder
+// is ever animated. The last of those is the default for everyone (section 3.5).
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    transition: none;
+  }
+}

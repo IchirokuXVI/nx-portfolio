@@ -7,13 +7,14 @@ import {
 import { NotFoundResourceError } from '@portfolio/shared/data-access';
 import { Optional } from '@portfolio/shared/util';
 import { firstValueFrom } from 'rxjs';
+import { ODONTOGRAM_DATA_ACCESS_PROVIDERS } from '../data-access-providers';
 import { TreatmentMemory } from './treatment-memory';
 import { runSharedTreatmentServiceTests } from './treatment-service.shared-spec';
 
 function serviceFactory() {
   TestBed.configureTestingModule({
     imports: [],
-    providers: [],
+    providers: [...ODONTOGRAM_DATA_ACCESS_PROVIDERS, TreatmentMemory],
   });
 
   const service = TestBed.inject(TreatmentMemory);

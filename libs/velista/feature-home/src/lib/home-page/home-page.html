@@ -1,0 +1,155 @@
+@let page = state();
+
+<div class="page">
+  <!-- Always the signed-in header here, and `bordered` is left at its default true
+       for the same reason: authenticatedGuard is what says so. -->
+  <lib-app-bar
+    (account)="account()"
+    (openSearch)="search()"
+    [accountInitial]="accountInitial()"
+    [signedIn]="true"
+  />
+
+  @switch (page.kind) {
+    @case ('loading') {
+      <div class="content">
+        <lib-zone-skeleton [count]="2" />
+      </div>
+    }
+
+    @case ('error') {
+      <div class="content">
+        <lib-error-state
+          (copyReference)="copyReference($event)"
+          (retry)="retry()"
+          [body]="'home.error.body' | rokuT"
+          [correlationId]="page.correlationId"
+          [title]="'home.error.title' | rokuT"
+        />
+      </div>
+    }
+
+    @case ('empty') {
+      <div class="content">
+        <!-- What just happened to the account, said once (plan 0009). Above the guest
+             banner, which cannot be showing at the same time: both of these mean the
+             person has just stopped being a guest. -->
+        @if (confirmEmail(); as address) {
+          <lib-confirm-email-nudge
+            (dismiss)="dismissNudge()"
+            (resend)="resendConfirmation()"
+            [email]="address"
+            [resendOffered]="resendOffered"
+            [resendState]="resendState()"
+            [resendWaitSeconds]="resendWaitSeconds()"
+          />
+        }
+
+        @if (securedEmail(); as address) {
+          <lib-success-note
+            [message]="'auth.upgrade.done' | rokuT: { email: address }"
+          />
+        }
+
+        @if (page.guest) {
+          <lib-guest-upgrade-banner
+            (dismiss)="dismissGuestBanner()"
+            (secure)="secureAccount()"
+          />
+        }
+
+        <lib-empty-state
+          [body]="'home.empty.body' | rokuT"
+          [title]="'home.empty.title' | rokuT"
+        >
+          <button (click)="createZone()" class="empty-primary" type="button">
+            {{ 'home.action.createZone' | rokuT }}
+          </button>
+          <button (click)="joinZone()" class="empty-secondary" type="button">
+            {{ 'home.action.joinCode' | rokuT }}
+          </button>
+        </lib-empty-state>
+      </div>
+    }
+
+    @case ('populated') {
+      <div class="content">
+        <!--
+          Above everything, including the guest banner: a group of one is useless, so
+          the code to share leads. Both outcomes of plan 0008 land here rather than on
+          a screen of their own, which would have to be dismissed before the person
+          could see what they had just made.
+        -->
+        @if (entry(); as arrival) {
+          @if (arrival.kind === 'created') {
+            <lib-invite-card
+              (copyCode)="copyCode(arrival.zone.joinCode)"
+              (share)="shareCode(arrival.zone.joinCode)"
+              [copied]="codeCopied()"
+              [joinCode]="arrival.zone.joinCode"
+              [shareable]="canShare"
+              [zoneName]="arrival.zone.name"
+            />
+          } @else {
+            <lib-asked-notice [zoneName]="arrival.zone.name" />
+          }
+        }
+
+        @if (confirmEmail(); as address) {
+          <lib-confirm-email-nudge
+            (dismiss)="dismissNudge()"
+            (resend)="resendConfirmation()"
+            [email]="address"
+            [resendOffered]="resendOffered"
+            [resendState]="resendState()"
+            [resendWaitSeconds]="resendWaitSeconds()"
+          />
+        }
+
+        @if (securedEmail(); as address) {
+          <!-- The banner is gone, and that is the reward. This line says why. -->
+          <lib-success-note
+            [message]="'auth.upgrade.done' | rokuT: { email: address }"
+          />
+        }
+
+        @if (page.guest) {
+          <lib-guest-upgrade-banner
+            (dismiss)="dismissGuestBanner()"
+            (secure)="secureAccount()"
+          />
+        }
+
+        @if (page.resume; as resume) {
+          <lib-resume-list-card (open)="openList($event)" [list]="resume" />
+        }
+
+        <section class="zones">
+          <div class="zones-head">
+            <h2 class="section-label">{{ 'home.section.zones' | rokuT }}</h2>
+            <button (click)="createZone()" class="new-zone" type="button">
+              {{ 'home.action.newZone' | rokuT }}
+            </button>
+          </div>
+
+          @for (zone of page.zones; track zone.id) {
+            <lib-zone-card
+              (open)="openZone($event)"
+              (openList)="openList($event)"
+              (reviewRequests)="reviewRequests($event)"
+              [zone]="zone"
+            />
+          }
+        </section>
+      </div>
+
+      <lib-bottom-action-bar (joinZone)="joinZone()" (newList)="newList()" />
+    }
+  }
+</div>
+
+<!--
+  Where a sheet renders (plan 0008, rule E1). Outside `.page`, so the sheet is not
+  laid out between the fixed header and the fixed action bar: it covers both.
+-->
+<router-outlet></router-outlet>

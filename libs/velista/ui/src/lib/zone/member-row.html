@@ -1,0 +1,68 @@
+<!--
+  A row that is acting is `aria-busy` and **keeps its accessible name**: swapping the
+  label for a spinner would leave a screen reader user with an unnamed busy element
+  where a person used to be (section 7).
+-->
+<div [attr.aria-busy]="member().busy" class="row">
+  <span aria-hidden="true" class="avatar">{{ member().initial }}</span>
+
+  <span class="body">
+    <span class="name-row">
+      <span class="name">{{ member().name }}</span>
+
+      @if (member().isYou) {
+        <span class="you">{{ 'zone.members.you' | rokuT }}</span>
+      }
+    </span>
+
+    <lib-role-chip [role]="member().role" class="role" />
+  </span>
+
+  <!--
+    No actions means no trigger at all. An admin looking at the owner's row gets
+    nothing here rather than a disabled button, because a disabled control implies a
+    permission that is merely unavailable right now (section 5.4).
+  -->
+  @if (member().actions.length > 0) {
+    <div class="menu-wrap">
+      <button
+        (click)="toggleMenu()"
+        [attr.aria-expanded]="menuOpen()"
+        [attr.aria-label]="
+          'zone.members.menuFor' | rokuT: { name: member().name }
+        "
+        [disabled]="member().busy"
+        #trigger
+        aria-haspopup="menu"
+        class="trigger"
+        type="button"
+      >
+        <lib-ellipsis-icon class="trigger-glyph" />
+      </button>
+
+      @if (menuOpen()) {
+        <ul
+          [attr.aria-label]="
+            'zone.members.menuFor' | rokuT: { name: member().name }
+          "
+          class="menu"
+          role="menu"
+        >
+          @for (action of member().actions; track action) {
+            <li role="none">
+              <button
+                (click)="choose(action)"
+                [class.destructive]="isDestructive(action)"
+                class="item"
+                role="menuitem"
+                type="button"
+              >
+                {{ labelKey(action) | rokuT }}
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  }
+</div>

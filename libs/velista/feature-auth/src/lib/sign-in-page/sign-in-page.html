@@ -1,0 +1,72 @@
+<lib-auth-screen
+  (back)="back()"
+  [backLabel]="'auth.back' | rokuT"
+  [lede]="'auth.signIn.body' | rokuT"
+  [title]="'auth.signIn.title' | rokuT"
+>
+  <!-- A real form with a submit button, so the phone keyboard's Go key works and
+       needs no handler of its own (plan 0009, section 7). -->
+  <form (submit)="onSubmit($event)" class="form">
+    <lib-email-field
+      [(value)]="email"
+      [describedBy]="error() === null ? null : errorId"
+      [invalid]="error()?.placement !== 'password' && error() !== null"
+      [label]="'auth.field.email' | rokuT"
+      [placeholder]="'auth.field.emailPlaceholder' | rokuT"
+      [readOnly]="submitting()"
+      fieldId="sign-in-email"
+    />
+
+    <lib-password-field
+      [(value)]="password"
+      [describedBy]="error() === null ? null : errorId"
+      [hideLabel]="'auth.field.hidePassword' | rokuT"
+      [invalid]="error()?.placement !== 'email' && error() !== null"
+      [label]="'auth.field.password' | rokuT"
+      [placeholder]="'auth.field.passwordPlaceholder' | rokuT"
+      [readOnly]="submitting()"
+      [showLabel]="'auth.field.showPassword' | rokuT"
+      autocomplete="current-password"
+      fieldId="sign-in-password"
+    />
+
+    <!--
+      One message, under the **pair** of fields and never under one of them: the
+      server answers the same `unauthorized` for an unknown address and a wrong
+      password alike, deliberately, so that the response does not reveal which
+      addresses are registered (section 5.4).
+    -->
+    @if (error(); as rejection) {
+      <lib-form-error
+        [message]="rejection.key | rokuT"
+        [messageId]="errorId"
+      />
+    }
+
+    <!-- Keeps its accessible name and gains `aria-busy` rather than swapping its
+         label for a spinner alone, so what is happening is announced and not only
+         drawn. -->
+    <button
+      [attr.aria-busy]="submitting()"
+      [disabled]="!canSubmit()"
+      class="primary"
+      type="submit"
+    >
+      @if (submitting()) {
+        <lib-spinner-icon class="glyph" />
+      }
+      {{ 'auth.signIn.submit' | rokuT }}
+    </button>
+  </form>
+
+  @if (googleOffered()) {
+    <lib-google-option (continueWithGoogle)="continueWithGoogle()" />
+  }
+
+  <p authFooter class="footer">
+    {{ 'auth.signIn.newHere' | rokuT }}
+    <button (click)="createAccount()" class="footer-link" type="button">
+      {{ 'auth.signIn.createAccount' | rokuT }}
+    </button>
+  </p>
+</lib-auth-screen>

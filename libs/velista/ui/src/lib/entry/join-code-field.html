@@ -1,0 +1,35 @@
+<div class="row">
+  <!--
+    `inputmode="text"` rather than `numeric`: the alphabet is mixed, and a numeric
+    keypad would make the letters unreachable. Autocapitalize, autocorrect and
+    spellcheck are all off because a code is not a word, and a phone that tries to
+    help turns HK7M into Hk7m or into something else entirely.
+  -->
+  <input
+    (input)="onInput($event)"
+    [attr.aria-describedby]="errorId()"
+    [attr.aria-invalid]="invalid()"
+    [class.invalid]="invalid()"
+    [id]="fieldId()"
+    [readOnly]="readOnly()"
+    [value]="value()"
+    autocapitalize="characters"
+    autocomplete="off"
+    autocorrect="off"
+    class="field"
+    inputmode="text"
+    maxlength="8"
+    spellcheck="false"
+    type="text"
+  />
+
+  <button
+    (click)="pasteCode.emit()"
+    [attr.aria-label]="'entry.joinZone.paste' | rokuT"
+    [disabled]="readOnly()"
+    class="paste"
+    type="button"
+  >
+    <lib-copy-icon class="glyph" />
+  </button>
+</div>

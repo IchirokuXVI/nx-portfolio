@@ -1,0 +1,3 @@
+# The seeded canvas is a generated bundle (it embeds the whole canvas editor, ~2.5 MB).
+# It is rebuilt from the .dc.html artboards plus canvas.json, so it is not committed.
+velista-home.html

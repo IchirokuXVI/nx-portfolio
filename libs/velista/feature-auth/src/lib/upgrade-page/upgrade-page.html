@@ -1,0 +1,61 @@
+<lib-auth-screen
+  (back)="back()"
+  [backLabel]="'auth.upgrade.later' | rokuT"
+  [lede]="'auth.upgrade.body' | rokuT"
+  [title]="'auth.upgrade.title' | rokuT"
+>
+  <!-- Above the fields, because it is the reason to fill them in. It names their own
+       number of groups, which is what turns a general promise into a specific one. -->
+  <lib-success-note [message]="keepsafe()" class="keepsafe" />
+
+  <form (submit)="onSubmit($event)" class="form">
+    <lib-email-field
+      [(value)]="email"
+      [describedBy]="error()?.placement === 'password' ? null : errorId"
+      [invalid]="error() !== null && error()?.placement !== 'password'"
+      [label]="'auth.field.email' | rokuT"
+      [placeholder]="'auth.field.emailPlaceholder' | rokuT"
+      [readOnly]="submitting()"
+      fieldId="upgrade-email"
+    />
+
+    <lib-password-field
+      [(value)]="password"
+      [describedBy]="error()?.placement === 'email' ? null : errorId"
+      [hideLabel]="'auth.field.hidePassword' | rokuT"
+      [invalid]="error() !== null && error()?.placement !== 'email'"
+      [label]="'auth.field.password' | rokuT"
+      [placeholder]="'auth.field.passwordPlaceholder' | rokuT"
+      [readOnly]="submitting()"
+      [rule]="'auth.field.passwordRule' | rokuT"
+      [showLabel]="'auth.field.showPassword' | rokuT"
+      autocomplete="new-password"
+      fieldId="upgrade-password"
+    />
+
+    @if (error(); as rejection) {
+      <lib-form-error [message]="rejection.key | rokuT" [messageId]="errorId" />
+    }
+
+    <button
+      [attr.aria-busy]="submitting()"
+      [disabled]="!canSubmit()"
+      class="primary"
+      type="submit"
+    >
+      @if (submitting()) {
+        <lib-spinner-icon class="glyph" />
+      }
+      {{ 'auth.upgrade.submit' | rokuT }}
+    </button>
+  </form>
+
+  <!-- Not now, and nothing else. There is no alternative account to offer somebody
+       who already has one: register is barred to them by rule C2, and Google would
+       lose the groups this screen just promised to keep. -->
+  <p authFooter class="footer">
+    <button (click)="back()" class="footer-link quiet" type="button">
+      {{ 'auth.upgrade.later' | rokuT }}
+    </button>
+  </p>
+</lib-auth-screen>

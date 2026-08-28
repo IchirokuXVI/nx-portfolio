@@ -1,0 +1,234 @@
+<!--
+  `(account)` is deliberately unbound on this one bar, and it is the only screen where
+  that is right: pressing it would navigate to the page it is already on. The button
+  stays drawn so the header does not change shape between screens.
+-->
+<lib-app-bar [accountInitial]="accountInitial()" [signedIn]="true" />
+
+<!--
+  `aria-busy` on the whole page while the delete is out, because there is no partial
+  success to render and nothing to go back to (section 3.1).
+-->
+<main [attr.aria-busy]="busy()" class="page">
+  <button
+    (click)="back()"
+    [attr.aria-label]="'account.back' | rokuT"
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
+  </button>
+
+  <h1 class="title">{{ 'account.title' | rokuT }}</h1>
+
+  <!--
+    One polite live region, outside every branch so it is never torn down and recreated:
+    a region that appears at the same moment as its text is often not announced at all.
+    It is what tells somebody who cannot see the screen that the sheet they just closed
+    changed the name behind it (section 7).
+  -->
+  <p aria-live="polite" class="live" role="status">
+    @if (announced(); as name) {
+      {{ 'account.name.saved' | rokuT: { name } }}
+    }
+  </p>
+
+  @let current = state();
+
+  <section aria-labelledby="account-you" class="group">
+    <lib-section-heading headingId="account-you" key="account.section.you" />
+
+    <!--
+      The name, and the one row that is identical for a guest. It is the reason a guest
+      is not simply redirected away from this screen (section 3.2).
+
+      `actionLabel` because "Name / Marta" announces as two unrelated strings followed
+      by "button"; the row's job is to open the rename, and the accessible name says so.
+    -->
+    <lib-account-row
+      (activate)="openRename()"
+      [actionLabel]="'account.name.change' | rokuT"
+      [chevron]="true"
+      [hasAction]="true"
+      [label]="'account.name.label' | rokuT"
+      [value]="current.name"
+    />
+    <p class="hint">{{ 'account.name.hint' | rokuT }}</p>
+  </section>
+
+  @if (current.kind === 'guest') {
+    <!--
+      The way out of this phone. Not a row: it is the primary of the guest's screen and
+      the only thing on it that changes their situation, so it is a card with the
+      sentence that makes the stakes concrete.
+    -->
+    <section aria-labelledby="account-guest" class="upgrade">
+      <h2 class="upgrade-title" id="account-guest">
+        {{ 'account.guest.title' | rokuT }}
+      </h2>
+      <p class="upgrade-body">{{ 'account.guest.body' | rokuT }}</p>
+      <!--
+        The same sentence, and the same count, that `0009` put on the upgrade screen
+        itself, so the two screens cannot disagree about what is at stake.
+      -->
+      <p class="upgrade-body">
+        {{ 'auth.upgrade.keepsafe' | rokuT: { count: current.zoneCount } }}
+      </p>
+      <button (click)="secureAccount()" class="primary" type="button">
+        {{ 'account.guest.secure' | rokuT }}
+      </button>
+    </section>
+  } @else {
+    <section aria-labelledby="account-access" class="group">
+      <lib-section-heading
+        headingId="account-access"
+        key="account.section.access"
+      />
+
+      @switch (current.profile) {
+        @case ('loading') {
+          <!--
+            Only the email row skeletons. The name above it is already correct, so a
+            skeleton over the whole screen would be a loading state for data the app
+            has had since the session started (section 3.1).
+          -->
+          <p aria-live="polite" class="skeleton" role="status">
+            <span aria-hidden="true" class="skeleton-bar"></span>
+            <span class="live">{{ 'account.email.loading' | rokuT }}</span>
+          </p>
+        }
+
+        @case ('failed') {
+          <!--
+            One retry line, and the screen still renders. Sign out below still works,
+            which is the point: being unable to read an email must never be what traps
+            somebody on a phone they want off (section 3.1).
+          -->
+          <p class="failed">
+            <span>{{ 'account.email.failed' | rokuT }}</span>
+            <button (click)="retryProfile()" class="quiet" type="button">
+              {{ 'account.email.retry' | rokuT }}
+            </button>
+          </p>
+        }
+
+        @default {
+          @if (current.email; as email) {
+            <!--
+              Words and not a colour: "Confirmed" and "Not confirmed" both survive a
+              colourblind reader and a screen reader alike (section 7). Not tappable,
+              because there is no screen behind an email address: it cannot be changed
+              anywhere in this product (section 9).
+            -->
+            <lib-account-row
+              [chipTone]="current.emailVerified ? 'ok' : 'pending'"
+              [chip]="
+                (current.emailVerified
+                  ? 'account.email.confirmed'
+                  : 'account.email.unconfirmed'
+                ) | rokuT
+              "
+              [divided]="!(!current.emailVerified && resendAvailable)"
+              [label]="'account.email.label' | rokuT"
+              [value]="email"
+            />
+
+            @if (!current.emailVerified && resendAvailable) {
+              <p class="nudge">
+                <lib-resend-sentence
+                  (resend)="resend()"
+                  [state]="resendState()"
+                  [waitSeconds]="resendWait()"
+                />
+              </p>
+            }
+
+            <!--
+              The password row is rendered whenever there is an address, including for
+              an account that signs in with Google. `UserProfileView` carries no
+              provider list, so the screen cannot know, and offering it is the safe
+              side of that: an account with no password gets the same incurious answer
+              as any other address, which is exactly what the endpoint was designed to
+              give (section 5.6).
+            -->
+            <lib-account-row
+              (activate)="changePassword()"
+              [chevron]="true"
+              [detail]="'account.password.body' | rokuT: { email }"
+              [hasAction]="true"
+              [value]="'account.password.action' | rokuT"
+            />
+
+            @if (resetOutcome(); as outcome) {
+              <p aria-live="polite" class="note" role="status">
+                @if (outcome.state === 'sent') {
+                  {{ 'account.password.sent' | rokuT }}
+                } @else {
+                  {{
+                    'account.error.tooManyResets'
+                      | rokuT: { wait: waitClock(outcome.waitSeconds) }
+                  }}
+                }
+              </p>
+            }
+          }
+        }
+      }
+
+      <!--
+        **Outside the switch, deliberately.** Sign out has to render whether the profile
+        loaded, is loading, or failed: being unable to read an email must never be what
+        traps somebody on a phone they want off (section 3.1). It was inside the loaded
+        branch when this was first written, and a spec is what found it.
+
+        **Rule A1.** Never rendered for a guest, and absent rather than disabled: for
+        them this is irreversible destruction of the account that reads as routine, and
+        there is no server call that undoes it (section 4.2). That is the `@else` this
+        sits in, not a second condition.
+
+        The copy claims nothing about other devices, because sign out does nothing to
+        them: there is no logout endpoint, so the refresh token stays live on the server
+        until it expires (section 5.5).
+      -->
+      <lib-account-row
+        (activate)="signOut()"
+        [detail]="'account.signOut.body' | rokuT"
+        [divided]="false"
+        [hasAction]="true"
+        [value]="'account.signOut.action' | rokuT"
+      />
+    </section>
+  }
+
+  @if (failure(); as problem) {
+    <p class="error" role="alert">
+      <span>{{ problem.key | rokuT: { wait: problem.wait } }}</span>
+      @if (correlationId(); as reference) {
+        <span class="reference">{{ reference }}</span>
+      }
+    </p>
+  }
+
+  <div class="spacer"></div>
+
+  <!--
+    Delete, at the bottom of both screens, and worded as what it is. For a guest it is
+    named as the only other exit there is, because for them it genuinely is.
+  -->
+  <section class="exit">
+    @if (current.kind === 'guest') {
+      <p class="hint">{{ 'account.guest.deleteNote' | rokuT }}</p>
+    }
+
+    <lib-account-row
+      (activate)="openDelete()"
+      [destructive]="true"
+      [divided]="false"
+      [hasAction]="true"
+      [value]="'account.delete.action' | rokuT"
+    />
+  </section>
+</main>
+
+<!-- The two sheets, as children of the row each is about (rule E1). -->
+<router-outlet />

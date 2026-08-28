@@ -1,0 +1,31 @@
+{
+  "name": "luna-shopper/platform",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper/platform/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/luna-shopper/platform/jest.config.cts"
+      }
+    },
+    "test-integration": {
+      "executor": "@nx/jest:jest",
+      "// ": "Uncached on purpose (plan 0015, section 3.3): the result depends on LUNA_INTEGRATION, LUNA_REQUIRE_STACK and a live broker, none of which Nx hashes, so a replayed cache entry could report a pass from a run that skipped everything. The JSON summary is what CI reads to prove the suite actually executed specs.",
+      "cache": false,
+      "options": {
+        "jestConfig": "libs/luna-shopper/platform/jest.integration.config.cts",
+        "runInBand": true,
+        "passWithNoTests": true,
+        "json": true,
+        "outputFile": "test-output/luna-shopper-backend/integration/luna-shopper-platform.json"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}
