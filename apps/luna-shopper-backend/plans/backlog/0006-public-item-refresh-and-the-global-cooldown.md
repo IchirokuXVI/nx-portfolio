@@ -6,7 +6,7 @@
 > from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
 > free number there, so parking a design never burns a number in the build sequence.
 
-Split out of plan 0026, which builds the harvester service and the Mercadona source. That plan
+Split out of plan 0038, which builds the harvester service and the Mercadona source. That plan
 originally carried a user facing endpoint letting **any** user refresh one item's price on demand,
 capped at **one fetch per five minutes across the whole platform**. The endpoint is parked here.
 
@@ -15,7 +15,7 @@ stack yet.** Section 2 explains why the obvious substitutes do not work, and sec
 Redis free design that was written before the decision to wait, so that picking this up later is a
 build rather than a redesign.
 
-Plan 0026 still builds the owner facing refresh (`REFRESH` run mode, platform admin gated). What is
+Plan 0038 still builds the owner facing refresh (`REFRESH` run mode, platform admin gated). What is
 deferred is only the **public, uncapped-audience, globally-capped** version.
 
 ## 1. What the feature is
@@ -80,7 +80,7 @@ Two properties that any implementation, Redis or Postgres, must keep:
   requests over tens of minutes; sharing one budget would starve every user refresh for the whole
   run. The honest reading of the five minute cap is that it stops the *public endpoint* being a free
   proxy, not that it is the whole of our politeness toward the source. The run's own rate limiter
-  (plan 0026, section 6.3) is what governs a run.
+  (plan 0038, section 6.3) is what governs a run.
 
 The reason this is a fallback rather than the plan: it puts a hot, contended, once-per-request write
 on the primary database to answer a question Redis answers with one round trip and no durability
@@ -88,7 +88,7 @@ requirement at all. It works. It is not what that data wants to be.
 
 ## 4. The contract
 
-Decided when this was part of 0026 and unchanged by the deferral: **a refresh that arrives while the
+Decided when this was part of 0038 and unchanged by the deferral: **a refresh that arrives while the
 window is closed is refused**, not queued and not silently reported as a success.
 
 `POST /v1/catalog/items/:itemId/refresh`, open to any authenticated user, returns `429` through the

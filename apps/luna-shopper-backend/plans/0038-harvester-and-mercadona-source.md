@@ -1,4 +1,4 @@
-# 0026 The harvester service, and Mercadona as its first source
+# 0038 The harvester service, and Mercadona as its first source
 
 Backlog 0001 designs the whole price sourcing machine. This plan builds the **ingest half** of it
 and leaves the **price modelling half** in the backlog.
