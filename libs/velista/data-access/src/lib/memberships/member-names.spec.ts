@@ -101,6 +101,33 @@ describe('MemberNames', () => {
     expect(names.nameOf(ZONE, 'u-a')).toBe('A');
   });
 
+  // The list header's presence panel draws a role beside each name. It comes off the
+  // same cached rows the name does, so the two cannot disagree about one person.
+  it('answers what somebody is in the zone, from the same rows as the name', async () => {
+    const { names } = setup([member('a', { role: 'ADMIN' })]);
+    await names.ensure(ZONE);
+
+    expect(names.roleOf(ZONE, 'u-a')).toBe('ADMIN');
+  });
+
+  it('follows a promotion, as the name follows a rename', async () => {
+    const { names, realtime } = setup();
+    await names.ensure(ZONE);
+
+    realtime.emit('member.roleChanged', member('a', { role: 'OWNER' }));
+
+    expect(names.roleOf(ZONE, 'u-a')).toBe('OWNER');
+  });
+
+  // Null rather than the enum's MEMBER fallback, which exists to read an unrecognised
+  // value off the wire safely. Using it here would demote an owner for as long as the
+  // members request is in flight, and the panel draws no chip at all instead.
+  it('has no role for somebody it has no name for', () => {
+    const { names } = setup();
+
+    expect(names.roleOf(ZONE, 'u-nobody')).toBeNull();
+  });
+
   it('starts no cache for a zone nobody has asked for', () => {
     // `membersOf` would otherwise hand the share sheet one row and look complete
     // rather than empty.

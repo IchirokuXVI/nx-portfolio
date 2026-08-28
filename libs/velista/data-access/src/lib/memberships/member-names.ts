@@ -1,5 +1,5 @@
 import { DestroyRef, inject, Injectable, signal } from '@angular/core';
-import type { Membership } from '@portfolio/velista/models';
+import type { Membership, ZoneRole } from '@portfolio/velista/models';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -78,8 +78,20 @@ export class MemberNames {
     this._destroyRef.onDestroy(() => subscription.unsubscribe());
   }
 
+  /**
+   * The whole membership per user, not merely the name.
+   *
+   * It held a `userId -> username` map until the list header started drawing a role
+   * beside each name. Two parallel signals would have been the smaller diff and the
+   * worse one: they are filled from the same rows by the same method, so the only thing
+   * a second map could ever do is disagree with the first.
+   *
+   * Still keyed by **user** id rather than membership id, which `_raw` already is: every
+   * caller here starts from a user id, because that is what a comment, a line and a
+   * presence payload carry.
+   */
   private readonly _byZone = signal<
-    ReadonlyMap<string, ReadonlyMap<string, string>>
+    ReadonlyMap<string, ReadonlyMap<string, Membership>>
   >(new Map());
 
   /** Zones whose request is in flight or done, so it is made once rather than per row. */
@@ -94,7 +106,22 @@ export class MemberNames {
    * neutral word, because to the person reading a comment they are the same fact.
    */
   nameOf(zoneId: string, userId: string): string | null {
-    return this._byZone().get(zoneId)?.get(userId) ?? null;
+    return this._byZone().get(zoneId)?.get(userId)?.username ?? null;
+  }
+
+  /**
+   * What that user is in that zone, or null.
+   *
+   * Null for the same three situations `nameOf` returns null for, and the caller draws
+   * nothing rather than falling back to MEMBER: the fallback in `enums.ts` exists to
+   * read an unrecognised value off the wire safely, and using it here would quietly
+   * demote an owner for as long as the members request is in flight.
+   *
+   * The **zone** role, which is the only one the client can know for somebody else. A
+   * per list role is not broadcast and there is no endpoint that answers it.
+   */
+  roleOf(zoneId: string, userId: string): ZoneRole | null {
+    return this._byZone().get(zoneId)?.get(userId)?.role ?? null;
   }
 
   /** Every member of a zone this cache knows, for the share sheet's rows. */
@@ -195,14 +222,18 @@ export class MemberNames {
     this._raw.set(zoneId, [...byId.values()]);
 
     this._byZone.update((current) => {
-      const names = new Map(current.get(zoneId) ?? []);
+      const known = new Map(current.get(zoneId) ?? []);
       for (const member of members) {
+        // A nameless row is not indexed, which is the rule `nameOf` has always applied
+        // and it now governs the role too. That is the right way round: the role is
+        // drawn next to the name, so a role with no name to sit beside is not a thing
+        // any surface can render.
         if (member.username !== '') {
-          names.set(member.userId, member.username);
+          known.set(member.userId, member);
         }
       }
 
-      return new Map(current).set(zoneId, names);
+      return new Map(current).set(zoneId, known);
     });
   }
 }

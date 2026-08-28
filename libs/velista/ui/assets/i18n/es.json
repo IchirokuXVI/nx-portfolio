@@ -353,6 +353,17 @@
       "notLive": "No se está actualizando ahora",
       "back": "Volver al grupo"
     },
+    "presence": {
+      "one": "{{name}} está en la lista",
+      "two": "{{first}} y {{second}} están en la lista",
+      "more_one": "{{name}} y {{count}} más están en la lista",
+      "more_other": "{{name}} y {{count}} más están en la lista",
+      "show": "Ver quién está en la lista",
+      "hide": "Ocultar quién está en la lista",
+      "panelTitle": "En la lista",
+      "since": "desde las {{time}}",
+      "hereNow": "aquí ahora"
+    },
     "add": {
       "placeholder": "Añade algo",
       "action": "Añadir",

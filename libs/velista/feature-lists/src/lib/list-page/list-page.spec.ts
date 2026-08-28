@@ -27,6 +27,7 @@ import {
 import type {
   Line,
   LineRowVm,
+  Membership,
   MyZone,
   ShoppingListSummary,
   ZoneRole,
@@ -61,6 +62,18 @@ function zone(role: ZoneRole = 'MEMBER'): MyZone {
       firstPendingRequesterName: null,
     },
     lists: [],
+  };
+}
+
+/** One approved membership, which is where a viewer's role comes from. */
+function member(userId: string, username: string, role: ZoneRole): Membership {
+  return {
+    id: `m-${userId}`,
+    zoneId: ZONE_ID,
+    userId,
+    username,
+    role,
+    status: 'APPROVED',
   };
 }
 
@@ -108,6 +121,14 @@ interface Options {
   readonly presence?: FakePresenceOptions;
   /** User id to the name they go by in this zone, since presence carries ids alone. */
   readonly names?: Readonly<Record<string, string>>;
+  /**
+   * The zone's memberships, which is where a role comes from.
+   *
+   * Separate from `names` rather than folded into it, because the two arrive from
+   * different requests in production and the header has to read well in the window
+   * where a name has resolved and a role has not.
+   */
+  readonly members?: readonly Membership[];
 }
 
 async function render(options: Options = {}): Promise<{
@@ -146,7 +167,10 @@ async function render(options: Options = {}): Promise<{
       provideFakeListStore(lists),
       provideFakeLineStore(lines),
       provideFakeMemberNames(
-        fakeMemberNames({ 'user-toni': 'Toni', ...options.names })
+        fakeMemberNames(
+          { 'user-toni': 'Toni', ...options.names },
+          options.members ?? []
+        )
       ),
       // Plan 0022: the header's viewers and the editor on a row.
       provideFakePresenceStore(fakePresenceStore(options.presence)),
@@ -484,7 +508,9 @@ describe('ListPage', () => {
         names: { u2: 'Ana' },
       });
 
-      expect(header(fixture).viewers).toEqual(['Ana']);
+      expect(header(fixture).viewers).toEqual([
+        { userId: 'u2', name: 'Ana', role: null, since: null },
+      ]);
     });
 
     // The caller is in the server's viewers, because this page now puts them there.
@@ -496,7 +522,52 @@ describe('ListPage', () => {
         names: { u1: 'Me', u2: 'Ana' },
       });
 
-      expect(header(fixture).viewers).toEqual(['Ana']);
+      expect(header(fixture).viewers.map((viewer) => viewer.name)).toEqual([
+        'Ana',
+      ]);
+    });
+
+    // The panel the header opens draws a role beside each name, and the only role the
+    // client can know for somebody else is their role in the zone: a list role is not
+    // broadcast and no endpoint answers it.
+    it('carries each viewer role from the zone memberships', async () => {
+      const { fixture } = await render({
+        presence: { viewers: { [LIST_ID]: ['u2'] } },
+        names: { u2: 'Ana' },
+        members: [member('u2', 'Ana', 'ADMIN')],
+      });
+
+      expect(header(fixture).viewers).toEqual([
+        { userId: 'u2', name: 'Ana', role: 'ADMIN', since: null },
+      ]);
+    });
+
+    // The members request is a second round trip, so there is a real window where a
+    // name has resolved and a role has not. Falling back to MEMBER would demote an
+    // owner for the length of it; the panel draws no chip instead.
+    it('leaves the role null rather than guessing while the members are in flight', async () => {
+      const { fixture } = await render({
+        presence: { viewers: { [LIST_ID]: ['u2'] } },
+        names: { u2: 'Ana' },
+        members: [],
+      });
+
+      expect(header(fixture).viewers[0]?.role).toBeNull();
+    });
+
+    // Nothing on the wire says when somebody opened the list, so the store's own first
+    // sighting is the only instant available and it is null until there is one.
+    it('carries when the client first saw each viewer', async () => {
+      const at = Date.parse('2026-08-28T15:04:00.000Z');
+      const { fixture } = await render({
+        presence: {
+          viewers: { [LIST_ID]: ['u2'] },
+          since: { [LIST_ID]: { u2: at } },
+        },
+        names: { u2: 'Ana' },
+      });
+
+      expect(header(fixture).viewers[0]?.since).toEqual(new Date(at));
     });
 
     it('says nothing rather than showing an id it could not resolve', async () => {
