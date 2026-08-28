@@ -44,7 +44,7 @@ function build(rows: Partial<ZoneMembership>[]) {
     save: jest.fn(async (row: ZoneMembership) => row),
   };
   const counts = { emitZoneCounts: jest.fn(async () => undefined) };
-  const events = { emit: jest.fn() };
+  const events = { emit: jest.fn(), emitTo: jest.fn() };
   const authz = new ZoneAuthzService(memberships as never);
   const service = new MembershipService(
     memberships as never,
@@ -69,9 +69,10 @@ describe('MembershipService.setUsername (plan 0018, section 5)', () => {
     const view = await service.setUsername(rename('u1', 'm1'));
 
     expect(view.username).toBe('Mamá');
-    expect(events.emit).toHaveBeenCalledWith(
+    // The zone room and the member's own (plan 0030, section 4.1).
+    expect(events.emitTo).toHaveBeenCalledWith(
       RealtimeEvent.MemberUsernameChanged,
-      ZONE,
+      { zoneId: ZONE, userIds: ['u1'] },
       expect.objectContaining({ username: 'Mamá' })
     );
   });

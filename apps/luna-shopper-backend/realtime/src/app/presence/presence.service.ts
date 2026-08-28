@@ -4,6 +4,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import {
+  listPresenceRoom,
   listRoom,
   RealtimeEvent,
   zoneRoom,
@@ -112,6 +113,25 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
     await Promise.all(
       [...this.sockets.keys()].map((socketId) => this.disconnect(socketId))
     );
+  }
+
+  /**
+   * The ids of this pod's sockets that belong to a user (plan 0031, section 7).
+   *
+   * The eviction sweep needs "which of my sockets are this person's", and this
+   * map is already the answer: it is the per pod half whose union lives in
+   * Redis. Nothing about its shape changes to serve the read, and a linear pass
+   * is right for it, because a sweep runs on a kick or a role change rather than
+   * on traffic.
+   */
+  socketsOf(userId: string): string[] {
+    const found: string[] = [];
+    for (const [socketId, socket] of this.sockets) {
+      if (socket.userId === userId) {
+        found.push(socketId);
+      }
+    }
+    return found;
   }
 
   /** Remember an authenticated socket so later signals can resolve its user. */
@@ -413,8 +433,12 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
       viewers,
       editors: dedupeEditors(editors),
     };
+    // Both rooms (plan 0032, section 3). The list room is whoever has it open;
+    // the presence room is everyone in the zone who may read it, so a group page
+    // can show who is shopping from each row. One payload, no per recipient
+    // variation, and nobody who may not read the list is in either room.
     this.relay.publish({
-      rooms: [listRoom(listId)],
+      rooms: [listRoom(listId), listPresenceRoom(listId)],
       event: RealtimeEvent.PresenceListUpdated,
       payload,
     });

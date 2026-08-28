@@ -2,6 +2,7 @@ import { expect, request, test } from '@playwright/test';
 import { GATEWAY_URL, REALTIME_URL } from '../playwright.config';
 import { expectDocumentedShape } from './support/contract';
 import { gateOnStack } from './support/db';
+import { waitForEvent } from './support/stream';
 
 /**
  * The core collaborative flow end to end (plan 0010, section 1), against the
@@ -20,69 +21,10 @@ import { gateOnStack } from './support/db';
  * without `docker compose up` + the services — and under LUNA_REQUIRE_STACK the
  * same condition fails instead, because CI stood the stack up on purpose. This
  * file used to carry its own copy of the probe; the one definition now lives in
- * `support/db.ts`.
+ * `support/db.ts`. The SSE reader went the same way: it lives in
+ * `support/stream.ts` now, because plan 0029's spec waits on three events and
+ * one parser for the transport is enough.
  */
-
-/**
- * Read the SSE stream until a `line.added` event arrives or the timeout fires.
- *
- * An SSE frame names its event on its own `event:` line and carries only the
- * payload on `data:` — the same split the socket transport makes, where the
- * event name is the channel and the payload is the body (plan 0009, section 3:
- * both transports publish identical payloads). The DomainEvent envelope stays
- * internal to the JetStream hop, so the event name is read off the frame rather
- * than looked for inside the JSON.
- */
-async function waitForLineAdded(
-  streamUrl: string,
-  token: string,
-  timeoutMs: number
-): Promise<unknown> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(streamUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'text/event-stream',
-      },
-      signal: controller.signal,
-    });
-    if (!res.body) {
-      throw new Error('stream had no body');
-    }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      // SSE frames are separated by a blank line; each `data:` line holds JSON.
-      const frames = buffer.split('\n\n');
-      buffer = frames.pop() ?? '';
-      for (const frame of frames) {
-        let name: string | undefined;
-        let json = '';
-        for (const line of frame.split('\n')) {
-          if (line.startsWith('event:')) {
-            name = line.slice('event:'.length).trim();
-          } else if (line.startsWith('data:')) {
-            json += line.slice('data:'.length).trim();
-          }
-        }
-        if (name === 'line.added' && json) {
-          return JSON.parse(json);
-        }
-      }
-    }
-    throw new Error('stream ended before line.added arrived');
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 test.describe('Luna Shopper core flow', () => {
   test.beforeAll(async () => {
@@ -139,7 +81,12 @@ test.describe('Luna Shopper core flow', () => {
     // 5. Open the realtime SSE stream for the zone, then add a line and assert
     //    the `line.added` event arrives and satisfies the published contract.
     const streamUrl = `${REALTIME_URL}/v1/zones/${zoneId}/stream`;
-    const eventPromise = waitForLineAdded(streamUrl, ownerToken, 10_000);
+    const eventPromise = waitForEvent(
+      streamUrl,
+      ownerToken,
+      'line.added',
+      10_000
+    );
     // Small delay so the stream subscription is established before we publish.
     await new Promise((r) => setTimeout(r, 500));
 

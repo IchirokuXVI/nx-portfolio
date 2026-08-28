@@ -124,7 +124,10 @@ describe('MembershipService republishes the counts', () => {
       requireRole: jest.fn(async () => ({ role: ZoneRole.OWNER })),
     } as unknown as ZoneAuthzService;
     const counts = { emitZoneCounts: jest.fn(async () => undefined) };
-    const events = { emit: jest.fn() } as unknown as CoreEventsPublisher;
+    const events = {
+      emit: jest.fn(),
+      emitTo: jest.fn(),
+    } as unknown as CoreEventsPublisher;
     const svc = new MembershipService(
       memberships as never,
       authz,

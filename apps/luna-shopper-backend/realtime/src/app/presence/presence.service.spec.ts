@@ -1,5 +1,6 @@
 import {
   RealtimeEvent,
+  listPresenceRoom,
   listRoom,
   zoneRoom,
   type ListPresence,
@@ -393,14 +394,19 @@ describe('presence editors', () => {
     ]);
   });
 
-  it('publishes list presence to the list room', async () => {
+  it('publishes list presence to the list room and its presence room', async () => {
     const redis = new FakeRedis();
     const pod = podOn(redis);
 
     pod.presence.register('s-1', 'user-a');
     await pod.presence.viewList('s-1', 'l1');
 
-    expect(pod.published[0].rooms).toEqual([listRoom('l1')]);
+    // Both, and one payload (plan 0032, section 3): whoever has the list open,
+    // and everyone in the zone who may read it but has not.
+    expect(pod.published[0].rooms).toEqual([
+      listRoom('l1'),
+      listPresenceRoom('l1'),
+    ]);
   });
 });
 

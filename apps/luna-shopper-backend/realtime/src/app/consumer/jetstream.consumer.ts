@@ -6,9 +6,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { context as otelContext } from '@opentelemetry/api';
 import {
-  DOMAIN_EVENT_SUBJECTS,
+  DOMAIN_EVENT_STREAM_SUBJECTS,
   listRoom,
   RealtimeEvent,
+  userRoom,
   zoneRoom,
   zoneStaffRoom,
   type DomainEvent,
@@ -43,6 +44,7 @@ import {
   EVENT_STREAM_NAME,
 } from '../realtime/constants';
 import { EventRelayService } from '../relay/event-relay.service';
+import { sweepsFor } from './sweeps';
 
 /**
  * The wire shape NestJS's NATS transport puts on an emitted event: the subject as
@@ -73,7 +75,7 @@ const MESSAGE_RETRY_MS = 5_000;
  * 0009, section 4).
  *
  * It attaches a durable consumer to a stream that captures exactly the domain
- * event subjects ({@link DOMAIN_EVENT_SUBJECTS}). Durable means the cursor
+ * event subjects ({@link DOMAIN_EVENT_STREAM_SUBJECTS}). Durable means the cursor
  * survives a restart and JetStream replays anything missed while the pod was
  * down. Delivery is at-least-once, so the relay is made idempotent here by
  * dropping any event id seen recently. The correlation id rides on the message
@@ -107,7 +109,7 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     // Fire and forget: the consume loop runs for the life of the process.
     void this.consumeLoop();
     this.logger.log(
-      `realtime consuming ${DOMAIN_EVENT_SUBJECTS.length} domain event subjects from JetStream stream ${EVENT_STREAM_NAME}`
+      `realtime consuming ${DOMAIN_EVENT_STREAM_SUBJECTS.length} domain event subjects from JetStream stream ${EVENT_STREAM_NAME}`
     );
   }
 
@@ -119,7 +121,7 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
 
   /** Create the event stream, or widen its subjects if it already exists. */
   private async ensureStream(jsm: JetStreamManager): Promise<void> {
-    const subjects = DOMAIN_EVENT_SUBJECTS as unknown as string[];
+    const subjects = [...DOMAIN_EVENT_STREAM_SUBJECTS];
     try {
       await jsm.streams.info(EVENT_STREAM_NAME);
       await jsm.streams.update(EVENT_STREAM_NAME, { subjects });
@@ -285,21 +287,31 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
      * The latency from receiving the event to pushing it is recorded alongside,
      * from the same place, so span and metric cannot disagree.
      */
+    const rooms = this.roomsFor(envelope);
+    if (rooms.length === 0) {
+      // Unreachable from any producer today, and written anyway (plan 0030,
+      // section 3): an optional `zoneId` makes an unaddressed envelope possible
+      // for the first time, and fanning one out to an empty room list is a
+      // silent no-op somebody finds six months later wondering why one event
+      // never arrives. Acked and dropped, since a redelivery would be just as
+      // unaddressed, and logged as the fault it is.
+      this.logger.error(
+        { event: envelope.event, eventId: envelope.eventId },
+        'realtime dropped an event addressed to nobody'
+      );
+      return;
+    }
+
     const fanOut = () => {
       const scope = beginConsumerSpan(message.subject, message.headers);
       const startedAt = Date.now();
       try {
         otelContext.with(scope.context, () => {
-          // Zone/membership/merge events reach the zone room; list-scoped events
-          // reach both the list room and the zone room, for a zone-level list
-          // index (section 6).
-          const rooms = [zoneRoom(envelope.zoneId)];
-          if (envelope.listId) {
-            rooms.push(listRoom(envelope.listId));
-          }
-
           if (envelope.event === RealtimeEvent.ZoneCountsUpdated) {
-            this.fanOutZoneCounts(envelope, correlationId);
+            // Zone scoped by definition; one without a zone is the fault above.
+            if (envelope.zoneId) {
+              this.fanOutZoneCounts(envelope.zoneId, envelope, correlationId);
+            }
             return;
           }
 
@@ -326,6 +338,52 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     } else {
       fanOut();
     }
+
+    this.sweep(envelope);
+  }
+
+  /**
+   * Ask every pod to re-check the rooms this event may have changed the answer
+   * for (plan 0031, sections 5 and 6).
+   *
+   * **After the fan out and not before**, which is the detail to get right. A
+   * member kicked from a zone learns about it through the zone room; evicting
+   * them first would remove them from the room carrying the news and leave their
+   * client sitting on a group it no longer belongs to with no idea why. Fanning
+   * out first means the notification lands, the cooperative unsubscribe usually
+   * happens on its own, and the sweep is the backstop that makes it not matter
+   * whether it did.
+   */
+  private sweep(envelope: DomainEvent): void {
+    for (const directive of sweepsFor(envelope)) {
+      this.relay.publishDirective(directive);
+    }
+  }
+
+  /**
+   * The rooms an envelope's audience names (plan 0030, section 3).
+   *
+   * The producer states the audience and this routes on it, without ever looking
+   * inside a payload: zone and membership events name a zone, list, line and
+   * comment events name a list as well (so a zone level list index hears them
+   * too, section 6), and an event whose subject is a person names the people
+   * whose own sessions must hear it whatever rooms they hold.
+   *
+   * An empty answer means the producer named nobody, which the caller treats as
+   * a fault.
+   */
+  private roomsFor(envelope: DomainEvent): string[] {
+    const rooms: string[] = [];
+    if (envelope.zoneId) {
+      rooms.push(zoneRoom(envelope.zoneId));
+    }
+    if (envelope.listId) {
+      rooms.push(listRoom(envelope.listId));
+    }
+    for (const userId of envelope.userIds ?? []) {
+      rooms.push(userRoom(userId));
+    }
+    return rooms;
   }
 
   /**
@@ -341,20 +399,21 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
    * zeroes.
    */
   private fanOutZoneCounts(
+    zoneId: string,
     envelope: DomainEvent,
     correlationId?: string
   ): void {
     const payload = envelope.payload as ZoneCountsUpdatedPayload;
 
     this.relay.publish({
-      rooms: [zoneStaffRoom(envelope.zoneId)],
+      rooms: [zoneStaffRoom(zoneId)],
       event: envelope.event,
       payload,
       correlationId,
     });
 
     this.relay.publish({
-      rooms: [zoneRoom(envelope.zoneId)],
+      rooms: [zoneRoom(zoneId)],
       event: envelope.event,
       payload: {
         ...payload,
@@ -391,7 +450,7 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
   private async invalidateAccessCache(envelope: DomainEvent): Promise<void> {
     const invalidatesZone = ACCESS_INVALIDATING_EVENTS.has(envelope.event);
 
-    if (invalidatesZone) {
+    if (invalidatesZone && envelope.zoneId) {
       await this.coreAccess.invalidateZone(envelope.zoneId);
     }
     if (envelope.listId) {

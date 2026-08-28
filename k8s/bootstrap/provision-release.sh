@@ -206,8 +206,20 @@ kubectl apply -f "$REPO_ROOT/k8s/namespace.yaml"
 # ---------------------------------------------------------------------------
 existing() {
   # Prints the current value of one key, or nothing.
-  kubectl -n "$NAMESPACE" get secret "$1" -o "jsonpath={.data.$2}" 2>/dev/null \
-    | { base64 -d 2>/dev/null || true; }
+  #
+  # It must also SUCCEED when there is nothing, which the obvious one line
+  # version does not. `kubectl get secret` exits non zero for a Secret that does
+  # not exist, `set -o pipefail` carries that status through the decoder, and
+  # `VALUE="$(existing ...)"` therefore aborted the whole script under `set -e`.
+  # Silently, because the error text goes to /dev/null. The effect was that
+  # provisioning a fresh namespace died at the first key it looked for, right
+  # after "Resolving credentials...", with no output and no clue. An absent
+  # Secret is the normal case on a new cluster, not an error, so it returns
+  # empty and succeeds.
+  local encoded
+  encoded="$(kubectl -n "$NAMESPACE" get secret "$1" -o "jsonpath={.data.$2}" 2>/dev/null || true)"
+  [ -n "$encoded" ] || return 0
+  printf '%s' "$encoded" | base64 -d 2>/dev/null || true
 }
 
 keep_or_generate() {

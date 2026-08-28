@@ -59,6 +59,31 @@ const READABLE_LIST = `
 `;
 
 /**
+ * The ids of a zone's readable lists, for one caller (plan 0032, section 4.1).
+ *
+ * The same predicate as the count and the preview, without the limit and
+ * selecting only ids, so the realtime service's presence rooms cannot disagree
+ * with the card the client is looking at. The membership is joined here rather
+ * than assumed, because unlike the queries above this one is not attached to a
+ * listing that already selected `m`.
+ *
+ * Raw rather than a query builder on purpose: `READABLE_LIST` is written with
+ * every camelCase column quoted by hand for a context TypeORM does not rewrite,
+ * and moving it into a `where` would put it somewhere TypeORM does.
+ *
+ * `$1` is the zone, `$2` the caller. Ordered by recent activity, matching the
+ * preview, so the first ids are the ones a zone card shows.
+ */
+export const ZONE_READABLE_LIST_IDS_SQL = `
+  SELECT sl.id AS "id"
+  FROM "shopping_lists" sl
+  JOIN "zone_memberships" m
+    ON m."zoneId" = sl."zoneId" AND m."userId" = $2
+  WHERE sl."zoneId" = $1 AND (${READABLE_LIST})
+  ORDER BY sl."updatedAt" DESC, sl.id DESC
+`;
+
+/**
  * Members and pending requests in one index scan over `(zoneId, status)`, two
  * aggregates, one raw column. Returned as JSON rather than two scalar subqueries
  * so the membership index is scanned once, as the plan's lateral does.

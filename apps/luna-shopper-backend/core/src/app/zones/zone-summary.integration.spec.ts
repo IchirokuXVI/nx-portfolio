@@ -20,6 +20,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
+import { ListAccessService } from '../lists/list-access.service';
 import { MemberListingService } from './member-listing.service';
 import { ZoneAuthzService } from './zone-authz.service';
 import { ZoneCountsService } from './zone-counts.service';
@@ -371,6 +372,74 @@ describeIntegration('zone summary (real Postgres)', () => {
           expect(readable).toBe(1);
         }
       }
+    });
+  });
+
+  /**
+   * The readable set the realtime service joins presence rooms from (plan 0032,
+   * section 4.1).
+   *
+   * It shares `READABLE_LIST` with the count and the preview, and this is the
+   * only place that sharing can be proven: a room set that disagreed with the
+   * card would show a dot on a row the client cannot open, or leave a row dark
+   * while somebody is shopping from it.
+   */
+  describe('the readable list ids (plan 0032)', () => {
+    function listAccess(): ListAccessService {
+      const membershipRepo = dataSource.getRepository(ZoneMembership);
+      return new ListAccessService(
+        dataSource.getRepository(ShoppingList),
+        dataSource.getRepository(ListAccess),
+        dataSource.getRepository(ListLine),
+        new ZoneAuthzService(membershipRepo)
+      );
+    }
+
+    it('answers the same set the count and the preview are built from', async () => {
+      const access = listAccess();
+
+      for (const userId of [
+        ids.owner,
+        ids.admin,
+        ids.reader,
+        ids.stranger,
+        ids.applicant,
+      ]) {
+        const view = await zones.get({ userId, zoneId: ids.zone });
+        const listIds = await access.readableListIds(ids.zone, userId);
+
+        expect(listIds).toHaveLength(view.counts.listCount);
+        // The preview is the same query with a limit, so it must be a prefix.
+        expect(listIds.slice(0, view.lists.length)).toEqual(
+          view.lists.map((l) => l.id)
+        );
+      }
+    });
+
+    it('gives a reader only the list they hold an access row for', async () => {
+      expect(await listAccess().readableListIds(ids.zone, ids.reader)).toEqual([
+        groceriesId,
+      ]);
+    });
+
+    it('gives a manager both lists, access row or not', async () => {
+      expect(
+        (await listAccess().readableListIds(ids.zone, ids.admin)).sort()
+      ).toEqual([groceriesId, hardwareId].sort());
+    });
+
+    it('gives nothing to a member with no list access, and to an applicant', async () => {
+      const access = listAccess();
+      expect(await access.readableListIds(ids.zone, ids.stranger)).toEqual([]);
+      // A PENDING applicant fails the APPROVED clause, so no room is joined for
+      // a zone they have not been let into.
+      expect(await access.readableListIds(ids.zone, ids.applicant)).toEqual([]);
+    });
+
+    it('gives nothing for a user with no membership at all', async () => {
+      expect(
+        await listAccess().readableListIds(ids.zone, randomUUID())
+      ).toEqual([]);
     });
   });
 

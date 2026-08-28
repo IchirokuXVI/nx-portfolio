@@ -183,6 +183,40 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
+    it('an event addressed to a person carries users and no zone (plan 0030)', () => {
+      expect(
+        validateEvent('zone.created', {
+          event: 'zone.created',
+          eventId: 'e3',
+          userIds: ['u1'],
+          payload: { id: 'z', name: 'Flat 3B' },
+        }).valid
+      ).toBe(true);
+    });
+
+    it('the re-published rename is a different subject from the identity event', () => {
+      // Same name on the wire to the client, two envelopes on the broker
+      // (plan 0030, section 4.3): the identity one is a service to service
+      // message, this one is a fan-out subject.
+      expect(
+        validateEvent('user.usernameChanged.broadcast', {
+          event: 'user.usernameChanged',
+          eventId: 'e4',
+          userIds: ['u1'],
+          payload: { userId: 'u1', username: 'Vela Rápida' },
+        }).valid
+      ).toBe(true);
+      expect(
+        validateEvent('user.usernameChanged.broadcast', {
+          eventId: 'e4',
+          userId: 'u1',
+          oldUsername: 'Swift Sail',
+          newUsername: 'Vela Rápida',
+          propagation: 'ALL_ZONES',
+        }).valid
+      ).toBe(false);
+    });
+
     it('zone.create response (ownerUserId null, empty config)', () => {
       expect(
         validateMessageResponse('zone.create', {

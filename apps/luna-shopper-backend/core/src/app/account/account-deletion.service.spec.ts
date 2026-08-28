@@ -35,7 +35,7 @@ function build(opts: {
     save: jest.fn(async (m) => m),
     createQueryBuilder: jest.fn(),
   };
-  const events = { emit: jest.fn() };
+  const events = { emit: jest.fn(), emitTo: jest.fn(), emitToUsers: jest.fn() };
   const store = { firstSeen: jest.fn(async () => opts.firstSeen ?? true) };
   // Retiring a membership drops the zone's member count, so the saga tells the
   // zone's open screens (plan 0017, section 9).
@@ -68,9 +68,12 @@ describe('AccountDeletionService.handleUserDeleted', () => {
     expect(savedZone.status).toBe(ZoneStatus.MARKED_FOR_DELETION);
     expect(savedZone.markedForDeletionAt).toBeInstanceOf(Date);
 
-    const emitted = events.emit.mock.calls.map((c) => c[0]);
-    expect(emitted).toContain(RealtimeEvent.ZoneMarkedForDeletion);
-    expect(emitted).toContain(RealtimeEvent.MemberKicked);
+    expect(events.emit.mock.calls.map((c) => c[0])).toContain(
+      RealtimeEvent.ZoneMarkedForDeletion
+    );
+    expect(events.emitTo.mock.calls.map((c) => c[0])).toContain(
+      RealtimeEvent.MemberKicked
+    );
   });
 
   it('non-owner path: leaves the zone untouched, still retires + anonymizes', async () => {
@@ -85,8 +88,10 @@ describe('AccountDeletionService.handleUserDeleted', () => {
     const savedMembership = membershipsRepo.save.mock.calls[0][0];
     expect(savedMembership.status).toBe(MembershipStatus.KICKED);
     expect(savedMembership.username).toContain(ANONYMIZED_USERNAME_PREFIX);
-    const emitted = events.emit.mock.calls.map((c) => c[0]);
-    expect(emitted).toEqual([RealtimeEvent.MemberKicked]);
+    expect(events.emit).not.toHaveBeenCalled();
+    expect(events.emitTo.mock.calls.map((c) => c[0])).toEqual([
+      RealtimeEvent.MemberKicked,
+    ]);
   });
 
   it('republishes the zone counts for every zone it touched (plan 0017)', async () => {
