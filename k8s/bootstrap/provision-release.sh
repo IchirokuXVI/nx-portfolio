@@ -33,6 +33,23 @@ OUT_PATH=""
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHART_DIR="$REPO_ROOT/k8s/helm"
 
+# ---------------------------------------------------------------------------
+# The kubeconfig, for the CI deploy user's sake.
+#
+# CI reaches this script as `ssh host "bash ~/k8s/bootstrap/..."`, which is non
+# interactive, so none of the shell profile that would export KUBECONFIG runs.
+# Without this the script fails at its first kubectl as the deploy user while
+# working perfectly by hand, which is the worst shape a failure can take.
+#
+# k3s puts its kubeconfig at the path below and install.sh makes it readable by
+# every local user (--write-kubeconfig-mode 644), so no sudo is involved. The
+# readability test keeps a laptop run, where that file does not exist, on its
+# own ~/.kube/config instead of pointing it at nothing.
+# ---------------------------------------------------------------------------
+if [ -z "${KUBECONFIG:-}" ] && [ -r /etc/rancher/k3s/k3s.yaml ]; then
+  export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+fi
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --env)       ENVIRONMENT="$2"; shift 2 ;;

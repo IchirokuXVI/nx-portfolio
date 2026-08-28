@@ -108,7 +108,7 @@ That SHA becomes `--base` (with `--head=${{ github.sha }}`) for three separate `
 After images are pushed, the workflow ships the manifests and upgrades the release on the cluster host over SSH:
 
 ```sh
-rsync -avz --delete ./k8s/ $SSH_DEPLOY_USER@$SSH_DEPLOY_HOST:/root/k8s/
+rsync -avz --delete ./k8s/ $SSH_DEPLOY_USER@$SSH_DEPLOY_HOST:~/k8s/
 ssh $SSH_DEPLOY_USER@$SSH_DEPLOY_HOST <<'EOF'
   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
   helm upgrade nx-portfolio ./k8s/helm -n nx-portfolio
@@ -122,8 +122,9 @@ Because image tags are pinned to `latest`, `helm upgrade` alone wouldn't restart
 | Secret            | Purpose                                                 |
 | ----------------- | ------------------------------------------------------- |
 | `SSH_DEPLOY_KEY`  | Private key loaded into `ssh-agent` for the deploy host |
-| `SSH_DEPLOY_USER` | SSH user on the cluster host (e.g. `root`)              |
-| `SSH_DEPLOY_HOST` | Cluster host address                                    |
+| `SSH_DEPLOY_USER` | Unprivileged SSH user on the cluster host (`deploy`)     |
+| `SSH_DEPLOY_HOST` | Production cluster host address                         |
+| `SSH_DEPLOY_HOST_STAGING` | Staging cluster host address (`docker-ci.yml`)  |
 
 `GITHUB_TOKEN` (provided automatically) is used for GHCR login and `gh run list`; the workflow needs `packages: write`.
 
