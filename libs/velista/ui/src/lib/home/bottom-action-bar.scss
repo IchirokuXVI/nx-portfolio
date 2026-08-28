@@ -27,21 +27,43 @@
   }
 }
 
-.primary {
+// The primary action and the line saying why it does nothing yet, stacked, so the
+// caption sits under the button instead of competing with it in the row.
+.primary-slot {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--app-space-2);
+}
+
+.primary {
   border: none;
   background: var(--app-action-bg);
   color: var(--app-action-fg);
   font-size: var(--app-text-base);
   font-weight: 600;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--app-action-bg-hover);
   }
 
-  &:active {
+  &:active:not(:disabled) {
     background: var(--app-action-bg-pressed);
   }
+
+  // Muted rather than hidden, and still legible: the button is here to say what is
+  // coming, so a contrast low enough to be unreadable would defeat the point.
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+}
+
+.soon {
+  text-align: center;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
 }
 
 .secondary {

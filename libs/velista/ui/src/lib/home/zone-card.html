@@ -75,7 +75,17 @@
             <lib-list-lines-icon class="list-glyph" />
             <span class="list-name">{{ list.name }}</span>
 
-            @if (
+            <!--
+              `=== 0` and never a falsy check. `undefined` means the count has not
+              arrived and still renders nothing; `0` means the list is empty and says
+              so, because "0 of 0 ready" is a sentence about progress through a shop
+              nobody has described yet (plan 0019, section 3).
+            -->
+            @if (list.lineCount === 0) {
+              <span class="list-progress">{{
+                'list.empty.short' | rokuT
+              }}</span>
+            } @else if (
               list.readyCount !== undefined && list.lineCount !== undefined
             ) {
               <span class="list-progress">{{

@@ -52,7 +52,8 @@ export interface MyZone extends Zone {
   readonly myStatus: MembershipStatus;
   readonly counts: ZoneCounts;
   /**
-   * At most three lists, newest activity first, filtered exactly as `listCount` is.
+   * At most `ZONE_LIST_PREVIEW_LIMIT` lists, newest activity first, filtered exactly
+   * as `listCount` is.
    *
    * **Empty means the caller can read no list in this zone, never that the zone has
    * none.** The distinction matters on a card: "no lists yet" would be a lie told to
@@ -60,6 +61,19 @@ export interface MyZone extends Zone {
    */
   readonly lists: readonly ListPreview[];
 }
+
+/**
+ * How many lists a zone's preview carries.
+ *
+ * The server decides this: it is `ZONE_LIST_PREVIEW_LIMIT` in the core service's
+ * `zones/zone-summary.sql.ts`, and this is a second declaration of the same number in
+ * a separate deployable. They can drift, and a drift is survivable in both directions:
+ * a client limit **lower** than the server's shows fewer rows than arrived, and a
+ * **higher** one is never reached because the server never sends more. What the client
+ * uses it for is deciding whether a newly created list has room in a preview it is
+ * holding (plan 0019, section 5.2); it never uses it to trim what the server sent.
+ */
+export const ZONE_LIST_PREVIEW_LIMIT = 3;
 
 /** The summary numbers on a zone card (backend plan 0017, section 3). */
 export interface ZoneCounts {

@@ -50,8 +50,10 @@ export class ListHeader {
   /**
    * The bar's fill, as a percentage.
    *
-   * An empty list is 0 rather than a division by zero, and it renders as an empty bar,
-   * which is honest: nothing is ready because there is nothing.
+   * An empty list is 0 rather than a division by zero, and the template never asks:
+   * at zero lines it draws "List is empty" and no bar at all, because an empty bar
+   * under an empty list is decoration that describes nothing (plan 0019, section 3).
+   * The guard stays anyway, so the computed is safe to read from anywhere.
    */
   readonly percent = computed(() => {
     const { readyCount, lineCount } = this.header();

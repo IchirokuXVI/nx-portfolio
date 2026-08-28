@@ -28,7 +28,14 @@ import { ChevronRightIcon, ListLinesIcon } from '../icons/icons';
       <span class="body">
         <span class="name">{{ list().name }}</span>
 
-        @if (
+        <!--
+          A strict zero check and never a falsy one: undefined is a count that has not
+          arrived and renders nothing, while 0 is an empty list and says so
+          (plan 0019, section 3).
+        -->
+        @if (list().lineCount === 0) {
+          <span class="meta">{{ 'list.empty.short' | rokuT }}</span>
+        } @else if (
           list().readyCount !== undefined && list().lineCount !== undefined
         ) {
           <span class="meta">{{

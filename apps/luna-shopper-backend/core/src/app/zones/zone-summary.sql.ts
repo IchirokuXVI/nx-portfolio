@@ -27,7 +27,13 @@ import type { ZoneMembership } from '../entities';
  * runtime with "column does not exist", which no mocked repository can catch.
  */
 
-/** How many lists a zone's preview carries. Server fixed, never client tunable. */
+/**
+ * How many lists a zone's preview carries. Server fixed, never client tunable.
+ *
+ * Declared a second time as `ZONE_LIST_PREVIEW_LIMIT` in `@portfolio/velista/models`,
+ * where the client needs it to decide whether a list it just saw created has room in
+ * the preview it is holding. That copy documents why the two are allowed to drift.
+ */
 export const ZONE_LIST_PREVIEW_LIMIT = 3;
 
 /**
