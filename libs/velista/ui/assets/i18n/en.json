@@ -308,14 +308,10 @@
       "ready": "{{ready}} of {{total}} ready"
     },
     "presence": {
-      "shopping": "{{names}} are shopping now",
-      "shoppingCount_one": "{{count}} shopping now",
-      "shoppingCount_other": "{{count}} shopping now",
-      "onList_one": "{{count}} person shopping now",
-      "onList_other": "{{count}} people shopping now",
-      "inGroup": "{{names}} are here now",
-      "inGroupCount_one": "{{count}} person here now",
-      "inGroupCount_other": "{{count}} people here now"
+      "here_one": "{{names}} is here now",
+      "here_other": "{{names}} are here now",
+      "hereCount_one": "{{count}} person here now",
+      "hereCount_other": "{{count}} people here now"
     },
     "guest": {
       "title": "You are shopping as a guest",

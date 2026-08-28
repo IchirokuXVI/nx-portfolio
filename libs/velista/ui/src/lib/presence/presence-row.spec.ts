@@ -29,7 +29,7 @@ async function render(inputs: {
   fixture.componentRef.setInput('names', inputs.names);
   fixture.componentRef.setInput(
     'messageKey',
-    inputs.messageKey ?? 'home.presence.inGroup'
+    inputs.messageKey ?? 'home.presence.here'
   );
   fixture.componentRef.setInput('countKey', inputs.countKey ?? '');
   fixture.componentRef.setInput('compact', inputs.compact ?? false);
@@ -74,7 +74,7 @@ describe('PresenceRow', () => {
       ).map((avatar) => avatar.textContent);
 
       expect(initials).toEqual(['A', 'M']);
-      expect(host(fixture).textContent).toContain('home.presence.inGroup');
+      expect(host(fixture).textContent).toContain('home.presence.here');
     });
 
     // Slicing cuts a surrogate pair in half and a name starting with an emoji would
@@ -102,23 +102,23 @@ describe('PresenceRow', () => {
     it('counts them once there are four, rather than listing four names', async () => {
       const many = await render({
         names: ['Ana', 'Marc', 'Ines', 'Toni'],
-        countKey: 'home.presence.inGroupCount',
+        countKey: 'home.presence.hereCount',
       });
 
       expect(many.nativeElement.textContent).toContain(
-        'home.presence.inGroupCount'
+        'home.presence.hereCount'
       );
     });
 
     it('still names three of them', async () => {
       const few = await render({
         names: ['Ana', 'Marc', 'Ines'],
-        countKey: 'home.presence.inGroupCount',
+        countKey: 'home.presence.hereCount',
       });
 
-      expect(few.nativeElement.textContent).toContain('home.presence.inGroup');
+      expect(few.nativeElement.textContent).toContain('home.presence.here');
       expect(few.nativeElement.textContent).not.toContain(
-        'home.presence.inGroupCount'
+        'home.presence.hereCount'
       );
     });
 
@@ -126,12 +126,10 @@ describe('PresenceRow', () => {
     it('never collapses when it was given no count to collapse to', async () => {
       const fixture = await render({
         names: ['Ana', 'Marc', 'Ines', 'Toni', 'Sam'],
-        messageKey: 'home.presence.shopping',
+        messageKey: 'home.presence.here',
       });
 
-      expect(fixture.nativeElement.textContent).toContain(
-        'home.presence.shopping'
-      );
+      expect(fixture.nativeElement.textContent).toContain('home.presence.here');
     });
   });
 
@@ -152,24 +150,31 @@ describe('PresenceRow', () => {
     it('keeps the sentence readable while taking it off the screen', async () => {
       const fixture = await render({
         names: ['Ana'],
-        countKey: 'home.presence.onList',
+        countKey: 'home.presence.hereCount',
         compact: true,
       });
 
       expect(host(fixture).querySelector('.off-screen')?.textContent).toContain(
-        'home.presence.onList'
+        'home.presence.hereCount'
       );
     });
 
-    // Three useful words in a control's name, where a list of names is a paragraph.
+    // Four useful words in a control's name, where a list of names is a paragraph.
+    //
+    // Asserted as the whole rendered string rather than as the absence of the message
+    // key, which is no longer a usable test: `home.presence.here` is a prefix of
+    // `home.presence.hereCount`, so "does not contain the names key" is true of neither
+    // branch and would pass whichever one ran.
     it('counts rather than names, even for one person', async () => {
       const fixture = await render({
         names: ['Ana'],
-        countKey: 'home.presence.onList',
+        countKey: 'home.presence.hereCount',
         compact: true,
       });
 
-      expect(host(fixture).textContent).not.toContain('home.presence.inGroup');
+      expect(
+        host(fixture).querySelector('.off-screen')?.textContent?.trim()
+      ).toBe('home.presence.hereCount');
     });
   });
 });
