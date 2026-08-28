@@ -268,20 +268,36 @@ export class ZoneService {
       req.membershipId
     );
 
-    return this.dataSource.transaction(async (manager) => {
-      owner.role = ZoneRole.ADMIN;
-      target.role = ZoneRole.OWNER;
-      target.status = MembershipStatus.APPROVED;
-      await manager.getRepository(ZoneMembership).save([owner, target]);
+    const { view, outgoing, incoming } = await this.dataSource.transaction(
+      async (manager) => {
+        owner.role = ZoneRole.ADMIN;
+        target.role = ZoneRole.OWNER;
+        target.status = MembershipStatus.APPROVED;
+        const [outgoing, incoming] = await manager
+          .getRepository(ZoneMembership)
+          .save([owner, target]);
 
-      const zone = await manager
-        .getRepository(Zone)
-        .findOneOrFail({ where: { id: req.zoneId } });
-      zone.ownerUserId = target.userId;
-      const view = toZoneView(await manager.getRepository(Zone).save(zone));
-      this.events.emit(RealtimeEvent.ZoneOwnershipChanged, req.zoneId, view);
-      return view;
-    });
+        const zone = await manager
+          .getRepository(Zone)
+          .findOneOrFail({ where: { id: req.zoneId } });
+        zone.ownerUserId = target.userId;
+        const view = toZoneView(await manager.getRepository(Zone).save(zone));
+        return { view, outgoing, incoming };
+      }
+    );
+
+    // A role is a permission, so a role the server changes is a role the server
+    // publishes (plan 0029). Two memberships change here and neither used to be
+    // announced, which left the outgoing owner holding owner only controls the
+    // server would then refuse. Both role events go out before the ownership
+    // event, so a client applying them in order never has a frame where
+    // `ownerUserId` names somebody whose role still says otherwise. Emitted
+    // after the commit, like every other emit in this service: an event for a
+    // transaction that then rolls back is a lie every client acts on.
+    this.emitMember(RealtimeEvent.MemberRoleChanged, outgoing);
+    this.emitMember(RealtimeEvent.MemberRoleChanged, incoming);
+    this.events.emit(RealtimeEvent.ZoneOwnershipChanged, req.zoneId, view);
+    return view;
   }
 
   /**
@@ -292,23 +308,32 @@ export class ZoneService {
     const membership = await this.authz.requireRole(req.zoneId, req.userId, [
       ZoneRole.ADMIN,
     ]);
-    return this.dataSource.transaction(async (manager) => {
-      const zone = await manager
-        .getRepository(Zone)
-        .findOneOrFail({ where: { id: req.zoneId } });
-      if (zone.ownerUserId) {
-        throw new ConflictException('This zone already has an owner');
+    const { view, claimant } = await this.dataSource.transaction(
+      async (manager) => {
+        const zone = await manager
+          .getRepository(Zone)
+          .findOneOrFail({ where: { id: req.zoneId } });
+        if (zone.ownerUserId) {
+          throw new ConflictException('This zone already has an owner');
+        }
+        membership.role = ZoneRole.OWNER;
+        const claimant = await manager
+          .getRepository(ZoneMembership)
+          .save(membership);
+        zone.ownerUserId = req.userId;
+        zone.status = ZoneStatus.ACTIVE;
+        // Rescued: clear the deletion marker so the zone reaper leaves it alone.
+        zone.markedForDeletionAt = null;
+        const view = toZoneView(await manager.getRepository(Zone).save(zone));
+        return { view, claimant };
       }
-      membership.role = ZoneRole.OWNER;
-      await manager.getRepository(ZoneMembership).save(membership);
-      zone.ownerUserId = req.userId;
-      zone.status = ZoneStatus.ACTIVE;
-      // Rescued: clear the deletion marker so the zone reaper leaves it alone.
-      zone.markedForDeletionAt = null;
-      const view = toZoneView(await manager.getRepository(Zone).save(zone));
-      this.events.emit(RealtimeEvent.ZoneOwnershipChanged, req.zoneId, view);
-      return view;
-    });
+    );
+
+    // The admin who claimed the zone changed role, so that role is published as
+    // well (plan 0029), ahead of the ownership event and after the commit.
+    this.emitMember(RealtimeEvent.MemberRoleChanged, claimant);
+    this.events.emit(RealtimeEvent.ZoneOwnershipChanged, req.zoneId, view);
+    return view;
   }
 
   private async loadTargetMembership(
