@@ -8,6 +8,7 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ListHeaderVm } from '@portfolio/velista/models';
 import { OfflineIcon } from '../icons/icons';
+import { PresenceRow } from '../presence/presence-row';
 
 /**
  * The top of the list: what it is called, which group it belongs to, and how far the
@@ -30,7 +31,7 @@ import { OfflineIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-list-header',
-  imports: [RokuTranslatorPipe, OfflineIcon],
+  imports: [RokuTranslatorPipe, OfflineIcon, PresenceRow],
   templateUrl: './list-header.html',
   styleUrl: './list-header.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

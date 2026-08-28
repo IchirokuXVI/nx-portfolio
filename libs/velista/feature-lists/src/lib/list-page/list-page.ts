@@ -18,6 +18,8 @@ import {
   LineStore,
   ListStore,
   MemberNames,
+  presenceNames,
+  PresenceStore,
   REALTIME_CLIENT,
   SessionStore,
   ZoneStore,
@@ -27,6 +29,7 @@ import {
   APP_BASE_PATH,
   type ListGoneReason,
   type ListPageState,
+  type PresenceUser,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -112,6 +115,7 @@ export class ListPage {
   private readonly _zones = inject(ZoneStore);
   private readonly _lists = inject(ListStore);
   private readonly _lines = inject(LineStore);
+  private readonly _presence = inject(PresenceStore);
   private readonly _names = inject(MemberNames);
   private readonly _session = inject(SessionStore);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
@@ -178,6 +182,11 @@ export class ListPage {
       },
       nameOf: (userId) => this._names.nameOf(zoneId, userId),
       reordering: this.reordering(),
+      // Both from `PresenceStore`, and both answerable at last: this page announces
+      // itself with `viewList` now, so the server's viewer set for this list has
+      // somebody in it (plan 0022, sections 2.1 and 3.4).
+      viewers: this._viewers(),
+      editorOf: (lineId) => this._editors().get(lineId) ?? null,
       // Not live means the room was refused or the connection dropped. What is on
       // screen is correct and will not update itself, which is worth saying: looking
       // live while being stale is worse than looking broken.
@@ -188,12 +197,52 @@ export class ListPage {
       // screen live and a refused zone is what makes it stale. Asking about a list room
       // nobody joins could only ever answer no.
       live:
-        this._realtime.connected() && !this._realtime.refusedZones().has(zoneId),
+        this._realtime.connected() &&
+        !this._realtime.refusedZones().has(zoneId),
       errorKey: this._errorKey(),
       correlationId: this._correlationId(),
       gone: this._gone(),
     });
   });
+
+  /**
+   * Who else is shopping this list, named and without the reader.
+   *
+   * The three joins are `presenceNames`, which the resume card makes as well: this is
+   * the screen that card points at, so the two say the same thing in the same words.
+   */
+  private readonly _viewers = computed(() =>
+    this._named(this._presence.viewersOf(this.listId()))
+  );
+
+  /**
+   * Who is editing which line, named, by line id.
+   *
+   * One pass rather than an `editorOfLine` per row, so a list of forty lines resolves
+   * the handful of editors the server sent instead of searching that array forty times.
+   * The server holds one edited line per **socket**, so several people can hold the same
+   * one; the last of them wins here, exactly as `editorOfLine` takes the first, because
+   * a row has space to name one person.
+   */
+  private readonly _editors = computed(() => {
+    const named = new Map<string, string>();
+    for (const editor of this._presence.editorsOf(this.listId())) {
+      const [name] = this._named([editor]);
+      if (name !== undefined) {
+        named.set(editor.lineId, name);
+      }
+    }
+
+    return named;
+  });
+
+  /** The three joins, against this list's zone. */
+  private _named(users: readonly PresenceUser[]): readonly string[] {
+    const zoneId = this.zoneId();
+    return presenceNames(users, this._session.userId(), (userId) =>
+      this._names.nameOf(zoneId, userId)
+    );
+  }
 
   /** Pulled out so the template narrows once rather than in every branch. */
   readonly header = computed(() => {
@@ -246,8 +295,19 @@ export class ListPage {
     // Both rooms. The list's own, and the **zone's**, because `list.deleted` and
     // `list.accessChanged` are zone events and losing the list while looking at it is
     // a state this page has to render (section 5.3). Refcounted, released on destroy.
+    //
+    // `viewList` and not `subscribeList`, which is the correction plan 0022 opens with.
+    // It takes the same room and returns the same release, and it also says somebody is
+    // here: the server refuses a presence intent from a socket that is not in
+    // `list:{id}`, so the client holds both as one call. Until this line said `viewList`
+    // the server's viewer set for every list was empty forever, which made the resume
+    // card's "Ana and Marc are shopping now" row unreachable for a real user.
+    //
+    // The dashboard's own subscription to the resume list stays `subscribeList`, and
+    // must: reading a dashboard is not shopping, and a page that announced it would put
+    // every user into whichever list they last opened.
     effect((onCleanup) => {
-      const leaveList = this._realtime.subscribeList(this.listId());
+      const leaveList = this._realtime.viewList(this.listId());
       const leaveZone = this._realtime.subscribeZone(this.zoneId());
       onCleanup(() => {
         leaveList();
@@ -353,7 +413,9 @@ export class ListPage {
    * tap would read as nagging (section 3.2).
    */
   async toggle(lineId: string): Promise<void> {
-    const line = this._lines.linesIn(this.listId()).find((l) => l.id === lineId);
+    const line = this._lines
+      .linesIn(this.listId())
+      .find((l) => l.id === lineId);
     if (line === undefined) {
       return;
     }

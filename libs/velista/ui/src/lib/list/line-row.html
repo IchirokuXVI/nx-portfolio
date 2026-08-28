@@ -13,14 +13,16 @@
   (keydown)="onRowKeydown($event)"
   [attr.aria-busy]="line().write === 'pending' ? 'true' : null"
   [attr.aria-checked]="reordering() ? null : checked()"
-  [attr.aria-describedby]="line().captionKey === null ? null : 'cap-' + line().id"
+  [attr.aria-describedby]="
+    line().captionKey === null ? null : 'cap-' + line().id
+  "
   [attr.aria-label]="reordering() ? null : accessibleName()"
   [attr.role]="reordering() ? null : 'checkbox'"
   [attr.tabindex]="reordering() || !line().interactive ? null : 0"
-  [class.inert]="!line().interactive && !reordering()"
-  [class.in-flight]="line().write === 'pending'"
-  [class.struck]="line().struck"
   [class.awaiting]="line().approvalStatus === 'PENDING'"
+  [class.in-flight]="line().write === 'pending'"
+  [class.inert]="!line().interactive && !reordering()"
+  [class.struck]="line().struck"
   [class.turned-down]="line().approvalStatus === 'REJECTED'"
   class="row"
 >
@@ -34,7 +36,9 @@
     <span class="grip-wrap">
       <button
         (click)="move('moveUp')"
-        [attr.aria-label]="'list.reorder.moveUp' | rokuT: { name: line().content }"
+        [attr.aria-label]="
+          'list.reorder.moveUp' | rokuT: { name: line().content }
+        "
         [disabled]="!canMoveUp()"
         class="grip-step"
         type="button"
@@ -80,7 +84,27 @@
     noise that makes the rows that matter harder to find (section 4.7).
   -->
   @if (line().quantity > 1) {
-    <span aria-hidden="true" class="quantity">&times;{{ line().quantity }}</span>
+    <span aria-hidden="true" class="quantity"
+      >&times;{{ line().quantity }}</span
+    >
+  }
+
+  <!--
+    Who is editing this line right now: their initial, and the word, subdued. Advisory
+    and nothing more (plan 0022, section 3.4): the row stays a checkbox, it stays
+    tappable, the sheet still opens over it, and a simultaneous edit resolves exactly as
+    it did before. Nothing here is a lock.
+
+    `aria-hidden`, and deliberately: the row's accessible name is its content and its
+    quantity, and a name that grew "Ana is editing" would be read out every time focus
+    touched the row and would go stale between two reads of it. It is the same argument
+    the captions won, and they went to `aria-describedby` for it.
+  -->
+  @if (line().editor !== null) {
+    <span aria-hidden="true" class="editor">
+      <span class="editor-avatar">{{ editorInitial() }}</span>
+      <span class="editor-label">{{ 'list.line.editing' | rokuT }}</span>
+    </span>
   }
 
   @if (line().commentCount !== undefined && line().commentCount! > 0) {
@@ -100,7 +124,9 @@
       <button
         (click)="toggleMenu(); $event.stopPropagation()"
         [attr.aria-expanded]="menuOpen()"
-        [attr.aria-label]="'list.line.menuFor' | rokuT: { name: line().content }"
+        [attr.aria-label]="
+          'list.line.menuFor' | rokuT: { name: line().content }
+        "
         #trigger
         aria-haspopup="menu"
         class="trigger"
@@ -111,7 +137,9 @@
 
       @if (menuOpen()) {
         <ul
-          [attr.aria-label]="'list.line.menuFor' | rokuT: { name: line().content }"
+          [attr.aria-label]="
+            'list.line.menuFor' | rokuT: { name: line().content }
+          "
           class="menu"
           role="menu"
         >
@@ -141,11 +169,7 @@
 -->
 @if (line().decidable) {
   <div class="decisions">
-    <button
-      (click)="choose('approve')"
-      class="decision approve"
-      type="button"
-    >
+    <button (click)="choose('approve')" class="decision approve" type="button">
       {{ 'list.line.approve' | rokuT }}
     </button>
     <button (click)="choose('reject')" class="decision reject" type="button">

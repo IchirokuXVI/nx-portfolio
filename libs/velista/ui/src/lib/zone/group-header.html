@@ -11,6 +11,18 @@
       <p class="counts">
         {{ 'home.zone.members' | rokuT: { count: group().memberCount } }}
       </p>
+
+      <!--
+        Under the member count, which is the natural pairing: "six members" and "two
+        here now" answer the same question at two timescales. Absent when the caller is
+        the only one here, and absent for everybody the moment the socket drops, which
+        the stale notice below explains once for the whole screen (plan 0022, 3.2).
+      -->
+      <lib-presence-row
+        [names]="group().online"
+        countKey="home.presence.inGroupCount"
+        messageKey="home.presence.inGroup"
+      />
     </div>
   </div>
 

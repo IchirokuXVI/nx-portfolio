@@ -27,6 +27,25 @@ export function selectGroupState(input: {
   readonly correlationId: string | null;
   /** Whether this zone's realtime room was refused, so the page is not live. */
   readonly stale: boolean;
+  /**
+   * Who is in the group right now, already named and already without the reader.
+   *
+   * Names rather than ids, and resolved by the container, exactly as `selectHomeState`
+   * takes its presence: a presence payload carries a user id and the only place the API
+   * pairs one with a name is a membership, so resolving it here would need this function
+   * to know about `MemberNames`. It is pure precisely so it knows about nothing.
+   */
+  readonly online: readonly string[];
+  /**
+   * Who is shopping each list, the same way.
+   *
+   * This page holds no list subscription and takes none: backend `0032` joins a socket
+   * that subscribed to a zone to the presence room of every list in it the caller may
+   * read, so the answers arrive without a client change (plan 0022, section 3.3). Until
+   * it lands the answer is empty for a list this client has not opened, the indicator
+   * does not draw, and that is section 5's rule working rather than a state to guard.
+   */
+  readonly listViewers: (listId: string) => readonly string[];
 }): GroupState {
   const { zone, zoneState, lists, listsState, correlationId, stale } = input;
 
@@ -38,7 +57,7 @@ export function selectGroupState(input: {
       : { kind: 'loading', header: null };
   }
 
-  const header = toHeader(zone, stale);
+  const header = toHeader(zone, stale, input.online);
 
   // Decided **before** any request is made. Core answers `forbidden` to both the lists
   // and the members for a caller who is not APPROVED, and firing two requests in order
@@ -69,7 +88,11 @@ export function selectGroupState(input: {
     return { kind: 'empty', header, reason: emptyReason(zone) };
   }
 
-  return { kind: 'loaded', header, lists: lists.map(toListRow) };
+  return {
+    kind: 'loaded',
+    header,
+    lists: lists.map((list) => toListRow(list, input.listViewers(list.id))),
+  };
 }
 
 /**
@@ -90,7 +113,11 @@ function emptyReason(zone: MyZone): 'no-lists' | 'no-access' {
   return zone.counts.memberCount > 1 ? 'no-access' : 'no-lists';
 }
 
-function toHeader(zone: MyZone, stale: boolean): GroupHeaderVm {
+function toHeader(
+  zone: MyZone,
+  stale: boolean,
+  online: readonly string[]
+): GroupHeaderVm {
   const staff = zone.myRole === 'OWNER' || zone.myRole === 'ADMIN';
 
   return {
@@ -99,6 +126,13 @@ function toHeader(zone: MyZone, stale: boolean): GroupHeaderVm {
     initial: initialOf(zone.name),
     role: zone.myRole,
     memberCount: zone.counts.memberCount,
+    // Under the member count, which is the natural pairing: the two answer the same
+    // question at two timescales. Empty draws nothing (plan 0022, sections 3.2 and 5).
+    //
+    // Nobody, for a caller still waiting to be let in. The dashboard's card makes the
+    // same choice for the same reason: they are standing outside the group rather than
+    // looking into it, and who is in there is not theirs to read yet.
+    online: zone.myStatus === 'APPROVED' ? online : [],
     joinCode: zone.joinCode,
     // **Rule G2.** Both of these come from `myRole` and from nothing else. The
     // count below is kept separately and decides only whether a number is drawn,
@@ -111,12 +145,16 @@ function toHeader(zone: MyZone, stale: boolean): GroupHeaderVm {
   };
 }
 
-function toListRow(list: ShoppingListSummary): ListRowVm {
+function toListRow(
+  list: ShoppingListSummary,
+  viewers: readonly string[]
+): ListRowVm {
   return {
     id: list.id,
     name: list.name,
     lineCount: list.lineCount,
     readyCount: list.readyCount,
+    viewers,
   };
 }
 

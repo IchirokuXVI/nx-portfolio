@@ -7,6 +7,7 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ListRowVm } from '@portfolio/velista/models';
 import { ChevronRightIcon, ListLinesIcon } from '../icons/icons';
+import { PresenceRow } from '../presence/presence-row';
 
 /**
  * One list, as a row on the group page.
@@ -20,7 +21,7 @@ import { ChevronRightIcon, ListLinesIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-list-row',
-  imports: [RokuTranslatorPipe, ChevronRightIcon, ListLinesIcon],
+  imports: [RokuTranslatorPipe, ChevronRightIcon, ListLinesIcon, PresenceRow],
   template: `
     <button (click)="open.emit(list().id)" class="row" type="button">
       <lib-list-lines-icon class="glyph" />
@@ -41,6 +42,22 @@ import { ChevronRightIcon, ListLinesIcon } from '../icons/icons';
           }}</span>
         }
       </span>
+
+      <!--
+        Who is shopping from this list: the dot and up to two initials, no names. A row
+        has no space for a sentence and the header above already carries one, so the
+        sentence is read but not drawn (plan 0022, section 3.3).
+
+        This page holds no subscription to the list. Backend plan 0032 broadcasts a
+        group's list presence to the group's members, so these fill in with no client
+        change; until then they are empty and simply do not draw.
+      -->
+      <lib-presence-row
+        [compact]="true"
+        [names]="list().viewers"
+        countKey="home.presence.onList"
+        messageKey="home.presence.shopping"
+      />
 
       <lib-chevron-right-icon class="chevron" />
     </button>

@@ -100,6 +100,33 @@
   color: var(--app-text-secondary);
 }
 
+// Somebody else is editing this line. Subdued on purpose: it is a thing to notice out
+// of the corner of an eye, not a thing to read before tapping, and it decides nothing.
+.editor {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-hair);
+  flex-shrink: 0;
+}
+
+.editor-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--app-avatar-sm);
+  height: var(--app-avatar-sm);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-attention-fg);
+  color: var(--app-surface-ground);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+}
+
+.editor-label {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
 .comment-count {
   display: inline-flex;
   align-items: center;

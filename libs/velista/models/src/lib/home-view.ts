@@ -22,6 +22,15 @@ export interface ListRowVm {
   /** Absent until the backend serves counts. Render the row without it. */
   readonly lineCount?: number;
   readonly readyCount?: number;
+  /**
+   * Who is shopping from this list right now, named and without the reader.
+   *
+   * Empty is the ordinary answer and draws nothing (plan 0022, section 5). It is also
+   * the answer for a list this client has never opened until backend `0032` starts
+   * broadcasting a group's list presence to the group's members, and no code here is
+   * conditional on that: the indicator simply begins appearing.
+   */
+  readonly viewers: readonly string[];
 }
 
 /** Who is waiting to be let into a zone. Absent when nobody is. */
@@ -50,6 +59,15 @@ export interface ZoneCardVm {
   readonly memberCount?: number;
   readonly listCount?: number;
   readonly lists: readonly ListRowVm[];
+  /**
+   * Who is in the group right now, named and without the reader.
+   *
+   * Zone presence needs no intent: the server computes it from who holds the zone
+   * room, and the dashboard holds one per zone already, so this arrives for every card
+   * without a request (plan 0022, section 3.1). Empty draws no row, never "0 online":
+   * presence under reports by design, so a zero is the one number it must not assert.
+   */
+  readonly online: readonly string[];
   /** Only ever set for a caller who can act on it, so the row implies the permission. */
   readonly joinRequests?: JoinRequestVm;
   /**

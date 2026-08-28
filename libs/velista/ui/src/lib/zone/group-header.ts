@@ -7,6 +7,7 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { GroupHeaderVm } from '@portfolio/velista/models';
 import { ChevronRightIcon, OfflineIcon, PersonIcon } from '../icons/icons';
+import { PresenceRow } from '../presence/presence-row';
 import { RoleChip } from './role-chip';
 
 /**
@@ -27,6 +28,7 @@ import { RoleChip } from './role-chip';
     ChevronRightIcon,
     OfflineIcon,
     PersonIcon,
+    PresenceRow,
     RoleChip,
   ],
   templateUrl: './group-header.html',

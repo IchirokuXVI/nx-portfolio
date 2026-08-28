@@ -45,6 +45,10 @@ function select(input: {
   lists?: readonly ShoppingListSummary[];
   listsState?: 'idle' | 'loading' | 'loaded' | 'failed';
   stale?: boolean;
+  /** Who is in the group, named and already without the reader (plan 0022). */
+  online?: readonly string[];
+  /** Who is shopping each list, by list id. */
+  listViewers?: Readonly<Record<string, readonly string[]>>;
 }) {
   return selectGroupState({
     zone: input.zone,
@@ -53,6 +57,8 @@ function select(input: {
     listsState: input.listsState ?? 'loaded',
     correlationId: 'ref-1',
     stale: input.stale ?? false,
+    online: input.online ?? [],
+    listViewers: (listId) => input.listViewers?.[listId] ?? [],
   });
 }
 
@@ -172,6 +178,61 @@ describe('selectGroupState', () => {
         kind: 'loaded',
         lists: [{ id: 'list-1', lineCount: 12, readyCount: 7 }],
       });
+    });
+
+    // Plan 0022, section 3.3. This page holds no subscription to any list: backend
+    // 0032 broadcasts a group's list presence to its members, so the answers arrive
+    // for lists this client has never opened.
+    it('puts whoever is shopping a list onto that row', () => {
+      const state = select({
+        zone: zone(),
+        lists: [list('list-1'), list('list-2')],
+        listViewers: { 'list-1': ['Ana'] },
+      });
+
+      expect(state).toMatchObject({
+        kind: 'loaded',
+        lists: [
+          { id: 'list-1', viewers: ['Ana'] },
+          { id: 'list-2', viewers: [] },
+        ],
+      });
+    });
+
+    // Section 5: the indicator is absent, never a zero, and "empty" is also the answer
+    // before the first broadcast and the instant the socket drops.
+    it('leaves a row empty rather than asserting nobody is there', () => {
+      const state = select({ zone: zone(), lists: [list('list-1')] });
+
+      expect(state).toMatchObject({ lists: [{ viewers: [] }] });
+    });
+  });
+
+  // Plan 0022, section 3.2. Zone presence needs no intent and no subscription of this
+  // page's own: the server computes it from who holds the zone room.
+  describe('who is here now', () => {
+    it('carries the names through to the header, under the member count', () => {
+      const state = select({ zone: zone(), online: ['Ana', 'Marc'] });
+
+      expect(state).toMatchObject({ header: { online: ['Ana', 'Marc'] } });
+    });
+
+    it('says nobody rather than zero when the caller is alone', () => {
+      const state = select({ zone: zone() });
+
+      expect(state).toMatchObject({ header: { online: [] } });
+    });
+
+    // Somebody still waiting to be let in is not shown who is inside. The dashboard's
+    // card makes the same choice for the same reason: they are outside the group, not
+    // looking into it.
+    it('shows nobody to a caller who has not been let in yet', () => {
+      const state = select({
+        zone: zone({ myStatus: 'PENDING' }),
+        online: ['Ana'],
+      });
+
+      expect(state).toMatchObject({ kind: 'pending', header: { online: [] } });
     });
   });
 

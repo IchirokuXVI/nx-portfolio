@@ -14,11 +14,18 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   ListStore,
+  MemberNames,
+  presenceNames,
+  PresenceStore,
   SessionStore,
   ZoneStore,
 } from '@portfolio/velista/data-access';
-import { APP_BASE_PATH, type GroupState } from '@portfolio/velista/models';
-import { appPath, BrowserFacade } from '@portfolio/velista/platform';
+import {
+  APP_BASE_PATH,
+  type GroupState,
+  type PresenceUser,
+} from '@portfolio/velista/models';
+import { appPath, BrowserFacade, zoneIdOf } from '@portfolio/velista/platform';
 import {
   AppBar,
   ChevronLeftIcon,
@@ -30,7 +37,6 @@ import {
   OwnerlessPanel,
   RowSkeleton,
 } from '@portfolio/velista/ui';
-import { zoneIdOf } from '@portfolio/velista/platform';
 import { selectGroupState } from '../select-group-state';
 import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
 
@@ -85,6 +91,8 @@ import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
 export class GroupPage {
   private readonly _zones = inject(ZoneStore);
   private readonly _lists = inject(ListStore);
+  private readonly _presence = inject(PresenceStore);
+  private readonly _names = inject(MemberNames);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
@@ -124,8 +132,46 @@ export class GroupPage {
       correlationId:
         correlationIdOf(this._zones.error()) ?? correlationIdOf(lists.error),
       stale: this._zones.staleZoneIds().has(id),
+      online: this._online(),
+      listViewers: (listId) => this._listViewers().get(listId) ?? [],
     });
   });
+
+  /**
+   * Who is in this group right now, named and without the reader.
+   *
+   * Zone presence needs no intent and no subscription of this page's own: the server
+   * computes it from who holds the zone room, and `ZoneStore` holds one per zone
+   * already (plan 0022, section 3.1). The three joins are `presenceNames`.
+   */
+  private readonly _online = computed(() =>
+    this._named(this._presence.onlineIn(this.zoneId()))
+  );
+
+  /**
+   * Who is shopping each of this group's lists, named.
+   *
+   * This page subscribes to no list and does not have to. Backend `0032` joins a socket
+   * that subscribed to a zone to the presence room of every list in it the caller may
+   * read, so `presence.listUpdated` arrives for lists this client has never opened and
+   * `PresenceStore` applies it exactly as it always has (section 3.3). Until that lands
+   * every answer here is empty, no indicator draws, and no code is conditional on it.
+   */
+  private readonly _listViewers = computed(() => {
+    const named = new Map<string, readonly string[]>();
+    for (const list of this._lists.forZone(this.zoneId())().lists) {
+      named.set(list.id, this._named(this._presence.viewersOf(list.id)));
+    }
+
+    return named;
+  });
+
+  private _named(users: readonly PresenceUser[]): readonly string[] {
+    const zoneId = this.zoneId();
+    return presenceNames(users, this._session.userId(), (userId) =>
+      this._names.nameOf(zoneId, userId)
+    );
+  }
 
   /**
    * The header, or null when there is nothing to draw one from.
@@ -227,6 +273,26 @@ export class GroupPage {
       untracked(() => {
         this._zones.clearLastCodeChange();
         this.codeIsNew.set(true);
+      });
+    });
+
+    // The names behind the presence rows, asked for only when there is somebody to
+    // name (plan 0022, section 3.1).
+    //
+    // Demand driven for the dashboard's reason: `MemberNames.ensure` is a request, and
+    // presence is advisory, so a screen must not spend one on the chance that somebody
+    // turns up. It is idempotent, so the second arrival in a group costs nothing.
+    effect(() => {
+      const id = this.zoneId();
+      const me = this._session.userId();
+      const peopled = this._presence
+        .onlineIn(id)
+        .some((user) => user.userId !== me);
+
+      untracked(() => {
+        if (peopled) {
+          void this._names.ensure(id);
+        }
       });
     });
 

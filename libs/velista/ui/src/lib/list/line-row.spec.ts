@@ -22,6 +22,7 @@ function vm(overrides: Partial<LineRowVm> = {}): LineRowVm {
     actions: ['edit', 'markNotAvailable', 'comments', 'delete'],
     decidable: false,
     restorable: false,
+    editor: null,
     ...overrides,
   };
 }
@@ -53,6 +54,58 @@ function row(fixture: ComponentFixture<LineRow>): HTMLElement {
 }
 
 describe('LineRow', () => {
+  // Plan 0022, section 3.4. The one thing this indicator must never become is a
+  // guard, so the tests are as much about what does not change as about what draws.
+  describe('somebody else editing', () => {
+    it('draws their initial and the word, and nothing when nobody is', async () => {
+      const editing = await render(vm({ editor: 'Ana' }));
+      const quiet = await render(vm());
+
+      expect(
+        editing.nativeElement.querySelector('.editor')?.textContent
+      ).toContain('A');
+      expect(quiet.nativeElement.querySelector('.editor')).toBeNull();
+    });
+
+    // Slicing a string cuts a surrogate pair in half, and a name that starts with an
+    // emoji would render the replacement character. Every initial in this app is a
+    // code point for that reason.
+    it('takes the initial as a code point', async () => {
+      const fixture = await render(vm({ editor: '\u{1F600}na' }));
+
+      expect(
+        fixture.nativeElement.querySelector('.editor-avatar')?.textContent
+      ).toBe('\u{1F600}');
+    });
+
+    // Advisory, per section 3: no lock, no disabled control, no warning. The row is
+    // exactly the row it was.
+    it('leaves the row a tappable checkbox', async () => {
+      const fixture = await render(vm({ editor: 'Ana' }));
+      const ticked: string[] = [];
+      fixture.componentInstance.ticked.subscribe((id) => ticked.push(id));
+
+      expect(row(fixture).getAttribute('role')).toBe('checkbox');
+      expect(row(fixture).getAttribute('tabindex')).toBe('0');
+
+      row(fixture).click();
+      expect(ticked).toEqual(['ln-1']);
+    });
+
+    // The name would be read out on every visit to the row and would go stale between
+    // two of them. The captions lost the same argument and went to `aria-describedby`.
+    it('stays out of the accessible name of the row', async () => {
+      const fixture = await render(vm({ editor: 'Ana' }));
+
+      expect(row(fixture).getAttribute('aria-label')).toBe('Sourdough loaf');
+      expect(
+        fixture.nativeElement
+          .querySelector('.editor')
+          ?.getAttribute('aria-hidden')
+      ).toBe('true');
+    });
+  });
+
   describe('the row is a checkbox', () => {
     it('carries the role and reflects READY in aria-checked', async () => {
       const fixture = await render(vm({ status: 'READY' }));
@@ -137,14 +190,18 @@ describe('LineRow', () => {
     it('offers a retry on the failed notice rather than a toast', async () => {
       const fixture = await render(vm({ write: 'failed' }));
 
-      expect(fixture.nativeElement.querySelector('.notice.failed')).not.toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('.notice.failed')
+      ).not.toBeNull();
     });
 
     it('names whoever overwrote the row, or says somebody did', async () => {
       const named = await render(
         vm({ write: 'overwritten', overwrittenBy: 'Toni' })
       );
-      expect(named.nativeElement.textContent).toContain('list.line.overwritten');
+      expect(named.nativeElement.textContent).toContain(
+        'list.line.overwritten'
+      );
 
       const unnamed = await render(vm({ write: 'overwritten' }));
       expect(unnamed.nativeElement.textContent).toContain(
@@ -168,9 +225,9 @@ describe('LineRow', () => {
       const steps = fixture.nativeElement.querySelectorAll('.grip-step');
 
       expect(steps).toHaveLength(2);
-      expect((steps[0] as HTMLButtonElement).getAttribute('aria-label')).toContain(
-        'list.reorder.moveUp'
-      );
+      expect(
+        (steps[0] as HTMLButtonElement).getAttribute('aria-label')
+      ).toContain('list.reorder.moveUp');
     });
 
     it('emits a move rather than reordering its own siblings', async () => {
@@ -181,7 +238,9 @@ describe('LineRow', () => {
       );
 
       (
-        fixture.nativeElement.querySelectorAll('.grip-step')[1] as HTMLButtonElement
+        fixture.nativeElement.querySelectorAll(
+          '.grip-step'
+        )[1] as HTMLButtonElement
       ).click();
 
       expect(emitted).toEqual(['moveDown']);

@@ -778,11 +778,27 @@ export function fakeMemberNames(
   names: Readonly<Record<string, string>> = {},
   members: readonly Membership[] = []
 ) {
+  /**
+   * Every zone whose members were asked for, in order and without repeats.
+   *
+   * `ensure` is a request in production, so **whether** a screen makes it is a design
+   * decision rather than plumbing: plan 0022 asks for a group's names only once
+   * somebody is actually present in it, so that an advisory row costs nothing on a
+   * dashboard where nobody is. That is a property of the call and can only be asserted
+   * on the double.
+   */
+  const asked: string[] = [];
+
   return {
     nameOf: (_zoneId: string, userId: string) => names[userId] ?? null,
     membersOf: () => members,
-    ensure: async () => undefined,
+    ensure: async (zoneId: string) => {
+      if (!asked.includes(zoneId)) {
+        asked.push(zoneId);
+      }
+    },
     prime: () => undefined,
+    asked,
   };
 }
 

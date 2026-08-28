@@ -45,10 +45,45 @@ function select(
     correlationId: null,
     resumeListId: null,
     resumeShoppers: [],
+    zoneOnline: () => [],
+    listViewers: () => [],
     guestBannerDismissed: false,
     ...overrides,
   });
 }
+
+// Plan 0022, sections 3.1 and 3.3. Zone presence needs no intent: the server computes
+// it from who holds the zone room, and the dashboard has held one per zone since 0017.
+describe('presence on the cards', () => {
+  it('puts who is in the group on its card', () => {
+    const state = select({ zoneOnline: () => ['Ana', 'Marc'] });
+
+    expect(firstZone(state).online).toEqual(['Ana', 'Marc']);
+  });
+
+  it('shows nobody rather than a zero when the caller is alone', () => {
+    expect(firstZone(select()).online).toEqual([]);
+  });
+
+  // Somebody standing outside the group is not shown who is inside it, for the reason
+  // their lists are empty too.
+  it('shows nobody at all on a card the caller has not been let into', () => {
+    const state = select({
+      zones: [zone({ myStatus: 'PENDING' })],
+      zoneOnline: () => ['Ana'],
+    });
+
+    expect(firstZone(state).online).toEqual([]);
+  });
+
+  it('puts who is shopping a list onto that row', () => {
+    const state = select({
+      listViewers: (listId) => (listId === 'l1' ? ['Ana'] : []),
+    });
+
+    expect(firstZone(state).lists).toMatchObject([{ viewers: ['Ana'] }]);
+  });
+});
 
 /**
  * Narrows to the populated variant so a test can read a zone card directly.

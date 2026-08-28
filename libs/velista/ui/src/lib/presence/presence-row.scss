@@ -1,0 +1,92 @@
+// The host is the row itself, so a parent places it by styling the element it wrote
+// and an absent row costs nothing: no box, no flex item, no gap above it.
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-width: 0;
+}
+
+:host(.empty) {
+  display: none;
+}
+
+// A row's worth: the dot leads, the stack is smaller, and the sentence is read but not
+// drawn. Ordered rather than given a second template, so one DOM serves both.
+:host(.compact) {
+  // Never squeezed by the name beside it: the row this sits in is a flex line whose
+  // title already takes the slack.
+  flex-shrink: 0;
+  gap: var(--app-space-1);
+
+  .text {
+    order: -1;
+  }
+
+  .avatar {
+    width: var(--app-avatar-sm);
+    height: var(--app-avatar-sm);
+
+    & + & {
+      margin-inline-start: calc(var(--app-avatar-sm) / -3);
+    }
+  }
+}
+
+.avatars {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--app-avatar-md);
+  height: var(--app-avatar-md);
+  border: var(--app-avatar-ring) solid var(--app-surface-raised);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-attention-fg);
+  color: var(--app-surface-ground);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+
+  // Derived from the avatar rather than written as a number, so the overlap stays
+  // proportional if the size ever changes. A third is enough to read as a stack
+  // without hiding the initial behind it.
+  & + & {
+    margin-inline-start: calc(var(--app-avatar-md) / -3);
+  }
+}
+
+.text {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-width: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}
+
+.dot {
+  flex-shrink: 0;
+  width: var(--app-dot-size);
+  height: var(--app-dot-size);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-success-fg);
+}
+
+// Visually hidden and still announced. `display: none` would take it out of the
+// accessibility tree entirely, which is the usual way a sentence like this ends up
+// unreadable rather than merely undrawn.
+.off-screen {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

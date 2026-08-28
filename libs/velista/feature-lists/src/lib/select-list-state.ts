@@ -28,13 +28,32 @@ export interface ListStateInput {
   readonly linesComplete: boolean;
   readonly writes: ReadonlyMap<
     string,
-    { readonly outcome: 'pending' | 'failed' | 'overwritten'; readonly byUserId: string | null }
+    {
+      readonly outcome: 'pending' | 'failed' | 'overwritten';
+      readonly byUserId: string | null;
+    }
   >;
   readonly commentCounts: ReadonlyMap<string, number>;
   readonly caller: CallerFacts;
   /** Resolves a user id to a name in this zone, or null. */
   readonly nameOf: (userId: string) => string | null;
   readonly reordering: boolean;
+  /**
+   * Who else is shopping this list, already named and already without the reader.
+   *
+   * Resolved by the container, as `selectHomeState`'s presence is: the filtering of the
+   * caller is a rendering decision and the naming needs `MemberNames`, and this function
+   * is pure so that neither has to happen here (plan 0022, section 3.4).
+   */
+  readonly viewers: readonly string[];
+  /**
+   * Whoever is editing one line, by line id, or null. Never the reader themselves.
+   *
+   * `PresenceStore.editorOfLine` is the shape this is: it has existed since `0017` with
+   * this comment on it, *"the shape a line row wants"*, and until now no line row called
+   * it. Advisory throughout: it changes nothing about what the row does.
+   */
+  readonly editorOf: (lineId: string) => string | null;
   readonly live: boolean;
   readonly errorKey: string | null;
   readonly correlationId: string | null;
@@ -109,6 +128,9 @@ function selectHeader(input: ListStateInput): ListHeaderVm {
       ? lines.filter((line) => line.status === 'READY').length
       : (list?.readyCount ?? 0),
     lineCount: counted ? lines.length : (list?.lineCount ?? 0),
+    // The sentence the resume card points at, in the resume card's own words: this is
+    // the screen it offers a way back into (plan 0022, section 3.4).
+    viewers: input.viewers,
     live: input.live,
   };
 }
@@ -152,7 +174,8 @@ function selectAbilities(input: ListStateInput): ListAbilitiesVm {
  */
 function sortLines(lines: readonly Line[]): readonly Line[] {
   return [...lines].sort((a, b) => {
-    const rejected = Number(a.approvalStatus === 'REJECTED') -
+    const rejected =
+      Number(a.approvalStatus === 'REJECTED') -
       Number(b.approvalStatus === 'REJECTED');
     return rejected !== 0 ? rejected : a.position - b.position;
   });
@@ -190,6 +213,10 @@ function toRow(
     actions: actionsFor(line, abilities, input.reordering),
     decidable: abilities.canDecide && awaiting && !input.reordering,
     restorable: abilities.canDecide && rejected && !input.reordering,
+    // Nobody is shown as editing while the list is being reordered: the sheet cannot be
+    // opened from a row in that mode, so an indicator there would be about a screen the
+    // reader cannot see. Advisory either way, and it locks nothing (section 3).
+    editor: input.reordering ? null : input.editorOf(line.id),
   };
 }
 

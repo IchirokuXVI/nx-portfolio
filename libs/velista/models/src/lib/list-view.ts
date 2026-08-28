@@ -106,6 +106,15 @@ export interface LineRowVm {
   readonly decidable: boolean;
   /** Whether to offer putting a turned down line back. Staff, on a REJECTED line. */
   readonly restorable: boolean;
+  /**
+   * Who is editing this line right now, or null. Never the reader themselves.
+   *
+   * Advisory and nothing more (plan 0022, section 3): the row stays tappable, the edit
+   * sheet still opens over it, and a simultaneous edit resolves exactly as `0012` says
+   * it does. Null when nobody is editing and null when the editor's name could not be
+   * resolved, because an id is not a person to the one reading the row.
+   */
+  readonly editor: string | null;
 }
 
 /**
@@ -146,6 +155,15 @@ export interface ListHeaderVm {
   readonly zoneName: string | null;
   readonly readyCount: number;
   readonly lineCount: number;
+  /**
+   * Who else is shopping this list right now, named and without the reader.
+   *
+   * The screen the resume card points at, so it says the same thing in the same words
+   * (plan 0022, section 3.4). It can only be filled because this page announces itself
+   * with `viewList`; while it merely subscribed, the server's viewer set was empty
+   * forever and nobody ever saw this row anywhere.
+   */
+  readonly viewers: readonly string[];
   /** The list room was refused or the connection dropped (section 3.1). */
   readonly live: boolean;
 }

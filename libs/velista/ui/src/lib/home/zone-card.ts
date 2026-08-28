@@ -8,6 +8,7 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ZoneCardVm } from '@portfolio/velista/models';
 import { ChevronRightIcon, ListLinesIcon, MemberAddIcon } from '../icons/icons';
+import { PresenceRow } from '../presence/presence-row';
 
 /**
  * One group, as a card.
@@ -35,6 +36,7 @@ import { ChevronRightIcon, ListLinesIcon, MemberAddIcon } from '../icons/icons';
     ChevronRightIcon,
     ListLinesIcon,
     MemberAddIcon,
+    PresenceRow,
   ],
   templateUrl: './zone-card.html',
   styleUrl: './zone-card.scss',

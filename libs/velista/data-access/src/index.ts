@@ -36,6 +36,7 @@ export * from './lib/memberships/membership-memory';
 export * from './lib/memberships/membership-service';
 export * from './lib/memberships/membership-store';
 export * from './lib/mutations';
+export * from './lib/presence/presence-names';
 export * from './lib/presence/presence-store';
 export * from './lib/realtime/realtime-client';
 export * from './lib/realtime/realtime-event-mapper';
