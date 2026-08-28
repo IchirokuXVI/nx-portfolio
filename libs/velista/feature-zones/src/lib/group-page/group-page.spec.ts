@@ -202,7 +202,7 @@ describe('GroupPage', () => {
 
     // Section 3.3, and the point of it: the page holds no subscription to `list-1`.
     // Backend 0032 delivers a group's list presence to its members, so the fake is
-    // asked about a list this page never opened, which is exactly what will be real.
+    // asked about a list this page never opened, which is what now happens for real.
     it('lights the row of a list somebody has open, holding no subscription to it', async () => {
       const { fixture } = await render({
         lists: [list('list-1', 'Weekly shop'), list('list-2', 'Hardware')],
@@ -224,6 +224,30 @@ describe('GroupPage', () => {
         presence: { online: { [ZONE_ID]: ['u2'] } },
       });
       expect(busy.names.asked).toEqual([ZONE_ID]);
+    });
+
+    // The other half of "somebody is here", and the one section 3.3 depends on. Backend
+    // `0032` delivers presence for a list this page never opened, and somebody deep
+    // linked to that list holds no zone subscription, so they show up in the list's
+    // presence and in no zone's. Gating on `onlineIn` alone meant the names were never
+    // asked for, `presenceNames` dropped every viewer it could not resolve, and the row
+    // above stayed dark with its data already in the store.
+    it('asks who the members are when the only presence is on one of its lists', async () => {
+      const busy = await render({
+        lists: [list('list-1', 'Weekly shop')],
+        presence: { viewers: { 'list-1': ['u2'] } },
+      });
+
+      expect(busy.names.asked).toEqual([ZONE_ID]);
+    });
+
+    it('still asks nothing when the only viewer of a list is the reader', async () => {
+      const quiet = await render({
+        lists: [list('list-1', 'Weekly shop')],
+        presence: { viewers: { 'list-1': ['u1'] } },
+      });
+
+      expect(quiet.names.asked).toEqual([]);
     });
   });
 

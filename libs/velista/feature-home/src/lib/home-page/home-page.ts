@@ -14,6 +14,7 @@ import {
   AccountNotice,
   AUTH_SERVICE,
   GatewayError,
+  hasOthers,
   MemberNames,
   NetworkError,
   presenceNames,
@@ -368,12 +369,24 @@ export class HomePage {
     // per card on every load to render a row that is usually absent. Presence is
     // advisory and must not be expensive. `ensure` is idempotent, so the zones already
     // asked for cost nothing when somebody else arrives in one of them.
+    //
+    // **Both kinds of presence count, and the list half is not hypothetical.** Backend
+    // `0032` joins a zone subscriber to the presence room of every list in that zone it
+    // may read, so `viewersOf` now answers for lists this page never opened, and a
+    // shopper who deep linked to a list holds no zone subscription and is therefore in
+    // no zone's presence at all. Asking only about `onlineIn` left that card's names
+    // unresolved forever, and `presenceNames` drops a name it cannot resolve, so the
+    // row silently did not draw while the data for it sat in the store.
     effect(() => {
       const me = this._session.userId();
       const peopled = this._zoneStore
         .myZones()
-        .filter((zone) =>
-          this._presence.onlineIn(zone.id).some((user) => user.userId !== me)
+        .filter(
+          (zone) =>
+            hasOthers(this._presence.onlineIn(zone.id), me) ||
+            zone.lists.some((list) =>
+              hasOthers(this._presence.viewersOf(list.id), me)
+            )
         )
         .map((zone) => zone.id);
 

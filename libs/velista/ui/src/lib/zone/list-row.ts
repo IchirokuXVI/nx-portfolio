@@ -56,8 +56,8 @@ import { PresenceRow } from '../presence/presence-row';
         sentence is read but not drawn (plan 0022, section 3.3).
 
         This page holds no subscription to the list. Backend plan 0032 broadcasts a
-        group's list presence to the group's members, so these fill in with no client
-        change; until then they are empty and simply do not draw.
+        group's list presence to the group's members, so these are filled for every
+        readable list in a zone the caller subscribes to, this row's included.
       -->
       <lib-presence-row
         [compact]="true"

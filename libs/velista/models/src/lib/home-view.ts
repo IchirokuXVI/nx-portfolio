@@ -25,10 +25,10 @@ export interface ListRowVm {
   /**
    * Who is shopping from this list right now, named and without the reader.
    *
-   * Empty is the ordinary answer and draws nothing (plan 0022, section 5). It is also
-   * the answer for a list this client has never opened until backend `0032` starts
-   * broadcasting a group's list presence to the group's members, and no code here is
-   * conditional on that: the indicator simply begins appearing.
+   * Empty is the ordinary answer and draws nothing (plan 0022, section 5). It is no
+   * longer the standing answer for a list this client has never opened: backend `0032`
+   * broadcasts a group's list presence to the group's members, so these fill in for
+   * every readable list in a subscribed zone.
    */
   readonly viewers: readonly string[];
 }

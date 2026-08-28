@@ -41,9 +41,12 @@ export function selectGroupState(input: {
    *
    * This page holds no list subscription and takes none: backend `0032` joins a socket
    * that subscribed to a zone to the presence room of every list in it the caller may
-   * read, so the answers arrive without a client change (plan 0022, section 3.3). Until
-   * it lands the answer is empty for a list this client has not opened, the indicator
-   * does not draw, and that is section 5's rule working rather than a state to guard.
+   * read, so the answers arrive without this function changing (plan 0022, section 3.3).
+   *
+   * The container did have to change when that landed. These are names, and a viewer
+   * whose name does not resolve is left out rather than drawn as an id, so the group's
+   * memberships have to have been asked for. `GroupPage`'s `MemberNames.ensure` effect
+   * now treats a viewer on any of these lists as somebody being here.
    */
   readonly listViewers: (listId: string) => readonly string[];
 }): GroupState {

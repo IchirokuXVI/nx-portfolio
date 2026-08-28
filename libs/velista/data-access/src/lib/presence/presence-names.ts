@@ -44,3 +44,22 @@ export function presenceNames(
 
   return names;
 }
+
+/**
+ * Whether a presence snapshot holds anybody but the reader.
+ *
+ * The question behind every `MemberNames.ensure` on a presence surface, and it applies
+ * the same rule `presenceNames` applies, one step earlier: a group whose only occupant
+ * is the person looking at it has nobody to name, and naming costs a request.
+ *
+ * Names are deliberately not consulted. This asks whether somebody is **there**, and
+ * the request it gates is the one that answers what they are called. Asking it of
+ * resolved names instead would gate the fetch on the fetch having already happened,
+ * which is a condition that can never become true on its own.
+ */
+export function hasOthers(
+  users: readonly PresenceUser[],
+  me: string | null
+): boolean {
+  return users.some((user) => user.userId !== me);
+}

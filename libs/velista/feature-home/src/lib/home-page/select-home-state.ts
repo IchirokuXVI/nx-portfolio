@@ -59,9 +59,13 @@ export function selectHomeState(input: {
   /**
    * Who is shopping a list, already named and already without the reader.
    *
-   * Empty for a list this client has not opened until backend `0032` broadcasts a
-   * group's list presence to the group's members. Nothing here is conditional on that:
-   * the rows simply start having somebody to draw (plan 0022, section 3.3).
+   * Filled for a list this client has never opened, now that backend `0032` broadcasts
+   * a group's list presence to the group's members. Nothing here was conditional on
+   * that: the rows simply started having somebody to draw (plan 0022, section 3.3).
+   *
+   * What it did need was the container asking for the names, since a viewer whose name
+   * will not resolve is dropped rather than drawn. See the `MemberNames.ensure` effect
+   * in `HomePage`, which now counts a list viewer as somebody being here.
    */
   listViewers: (listId: string) => readonly string[];
   /** Whether the guest has dismissed the banner in this session. */

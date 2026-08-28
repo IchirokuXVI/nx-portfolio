@@ -13,6 +13,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  hasOthers,
   ListStore,
   MemberNames,
   presenceNames,
@@ -154,8 +155,11 @@ export class GroupPage {
    * This page subscribes to no list and does not have to. Backend `0032` joins a socket
    * that subscribed to a zone to the presence room of every list in it the caller may
    * read, so `presence.listUpdated` arrives for lists this client has never opened and
-   * `PresenceStore` applies it exactly as it always has (section 3.3). Until that lands
-   * every answer here is empty, no indicator draws, and no code is conditional on it.
+   * `PresenceStore` applies it exactly as it always has (section 3.3).
+   *
+   * These are names, so they resolve only for a group whose memberships were asked for.
+   * That is the one thing landing `0032` did require of this page, and it is the effect
+   * below rather than anything here.
    */
   private readonly _listViewers = computed(() => {
     const named = new Map<string, readonly string[]>();
@@ -302,12 +306,24 @@ export class GroupPage {
     // Demand driven for the dashboard's reason: `MemberNames.ensure` is a request, and
     // presence is advisory, so a screen must not spend one on the chance that somebody
     // turns up. It is idempotent, so the second arrival in a group costs nothing.
+    //
+    // A viewer on one of this group's lists counts as somebody being here, and has to,
+    // now that backend `0032` sends this page list presence for lists it never opened:
+    // the row it feeds is drawn from names, `presenceNames` drops the ones it cannot
+    // resolve, and only this request resolves them. Gating on `onlineIn` alone left
+    // section 3.3's whole indicator dark for the case it was built for, a shopper deep
+    // linked to a list who holds no zone subscription and so appears in no zone's
+    // presence.
     effect(() => {
       const id = this.zoneId();
       const me = this._session.userId();
-      const peopled = this._presence
-        .onlineIn(id)
-        .some((user) => user.userId !== me);
+      const peopled =
+        hasOthers(this._presence.onlineIn(id), me) ||
+        this._lists
+          .forZone(id)()
+          .lists.some((list) =>
+            hasOthers(this._presence.viewersOf(list.id), me)
+          );
 
       untracked(() => {
         if (peopled) {

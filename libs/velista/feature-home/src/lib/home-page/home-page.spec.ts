@@ -578,6 +578,27 @@ describe('HomePage', () => {
       await render({ presence: { online: { z1: ['u2'] } } });
       expect(namesDouble.asked).toEqual(['z1']);
     });
+
+    // Backend `0032` sends list presence for lists this page never opened, and somebody
+    // deep linked to a list holds no zone subscription, so they are in that zone's list
+    // presence and in no zone's own presence at all. Asking only about `onlineIn` left
+    // the names for this card unresolved forever, and `presenceNames` drops a name it
+    // cannot resolve, so the row above did not draw while its data sat in the store.
+    //
+    // Not caught by that row's own test, which is worth saying: `fakeMemberNames`
+    // answers `nameOf` from a record rather than from what was asked for, so a screen
+    // that never calls `ensure` still renders names there. The call is the assertion.
+    it('asks who the members are for a group whose only presence is on a list', async () => {
+      await render({ presence: { viewers: { l1: ['u2'] } } });
+
+      expect(namesDouble.asked).toEqual(['z1']);
+    });
+
+    it('still asks nothing when the only viewer of a list is the reader', async () => {
+      await render({ presence: { viewers: { l1: ['u1'] } } });
+
+      expect(namesDouble.asked).toEqual([]);
+    });
   });
 
   describe('after a way in', () => {

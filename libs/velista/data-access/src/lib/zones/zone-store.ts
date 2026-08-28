@@ -634,8 +634,11 @@ export class ZoneStore {
         // `myRole: 'OWNER'` after a successful claim rather than waiting to be told,
         // so the store already holds that `ownerUserId` and `myRole` cannot disagree;
         // asserting that for a local write and not for a remote one is how they came
-        // to disagree here. When backend `0029` lands, both writers compute the same
-        // value from the same fact, so the second one changes nothing.
+        // to disagree here. Backend `0029` now publishes a `member.roleChanged` for
+        // each of the two memberships a transfer moves, and both writers compute the
+        // same value from the same fact, so whichever arrives second changes nothing.
+        // Which is also why this stays: JetStream preserves order per subject and not
+        // across them, so the two can arrive either way round.
         const held = this._byId().get(event.zone.id);
         if (held === undefined) {
           // Same answer `_patch` gives: an event for a zone the caller never loaded
