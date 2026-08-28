@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -16,6 +16,7 @@ import {
   appPath,
   lineIdOf,
   listIdOf,
+  SheetNavigation,
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import { ConfirmSheet } from '@portfolio/velista/ui';
@@ -57,7 +58,7 @@ import { listErrorKey } from '../list-error-copy';
 })
 export class DeleteLineSheet {
   private readonly _lines = inject(LineStore);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -98,7 +99,7 @@ export class DeleteLineSheet {
 
   /** Cancel, Escape, the scrim, and the back button all arrive here. */
   async dismiss(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._sheet.dismiss(
       appPath(
         this._locale(),
         this._basePath,

@@ -1,7 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -20,7 +19,10 @@ import {
   type FakeProfileStore,
 } from '@portfolio/velista/data-access';
 import type { MyZone, ZoneRole } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  provideVelistaTesting,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import { DeleteAccountSheet } from './delete-account-sheet';
 
 const ME = 'u1';
@@ -55,7 +57,7 @@ async function render(options: Options = {}): Promise<{
   profile: FakeProfileStore;
   tokens: TokenStore;
   notice: AccountNotice;
-  router: { navigateByUrl: jest.Mock };
+  sheets: { dismiss: jest.Mock; leaveTo: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
@@ -64,7 +66,10 @@ async function render(options: Options = {}): Promise<{
     profile: profileFor({ userId: ME, username }),
     removeRejectsWith: options.removeRejectsWith,
   });
-  const router = { navigateByUrl: jest.fn().mockResolvedValue(true) };
+  const sheets = {
+    dismiss: jest.fn().mockResolvedValue(undefined),
+    leaveTo: jest.fn().mockResolvedValue(undefined),
+  };
 
   await TestBed.configureTestingModule({
     imports: [DeleteAccountSheet, RokuTranslatorTestingModule.forTesting()],
@@ -77,7 +82,7 @@ async function render(options: Options = {}): Promise<{
       provideFakeProfileStore(profile),
       provideFakeZoneStore(fakeZoneStore({ zones: options.zones ?? [] })),
       provideFakeSessionStore('REGISTERED', { userId: ME, username }),
-      { provide: Router, useValue: router },
+      { provide: SheetNavigation, useValue: sheets },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
     ],
   }).compileComponents();
@@ -92,7 +97,7 @@ async function render(options: Options = {}): Promise<{
     profile,
     tokens: TestBed.inject(TokenStore),
     notice: TestBed.inject(AccountNotice),
-    router,
+    sheets,
   };
 }
 
@@ -194,7 +199,7 @@ describe('DeleteAccountSheet', () => {
     it('clears the session and goes to the front door', async () => {
       // The front door and **not** sign in, which is the screen for somebody who has an
       // account (section 5.7).
-      const { fixture, tokens, router } = await render();
+      const { fixture, tokens, sheets } = await render();
       tokens.set({
         userId: ME,
         kind: 'REGISTERED',
@@ -208,7 +213,7 @@ describe('DeleteAccountSheet', () => {
       await fixture.whenStable();
 
       expect(tokens.tokens()).toBeNull();
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en');
+      expect(sheets.leaveTo).toHaveBeenCalledWith('/velista/en');
     });
 
     it('leaves the front door something to say once', async () => {
@@ -258,7 +263,7 @@ describe('DeleteAccountSheet', () => {
     });
 
     it('stays open with the correlation id', async () => {
-      const { fixture, router } = await render({
+      const { fixture, sheets } = await render({
         removeRejectsWith: new GatewayError({
           code: 'internal',
           status: 500,
@@ -271,7 +276,7 @@ describe('DeleteAccountSheet', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(router.navigateByUrl).not.toHaveBeenCalled();
+      expect(sheets.dismiss).not.toHaveBeenCalled();
       expect(fixture.componentInstance.correlationId()).toBe('c-99');
       expect(text(fixture)).toContain('c-99');
     });
@@ -279,11 +284,11 @@ describe('DeleteAccountSheet', () => {
 
   describe('dismissing', () => {
     it('goes back to the account screen', async () => {
-      const { fixture, router } = await render();
+      const { fixture, sheets } = await render();
 
       await fixture.componentInstance.dismiss();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/account');
+      expect(sheets.dismiss).toHaveBeenCalledWith('/velista/en/account');
     });
   });
 });

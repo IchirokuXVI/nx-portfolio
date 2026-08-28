@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -20,6 +20,7 @@ import {
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
+  SheetNavigation,
 } from '@portfolio/velista/platform';
 import { entryErrorKey } from '../entry-error-copy';
 import { JoinCodeSheet } from './join-code-sheet';
@@ -38,12 +39,15 @@ interface Options {
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<JoinCodeSheet>;
   store: FakeZoneStore;
-  router: { navigateByUrl: jest.Mock };
+  sheets: { dismiss: jest.Mock; leaveTo: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
   const store = fakeZoneStore({ respond: options.respond });
-  const router = { navigateByUrl: jest.fn().mockResolvedValue(true) };
+  const sheets = {
+    dismiss: jest.fn().mockResolvedValue(undefined),
+    leaveTo: jest.fn().mockResolvedValue(undefined),
+  };
 
   await TestBed.configureTestingModule({
     imports: [JoinCodeSheet, RokuTranslatorTestingModule.forTesting()],
@@ -60,7 +64,7 @@ async function render(options: Options = {}): Promise<{
       }),
       provideFakeZoneStore(store),
       provideFakeSessionStore('TEMPORARY'),
-      { provide: Router, useValue: router },
+      { provide: SheetNavigation, useValue: sheets },
       { provide: TokenStore, useValue: { clear: jest.fn() } },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
@@ -76,7 +80,7 @@ async function render(options: Options = {}): Promise<{
   fixture.detectChanges();
   await fixture.whenStable();
 
-  return { fixture, store, router };
+  return { fixture, store, sheets };
 }
 
 function query(fixture: ComponentFixture<JoinCodeSheet>, selector: string) {
@@ -156,13 +160,13 @@ describe('JoinCodeSheet', () => {
     });
 
     it('lands on the dashboard, where the group is now listed as pending', async () => {
-      const { fixture, router } = await render();
+      const { fixture, sheets } = await render();
       type(fixture, 'HK7M2QPD');
 
       (query(fixture, '.primary') as HTMLButtonElement).click();
       await fixture.whenStable();
 
-      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
+      expect(sheets.leaveTo).toHaveBeenCalledWith('/velista/en/home');
     });
 
     it('never names the group, because nothing can resolve a code to one', async () => {
@@ -178,7 +182,7 @@ describe('JoinCodeSheet', () => {
     });
 
     it('cannot be dismissed while the ask is in flight', async () => {
-      const { fixture, router } = await render({ respond: inFlight });
+      const { fixture, sheets } = await render({ respond: inFlight });
       type(fixture, 'HK7M2QPD');
 
       (query(fixture, '.primary') as HTMLButtonElement).click();
@@ -186,7 +190,7 @@ describe('JoinCodeSheet', () => {
 
       expect(query(fixture, '.cancel')).toBeNull();
       (query(fixture, '.scrim') as HTMLButtonElement).click();
-      expect(router.navigateByUrl).not.toHaveBeenCalled();
+      expect(sheets.dismiss).not.toHaveBeenCalled();
     });
   });
 

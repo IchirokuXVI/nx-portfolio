@@ -5,16 +5,19 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import { ZoneStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, ZONE_NAME_MAX_LENGTH } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import {
+  appPath,
+  SheetNavigation,
+  zoneIdOf,
+} from '@portfolio/velista/platform';
 import { ConfirmSheet, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
-import { zoneIdOf } from '@portfolio/velista/platform';
 import { shouldRefetch, zoneErrorKey } from '../zone-error-copy';
 
 /** Which confirm, if any, is covering the settings sheet. */
@@ -51,7 +54,7 @@ type Pending = 'regenerate' | 'delete' | null;
 })
 export class GroupSettingsSheet {
   private readonly _zones = inject(ZoneStore);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -124,7 +127,9 @@ export class GroupSettingsSheet {
     await this._run(() => this._zones.deleteZone(this.zoneId()));
 
     if (this.errorKey() === null) {
-      await this._router.navigateByUrl(
+      // A replace and not a push: the group this sheet was opened over is gone, so
+      // its URL and this one both have to leave the stack (plan 0031).
+      await this._sheet.leaveTo(
         appPath(this._locale(), this._basePath, 'home')
       );
     }
@@ -132,7 +137,7 @@ export class GroupSettingsSheet {
 
   /** Cancel, Escape, the scrim, and the back button all arrive here. */
   async dismiss(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._sheet.dismiss(
       appPath(this._locale(), this._basePath, 'zones', this.zoneId())
     );
   }
