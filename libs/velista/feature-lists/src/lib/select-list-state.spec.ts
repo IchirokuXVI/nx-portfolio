@@ -33,7 +33,9 @@ function line(overrides: Partial<Line> = {}): Line {
   };
 }
 
-function list(overrides: Partial<ShoppingListSummary> = {}): ShoppingListSummary {
+function list(
+  overrides: Partial<ShoppingListSummary> = {}
+): ShoppingListSummary {
   return {
     id: LIST_ID,
     zoneId: 'zone-1',
@@ -57,6 +59,8 @@ function select(overrides: Partial<ListStateInput> = {}): ListPageState {
     caller: { userId: ME, isStaff: false, knownReader: false },
     nameOf: () => null,
     reordering: false,
+    viewers: [],
+    editorOf: () => null,
     live: true,
     errorKey: null,
     correlationId: null,
@@ -74,6 +78,50 @@ function loaded(state: ListPageState) {
 }
 
 describe('selectListState', () => {
+  // Plan 0022, section 3.4. The two indicators this screen earns, and the rule that
+  // neither of them is allowed to decide anything.
+  describe('presence', () => {
+    it('puts who else is shopping into the header', () => {
+      const state = select({ viewers: ['Ana', 'Marc'] });
+
+      expect(loaded(state).header.viewers).toEqual(['Ana', 'Marc']);
+    });
+
+    it('says nobody rather than zero when the caller is alone', () => {
+      expect(loaded(select()).header.viewers).toEqual([]);
+    });
+
+    it('names whoever is editing a line, on that line', () => {
+      const state = select({
+        lines: [line({ id: 'line-1' }), line({ id: 'line-2', position: 2 })],
+        editorOf: (lineId) => (lineId === 'line-1' ? 'Ana' : null),
+      });
+
+      expect(loaded(state).lines.map((row) => row.editor)).toEqual([
+        'Ana',
+        null,
+      ]);
+    });
+
+    // Section 3: advisory and only advisory. Somebody else editing changes nothing
+    // about what the row is or what a tap on it does, and a guard built on presence
+    // would refuse an edit nobody is making.
+    it('changes nothing else about a line somebody else is editing', () => {
+      const withEditor = loaded(select({ editorOf: () => 'Ana' })).lines[0];
+      const without = loaded(select()).lines[0];
+
+      expect(withEditor).toEqual({ ...without, editor: 'Ana' });
+    });
+
+    // The sheet cannot be opened from a row in reorder mode, so an indicator there
+    // would be about a screen the reader cannot get to.
+    it('names nobody while the list is being put in order', () => {
+      const state = select({ reordering: true, editorOf: () => 'Ana' });
+
+      expect(loaded(state).lines[0]?.editor).toBeNull();
+    });
+  });
+
   describe('the header, and rule L2', () => {
     it('names the list from the cache while the lines are still loading', () => {
       // The common path: the caller arrived from the group page, so the list is
@@ -330,7 +378,10 @@ describe('selectListState', () => {
   });
 
   describe('reordering, and rule L4', () => {
-    const two = [line({ id: 'a', position: 1 }), line({ id: 'b', position: 2 })];
+    const two = [
+      line({ id: 'a', position: 1 }),
+      line({ id: 'b', position: 2 }),
+    ];
 
     it('is available once every page has arrived', () => {
       expect(loaded(select({ lines: two })).canReorder).toBe(true);

@@ -25,6 +25,19 @@
     </div>
   }
 
+  <!--
+    Who is in the group right now, beneath the counts and **outside** the head button.
+    Outside, because it is a live region: content that changes on its own inside a tap
+    target would keep rewriting that target's accessible name while somebody is reading
+    it. The card draws nothing at all when the caller is the only one here (plan 0022,
+    sections 3.1 and 5).
+  -->
+  <lib-presence-row
+    [names]="zone().online"
+    countKey="home.presence.inGroupCount"
+    messageKey="home.presence.inGroup"
+  />
+
   @if (zone().waitingOn; as owner) {
     <p class="waiting">
       {{ 'home.pending.waiting' | rokuT: { name: owner } }}
@@ -97,6 +110,18 @@
                 'home.list.items' | rokuT: { count: list.lineCount }
               }}</span>
             }
+
+            <!--
+              Who is shopping from this row: the dot and up to two initials, no names.
+              A row has no space for a sentence and the group's own page carries one,
+              so the sentence is off screen rather than absent (plan 0022, section 3.3).
+            -->
+            <lib-presence-row
+              [compact]="true"
+              [names]="list.viewers"
+              countKey="home.presence.onList"
+              messageKey="home.presence.shopping"
+            />
           </button>
         </li>
       }

@@ -30,6 +30,14 @@ export interface GroupHeaderVm {
   readonly initial: string;
   readonly role: ZoneRole;
   readonly memberCount: number;
+  /**
+   * Who is in the group right now, named and without the reader.
+   *
+   * Sits under the member count, which is the natural pairing: "six members" and "two
+   * here now" answer the same question at two timescales (plan 0022, section 3.2).
+   * Empty draws nothing, and everything here empties at once when the socket goes.
+   */
+  readonly online: readonly string[];
   readonly joinCode: string;
   /** OWNER or ADMIN. Decides whether the governance row is drawn at all. */
   readonly isStaff: boolean;
@@ -103,7 +111,12 @@ export type GroupState =
  * list means **no menu at all** rather than a disabled one.
  */
 export type MemberAction =
-  'makeAdmin' | 'makeMember' | 'transfer' | 'remove' | 'ban' | 'rename';
+  | 'makeAdmin'
+  | 'makeMember'
+  | 'transfer'
+  | 'remove'
+  | 'ban'
+  | 'rename';
 
 /** One approved member's row. */
 export interface MemberRowVm {

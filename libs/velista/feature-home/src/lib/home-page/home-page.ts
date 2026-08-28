@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
@@ -15,6 +16,7 @@ import {
   GatewayError,
   MemberNames,
   NetworkError,
+  presenceNames,
   PresenceStore,
   REALTIME_CLIENT,
   SessionStore,
@@ -23,7 +25,11 @@ import {
   type AuthServiceI,
   type RealtimeClientI,
 } from '@portfolio/velista/data-access';
-import type { HomeState, MyZone } from '@portfolio/velista/models';
+import type {
+  HomeState,
+  MyZone,
+  PresenceUser,
+} from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
 import {
   AppBar,
@@ -153,19 +159,10 @@ export class HomePage {
   /**
    * Who else is shopping the resume list, named and without the reader.
    *
-   * Three joins, and each is a decision rather than plumbing:
-   *
-   * - **The reader is removed.** Somebody looking at their own dashboard is not
-   *   shopping the list, and a card that counts them is wrong about the only thing it
-   *   says. The store keeps them because a store keeps what the server said; the
-   *   sentence is where that stops being useful.
-   * - **A name that does not resolve is left out rather than rendered as an id.** The
-   *   same rule the comment sheet follows, for the same reason: to the person reading
-   *   the card, "not loaded yet", "left the group" and "not allowed to see them" are
-   *   one fact, and none of the three is a hex string.
-   * - **A wire username wins if one ever appears.** Presence carries a user id and no
-   *   name today, so this always falls through to the zone's memberships; reading the
-   *   field first is what makes the day it is filled in a no-op here.
+   * The three joins this and every other presence row on the page make are
+   * `presenceNames`, which is where they are explained: the reader is dropped here
+   * rather than in the store, a name that will not resolve is left out rather than
+   * rendered as an id, and a wire username would win if one ever appeared.
    */
   private readonly _resumeShoppers = computed<readonly string[]>(() => {
     const key = this._presenceListKey();
@@ -174,28 +171,52 @@ export class HomePage {
     }
 
     const separator = key.indexOf('/');
-    const zoneId = key.slice(0, separator);
-    const listId = key.slice(separator + 1);
-    const me = this._session.userId();
+    return this._named(
+      key.slice(0, separator),
+      this._presence.viewersOf(key.slice(separator + 1))
+    );
+  });
 
-    const names: string[] = [];
-    for (const viewer of this._presence.viewersOf(listId)) {
-      if (viewer.userId === me) {
-        continue;
-      }
+  /**
+   * Who is online in each group, and who is shopping each of its lists, all named.
+   *
+   * Two maps built in one pass over the zones, because a card's presence and its rows'
+   * presence are resolved against the **same** zone: a membership username is a name in
+   * that group and nowhere else, so the zone the id came from has to be in scope at the
+   * moment the name is looked up.
+   *
+   * Maps rather than a lookup per card, so the whole dashboard's presence is one pass
+   * whenever any of it changes, and `selectHomeState` is handed two plain functions.
+   */
+  private readonly _presenceNames = computed(() => {
+    const zones = new Map<string, readonly string[]>();
+    const lists = new Map<string, readonly string[]>();
 
-      const name =
-        viewer.username !== ''
-          ? viewer.username
-          : this._names.nameOf(zoneId, viewer.userId);
-
-      if (name !== null && name !== '') {
-        names.push(name);
+    for (const zone of this._zoneStore.myZones()) {
+      zones.set(
+        zone.id,
+        this._named(zone.id, this._presence.onlineIn(zone.id))
+      );
+      for (const list of zone.lists) {
+        lists.set(
+          list.id,
+          this._named(zone.id, this._presence.viewersOf(list.id))
+        );
       }
     }
 
-    return names;
+    return { zones, lists };
   });
+
+  /** The three joins, for one zone's worth of presence. */
+  private _named(
+    zoneId: string,
+    users: readonly PresenceUser[]
+  ): readonly string[] {
+    return presenceNames(users, this._session.userId(), (userId) =>
+      this._names.nameOf(zoneId, userId)
+    );
+  }
 
   readonly state = computed<HomeState>(() => {
     const identity = this._session.identity();
@@ -217,6 +238,8 @@ export class HomePage {
       correlationId: this._correlationId(),
       resumeListId: this._resumeListId(),
       resumeShoppers: this._resumeShoppers(),
+      zoneOnline: (zoneId) => this._presenceNames().zones.get(zoneId) ?? [],
+      listViewers: (listId) => this._presenceNames().lists.get(listId) ?? [],
       guestBannerDismissed: this._guestBannerDismissed(),
     });
   });
@@ -335,6 +358,30 @@ export class HomePage {
       void this._names.ensure(key.slice(0, separator));
 
       onCleanup(() => release());
+    });
+
+    // The names behind the presence rows, asked for only when there is somebody to
+    // name (plan 0022, section 3.1).
+    //
+    // Demand driven, and that is the point: `MemberNames.ensure` is one request per
+    // zone, so naming every group on the dashboard unconditionally would cost a request
+    // per card on every load to render a row that is usually absent. Presence is
+    // advisory and must not be expensive. `ensure` is idempotent, so the zones already
+    // asked for cost nothing when somebody else arrives in one of them.
+    effect(() => {
+      const me = this._session.userId();
+      const peopled = this._zoneStore
+        .myZones()
+        .filter((zone) =>
+          this._presence.onlineIn(zone.id).some((user) => user.userId !== me)
+        )
+        .map((zone) => zone.id);
+
+      untracked(() => {
+        for (const zoneId of peopled) {
+          void this._names.ensure(zoneId);
+        }
+      });
     });
 
     // Shown once. Cleared when this page is destroyed rather than by a dismiss

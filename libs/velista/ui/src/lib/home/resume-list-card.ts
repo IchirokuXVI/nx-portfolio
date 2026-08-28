@@ -8,6 +8,7 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ResumeListVm } from '@portfolio/velista/models';
 import { ChevronRightIcon } from '../icons/icons';
+import { PresenceRow } from '../presence/presence-row';
 
 /**
  * The last list the user opened, and the fastest path back into it.
@@ -22,7 +23,7 @@ import { ChevronRightIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-resume-list-card',
-  imports: [RokuTranslatorPipe, ChevronRightIcon],
+  imports: [RokuTranslatorPipe, ChevronRightIcon, PresenceRow],
   templateUrl: './resume-list-card.html',
   styleUrl: './resume-list-card.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,14 +51,4 @@ export class ResumeListCard {
     }
     return Math.round((readyCount / lineCount) * 100);
   });
-
-  /** The first two initials, for the stacked avatars. */
-  readonly initials = computed(() =>
-    this.list()
-      .shoppers.slice(0, 2)
-      .map((name) => name.slice(0, 1).toUpperCase())
-  );
-
-  /** "Ana and Marc", already joined, because Spanish does not join lists the same way. */
-  readonly shopperNames = computed(() => this.list().shoppers.join(', '));
 }

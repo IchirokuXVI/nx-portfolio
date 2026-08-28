@@ -28,7 +28,7 @@ import {
   provideVelistaTesting,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { ResumeListCard } from '@portfolio/velista/ui';
+import { ResumeListCard, ZoneCard } from '@portfolio/velista/ui';
 import { HomePage } from './home-page';
 
 function zone(overrides: Partial<MyZone> = {}): MyZone {
@@ -80,11 +80,22 @@ interface Options {
  * was waiting on. Neither problem exists here: the store needs no loading, so there is
  * nothing to await and nothing to fetch twice.
  */
+/**
+ * The `MemberNames` double of the current render.
+ *
+ * Held outside `render` because what a spec wants from it is the record of which zones
+ * it was asked about, and that is a fact about a render rather than about a fixture.
+ */
+let namesDouble = fakeMemberNames();
+
 async function render(
   options: Options = {}
 ): Promise<ComponentFixture<HomePage>> {
   // Lets one test render twice, which the guest banner comparison needs.
   TestBed.resetTestingModule();
+
+  // Rebuilt per render so its record of who was asked for belongs to this one.
+  namesDouble = fakeMemberNames(options.names);
 
   const store = options.fails
     ? fakeZoneStore({ state: 'failed', error: new Error('boom') })
@@ -109,7 +120,7 @@ async function render(
       // Plan 0017: the resume card's presence row. Both are doubles for the same
       // reason the store is, so a presence test changes one fact about the world.
       provideFakePresenceStore(fakePresenceStore(options.presence)),
-      provideFakeMemberNames(fakeMemberNames(options.names)),
+      provideFakeMemberNames(namesDouble),
     ],
   }).compileComponents();
 
@@ -508,6 +519,64 @@ describe('HomePage', () => {
         fixture.destroy();
         expect(realtime.rooms).not.toContain('list:l1');
       });
+    });
+  });
+
+  // Plan 0022, sections 3.1 and 3.3. The card's own rendering is `ZoneCard`'s and is
+  // tested where it lives; what is observable here is the container's three joins and
+  // the request it declines to make.
+  describe('presence on a group card', () => {
+    const card = (fixture: ComponentFixture<HomePage>) =>
+      fixture.debugElement
+        .query(By.directive(ZoneCard))
+        ?.componentInstance.zone();
+
+    it('names the other people in the group', async () => {
+      const fixture = await render({
+        presence: { online: { z1: ['u2'] } },
+        names: { u2: 'Ana' },
+      });
+
+      expect(card(fixture).online).toEqual(['Ana']);
+    });
+
+    // The reader holds the zone room too, so the server counts them. A card that told
+    // somebody they were here would be wrong about the only thing it says.
+    it('leaves the reader out of it', async () => {
+      const fixture = await render({
+        presence: { online: { z1: ['u1', 'u2'] } },
+        names: { u1: 'Me', u2: 'Ana' },
+      });
+
+      expect(card(fixture).online).toEqual(['Ana']);
+    });
+
+    it('says nothing rather than showing an id it could not resolve', async () => {
+      const fixture = await render({
+        presence: { online: { z1: ['u2'] } },
+        names: {},
+      });
+
+      expect(card(fixture).online).toEqual([]);
+    });
+
+    it('lights the row of a list somebody has open', async () => {
+      const fixture = await render({
+        presence: { viewers: { l1: ['u2'] } },
+        names: { u2: 'Ana' },
+      });
+
+      expect(card(fixture).lists).toMatchObject([{ viewers: ['Ana'] }]);
+    });
+
+    // A request per card, on every load, to name people who are usually not there is
+    // what would make an advisory row expensive. Nobody online, nobody to name.
+    it('does not ask who the members are until somebody is actually here', async () => {
+      await render();
+      expect(namesDouble.asked).toEqual([]);
+
+      await render({ presence: { online: { z1: ['u2'] } } });
+      expect(namesDouble.asked).toEqual(['z1']);
     });
   });
 

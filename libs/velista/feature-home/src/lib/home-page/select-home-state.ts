@@ -44,6 +44,26 @@ export function selectHomeState(input: {
    * pure precisely so it does not know about anything.
    */
   resumeShoppers: readonly string[];
+  /**
+   * Who is online in a zone, already named and already without the reader.
+   *
+   * A function rather than a map, as `selectListState` takes `nameOf`: the container
+   * resolves it, for `resumeShoppers`' reason exactly, and this function stays pure and
+   * stays testable without a fixture.
+   *
+   * Zone presence costs nothing to have. The server computes it from who holds the zone
+   * room and `ZoneStore` already holds one per zone, so it has been arriving for every
+   * card on this page since `0017` with nothing reading it (plan 0022, section 3.1).
+   */
+  zoneOnline: (zoneId: string) => readonly string[];
+  /**
+   * Who is shopping a list, already named and already without the reader.
+   *
+   * Empty for a list this client has not opened until backend `0032` broadcasts a
+   * group's list presence to the group's members. Nothing here is conditional on that:
+   * the rows simply start having somebody to draw (plan 0022, section 3.3).
+   */
+  listViewers: (listId: string) => readonly string[];
   /** Whether the guest has dismissed the banner in this session. */
   guestBannerDismissed: boolean;
 }): HomeState {
@@ -74,7 +94,9 @@ export function selectHomeState(input: {
   return {
     kind: 'populated',
     resume: selectResume(zones, resumeListId, input.resumeShoppers),
-    zones: zones.map(toZoneCard),
+    zones: zones.map((zone) =>
+      toZoneCard(zone, input.zoneOnline, input.listViewers)
+    ),
     guest,
   };
 }
@@ -137,7 +159,11 @@ function selectResume(
   return null;
 }
 
-function toZoneCard(zone: MyZone): ZoneCardVm {
+function toZoneCard(
+  zone: MyZone,
+  zoneOnline: (zoneId: string) => readonly string[],
+  listViewers: (listId: string) => readonly string[]
+): ZoneCardVm {
   const pending = zone.myStatus === 'PENDING';
   const active = zone.status === 'ACTIVE';
   const { counts } = zone;
@@ -150,7 +176,15 @@ function toZoneCard(zone: MyZone): ZoneCardVm {
     membership: zone.myStatus,
     memberCount: counts.memberCount,
     listCount: counts.listCount,
-    lists: pending ? [] : zone.lists.map(toListRow),
+    lists: pending
+      ? []
+      : zone.lists.map((list) => toListRow(list, listViewers(list.id))),
+
+    // Drawn only when somebody **else** is there, and never as a zero: presence under
+    // reports, so a zero is the one number it must not assert (plan 0022, section 5).
+    // A pending membership sees nobody, for the reason its lists are empty: it is
+    // waiting outside the group rather than looking into it.
+    online: pending ? [] : zoneOnline(zone.id),
 
     // `pendingRequestCount` is non-null only for a caller the backend considers
     // staff, so **the value is the permission** and nothing here re-derives it from
@@ -175,17 +209,21 @@ function toZoneCard(zone: MyZone): ZoneCardVm {
   };
 }
 
-function toListRow(list: {
-  id: string;
-  name: string;
-  lineCount?: number;
-  readyCount?: number;
-}): ListRowVm {
+function toListRow(
+  list: {
+    id: string;
+    name: string;
+    lineCount?: number;
+    readyCount?: number;
+  },
+  viewers: readonly string[]
+): ListRowVm {
   return {
     id: list.id,
     name: list.name,
     lineCount: list.lineCount,
     readyCount: list.readyCount,
+    viewers,
   };
 }
 

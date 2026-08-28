@@ -14,6 +14,7 @@ function card(overrides: Partial<ZoneCardVm> = {}): ZoneCardVm {
     memberCount: 3,
     listCount: 2,
     lists: [],
+    online: [],
     tappable: true,
     ...overrides,
   };

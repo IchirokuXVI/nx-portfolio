@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import {
   RokuLocaleStore,
@@ -9,19 +10,23 @@ import {
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
+  fakePresenceStore,
   fakeZoneStore,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
+  provideFakePresenceStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
   REALTIME_CLIENT,
   RealtimeMemory,
   type FakeLineStore,
   type FakeListStore,
+  type FakePresenceOptions,
 } from '@portfolio/velista/data-access';
 import type {
   Line,
+  LineRowVm,
   MyZone,
   ShoppingListSummary,
   ZoneRole,
@@ -31,6 +36,7 @@ import {
   provideVelistaTesting,
   StorageKeys,
 } from '@portfolio/velista/platform';
+import { LineList, ListHeader } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { ListPage } from './list-page';
 
@@ -58,7 +64,9 @@ function zone(role: ZoneRole = 'MEMBER'): MyZone {
   };
 }
 
-function list(overrides: Partial<ShoppingListSummary> = {}): ShoppingListSummary {
+function list(
+  overrides: Partial<ShoppingListSummary> = {}
+): ShoppingListSummary {
   return {
     id: LIST_ID,
     zoneId: ZONE_ID,
@@ -96,12 +104,17 @@ interface Options {
   readonly linesState?: 'idle' | 'loading' | 'loaded' | 'failed';
   readonly complete?: boolean;
   readonly storage?: Map<string, string>;
+  /** Who the server says is here, which the header and the rows draw (plan 0022). */
+  readonly presence?: FakePresenceOptions;
+  /** User id to the name they go by in this zone, since presence carries ids alone. */
+  readonly names?: Readonly<Record<string, string>>;
 }
 
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<ListPage>;
   lines: FakeLineStore;
   lists: FakeListStore;
+  realtime: RealtimeMemory;
   storage: Map<string, string>;
   router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
 }> {
@@ -117,6 +130,7 @@ async function render(options: Options = {}): Promise<{
     state: options.linesState ?? 'loaded',
     complete: options.complete ?? true,
   });
+  const realtime = new RealtimeMemory();
   const storage = options.storage ?? new Map<string, string>();
   const router = {
     navigate: jest.fn().mockResolvedValue(true),
@@ -131,9 +145,13 @@ async function render(options: Options = {}): Promise<{
       provideFakeZoneStore(zones),
       provideFakeListStore(lists),
       provideFakeLineStore(lines),
-      provideFakeMemberNames(fakeMemberNames({ 'user-toni': 'Toni' })),
+      provideFakeMemberNames(
+        fakeMemberNames({ 'user-toni': 'Toni', ...options.names })
+      ),
+      // Plan 0022: the header's viewers and the editor on a row.
+      provideFakePresenceStore(fakePresenceStore(options.presence)),
       provideFakeSessionStore('REGISTERED'),
-      { provide: REALTIME_CLIENT, useValue: new RealtimeMemory() },
+      { provide: REALTIME_CLIENT, useValue: realtime },
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       { provide: ActivatedRoute, useValue: route() },
@@ -145,7 +163,7 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, lines, lists, storage, router };
+  return { fixture, lines, lists, realtime, storage, router };
 }
 
 /** The shape `route-params.ts` reads: a real `paramMap` observable plus a snapshot. */
@@ -195,9 +213,7 @@ describe('ListPage', () => {
     it('calls the page gone once the lists came back without it', async () => {
       const { fixture } = await render({ lists: [], listsState: 'loaded' });
 
-      expect(fixture.nativeElement.textContent).toContain(
-        'list.gone.unshared'
-      );
+      expect(fixture.nativeElement.textContent).toContain('list.gone.unshared');
     });
 
     it('shows the name on the first frame when it was cached', async () => {
@@ -393,7 +409,10 @@ describe('ListPage', () => {
       const { fixture, router } = await render();
 
       await fixture.componentInstance.act({ action: 'edit', lineId: 'ln-1' });
-      await fixture.componentInstance.act({ action: 'comments', lineId: 'ln-1' });
+      await fixture.componentInstance.act({
+        action: 'comments',
+        lineId: 'ln-1',
+      });
       await fixture.componentInstance.act({ action: 'delete', lineId: 'ln-1' });
       fixture.componentInstance.openSettings();
 
@@ -425,13 +444,90 @@ describe('ListPage', () => {
     it('puts a turned down line back with the same call', async () => {
       const { fixture, lines } = await render({ role: 'OWNER' });
 
-      await fixture.componentInstance.act({ action: 'restore', lineId: 'ln-1' });
+      await fixture.componentInstance.act({
+        action: 'restore',
+        lineId: 'ln-1',
+      });
 
       expect(lines.calls).toContainEqual({
         kind: 'approval',
         lineId: 'ln-1',
         status: 'APPROVED',
       });
+    });
+  });
+
+  /**
+   * Plan 0022, sections 2.1 and 3.4. The first test here is the one that matters: for
+   * the whole of `0017` this page took the list room without announcing anybody in it,
+   * so the server's viewer set was empty forever and no presence indicator anywhere in
+   * the product could ever have something to draw.
+   */
+  describe('presence', () => {
+    it('announces that somebody is looking at the list, and stops on the way out', async () => {
+      const { fixture, realtime } = await render();
+
+      expect(realtime.viewedLists.has(LIST_ID)).toBe(true);
+      // The intent takes the room with it: the server refuses a presence intent from a
+      // socket that is not in `list:{id}`, so the client holds both as one call.
+      expect(realtime.rooms).toContain(`list:${LIST_ID}`);
+
+      fixture.destroy();
+
+      expect(realtime.viewedLists.has(LIST_ID)).toBe(false);
+      expect(realtime.rooms).not.toContain(`list:${LIST_ID}`);
+    });
+
+    it('names the other people shopping it, in the header', async () => {
+      const { fixture } = await render({
+        presence: { viewers: { [LIST_ID]: ['u2'] } },
+        names: { u2: 'Ana' },
+      });
+
+      expect(header(fixture).viewers).toEqual(['Ana']);
+    });
+
+    // The caller is in the server's viewers, because this page now puts them there.
+    // A header that told them they were shopping would be wrong about the one thing
+    // it says, so the sentence is where the reader is dropped.
+    it('leaves the reader out of it, now that the reader is really in there', async () => {
+      const { fixture } = await render({
+        presence: { viewers: { [LIST_ID]: ['u1', 'u2'] } },
+        names: { u1: 'Me', u2: 'Ana' },
+      });
+
+      expect(header(fixture).viewers).toEqual(['Ana']);
+    });
+
+    it('says nothing rather than showing an id it could not resolve', async () => {
+      const { fixture } = await render({
+        presence: { viewers: { [LIST_ID]: ['u2'] } },
+        names: {},
+      });
+
+      expect(header(fixture).viewers).toEqual([]);
+    });
+
+    it('names whoever is editing a line, on that line', async () => {
+      const { fixture } = await render({
+        lines: [line('ln-1'), line('ln-2', { position: 2 })],
+        presence: { editors: { [LIST_ID]: { u2: 'ln-1' } } },
+        names: { u2: 'Ana' },
+      });
+
+      expect(rows(fixture).map((row) => row.editor)).toEqual(['Ana', null]);
+    });
+
+    // Editing is announced by the sheet, so the caller's own intent comes back to
+    // them through the store. Telling somebody that they are editing a line is the
+    // same mistake as telling them they are shopping the list.
+    it('does not name the reader as the editor of their own line', async () => {
+      const { fixture } = await render({
+        presence: { editors: { [LIST_ID]: { u1: 'ln-1' } } },
+        names: { u1: 'Me' },
+      });
+
+      expect(rows(fixture)[0]?.editor).toBeNull();
     });
   });
 
@@ -444,6 +540,20 @@ describe('ListPage', () => {
     });
   });
 });
+
+/** The header the page handed down, which is where its presence joins are observable. */
+function header(fixture: ComponentFixture<ListPage>) {
+  return fixture.debugElement
+    .query(By.directive(ListHeader))
+    .componentInstance.header();
+}
+
+/** The rows the page handed down, in the order it put them in. */
+function rows(fixture: ComponentFixture<ListPage>) {
+  return fixture.debugElement
+    .query(By.directive(LineList))
+    .componentInstance.lines() as readonly LineRowVm[];
+}
 
 /** A gateway `forbidden`, which is how a reader is discovered today. */
 function forbidden(): unknown {

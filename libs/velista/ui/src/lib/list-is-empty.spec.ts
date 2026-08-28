@@ -44,7 +44,7 @@ function text(fixture: ComponentFixture<unknown>, selector: string): string[] {
 }
 
 function listRow(overrides: Partial<ListRowVm> = {}): ListRowVm {
-  return { id: 'l1', name: 'Weekly shop', ...overrides };
+  return { id: 'l1', name: 'Weekly shop', viewers: [], ...overrides };
 }
 
 function card(lists: readonly ListRowVm[]): ZoneCardVm {
@@ -57,6 +57,7 @@ function card(lists: readonly ListRowVm[]): ZoneCardVm {
     memberCount: 3,
     listCount: lists.length,
     lists,
+    online: [],
     tappable: true,
   };
 }
@@ -67,6 +68,7 @@ function header(overrides: Partial<ListHeaderVm> = {}): ListHeaderVm {
     zoneName: 'Flat 3B',
     readyCount: 0,
     lineCount: 0,
+    viewers: [],
     live: true,
     ...overrides,
   };

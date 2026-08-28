@@ -308,7 +308,12 @@
     "presence": {
       "shopping": "{{names}} están comprando ahora",
       "shoppingCount_one": "{{count}} comprando ahora",
-      "shoppingCount_other": "{{count}} comprando ahora"
+      "shoppingCount_other": "{{count}} comprando ahora",
+      "onList_one": "{{count}} persona comprando ahora",
+      "onList_other": "{{count}} personas comprando ahora",
+      "inGroup": "{{names}} están aquí ahora",
+      "inGroupCount_one": "{{count}} persona aquí ahora",
+      "inGroupCount_other": "{{count}} personas aquí ahora"
     },
     "guest": {
       "title": "Estás comprando como invitado",
@@ -370,6 +375,7 @@
       "markNotAvailable": "Marcar como que no estaba",
       "markPending": "Devolverlo a la lista",
       "edit": "Cambiar esto",
+      "editing": "Editando",
       "comments": "Lo que se ha dicho",
       "delete": "Quitar de la lista",
       "menuFor": "Más opciones para {{name}}",
