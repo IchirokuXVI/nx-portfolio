@@ -247,8 +247,12 @@ jobs:
           E2E_IMAGE_TAG: staging
         run: |
           # The staging shell bakes https://mfe.staging.ichirokuxvi.com, so make the
-          # staging hostnames resolve to the local reverse proxy.
-          echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
+          # staging hostnames resolve to the local reverse proxy. velista is on the
+          # list because it is served from an origin of its own (velista plan 0013)
+          # and the shell initialises every remote container while it boots: leave
+          # this host pointing at the real internet and the shell dies on an
+          # unreachable remoteEntry, taking every suite with it.
+          echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com velista.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
 
           docker compose -f k8s/e2e/portfolio-frontend/compose.yml up -d --pull always
 
@@ -259,6 +263,28 @@ jobs:
             fi
             echo "waiting for the staging e2e stack ($i)..."; sleep 2
           done
+
+          # ...then check the remotes, because the wait above cannot. The shell
+          # serves its index.html for any path, so it answers 200 whether or not a
+          # single remote is reachable, and a missing remote host is invisible until
+          # every spec fails on an empty <ng-shell-root>. Assert each remoteEntry
+          # the shell actually asks for, and fail here with a name instead.
+          missing=''
+          for entry in \
+            https://mfe.staging.ichirokuxvi.com/odontogram/remoteEntry.mjs \
+            https://mfe.staging.ichirokuxvi.com/damoclesSword/remoteEntry.mjs \
+            https://mfe.staging.ichirokuxvi.com/landingV2/remoteEntry.mjs \
+            https://velista.staging.ichirokuxvi.com/remoteEntry.mjs; do
+            if curl -kfsS -o /dev/null "$entry"; then
+              echo "  ok  $entry"
+            else
+              echo "  MISSING  $entry"; missing="$missing $entry"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::the e2e stack does not serve every remote the shell loads:$missing"
+            exit 1
+          fi
 
       - name: Run affected e2e against the staging stack
         if: ${{ steps.get-affected-e2e.outputs.projects != '' }}
