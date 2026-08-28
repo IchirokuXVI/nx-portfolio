@@ -55,6 +55,19 @@ interface NatsEventPacket {
   data: DomainEvent;
 }
 
+/** Backoff between rebuilds of a consume loop that ended. Exponential, capped. */
+const CONSUME_RETRY_BASE_MS = 1_000;
+const CONSUME_RETRY_CAP_MS = 30_000;
+
+/**
+ * How long JetStream waits before redelivering a message this pod failed on.
+ *
+ * A delay rather than an immediate `nak`, because the failures worth retrying are
+ * transient (a Redis blip, a broker hiccup) and an undelayed redelivery of a
+ * message that fails deterministically is a hot loop.
+ */
+const MESSAGE_RETRY_MS = 5_000;
+
 /**
  * Consumes the domain events from JetStream and hands them to the relay (plan
  * 0009, section 4).
@@ -134,27 +147,112 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
+  /**
+   * Consume for the life of the process, rebuilding the subscription whenever it
+   * ends.
+   *
+   * ## Why this is a loop and not a `for await`
+   *
+   * It used to be one pass: build the iterator, iterate, and log if it threw. Both
+   * ways out of that were terminal. A throw from {@link handle} left the catch and
+   * returned; an iterator that simply **ended**, which a dropped connection or a
+   * missed heartbeat is enough to do, returned with no error to log at all. Either
+   * way the process stayed up and healthy in every way anyone was measuring: the
+   * socket server kept accepting connections, presence kept broadcasting, rooms
+   * kept being joined, and not one domain event was ever fanned out again.
+   *
+   * That is the worst shape a failure can take here. Nothing is down, so nothing
+   * restarts and no probe fails; the app simply stops being live, for everybody,
+   * until somebody notices by hand that their groups do not update. It was found
+   * exactly that way, with the durable consumer sitting 26 messages behind and its
+   * `num_waiting` at zero: nobody was pulling.
+   *
+   * So the loop owns its own recovery. The subscription is rebuilt after a backoff,
+   * and the backoff resets on any pass that actually delivered something, since
+   * that is the proof the connection works.
+   */
   private async consumeLoop(): Promise<void> {
-    if (!this.connection) {
-      return;
+    let attempt = 0;
+
+    while (!this.draining) {
+      try {
+        const handled = await this.consumeUntilItEnds();
+        attempt = handled > 0 ? 0 : attempt + 1;
+        if (!this.draining) {
+          this.logger.warn(
+            { handled },
+            'realtime JetStream consume loop ended, rebuilding it'
+          );
+        }
+      } catch (err) {
+        attempt += 1;
+        if (!this.draining) {
+          this.logger.error(
+            { err },
+            'realtime JetStream consume loop failed, rebuilding it'
+          );
+        }
+      }
+
+      if (this.draining) {
+        return;
+      }
+
+      await this.pause(
+        Math.min(
+          CONSUME_RETRY_CAP_MS,
+          CONSUME_RETRY_BASE_MS * 2 ** (attempt - 1)
+        )
+      );
     }
+  }
+
+  /**
+   * One subscription's worth of messages. Answers how many it handled.
+   *
+   * **A message that fails must not end this.** The handler already swallows the
+   * failures it knows about, so an exception reaching here is an unexpected one,
+   * and taking the whole fan out down for the process is never the right answer to
+   * a single bad event. It is naked instead, with a delay, and the next message is
+   * taken: the broker redelivers it while everybody else's updates keep flowing.
+   */
+  private async consumeUntilItEnds(): Promise<number> {
+    if (!this.connection) {
+      return 0;
+    }
+
     const consumer = await this.connection
       .jetstream()
       .consumers.get(EVENT_STREAM_NAME, EVENT_CONSUMER_NAME);
-    this.messages = await consumer.consume();
-    try {
-      for await (const message of this.messages) {
+    const messages = await consumer.consume();
+    this.messages = messages;
+
+    let handled = 0;
+    for await (const message of messages) {
+      try {
         // Awaited, so the dedupe claim settles before the next message is
         // handled and before this one is acked. It also keeps the fan out in
         // stream order, which the synchronous version got for free.
         await this.handle(message);
         message.ack();
+      } catch (err) {
+        this.logger.error(
+          { err, subject: message.subject },
+          'realtime failed to handle an event, retrying it later'
+        );
+        message.nak(MESSAGE_RETRY_MS);
       }
-    } catch (err) {
-      if (!this.draining) {
-        this.logger.error({ err }, 'realtime JetStream consume loop failed');
-      }
+      handled += 1;
     }
+
+    return handled;
+  }
+
+  /** Sleep, without holding the process open if shutdown is what ends the wait. */
+  private pause(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms).unref?.();
+    });
   }
 
   private async handle(message: JsMsg): Promise<void> {
