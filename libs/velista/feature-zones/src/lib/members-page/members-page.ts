@@ -15,6 +15,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   MEMBERSHIP_SERVICE,
+  MembershipStore,
   REALTIME_CLIENT,
   SessionStore,
   ZoneStore,
@@ -27,7 +28,7 @@ import {
   type Membership,
   type MembersState,
 } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, zoneIdOf } from '@portfolio/velista/platform';
 import {
   AppBar,
   ChevronLeftIcon,
@@ -38,7 +39,6 @@ import {
 } from '@portfolio/velista/ui';
 import { canSeePendingRequests, memberActionsFor } from '../member-actions';
 import { MemberListRefresh } from '../member-list-refresh';
-import { zoneIdOf } from '@portfolio/velista/platform';
 import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
 
 /**
@@ -49,16 +49,28 @@ import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
  * resolve one, so an app built to the plans before this one had people standing in a
  * queue that nothing could serve.
  *
- * ## The members list is page state, not store state
+ * ## The members list moved into a store (plan 0018)
  *
- * There is no `MembershipStore`, deliberately. A store is shaped like the domain and
- * survives navigation; this is a cursor paged list scoped to one screen, which is what
- * plan 0004 calls a page facade. Holding it here means leaving the screen throws it
- * away, which is right: coming back should show who is in the group **now**.
+ * It was page state, and the argument for that was a good one: a cursor paged list
+ * scoped to one screen is what plan 0004 calls a page facade, and throwing it away on
+ * the way out means coming back shows who is in the group **now**.
  *
- * The counts are the exception, and they belong to the zone rather than to this list,
- * so approving somebody tells `ZoneStore` and the group page's member count moves
- * without a reload.
+ * What it could not survive was the events. Six membership events change these rows and
+ * this screen applied one of them, the rename, through a one shot channel on
+ * `ZoneStore`; the other five did nothing, so a member kicked while an owner was
+ * looking at this screen stayed on it with a working actions menu whose every entry
+ * failed against a membership the server had already deleted. Five more one shot
+ * channels would have dropped events, since a signal holds only its latest value and
+ * departures arrive in bursts.
+ *
+ * `MembershipStore` holds the rows now and applies all seven, this screen included.
+ * The property that argued for page state is kept rather than lost: the load effect
+ * below still runs on every arrival, so coming back still asks the server who is in the
+ * group, and the store's rows are what fills the screen while that answer is on its way
+ * instead of a skeleton.
+ *
+ * The counts belong to the zone rather than to this list, so approving somebody still
+ * tells `ZoneStore` and the group page's member count moves without a reload.
  *
  * ## Rule G3
  *
@@ -87,6 +99,7 @@ import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
 export class MembersPage {
   private readonly _zones = inject(ZoneStore);
   private readonly _members = inject<MembershipServiceI>(MEMBERSHIP_SERVICE);
+  private readonly _rowStore = inject(MembershipStore);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
@@ -97,11 +110,17 @@ export class MembersPage {
 
   readonly zoneId = zoneIdOf(this._route);
 
-  private readonly _rows = signal<readonly Membership[]>([]);
-  private readonly _loading = signal(true);
-  private readonly _loadingMore = signal(false);
-  private readonly _failure = signal<unknown>(null);
-  private readonly _cursor = signal<string | null>(null);
+  /**
+   * The rows, and how their load is going, both from the store (plan 0018).
+   *
+   * Read through one `computed` rather than four calls scattered down the file, so the
+   * screen reads one consistent answer per turn and the store's shape is named once.
+   */
+  private readonly _rowState = computed(() =>
+    this._rowStore.forZone(this.zoneId())()
+  );
+
+  private readonly _rows = computed(() => this._rowState().members);
 
   /** Rows with a write in flight, so only those go busy and the screen stays usable. */
   private readonly _busy = signal<ReadonlySet<string>>(new Set());
@@ -139,18 +158,25 @@ export class MembersPage {
    * reused across groups, so without it a move from one group to the next went on
    * holding the first group's subscription and never took one on the second.
    */
-  private _staffRoom: { readonly zoneId: string; readonly release: () => void } | null =
-    null;
+  private _staffRoom: {
+    readonly zoneId: string;
+    readonly release: () => void;
+  } | null = null;
 
   readonly state = computed<MembersState>(() => {
-    if (this._failure() !== null && this._rows().length === 0) {
+    const rowState = this._rowState();
+
+    if (rowState.state === 'failed' && rowState.members.length === 0) {
       return {
         kind: 'error',
-        correlationId: correlationIdOf(this._failure()),
+        correlationId: correlationIdOf(rowState.error),
       };
     }
 
-    if (this._loading()) {
+    // Rows already loaded beat the spinner, which is the half of the store that pays
+    // for itself on the way back into a group: the second visit draws the list it had
+    // while the reload is in flight, rather than a skeleton over data it is holding.
+    if (rowState.state !== 'loaded' && rowState.members.length === 0) {
       return { kind: 'loading' };
     }
 
@@ -191,8 +217,8 @@ export class MembersPage {
           }),
           busy: busy.has(row.id),
         })),
-      hasMore: this._cursor() !== null,
-      loadingMore: this._loadingMore(),
+      hasMore: rowState.hasMore,
+      loadingMore: rowState.loadingMore,
     };
   });
 
@@ -239,32 +265,10 @@ export class MembersPage {
       );
     });
 
-    // A member was renamed while this screen was open (plan 0015, section 5.8).
-    //
-    // Patched in place rather than refetched, which is the whole point: a rename with
-    // `MATCHING_ZONES` can change several rows at once, and a page of members per event
-    // would be a request storm for a change the event already carries in full.
-    //
-    // It reaches this screen through `ZoneStore` rather than through a second
-    // subscription to `REALTIME_CLIENT.events`, so every screen in the app still learns
-    // about the stream through a store. The store cannot patch the row itself: the
-    // members list is page state and lives here, deliberately.
-    effect(() => {
-      const rename = this._zones.memberRename();
-      if (rename === null || rename.zoneId !== this.zoneId()) {
-        return;
-      }
-
-      untracked(() => {
-        this._rows.update((current) =>
-          current.map((row) =>
-            row.id === rename.membershipId
-              ? { ...row, username: rename.username }
-              : row
-          )
-        );
-      });
-    });
+    // The rename effect that used to be here is gone with plan 0018. It was this
+    // screen's one live event, patched in from a `ZoneStore` channel; `MembershipStore`
+    // now applies it and the five membership events that never had a channel, so the
+    // rows are live through one mechanism rather than one row's worth of one.
 
     inject(DestroyRef).onDestroy(() => this._releaseStaffRoom());
   }
@@ -338,23 +342,10 @@ export class MembersPage {
 
   /** Another page of members. Rare, and the screen still has to do it. */
   async loadMore(): Promise<void> {
-    const cursor = this._cursor();
-    if (cursor === null || this._loadingMore()) {
-      return;
-    }
-
-    this._loadingMore.set(true);
     try {
-      const page = await this._members.listMembers(this.zoneId(), {
-        cursor,
-        statuses: this._statuses(),
-      });
-      this._rows.update((current) => [...current, ...page.items]);
-      this._cursor.set(page.nextCursor);
+      await this._rowStore.loadMore(this.zoneId());
     } catch (error) {
       this.errorKey.set(zoneErrorKey(error, 'zone.read'));
-    } finally {
-      this._loadingMore.set(false);
     }
   }
 
@@ -410,9 +401,10 @@ export class MembersPage {
 
     try {
       const updated = await this._members.setRole(zoneId, membershipId, role);
-      this._rows.update((current) =>
-        current.map((row) => (row.id === membershipId ? updated : row))
-      );
+      // The same path `member.roleChanged` takes when it arrives from another device,
+      // deliberately: two ways into one row is how the two end up differing in the
+      // case nobody tests.
+      this._rowStore.record(updated);
     } catch (error) {
       this.errorKey.set(zoneErrorKey(error, 'member.govern'));
       // The caller's own role may be what changed. Re-reading the zone is what puts
@@ -427,18 +419,14 @@ export class MembersPage {
     zoneId: string,
     statuses: readonly Membership['status'][] = this._statuses()
   ): Promise<void> {
-    this._loading.set(this._rows().length === 0);
-    this._failure.set(null);
-
     try {
-      const page = await this._members.listMembers(zoneId, { statuses });
-      this._rows.set(page.items);
-      this._cursor.set(page.nextCursor);
+      await this._rowStore.load(zoneId, statuses);
     } catch (error) {
-      this._failure.set(error);
+      // The store holds the failure, which is what the error state renders. This is
+      // the copy for the inline message, which is a different sentence in a different
+      // place, and both are wanted: one for a screen with nothing on it, one for a
+      // screen that still has rows.
       this.errorKey.set(zoneErrorKey(error, 'zone.read'));
-    } finally {
-      this._loading.set(false);
     }
   }
 
@@ -480,7 +468,10 @@ export class MembersPage {
     const zone = this._zones.zoneById(zoneId);
     const wanted = canSeePendingRequests(zone?.myRole ?? 'MEMBER');
 
-    if (this._staffRoom !== null && (!wanted || this._staffRoom.zoneId !== zoneId)) {
+    if (
+      this._staffRoom !== null &&
+      (!wanted || this._staffRoom.zoneId !== zoneId)
+    ) {
       this._releaseStaffRoom();
     }
 

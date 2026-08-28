@@ -73,11 +73,17 @@ function service(seed: readonly Line[]) {
     },
     addLine: async (listId, content, quantity) =>
       answer(
-        line('server-id', { listId, content, quantity: quantity ?? 1, version: 1 })
+        line('server-id', {
+          listId,
+          content,
+          quantity: quantity ?? 1,
+          version: 1,
+        })
       ),
     updateLine: async (lineId, changes) =>
       answer(line(lineId, { ...changes, version: 2 })),
-    setStatus: async (lineId, status) => answer(line(lineId, { status, version: 2 })),
+    setStatus: async (lineId, status) =>
+      answer(line(lineId, { status, version: 2 })),
     setApproval: async (lineId, approvalStatus) =>
       answer(line(lineId, { approvalStatus, version: 2 })),
     reorder: async () => {
@@ -177,9 +183,9 @@ describe('LineStore', () => {
       await store.load(LIST);
       // The first page is on screen and the follow up has been issued.
       expect(store.linesIn(LIST).length).toBeGreaterThan(0);
-      expect(lines.calls.filter((call) => call === 'list').length).toBeGreaterThan(
-        1
-      );
+      expect(
+        lines.calls.filter((call) => call === 'list').length
+      ).toBeGreaterThan(1);
     });
   });
 
@@ -327,10 +333,15 @@ describe('LineStore', () => {
     });
 
     it('takes the whole record when no overlay claims anything', async () => {
-      const { store, realtime } = await build([line('a', { content: 'Bread' })]);
+      const { store, realtime } = await build([
+        line('a', { content: 'Bread' }),
+      ]);
       await store.load(LIST);
 
-      realtime.emit('line.updated', line('a', { content: 'Theirs', version: 2 }));
+      realtime.emit(
+        'line.updated',
+        line('a', { content: 'Theirs', version: 2 })
+      );
 
       expect(store.linesIn(LIST)[0].content).toBe('Theirs');
     });
@@ -403,6 +414,75 @@ describe('LineStore', () => {
       });
 
       expect(store.commentCountOf('a')).toBeUndefined();
+    });
+
+    /**
+     * Plan 0018, gap 2. The comments themselves used to be sheet state, so a comment
+     * from anybody but the reader moved the count and reached no conversation.
+     */
+    describe('the conversation itself', () => {
+      const comment = (
+        id: string,
+        overrides: Record<string, unknown> = {}
+      ) => ({
+        id,
+        lineId: 'a',
+        authorUserId: 'user-toni',
+        body: `body ${id}`,
+        createdAt: new Date().toISOString(),
+        ...overrides,
+      });
+
+      it('puts an arriving comment at the top of a loaded conversation', async () => {
+        const { store, realtime } = await build([line('a')]);
+        await store.load(LIST);
+        store.recordComments('a', [
+          {
+            id: 'c1',
+            lineId: 'a',
+            authorUserId: 'me',
+            body: 'first',
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+
+        realtime.emit('comment.added', comment('c2'));
+
+        // Newest first, which is the order the endpoint answers in and the sheet draws.
+        expect(store.commentsOf('a')?.map((row) => row.id)).toEqual([
+          'c2',
+          'c1',
+        ]);
+        // The count follows from the list's length, so the two cannot disagree.
+        expect(store.commentCountOf('a')).toBe(2);
+      });
+
+      it('shows a comment once when it arrives twice', async () => {
+        const { store, realtime } = await build([line('a')]);
+        await store.load(LIST);
+        store.recordComments('a', []);
+
+        // The reader's own comment: once as the response to the POST, once on the
+        // socket. An append rather than an upsert would draw it twice.
+        store.addComment(comment('c1'));
+        realtime.emit('comment.added', comment('c1'));
+
+        expect(store.commentsOf('a')?.map((row) => row.id)).toEqual(['c1']);
+        expect(store.commentCountOf('a')).toBe(1);
+      });
+
+      it('leaves a line whose conversation was never opened alone', async () => {
+        const { store, realtime } = await build([line('a')]);
+        await store.load(LIST);
+        store.recordCommentCount('a', 9);
+
+        realtime.emit('comment.added', comment('c1'));
+
+        // Starting a list from an event would show one comment for a line with nine.
+        // The count still moves, which is the behaviour that was already right.
+        expect(store.commentsOf('a')).toBeUndefined();
+        expect(store.commentCountOf('a')).toBe(10);
+      });
     });
   });
 
