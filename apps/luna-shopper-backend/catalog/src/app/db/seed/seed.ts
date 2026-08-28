@@ -11,7 +11,6 @@ import {
   SupermarketItem,
   SupermarketLocation,
 } from '../../entities';
-import defaultDataSource from '../data-source';
 
 /**
  * The catalog half of the demo world seeder (plan 0013, section 2).
@@ -20,6 +19,12 @@ import defaultDataSource from '../data-source';
  * rows) through the real entities and repositories. The core shopping lines
  * reference these item ids across the databases by opaque id only, so the shared
  * fixed constants keep the graph consistent. Idempotent by fixed id.
+ *
+ * The caller supplies the DataSource; this module never imports one. Importing
+ * `data-source.ts` throws the moment CATALOG_DB_URL is unset, so holding it here
+ * would make every consumer of this file need a configured database, unit tests
+ * beside it included. `cli.js` already resolves the URL and runs the host guard,
+ * so it is the one place that should hold a real data source.
  */
 
 const catalog = demoWorld.catalog;
@@ -44,9 +49,7 @@ export const CATALOG_INSERT_ORDER: {
   },
 ];
 
-export async function seedCatalog(
-  dataSource: DataSource = defaultDataSource
-): Promise<void> {
+export async function seedCatalog(dataSource: DataSource): Promise<void> {
   if (!dataSource.isInitialized) {
     await dataSource.initialize();
   }
@@ -66,9 +69,9 @@ export async function seedCatalog(
 }
 
 /** CLI entry: seed, then close the connection (the CLI wrapper handles errors). */
-export async function main(): Promise<void> {
-  await seedCatalog();
-  await defaultDataSource.destroy();
+export async function main(dataSource: DataSource): Promise<void> {
+  await seedCatalog(dataSource);
+  await dataSource.destroy();
   console.log(
     `[seed] catalog: ${catalog.supermarkets.length} supermarket(s), ${catalog.locations.length} location(s), ${catalog.items.length} items, ${catalog.supermarketItems.length} per-store rows`
   );

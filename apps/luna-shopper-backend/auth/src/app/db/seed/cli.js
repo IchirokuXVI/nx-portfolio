@@ -25,8 +25,14 @@ require('tsconfig-paths').register({
   paths: { '@portfolio/luna-shopper/*': ['libs/luna-shopper/*/src/index.ts'] },
 });
 
+// The seeder takes its DataSource from here rather than importing one, so that
+// importing it in a unit test does not require a configured database. This is
+// the CLI path, the only one that connects, and the URL above is already
+// resolved and guarded by the time this line runs.
+const dataSource = require('../data-source').default;
+
 require('./seed')
-  .main()
+  .main(dataSource)
   .catch((err) => {
     console.error(err);
     process.exit(1);

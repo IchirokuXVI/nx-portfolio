@@ -2,7 +2,6 @@ import { demoWorld } from '@portfolio/luna-shopper/test-fixtures';
 import * as argon2 from 'argon2';
 import type { DataSource } from 'typeorm';
 import { Credential, OAuthIdentity, User } from '../../entities';
-import defaultDataSource from '../data-source';
 
 /**
  * The auth half of the demo world seeder (plan 0013, section 2).
@@ -13,6 +12,13 @@ import defaultDataSource from '../data-source';
  * drifts from the entities. It is idempotent by fixed id: it removes the known
  * seed users first (which cascades to their credentials and identities) and
  * reinserts, so it only ever touches the canonical scenario rows.
+ *
+ * The caller supplies the DataSource; this module never imports one. Importing
+ * `data-source.ts` throws the moment AUTH_DB_URL is unset, so holding it here
+ * would make every consumer of this file need a configured database, the unit
+ * tests beside it included, even though they only exercise the pure hashing
+ * helper. `cli.js` already resolves the URL and runs the host guard, so it is
+ * the one place that should hold a real data source.
  */
 
 const auth = demoWorld.auth;
@@ -34,9 +40,7 @@ export function hashCredentials(
   );
 }
 
-export async function seedAuth(
-  dataSource: DataSource = defaultDataSource
-): Promise<void> {
+export async function seedAuth(dataSource: DataSource): Promise<void> {
   if (!dataSource.isInitialized) {
     await dataSource.initialize();
   }
@@ -58,9 +62,9 @@ export async function seedAuth(
 }
 
 /** CLI entry: seed, then close the connection (the CLI wrapper handles errors). */
-export async function main(): Promise<void> {
-  await seedAuth();
-  await defaultDataSource.destroy();
+export async function main(dataSource: DataSource): Promise<void> {
+  await seedAuth(dataSource);
+  await dataSource.destroy();
   console.log(
     `[seed] auth: ${auth.users.length} users, ${auth.credentials.length} credentials, ${auth.oauthIdentities.length} identities`
   );

@@ -14,7 +14,6 @@ import {
   Zone,
   ZoneMembership,
 } from '../../entities';
-import defaultDataSource from '../data-source';
 
 /**
  * The core half of the demo world seeder (plan 0013, section 2).
@@ -27,6 +26,13 @@ import defaultDataSource from '../data-source';
  *
  * It deliberately does NOT replay NATS domain events: seeded rows are historical,
  * so no realtime fan-out fires for them (plan 0013, section 2).
+ *
+ * The caller supplies the DataSource; this module never imports one. Importing
+ * `data-source.ts` throws the moment CORE_DB_URL is unset, so holding it here
+ * would make every consumer of this file need a configured database, the unit
+ * tests beside it included, even though they drive the seeder with a fake.
+ * `cli.js` already resolves the URL and runs the host guard, so it is the one
+ * place that should hold a real data source.
  */
 
 const core = demoWorld.core;
@@ -49,9 +55,7 @@ export const CORE_INSERT_ORDER: {
   { name: 'MergeRequest', entity: MergeRequest, rows: core.mergeRequests },
 ];
 
-export async function seedCore(
-  dataSource: DataSource = defaultDataSource
-): Promise<void> {
+export async function seedCore(dataSource: DataSource): Promise<void> {
   if (!dataSource.isInitialized) {
     await dataSource.initialize();
   }
@@ -71,9 +75,9 @@ export async function seedCore(
 }
 
 /** CLI entry: seed, then close the connection (the CLI wrapper handles errors). */
-export async function main(): Promise<void> {
-  await seedCore();
-  await defaultDataSource.destroy();
+export async function main(dataSource: DataSource): Promise<void> {
+  await seedCore(dataSource);
+  await dataSource.destroy();
   console.log(
     `[seed] core: ${core.zones.length} zone(s), ${core.memberships.length} memberships, ${core.lists.length} lists, ${core.lines.length} lines`
   );

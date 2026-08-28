@@ -21,8 +21,12 @@ require('tsconfig-paths').register({
   paths: { '@portfolio/luna-shopper/*': ['libs/luna-shopper/*/src/index.ts'] },
 });
 
+// The seeder takes its DataSource from here rather than importing one; see the
+// auth seed cli.js for why.
+const dataSource = require('../data-source').default;
+
 require('./seed')
-  .main()
+  .main(dataSource)
   .catch((err) => {
     console.error(err);
     process.exit(1);
