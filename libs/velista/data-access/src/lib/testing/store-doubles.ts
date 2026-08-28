@@ -509,7 +509,8 @@ export function fakeListStore(options: FakeListStateOptions = {}) {
   const error = signal<unknown>(options.error ?? null);
   const loads = signal(0);
 
-  const created: { zoneId: string; name: string }[] = [];
+  const created: { zoneId: string; name: string; shareWithZone: boolean }[] =
+    [];
 
   return {
     /** How many times a page asked for this zone's lists. Starts at zero. */
@@ -519,6 +520,7 @@ export function fakeListStore(options: FakeListStateOptions = {}) {
     creations: created as readonly {
       readonly zoneId: string;
       readonly name: string;
+      readonly shareWithZone: boolean;
     }[],
 
     listsIn: () => lists(),
@@ -538,8 +540,15 @@ export function fakeListStore(options: FakeListStateOptions = {}) {
       loads.update((count) => count + 1);
     },
 
-    createList: async (zoneId: string, name: string) => {
-      created.push({ zoneId, name });
+    createList: async (
+      zoneId: string,
+      name: string,
+      shareWithZone: boolean
+    ) => {
+      // The flag is recorded rather than dropped: the sheet's whole job is to send
+      // the answer somebody ticked, and a double that swallowed it would pass whether
+      // or not the checkbox was wired to anything.
+      created.push({ zoneId, name, shareWithZone });
       const list: ShoppingListSummary = {
         id: 'list-new',
         zoneId,
@@ -778,11 +787,27 @@ export function fakeMemberNames(
   names: Readonly<Record<string, string>> = {},
   members: readonly Membership[] = []
 ) {
+  /**
+   * Every zone whose members were asked for, in order and without repeats.
+   *
+   * `ensure` is a request in production, so **whether** a screen makes it is a design
+   * decision rather than plumbing: plan 0022 asks for a group's names only once
+   * somebody is actually present in it, so that an advisory row costs nothing on a
+   * dashboard where nobody is. That is a property of the call and can only be asserted
+   * on the double.
+   */
+  const asked: string[] = [];
+
   return {
     nameOf: (_zoneId: string, userId: string) => names[userId] ?? null,
     membersOf: () => members,
-    ensure: async () => undefined,
+    ensure: async (zoneId: string) => {
+      if (!asked.includes(zoneId)) {
+        asked.push(zoneId);
+      }
+    },
     prime: () => undefined,
+    asked,
   };
 }
 

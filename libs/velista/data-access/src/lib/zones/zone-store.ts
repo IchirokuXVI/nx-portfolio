@@ -5,8 +5,13 @@ import {
   Injectable,
   signal,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import type { MyZone, Zone } from '@portfolio/velista/models';
+import {
+  ZONE_LIST_PREVIEW_LIMIT,
+  type ListPreview,
+  type MyZone,
+  type Zone,
+  type ZoneRole,
+} from '@portfolio/velista/models';
 import { SessionStore } from '../auth/session-store';
 import { Mutations } from '../mutations';
 import {
@@ -176,11 +181,18 @@ export class ZoneStore {
   readonly staleZoneIds = computed(() => this._realtime.refusedZones());
 
   constructor() {
-    this._realtime.events
-      .pipe(takeUntilDestroyed(this._destroyRef))
-      .subscribe((event) => this._apply(event));
+    // By hand, not `takeUntilDestroyed`: `@angular/core/rxjs-interop` is a secondary
+    // entry point module federation does not dedupe, and a service several remotes
+    // provide throws `NG0203` from it with a perfectly correct DI graph.
+    // `MembershipStore`, `PresenceStore` and `ProfileStore` all say the same thing.
+    const subscription = this._realtime.events.subscribe((event) =>
+      this._apply(event)
+    );
 
-    this._destroyRef.onDestroy(() => this._releaseRooms());
+    this._destroyRef.onDestroy(() => {
+      subscription.unsubscribe();
+      this._releaseRooms();
+    });
   }
 
   /**
@@ -583,16 +595,74 @@ export class ZoneStore {
    */
   private _apply(event: RealtimeEvent): void {
     switch (event.type) {
+      case 'zone.created': {
+        // Only ever addressed to the creator, and checked anyway: a client that trusts
+        // routing to be its authorization is one server bug away from rendering
+        // somebody else's group.
+        if (event.zone.ownerUserId === this._session.userId()) {
+          // The event carries a `Zone` and the dashboard draws a `MyZone`. Composing
+          // the difference here would mean inventing `counts` and `lists`, which is
+          // the very thing `_patch` drops an event rather than do, so the event is
+          // the signal and the load is the answer. `upsert` prepends, which is what
+          // puts the new group at the top of the dashboard.
+          //
+          // The tab that created the zone receives this too, having already upserted
+          // optimistically in `createZone`. The extra load is idempotent and it is
+          // exactly the reconciling read that method says it wants. No "did I do
+          // this" flag: a store that tracked which of its own actions caused which
+          // event would have to stay right about that forever.
+          void this.loadZone(event.zone.id);
+        }
+        break;
+      }
+
       case 'zone.updated':
-      case 'zone.ownershipChanged':
       case 'zone.markedForDeletion': {
+        this._patch(event.zone.id, (zone) => withZoneFields(zone, event.zone));
+        break;
+      }
+
+      case 'zone.ownershipChanged': {
+        // The zone's own fields, exactly as `zone.updated`, plus the one thing the
+        // payload states without saying it: a `ZoneView` says who owns the group now,
+        // and it cannot say what that makes the caller. Two memberships changed role
+        // and the transfer publishes no membership event for either (plan 0020,
+        // section 2), so the caller's own role is derived here from `ownerUserId`.
+        //
+        // Deriving it here is not a guess, and it does not become redundant once the
+        // server publishes those two events. `claimOwnership` already writes
+        // `myRole: 'OWNER'` after a successful claim rather than waiting to be told,
+        // so the store already holds that `ownerUserId` and `myRole` cannot disagree;
+        // asserting that for a local write and not for a remote one is how they came
+        // to disagree here. Backend `0029` now publishes a `member.roleChanged` for
+        // each of the two memberships a transfer moves, and both writers compute the
+        // same value from the same fact, so whichever arrives second changes nothing.
+        // Which is also why this stays: JetStream preserves order per subject and not
+        // across them, so the two can arrive either way round.
+        const held = this._byId().get(event.zone.id);
+        if (held === undefined) {
+          // Same answer `_patch` gives: an event for a zone the caller never loaded
+          // is not news, and a record invented from it would have no name and no
+          // counts.
+          break;
+        }
+
+        const myRole = roleAfterOwnershipChange(
+          held.myRole,
+          event.zone.ownerUserId,
+          this._session.userId()
+        );
+
         this._patch(event.zone.id, (zone) => ({
-          ...zone,
-          name: event.zone.name,
-          joinCode: event.zone.joinCode,
-          status: event.zone.status,
-          ownerUserId: event.zone.ownerUserId,
+          ...withZoneFields(zone, event.zone),
+          myRole,
         }));
+
+        if (myRole !== held.myRole) {
+          // **Rule G3**, for the reason the `member.roleChanged` branch below gives:
+          // the staff room follows `myRole`, and this is now an event that moves it.
+          this._syncRooms();
+        }
         break;
       }
 
@@ -657,6 +727,11 @@ export class ZoneStore {
           break;
         }
 
+        // Read before the patch, because after it there is nothing left to compare
+        // against. `undefined` for a zone the store has never seen, which section 4.3
+        // of `0021` wants to load rather than ignore.
+        const previousStatus = this._byId().get(membership.zoneId)?.myStatus;
+
         this._patch(membership.zoneId, (zone) =>
           isMe
             ? { ...zone, myRole: membership.role, myStatus: membership.status }
@@ -670,6 +745,28 @@ export class ZoneStore {
           // demoted admin would keep asking for a room the server now refuses, which
           // surfaces as a permanent and untrue "not live" badge on the group.
           this._syncRooms();
+
+          if (
+            event.type === 'member.approved' &&
+            membership.status === 'APPROVED' &&
+            previousStatus !== 'APPROVED'
+          ) {
+            // A zone the caller was PENDING in was loaded as a pending summary: its
+            // counts are the pending view's and `toZoneCard` renders its lists as
+            // empty by definition. Flipping the status alone makes the card tappable
+            // and opens onto a group page with nothing in it, so the real record is
+            // fetched.
+            //
+            // Guarded on the previous status rather than run on every approval for
+            // the caller, so a redelivery, or an approval for a zone already
+            // approved, does not cost a request each. A zone absent from the cache
+            // has no previous status and is loaded, which is correct: `loadZone` is
+            // a fetch and an upsert, not a patch, so it works for a request made on
+            // another device and approved before this one ever listed its zones.
+            // This is the one place an event creates a record here, and it is
+            // legitimate because the record comes from the server.
+            void this.loadZone(membership.zoneId);
+          }
         }
         break;
       }
@@ -688,6 +785,12 @@ export class ZoneStore {
         // the other five, so the channel had one writer and no readers (plan 0018).
         break;
 
+      case 'user.usernameChanged':
+        // The caller's own global name. Nothing on a zone card renders it, and
+        // `ProfileStore` owns it, which is the store `SessionStore` prefers over the
+        // token pair (rule A2).
+        break;
+
       case 'member.rejected':
         // Carries no zone id, so there is nothing to apply it to. The count corrects
         // itself on the next load rather than being guessed at here.
@@ -695,21 +798,59 @@ export class ZoneStore {
 
       // `listCount` is access filtered per caller, so the counts broadcast cannot
       // carry it and the store keeps its own from the list events it already gets.
+      //
+      // The **preview** underneath the count is kept in step here too (plan 0019,
+      // section 5). Before that it was not, so a card could say "4 lists" over three
+      // rows until the next full load.
       case 'list.created':
-        this._patch(event.list.zoneId, (zone) => bumpLists(zone, 1));
+        this._patch(event.list.zoneId, (zone) =>
+          addListPreview(bumpLists(zone, 1), {
+            id: event.list.id,
+            name: event.list.name,
+            // Facts, not guesses: a list created this instant has no lines in it.
+            lineCount: 0,
+            readyCount: 0,
+          })
+        );
         break;
 
-      case 'list.deleted':
+      case 'list.updated':
+        // Rename in place. Only the preview rows are held here, so a list outside the
+        // preview is a no-op, which is right: nothing on this screen shows its name.
+        this._patch(event.list.zoneId, (zone) =>
+          renameListPreview(zone, event.list.id, event.list.name)
+        );
+        break;
+
+      case 'list.deleted': {
+        // The event carries a list id and no zone id, and the stream is merged across
+        // every room, so the zone has to be found by the row it holds. A list outside
+        // the preview cannot be located at all and its count therefore stands until
+        // the next load; the alternative is a request per deletion to learn a zone id
+        // the card is about to re-read anyway.
+        const zoneId = this._zoneIdOfPreviewedList(event.listId);
+        if (zoneId !== null) {
+          this._patch(zoneId, (zone) =>
+            removeListPreview(bumpLists(zone, -1), event.listId)
+          );
+        }
+        break;
+      }
+
       case 'list.accessChanged':
       case 'line.added':
       case 'line.updated':
       case 'line.reordered':
       case 'line.deleted':
       case 'comment.added':
-      case 'list.updated':
         // List-scoped traffic reaching the zone room. `ListStore` owns these; the zone
         // summary's per-list counts are refreshed by its own load rather than being
         // recomputed from a stream the store only sees part of.
+        //
+        // `list.accessChanged` stays here on purpose: the payload says access changed,
+        // not whether **this** caller gained or lost it, so adding or removing a row
+        // would be a guess, and guessing wrong puts a list on a dashboard its owner
+        // cannot open.
         break;
 
       case 'merge.requested':
@@ -721,6 +862,17 @@ export class ZoneStore {
         // (plan 0004, section 6.7).
         break;
     }
+  }
+
+  /** Which loaded zone, if any, has this list in the three rows it is previewing. */
+  private _zoneIdOfPreviewedList(listId: string): string | null {
+    for (const [zoneId, zone] of this._byId()) {
+      if (zone.lists.some((list) => list.id === listId)) {
+        return zoneId;
+      }
+    }
+
+    return null;
   }
 
   private _patch(zoneId: string, update: (zone: MyZone) => MyZone): void {
@@ -753,6 +905,48 @@ export class ZoneStore {
   }
 }
 
+/**
+ * The zone's own fields, replaced from the `ZoneView` an event carried.
+ *
+ * Shared by the events that carry a whole zone, so the set of fields a broadcast is
+ * allowed to overwrite is written once. Deliberately not a spread of `next`: an event's
+ * `Zone` and the cached `MyZone` are different types, and a blanket merge would drop
+ * the caller's own standing and the counts every time somebody renamed the group.
+ */
+function withZoneFields(zone: MyZone, next: Zone): MyZone {
+  return {
+    ...zone,
+    name: next.name,
+    joinCode: next.joinCode,
+    status: next.status,
+    ownerUserId: next.ownerUserId,
+  };
+}
+
+/**
+ * The caller's role after somebody became the owner of a group they are in.
+ *
+ * Three cases, and only the second is worth an argument:
+ *
+ * - the new owner is the caller, so the caller is the owner;
+ * - the caller **was** the owner and somebody else is now, so the caller is an admin.
+ *   Not a guess: `ZoneService.transferOwnership` demotes the outgoing owner to `ADMIN`
+ *   unconditionally, in the same transaction that promotes the target;
+ * - otherwise the change was between two other people and says nothing about the
+ *   caller's own role.
+ */
+function roleAfterOwnershipChange(
+  current: ZoneRole,
+  ownerUserId: string | null,
+  myUserId: string | null
+): ZoneRole {
+  if (myUserId !== null && ownerUserId === myUserId) {
+    return 'OWNER';
+  }
+
+  return current === 'OWNER' ? 'ADMIN' : current;
+}
+
 function bumpMembers(zone: MyZone, by: number): MyZone {
   return {
     ...zone,
@@ -770,5 +964,52 @@ function bumpLists(zone: MyZone, by: number): MyZone {
       ...zone.counts,
       listCount: Math.max(0, zone.counts.listCount + by),
     },
+  };
+}
+
+/**
+ * Put a just created list into the card's preview, **if there is room**.
+ *
+ * A zone already showing `ZONE_LIST_PREVIEW_LIMIT` rows gets the count bump and
+ * nothing else. Evicting the oldest would be the right answer only if the server's
+ * ordering were reproducible here, and it is not: the preview is ordered by recent
+ * activity, which the client cannot compute for lists it has never loaded. So a full
+ * preview is left exactly as it arrived (plan 0019, section 5).
+ */
+function addListPreview(zone: MyZone, list: ListPreview): MyZone {
+  if (
+    zone.lists.length >= ZONE_LIST_PREVIEW_LIMIT ||
+    zone.lists.some((existing) => existing.id === list.id)
+  ) {
+    return zone;
+  }
+
+  return { ...zone, lists: [...zone.lists, list] };
+}
+
+function renameListPreview(zone: MyZone, listId: string, name: string): MyZone {
+  if (!zone.lists.some((list) => list.id === listId)) {
+    return zone;
+  }
+
+  return {
+    ...zone,
+    lists: zone.lists.map((list) =>
+      list.id === listId ? { ...list, name } : list
+    ),
+  };
+}
+
+/**
+ * Drop a deleted list from the preview.
+ *
+ * A zone with four lists showing three now shows two, until the next load refills it.
+ * That is accepted: the alternative is asking the server for a fresh preview on every
+ * deletion, which is a request per event for a cosmetic third row.
+ */
+function removeListPreview(zone: MyZone, listId: string): MyZone {
+  return {
+    ...zone,
+    lists: zone.lists.filter((list) => list.id !== listId),
   };
 }

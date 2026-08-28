@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import {
   RokuLocaleStore,
@@ -7,15 +8,21 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   fakeListStore,
+  fakeMemberNames,
+  fakePresenceStore,
   fakeZoneStore,
   provideFakeListStore,
+  provideFakeMemberNames,
+  provideFakePresenceStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
   type FakeListStore,
+  type FakePresenceOptions,
   type FakeZoneStore,
 } from '@portfolio/velista/data-access';
 import type { MyZone, ShoppingListSummary } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { GroupHeader, ListRow } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { GroupPage } from './group-page';
 
@@ -57,12 +64,17 @@ interface Options {
   readonly lists?: readonly ShoppingListSummary[];
   /** Defaults to `loaded`, which is a group already opened once this session. */
   readonly listsState?: 'idle' | 'loading' | 'loaded' | 'failed';
+  /** Who the server says is present, which the header and the rows draw (plan 0022). */
+  readonly presence?: FakePresenceOptions;
+  /** User id to the name they go by here, since presence carries ids alone. */
+  readonly names?: Readonly<Record<string, string>>;
 }
 
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<GroupPage>;
   zones: FakeZoneStore;
   lists: FakeListStore;
+  names: ReturnType<typeof fakeMemberNames>;
   router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
 }> {
   TestBed.resetTestingModule();
@@ -73,6 +85,7 @@ async function render(options: Options = {}): Promise<{
     lists: options.lists ?? [],
     state: options.listsState ?? 'loaded',
   });
+  const names = fakeMemberNames(options.names);
   const router = {
     navigate: jest.fn().mockResolvedValue(true),
     navigateByUrl: jest.fn().mockResolvedValue(true),
@@ -84,6 +97,10 @@ async function render(options: Options = {}): Promise<{
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeZoneStore(zones),
       provideFakeListStore(lists),
+      // Plan 0022: the header's "who is here now" and the rows' viewer dots. Both are
+      // doubles for the reason the stores are, so a presence test changes one fact.
+      provideFakePresenceStore(fakePresenceStore(options.presence)),
+      provideFakeMemberNames(names),
       provideFakeSessionStore('REGISTERED'),
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
@@ -96,7 +113,7 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, zones, lists, router };
+  return { fixture, zones, lists, names, router };
 }
 
 /**
@@ -135,6 +152,103 @@ describe('GroupPage', () => {
 
     expect(text(fixture)).toContain('Flat 3B');
     expect(text(fixture)).toContain('Weekly shop');
+  });
+
+  /**
+   * Plan 0022, sections 3.1 to 3.3. The rendered sentence is not asserted on, because
+   * the testing translator returns the key without interpolating it: the input to the
+   * component that writes the sentence is the boundary that matters, and it is where
+   * the container's three joins are observable.
+   */
+  describe('who is here now', () => {
+    const online = (fixture: ComponentFixture<GroupPage>) =>
+      fixture.debugElement
+        .query(By.directive(GroupHeader))
+        ?.componentInstance.group().online;
+
+    const viewersOn = (fixture: ComponentFixture<GroupPage>, index: number) =>
+      fixture.debugElement
+        .queryAll(By.directive(ListRow))
+        [index]?.componentInstance.list().viewers;
+
+    it('names the other people in the group under its member count', async () => {
+      const { fixture } = await render({
+        presence: { online: { [ZONE_ID]: ['u2'] } },
+        names: { u2: 'Ana' },
+      });
+
+      expect(online(fixture)).toEqual(['Ana']);
+    });
+
+    // The reader holds the zone room too, so the server counts them. A header that
+    // told somebody they were here would be wrong about the only thing it says.
+    it('leaves the reader out of it', async () => {
+      const { fixture } = await render({
+        presence: { online: { [ZONE_ID]: ['u1', 'u2'] } },
+        names: { u1: 'Me', u2: 'Ana' },
+      });
+
+      expect(online(fixture)).toEqual(['Ana']);
+    });
+
+    it('says nothing rather than showing an id it could not resolve', async () => {
+      const { fixture } = await render({
+        presence: { online: { [ZONE_ID]: ['u2'] } },
+        names: {},
+      });
+
+      expect(online(fixture)).toEqual([]);
+    });
+
+    // Section 3.3, and the point of it: the page holds no subscription to `list-1`.
+    // Backend 0032 delivers a group's list presence to its members, so the fake is
+    // asked about a list this page never opened, which is what now happens for real.
+    it('lights the row of a list somebody has open, holding no subscription to it', async () => {
+      const { fixture } = await render({
+        lists: [list('list-1', 'Weekly shop'), list('list-2', 'Hardware')],
+        presence: { viewers: { 'list-1': ['u2'] } },
+        names: { u2: 'Ana' },
+      });
+
+      expect(viewersOn(fixture, 0)).toEqual(['Ana']);
+      expect(viewersOn(fixture, 1)).toEqual([]);
+    });
+
+    // Section 3.1: a request per group to name people who are usually not there is
+    // what makes an advisory feature expensive. Nobody online, nobody to name.
+    it('does not ask who the members are until somebody is actually here', async () => {
+      const quiet = await render();
+      expect(quiet.names.asked).toEqual([]);
+
+      const busy = await render({
+        presence: { online: { [ZONE_ID]: ['u2'] } },
+      });
+      expect(busy.names.asked).toEqual([ZONE_ID]);
+    });
+
+    // The other half of "somebody is here", and the one section 3.3 depends on. Backend
+    // `0032` delivers presence for a list this page never opened, and somebody deep
+    // linked to that list holds no zone subscription, so they show up in the list's
+    // presence and in no zone's. Gating on `onlineIn` alone meant the names were never
+    // asked for, `presenceNames` dropped every viewer it could not resolve, and the row
+    // above stayed dark with its data already in the store.
+    it('asks who the members are when the only presence is on one of its lists', async () => {
+      const busy = await render({
+        lists: [list('list-1', 'Weekly shop')],
+        presence: { viewers: { 'list-1': ['u2'] } },
+      });
+
+      expect(busy.names.asked).toEqual([ZONE_ID]);
+    });
+
+    it('still asks nothing when the only viewer of a list is the reader', async () => {
+      const quiet = await render({
+        lists: [list('list-1', 'Weekly shop')],
+        presence: { viewers: { 'list-1': ['u1'] } },
+      });
+
+      expect(quiet.names.asked).toEqual([]);
+    });
   });
 
   it('reads the group once, and not once per turn of its own effect', async () => {
@@ -194,6 +308,43 @@ describe('GroupPage', () => {
       const { fixture } = await render({
         zone: zone({ myStatus: 'PENDING', myRole: 'MEMBER' }),
       });
+
+      expect(query(fixture, 'lib-invite-card')).toBeNull();
+    });
+  });
+
+  describe('who the invite card belongs to', () => {
+    // Plan 0020, section 5. The code can only be regenerated by an owner or an admin,
+    // so the card is the same governance surface Settings is, and it is drawn from
+    // `isStaff` for the same reason (**rule G2**).
+
+    it('offers the code to an admin', async () => {
+      const { fixture } = await render({ zone: zone({ myRole: 'ADMIN' }) });
+
+      expect(query(fixture, 'lib-invite-card')).not.toBeNull();
+    });
+
+    it('does not offer it to an ordinary member', async () => {
+      const { fixture } = await render({ zone: zone({ myRole: 'MEMBER' }) });
+
+      expect(query(fixture, 'lib-invite-card')).toBeNull();
+    });
+
+    it('brings the card in on a promotion, and takes it away on a demotion', async () => {
+      // Without a reload, in both directions. "It appears on the next visit" would
+      // satisfy a lazier test and is not the requirement: the role moves live, so the
+      // surface it decides moves with it.
+      const { fixture, zones } = await render({
+        zone: zone({ myRole: 'MEMBER' }),
+      });
+
+      zones.set([zone({ myRole: 'ADMIN' })]);
+      fixture.detectChanges();
+
+      expect(query(fixture, 'lib-invite-card')).not.toBeNull();
+
+      zones.set([zone({ myRole: 'MEMBER' })]);
+      fixture.detectChanges();
 
       expect(query(fixture, 'lib-invite-card')).toBeNull();
     });

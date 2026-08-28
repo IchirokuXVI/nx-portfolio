@@ -108,6 +108,8 @@
       "body": "Anyone in this group can start a list. You can rename it later",
       "label": "List name",
       "placeholder": "Weekly shop",
+      "shareLabel": "Everyone in the group can see it",
+      "shareHint": "They can add to it and tick things off. Turn this off to keep it to yourself, and share it with whoever you choose later",
       "submit": "Create list"
     },
     "error": {
@@ -281,7 +283,8 @@
       "google": "Continue with Google",
       "emailSignIn": "Sign in with email",
       "newZone": "New group",
-      "newList": "New list",
+      "generateList": "Get shopping list",
+      "generateListSoon": "Coming soon",
       "search": "Search",
       "account": "Your account",
       "changeLocale": "Change language"
@@ -307,7 +310,12 @@
     "presence": {
       "shopping": "{{names}} are shopping now",
       "shoppingCount_one": "{{count}} shopping now",
-      "shoppingCount_other": "{{count}} shopping now"
+      "shoppingCount_other": "{{count}} shopping now",
+      "onList_one": "{{count}} person shopping now",
+      "onList_other": "{{count}} people shopping now",
+      "inGroup": "{{names}} are here now",
+      "inGroupCount_one": "{{count}} person here now",
+      "inGroupCount_other": "{{count}} people here now"
     },
     "guest": {
       "title": "You are shopping as a guest",
@@ -353,7 +361,8 @@
     },
     "empty": {
       "title": "Nothing on this list yet",
-      "body": "Write the first thing and everyone here sees it"
+      "body": "Write the first thing and everyone here sees it",
+      "short": "List is empty"
     },
     "readOnly": {
       "notice": "You can read this list, not change it"
@@ -368,6 +377,7 @@
       "markNotAvailable": "Mark as not in the shop",
       "markPending": "Put it back on the list",
       "edit": "Change this",
+      "editing": "Editing",
       "comments": "What people said",
       "delete": "Take off the list",
       "menuFor": "More for {{name}}",
@@ -487,7 +497,7 @@
       "title": "This account lives on this phone",
       "body": "There is no email and no password on it yet, so it cannot be opened anywhere else, and clearing this browser's data would end it",
       "secure": "Secure this account",
-      "deleteNote": "Until it is secured, deleting is the only other way this account ends"
+      "deleteNote": "In order to log out you need to delete your account because it is not secured to an email"
     },
     "delete": {
       "action": "Delete your account",

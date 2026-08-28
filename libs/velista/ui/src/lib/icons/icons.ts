@@ -586,3 +586,25 @@ export class GripIcon {
       import('./grip-icon.svg?raw')
   );
 }
+
+/**
+ * A paper plane: sending the comment in the box beside it.
+ *
+ * The glyph rather than the word, because the composer's button has to be as tall as
+ * a two row textarea to sit level with it, and a tall button with "Send" written
+ * across the middle of it reads as a panel rather than as a control. The accessible
+ * name is still the word, carried by the button (plan 0025).
+ */
+@Component({
+  selector: 'lib-send-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class SendIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./send-icon.svg?raw')
+  );
+}

@@ -1,6 +1,9 @@
+// Stretch, so the button is exactly as tall as the textarea beside it however many
+// rows that is. `flex-end` made it a short control resting on the box's bottom edge,
+// which read as two things rather than one composer.
 .composer {
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   gap: var(--app-space-2);
 }
 
@@ -27,15 +30,21 @@
   }
 }
 
+// Square, and sized from the touch target rather than from the text it no longer has.
+// The height comes from the row's `stretch`, so this only has to guarantee the floor:
+// a composer rendered somewhere with a shorter box must still be tappable.
 .send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  min-height: var(--app-touch-target);
-  padding: 0 var(--app-space-4);
+  inline-size: var(--app-touch-target);
+  min-block-size: var(--app-touch-target);
+  padding: 0;
   background: var(--app-action-bg);
   border: 0;
   border-radius: var(--app-button-radius);
   font: inherit;
-  font-size: var(--app-text-sm);
   color: var(--app-text-on-action);
   cursor: pointer;
 
@@ -48,4 +57,8 @@
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
 }

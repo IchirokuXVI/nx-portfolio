@@ -27,6 +27,8 @@ export interface RoomReconciliation {
  * for a room that is not joined yet is refused (plan 0017, section 5.1).
  */
 export interface PresenceReconciliation {
+  readonly zonesToEnter: readonly string[];
+  readonly zonesToLeave: readonly string[];
   readonly viewsToStart: readonly string[];
   readonly viewsToStop: readonly string[];
   readonly editsToStart: readonly EditAsk[];
@@ -36,6 +38,15 @@ export interface PresenceReconciliation {
 interface ZoneDesire {
   holders: number;
   staffHolders: number;
+  /**
+   * The subset of holders who want the caller to be **seen** in this zone.
+   *
+   * `viewHolders`' counterpart on a list, and it exists for the same reason and a
+   * sharper one. Every group the user belongs to is subscribed for its whole session
+   * so its counts stay live, so a zone subscription says nothing at all about where
+   * the user is; only a screen that is open right now does (plan 0023).
+   */
+  presenceHolders: number;
 }
 
 interface ListDesire {
@@ -83,13 +94,15 @@ export class RoomRegistry {
   private readonly _joinedZones = new Map<string, boolean>();
   private readonly _joinedLists = new Set<string>();
 
-  /** Views announced, and the line announced as edited, on this connection. */
+  /** Zones and views announced, and the line announced as edited, on this connection. */
+  private readonly _joinedZonePresence = new Set<string>();
   private readonly _joinedViews = new Set<string>();
   private readonly _joinedEdits = new Map<string, string>();
 
   /** Asked for, no answer yet. Keeps a reconcile from asking the same thing twice. */
   private readonly _pendingZones = new Set<string>();
   private readonly _pendingLists = new Set<string>();
+  private readonly _pendingZonePresence = new Set<string>();
   private readonly _pendingViews = new Set<string>();
   private readonly _pendingEdits = new Set<string>();
 
@@ -107,6 +120,16 @@ export class RoomRegistry {
    * room being joined afresh, so that is what lifts the latch.
    */
   private readonly _refusedViews = new Set<string>();
+
+  /**
+   * Zone presence the server refused, by zone id. Cleared when the room is re-joined.
+   *
+   * {@link _refusedViews}' reason exactly: the intent is only ever proposed for a zone
+   * this registry has recorded as joined, so a refusal is a disagreement about which
+   * rooms this socket is in, and the only thing that can change the answer is the room
+   * being joined afresh.
+   */
+  private readonly _refusedZonePresence = new Set<string>();
 
   /** Zones the server refused, by zone id. Cleared on every new connection. */
   refusedZones(): ReadonlySet<string> {
@@ -143,10 +166,44 @@ export class RoomRegistry {
    * releases in both an effect cleanup and `ngOnDestroy` is one line of ordinary code.
    */
   acquireZone(zoneId: string, staff: boolean): () => void {
-    const desire = this._zones.get(zoneId) ?? { holders: 0, staffHolders: 0 };
+    return this._acquireZone(zoneId, staff, false);
+  }
+
+  /**
+   * Add a holder that also wants to be **seen** in the zone (plan 0023).
+   *
+   * {@link acquireListView}'s shape, one acquisition rather than two, and for the same
+   * reason: the server refuses a presence intent from a socket that is not in
+   * `zone:{id}`, so an intent without its room is not a weaker subscription but a
+   * refused one.
+   *
+   * What differs from a list is who calls it. Every list room has an open list behind
+   * it, so `subscribeList` is the rare case; every zone room is held for a whole
+   * session so its group's counts stay live, so `acquireZone` is the common case and
+   * this is the rare one. It is held by a screen about one group, and released when
+   * that screen goes, which is what makes zone presence answer "where is this person"
+   * instead of "which groups is this person a member of".
+   */
+  acquireZonePresence(zoneId: string, staff: boolean): () => void {
+    return this._acquireZone(zoneId, staff, true);
+  }
+
+  private _acquireZone(
+    zoneId: string,
+    staff: boolean,
+    present: boolean
+  ): () => void {
+    const desire = this._zones.get(zoneId) ?? {
+      holders: 0,
+      staffHolders: 0,
+      presenceHolders: 0,
+    };
     desire.holders += 1;
     if (staff) {
       desire.staffHolders += 1;
+    }
+    if (present) {
+      desire.presenceHolders += 1;
     }
     this._zones.set(zoneId, desire);
 
@@ -166,6 +223,9 @@ export class RoomRegistry {
       if (staff) {
         current.staffHolders -= 1;
       }
+      if (present) {
+        current.presenceHolders -= 1;
+      }
 
       if (current.holders <= 0) {
         this._zones.delete(zoneId);
@@ -173,6 +233,7 @@ export class RoomRegistry {
         // zone somebody is asking for; keeping it would leave a group nobody
         // subscribes to reported as stale forever.
         this._refusedZones.delete(zoneId);
+        this._refusedZonePresence.delete(zoneId);
       }
     };
   }
@@ -289,6 +350,10 @@ export class RoomRegistry {
     for (const zoneId of [...this._joinedZones.keys()]) {
       if (!this._zones.has(zoneId)) {
         this._joinedZones.delete(zoneId);
+        // Silently, for the reason `list.unsubscribe` drops the view below it:
+        // `zone.unsubscribe` calls `presence.leaveZone` on the server, so a leave sent
+        // beside it would buy another ack to accomplish what the unsubscribe did.
+        this._joinedZonePresence.delete(zoneId);
         zonesToUnsubscribe.push(zoneId);
       }
     }
@@ -340,10 +405,39 @@ export class RoomRegistry {
    * leaving the server believing this client is still viewing or still editing.
    */
   reconcilePresence(): PresenceReconciliation {
+    const zonesToEnter: string[] = [];
+    const zonesToLeave: string[] = [];
     const viewsToStart: string[] = [];
     const viewsToStop: string[] = [];
     const editsToStart: EditAsk[] = [];
     const editsToStop: string[] = [];
+
+    for (const [zoneId, desire] of this._zones) {
+      if (
+        !this._joinedZones.has(zoneId) ||
+        this._pendingZonePresence.has(zoneId)
+      ) {
+        continue;
+      }
+
+      const wantsPresence = desire.presenceHolders > 0;
+      const announced = this._joinedZonePresence.has(zoneId);
+
+      if (
+        wantsPresence &&
+        !announced &&
+        !this._refusedZonePresence.has(zoneId)
+      ) {
+        this._pendingZonePresence.add(zoneId);
+        zonesToEnter.push(zoneId);
+        continue;
+      }
+
+      if (!wantsPresence && announced) {
+        this._pendingZonePresence.add(zoneId);
+        zonesToLeave.push(zoneId);
+      }
+    }
 
     for (const [listId, desire] of this._lists) {
       if (!this._joinedLists.has(listId) || this._pendingViews.has(listId)) {
@@ -389,7 +483,14 @@ export class RoomRegistry {
       }
     }
 
-    return { viewsToStart, viewsToStop, editsToStart, editsToStop };
+    return {
+      zonesToEnter,
+      zonesToLeave,
+      viewsToStart,
+      viewsToStop,
+      editsToStart,
+      editsToStop,
+    };
   }
 
   /** Lists this client wants to be seen on. Desire, not announcement. */
@@ -418,6 +519,9 @@ export class RoomRegistry {
   onZoneSubscribed(zoneId: string, staff: boolean): void {
     this._pendingZones.delete(zoneId);
     this._joinedZones.set(zoneId, staff);
+    // The room is joined afresh, which is the one event that can change the server's
+    // answer about presence it refused. See `_refusedZonePresence`.
+    this._refusedZonePresence.delete(zoneId);
   }
 
   /** The server answered `{ ok: false }`. Not asked again on this connection. */
@@ -459,6 +563,46 @@ export class RoomRegistry {
 
   onListAskFailed(listId: string): void {
     this._pendingLists.delete(listId);
+  }
+
+  /** The server accepted it. This client is in the zone's online set. */
+  onZonePresenceStarted(zoneId: string): void {
+    this._pendingZonePresence.delete(zoneId);
+    this._joinedZonePresence.add(zoneId);
+  }
+
+  /** The server accepted the leave, so it no longer counts this client as here. */
+  onZonePresenceStopped(zoneId: string): void {
+    this._pendingZonePresence.delete(zoneId);
+    this._joinedZonePresence.delete(zoneId);
+  }
+
+  /** `{ ok: false }`: the server says we are not in the zone room we think we are in. */
+  onZonePresenceRefused(zoneId: string): void {
+    this._pendingZonePresence.delete(zoneId);
+    this._joinedZonePresence.delete(zoneId);
+    if (this._zones.has(zoneId)) {
+      this._refusedZonePresence.add(zoneId);
+    }
+  }
+
+  /**
+   * The intent timed out. Not a refusal, so nothing is recorded and the next reconcile
+   * proposes it again. {@link onPresenceAskFailed}'s reasoning, for a zone.
+   */
+  onZonePresenceAskFailed(zoneId: string): void {
+    this._pendingZonePresence.delete(zoneId);
+  }
+
+  /** Zones this client wants to be seen in. Desire, not announcement. */
+  presentZones(): ReadonlySet<string> {
+    const present = new Set<string>();
+    for (const [zoneId, desire] of this._zones) {
+      if (desire.presenceHolders > 0) {
+        present.add(zoneId);
+      }
+    }
+    return present;
   }
 
   /** The server accepted the view. This client is in the list's viewers. */
@@ -555,6 +699,9 @@ export class RoomRegistry {
     this._pendingLists.clear();
     this._refusedZones.clear();
     this._refusedLists.clear();
+    this._joinedZonePresence.clear();
+    this._pendingZonePresence.clear();
+    this._refusedZonePresence.clear();
     // Presence is per connection exactly as rooms are: a socket that dropped is
     // present nowhere, so everything announced belongs to the connection that is gone
     // and the next one announces it all again.

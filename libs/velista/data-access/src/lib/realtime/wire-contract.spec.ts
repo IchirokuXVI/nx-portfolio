@@ -169,7 +169,12 @@ async function setup() {
       },
       {
         provide: TokenStore,
-        useValue: { ensureFreshToken: async () => 'a-token' },
+        useValue: {
+          ensureFreshToken: async () => 'a-token',
+          // R1's authentication check reads the pair directly rather than the
+          // session, to keep the socket below `SessionStore` in the DI graph.
+          hasSession: () => true,
+        },
       },
       {
         provide: SessionStore,

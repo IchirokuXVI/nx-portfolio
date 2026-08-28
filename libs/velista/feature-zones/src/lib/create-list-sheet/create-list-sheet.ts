@@ -12,9 +12,8 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { ListStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, LIST_NAME_MAX_LENGTH } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, zoneIdOf } from '@portfolio/velista/platform';
 import { SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
-import { zoneIdOf } from '@portfolio/velista/platform';
 import { zoneErrorKey } from '../zone-error-copy';
 
 /**
@@ -28,6 +27,18 @@ import { zoneErrorKey } from '../zone-error-copy';
  * **Offered to a plain member too.** `ListService.create` requires only an approved
  * membership and gives the creator WRITER access to what they made, so the button on
  * the empty state is honest for everybody in the group (section 5.5).
+ *
+ * ## Two fields, and the second one is a default rather than a question
+ *
+ * Plan 0024 adds who can see it. It stays one screen and one decision in practice,
+ * because the checkbox arrives already answered: somebody naming a list and pressing
+ * Create gets the shared list they almost always wanted, and the person who wants a
+ * private one unticks a box. That is what keeps this a sheet rather than a wizard.
+ *
+ * The reverse default was never a candidate. A list created private and shared later
+ * is a list the rest of the group cannot see until somebody notices, and a shopping
+ * list nobody else can see fails silently: nothing is broken, the group simply never
+ * shops from it.
  */
 @Component({
   selector: 'lib-create-list-sheet',
@@ -47,6 +58,18 @@ export class CreateListSheet {
   readonly maxLength = LIST_NAME_MAX_LENGTH;
 
   readonly name = signal('');
+
+  /**
+   * Whether everybody in the group gets access to the list (plan 0024).
+   *
+   * **True by default**, because a group is the thing lists are shared inside: the
+   * household that shares a shop is the whole premise of a zone, so the list nobody
+   * else can open is the exception and the exception is what costs a tap. It is also
+   * the behaviour every list created before this sheet had the option already has,
+   * so the default is not a new opinion, it is the existing one written down.
+   */
+  readonly shareWithZone = signal(true);
+
   readonly submitting = signal(false);
   readonly errorKey = signal<string | null>(null);
 
@@ -65,7 +88,8 @@ export class CreateListSheet {
 
     const outcome = await this._lists.createList(
       this.zoneId(),
-      this.name().trim()
+      this.name().trim(),
+      this.shareWithZone()
     );
 
     if (outcome.state === 'created') {
@@ -88,5 +112,9 @@ export class CreateListSheet {
 
   onNameInput(event: Event): void {
     this.name.set((event.target as HTMLInputElement).value);
+  }
+
+  onShareChange(event: Event): void {
+    this.shareWithZone.set((event.target as HTMLInputElement).checked);
   }
 }

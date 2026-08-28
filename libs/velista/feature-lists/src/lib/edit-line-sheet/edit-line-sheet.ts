@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   signal,
 } from '@angular/core';
@@ -10,7 +11,11 @@ import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import { LineStore } from '@portfolio/velista/data-access';
+import {
+  LineStore,
+  REALTIME_CLIENT,
+  type RealtimeClientI,
+} from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   LINE_CONTENT_MAX_LENGTH,
@@ -21,7 +26,11 @@ import {
   listIdOf,
   zoneIdOf,
 } from '@portfolio/velista/platform';
-import { QuantityStepper, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
+import {
+  QuantityStepper,
+  SheetShell,
+  SpinnerIcon,
+} from '@portfolio/velista/ui';
 import { listErrorKey } from '../list-error-copy';
 
 /**
@@ -38,6 +47,21 @@ import { listErrorKey } from '../list-error-copy';
  * is holding this line, so opening the sheet costs nothing. A line that is not in the
  * store means the sheet was deep linked onto a list that has not loaded, and it closes
  * rather than showing empty fields somebody might type into and save over nothing.
+ *
+ * ## It announces the edit, and the sheet's life is the intent's life
+ *
+ * Plan 0022, section 2.2. The intent is taken when this sheet opens and dropped when it
+ * closes, from this component's own lifecycle rather than from the row or from a focus
+ * handler: an intent that outlives what caused it is how a line stays locked looking
+ * after somebody backgrounded the app.
+ *
+ * The drop goes through `DestroyRef` and **only** through it, because saving,
+ * cancelling, a back gesture and a navigation away are four exits and that is the one
+ * hook all four reach. Explicit calls beside it would be three of the four, written
+ * three times, and the fourth would be the one that leaves the line lit up.
+ *
+ * A socket that drops mid edit needs nothing here: presence is per connection on both
+ * ends, and the server expires a member that stops heartbeating (plan 0017).
  */
 @Component({
   selector: 'lib-edit-line-sheet',
@@ -48,6 +72,7 @@ import { listErrorKey } from '../list-error-copy';
 })
 export class EditLineSheet {
   private readonly _lines = inject(LineStore);
+  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -80,6 +105,15 @@ export class EditLineSheet {
 
     this.content.set(line.content);
     this.quantity.set(line.quantity);
+
+    // The list page underneath is what holds the room, so the intent lands. It is
+    // recorded after the early return above and not before it, because a sheet that
+    // found no line is about to dismiss and has nothing to announce.
+    const listId = this.listId();
+    this._realtime.setEditingLine(listId, this.lineId());
+    inject(DestroyRef).onDestroy(() =>
+      this._realtime.setEditingLine(listId, null)
+    );
   }
 
   async submit(): Promise<void> {

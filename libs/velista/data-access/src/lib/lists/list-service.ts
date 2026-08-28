@@ -34,7 +34,15 @@ export interface ListServiceI {
    * **Any APPROVED member may**, which is why the empty state's primary is offered to
    * a plain member too. The creator is given WRITER access to what they made.
    */
-  createList(zoneId: string, name: string): Promise<ShoppingListSummary>;
+  /**
+   * Start a list. `shareWithZone` gives every other approved member WRITER on it
+   * (plan 0024); false keeps it to its creator until the share sheet says otherwise.
+   */
+  createList(
+    zoneId: string,
+    name: string,
+    shareWithZone: boolean
+  ): Promise<ShoppingListSummary>;
 
   /**
    * Rename a list (`PATCH /v1/lists/:id`).

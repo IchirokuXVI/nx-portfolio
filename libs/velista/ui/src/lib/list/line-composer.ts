@@ -98,6 +98,21 @@ export class LineComposer {
   }
 
   /**
+   * The form's own submit, which is what makes the phone keyboard's Go key work.
+   *
+   * `(submit)` and not `(ngSubmit)`: the latter is `NgForm`'s output and needs
+   * `FormsModule`, which this composer does not import and does not want, because
+   * nothing here is a form control. Without the module `(ngSubmit)` binds to a DOM
+   * event of that name, which no browser ever fires, so the Go key and the button
+   * would both do nothing except let the native submit through and reload the page.
+   * `preventDefault` is then this handler's job rather than the directive's.
+   */
+  onSubmit(event: Event): void {
+    event.preventDefault();
+    this.submit();
+  }
+
+  /**
    * Send it, and stay ready for the next one.
    *
    * The field is cleared and the quantity reset **here**, before the request resolves,

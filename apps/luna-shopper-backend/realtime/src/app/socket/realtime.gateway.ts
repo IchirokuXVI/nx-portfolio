@@ -193,7 +193,14 @@ export class RealtimeGateway
     for (const listId of zone.listIds) {
       await client.join(listPresenceRoom(listId));
     }
-    await this.presence.joinZone(client.id, body.zoneId);
+    /**
+     * **No presence here** (plan 0033). This subscription is held for every group
+     * the caller belongs to, from the moment the app loads until it closes, so
+     * joining zone presence inside it made a member of six groups present in all
+     * six simultaneously and forever. Presence is announced by
+     * {@link RealtimeClientMessage.EnterZone}, which a screen holds and releases,
+     * and which therefore follows navigation.
+     */
     return { ok: true };
   }
 
@@ -249,6 +256,40 @@ export class RealtimeGateway
   ): Promise<Ack> {
     await client.leave(listRoom(body.listId));
     await this.presence.unviewList(client.id, body.listId);
+    return { ok: true };
+  }
+
+  /**
+   * "I am on this group's screen right now" (plan 0033).
+   *
+   * Gated on room membership rather than on a second core round trip, exactly as
+   * the list intents below are: `zone.subscribe` already asked core whether this
+   * caller may be in `zone:{id}`, and a socket cannot be in that room without
+   * having been told yes.
+   */
+  @SubscribeMessage(RealtimeClientMessage.EnterZone)
+  async enterZone(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: ZoneSubscription
+  ): Promise<Ack> {
+    if (!client.rooms.has(zoneRoom(body.zoneId))) {
+      return { ok: false };
+    }
+    await this.presence.joinZone(client.id, body.zoneId);
+    return { ok: true };
+  }
+
+  /**
+   * Acknowledged whatever state the socket was in, like every other stop intent:
+   * a client walking away from a screen must never be left announcing it because
+   * the room went first.
+   */
+  @SubscribeMessage(RealtimeClientMessage.LeaveZone)
+  async leaveZone(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: ZoneSubscription
+  ): Promise<Ack> {
+    await this.presence.leaveZone(client.id, body.zoneId);
     return { ok: true };
   }
 

@@ -40,6 +40,17 @@ export enum RealtimeClientMessage {
   SubscribeList = 'list.subscribe',
   UnsubscribeList = 'list.unsubscribe',
   // Presence intents over the socket (plan 0009, section 7).
+  /**
+   * "I am looking at this group right now" (plan 0033).
+   *
+   * Separate from {@link SubscribeZone}, which is a data subscription a client
+   * holds for every group it belongs to so its counts stay live. Zone presence
+   * used to ride on that subscription, which made every member of six groups
+   * present in all six at once, permanently. An intent is the only shape that
+   * can follow navigation, because navigation is the thing that changes it.
+   */
+  EnterZone = 'presence.enterZone',
+  LeaveZone = 'presence.leaveZone',
   ViewList = 'presence.view',
   UnviewList = 'presence.unview',
   EditLine = 'presence.edit',

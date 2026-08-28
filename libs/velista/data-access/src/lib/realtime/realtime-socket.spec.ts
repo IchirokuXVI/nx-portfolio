@@ -6,7 +6,6 @@ import {
   provideFakeBrowserFacade,
 } from '@portfolio/velista/platform';
 import { ApiUrl } from '../api-url';
-import { SessionStore } from '../auth/session-store';
 import { TokenStore } from '../auth/token-store';
 import type { RealtimeEvent } from './realtime-events';
 import { RealtimeSocket } from './realtime-socket';
@@ -206,11 +205,11 @@ describe('RealtimeSocket', () => {
               }
               return token;
             },
+            // R1's authentication check. It reads the pair here rather than through
+            // the session store, so the socket stays below the session in the DI
+            // graph: the session injects `ProfileStore`, which listens to this client.
+            hasSession: () => authenticated(),
           },
-        },
-        {
-          provide: SessionStore,
-          useValue: { isAuthenticated: authenticated.asReadonly() },
         },
         {
           provide: SOCKET_FACTORY,

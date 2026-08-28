@@ -89,6 +89,12 @@
   }
 }
 
+// Under the bar rather than beside it: the progress line is a sentence with numbers in
+// it and putting a second sentence on the same line makes both harder to read.
+.viewers {
+  margin-block-start: var(--app-space-2);
+}
+
 .stale {
   display: flex;
   align-items: center;

@@ -6514,6 +6514,10 @@
           "name": {
             "type": "string",
             "maxLength": 120
+          },
+          "shareWithZone": {
+            "type": "boolean",
+            "default": true
           }
         },
         "required": [

@@ -13,12 +13,22 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  hasOthers,
   ListStore,
+  MemberNames,
+  presenceNames,
+  PresenceStore,
+  REALTIME_CLIENT,
   SessionStore,
   ZoneStore,
+  type RealtimeClientI,
 } from '@portfolio/velista/data-access';
-import { APP_BASE_PATH, type GroupState } from '@portfolio/velista/models';
-import { appPath, BrowserFacade } from '@portfolio/velista/platform';
+import {
+  APP_BASE_PATH,
+  type GroupState,
+  type PresenceUser,
+} from '@portfolio/velista/models';
+import { appPath, BrowserFacade, zoneIdOf } from '@portfolio/velista/platform';
 import {
   AppBar,
   ChevronLeftIcon,
@@ -30,7 +40,6 @@ import {
   OwnerlessPanel,
   RowSkeleton,
 } from '@portfolio/velista/ui';
-import { zoneIdOf } from '@portfolio/velista/platform';
 import { selectGroupState } from '../select-group-state';
 import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
 
@@ -85,6 +94,9 @@ import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
 export class GroupPage {
   private readonly _zones = inject(ZoneStore);
   private readonly _lists = inject(ListStore);
+  private readonly _presence = inject(PresenceStore);
+  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
+  private readonly _names = inject(MemberNames);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
@@ -124,8 +136,53 @@ export class GroupPage {
       correlationId:
         correlationIdOf(this._zones.error()) ?? correlationIdOf(lists.error),
       stale: this._zones.staleZoneIds().has(id),
+      online: this._online(),
+      listViewers: (listId) => this._listViewers().get(listId) ?? [],
     });
   });
+
+  /**
+   * Who is in this group right now, named and without the reader.
+   *
+   * Plan 0022, section 3.1 said this needed no intent, because the server computed
+   * zone presence from who holds the zone room and `ZoneStore` holds one per zone
+   * already. That was true and it was the defect: `ZoneStore` holds a room for
+   * **every** group the caller belongs to, for the whole session, so everybody was
+   * reported as being in all of their groups at once and never left any of them. Plan
+   * 0023 splits the intent out, and the effect below is this page announcing it. The
+   * three joins are still `presenceNames`.
+   */
+  private readonly _online = computed(() =>
+    this._named(this._presence.onlineIn(this.zoneId()))
+  );
+
+  /**
+   * Who is shopping each of this group's lists, named.
+   *
+   * This page subscribes to no list and does not have to. Backend `0032` joins a socket
+   * that subscribed to a zone to the presence room of every list in it the caller may
+   * read, so `presence.listUpdated` arrives for lists this client has never opened and
+   * `PresenceStore` applies it exactly as it always has (section 3.3).
+   *
+   * These are names, so they resolve only for a group whose memberships were asked for.
+   * That is the one thing landing `0032` did require of this page, and it is the effect
+   * below rather than anything here.
+   */
+  private readonly _listViewers = computed(() => {
+    const named = new Map<string, readonly string[]>();
+    for (const list of this._lists.forZone(this.zoneId())().lists) {
+      named.set(list.id, this._named(this._presence.viewersOf(list.id)));
+    }
+
+    return named;
+  });
+
+  private _named(users: readonly PresenceUser[]): readonly string[] {
+    const zoneId = this.zoneId();
+    return presenceNames(users, this._session.userId(), (userId) =>
+      this._names.nameOf(zoneId, userId)
+    );
+  }
 
   /**
    * The header, or null when there is nothing to draw one from.
@@ -146,10 +203,30 @@ export class GroupPage {
    * Not to somebody still waiting, since handing out a code to a group you have not
    * been let into yourself would be odd, and not on an ownerless group, where the only
    * thing that matters is whether an admin takes it on.
+   *
+   * And not to an ordinary member. The code can only be **regenerated** by an owner or
+   * an admin, so the invite card is the same governance surface the Settings entry is,
+   * and on a member's screen it reads as an invitation to an action that is not theirs.
+   * `isStaff` is the fact Settings is drawn from too, so the two appear and disappear
+   * together, which is right: they are the two halves of governing a group. Because it
+   * comes from `myRole` and nothing else (**rule G2**), this is live — promoted, the
+   * card appears; demoted, it goes.
+   *
+   * This is a UI decision and deliberately not a permission (plan 0020, section 5.1).
+   * `ZoneView.joinCode` is still sent to every member, so a member's browser still
+   * holds the code and devtools will show it. That is accepted: the code is a low
+   * entropy invite string any member could get by asking, and the requirement is that
+   * the page not put a governance surface in front of somebody it does not belong to.
    */
   readonly showInvite = computed(() => {
     const kind = this.state().kind;
-    return kind !== 'error' && kind !== 'pending' && kind !== 'ownerless';
+    if (kind === 'error' || kind === 'pending' || kind === 'ownerless') {
+      return false;
+    }
+
+    // Read through `header` rather than off the union, because `loading` carries an
+    // optional one and there is nothing to decide from until it arrives.
+    return this.header()?.isStaff === true;
   });
 
   /**
@@ -227,6 +304,50 @@ export class GroupPage {
       untracked(() => {
         this._zones.clearLastCodeChange();
         this.codeIsNew.set(true);
+      });
+    });
+
+    // This page is what makes the caller present in this group (plan 0023).
+    //
+    // An intent rather than a subscription, and held by a screen rather than a store,
+    // because a screen is the only thing that knows where somebody is. It takes the
+    // zone room with it, which `ZoneStore` is holding anyway, so the refcount keeps
+    // one subscription and this adds the intent riding on it. Released on destroy,
+    // which is what navigating away from this group does.
+    effect((onCleanup) => {
+      const leave = this._realtime.enterZone(this.zoneId());
+      onCleanup(leave);
+    });
+
+    // The names behind the presence rows, asked for only when there is somebody to
+    // name (plan 0022, section 3.1).
+    //
+    // Demand driven for the dashboard's reason: `MemberNames.ensure` is a request, and
+    // presence is advisory, so a screen must not spend one on the chance that somebody
+    // turns up. It is idempotent, so the second arrival in a group costs nothing.
+    //
+    // A viewer on one of this group's lists counts as somebody being here, and has to,
+    // now that backend `0032` sends this page list presence for lists it never opened:
+    // the row it feeds is drawn from names, `presenceNames` drops the ones it cannot
+    // resolve, and only this request resolves them. Gating on `onlineIn` alone left
+    // section 3.3's whole indicator dark for the case it was built for, a shopper deep
+    // linked to a list who holds no zone subscription and so appears in no zone's
+    // presence.
+    effect(() => {
+      const id = this.zoneId();
+      const me = this._session.userId();
+      const peopled =
+        hasOthers(this._presence.onlineIn(id), me) ||
+        this._lists
+          .forZone(id)()
+          .lists.some((list) =>
+            hasOthers(this._presence.viewersOf(list.id), me)
+          );
+
+      untracked(() => {
+        if (peopled) {
+          void this._names.ensure(id);
+        }
       });
     });
 

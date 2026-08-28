@@ -26,7 +26,11 @@
         so reordering a half read list collides two lines onto one position (rule L4).
       -->
       @if (canReorder()) {
-        <button (click)="startReorder.emit()" class="header-action" type="button">
+        <button
+          (click)="startReorder.emit()"
+          class="header-action"
+          type="button"
+        >
           {{ 'list.reorder.enter' | rokuT }}
         </button>
       }
@@ -42,17 +46,37 @@
   "7 of 12 ready", with the bar underneath. The text is the accessible version and the
   bar is `aria-hidden`, because a progressbar role here would announce a number the
   sentence beside it already gives in words.
--->
-<p class="progress-line">
-  {{
-    'list.header.ready'
-      | rokuT: { ready: header().readyCount, total: header().lineCount }
-  }}
-</p>
 
-<div aria-hidden="true" class="progress">
-  <span [style.inline-size.%]="percent()" class="progress-fill"></span>
-</div>
+  An empty list gets neither: "0 of 0 ready" describes progress through a shop nobody
+  has written down, and an empty bar under it is decoration that describes nothing
+  (plan 0019, section 3).
+-->
+@if (header().lineCount === 0) {
+  <p class="progress-line">{{ 'list.empty.short' | rokuT }}</p>
+} @else {
+  <p class="progress-line">
+    {{
+      'list.header.ready'
+        | rokuT: { ready: header().readyCount, total: header().lineCount }
+    }}
+  </p>
+
+  <div aria-hidden="true" class="progress">
+    <span [style.inline-size.%]="percent()" class="progress-fill"></span>
+  </div>
+}
+
+<!--
+  Who else is shopping this list, in the resume card's words because this is the screen
+  that card points at (plan 0022, section 3.4). It says nothing rather than zero, and it
+  empties with everything else the moment the socket drops, which the notice below
+  explains once for the whole screen.
+-->
+<lib-presence-row
+  [names]="header().viewers"
+  class="viewers"
+  messageKey="home.presence.shopping"
+/>
 
 <!--
   The list is not live: its room was refused or the connection dropped, so what is on

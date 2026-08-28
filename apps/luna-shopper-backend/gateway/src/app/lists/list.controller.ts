@@ -63,6 +63,7 @@ export class ZoneListsController {
       userId: user.userId,
       zoneId,
       name: dto.name,
+      shareWithZone: dto.shareWithZone,
     });
   }
 

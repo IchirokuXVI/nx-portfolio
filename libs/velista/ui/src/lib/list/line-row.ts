@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   inject,
   input,
@@ -40,6 +41,14 @@ export type LineRowAction = LineAction | 'approve' | 'reject' | 'restore';
  * Drawn at 70% and `aria-busy`, and still live. Blocking it would make the app feel
  * slow on exactly the connection it was designed for, and the second tap simply
  * supersedes the first (section 3.3).
+ *
+ * ## Somebody else editing is drawn, and decides nothing
+ *
+ * Their initial and a subdued word, from `PresenceStore.editorOfLine` by way of the
+ * container. It is advisory (plan 0022, section 3): no lock, no warning, no disabled
+ * control, and no change to what a tap does. The one thing it must not become is a
+ * guard, because presence under reports and a guard built on it would refuse an edit
+ * nobody is making.
  *
  * ## In reorder mode it stops being a checkbox
  *
@@ -215,4 +224,16 @@ export class LineRow {
   move(action: 'moveUp' | 'moveDown'): void {
     this.act.emit({ action, lineId: this.line().id });
   }
+
+  /**
+   * The editor's initial, or an empty string when nobody is editing.
+   *
+   * Code points rather than a slice, for the reason every other initial in this app is:
+   * slicing a string cuts a surrogate pair in half, and a name that starts with an emoji
+   * would render the replacement character.
+   */
+  readonly editorInitial = computed(() => {
+    const name = this.line().editor?.trim() ?? '';
+    return name === '' ? '' : (Array.from(name)[0] ?? '').toLocaleUpperCase();
+  });
 }

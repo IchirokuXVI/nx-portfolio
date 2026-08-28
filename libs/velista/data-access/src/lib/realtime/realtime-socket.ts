@@ -10,7 +10,6 @@ import {
 import { BrowserFacade } from '@portfolio/velista/platform';
 import { Subject, type Observable } from 'rxjs';
 import { ApiUrl } from '../api-url';
-import { SessionStore } from '../auth/session-store';
 import { TokenStore } from '../auth/token-store';
 import type {
   RealtimeClientI,
@@ -92,8 +91,23 @@ type AskOutcome = 'ok' | 'refused' | 'failed';
 @Injectable()
 export class RealtimeSocket implements RealtimeClientI {
   private readonly _urls = inject(ApiUrl);
+  /**
+   * The token pair, and **not** `SessionStore`, though one question asked of it is
+   * `isAuthenticated` and that is where it used to come from.
+   *
+   * `SessionStore.isAuthenticated` is `tokens() !== null`, which is exactly
+   * `TokenStore.hasSession()`, so nothing about R1 changes. What changes is the
+   * dependency: `SessionStore` injects `ProfileStore` for rule A2, and `ProfileStore`
+   * now listens to this client for `user.usernameChanged` (plan 0021, section 5), so
+   * reaching for the session here closes the cycle
+   * `SessionStore -> ProfileStore -> REALTIME_CLIENT -> SessionStore`. Angular reports
+   * it as NG0200 at the first injection and the whole app fails to boot.
+   *
+   * The rule that falls out, and the reason this is a comment rather than a quiet
+   * edit: **the realtime client sits below the session, so it asks the token store
+   * directly.** Anything the session depends on cannot depend on the socket.
+   */
   private readonly _tokens = inject(TokenStore);
-  private readonly _session = inject(SessionStore);
   private readonly _browser = inject(BrowserFacade);
   private readonly _factory = inject(SOCKET_FACTORY);
   private readonly _destroyRef = inject(DestroyRef);
@@ -142,7 +156,7 @@ export class RealtimeSocket implements RealtimeClientI {
     // `handleConnection` and drops the connection on failure, so an anonymous connect
     // is a guaranteed disconnect rather than a degraded session.
     effect(() => {
-      const authenticated = this._session.isAuthenticated();
+      const authenticated = this._tokens.hasSession();
       untracked(() => (authenticated ? this._start() : this._stop()));
     });
 
@@ -175,6 +189,22 @@ export class RealtimeSocket implements RealtimeClientI {
       release();
       // The registry drops a refusal with the last holder, so republish before the
       // reconcile: a group nobody is subscribed to must not go on reading as stale.
+      this._publishRefused();
+      void this._reconcile();
+    };
+  }
+
+  enterZone(zoneId: string, options?: RealtimeSubscribeOptions): () => void {
+    // The room comes with it, exactly as it does for `viewList`: the server refuses
+    // the intent from a socket that is not in `zone:{id}` (plan 0023).
+    const release = this._registry.acquireZonePresence(
+      zoneId,
+      options?.staff === true
+    );
+    void this._reconcile();
+
+    return () => {
+      release();
       this._publishRefused();
       void this._reconcile();
     };
@@ -219,7 +249,7 @@ export class RealtimeSocket implements RealtimeClientI {
   private _start(): void {
     // A server render has no socket to open and no window to open it from. R1's
     // authentication check is the other half of the same guard.
-    if (!this._browser.isBrowser || !this._session.isAuthenticated()) {
+    if (!this._browser.isBrowser || !this._tokens.hasSession()) {
       return;
     }
 
@@ -529,6 +559,36 @@ export class RealtimeSocket implements RealtimeClientI {
     const plan = this._registry.reconcilePresence();
 
     return Promise.all([
+      ...plan.zonesToEnter.map(async (zoneId) => {
+        const outcome = await this._emit(
+          socket,
+          REALTIME_CLIENT_MESSAGES.zoneEnter,
+          { zoneId }
+        );
+        if (outcome === 'ok') {
+          this._registry.onZonePresenceStarted(zoneId);
+        } else if (outcome === 'refused') {
+          this._registry.onZonePresenceRefused(zoneId);
+        } else {
+          this._registry.onZonePresenceAskFailed(zoneId);
+        }
+        return outcome;
+      }),
+      ...plan.zonesToLeave.map(async (zoneId) => {
+        const outcome = await this._emit(
+          socket,
+          REALTIME_CLIENT_MESSAGES.zoneLeave,
+          { zoneId }
+        );
+        // A refusal to a leave is a leave, as it is for an unview: the server
+        // acknowledges it whatever state it was in, so only a timeout is retried.
+        if (outcome === 'failed') {
+          this._registry.onZonePresenceAskFailed(zoneId);
+        } else {
+          this._registry.onZonePresenceStopped(zoneId);
+        }
+        return outcome;
+      }),
       ...plan.viewsToStart.map(async (listId) => {
         const outcome = await this._emit(
           socket,

@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import type { MyZone, Zone } from '@portfolio/velista/models';
+import type { ListPreview, MyZone, Zone } from '@portfolio/velista/models';
 import { provideFakeBrowserFacade } from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
@@ -30,6 +30,19 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
     lists: [],
     ...overrides,
   };
+}
+
+/**
+ * Let a load a realtime handler started settle.
+ *
+ * The two branches plan 0021 adds call `void this.loadZone(...)` rather than awaiting
+ * it, because an event handler has nobody to await it: the point is that the card
+ * corrects itself without anything on screen having asked.
+ */
+async function settle(): Promise<void> {
+  for (let tick = 0; tick < 5; tick += 1) {
+    await Promise.resolve();
+  }
 }
 
 describe('ZoneStore', () => {
@@ -413,6 +426,68 @@ describe('ZoneStore', () => {
       expect(store.myZones()[1].myRole).toBe('ADMIN');
     });
 
+    // Plan 0020, section 2. An ownership transfer changes two memberships and
+    // publishes no membership event for either, so the caller's own role is derived
+    // from `ownerUserId`. All three cases, because the middle one is the damaging
+    // half: an old owner left holding `OWNER` is offered Delete group and Transfer
+    // ownership, and every press of either is a forbidden.
+
+    it('makes the caller the owner when the group is handed to them', () => {
+      realtime.emit('zone.ownershipChanged', {
+        id: 'z2',
+        name: "Mum and Dad's",
+        joinCode: 'FLAT3B',
+        status: 'ACTIVE',
+        ownerUserId: 'user-me',
+      });
+
+      expect(store.myZones()[1].myRole).toBe('OWNER');
+    });
+
+    it('demotes the outgoing owner to admin when the group goes to somebody else', () => {
+      realtime.emit('zone.ownershipChanged', {
+        id: 'z1',
+        name: 'Flat 3B',
+        joinCode: 'FLAT3B',
+        status: 'ACTIVE',
+        ownerUserId: 'someone-else',
+      });
+
+      // What `transferOwnership` writes in the same transaction, so this is the
+      // server's own answer rather than a guess.
+      expect(store.myZones()[0].myRole).toBe('ADMIN');
+      expect(store.myZones()[0].ownerUserId).toBe('someone-else');
+    });
+
+    it('leaves the caller role alone when the transfer is between two other people', () => {
+      realtime.emit('zone.ownershipChanged', {
+        id: 'z2',
+        name: "Mum and Dad's",
+        joinCode: 'FLAT3B',
+        status: 'ACTIVE',
+        ownerUserId: 'someone-else',
+      });
+
+      expect(store.myZones()[1].myRole).toBe('MEMBER');
+    });
+
+    it('joins the staff room on becoming the owner', () => {
+      // **Rule G3.** Without the re-sync a new owner would not receive the governance
+      // counts until the next full load, so the group's join requests would be
+      // invisible to the only person who can act on them.
+      expect([...realtime.rooms.keys()]).not.toContain('zone:z2:staff');
+
+      realtime.emit('zone.ownershipChanged', {
+        id: 'z2',
+        name: "Mum and Dad's",
+        joinCode: 'FLAT3B',
+        status: 'ACTIVE',
+        ownerUserId: 'user-me',
+      });
+
+      expect([...realtime.rooms.keys()]).toContain('zone:z2:staff');
+    });
+
     it('counts a new list against the zone', () => {
       realtime.emit('list.created', {
         id: 'l9',
@@ -443,6 +518,312 @@ describe('ZoneStore', () => {
       realtime.emit('zone.teleported', { id: 'z1' });
 
       expect(store.myZones()).toHaveLength(2);
+    });
+  });
+
+  /**
+   * Plan 0019, section 5. The counts on a card were live and the preview underneath
+   * them was not, so a card claimed four lists over three rows until the next full
+   * load. These cover the asymmetry that makes the fix small: a preview with room
+   * takes the new list, and a preview already full is left exactly as the server
+   * ordered it, because that ordering is by recent activity and the client cannot
+   * reproduce it for lists it has never loaded.
+   */
+  describe('the list preview on a zone card', () => {
+    function preview(id: string, name: string): ListPreview {
+      return { id, name, lineCount: 4, readyCount: 1 };
+    }
+
+    /** The rows the first zone is showing, after loading it with `lists`. */
+    async function loadWith(lists: readonly ListPreview[]): Promise<void> {
+      zones[0] = zone({ lists });
+      await store.load();
+    }
+
+    function rows(): readonly ListPreview[] {
+      return store.myZones()[0].lists;
+    }
+
+    it('adds a created list to a preview with room, at zero of zero', async () => {
+      await loadWith([preview('l1', 'Weekly shop')]);
+
+      realtime.emit('list.created', {
+        id: 'l9',
+        zoneId: 'z1',
+        name: 'Party',
+        createdByUserId: 'user-me',
+      });
+
+      expect(rows().map((list) => list.id)).toEqual(['l1', 'l9']);
+      // Not a guess: a list created this instant has nothing in it.
+      expect(rows()[1]).toEqual({
+        id: 'l9',
+        name: 'Party',
+        lineCount: 0,
+        readyCount: 0,
+      });
+      expect(store.myZones()[0].counts.listCount).toBe(3);
+    });
+
+    it('leaves a full preview alone and still bumps the count', async () => {
+      await loadWith([
+        preview('l1', 'Weekly shop'),
+        preview('l2', 'Hardware'),
+        preview('l3', 'Chemist'),
+      ]);
+
+      realtime.emit('list.created', {
+        id: 'l9',
+        zoneId: 'z1',
+        name: 'Party',
+        createdByUserId: 'user-me',
+      });
+
+      expect(rows().map((list) => list.id)).toEqual(['l1', 'l2', 'l3']);
+      expect(store.myZones()[0].counts.listCount).toBe(3);
+    });
+
+    it('does not add the same list twice', async () => {
+      await loadWith([preview('l1', 'Weekly shop')]);
+
+      const created = {
+        id: 'l9',
+        zoneId: 'z1',
+        name: 'Party',
+        createdByUserId: 'user-me',
+      };
+      realtime.emit('list.created', created);
+      realtime.emit('list.created', created);
+
+      expect(rows().map((list) => list.id)).toEqual(['l1', 'l9']);
+    });
+
+    it('renames a previewed list in place', async () => {
+      await loadWith([preview('l1', 'Weekly shop'), preview('l2', 'Hardware')]);
+
+      realtime.emit('list.updated', {
+        id: 'l2',
+        zoneId: 'z1',
+        name: 'DIY',
+        createdByUserId: 'user-me',
+      });
+
+      expect(rows().map((list) => list.name)).toEqual(['Weekly shop', 'DIY']);
+      // A rename is not a creation. The count must not move.
+      expect(store.myZones()[0].counts.listCount).toBe(2);
+    });
+
+    it('ignores a rename of a list outside the preview', async () => {
+      await loadWith([preview('l1', 'Weekly shop')]);
+
+      realtime.emit('list.updated', {
+        id: 'l7',
+        zoneId: 'z1',
+        name: 'DIY',
+        createdByUserId: 'user-me',
+      });
+
+      expect(rows().map((list) => list.name)).toEqual(['Weekly shop']);
+    });
+
+    it('drops a deleted list and decrements the count', async () => {
+      await loadWith([preview('l1', 'Weekly shop'), preview('l2', 'Hardware')]);
+
+      // The payload carries a list id and no zone id, so the store has to find the
+      // zone by the row it is holding.
+      realtime.emit('list.deleted', { id: 'l1' });
+
+      expect(rows().map((list) => list.id)).toEqual(['l2']);
+      expect(store.myZones()[0].counts.listCount).toBe(1);
+    });
+
+    it('leaves everything alone for a list it is not previewing', async () => {
+      // The consequence of finding the zone by the row: a list past the third cannot
+      // be located at all, so its count stands until the next load.
+      await loadWith([preview('l1', 'Weekly shop')]);
+
+      realtime.emit('list.deleted', { id: 'l7' });
+
+      expect(rows().map((list) => list.id)).toEqual(['l1']);
+      expect(store.myZones()[0].counts.listCount).toBe(2);
+    });
+
+    it('leaves the preview alone when access changes', async () => {
+      // The payload says access changed, not whether **this** caller gained or lost
+      // it, so either guess can put a list on a dashboard its reader cannot open.
+      await loadWith([preview('l1', 'Weekly shop')]);
+
+      realtime.emit('list.accessChanged', { listId: 'l1' });
+
+      expect(rows().map((list) => list.id)).toEqual(['l1']);
+      expect(store.myZones()[0].counts.listCount).toBe(2);
+    });
+  });
+
+  /**
+   * Plan 0021. Three things the server could not tell this client at all, because
+   * every room in the system is scoped to a resource and none of them was addressed to
+   * a person. What arrives is a signal; the load is the answer, since neither event
+   * carries a zone the dashboard can draw.
+   */
+  describe('events addressed to the caller', () => {
+    it('puts a group created in another tab at the top of the dashboard', async () => {
+      await store.load();
+      zones = [
+        ...zones,
+        zone({ id: 'z3', name: 'The Boat', joinCode: 'BOAT9999' }),
+      ];
+
+      realtime.emit('zone.created', {
+        id: 'z3',
+        name: 'The Boat',
+        joinCode: 'BOAT9999',
+        status: 'ACTIVE',
+        ownerUserId: 'user-me',
+      });
+      await settle();
+
+      // Loaded rather than composed: a `ZoneView` has no counts and no list preview,
+      // and inventing them is what `_patch` drops an event rather than do.
+      expect(getCalls).toEqual(['z3']);
+      expect(store.myZones().map((z) => z.id)).toEqual(['z3', 'z1', 'z2']);
+      expect(store.zoneById('z3')?.counts.memberCount).toBe(3);
+    });
+
+    it('ignores a creation that is not the caller own', async () => {
+      // A client that trusts routing to be its authorization is one server bug away
+      // from rendering somebody else's group.
+      await store.load();
+
+      realtime.emit('zone.created', {
+        id: 'z9',
+        name: 'Not Mine',
+        joinCode: 'NOTMINE1',
+        status: 'ACTIVE',
+        ownerUserId: 'someone-else',
+      });
+      await settle();
+
+      expect(getCalls).toEqual([]);
+      expect(store.myZones().map((z) => z.id)).toEqual(['z1', 'z2']);
+    });
+
+    it('fills a pending card in when the approval arrives', async () => {
+      // A zone the caller was PENDING in was listed as a pending summary: its counts
+      // are the pending view's and `toZoneCard` renders its lists empty by
+      // definition. Flipping the status alone makes the card tappable and opens onto
+      // a group page with nothing in it.
+      zones = [zone({ myRole: 'MEMBER', myStatus: 'PENDING', lists: [] })];
+      await store.load();
+
+      zones = [
+        zone({
+          myRole: 'MEMBER',
+          myStatus: 'APPROVED',
+          lists: [{ id: 'l1', name: 'Weekly', lineCount: 4, readyCount: 1 }],
+        }),
+      ];
+      realtime.emit('member.approved', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'You',
+        role: 'MEMBER',
+        status: 'APPROVED',
+      });
+      await settle();
+
+      expect(store.zoneById('z1')?.myStatus).toBe('APPROVED');
+      expect(getCalls).toEqual(['z1']);
+      expect(store.zoneById('z1')?.lists.map((l) => l.id)).toEqual(['l1']);
+    });
+
+    it('produces a card for a zone this device never listed', async () => {
+      // The request was made on another device and approved before this one ever
+      // listed its zones. `loadZone` is a fetch and an upsert, not a patch, so it
+      // works for a zone the store has never seen.
+      realtime.emit('member.approved', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'You',
+        role: 'MEMBER',
+        status: 'APPROVED',
+      });
+      await settle();
+
+      expect(getCalls).toEqual(['z1']);
+      expect(store.zoneById('z1')?.name).toBe('Flat 3B');
+    });
+
+    it('does not spend a request on an approval it already holds', async () => {
+      // A redelivery, or an approval for a zone already approved. Without the guard
+      // on the previous status this is one request per event.
+      await store.load();
+
+      realtime.emit('member.approved', {
+        id: 'm1',
+        zoneId: 'z1',
+        userId: 'user-me',
+        username: 'You',
+        role: 'OWNER',
+        status: 'APPROVED',
+      });
+      await settle();
+
+      expect(getCalls).toEqual([]);
+    });
+
+    it('does not load when somebody else is approved', async () => {
+      await store.load();
+
+      realtime.emit('member.approved', {
+        id: 'm2',
+        zoneId: 'z1',
+        userId: 'someone-else',
+        username: 'Ines',
+        role: 'MEMBER',
+        status: 'APPROVED',
+      });
+      await settle();
+
+      expect(getCalls).toEqual([]);
+    });
+
+    it('drops a half formed creation or rename rather than acting on it', async () => {
+      // Rule D4 for the two new payloads: nothing half formed reaches a store, and a
+      // count is left behind so a shape the mapper does not expect is findable.
+      await store.load();
+
+      realtime.emit('zone.created', {
+        name: 'no id at all',
+        ownerUserId: 'user-me',
+      });
+      realtime.emit('user.usernameChanged', { userId: 'user-me' });
+      realtime.emit('user.usernameChanged', { username: 'Dani' });
+      realtime.emit('user.usernameChanged', 'not an object');
+      await settle();
+
+      expect(getCalls).toEqual([]);
+      expect([...realtime.droppedEvents().entries()]).toEqual([
+        ['zone.created', 1],
+        ['user.usernameChanged', 3],
+      ]);
+    });
+
+    it('leaves the global username alone, since ProfileStore owns it', async () => {
+      await store.load();
+
+      realtime.emit('user.usernameChanged', {
+        userId: 'user-me',
+        username: 'Dani',
+      });
+      await settle();
+
+      // Applied by nothing here, and specifically not dropped as unmappable: a
+      // dropped event is how this reaches production looking live and being stale.
+      expect(realtime.droppedEvents().size).toBe(0);
+      expect(getCalls).toEqual([]);
     });
   });
 

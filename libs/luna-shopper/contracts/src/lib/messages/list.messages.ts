@@ -92,6 +92,16 @@ export interface CreateListRequest {
   userId: string;
   zoneId: string;
   name: string;
+  /**
+   * Give every approved member of the zone access to the new list (plan 0034).
+   *
+   * **Optional, and absent means true.** A list nobody but its creator can open is
+   * the rarer thing somebody chooses on purpose, and the field was added after
+   * clients existed that do not send it; both point the default the same way. So an
+   * older client keeps getting the shared list it has no way to ask for, rather than
+   * silently starting to create private ones the moment this shipped.
+   */
+  shareWithZone?: boolean;
 }
 
 export interface SetListAccessRequest {

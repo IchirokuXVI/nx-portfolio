@@ -8,6 +8,7 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ListHeaderVm } from '@portfolio/velista/models';
 import { OfflineIcon } from '../icons/icons';
+import { PresenceRow } from '../presence/presence-row';
 
 /**
  * The top of the list: what it is called, which group it belongs to, and how far the
@@ -30,7 +31,7 @@ import { OfflineIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-list-header',
-  imports: [RokuTranslatorPipe, OfflineIcon],
+  imports: [RokuTranslatorPipe, OfflineIcon, PresenceRow],
   templateUrl: './list-header.html',
   styleUrl: './list-header.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,8 +51,10 @@ export class ListHeader {
   /**
    * The bar's fill, as a percentage.
    *
-   * An empty list is 0 rather than a division by zero, and it renders as an empty bar,
-   * which is honest: nothing is ready because there is nothing.
+   * An empty list is 0 rather than a division by zero, and the template never asks:
+   * at zero lines it draws "List is empty" and no bar at all, because an empty bar
+   * under an empty list is decoration that describes nothing (plan 0019, section 3).
+   * The guard stays anyway, so the computed is safe to read from anywhere.
    */
   readonly percent = computed(() => {
     const { readyCount, lineCount } = this.header();

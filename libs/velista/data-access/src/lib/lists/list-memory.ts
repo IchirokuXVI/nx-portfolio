@@ -57,8 +57,21 @@ export class ListMemory implements ListServiceI {
    * primary depends on: a plain member really can make the first list, so a fake that
    * demanded staff would have the screen hiding a button that works (section 5.5).
    */
-  async createList(zoneId: string, name: string): Promise<ShoppingListSummary> {
+  /** What the last {@link createList} was asked to share. See the note inside it. */
+  lastShareWithZone = true;
+
+  async createList(
+    zoneId: string,
+    name: string,
+    shareWithZone: boolean
+  ): Promise<ShoppingListSummary> {
     this._approvedZone(zoneId);
+    // Recorded and not acted on. This fake has one user, so there is nobody for a
+    // grant to reach and nobody a private list could be hidden from; modelling the
+    // access table here would be inventing a second implementation of a rule whose
+    // only real one is in core. What it must not do is lose the answer, so a test
+    // driving this fake can still assert what the sheet sent.
+    this.lastShareWithZone = shareWithZone;
 
     const list: ShoppingListSummary = {
       id: `list-${crypto.randomUUID?.() ?? Date.now()}`,
@@ -79,10 +92,7 @@ export class ListMemory implements ListServiceI {
   }
 
   /** Rename. `requireManage`, so the creator, a zone admin, or the owner. */
-  async updateList(
-    listId: string,
-    name: string
-  ): Promise<ShoppingListSummary> {
+  async updateList(listId: string, name: string): Promise<ShoppingListSummary> {
     return this._patch(listId, (list) => ({ ...list, name }));
   }
 

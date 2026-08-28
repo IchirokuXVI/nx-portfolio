@@ -34,6 +34,14 @@ export function toRealtimeEvent(
   }
 
   switch (name) {
+    case 'zone.created': {
+      // The same `ZoneView` its three siblings below carry, mapped the same way. It is
+      // a separate branch because the event means something else entirely: those patch
+      // a zone the store holds, and this one announces a zone it does not.
+      const zone = toZone(payload);
+      return zone === null ? null : { type: name, zone };
+    }
+
     case 'zone.updated':
     case 'zone.ownershipChanged':
     case 'zone.markedForDeletion': {
@@ -95,6 +103,19 @@ export function toRealtimeEvent(
       return membershipId === null || userId === null
         ? null
         : { type: name, membershipId, userId };
+    }
+
+    case 'user.usernameChanged': {
+      // Two required strings and nothing else. Not a profile: see the union's own
+      // comment for why one must not be invented from this.
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const userId = str(payload['userId']);
+      const username = str(payload['username']);
+      return userId === null || username === null
+        ? null
+        : { type: name, userId, username };
     }
 
     case 'list.created':

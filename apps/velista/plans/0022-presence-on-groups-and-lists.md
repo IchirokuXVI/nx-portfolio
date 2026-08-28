@@ -225,4 +225,46 @@ Not built:
    the release runs on destroy.
 7. After backend `0032`: a group page lights the row of a list somebody else has open
    while holding no subscription to that list, and a member with no access to that list
-   sees nothing and receives nothing naming it. No client change ships with it.
+   sees nothing and receives nothing naming it. One client change ships with it, and
+   section 8 says which and why this criterion was written expecting none.
+
+## 8. What landing backend `0032` actually needed
+
+Sections 3.3 and 6 both say this plan's rendering needs no client change when `0032`
+lands, and both are right about the rendering. They were wrong about the **names**, and
+the difference is a request.
+
+`presenceNames` drops a viewer whose name will not resolve, deliberately: to the person
+reading, "not loaded yet", "left the group" and "not allowed to see them" are one fact
+and none of the three is a hex string. Names resolve out of `MemberNames`, which is
+demand driven and populated per zone by `ensure`, and both surfaces gated that call on
+zone presence alone:
+
+```ts
+const peopled = this._presence.onlineIn(zoneId).some((user) => user.userId !== me);
+```
+
+Which was complete while list presence could only exist for a list this client had open,
+and stopped being complete the moment `0032` started sending list presence for lists it
+had not. The failure is quiet in the worst way: `viewersOf` answers correctly, the view
+model carries the ids, and every name is then dropped for want of a request nobody made,
+so the indicator does not draw and nothing anywhere reports a problem.
+
+The case that makes it more than a race is a shopper who **deep linked to a list**. They
+hold no zone subscription, so they are in that list's presence and in no zone's presence
+at all, and the group they are shopping in is a group the reader's client would never
+have asked the names for. That reader waits forever.
+
+So the trigger on both surfaces now counts a viewer on any of the zone's lists as
+somebody being here, through one `hasOthers` helper beside `presenceNames`, for the
+reason that function is shared: the rule is quiet enough that two copies is two chances
+to get one subtly wrong.
+
+**Why the specs did not catch it, which is the more useful half.** `fakeMemberNames`
+answers `nameOf` from a record it was handed rather than from what was asked for, so a
+screen that never calls `ensure` still renders names in a test. Section 3.3's own spec,
+"lights the row of a list somebody has open, holding no subscription to it", passed
+throughout and would have kept passing against a build where the row could never draw.
+A double that is more helpful than the thing it stands in for hides exactly the defect
+its subject exists to have. The new specs assert the **call** rather than the rendering,
+which is the only part of this the double cannot be generous about.

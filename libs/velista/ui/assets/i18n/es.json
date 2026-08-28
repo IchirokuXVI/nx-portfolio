@@ -108,6 +108,8 @@
       "body": "Cualquiera del grupo puede empezar una lista. Podrás cambiarle el nombre después",
       "label": "Nombre de la lista",
       "placeholder": "Compra semanal",
+      "shareLabel": "Todo el grupo puede verla",
+      "shareHint": "Pueden añadir cosas y marcarlas. Desactívalo para dejarla solo para ti y compartirla con quien quieras más adelante",
       "submit": "Crear lista"
     },
     "error": {
@@ -281,7 +283,8 @@
       "google": "Continuar con Google",
       "emailSignIn": "Entrar con correo",
       "newZone": "Nuevo grupo",
-      "newList": "Nueva lista",
+      "generateList": "Obtener lista de la compra",
+      "generateListSoon": "Próximamente",
       "search": "Buscar",
       "account": "Tu cuenta",
       "changeLocale": "Cambiar idioma"
@@ -307,7 +310,12 @@
     "presence": {
       "shopping": "{{names}} están comprando ahora",
       "shoppingCount_one": "{{count}} comprando ahora",
-      "shoppingCount_other": "{{count}} comprando ahora"
+      "shoppingCount_other": "{{count}} comprando ahora",
+      "onList_one": "{{count}} persona comprando ahora",
+      "onList_other": "{{count}} personas comprando ahora",
+      "inGroup": "{{names}} están aquí ahora",
+      "inGroupCount_one": "{{count}} persona aquí ahora",
+      "inGroupCount_other": "{{count}} personas aquí ahora"
     },
     "guest": {
       "title": "Estás comprando como invitado",
@@ -353,7 +361,8 @@
     },
     "empty": {
       "title": "Todavía no hay nada en esta lista",
-      "body": "Escribe lo primero y todos lo verán"
+      "body": "Escribe lo primero y todos lo verán",
+      "short": "La lista está vacía"
     },
     "readOnly": {
       "notice": "Puedes ver esta lista, no cambiarla"
@@ -368,6 +377,7 @@
       "markNotAvailable": "Marcar como que no estaba",
       "markPending": "Devolverlo a la lista",
       "edit": "Cambiar esto",
+      "editing": "Editando",
       "comments": "Lo que se ha dicho",
       "delete": "Quitar de la lista",
       "menuFor": "Más opciones para {{name}}",
@@ -487,7 +497,7 @@
       "title": "Esta cuenta vive en este teléfono",
       "body": "Todavía no tiene correo ni contraseña, así que no se puede abrir en ningún otro sitio, y borrar los datos del navegador acabaría con ella",
       "secure": "Proteger esta cuenta",
-      "deleteNote": "Hasta que la protejas, eliminarla es la única otra forma en que esta cuenta termina"
+      "deleteNote": "Para cerrar sesión tienes que eliminar tu cuenta, porque no está protegida con un correo"
     },
     "delete": {
       "action": "Eliminar tu cuenta",
