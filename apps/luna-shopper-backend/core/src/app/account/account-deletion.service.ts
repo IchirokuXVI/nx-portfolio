@@ -65,9 +65,9 @@ export class AccountDeletionService {
       membership.username = anonymizedUsername(membership.id);
       membership.status = MembershipStatus.KICKED;
       const saved = await this.memberships.save(membership);
-      this.events.emit(
+      this.events.emitTo(
         RealtimeEvent.MemberKicked,
-        membership.zoneId,
+        { zoneId: membership.zoneId, userIds: [membership.userId] },
         toMembershipView(saved)
       );
       // The member count drops with no user action at all, so the zone's open

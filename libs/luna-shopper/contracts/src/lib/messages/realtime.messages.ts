@@ -28,6 +28,19 @@ export function listRoom(listId: string): string {
 }
 
 /**
+ * Builds the `user:{userId}` room name: the one room addressed to a person
+ * rather than to a resource (plan 0030, section 2).
+ *
+ * It lives here beside the three resource rooms because every server half needs
+ * it (the socket gateway joins it at connection, the SSE controller adds it to
+ * whichever stream is open, and the JetStream consumer routes to it) while the
+ * client half needs to know nothing about it: nobody subscribes to this one.
+ */
+export function userRoom(userId: string): string {
+  return `${RealtimeRoom.User}:${userId}`;
+}
+
+/**
  * Access checks the realtime service asks core before adding a socket to a room
  * (plan 0009, section 5). They mirror the socket rooms: a zone check gates the
  * `zone:` room, a list check gates the `list:` room. Core resolves membership and
@@ -90,6 +103,21 @@ export interface ListPresence {
 export interface EditLineSignal {
   listId: string;
   lineId: string;
+}
+
+/**
+ * Payload of {@link RealtimeEvent.UserUsernameChanged}: the new global username
+ * of the user this event is addressed to (plan 0030, section 4.3).
+ *
+ * The id travels with the name so a client can check that the event is about
+ * itself rather than trusting the routing that put it in the room, and the two
+ * fields are all there is: this is a rename, not a profile, and inventing the
+ * rest of one would hand a client an email verification state and a created date
+ * the rename never knew.
+ */
+export interface UserUsernameChangedPayload {
+  userId: string;
+  username: string;
 }
 
 /** Body of a {@link RealtimeClientMessage.StopEditLine} intent. */
