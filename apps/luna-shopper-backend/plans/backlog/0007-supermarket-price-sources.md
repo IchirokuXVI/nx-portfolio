@@ -1,4 +1,16 @@
-# 0015 Supermarket price sources
+# 0007 (backlog) Supermarket price sources
+
+> **Status: backlog. Not scheduled for development.**
+> Plans in `plans/backlog/` are designed and agreed but are not part of the build order, and
+> nothing in them has been built. They carry their own numbering starting at `0001`, separate
+> from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
+> free number there, so parking a design never burns a number in the build sequence.
+>
+> This one is a **research spike rather than a design**, and it is here because its findings were
+> absorbed rather than because it is waiting to be built: backlog 0001 turned them into the price
+> sourcing design, and plan 0038 builds the ingest half of that against the Mercadona source this
+> spike found. It is kept for the source survey, which is the part nothing else records: which
+> chains were reachable, which were not, and why.
 
 Research spike answering three questions for the catalog service (0012): which Spanish chains
 expose usable price data, at what granularity prices actually vary, and where a product list can

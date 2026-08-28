@@ -11,7 +11,7 @@
  *
  * NOTE: none of these are official APIs. Mercadona is the only chain whose
  * endpoints are stable and callable without a browser; the others are
- * documented here with what it would actually take. See ../../plans/0015.
+ * documented here with what it would actually take. See ../../plans/backlog/0007.
  */
 
 const UA =
