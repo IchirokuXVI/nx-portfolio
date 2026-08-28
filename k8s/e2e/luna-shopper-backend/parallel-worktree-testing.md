@@ -32,10 +32,10 @@ others:
 - the compose project (its containers, network, and named volumes) becomes
   `luna-slot<N>`, so nothing is shared with another slot,
 - the five services listen on `3000..3004 + N*100`, and their `.env` files are
-  pointed at that slot's Postgres / NATS / Redis / SMTP ports,
-- the browser origins the gateway allows (`CORS_ORIGINS`, `APP_BASE_URL`) become
-  that slot's front end ports, so the matching `tools/dev/ng-slot.sh` slot works
-  against it.
+  pointed at that slot's Postgres / NATS / Redis / SMTP ports.
+
+The front end slots (`tools/dev/ng-slot.sh`) are a **separate** numbering that
+this one does not imply; see the section below.
 
 **Slot 0 is reserved for your own local development** — it is the original
 single stack (default ports, project name `luna-shopper-backend`) that your primary
@@ -63,7 +63,6 @@ workflow (no slot flag needed = slot 0).
 | jaeger ui           | 16686                  | 16786        | 16886        | 16986        |
 | prometheus          | 9090                   | 9190         | 9290         | 9390         |
 | grafana             | 3010                   | 3110         | 3210         | 3310         |
-| shell / velista     | 4200 / 4205            | 4300 / 4305  | 4400 / 4405  | 4500 / 4505  |
 
 Slot 0 (first column) is **yours** — reserved for your own development; workers
 use slots 1 and up. The step of 100 is larger than the spread of the base ports,
@@ -158,23 +157,40 @@ npx nx serve luna-shopper-backend-gateway     # + realtime / auth / core / catal
 files, or a different N to move the worktree to another slot. Everything it
 writes is git ignored, so it never shows up in a diff or a commit.
 
-## The front end takes the same number
+## The front end slots are a separate numbering
 
-`tools/dev/ng-slot.{sh,ps1}` does all of this for the Angular apps, with the same
-arithmetic, so **slot 1 means shell 4300, velista 4305, gateway 3100, realtime
-3101** and the two halves fit together:
+`tools/dev/ng-slot.{sh,ps1}` does all of this for the Angular apps with the same
+arithmetic, but **the two numbers are independent and must not be assumed equal**.
+A front end on slot 5 may point at a backend on slot 1, or 2, or 8, and **several
+front end slots may point at one backend at the same time**. That last case is the
+common one: most front end work needs a backend running, not a backend of its own,
+so when nobody is changing the backend every front end worktree can use the single
+instance that happens to be up.
+
+Two consequences, and they pull in opposite directions:
+
+- **`CORS_ORIGINS` is a list**, so `luna-slot` writes **every** front end slot's
+  two origins, not this slot's. A backend has no way to know which front ends will
+  call it and no reason to care, and an origin it was not told about fails with a
+  CORS error that says nothing about slots. Twenty entries in a git ignored file
+  removes the whole class of problem. (It used to be hardcoded to `localhost:4200`,
+  so any front end past slot 0 got a gateway that refused its own browser.)
+- **`APP_BASE_URL` and the two `MAIL_*_BASE_URL` are singular**: they are where
+  the Google callback and the verification links send a browser, and a redirect
+  can only have one target. So they name one front end, chosen with
+  `--app-slot <n>` and defaulting to 0, the shared one. Only the OAuth and mail
+  round trips are affected by getting it wrong; ordinary API calls from any slot
+  work regardless.
 
 ```sh
-bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up 1
-bash tools/dev/ng-slot.sh --up 1
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up 1 --app-slot 5
+bash tools/dev/ng-slot.sh --up 5 --backend-slot 1
 ```
 
-That pairing is not decoration. The `CORS_ORIGINS` and `APP_BASE_URL` this script
-writes are derived from the **same** slot number, so the gateway allows the
-browser origin that slot's shell and velista actually serve on. They used to be
-hardcoded to `localhost:4200`, which meant every worktree past the first got a
-gateway that refused its own browser, with a CORS error that says nothing about
-slots. See `tools/dev/README.md`.
+On the front end side the backend is worked out rather than assumed when
+`--backend-slot` is left off: a choice already recorded, else the luna slot this
+same worktree runs, else the only gateway listening, else slot 0. See
+`tools/dev/README.md`.
 
 ### Traces and metrics, per slot
 

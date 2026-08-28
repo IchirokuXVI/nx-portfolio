@@ -27,6 +27,11 @@
   because three of them declare dependsOn shell:serve, which would otherwise start
   a second shell on the default port.
 
+  The backend slots are a SEPARATE numbering: front end slot 5 may talk to backend
+  slot 1, or 2, or 8, and several front end slots may talk to one backend at the
+  same time, which is the common case when nobody is changing the backend. See
+  -BackendSlot for how the pairing is decided.
+
   Writes, all git ignored: tools/dev/.env.ng-slot (the slot descriptor),
   apps/shell/.env, apps/velista/.env, and tools/dev/.run (logs and pids). Nx loads
   {projectRoot}/.env into that project's tasks, so the two app files are picked up
@@ -78,6 +83,11 @@ $maxSlot = 9
 # person asking for it explicitly means it.
 $minAutoSlot = 1
 
+# Where velista points when nothing is running and nobody has said. Slot 0 is the
+# developer's own backend, the one most likely to be up. It is the last rung of
+# Find-BackendSlot, not a coupling to this slot's number.
+$defaultBackendSlot = 0
+
 function Get-PortFor([string]$app, [int]$slot) { return $basePort[$app] + $slot * 100 }
 
 # Every port a slot occupies, the static remote file server included, so -Down,
@@ -126,6 +136,71 @@ function Get-WorktreeSlot([string]$worktree) {
 
 function Write-EnvFile($path, $content) {
   Set-Content -Path $path -Value $content -Encoding utf8
+}
+
+# --- which backend velista should talk to ------------------------------------
+#
+# Deliberately not "the same number as this slot". The two numberings are
+# independent: a front end slot exists to stop two dev servers fighting over 4200,
+# and a backend slot exists to stop two compose stacks fighting over 5432. Neither
+# implies the other, and the usual arrangement is several front end worktrees all
+# pointed at one backend, because most front end work needs a backend running, not
+# a backend of its own.
+
+# The luna slot this same worktree is configured for, if it runs its own backend.
+# This is the real pairing when there is one: same worktree, not same number.
+function Get-OwnBackendSlot {
+  $file = Join-Path $root 'k8s/e2e/luna-shopper-backend/.env.slot'
+  if (-not (Test-Path $file)) { return $null }
+  foreach ($line in (Get-Content $file)) {
+    if ($line -match '^LUNA_SLOT=(\d+)\s*$') { return [int]$Matches[1] }
+  }
+  return $null
+}
+
+# The backend slots whose gateway is answering right now.
+function Get-RunningBackendSlots {
+  $ports = @()
+  for ($slot = 0; $slot -le $maxSlot; $slot++) { $ports += (3000 + $slot * 100) }
+  $states = Get-PortStates $ports
+  $slots = @()
+  for ($slot = 0; $slot -le $maxSlot; $slot++) {
+    if ($states[(3000 + $slot * 100)] -eq 'open') { $slots += $slot }
+  }
+  return $slots
+}
+
+# Returns the slot; explains the choice on the host, so the reason is visible
+# without the value carrying it.
+function Find-BackendSlot {
+  $config = Read-SlotConfig
+  if ($null -ne $config -and $config.ContainsKey('NG_BACKEND_SLOT')) {
+    Write-Host 'keeping the backend slot this worktree already records'
+    return [int]$config['NG_BACKEND_SLOT']
+  }
+
+  $own = Get-OwnBackendSlot
+  if ($null -ne $own) {
+    Write-Host "this worktree runs its own backend on luna slot $own"
+    return $own
+  }
+
+  $running = @(Get-RunningBackendSlots)
+  if ($running.Count -eq 1) {
+    Write-Host "the only backend gateway listening is luna slot $($running[0])"
+    return $running[0]
+  }
+  if ($running.Count -gt 1) {
+    if ($running -contains 0) {
+      Write-Host "several backends are up; taking slot 0, the shared one (-BackendSlot to pick another: $($running -join ', '))"
+      return 0
+    }
+    Write-Host "several backends are up ($($running -join ', ')); taking the lowest, $($running[0]) (-BackendSlot to pick another)"
+    return $running[0]
+  }
+
+  Write-Host 'no backend gateway is listening; pointing at luna slot 0, the default'
+  return $defaultBackendSlot
 }
 
 function Write-SlotConfig([int]$slot, [int]$backendSlot) {
@@ -276,7 +351,7 @@ function Invoke-Up {
 
   if ($Slot) {
     $backend = $BackendSlot
-    if ($backend -lt 0) { $backend = [int]$Slot }
+    if ($backend -lt 0) { $backend = Find-BackendSlot }
     Write-SlotConfig ([int]$Slot) $backend
     $config = Read-SlotConfig
   }
@@ -284,7 +359,7 @@ function Invoke-Up {
     $free = Find-FreeSlot
     Write-Host "==> this worktree has no slot yet; taking the lowest free one: $free"
     $backend = $BackendSlot
-    if ($backend -lt 0) { $backend = $free }
+    if ($backend -lt 0) { $backend = Find-BackendSlot }
     Write-SlotConfig $free $backend
     $config = Read-SlotConfig
   }
@@ -490,14 +565,14 @@ if ($Up) { Invoke-Up; return }
 if ($Auto) {
   $free = Find-FreeSlot
   $backend = $BackendSlot
-  if ($backend -lt 0) { $backend = $free }
+  if ($backend -lt 0) { $backend = Find-BackendSlot }
   Write-SlotConfig $free $backend
   return
 }
 
 if ($Slot -match '^\d+$') {
   $backend = $BackendSlot
-  if ($backend -lt 0) { $backend = [int]$Slot }
+  if ($backend -lt 0) { $backend = Find-BackendSlot }
   Write-SlotConfig ([int]$Slot) $backend
   return
 }
@@ -512,8 +587,15 @@ usage:
 
 options:
   -Apps a,b,c         limit -Up to these apps (default: all five)
-  -BackendSlot <n>    which luna-shopper slot velista should talk to
-                      (default: the same number as this slot)
+  -BackendSlot <n>    which luna-shopper slot velista should talk to. It is NOT
+                      this slot's number: the two numberings are independent, and
+                      one backend can serve every front end slot at once. Left
+                      out, the backend is worked out in this order:
+                        1. the choice already recorded for this worktree
+                        2. the luna slot this worktree runs itself, if any
+                        3. the only backend gateway that is listening
+                        4. backend slot 0 if it is listening
+                        5. backend slot 0 anyway, with a note
   -Timeout <secs>     how long -Up waits for each app to answer (default 300)
 '@
 exit 2

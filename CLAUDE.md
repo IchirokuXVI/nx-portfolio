@@ -60,7 +60,9 @@ There are no top-level `package.json` scripts — run everything through Nx, eit
 
 ### Serving from a worktree: dev slots
 
-Every app has a fixed port, so two checkouts that both `nx serve` collide. A **slot** is an integer N that shifts a whole stack out of the way: every port becomes its default + N\*100. **Slot 0 is the developer's own** and `--auto` never takes it; workers start at 1. The two halves share the number, so slot 1 is shell 4300, velista 4305, gateway 3100, realtime 3101.
+Every app has a fixed port, so two checkouts that both `nx serve` collide. A **slot** is an integer N that shifts a whole stack out of the way: every port becomes its default + N\*100. **Slot 0 is the developer's own** and `--auto` never takes it; workers start at 1.
+
+**The front end and backend slot numbers are independent.** Front end slot 5 may talk to backend slot 1, 2 or 8, and several front end slots can share one backend at the same time, which is the usual arrangement when nobody is changing the backend. So `luna-slot` allows every front end slot's origin in `CORS_ORIGINS` rather than one, and `ng-slot` works its backend out (recorded choice, else this worktree's own luna slot, else the only gateway listening, else slot 0) rather than assuming its own number. `--backend-slot <n>` and `--app-slot <n>` state it explicitly.
 
 ```sh
 # which slots are taken (reads every worktree's claim, then probes the ports)
@@ -70,6 +72,7 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
 # claim the lowest free slot and serve; --up writes the env files first if absent
 tools/dev/ng-slot.sh --up                       # all five Angular apps
 tools/dev/ng-slot.sh --up --apps shell,velista  # ...or just some
+tools/dev/ng-slot.sh --up 5 --backend-slot 1    # ...pointed at a named backend
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up   # compose + migrations + five services
 
 tools/dev/ng-slot.sh --down

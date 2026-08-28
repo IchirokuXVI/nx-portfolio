@@ -5,7 +5,11 @@
 # agents, can serve the front end at the same time without fighting over ports.
 #
 # It is the front end twin of k8s/e2e/luna-shopper-backend/luna-slot.sh and uses
-# the same arithmetic, so "slot 2" means the same thing on both sides of the app.
+# the same arithmetic, but the two numberings are INDEPENDENT: front end slot 5
+# may talk to backend slot 1, or 2, or 8, and several front end slots may talk to
+# one backend at the same time. That last case is the common one, when nobody is
+# changing the backend and a single instance serves everybody. See
+# `--backend-slot` below for how the pairing is decided.
 #
 #   tools/dev/ng-slot.sh <slot>          configure this worktree for that slot
 #   tools/dev/ng-slot.sh --auto          configure it for the lowest free slot
@@ -94,6 +98,11 @@ MAX_SLOT=9
 # accepted, because a person asking for it explicitly means it.
 MIN_AUTO_SLOT=1
 
+# Where velista points when nothing is running and nobody has said. Slot 0 is the
+# developer's own backend, the one most likely to be up. It is the last rung of
+# `detect_backend_slot`, not a coupling to this slot's number.
+DEFAULT_BACKEND_SLOT=0
+
 usage() {
   cat >&2 <<'EOF'
 usage:
@@ -105,8 +114,15 @@ usage:
 
 options:
   --apps a,b,c        limit --up to these apps (default: all five)
-  --backend-slot <n>  which luna-shopper slot velista should talk to
-                      (default: the same number as this slot)
+  --backend-slot <n>  which luna-shopper slot velista should talk to. It is NOT
+                      this slot's number: the two numberings are independent, and
+                      one backend can serve every front end slot at once. Left
+                      out, the backend is worked out in this order:
+                        1. the choice already recorded for this worktree
+                        2. the luna slot this worktree runs itself, if any
+                        3. the only backend gateway that is listening
+                        4. backend slot 0 if it is listening
+                        5. backend slot 0 anyway, with a note
   --timeout <secs>    how long --up waits for each app to answer (default 300)
 EOF
 }
@@ -148,6 +164,84 @@ slot_of_worktree() {
 probe_ports() {
   (( $# )) || return 0
   node "$PROBE" "$@"
+}
+
+# --- which backend velista should talk to ------------------------------------
+#
+# Deliberately not "the same number as this slot". The two numberings are
+# independent: a front end slot exists to stop two dev servers fighting over 4200,
+# and a backend slot exists to stop two compose stacks fighting over 5432. Neither
+# implies the other, and the usual arrangement is several front end worktrees all
+# pointed at one backend, because most front end work needs a backend running, not
+# a backend of its own.
+#
+# So it is worked out rather than assumed, in an order that puts a human's stated
+# choice first and a running instance ahead of a guess.
+
+# The luna slot this same worktree is configured for, if it runs its own backend.
+# This is the real pairing when there is one: same worktree, not same number.
+own_backend_slot() {
+  local file="$root/k8s/e2e/luna-shopper-backend/.env.slot"
+  [[ -f "$file" ]] || return 0
+  sed -n 's/^LUNA_SLOT=\([0-9]\+\)[[:space:]]*$/\1/p' "$file" | head -n 1
+}
+
+# The backend slots whose gateway is answering right now.
+running_backend_slots() {
+  local slot state port
+  local -a ports=()
+  for (( slot = 0; slot <= MAX_SLOT; slot++ )); do
+    ports+=("$(( 3000 + slot * 100 ))")
+  done
+  while IFS=$'\t' read -r port state; do
+    [[ "$state" == "open" ]] && echo $(( (port - 3000) / 100 ))
+  done < <(probe_ports "${ports[@]}")
+}
+
+# Writes the slot on stdout and its justification on stderr, so a caller can
+# report why without the value being polluted by the explanation.
+detect_backend_slot() {
+  local recorded
+  if [[ -f "$SLOT_ENV" ]]; then
+    recorded="$(sed -n 's/^NG_BACKEND_SLOT=\([0-9]\+\)[[:space:]]*$/\1/p' "$SLOT_ENV" | head -n 1)"
+    if [[ -n "$recorded" ]]; then
+      echo "keeping the backend slot this worktree already records" >&2
+      echo "$recorded"
+      return 0
+    fi
+  fi
+
+  local own
+  own="$(own_backend_slot)"
+  if [[ -n "$own" ]]; then
+    echo "this worktree runs its own backend on luna slot ${own}" >&2
+    echo "$own"
+    return 0
+  fi
+
+  local -a running=()
+  mapfile -t running < <(running_backend_slots)
+  if (( ${#running[@]} == 1 )); then
+    echo "the only backend gateway listening is luna slot ${running[0]}" >&2
+    echo "${running[0]}"
+    return 0
+  fi
+  if (( ${#running[@]} > 1 )); then
+    local slot
+    for slot in "${running[@]}"; do
+      if [[ "$slot" == "0" ]]; then
+        echo "several backends are up; taking slot 0, the shared one (--backend-slot to pick another: ${running[*]})" >&2
+        echo 0
+        return 0
+      fi
+    done
+    echo "several backends are up (${running[*]}); taking the lowest, ${running[0]} (--backend-slot to pick another)" >&2
+    echo "${running[0]}"
+    return 0
+  fi
+
+  echo "no backend gateway is listening; pointing at luna slot 0, the default" >&2
+  echo "$DEFAULT_BACKEND_SLOT"
 }
 
 # --- configure ---------------------------------------------------------------
@@ -194,8 +288,9 @@ MFE_REMOTE_URLS=odontogram=http://localhost:${odontogram_port},damoclesSword=htt
 EOF
 
   # velista is the only front end that talks to a backend, so it is the only one
-  # whose slot has a second half. The pair defaults to the matching luna slot,
-  # which is what makes "slot 2" one idea rather than two.
+  # this half of the slot reaches. The backend it names is a separate number
+  # (see detect_backend_slot): one backend commonly serves several front end
+  # slots, and its CORS list allows every one of them.
   cat > "$root/apps/velista/.env" <<EOF
 # Generated by ng-slot.sh (slot ${slot}, luna-shopper slot ${backend_slot}). Git ignored.
 # Read by apps/velista/webpack.config.ts and substituted into environment.ts at
@@ -214,6 +309,7 @@ Configured this worktree for Angular slot ${slot}.
   velista       http://localhost:${velista_port}   (own origin, plan 0013)
   reserved      $(( shell_port + STATIC_REMOTES_OFFSET )), held for Nx's static remote server
   backend       luna-shopper slot ${backend_slot}: gateway ${gateway_port}, realtime ${realtime_port}
+                (an independent number, not this slot's; --backend-slot <n> moves it)
 
 Serve it:
   tools/dev/ng-slot.sh --up
@@ -311,12 +407,12 @@ up() {
   local requested_slot="$1" backend_slot="$2" apps_csv="$3" timeout="$4"
 
   if [[ -n "$requested_slot" ]]; then
-    write_config "$requested_slot" "${backend_slot:-$requested_slot}"
+    write_config "$requested_slot" "${backend_slot:-$(detect_backend_slot)}"
   elif ! require_config; then
     local slot
     slot="$(find_free_slot)"
     echo "==> this worktree has no slot yet; taking the lowest free one: ${slot}"
-    write_config "$slot" "${backend_slot:-$slot}"
+    write_config "$slot" "${backend_slot:-$(detect_backend_slot)}"
   elif [[ -n "$backend_slot" && "$backend_slot" != "${NG_BACKEND_SLOT:-}" ]]; then
     write_config "$NG_SLOT" "$backend_slot"
   fi
@@ -599,6 +695,7 @@ case "${action:-}" in
   list) list ;;
   down) down ;;
   up) up "$slot_arg" "$backend_slot" "$apps_csv" "$timeout" ;;
-  configure) write_config "$slot_arg" "${backend_slot:-$slot_arg}" ;;
+  # No --backend-slot means "work it out", never "the same number as this slot".
+  configure) write_config "$slot_arg" "${backend_slot:-$(detect_backend_slot)}" ;;
   *) usage; exit 2 ;;
 esac

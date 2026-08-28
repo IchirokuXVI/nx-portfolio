@@ -4,26 +4,29 @@
 worktrees, and therefore several agents, can serve the front end at the same time
 without fighting over ports.
 
-It is the front end half of `k8s/e2e/luna-shopper-backend/luna-slot.{sh,ps1}` and
-uses the same arithmetic, so **"slot 2" means one thing across the whole app**.
+It uses the same arithmetic as `k8s/e2e/luna-shopper-backend/luna-slot.{sh,ps1}`,
+but **the two numberings are independent**. See "which backend" below before
+assuming otherwise.
 
 ## The slot table
 
 A slot is an integer N. Every port is its default plus N&times;100.
 
-|                             | slot 0 (yours) | slot 1      | slot 2      | slot 3      |
-| --------------------------- | -------------- | ----------- | ----------- | ----------- |
-| shell                       | 4200           | 4300        | 4400        | 4500        |
-| static remotes (reserved)   | 4201           | 4301        | 4401        | 4501        |
-| odontogram                  | 4202           | 4302        | 4402        | 4502        |
-| damoclesSword               | 4203           | 4303        | 4403        | 4503        |
-| landingV2                   | 4204           | 4304        | 4404        | 4504        |
-| velista                     | 4205           | 4305        | 4405        | 4505        |
-| its luna gateway / realtime | 3000 / 3001    | 3100 / 3101 | 3200 / 3201 | 3300 / 3301 |
+|                           | slot 0 (yours) | slot 1 | slot 2 | slot 3 |
+| ------------------------- | -------------- | ------ | ------ | ------ |
+| shell                     | 4200           | 4300   | 4400   | 4500   |
+| static remotes (reserved) | 4201           | 4301   | 4401   | 4501   |
+| odontogram                | 4202           | 4302   | 4402   | 4502   |
+| damoclesSword             | 4203           | 4303   | 4403   | 4503   |
+| landingV2                 | 4204           | 4304   | 4404   | 4504   |
+| velista                   | 4205           | 4305   | 4405   | 4505   |
 
 **Slot 0 is yours**, the ports `project.json` already names, so a lone checkout
 needs no slot at all and `npx nx serve shell` is unchanged. `--auto` never takes
 it; workers start at 1. Asking for it explicitly (`ng-slot.sh 0`) still works.
+
+There is deliberately **no backend row** in that table. A front end slot number
+says nothing about which backend the front end talks to.
 
 ## Commands
 
@@ -46,15 +49,37 @@ exit means the slot is genuinely serving. It refuses to start over a port that i
 already busy rather than half starting the slot. Logs and pids land in
 `tools/dev/.run/`, all git ignored.
 
-Pair it with the backend on the same number:
+## Which backend velista talks to
+
+**The front end slot number and the backend slot number are independent.** Front
+end slot 5 may talk to backend slot 1, or 2, or 8, and **several front end slots
+may talk to one backend at the same time**. That last case is the common one: most
+front end work needs a backend running, not a backend of its own, so when nobody
+is changing the backend every worktree can point at the single instance that is up
+(usually slot 0).
+
+`--backend-slot <n>` says which. Left out, it is worked out rather than assumed,
+in this order:
+
+1. the choice already recorded for this worktree, so a re-run never silently
+   moves it;
+2. the luna slot **this same worktree** runs, if it runs one. This is the real
+   pairing when there is one: same worktree, not same number;
+3. the only backend gateway that is listening;
+4. backend slot 0 if it is listening (several are up, and it is the shared one);
+5. backend slot 0 anyway, with a note that nothing is running.
+
+The choice is printed whenever it is made, so an unexpected pairing is visible at
+the point it happens rather than as a failed request later.
 
 ```sh
-bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up 1   # gateway 3100, realtime 3101
-tools/dev/ng-slot.sh --up 1                             # shell 4300, velista 4305
+tools/dev/ng-slot.sh --up                      # ...and point at whatever is up
+tools/dev/ng-slot.sh --up 5 --backend-slot 1   # front end 5, backend 1
 ```
 
-`--backend-slot <n>` points velista at a different luna slot, for the uncommon
-case where the two numbers have to differ.
+Nothing on the backend side has to agree in advance: `luna-slot` allows **every**
+front end slot's origin, so any of them can call any backend without being
+configured into it.
 
 ## How it works, and why it is not simply a port in project.json
 
@@ -104,8 +129,8 @@ the caller, and nothing leaks into another project's build.
 ### velista is the one app that needed a change
 
 It is the only front end that talks to a backend, and its development environment
-named `localhost:3000` / `localhost:3001` as literals. Every worktree would
-therefore have talked to whichever backend held slot 0.
+named `localhost:3000` / `localhost:3001` as literals, so no worktree could point
+anywhere else even when it needed to.
 
 `apps/velista/webpack.config.ts` now carries the same `DefinePlugin` that
 `webpack.prod.config.ts` has always had, with the two default ports as its

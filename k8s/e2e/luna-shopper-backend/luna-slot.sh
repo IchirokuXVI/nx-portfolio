@@ -18,13 +18,29 @@
 # so the plain `docker compose ... up` workflow still matches), so a lone
 # worktree needs no slot at all.
 #
-# The front end has the same idea with the same arithmetic in `tools/dev/ng-slot.sh`,
-# so "slot 2" means one thing across the whole app: shell 4400, velista 4405,
-# gateway 3200, realtime 3201. That pairing is not decoration. The origins this
-# script writes into CORS_ORIGINS and APP_BASE_URL are derived from the *same* slot
-# number, so a worktree that takes slot 2 on both sides has a browser the gateway
-# will actually answer. `--backend-slot` on ng-slot.sh is the escape hatch for the
-# uncommon case where they differ.
+# --- the front end slots are a SEPARATE numbering ----------------------------
+#
+# `tools/dev/ng-slot.sh` does the same for the Angular apps, but the two numbers
+# are independent and must not be assumed equal. A front end on slot 5 may point
+# at this backend on slot 1, or 2, or 8, and several front end slots may point at
+# ONE backend at the same time. The common case is exactly that: nobody is
+# changing the backend, one instance is up, and every front end worktree uses it.
+#
+# Two consequences, and they pull in opposite directions:
+#
+#   CORS_ORIGINS is a LIST, so it names every front end slot's two origins, not
+#   this slot's. A backend has no way to know which front ends will call it and no
+#   reason to care, and an origin it has not been told about fails with a CORS
+#   error that says nothing about slots. Listing them all costs a long line in a
+#   git ignored file and removes the whole class of problem.
+#
+#   APP_BASE_URL and the two MAIL_*_BASE_URL are SINGULAR: they are where the
+#   Google callback and the verification links send a browser, and a redirect can
+#   only have one target. So they have to name one front end, which is what
+#   `--app-slot <n>` chooses. It defaults to 0, the shared front end, because that
+#   is the one a backend serving several worktrees is most likely to be driven
+#   from. Only the OAuth and mail round trips are affected by getting it wrong;
+#   ordinary API calls from any slot work regardless.
 #
 # This script (re)writes, all git ignored, so it is safe per worktree:
 #   - k8s/e2e/luna-shopper-backend/.env.slot   (compose: project name + host ports)
@@ -61,6 +77,12 @@ MAX_SLOT=9
 # asking for it explicitly means it.
 MIN_AUTO_SLOT=1
 
+# Which front end slot the singular URLs (the Google callback, the mail links)
+# point at when nobody says. Slot 0 is the developer's own front end, which is the
+# one a shared backend is most likely to be driven from. A default, not an
+# assumption about who may call: CORS allows every slot regardless.
+DEFAULT_APP_SLOT=0
+
 usage() {
   cat >&2 <<'EOF'
 usage:
@@ -72,9 +94,15 @@ usage:
 
 options:
   -p, --profile <name>   compose profile for --up / --down (e.g. observability)
+  --app-slot <n>         which Angular slot the Google callback and the mail
+                         links send a browser to (default 0). Only those; CORS
+                         allows every Angular slot no matter what this says.
   --keep-data            --down stops the containers instead of removing them
                          and their volumes, so the databases survive
   --timeout <secs>       how long --up waits for each service (default 180)
+
+The Angular slots are a separate numbering: any of them can call this backend,
+and several can at the same time. Backend slot 3 does not imply front end slot 3.
 
 --up is the whole thing: it writes the .env files if they are missing, brings the
 compose stack up and waits on its healthchecks, runs the migrations, then serves
@@ -136,6 +164,26 @@ probe_ports() {
   node "$PROBE" "$@"
 }
 
+# Every origin any front end slot can serve on, as one comma separated list.
+#
+# Not this slot's, and not a guess at which front end will call: the numbering is
+# independent, and several front end slots may point at one backend at the same
+# time (the common case, when nobody is changing the backend). `enableCors` is
+# handed this as an array of exact origins, with no wildcard, so an origin that is
+# missing is a request that fails. Twenty entries in a git ignored dev file is a
+# cheap way to never think about it again.
+#
+# Production is unaffected: it gets CORS_ORIGINS from the chart, not from here.
+frontend_origins() {
+  local slot origins=()
+  for (( slot = 0; slot <= MAX_SLOT; slot++ )); do
+    origins+=("http://localhost:$(( 4200 + slot * 100 ))")   # shell
+    origins+=("http://localhost:$(( 4205 + slot * 100 ))")   # velista's own origin
+  done
+  local IFS=','
+  echo "${origins[*]}"
+}
+
 # --- reading the other worktrees ---------------------------------------------
 
 worktree_paths() {
@@ -174,7 +222,7 @@ EOF
 }
 
 write_config() {
-  local slot="$1"
+  local slot="$1" app_slot="$2"
   local off=$(( slot * 100 ))
 
   # Host ports (compose). Kept > 100 apart per service so slots never overlap.
@@ -203,13 +251,11 @@ write_config() {
   local CORE_PORT=$(( 3003 + off ))
   local CATALOG_PORT=$(( 3004 + off ))
 
-  # The front end of the same slot (tools/dev/ng-slot.sh). These are the origins a
-  # browser will actually be on, so they are what CORS has to allow and what the
-  # Google callback and the mail links have to point back at. Hardcoding 4200 here
-  # meant every worktree past the first got a gateway that refused its own browser,
-  # with a CORS error that says nothing about slots.
-  local SHELL_PORT=$(( 4200 + off ))
-  local VELISTA_PORT=$(( 4205 + off ))
+  # The one front end the singular URLs point at. See the note at the top: this is
+  # a choice, not an inference, because a redirect target cannot be a list.
+  local aoff=$(( app_slot * 100 ))
+  local SHELL_PORT=$(( 4200 + aoff ))
+  local VELISTA_PORT=$(( 4205 + aoff ))
 
   local project
   project="$(slot_project "$slot")"
@@ -231,6 +277,10 @@ write_config() {
 # same three in every other worktree, can read this worktree's slot back out of the
 # one file that already describes it.
 LUNA_SLOT=${slot}
+# Which front end slot the singular redirect and mail URLs point at. Independent
+# of LUNA_SLOT on purpose (see the header); kept here so a plain re-run of this
+# script preserves the choice instead of silently resetting it to the default.
+LUNA_APP_SLOT=${app_slot}
 COMPOSE_PROJECT_NAME=${project}
 LUNA_AUTH_DB_PORT=${AUTH_DB_PORT}
 LUNA_CORE_DB_PORT=${CORE_DB_PORT}
@@ -259,10 +309,12 @@ EOF
 NATS_URL=nats://localhost:${NATS_PORT}
 REDIS_URL=redis://localhost:${REDIS_PORT}
 LOG_LEVEL=debug
-# Both front end origins of this slot: the portfolio shell, which mounts velista as
-# a remote, and velista's own origin, which is a first class way to run it (plan
+# Every front end slot's two origins, not this slot's: the front end numbering is
+# independent of this one, and several front end slots may call one backend at the
+# same time. Each slot contributes the portfolio shell, which mounts velista as a
+# remote, and velista's own origin, which is a first class way to run it (plan
 # 0013) and was missing from this list even on slot 0.
-CORS_ORIGINS=http://localhost:${SHELL_PORT},http://localhost:${VELISTA_PORT}
+CORS_ORIGINS=$(frontend_origins)
 # Telemetry deliberately does NOT live here; see the note in each service's .env.
 EOF
 
@@ -369,8 +421,11 @@ Configured this worktree for Luna Shopper slot ${slot}.
   otlp http/grpc  : localhost:${OTLP_HTTP_PORT} / ${OTLP_GRPC_PORT}
   jaeger / graf   : http://localhost:${JAEGER_UI_PORT} / http://localhost:${GRAFANA_PORT}
   prometheus      : http://localhost:${PROMETHEUS_PORT}
-  browser origins : http://localhost:${SHELL_PORT} (shell) and http://localhost:${VELISTA_PORT} (velista)
-                    matching Angular slot ${slot}; see tools/dev/ng-slot.sh
+  cors            : every front end slot (0..${MAX_SLOT}), shell and velista origins both.
+                    Any Angular slot can call this backend, and several can at once.
+  redirects       : Angular slot ${app_slot} (http://localhost:${SHELL_PORT}), for the Google
+                    callback and the mail links only, which can name just one.
+                    Change it with --app-slot <n>.
 
 Start the whole thing (compose, migrations, all five services):
   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up
@@ -420,6 +475,16 @@ require_config() {
   [[ -n "${LUNA_SLOT:-}" ]]
 }
 
+# The front end this worktree already points its redirects at, so re-running the
+# script to move slots does not quietly reset a choice somebody made.
+current_app_slot() {
+  local value=''
+  if [[ -f "$SLOT_ENV" ]]; then
+    value="$(sed -n 's/^LUNA_APP_SLOT=\([0-9]\+\)[[:space:]]*$/\1/p' "$SLOT_ENV" | head -n 1)"
+  fi
+  echo "${value:-$DEFAULT_APP_SLOT}"
+}
+
 # --- up ----------------------------------------------------------------------
 
 wait_for_ports() {
@@ -440,17 +505,19 @@ wait_for_ports() {
 }
 
 up() {
-  local requested_slot="$1" profile="$2" timeout="$3"
+  local requested_slot="$1" profile="$2" timeout="$3" app_slot="$4"
 
   if [[ -n "$requested_slot" ]]; then
-    write_config "$requested_slot"
+    write_config "$requested_slot" "${app_slot:-$(current_app_slot)}"
   elif ! require_config; then
     # "--up without generating the env file does that first" is the whole point:
     # an agent that has just made a worktree should need one command, not two.
     local slot
     slot="$(find_free_slot)"
     echo "==> this worktree has no slot yet; taking the lowest free one: ${slot}"
-    write_config "$slot"
+    write_config "$slot" "${app_slot:-$DEFAULT_APP_SLOT}"
+  elif [[ -n "$app_slot" && "$app_slot" != "${LUNA_APP_SLOT:-}" ]]; then
+    write_config "$LUNA_SLOT" "$app_slot"
   fi
 
   require_config || { echo "could not read $SLOT_ENV after writing it" >&2; return 1; }
@@ -663,6 +730,7 @@ list() {
 
 action=''
 slot_arg=''
+app_slot=''
 profile=''
 keep_data=''
 timeout=180
@@ -676,6 +744,8 @@ while (( $# )); do
     --auto) slot_arg='auto'; [[ -n "$action" ]] || action='configure'; shift ;;
     -p | --profile) profile="${2:-}"; shift 2 ;;
     -p=* | --profile=*) profile="${1#*=}"; shift ;;
+    --app-slot) app_slot="${2:-}"; shift 2 ;;
+    --app-slot=*) app_slot="${1#*=}"; shift ;;
     --keep-data) keep_data=1; shift ;;
     --timeout) timeout="${2:-}"; shift 2 ;;
     --timeout=*) timeout="${1#*=}"; shift ;;
@@ -693,6 +763,10 @@ if [[ ! "$timeout" =~ ^[0-9]+$ ]]; then
   echo "--timeout takes a number of seconds" >&2
   exit 2
 fi
+if [[ -n "$app_slot" && ! "$app_slot" =~ ^[0-9]+$ ]]; then
+  echo "--app-slot takes a non-negative integer" >&2
+  exit 2
+fi
 
 if [[ "$slot_arg" == 'auto' ]]; then
   slot_arg="$(find_free_slot)"
@@ -701,7 +775,9 @@ fi
 case "${action:-}" in
   list) list ;;
   down) down "$profile" "$keep_data" ;;
-  up) up "$slot_arg" "$profile" "$timeout" ;;
-  configure) write_config "$slot_arg" ;;
+  up) up "$slot_arg" "$profile" "$timeout" "$app_slot" ;;
+  # An --app-slot given on its own keeps the slot this worktree already has, and a
+  # re-run with neither keeps the front end it was already pointed at.
+  configure) write_config "$slot_arg" "${app_slot:-$(current_app_slot)}" ;;
   *) usage; exit 2 ;;
 esac

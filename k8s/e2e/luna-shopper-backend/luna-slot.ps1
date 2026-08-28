@@ -18,11 +18,20 @@
   services listen on 300{0..4}+N*100. Slot 0 keeps the original ports and the
   "luna-shopper-backend" project name, so a lone worktree needs no slot.
 
-  The front end has the same idea with the same arithmetic in tools/dev/ng-slot.ps1,
-  so "slot 2" means one thing across the whole app: shell 4400, velista 4405,
-  gateway 3200, realtime 3201. That pairing is not decoration: the origins written
-  into CORS_ORIGINS and APP_BASE_URL are derived from the same slot number, so a
-  worktree that takes slot 2 on both sides has a browser the gateway will answer.
+  tools/dev/ng-slot.ps1 does the same for the Angular apps, but the two numbers are
+  INDEPENDENT and must not be assumed equal. A front end on slot 5 may point at
+  this backend on slot 1, or 2, or 8, and several front end slots may point at ONE
+  backend at the same time. The common case is exactly that: nobody is changing the
+  backend, one instance is up, and every front end worktree uses it.
+
+  Two consequences, pulling in opposite directions. CORS_ORIGINS is a LIST, so it
+  names every front end slot's two origins rather than this slot's: a backend has
+  no way to know which front ends will call it, and an origin it was not told about
+  fails with a CORS error that says nothing about slots. APP_BASE_URL and the two
+  MAIL_*_BASE_URL are SINGULAR, because a redirect can only have one target, so
+  they name one front end, chosen with -AppSlot (default 0, the shared front end).
+  Only the OAuth and mail round trips care; ordinary API calls from any slot work
+  regardless.
 
   (Re)writes, all git ignored: .env.slot (compose),
   apps/luna-shopper-backend/.env.luna-shopper-backend, each service .env, the dev
@@ -41,6 +50,7 @@ param(
   [switch]$Down,
   [switch]$Auto,
   [Alias('p','Profile')][string]$ComposeProfile,
+  [int]$AppSlot = -1,
   [switch]$KeepData,
   [int]$Timeout = 180
 )
@@ -67,6 +77,29 @@ $maxSlot = 9
 # checkout that cannot move. `luna-slot.ps1 0` is still accepted, because asking for
 # it explicitly means it.
 $minAutoSlot = 1
+
+# Which front end slot the singular URLs (the Google callback, the mail links)
+# point at when nobody says. Slot 0 is the developer's own front end, the one a
+# shared backend is most likely to be driven from. A default, not an assumption
+# about who may call: CORS allows every slot regardless.
+$defaultAppSlot = 0
+
+# Every origin any front end slot can serve on, as one comma separated list.
+#
+# Not this slot's, and not a guess at which front end will call: the numbering is
+# independent, and several front end slots may point at one backend at the same
+# time. `enableCors` is handed this as an array of exact origins, with no wildcard,
+# so a missing origin is a request that fails. Twenty entries in a git ignored dev
+# file is a cheap way to never think about it again. Production is unaffected: it
+# gets CORS_ORIGINS from the chart, not from here.
+function Get-FrontendOrigins {
+  $origins = @()
+  for ($slot = 0; $slot -le $maxSlot; $slot++) {
+    $origins += "http://localhost:$(4200 + $slot * 100)"   # shell
+    $origins += "http://localhost:$(4205 + $slot * 100)"   # velista's own origin
+  }
+  return ($origins -join ',')
+}
 
 function Get-SlotProject([int]$slot) {
   # Slot 0 keeps the historic name so the no-slot workflow still matches.
@@ -162,6 +195,18 @@ function Write-EnvFile($path, $content) {
   Set-Content -Path $path -Value $content -Encoding utf8 -NoNewline
 }
 
+# -AppSlot if given, else the front end this worktree already points its redirects
+# at, so re-running the script to move backend slots does not quietly reset a
+# choice somebody made. Falls back to the default only on a fresh checkout.
+function Resolve-AppSlot {
+  if ($AppSlot -ge 0) { return $AppSlot }
+  $config = Read-SlotConfig
+  if ($null -ne $config -and $config.ContainsKey('LUNA_APP_SLOT')) {
+    return [int]$config['LUNA_APP_SLOT']
+  }
+  return $defaultAppSlot
+}
+
 # Telemetry (plan 0016), written into every service's own .env rather than the
 # shared file. That placement is load bearing, not tidiness: the SDK starts from
 # process.env before Nest exists (section 4.1), and only @nestjs/config ever reads
@@ -188,7 +233,7 @@ METRICS_ENABLED=true
 "@
 }
 
-function Write-SlotConfig([int]$slot) {
+function Write-SlotConfig([int]$slot, [int]$appSlot) {
   $off = $slot * 100
 
   $authDb = 5432 + $off
@@ -210,13 +255,11 @@ function Write-SlotConfig([int]$slot) {
   $prometheus = 9090 + $off
   $grafana = 3010 + $off
 
-  # The front end of the same slot (tools/dev/ng-slot.ps1). These are the origins a
-  # browser will actually be on, so they are what CORS has to allow and what the
-  # Google callback and the mail links have to point back at. Hardcoding 4200 here
-  # meant every worktree past the first got a gateway that refused its own browser,
-  # with a CORS error that says nothing about slots.
-  $shellPort = 4200 + $off
-  $velistaPort = 4205 + $off
+  # The one front end the singular URLs point at. See the header: this is a choice,
+  # not an inference, because a redirect target cannot be a list.
+  $aoff = $appSlot * 100
+  $shellPort = 4200 + $aoff
+  $velistaPort = 4205 + $aoff
 
   $project = Get-SlotProject $slot
 
@@ -235,6 +278,10 @@ function Write-SlotConfig([int]$slot) {
 # same three in every other worktree, can read this worktree's slot back out of the
 # one file that already describes it.
 LUNA_SLOT=$slot
+# Which front end slot the singular redirect and mail URLs point at. Independent
+# of LUNA_SLOT on purpose (see the header); kept here so a plain re-run of this
+# script preserves the choice instead of silently resetting it to the default.
+LUNA_APP_SLOT=$appSlot
 COMPOSE_PROJECT_NAME=$project
 LUNA_AUTH_DB_PORT=$authDb
 LUNA_CORE_DB_PORT=$coreDb
@@ -262,10 +309,12 @@ LUNA_CATALOG_PORT=$catalog
 NATS_URL=nats://localhost:$nats
 REDIS_URL=redis://localhost:$redis
 LOG_LEVEL=debug
-# Both front end origins of this slot: the portfolio shell, which mounts velista as
-# a remote, and velista's own origin, which is a first class way to run it (plan
+# Every front end slot's two origins, not this slot's: the front end numbering is
+# independent of this one, and several front end slots may call one backend at the
+# same time. Each slot contributes the portfolio shell, which mounts velista as a
+# remote, and velista's own origin, which is a first class way to run it (plan
 # 0013) and was missing from this list even on slot 0.
-CORS_ORIGINS=http://localhost:$shellPort,http://localhost:$velistaPort
+CORS_ORIGINS=$(Get-FrontendOrigins)
 # Telemetry deliberately does NOT live here; see the note in each service's .env.
 "@
 
@@ -341,8 +390,11 @@ $(Get-TelemetryEnv 'catalog' $otlpHttp)
   Write-Host "  gateway $gateway   realtime $realtime   auth $auth   core $core   catalog $catalog"
   Write-Host "  otlp http/grpc $otlpHttp / $otlpGrpc   jaeger http://localhost:$jaegerUi"
   Write-Host "  prometheus http://localhost:$prometheus   grafana http://localhost:$grafana"
-  Write-Host "  browser origins http://localhost:$shellPort (shell) and http://localhost:$velistaPort (velista)"
-  Write-Host "                  matching Angular slot $slot; see tools/dev/ng-slot.ps1"
+  Write-Host "  cors            every front end slot (0..$maxSlot), shell and velista origins both."
+  Write-Host "                  Any Angular slot can call this backend, and several can at once."
+  Write-Host "  redirects       Angular slot $appSlot (http://localhost:$shellPort), for the Google"
+  Write-Host "                  callback and the mail links only, which can name just one."
+  Write-Host "                  Change it with -AppSlot <n>."
   Write-Host ""
   Write-Host 'Start the whole thing (compose, migrations, all five services):'
   Write-Host '  ./k8s/e2e/luna-shopper-backend/luna-slot.ps1 -Up'
@@ -405,7 +457,7 @@ function Invoke-Up {
   if ($Auto -and -not $Slot) { $Slot = "$(Find-FreeSlot)" }
 
   if ($Slot) {
-    Write-SlotConfig ([int]$Slot)
+    Write-SlotConfig ([int]$Slot) (Resolve-AppSlot)
     $config = Read-SlotConfig
   }
   elseif ($null -eq $config) {
@@ -413,7 +465,7 @@ function Invoke-Up {
     # agent that has just made a worktree should need one command, not two.
     $free = Find-FreeSlot
     Write-Host "==> this worktree has no slot yet; taking the lowest free one: $free"
-    Write-SlotConfig $free
+    Write-SlotConfig $free (Resolve-AppSlot)
     $config = Read-SlotConfig
   }
 
@@ -602,8 +654,8 @@ function Invoke-List {
 if ($List) { Invoke-List; return }
 if ($Down) { Invoke-Down; return }
 if ($Up) { Invoke-Up; return }
-if ($Auto) { Write-SlotConfig (Find-FreeSlot); return }
-if ($Slot -match '^\d+$') { Write-SlotConfig ([int]$Slot); return }
+if ($Auto) { Write-SlotConfig (Find-FreeSlot) (Resolve-AppSlot); return }
+if ($Slot -match '^\d+$') { Write-SlotConfig ([int]$Slot) (Resolve-AppSlot); return }
 
 Write-Host @'
 usage:
@@ -615,9 +667,15 @@ usage:
 
 options:
   -Profile <name>   compose profile for -Up / -Down (e.g. observability)
+  -AppSlot <n>      which Angular slot the Google callback and the mail links
+                    send a browser to (default 0). Only those; CORS allows every
+                    Angular slot no matter what this says.
   -KeepData         -Down stops the containers instead of removing them and
                     their volumes, so the databases survive
   -Timeout <secs>   how long -Up waits for each service (default 180)
+
+The Angular slots are a separate numbering: any of them can call this backend,
+and several can at the same time. Backend slot 3 does not imply front end slot 3.
 
 -Up is the whole thing: it writes the .env files if they are missing, brings the
 compose stack up and waits on its healthchecks, runs the migrations, then serves
