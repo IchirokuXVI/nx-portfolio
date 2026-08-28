@@ -2,7 +2,7 @@
   "name": "luna-shopper-backend-catalog",
   "version": "0.0.1",
   "private": true,
-  "comment": "Runtime dependency manifest for the container image. Development uses the single root package.json (plan 0003); this is the authoritative list of what the built service needs at runtime, so `nx prune` produces a pruned package.json + lockfile for a reproducible `npm ci` in the Dockerfile (plan 0002, section 3). Includes the deps the bundled @portfolio/luna-shopper/platform code pulls in (pino/terminus/swagger/throttler/class-validator, and the OpenTelemetry SDK that `main.ts` loads before anything else). Keep in sync with the imports the service actually uses.",
+  "comment": "Runtime dependency manifest for the container image. Development uses the single root package.json (plan 0003); this is the authoritative list of what the built service needs at runtime, so `nx prune` produces a pruned package.json + lockfile for a reproducible `npm ci` in the Dockerfile (plan 0002, section 3). Includes the deps the bundled @portfolio/luna-shopper/platform code pulls in (pino/terminus/swagger/throttler/class-validator, and the OpenTelemetry SDK that `main.ts` loads before anything else). ioredis is in that set even though this service never touches Redis: the platform barrel re-exports RedisService, so every bundle that imports anything from it emits a top level `require(\"ioredis\")` and the container dies at boot without it. Keep in sync with the imports the service actually uses, and check the built main.js rather than the source when a dependency looks unused.",
   "dependencies": {
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.0",
@@ -27,6 +27,7 @@
     "ajv-formats": "^3.0.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "ioredis": "^5.11.1",
     "joi": "^17.13.3",
     "nats": "^2.29.3",
     "nestjs-pino": "^4.6.1",
