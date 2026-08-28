@@ -19,12 +19,20 @@
 # the task when it starts it. --restart replaces the processes and leaves compose
 # and its volumes untouched, so it never costs the data in the databases.
 #
-# What a slot is: an integer N. Every host port is its default + N*100, the
-# compose project (and therefore its containers, network, and named volumes) is
-# "luna-slot<N>", and the five services listen on 300{0..4}+N*100. Slot 0 is the
-# original single stack (default ports, project "luna-shopper-backend" is kept for N=0
-# so the plain `docker compose ... up` workflow still matches), so a lone
-# worktree needs no slot at all.
+# What a slot is: an integer N. The compose project (and therefore its containers,
+# network, and named volumes) is "luna-slot<N>".
+#
+# Slot 0 is the original single stack, on exactly the historic ports (gateway 3000,
+# auth-db 5432, nats 4222, and the rest) with the project still named
+# "luna-shopper-backend", so the plain `docker compose ... up` workflow still
+# matches and a lone worktree needs no slot at all. Nothing here changes it.
+#
+# Every other slot gets a 100 port block up in the 43000s: slot 1 is 43000..43054,
+# slot 2 is 43100..43154, and so on. That is a change from `default + N*100`, which
+# scattered a slot across 5532, 4322, 6479, 1125 and 16786, most of them in the
+# range everything else on the machine also wants, so slots collided with other
+# software instead of with each other. See the port table below for the band and
+# for how it was chosen.
 #
 # --- the front end slots are a SEPARATE numbering ----------------------------
 #
@@ -128,31 +136,74 @@ EOF
 
 # --- slot arithmetic ---------------------------------------------------------
 #
-# One function, so every caller (write, list, probe, wait) derives ports the same
-# way and none of them can hold a stale copy of the table.
+# One table and one function, so every caller (write, list, probe, wait) derives
+# ports the same way and none of them can hold a stale copy.
+#
+# Slot 0 is exactly the historic ports, and nothing here may change them: they are
+# the developer's own, the ones their tools, their Postman environment and their
+# running containers already point at.
+#
+# Every other slot gets a 100 port block up in the 43000s. It used to be
+# `default + N*100`, which scattered a slot across 5532, 4322, 6479, 1125, 8125,
+# 3100 and 16786, most of them in the range everything else on a developer machine
+# also wants, so slots collided with other software instead of with each other.
+#
+# 43000 is chosen against what this machine actually reserves rather than by feel.
+# `netsh int ipv4 show dynamicport tcp` puts the Windows ephemeral range at 49152
+# and up, and `netsh int ipv4 show excludedportrange protocol=tcp` puts every
+# Hyper-V and WSL reservation at 50000 and up. So 40000..48000 is clear of both,
+# and 43000 sits above the front end's 42000 band (tools/dev/ng-slot.sh) with room
+# for nine slots on each side.
+#
+# The offsets group by kind so a block stays readable: services at +0, databases
+# at +10, messaging at +20, cache at +30, mail at +40, observability at +50.
+declare -A DEFAULT_PORT=(
+  [gateway]=3000  [realtime]=3001  [auth]=3002  [core]=3003  [catalog]=3004
+  [auth_db]=5432  [core_db]=5433   [catalog_db]=5434
+  [nats]=4222     [nats_mon]=8222
+  [redis]=6379
+  [smtp]=1025     [mailpit]=8025
+  [otlp_grpc]=4317 [otlp_http]=4318 [jaeger]=16686 [prometheus]=9090 [grafana]=3010
+)
+LUNA_SLOT_BAND=43000
+declare -A SLOT_OFFSET=(
+  [gateway]=0   [realtime]=1   [auth]=2   [core]=3   [catalog]=4
+  [auth_db]=10  [core_db]=11   [catalog_db]=12
+  [nats]=20     [nats_mon]=21
+  [redis]=30
+  [smtp]=40     [mailpit]=41
+  [otlp_grpc]=50 [otlp_http]=51 [jaeger]=52 [prometheus]=53 [grafana]=54
+)
 
 slot_project() {
   # Slot 0 keeps the historic name so the no-slot workflow still matches.
   if [[ "$1" == "0" ]]; then echo 'luna-shopper-backend'; else echo "luna-slot$1"; fi
 }
 
+# The port one thing gets on one slot.
+luna_port() {
+  local name="$1" slot="$2"
+  if (( slot == 0 )); then
+    echo "${DEFAULT_PORT[$name]}"
+  else
+    echo $(( LUNA_SLOT_BAND + (slot - 1) * 100 + SLOT_OFFSET[$name] ))
+  fi
+}
+
 # The infrastructure compose brings up. `--wait` covers all of it, so a slot with
 # some of these open and some closed is genuinely half started.
 infra_ports() {
-  local off=$(( $1 * 100 ))
-  echo $(( 5432 + off ))   # auth-db
-  echo $(( 5433 + off ))   # core-db
-  echo $(( 5434 + off ))   # catalog-db
-  echo $(( 4222 + off ))   # nats
-  echo $(( 8222 + off ))   # nats monitoring
-  echo $(( 6379 + off ))   # redis
-  echo $(( 1025 + off ))   # smtp
-  echo $(( 8025 + off ))   # mailpit ui
+  local name
+  for name in auth_db core_db catalog_db nats nats_mon redis smtp mailpit; do
+    luna_port "$name" "$1"
+  done
 }
 
 service_ports() {
-  local off=$(( $1 * 100 )) i
-  for i in 0 1 2 3 4; do echo $(( 3000 + i + off )); done
+  local name
+  for name in "${SERVICES[@]}"; do
+    luna_port "$name" "$1"
+  done
 }
 
 # Reserved per slot whether or not the `observability` profile is up, so two
@@ -160,12 +211,10 @@ service_ports() {
 # whether a slot is up: the profile is opt in, and counting it would report every
 # healthy slot as partial.
 observability_ports() {
-  local off=$(( $1 * 100 ))
-  echo $(( 4317 + off ))    # otlp grpc
-  echo $(( 4318 + off ))    # otlp http
-  echo $(( 16686 + off ))   # jaeger ui
-  echo $(( 9090 + off ))    # prometheus
-  echo $(( 3010 + off ))    # grafana
+  local name
+  for name in otlp_grpc otlp_http jaeger prometheus grafana; do
+    luna_port "$name" "$1"
+  done
 }
 
 slot_ports() {
@@ -177,6 +226,29 @@ slot_ports() {
 probe_ports() {
   (( $# )) || return 0
   node "$PROBE" "$@"
+}
+
+# The port an Angular app gets on a front end slot.
+#
+# It restates tools/dev/ng-slot.sh's arithmetic, which is a duplication worth being
+# explicit about: this script has to know the front end's ports (to allow their
+# origins, and to aim the redirects), the two scripts are independent entry points
+# with no shared library between them, and a shell function cannot be imported from
+# a different tool without turning one into a dependency of the other. Both files
+# name the same two constants and both say so; if either band moves, this moves
+# with it. `ng-slot.sh --list` and this script's `--list` printing different
+# numbers for the same slot is the symptom of getting it wrong.
+FRONTEND_SLOT_BAND=42000
+declare -A FRONTEND_DEFAULT_PORT=([shell]=4200 [velista]=4205)
+declare -A FRONTEND_SLOT_OFFSET=([shell]=0 [velista]=5)
+
+frontend_port() {
+  local app="$1" slot="$2"
+  if (( slot == 0 )); then
+    echo "${FRONTEND_DEFAULT_PORT[$app]}"
+  else
+    echo $(( FRONTEND_SLOT_BAND + (slot - 1) * 100 + FRONTEND_SLOT_OFFSET[$app] ))
+  fi
 }
 
 # Every origin any front end slot can serve on, as one comma separated list.
@@ -192,8 +264,8 @@ probe_ports() {
 frontend_origins() {
   local slot origins=()
   for (( slot = 0; slot <= MAX_SLOT; slot++ )); do
-    origins+=("http://localhost:$(( 4200 + slot * 100 ))")   # shell
-    origins+=("http://localhost:$(( 4205 + slot * 100 ))")   # velista's own origin
+    origins+=("http://localhost:$(frontend_port shell "$slot")")
+    origins+=("http://localhost:$(frontend_port velista "$slot")")
   done
   local IFS=','
   echo "${origins[*]}"
@@ -238,39 +310,43 @@ EOF
 
 write_config() {
   local slot="$1" app_slot="$2"
-  local off=$(( slot * 100 ))
 
-  # Host ports (compose). Kept > 100 apart per service so slots never overlap.
-  local AUTH_DB_PORT=$(( 5432 + off ))
-  local CORE_DB_PORT=$(( 5433 + off ))
-  local CATALOG_DB_PORT=$(( 5434 + off ))
-  local NATS_PORT=$(( 4222 + off ))
-  local NATS_MON_PORT=$(( 8222 + off ))
-  local REDIS_PORT=$(( 6379 + off ))
-  local SMTP_PORT=$(( 1025 + off ))
-  local MAILPIT_UI_PORT=$(( 8025 + off ))
+  # Host ports (compose). Every one of them comes from luna_port, so this function
+  # cannot drift from what --list probes and --down frees.
+  local AUTH_DB_PORT CORE_DB_PORT CATALOG_DB_PORT NATS_PORT NATS_MON_PORT
+  local REDIS_PORT SMTP_PORT MAILPIT_UI_PORT
+  AUTH_DB_PORT="$(luna_port auth_db "$slot")"
+  CORE_DB_PORT="$(luna_port core_db "$slot")"
+  CATALOG_DB_PORT="$(luna_port catalog_db "$slot")"
+  NATS_PORT="$(luna_port nats "$slot")"
+  NATS_MON_PORT="$(luna_port nats_mon "$slot")"
+  REDIS_PORT="$(luna_port redis "$slot")"
+  SMTP_PORT="$(luna_port smtp "$slot")"
+  MAILPIT_UI_PORT="$(luna_port mailpit "$slot")"
 
   # Observability stack (plan 0016, section 9). Opt in via the `observability`
   # compose profile; these ports are reserved per slot either way so two worktrees
   # can each run their own collector without colliding.
-  local OTLP_GRPC_PORT=$(( 4317 + off ))
-  local OTLP_HTTP_PORT=$(( 4318 + off ))
-  local JAEGER_UI_PORT=$(( 16686 + off ))
-  local PROMETHEUS_PORT=$(( 9090 + off ))
-  local GRAFANA_PORT=$(( 3010 + off ))
+  local OTLP_GRPC_PORT OTLP_HTTP_PORT JAEGER_UI_PORT PROMETHEUS_PORT GRAFANA_PORT
+  OTLP_GRPC_PORT="$(luna_port otlp_grpc "$slot")"
+  OTLP_HTTP_PORT="$(luna_port otlp_http "$slot")"
+  JAEGER_UI_PORT="$(luna_port jaeger "$slot")"
+  PROMETHEUS_PORT="$(luna_port prometheus "$slot")"
+  GRAFANA_PORT="$(luna_port grafana "$slot")"
 
   # Service listen ports.
-  local GATEWAY_PORT=$(( 3000 + off ))
-  local REALTIME_PORT=$(( 3001 + off ))
-  local AUTH_PORT=$(( 3002 + off ))
-  local CORE_PORT=$(( 3003 + off ))
-  local CATALOG_PORT=$(( 3004 + off ))
+  local GATEWAY_PORT REALTIME_PORT AUTH_PORT CORE_PORT CATALOG_PORT
+  GATEWAY_PORT="$(luna_port gateway "$slot")"
+  REALTIME_PORT="$(luna_port realtime "$slot")"
+  AUTH_PORT="$(luna_port auth "$slot")"
+  CORE_PORT="$(luna_port core "$slot")"
+  CATALOG_PORT="$(luna_port catalog "$slot")"
 
   # The one front end the singular URLs point at. See the note at the top: this is
   # a choice, not an inference, because a redirect target cannot be a list.
-  local aoff=$(( app_slot * 100 ))
-  local SHELL_PORT=$(( 4200 + aoff ))
-  local VELISTA_PORT=$(( 4205 + aoff ))
+  local SHELL_PORT VELISTA_PORT
+  SHELL_PORT="$(frontend_port shell "$app_slot")"
+  VELISTA_PORT="$(frontend_port velista "$app_slot")"
 
   local project
   project="$(slot_project "$slot")"
@@ -827,7 +903,7 @@ list() {
   }
 
   echo
-  echo "Luna Shopper dev slots (ports are the default plus slot*100)"
+  echo "Luna Shopper dev slots (slot 0 is the historic ports; 1 and up are a block at 43000 + (slot-1)*100)"
   echo
   printf '  %-4s %-20s %-9s %-9s %-7s %s\n' \
     'SLOT' 'COMPOSE PROJECT' 'INFRA' 'SERVICES' 'OBSERV' 'CLAIMED BY'

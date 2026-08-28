@@ -4,26 +4,48 @@
 worktrees, and therefore several agents, can serve the front end at the same time
 without fighting over ports.
 
-It uses the same arithmetic as `k8s/e2e/luna-shopper-backend/luna-slot.{sh,ps1}`,
-but **the two numberings are independent**. See "which backend" below before
-assuming otherwise.
+It works the same way as `k8s/e2e/luna-shopper-backend/luna-slot.{sh,ps1}`, in its
+own port band and on its **own independent numbering**. See "which backend" below
+before assuming a front end slot implies a backend slot.
 
 ## The slot table
 
-A slot is an integer N. Every port is its default plus N&times;100.
+**Slot 0 is yours**, exactly the ports `project.json` already names, and nothing
+here changes them. A lone checkout needs no slot at all and `npx nx serve shell` is
+unchanged. `--auto` never takes slot 0; workers start at 1. Asking for it
+explicitly (`ng-slot.sh 0`) still works.
 
-|                           | slot 0 (yours) | slot 1 | slot 2 | slot 3 |
-| ------------------------- | -------------- | ------ | ------ | ------ |
-| shell                     | 4200           | 4300   | 4400   | 4500   |
-| static remotes (reserved) | 4201           | 4301   | 4401   | 4501   |
-| odontogram                | 4202           | 4302   | 4402   | 4502   |
-| damoclesSword             | 4203           | 4303   | 4403   | 4503   |
-| landingV2                 | 4204           | 4304   | 4404   | 4504   |
-| velista                   | 4205           | 4305   | 4405   | 4505   |
+**Every other slot gets a 100 port block up in the 42000s**, keeping the shape of
+the defaults so the numbers stay readable: 4200 becomes 42000, 4205 becomes 42005.
 
-**Slot 0 is yours**, the ports `project.json` already names, so a lone checkout
-needs no slot at all and `npx nx serve shell` is unchanged. `--auto` never takes
-it; workers start at 1. Asking for it explicitly (`ng-slot.sh 0`) still works.
+|                           | slot 0 (yours) | slot 1 | slot 2 | slot 3 | …   | slot 9 |
+| ------------------------- | -------------- | ------ | ------ | ------ | --- | ------ |
+| shell                     | 4200           | 42000  | 42100  | 42200  | …   | 42800  |
+| static remotes (reserved) | 4201           | 42001  | 42101  | 42201  | …   | 42801  |
+| odontogram                | 4202           | 42002  | 42102  | 42202  | …   | 42802  |
+| damoclesSword             | 4203           | 42003  | 42103  | 42203  | …   | 42803  |
+| landingV2                 | 4204           | 42004  | 42104  | 42204  | …   | 42804  |
+| velista                   | 4205           | 42005  | 42105  | 42205  | …   | 42805  |
+
+### Why the high band
+
+It used to be `default + N*100`, which put slot 1 on 4300 and slot 4 on 4600,
+right in the range everything else on a developer machine also wants. Slots then
+collided with **other software** instead of with each other, which is the same
+failure the slots exist to prevent, only harder to diagnose.
+
+42000 is chosen against what the machine actually reserves rather than by feel:
+
+```
+netsh int ipv4 show dynamicport tcp        -> ephemeral range starts at 49152
+netsh int ipv4 show excludedportrange tcp  -> every Hyper-V/WSL reservation >= 50000
+```
+
+So **40000..48000 is clear of both**, and far above the crowded region below 10000
+where the defaults live. The backend takes 43000 (see
+`k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md`), leaving room for nine
+slots on each side. Worth re-running those two commands if this ever starts
+colliding again; the reservations differ per machine.
 
 There is deliberately **no backend row** in that table. A front end slot number
 says nothing about which backend the front end talks to.
@@ -116,7 +138,7 @@ the point it happens rather than as a failed request later.
 
 ```sh
 tools/dev/ng-slot.sh --up                      # ...and point at whatever is up
-tools/dev/ng-slot.sh --up 5 --backend-slot 1   # front end 5, backend 1
+tools/dev/ng-slot.sh --up 5 --backend-slot 1   # shell 42400, gateway 43000
 ```
 
 Nothing on the backend side has to agree in advance: `luna-slot` allows **every**

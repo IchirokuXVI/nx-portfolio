@@ -28,11 +28,13 @@ NATS, or a running service needs a **slot**.
 A **slot** is an integer N that shifts an entire stack out of the way of the
 others:
 
-- every host port becomes its default **+ N&times;100**,
 - the compose project (its containers, network, and named volumes) becomes
   `luna-slot<N>`, so nothing is shared with another slot,
-- the five services listen on `3000..3004 + N*100`, and their `.env` files are
-  pointed at that slot's Postgres / NATS / Redis / SMTP ports.
+- **slot 0 keeps exactly the historic ports** (gateway 3000, auth-db 5432, nats
+  4222, and the rest); it is your own and nothing moves it,
+- **every other slot gets a 100 port block up in the 43000s**: slot 1 is
+  `43000..43054`, slot 2 is `43100..43154`, and each service's `.env` is pointed at
+  that block's Postgres / NATS / Redis / SMTP ports.
 
 The front end slots (`tools/dev/ng-slot.sh`) are a **separate** numbering that
 this one does not imply; see the section below.
@@ -45,29 +47,51 @@ already using. Worker slots therefore start at **1** (1, 2, 3, …). A lone
 worktree that is your own dev environment still just uses the plain default
 workflow (no slot flag needed = slot 0).
 
-|                     | slot 0 (yours)         | slot 1       | slot 2       | slot 3       |
-| ------------------- | ---------------------- | ------------ | ------------ | ------------ |
-| compose project     | `luna-shopper-backend` | `luna-slot1` | `luna-slot2` | `luna-slot3` |
-| auth-db             | 5432                   | 5532         | 5632         | 5732         |
-| core-db             | 5433                   | 5533         | 5633         | 5733         |
-| catalog-db          | 5434                   | 5534         | 5634         | 5734         |
-| nats (client / mon) | 4222 / 8222            | 4322 / 8322  | 4422 / 8422  | 4522 / 8522  |
-| redis               | 6379                   | 6479         | 6579         | 6679         |
-| smtp / mailpit ui   | 1025 / 8025            | 1125 / 8125  | 1225 / 8225  | 1325 / 8325  |
-| gateway             | 3000                   | 3100         | 3200         | 3300         |
-| realtime            | 3001                   | 3101         | 3201         | 3301         |
-| auth                | 3002                   | 3102         | 3202         | 3302         |
-| core                | 3003                   | 3103         | 3203         | 3303         |
-| catalog             | 3004                   | 3104         | 3204         | 3304         |
-| otlp (http / grpc)  | 4318 / 4317            | 4418 / 4417  | 4518 / 4517  | 4618 / 4617  |
-| jaeger ui           | 16686                  | 16786        | 16886        | 16986        |
-| prometheus          | 9090                   | 9190         | 9290         | 9390         |
-| grafana             | 3010                   | 3110         | 3210         | 3310         |
+Within a block the offsets group by kind, so a slot stays readable: services at
+`+0`, databases at `+10`, messaging at `+20`, cache at `+30`, mail at `+40`,
+observability at `+50`.
 
-Slot 0 (first column) is **yours** — reserved for your own development; workers
-use slots 1 and up. The step of 100 is larger than the spread of the base ports,
-so no two slots ever land on the same number. Four slots are laid out here; the
-scheme extends to as many as you need.
+|                     | slot 0 (yours)         | slot 1        | slot 2        | slot 3        | …   |
+| ------------------- | ---------------------- | ------------- | ------------- | ------------- | --- |
+| compose project     | `luna-shopper-backend` | `luna-slot1`  | `luna-slot2`  | `luna-slot3`  | …   |
+| gateway             | 3000                   | 43000         | 43100         | 43200         | …   |
+| realtime            | 3001                   | 43001         | 43101         | 43201         | …   |
+| auth                | 3002                   | 43002         | 43102         | 43202         | …   |
+| core                | 3003                   | 43003         | 43103         | 43203         | …   |
+| catalog             | 3004                   | 43004         | 43104         | 43204         | …   |
+| auth-db             | 5432                   | 43010         | 43110         | 43210         | …   |
+| core-db             | 5433                   | 43011         | 43111         | 43211         | …   |
+| catalog-db          | 5434                   | 43012         | 43112         | 43212         | …   |
+| nats (client / mon) | 4222 / 8222            | 43020 / 43021 | 43120 / 43121 | 43220 / 43221 | …   |
+| redis               | 6379                   | 43030         | 43130         | 43230         | …   |
+| smtp / mailpit ui   | 1025 / 8025            | 43040 / 43041 | 43140 / 43141 | 43240 / 43241 | …   |
+| otlp (grpc / http)  | 4317 / 4318            | 43050 / 43051 | 43150 / 43151 | 43250 / 43251 | …   |
+| jaeger ui           | 16686                  | 43052         | 43152         | 43252         | …   |
+| prometheus          | 9090                   | 43053         | 43153         | 43253         | …   |
+| grafana             | 3010                   | 43054         | 43154         | 43254         | …   |
+
+Slot 0 (first column) is **yours**, reserved for your own development, and nothing
+moves it; workers use slots 1 and up.
+
+### Why the high band
+
+It used to be `default + N*100`, which scattered a slot across 5532, 4322, 6479,
+1125, 8125 and 16786, most of them in the range everything else on a developer
+machine also wants. Slots then collided with **other software** instead of with
+each other, which is the same failure the slots exist to prevent, only harder to
+diagnose.
+
+43000 is chosen against what the machine actually reserves rather than by feel:
+
+```
+netsh int ipv4 show dynamicport tcp        -> ephemeral range starts at 49152
+netsh int ipv4 show excludedportrange tcp  -> every Hyper-V/WSL reservation >= 50000
+```
+
+So **40000..48000 is clear of both**, and 43000 sits above the front end's 42000
+band (`tools/dev/README.md`) with room for nine slots on each side. Worth
+re-running those two commands if this ever starts colliding again; the
+reservations differ per machine.
 
 ## One time per worktree: give it a `node_modules`
 
