@@ -60,9 +60,25 @@ describe('ZoneController username defaulting', () => {
     await controller.create(authenticated, { name: 'Home', username: 'Mamá' });
 
     expect(sentTo(send, ZONE_PATTERNS.create).username).toBe('Mamá');
-    // The global name is neither read nor written by a per zone choice.
-    expect(calledWith(send, AUTH_PATTERNS.getProfile)).toBe(false);
+    // A per zone choice does not write the global name.
     expect(calledWith(send, AUTH_PATTERNS.setUsername)).toBe(false);
+  });
+
+  it('and is still confirmed to exist, though its name goes unused', async () => {
+    // The profile hop used to be skipped here, on the reading that it was about
+    // the name and there was no longer a name to fetch. It is also the only
+    // moment this route checks that the account behind the token exists at all,
+    // and without it a token naming a deleted user creates a zone owned by
+    // nobody: unreachable, undeletable, and answered 201.
+    const { controller, send } = build();
+
+    await controller.join(authenticated, {
+      joinCode: 'ABCD1234',
+      username: 'Mamá',
+    });
+
+    expect(calledWith(send, AUTH_PATTERNS.getProfile)).toBe(true);
+    expect(sentTo(send, ZONE_PATTERNS.join).username).toBe('Mamá');
   });
 
   it('an anonymous caller joins under the name minted with their guest identity', async () => {
