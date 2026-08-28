@@ -99,7 +99,7 @@ describe('GET /v1/auth/google/callback', () => {
     // `upgrade()` and converts the caller in place instead of minting a stranger.
     const { controller, send } = build({ userId: 'guest-1', locale: 'en' });
 
-    await controller.callback({ user: profile, query: { state: 's' } });
+    await controller.resolveCallback({ user: profile, query: { state: 's' } });
 
     expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.googleLogin, {
       ...profile,
@@ -110,7 +110,7 @@ describe('GET /v1/auth/google/callback', () => {
   it('links nobody when the state carried nobody', async () => {
     const { controller, send } = build({ locale: 'en' });
 
-    await controller.callback({ user: profile, query: { state: 's' } });
+    await controller.resolveCallback({ user: profile, query: { state: 's' } });
 
     expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.googleLogin, {
       ...profile,
@@ -121,7 +121,7 @@ describe('GET /v1/auth/google/callback', () => {
   it('redirects to the app with the pair in the fragment, never a JSON body', async () => {
     const { controller } = build({ userId: 'guest-1', locale: 'es' });
 
-    const result = await controller.callback({
+    const result = await controller.resolveCallback({
       user: profile,
       query: { state: 's' },
     });
@@ -148,7 +148,7 @@ describe('GET /v1/auth/google/callback', () => {
     // every proxy log in front of it, and the next request's `Referer`.
     const { controller } = build({ userId: 'guest-1', locale: 'en' });
 
-    const { url } = await controller.callback({
+    const { url } = await controller.resolveCallback({
       user: profile,
       query: { state: 's' },
     });
@@ -162,7 +162,7 @@ describe('GET /v1/auth/google/callback', () => {
   it('falls back to the default locale when the state carried none', async () => {
     const { controller } = build({ userId: 'guest-1' });
 
-    const { url } = await controller.callback({
+    const { url } = await controller.resolveCallback({
       user: profile,
       query: { state: 's' },
     });
@@ -179,7 +179,7 @@ describe('GET /v1/auth/google/callback', () => {
     // anything.
     const { controller } = build({ userId: 'guest-1', locale: '../../evil' });
 
-    const { url } = await controller.callback({
+    const { url } = await controller.resolveCallback({
       user: profile,
       query: { state: 's' },
     });
@@ -198,7 +198,7 @@ describe('GET /v1/auth/google/callback', () => {
         )
       );
 
-      const result = await controller.callback({
+      const result = await controller.resolveCallback({
         user: profile,
         query: { state: 'replayed' },
       });
@@ -224,7 +224,10 @@ describe('GET /v1/auth/google/callback', () => {
         )
       );
 
-      const result = await controller.callback({ user: profile, query: {} });
+      const result = await controller.resolveCallback({
+        user: profile,
+        query: {},
+      });
 
       expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.consumeOAuthState, {
         state: '',
@@ -237,7 +240,7 @@ describe('GET /v1/auth/google/callback', () => {
     it('reports an unrecognisable failure as internal rather than leaking it', async () => {
       const { controller } = build(new Error('ECONNREFUSED nats:4222'));
 
-      const { url } = await controller.callback({
+      const { url } = await controller.resolveCallback({
         user: profile,
         query: { state: 's' },
       });
@@ -252,7 +255,7 @@ describe('GET /v1/auth/google/callback', () => {
     // user has no way back from there and the app never learns the flow ended.
     const { controller, send } = build({ userId: 'guest-1', locale: 'en' });
 
-    const result = await controller.callback({ query: { state: 's' } });
+    const result = await controller.resolveCallback({ query: { state: 's' } });
 
     expect(send).not.toHaveBeenCalled();
     expect(result.statusCode).toBe(HttpStatus.FOUND);
@@ -390,7 +393,7 @@ describe('the callback with Google unconfigured (plan 0026)', () => {
       unconfiguredConfigService
     );
 
-    const result = await controller.callback({ query: {} });
+    const result = await controller.resolveCallback({ query: {} });
 
     expect(result.url.startsWith('https://app.example/')).toBe(true);
     expect(fragmentOf(result.url)).toEqual({
@@ -485,7 +488,7 @@ describe('the callback, on a request Google did not send', () => {
     const send = jest.fn();
     const controller = new GoogleController({ send } as never, configService);
 
-    const result = await controller.callback({
+    const result = await controller.resolveCallback({
       query: { state: 'never-minted' },
     });
 
@@ -498,5 +501,64 @@ describe('the callback, on a request Google did not send', () => {
     // No state was ever minted, so there is nothing to consume and no login to
     // attempt. The flow ends here, in the app.
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * How the handler puts that value on the wire, which is the other half of "never
+ * with a body" (plan 0023, section 3.3).
+ *
+ * `@Redirect()` reaches Express's `res.redirect`, and that writes `Found.
+ * Redirecting to <url>` as the body. On the success path the url carries the
+ * token pair in its fragment, so the courtesy body was a copy of the tokens in a
+ * response body on this origin, which is the thing the fragment exists to avoid.
+ */
+describe('the callback response itself', () => {
+  function responseDouble() {
+    const end = jest.fn();
+    const headers: Record<string, string> = {};
+    let status = 0;
+    return {
+      end,
+      headers,
+      statusOf: () => status,
+      res: {
+        setHeader: (name: string, value: string) => {
+          headers[name] = value;
+        },
+        status: (code: number) => {
+          status = code;
+          return { end };
+        },
+      },
+    };
+  }
+
+  it('sends the location as a header and nothing as a body', async () => {
+    const { controller } = build({ userId: 'guest-1', locale: 'en' });
+    const response = responseDouble();
+
+    await controller.callback(
+      { user: profile, query: { state: 's' } },
+      response.res
+    );
+
+    expect(response.statusOf()).toBe(HttpStatus.FOUND);
+    expect(response.headers['Location']).toContain('/auth/callback#');
+    // Called with nothing. Anything passed here would be the body.
+    expect(response.end).toHaveBeenCalledWith();
+  });
+
+  it('carries no copy of the tokens outside that header', async () => {
+    const { controller } = build({ userId: 'guest-1', locale: 'en' });
+    const response = responseDouble();
+
+    await controller.callback(
+      { user: profile, query: { state: 's' } },
+      response.res
+    );
+
+    expect(response.headers['Location']).toContain(pair.refreshToken);
+    expect(response.end.mock.calls).toEqual([[]]);
   });
 });
