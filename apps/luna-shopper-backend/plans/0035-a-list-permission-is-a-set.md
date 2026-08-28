@@ -76,7 +76,7 @@ export enum ListPermission {
 | `READ` | See the list and everything on it: lines with both their statuses, comments, the presence of other viewers and editors, the counts, the name. Write nothing, **including comments**. |
 | `WRITE` | Add lines. Edit and delete lines that are `PENDING` or `REJECTED`. Reorder. Comment. |
 | `DECIDE` | Approve, reject and un-approve lines. Set a line's item status to `PENDING`, `READY` or `NOT_AVAILABLE`. Change the quantity of an **approved** line, and nothing else about it. Comment. |
-| `MANAGE` | Everything above, plus grant and revoke other people's permissions on this list, change its configuration, rename it and delete it. |
+| `MANAGE` | Everything above, plus edit and delete **any** line whatever its approval, grant and revoke other people's permissions on this list, change its configuration, rename it and delete it. |
 
 One reading of the requirement is recorded here rather than left implicit. It describes
 the person who can see everything and write nothing as having "just write access", and
@@ -137,6 +137,11 @@ a group admin's access**, because there is nothing to revoke. `setAccess` reject
 entry naming a staff membership rather than quietly dropping it, so the caller is told
 rather than left believing they did something.
 
+Group staff have one further power that is not a permission on any list: **only they may
+grant or revoke `MANAGE`** (section 5, rule 3). Being a list admin is therefore something
+the group hands out, and a list admin cannot mint another one, promote themselves out of
+review, or demote the peer who was appointed beside them.
+
 ### 2.5 A group admin can revoke a list creator's permissions
 
 The other direction is asked for explicitly and needs a change to how the creator's
@@ -162,6 +167,18 @@ survives intact and now has the vocabulary it wanted: the grant becomes
 `{READ, WRITE, DECIDE}`. The group can add lines and can tick them off. `MANAGE` is not
 in it, because governing the list is the thing the creator kept.
 
+**This is deliberately not the same answer as section 3.1**, and the difference is worth
+defending because the two look like the same question. The migration reinterprets a
+value somebody else chose years of product-decisions ago, under a vocabulary that had no
+word for approving; inventing a grant there would be putting words in their mouth. This
+grant is a decision being made now, by this plan, for a list created after it ships, and
+`0034` already made the argument for what that decision should be: a newly shared list
+on which only its creator can tick anything off is the exact failure `0034` exists to
+prevent, one release later and with a better vocabulary.
+
+A group that wants approval to mean something narrows the grant in the share sheet, once
+per list, which is where every other exception to a default in this product lives.
+
 ## 3. Storage and migration
 
 `list_access.role` (`list_role` enum) is replaced by `list_access.permissions`, a
@@ -173,7 +190,7 @@ The migration:
 
 1. creates the `list_permission` enum type,
 2. adds `permissions list_permission[] NOT NULL DEFAULT '{}'`,
-3. backfills `READER` to `{READ}` and `WRITER` to `{READ,WRITE,DECIDE}`,
+3. backfills `READER` to `{READ}` and `WRITER` to `{READ,WRITE}`,
 4. inserts or widens a row for every list's creator so it contains all four,
 5. deletes any row left with an empty set,
 6. drops the default, drops `role`, drops the `list_role` type,
@@ -183,21 +200,37 @@ The migration:
 `READER`. Stated rather than hidden, because a rollback that quietly promotes readers
 would be worse than one that is known to flatten.
 
-### 3.1 Why `WRITER` backfills to `{READ, WRITE, DECIDE}` and not `{READ, WRITE}`
+### 3.1 `WRITER` backfills to `{READ, WRITE}`, and what that costs
 
-This is the one migration decision worth arguing about, because it **widens** existing
-grants: today's `WRITER` cannot approve a line, and afterwards they can.
+The name maps to the two permissions it names, and nothing else. A migration that
+handed out `DECIDE` would be inventing a grant nobody made: approving a line is a
+permission that has never existed on a `list_access` row, and inferring it from a role
+called `WRITER` would mean the deploy quietly gave every writer in every group a power
+their group had reserved to its admins. A migration may not do that.
 
-The alternative narrows instead, and narrowing is the worse failure here. Today's
-`WRITER` can already set a line to `READY`, which is the ticking-off gesture the whole
-screen exists for; `DECIDE` is where that gesture now lives. Backfilling to
-`{READ, WRITE}` would take ticking away from every existing member of every existing
-group at once, with no notice and no error message that explains it, and the list would
-simply stop working for them. The widening, by contrast, is visible in the share sheet
-the day it lands and is one tap to undo.
+**The cost, stated plainly.** Today's `WRITER` can set a line to `READY`, and after this
+migration they cannot, because ticking off has moved into `DECIDE`. Every existing
+member who does the shopping needs `DECIDE` granting once, from the share sheet, by a
+list admin or a group admin. Until somebody does, the people who shop from a list can
+add to it and cannot tick anything off.
 
-Put plainly: a migration may hand somebody a permission they can be seen to have and
-asked to give back. It may not silently remove the one they use every week.
+Three things make that acceptable where it would not normally be:
+
+- The share sheet is reachable in the same release (section 6), so the fix is available
+  the moment the problem is, rather than being a wait for a follow-up.
+- Group admins are unaffected. They hold all four on every list (section 2.4), so a
+  group is never left with nobody who can complete a shop.
+- Luna Shopper has no production traffic yet. The row this argument is about is a
+  developer's seed data, not somebody's Saturday.
+
+The frontend must not present the resulting state as a broken screen.
+`velista/plans/0027` section 4 gives the `WRITE`-only caller a caption naming who does
+the ticking, and that caption exists largely for the fortnight after this migration.
+
+**Not solved by widening later.** If the first week shows the grant was needed after
+all, the answer is a one-off script that adds `DECIDE` to the rows a group asks for, not
+a re-run of the migration. A migration reinterprets a value somebody else chose; a
+script carries out a choice somebody made today.
 
 ### 3.2 Cost
 
@@ -235,7 +268,7 @@ And the call sites:
 | Operation | Was | Becomes |
 | --- | --- | --- |
 | `line.add` | `WRITER` | `WRITE` |
-| `line.update` | `WRITER`, any line | `WRITE` on a `PENDING`/`REJECTED` line; `DECIDE` for the quantity of an `APPROVED` line and nothing else (`0036` section 4) |
+| `line.update` | `WRITER`, any line | `WRITE` on a `PENDING`/`REJECTED` line; `DECIDE` for the quantity of an `APPROVED` line and nothing else (`0036` section 4); `MANAGE` for any field of any line |
 | `line.delete` | `WRITER`, any line | `WRITE` on a `PENDING`/`REJECTED` line; `MANAGE` for any line |
 | `line.reorder` | `WRITER` | `WRITE` |
 | `line.setStatus` | `WRITER` | `DECIDE` |
@@ -244,21 +277,30 @@ And the call sites:
 | `comment.list` | read access | `READ` |
 | `list.update` / `list.delete` / `list.setAccess` | creator or zone staff | `MANAGE` |
 
-### 4.1 An approved line is edited by un-approving it
+### 4.1 Who may touch an approved line
 
-`WRITE` covers `PENDING` and `REJECTED` lines only, per the requirement, and `DECIDE`
-covers exactly one field on an `APPROVED` one. Nobody, group admin included, may edit
-the **content** of an approved line in place.
+Three different answers, and the whole shape of the model is in them:
 
-That is deliberate and it is not a gap. `DECIDE` includes putting a line back to
-`PENDING`, so the path exists and reads correctly: un-approve, edit, approve. Somebody
-holding both permissions does it in three taps, and the line's approval state says what
-happened, which is the point of having approval at all. A silent in-place edit of an
-approved line is precisely the thing approval is supposed to prevent.
+- **`WRITE` may not touch it at all.** `WRITE` covers `PENDING` and `REJECTED` lines
+  only, which is the requirement stated exactly. A writer whose line has been agreed to
+  cannot quietly change what was agreed to.
+- **`DECIDE` may change its quantity, and nothing else.** That single field is what a
+  person in the aisle learns that the list did not know, and `0036` section 4 is about
+  what the server does with it. Content, item reference and position are untouched.
+- **`MANAGE` may edit any field of any line**, whatever its approval, and delete any
+  line. A list admin governs the list, and a governed thing needs somebody who can fix
+  it: a line approved with a typo in it, an item the group agreed to that turns out to be
+  the wrong one, an approved line that should never have existed at all.
 
-`MANAGE` is given the extra right to **delete** any line regardless of approval, because
-otherwise an approved line that should never have existed has no removal path at all
-short of deleting the list.
+`READ` may do none of it, which the table above already says and is worth saying twice
+because "can see everything" is easy to read as "can correct a small thing".
+
+There is a second path to editing an approved line that needs no `MANAGE`, and it is the
+one a plain `DECIDE` holder uses: `DECIDE` includes putting a line back to `PENDING`, so
+un-approve, edit, approve reads correctly and leaves the line's approval state saying
+what happened. Somebody holding `WRITE` and `DECIDE` together does it in three taps. The
+`MANAGE` bypass is the shortcut for the person who governs the list, not the only way
+through.
 
 ### 4.2 Editing a rejected line puts it back to `PENDING`
 
@@ -286,7 +328,7 @@ is `MANAGE` (section 6). Who else can write to a list is governance, not content
 ## 5. `setAccess`, and who may grant what
 
 `SetListAccessRequest.entries` becomes `{ membershipId, permissions: ListPermission[] }`.
-The handler (`list.service.ts:166`) keeps its upsert-per-entry shape and gains four
+The handler (`list.service.ts:166`) keeps its upsert-per-entry shape and gains five
 rules, applied in this order:
 
 1. **The caller holds `MANAGE`.** Unchanged in spirit, narrower in fact: it is now a
@@ -296,15 +338,42 @@ rules, applied in this order:
    themselves staff, because the row would be meaningless either way; the difference the
    requirement draws between a list admin and a group admin is about **other** rows, not
    about staff rows.
-3. **`READ` is added to any non-empty set.** Section 2.2.
-4. **An empty set deletes the row.** Section 2.2. This is how access is revoked, and it
+3. **Only a zone `OWNER` or `ADMIN` may change the `MANAGE` bit**, in either direction.
+   An entry from any other caller whose `MANAGE` differs from what the stored row already
+   holds is rejected. Section 5.2.
+4. **`READ` is added to any non-empty set.** Section 2.2.
+5. **An empty set deletes the row.** Section 2.2. This is how access is revoked, and it
    is the same call, so a share sheet has one save button rather than a save and a
    remove.
 
-A list admin who is not group staff may otherwise grant and revoke anything, including
-`MANAGE`, and including on the creator's row. A group admin may do the same. That is the
-whole of the asymmetry the requirement asks for: **staff rows are untouchable, every
-other row is not, and the creator's row is an ordinary row** (section 2.5).
+Subject to those, a list admin who is not group staff may grant and revoke `READ`,
+`WRITE` and `DECIDE` on any non-staff row, including the creator's. A group admin may do
+that and set `MANAGE` as well. That is the whole of the asymmetry the requirement asks
+for: **staff rows are untouchable, `MANAGE` is the group's to hand out, every other row
+and bit is a list admin's, and the creator's row is an ordinary row** (section 2.5).
+
+### 5.2 Why a list admin cannot appoint another one
+
+`MANAGE` is grantable, unlike the derived staff grant, so somebody other than the creator
+can be made a list admin. What they cannot then do is make a third.
+
+The reason is that `MANAGE` is not a stronger version of the permissions beside it, it is
+a different kind of thing: the other three say what you may do to the list's contents,
+and `MANAGE` says who else may do anything at all. A permission that can grant itself has
+no ceiling, and the first list admin appointed by mistake could appoint their way out of
+being removed, or demote the person who appointed them. Reserving the bit to the group
+keeps a fixed number of people who can settle any argument about a list, and that number
+is the group's admins, which is where every other governance answer in this product
+already lives.
+
+The rule is symmetric on purpose. Revoking somebody's `MANAGE` is the same power as
+granting it, so a list admin may do neither, which also means a list admin cannot strip
+the creator's `MANAGE` while leaving the rest of the row alone.
+
+Note the interaction with rule 5: an empty set deletes the row. A non-staff list admin
+clearing a row that holds `MANAGE` is therefore a `MANAGE` change and is refused by rule
+3, which is the right answer and would be an obvious hole if the rules were checked in
+the other order.
 
 ### 5.1 Not a partial update
 
