@@ -525,10 +525,6 @@ export class HomePage {
     );
   }
 
-  newList(): void {
-    this._notYetRouted('lists.create');
-  }
-
   search(): void {
     this._notYetRouted('search');
   }

@@ -26,7 +26,7 @@ import { COMMENT_BODY_MAX_LENGTH } from '@portfolio/velista/models';
   selector: 'lib-comment-composer',
   imports: [RokuTranslatorPipe],
   template: `
-    <form (ngSubmit)="submit()" class="composer">
+    <form (submit)="onSubmit($event)" class="composer">
       <textarea
         (input)="onInput($event)"
         [attr.aria-label]="'list.comments.placeholder' | rokuT"
@@ -39,11 +39,7 @@ import { COMMENT_BODY_MAX_LENGTH } from '@portfolio/velista/models';
         rows="2"
       ></textarea>
 
-      <button
-        [disabled]="!canSubmit() || busy()"
-        class="send"
-        type="submit"
-      >
+      <button [disabled]="!canSubmit() || busy()" class="send" type="submit">
         {{ 'list.comments.send' | rokuT }}
       </button>
     </form>
@@ -65,6 +61,17 @@ export class CommentComposer {
 
   onInput(event: Event): void {
     this.body.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  /**
+   * The form's own submit, for the reason `LineComposer.onSubmit` gives at length:
+   * `(ngSubmit)` is `NgForm`'s output and needs `FormsModule`, which this composer
+   * neither imports nor wants, so binding it would leave the native submit to run and
+   * reload the page.
+   */
+  onSubmit(event: Event): void {
+    event.preventDefault();
+    this.submit();
   }
 
   submit(): void {

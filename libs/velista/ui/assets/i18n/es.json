@@ -281,7 +281,8 @@
       "google": "Continuar con Google",
       "emailSignIn": "Entrar con correo",
       "newZone": "Nuevo grupo",
-      "newList": "Nueva lista",
+      "generateList": "Obtener lista de la compra",
+      "generateListSoon": "Próximamente",
       "search": "Buscar",
       "account": "Tu cuenta",
       "changeLocale": "Cambiar idioma"
@@ -353,7 +354,8 @@
     },
     "empty": {
       "title": "Todavía no hay nada en esta lista",
-      "body": "Escribe lo primero y todos lo verán"
+      "body": "Escribe lo primero y todos lo verán",
+      "short": "La lista está vacía"
     },
     "readOnly": {
       "notice": "Puedes ver esta lista, no cambiarla"

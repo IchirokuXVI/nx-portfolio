@@ -281,7 +281,8 @@
       "google": "Continue with Google",
       "emailSignIn": "Sign in with email",
       "newZone": "New group",
-      "newList": "New list",
+      "generateList": "Get shopping list",
+      "generateListSoon": "Coming soon",
       "search": "Search",
       "account": "Your account",
       "changeLocale": "Change language"
@@ -353,7 +354,8 @@
     },
     "empty": {
       "title": "Nothing on this list yet",
-      "body": "Write the first thing and everyone here sees it"
+      "body": "Write the first thing and everyone here sees it",
+      "short": "List is empty"
     },
     "readOnly": {
       "notice": "You can read this list, not change it"

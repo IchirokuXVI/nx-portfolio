@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import type { MyZone, Zone } from '@portfolio/velista/models';
+import type { ListPreview, MyZone, Zone } from '@portfolio/velista/models';
 import { provideFakeBrowserFacade } from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
@@ -443,6 +443,145 @@ describe('ZoneStore', () => {
       realtime.emit('zone.teleported', { id: 'z1' });
 
       expect(store.myZones()).toHaveLength(2);
+    });
+  });
+
+  /**
+   * Plan 0019, section 5. The counts on a card were live and the preview underneath
+   * them was not, so a card claimed four lists over three rows until the next full
+   * load. These cover the asymmetry that makes the fix small: a preview with room
+   * takes the new list, and a preview already full is left exactly as the server
+   * ordered it, because that ordering is by recent activity and the client cannot
+   * reproduce it for lists it has never loaded.
+   */
+  describe('the list preview on a zone card', () => {
+    function preview(id: string, name: string): ListPreview {
+      return { id, name, lineCount: 4, readyCount: 1 };
+    }
+
+    /** The rows the first zone is showing, after loading it with `lists`. */
+    async function loadWith(lists: readonly ListPreview[]): Promise<void> {
+      zones[0] = zone({ lists });
+      await store.load();
+    }
+
+    function rows(): readonly ListPreview[] {
+      return store.myZones()[0].lists;
+    }
+
+    it('adds a created list to a preview with room, at zero of zero', async () => {
+      await loadWith([preview('l1', 'Weekly shop')]);
+
+      realtime.emit('list.created', {
+        id: 'l9',
+        zoneId: 'z1',
+        name: 'Party',
+        createdByUserId: 'user-me',
+      });
+
+      expect(rows().map((list) => list.id)).toEqual(['l1', 'l9']);
+      // Not a guess: a list created this instant has nothing in it.
+      expect(rows()[1]).toEqual({
+        id: 'l9',
+        name: 'Party',
+        lineCount: 0,
+        readyCount: 0,
+      });
+      expect(store.myZones()[0].counts.listCount).toBe(3);
+    });
+
+    it('leaves a full preview alone and still bumps the count', async () => {
+      await loadWith([
+        preview('l1', 'Weekly shop'),
+        preview('l2', 'Hardware'),
+        preview('l3', 'Chemist'),
+      ]);
+
+      realtime.emit('list.created', {
+        id: 'l9',
+        zoneId: 'z1',
+        name: 'Party',
+        createdByUserId: 'user-me',
+      });
+
+      expect(rows().map((list) => list.id)).toEqual(['l1', 'l2', 'l3']);
+      expect(store.myZones()[0].counts.listCount).toBe(3);
+    });
+
+    it('does not add the same list twice', async () => {
+      await loadWith([preview('l1', 'Weekly shop')]);
+
+      const created = {
+        id: 'l9',
+        zoneId: 'z1',
+        name: 'Party',
+        createdByUserId: 'user-me',
+      };
+      realtime.emit('list.created', created);
+      realtime.emit('list.created', created);
+
+      expect(rows().map((list) => list.id)).toEqual(['l1', 'l9']);
+    });
+
+    it('renames a previewed list in place', async () => {
+      await loadWith([preview('l1', 'Weekly shop'), preview('l2', 'Hardware')]);
+
+      realtime.emit('list.updated', {
+        id: 'l2',
+        zoneId: 'z1',
+        name: 'DIY',
+        createdByUserId: 'user-me',
+      });
+
+      expect(rows().map((list) => list.name)).toEqual(['Weekly shop', 'DIY']);
+      // A rename is not a creation. The count must not move.
+      expect(store.myZones()[0].counts.listCount).toBe(2);
+    });
+
+    it('ignores a rename of a list outside the preview', async () => {
+      await loadWith([preview('l1', 'Weekly shop')]);
+
+      realtime.emit('list.updated', {
+        id: 'l7',
+        zoneId: 'z1',
+        name: 'DIY',
+        createdByUserId: 'user-me',
+      });
+
+      expect(rows().map((list) => list.name)).toEqual(['Weekly shop']);
+    });
+
+    it('drops a deleted list and decrements the count', async () => {
+      await loadWith([preview('l1', 'Weekly shop'), preview('l2', 'Hardware')]);
+
+      // The payload carries a list id and no zone id, so the store has to find the
+      // zone by the row it is holding.
+      realtime.emit('list.deleted', { id: 'l1' });
+
+      expect(rows().map((list) => list.id)).toEqual(['l2']);
+      expect(store.myZones()[0].counts.listCount).toBe(1);
+    });
+
+    it('leaves everything alone for a list it is not previewing', async () => {
+      // The consequence of finding the zone by the row: a list past the third cannot
+      // be located at all, so its count stands until the next load.
+      await loadWith([preview('l1', 'Weekly shop')]);
+
+      realtime.emit('list.deleted', { id: 'l7' });
+
+      expect(rows().map((list) => list.id)).toEqual(['l1']);
+      expect(store.myZones()[0].counts.listCount).toBe(2);
+    });
+
+    it('leaves the preview alone when access changes', async () => {
+      // The payload says access changed, not whether **this** caller gained or lost
+      // it, so either guess can put a list on a dashboard its reader cannot open.
+      await loadWith([preview('l1', 'Weekly shop')]);
+
+      realtime.emit('list.accessChanged', { listId: 'l1' });
+
+      expect(rows().map((list) => list.id)).toEqual(['l1']);
+      expect(store.myZones()[0].counts.listCount).toBe(2);
     });
   });
 

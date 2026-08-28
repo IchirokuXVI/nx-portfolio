@@ -2,7 +2,7 @@
   A form, so Enter on the field submits without a keydown handler and the phone's
   keyboard offers a Go key rather than a newline.
 -->
-<form (ngSubmit)="submit()" class="composer">
+<form (submit)="onSubmit($event)" class="composer">
   <div class="field-wrap">
     <input
       (input)="onInput($event)"

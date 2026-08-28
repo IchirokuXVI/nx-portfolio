@@ -6,7 +6,12 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import type { MyZone, Zone } from '@portfolio/velista/models';
+import {
+  ZONE_LIST_PREVIEW_LIMIT,
+  type ListPreview,
+  type MyZone,
+  type Zone,
+} from '@portfolio/velista/models';
 import { SessionStore } from '../auth/session-store';
 import { Mutations } from '../mutations';
 import {
@@ -695,21 +700,59 @@ export class ZoneStore {
 
       // `listCount` is access filtered per caller, so the counts broadcast cannot
       // carry it and the store keeps its own from the list events it already gets.
+      //
+      // The **preview** underneath the count is kept in step here too (plan 0019,
+      // section 5). Before that it was not, so a card could say "4 lists" over three
+      // rows until the next full load.
       case 'list.created':
-        this._patch(event.list.zoneId, (zone) => bumpLists(zone, 1));
+        this._patch(event.list.zoneId, (zone) =>
+          addListPreview(bumpLists(zone, 1), {
+            id: event.list.id,
+            name: event.list.name,
+            // Facts, not guesses: a list created this instant has no lines in it.
+            lineCount: 0,
+            readyCount: 0,
+          })
+        );
         break;
 
-      case 'list.deleted':
+      case 'list.updated':
+        // Rename in place. Only the preview rows are held here, so a list outside the
+        // preview is a no-op, which is right: nothing on this screen shows its name.
+        this._patch(event.list.zoneId, (zone) =>
+          renameListPreview(zone, event.list.id, event.list.name)
+        );
+        break;
+
+      case 'list.deleted': {
+        // The event carries a list id and no zone id, and the stream is merged across
+        // every room, so the zone has to be found by the row it holds. A list outside
+        // the preview cannot be located at all and its count therefore stands until
+        // the next load; the alternative is a request per deletion to learn a zone id
+        // the card is about to re-read anyway.
+        const zoneId = this._zoneIdOfPreviewedList(event.listId);
+        if (zoneId !== null) {
+          this._patch(zoneId, (zone) =>
+            removeListPreview(bumpLists(zone, -1), event.listId)
+          );
+        }
+        break;
+      }
+
       case 'list.accessChanged':
       case 'line.added':
       case 'line.updated':
       case 'line.reordered':
       case 'line.deleted':
       case 'comment.added':
-      case 'list.updated':
         // List-scoped traffic reaching the zone room. `ListStore` owns these; the zone
         // summary's per-list counts are refreshed by its own load rather than being
         // recomputed from a stream the store only sees part of.
+        //
+        // `list.accessChanged` stays here on purpose: the payload says access changed,
+        // not whether **this** caller gained or lost it, so adding or removing a row
+        // would be a guess, and guessing wrong puts a list on a dashboard its owner
+        // cannot open.
         break;
 
       case 'merge.requested':
@@ -721,6 +764,17 @@ export class ZoneStore {
         // (plan 0004, section 6.7).
         break;
     }
+  }
+
+  /** Which loaded zone, if any, has this list in the three rows it is previewing. */
+  private _zoneIdOfPreviewedList(listId: string): string | null {
+    for (const [zoneId, zone] of this._byId()) {
+      if (zone.lists.some((list) => list.id === listId)) {
+        return zoneId;
+      }
+    }
+
+    return null;
   }
 
   private _patch(zoneId: string, update: (zone: MyZone) => MyZone): void {
@@ -770,5 +824,52 @@ function bumpLists(zone: MyZone, by: number): MyZone {
       ...zone.counts,
       listCount: Math.max(0, zone.counts.listCount + by),
     },
+  };
+}
+
+/**
+ * Put a just created list into the card's preview, **if there is room**.
+ *
+ * A zone already showing `ZONE_LIST_PREVIEW_LIMIT` rows gets the count bump and
+ * nothing else. Evicting the oldest would be the right answer only if the server's
+ * ordering were reproducible here, and it is not: the preview is ordered by recent
+ * activity, which the client cannot compute for lists it has never loaded. So a full
+ * preview is left exactly as it arrived (plan 0019, section 5).
+ */
+function addListPreview(zone: MyZone, list: ListPreview): MyZone {
+  if (
+    zone.lists.length >= ZONE_LIST_PREVIEW_LIMIT ||
+    zone.lists.some((existing) => existing.id === list.id)
+  ) {
+    return zone;
+  }
+
+  return { ...zone, lists: [...zone.lists, list] };
+}
+
+function renameListPreview(zone: MyZone, listId: string, name: string): MyZone {
+  if (!zone.lists.some((list) => list.id === listId)) {
+    return zone;
+  }
+
+  return {
+    ...zone,
+    lists: zone.lists.map((list) =>
+      list.id === listId ? { ...list, name } : list
+    ),
+  };
+}
+
+/**
+ * Drop a deleted list from the preview.
+ *
+ * A zone with four lists showing three now shows two, until the next load refills it.
+ * That is accepted: the alternative is asking the server for a fresh preview on every
+ * deletion, which is a request per event for a cosmetic third row.
+ */
+function removeListPreview(zone: MyZone, listId: string): MyZone {
+  return {
+    ...zone,
+    lists: zone.lists.filter((list) => list.id !== listId),
   };
 }
