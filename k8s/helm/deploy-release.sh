@@ -42,59 +42,78 @@ export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 # ---------------------------------------------------------------------------
 # What state is the release in before anything touches it?
 #
-# helm refuses to work on a release stuck in a pending state, with "another
-# operation (install/upgrade/rollback) is in progress". A release gets stuck
-# that way when a deploy is KILLED rather than failed: helm records pending
-# before it starts waiting, and if the process dies in between, nothing ever
-# writes the outcome. The way that happens here is the SSH connection CI runs
-# this over going away mid `--wait`, which sends the whole remote process group
-# a SIGHUP.
+# A first install that does not finish leaves a release record but no chart
+# resources, and that combination is a trap helm cannot climb out of on its own.
+# The record makes every later deploy an UPGRADE, so it runs the pre-upgrade
+# hooks, and those hooks expect the resources a successful install would have
+# created. Here that means the migration Job looking for a ConfigMap that has
+# never existed, failing CreateContainerConfigError until the timeout, forever.
+# Production sat in exactly that loop across 0.2.0, 0.2.1 and 0.2.2.
 #
-# Without this block the next attempt fails on the wreckage of the previous one
-# instead of on anything real, and the message names an operation that is not in
-# progress and has not been for hours. That is a considerably more confusing
-# failure than whatever caused the original disconnect.
+# So the question worth asking is not what the current status is called. It is
+# whether any revision of this release has ever been live. Two different labels
+# describe the same wreckage, depending only on how the attempt ended:
+#
+#   pending-install  the deploy process was KILLED. helm writes pending before
+#                    it waits, so nothing ever wrote the outcome. That is what a
+#                    reaped SSH connection does, via SIGHUP.
+#   failed           helm gave up on its own, cleanly, and said so.
+#
+# Neither has anything to preserve, and both block the install that would fix
+# them. Keying on `pending-install` alone caught the first and missed the
+# second, which is how 0.2.2 still failed with the guard in place.
 # ---------------------------------------------------------------------------
 RELEASE_STATUS="$(helm status "$RELEASE_NAME" --namespace "$NAMESPACE" 2>/dev/null \
   | sed -n 's/^STATUS: //p' | head -1 || true)"
 RELEASE_STATUS="${RELEASE_STATUS:-none}"
 
-case "$RELEASE_STATUS" in
-  pending-install)
-    # Cleared automatically, because there is provably nothing to lose. A
-    # pending-install release has never completed once, so no revision of it has
-    # ever served traffic, and there is no earlier revision to roll back to:
-    # removing the record and installing again is the only way forward.
-    #
-    # It does not take the databases with it either. The only persistent storage
-    # in this chart comes from StatefulSet volumeClaimTemplates (postgres and
-    # nats), and Kubernetes deliberately leaves those PVCs behind when the
-    # StatefulSet goes away. There are no standalone PVCs in the chart, so
-    # `helm uninstall` cannot delete a volume.
-    echo "Release '${RELEASE_NAME}' is stuck in pending-install from an earlier"
-    echo "attempt that was killed rather than finished. Removing that record and"
-    echo "installing again; no revision of it ever served traffic, and the"
-    echo "postgres and nats volumes are not helm's to delete."
-    helm uninstall "$RELEASE_NAME" --namespace "$NAMESPACE" --wait --timeout 5m
-    RELEASE_STATUS=none
-    ;;
-  pending-upgrade|pending-rollback)
-    # NOT cleared automatically, because here an earlier revision did deploy and
-    # its pods may be serving production right now. Choosing between rolling
-    # back and letting the operation stand is a judgement about live traffic,
-    # and a deploy script that silently makes it is a script nobody can trust
-    # with the next release. It says what to run instead.
-    echo "Release '${RELEASE_NAME}' is stuck in ${RELEASE_STATUS}, left behind by a" >&2
-    echo "deploy that was killed mid flight. An earlier revision is still live, so" >&2
-    echo "this script will not decide for you. Look at what is running, then:" >&2
-    echo >&2
-    echo "  helm history ${RELEASE_NAME} --namespace ${NAMESPACE}" >&2
-    echo "  helm rollback ${RELEASE_NAME} --namespace ${NAMESPACE}   # to the last deployed revision" >&2
-    echo >&2
-    echo "and run this script again." >&2
-    exit 1
-    ;;
-esac
+# Has any revision ever been live? `deployed` is the current one, `superseded` a
+# previous one, and a release that has neither has never served a request.
+#
+# Read from the JSON rather than the table, whose UPDATED column contains spaces
+# and defeats column counting, and with grep rather than jq, which is not
+# installed on the VPS and is not worth requiring for one field.
+EVER_DEPLOYED=false
+if [ "$RELEASE_STATUS" != none ] \
+  && helm history "$RELEASE_NAME" --namespace "$NAMESPACE" --output json 2>/dev/null \
+    | grep -q '"status":"\(deployed\|superseded\)"'; then
+  EVER_DEPLOYED=true
+fi
+
+if [ "$RELEASE_STATUS" != none ] && [ "$EVER_DEPLOYED" = false ]; then
+  # Cleared automatically, because there is provably nothing to lose. No
+  # revision has ever served traffic and there is no earlier one to roll back
+  # to, so removing the record and installing fresh is the only way forward as
+  # well as the safe one.
+  #
+  # It does not take the databases with it either. The only persistent storage
+  # in this chart comes from StatefulSet volumeClaimTemplates (postgres and
+  # nats), and Kubernetes deliberately leaves those PVCs behind when the
+  # StatefulSet goes away. There are no standalone PVCs in the chart, so
+  # `helm uninstall` cannot delete a volume.
+  echo "Release '${RELEASE_NAME}' exists in state '${RELEASE_STATUS}' but no revision of"
+  echo "it has ever been live, so an earlier first install never finished. Removing"
+  echo "the record and installing fresh, which is what lets the install path (and"
+  echo "its post-install migrations) run at all. The postgres and nats volumes are"
+  echo "not helm's to delete and stay where they are."
+  helm uninstall "$RELEASE_NAME" --namespace "$NAMESPACE" --wait --timeout 5m
+  RELEASE_STATUS=none
+elif [ "$RELEASE_STATUS" = pending-upgrade ] || [ "$RELEASE_STATUS" = pending-rollback ]; then
+  # NOT cleared automatically. Here a revision did deploy and its pods may be
+  # serving production right now. Choosing between rolling back and letting the
+  # operation stand is a judgement about live traffic, and a deploy script that
+  # silently makes it is a script nobody can trust with the next release. It
+  # says what to run instead.
+  echo "Release '${RELEASE_NAME}' is stuck in ${RELEASE_STATUS}, left behind by a" >&2
+  echo "deploy that was killed mid flight. An earlier revision is still live, so" >&2
+  echo "this script will not decide for you. Look at what is running, then:" >&2
+  echo >&2
+  echo "  helm history ${RELEASE_NAME} --namespace ${NAMESPACE}" >&2
+  echo "  helm rollback ${RELEASE_NAME} --namespace ${NAMESPACE}   # to the last deployed revision" >&2
+  echo >&2
+  echo "and run this script again." >&2
+  exit 1
+fi
 
 # A first install is a different amount of work from an upgrade, so it gets a
 # different budget. 10m is measured against the slowest ordinary path: three
