@@ -22,6 +22,36 @@
 # `--wait` on the upgrade (plan 0003) is what makes a failure here matter: the
 # Job is a hook, so a migration that exhausts backoffLimit fails the upgrade
 # before any new pod takes traffic.
+#
+# post-install rather than pre-install, and this is the difference between a
+# first deploy that works and one that cannot.
+#
+# Helm runs pre-install hooks BEFORE it applies a single chart resource, so on a
+# first install this Job would start in an empty namespace. It has two hard
+# dependencies there and neither exists yet: the ConfigMap it reads its whole
+# environment from, and the Postgres it migrates. The first is what you actually
+# see, because the kubelet cannot even create the container without it:
+#
+#   Error: configmap "luna-shopper-backend-config" not found
+#   CreateContainerConfigError, x21 over 4m13s
+#
+# which is what production did on 0.2.0 and again on 0.2.1. Creating the
+# ConfigMap earlier would not fix it, only move the failure one step along to a
+# database that has not been created either, because Helm is still blocked on
+# this hook and cannot apply the StatefulSet that would provide one.
+#
+# post-install runs after every resource is applied and, because the deploy uses
+# --wait, after they are ready. Nothing is lost by migrating then: readiness for
+# auth and core is `db.pingCheck`, a SELECT 1 that an empty schema answers
+# perfectly well, and the services set `synchronize: false`, so no pod does DDL
+# of its own on the way up. A first install therefore comes up on an empty
+# schema, migrates, and is correct from that point on.
+#
+# The upgrade path is untouched: pre-upgrade still runs before any new pod
+# takes traffic, which is the property the expand/contract argument above
+# depends on. And a first install whose migration fails leaves a release that
+# exists, so the retry is an upgrade and takes the pre-upgrade path, where the
+# ConfigMap is now there.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -31,7 +61,7 @@ metadata:
     app: {{ .name }}-migrate
     app.kubernetes.io/part-of: luna-shopper-backend
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook: post-install,pre-upgrade
     helm.sh/hook-weight: '0'
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
