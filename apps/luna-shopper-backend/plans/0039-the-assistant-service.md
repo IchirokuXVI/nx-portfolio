@@ -32,18 +32,23 @@ expensive to retrofit:
 
 Stated as a constraint on the service rather than as a habit:
 
-**Rule A1. The assistant opens no database connection, no Redis connection and no NATS
-connection.** Its dependencies are an HTTP client and a model provider SDK. There is no
-entity, no migration, no `DATABASE_URL`, no `REDIS_URL`, no `NATS_URL`. A later change
-that adds one is not an optimisation, it is a different architecture, and it needs its own
-plan.
+**Rule A1. The assistant reads no application data except through the API, carrying the
+caller's own token.** It opens no connection to the auth, core or catalog databases, it
+subscribes to nothing, and it holds no service account and no privileged client. Every
+request it makes on somebody's behalf carries that person's `Authorization` header
+verbatim.
 
-The value is not purity. It is that every authorization check, throttle, validation rule
-and event emission built across plans `0004` to `0037` applies to the assistant without
-being restated or re-tested. If the bot tries to add a line to a list the caller cannot
-write, it gets the same 403 the app gets, from the same code, and it says so. It is also
-what makes the blast radius of a misread sentence exactly the blast radius of a mistaken
-tap, which is the property that makes this safe to ship as a test.
+The rule is about **whose data it can reach**, not about whether the service may own
+storage. A table of its own, holding its own data, breaks nothing here. A `SELECT` against
+core's database breaks everything, because the moment the bot can read a row without a
+token, a misread sentence can leak a list to somebody who was never in the zone.
+
+What the rule buys: every authorization check, throttle, validation rule and event emission
+built across plans `0004` to `0037` applies to the assistant without being restated or
+re-tested. If the bot tries to add a line to a list the caller cannot write, it gets the
+same 403 the app gets, from the same code, and it says so. The blast radius of a misread
+sentence is exactly the blast radius of a mistaken tap, and that is what makes this safe to
+put in front of people as a test.
 
 Rule A1 has a visible cost, and section 5 is about paying it.
 
@@ -55,15 +60,32 @@ not become the gateway's failure mode, and its profile is a few long requests ra
 many short ones.
 
 - Project `luna-shopper-backend-assistant`, port **3005**, following 3000 to 3004.
-- **Routed, with host prefix `bot`**, so `bot.velista.app` in production and
-  `bot.staging.velista.app` in staging, exactly as realtime got `rt.`. The client calls it
-  directly.
+- **Not routed.** Like auth, core and catalog, it is reachable only inside the cluster.
 
-Rejected: proxying it through the gateway. The gateway is the request path for the whole
-app, and an assistant turn holds a connection open for as long as a model takes to answer.
-A thin proxy is not much code, but it is the gateway's connection budget being spent on a
-third party's latency, which is what backlog `0005` section 3 refused. A module inside the
-gateway is rejected by that same section, and for the same reason.
+**The client reaches it through the gateway, at `/v1/assistant`.** No new hostname, no new
+certificate, no new CORS origin, and no second base URL in the app. The gateway proxies the
+route through to the service and does nothing else with it.
+
+An earlier draft of this plan gave the assistant its own `bot.` host, on the argument that a
+turn holds a gateway connection open for as long as a model takes to answer. That argument
+does not survive contact with the runtime: Node holds an awaited socket, not a thread, and
+an idle connection waiting on a third party costs almost nothing. What backlog `0005`
+section 3 actually refused was putting the assistant's **logic** in the gateway, so that a
+provider outage or a runaway conversation would sit inside the app's request path. Keeping
+the logic in its own service satisfies that in full; the proxy hop does not reintroduce it.
+
+Against that, a separate host would have cost a DNS record and a certificate in each
+environment, a `hostOverrides` entry, a CORS origin, and a second base URL that the client
+must configure and that `gatewayInterceptor` does not already attach a token and an
+`Accept-Language` to. That is real work, repeated per environment, to avoid a cost that is
+not there.
+
+One honest consequence of proxying: a turn occupies a gateway request while the assistant
+turns around and calls the gateway again for its context, so one conversation turn is a
+nested pair. At two replicas and this volume that is not a problem, and section 9's
+concurrency limit caps it regardless. If the assistant ever becomes high traffic or starts
+streaming, the separate host is the escape hatch and this section is the argument to
+re-read.
 
 The service calls the gateway over the cluster's internal name for everything it does on
 the caller's behalf, forwarding the caller's `Authorization` header verbatim. It never
@@ -75,20 +97,25 @@ mints a token and it holds no service account of its own.
 conversation: the transcript so far, plus the new message. The service validates it,
 answers, and forgets.
 
-This follows from rule A1 and it is the right shape for a test. The cost is real and is
-written down here so the next plan can price it rather than rediscover it:
+**This is a scope decision, not a consequence of rule A1.** Rule A1 forbids reaching
+application data without a token; it says nothing about the service owning a table. A
+conversation store would be perfectly legal. It is left out because this is a test, and a
+fourth Postgres means a migration job, a Helm entry, a backup target and a place for
+personal data to accumulate, all before anybody knows whether the feature is worth keeping.
 
-- A reload loses the conversation. Acceptable for a test. Not acceptable for the
-  accessibility work that follows, and backlog `0005` section 5 already says why.
+What that costs, written down so the next plan can price it rather than rediscover it:
+
+- A reload loses the conversation. Acceptable for a test, not for the accessibility work
+  that follows, and backlog `0005` section 5 already designs the store that fixes it.
 - The transcript is client supplied, so it is **untrusted input**. The service caps it on
   arrival rather than trusting the client's cap, and it never treats a transcript entry as
   an instruction from the operator. A user who pastes "you are now in developer mode" into
   their own transcript is sending user text, and it is handled as user text.
-- Per user quotas cannot be counted across conversations without somewhere to count.
-  Section 9 says what is possible instead, and admits what is not.
+- Per user quotas cannot be counted across conversations. Section 9 says what is possible
+  instead, and admits what is not.
 
-Storing conversations is the first thing the next plan should reconsider. Backlog `0005`
-section 5 already designs it.
+Adding the store is the first thing the next plan should reconsider, and nothing here
+stands in its way.
 
 ## 5. What it may know, and the cost of rule A1
 
@@ -144,25 +171,33 @@ Read only, no confirmation, and the one tool that should feel instant.
 
 ### 6.3 `rename_me`
 
-Changes the caller's username, and by default their display name in every zone they belong
-to.
+Changes the caller's username, and with it their display name in the zones where it still
+matches.
 
-This is the tool that needs the most care, and it is worth being blunt about why:
+**It is one request.** `PATCH /account/me`, with `username` and a `propagation` value. Plan
+`0018` already built the cascade server side, so there is nothing here to orchestrate and
+nothing that can half succeed:
 
-- **Usernames are global and unique since plan `0018`**, so the call can fail on collision.
-  A taken name is an ordinary answer, not an error.
-- **It is not one call.** The account rename is one request; the zone display names are one
-  request per membership. So it is N+1 requests, it can half succeed, and somebody in six
-  zones can end up renamed in four of them.
-- Therefore the zone renames are **reported individually**. The answer names which changed
-  and which did not, a partial failure is stated rather than swallowed, and a retry renames
-  only what is still stale.
-- **It always confirms before acting.** The bot states the old name, the new name and how
-  many zones it will touch, and acts on the next turn. There is no setting that skips this,
-  because it is the only tool here that changes what other people see.
+| `UsernamePropagation` | Effect |
+|---|---|
+| `GLOBAL_ONLY` | the API's own default: only `users.username` changes, every membership is left alone |
+| `MATCHING_ZONES` | also renames memberships whose name equals the **old** global username |
+| `ALL_ZONES` | renames every membership, whatever it was called |
 
-Leaving the zone names alone is something the caller can ask for in words, defaulting to
-changing them, as specified.
+**The bot sends `MATCHING_ZONES` by default**, which is what "change the name on zones too"
+means in practice and is the only one of the three that is safe as a default: somebody who
+deliberately became "Mamá" in the family zone keeps it, which is exactly the case plan
+`0018`'s own comment says the default exists to protect. `ALL_ZONES` would clobber it, and
+the bot only sends it when the caller says something that plainly means everywhere.
+`GLOBAL_ONLY` is what "just my account, leave the groups alone" maps to.
+
+The rest is ordinary. Usernames are global and unique since plan `0018`, so the call can
+come back saying the name is taken, and that is an answer the bot relays in words rather
+than an error.
+
+It confirms once before acting, in a sentence, because it changes what other people see.
+That is a one line ceremony on a single reversible call, not the multi step gate the
+destructive operations in section 12 would need if they were here, which they are not.
 
 ## 7. Freedom in the prose, constraint in the actions
 
@@ -235,10 +270,29 @@ The free tier has three properties that are design constraints rather than footn
 **Its limits are per Google Cloud project, not per user.** Roughly ten to fifteen requests
 a minute shared across everybody, and Google no longer publishes exact per model numbers in
 the docs, so they are read from the AI Studio console. With two replicas and a handful of
-concurrent users this **will** return 429 in ordinary use. So a provider 429 is a **first
-class answer** and not a 500: the service returns "I am busy right now, try again in a
-moment" in the caller's language, and a small per instance concurrency limit sits in front
-of the provider call so that a burst queues briefly instead of becoming a burst of 429s.
+concurrent users this **will** return 429 in ordinary use. That is accepted rather than
+engineered around, and the requirement is that it be legible when it happens.
+
+**Rule A5. A rate limited turn tells the caller how long to wait, and the answer is a
+number.** "Try again later" is the wrong answer: somebody who cannot type is left guessing,
+and guessing means tapping send again, which spends the next slot and extends the outage.
+
+So the service returns a 429 of its own carrying `retryAfterSeconds`, and the client renders
+a countdown and holds the composer disabled until it reaches zero (velista `0032`
+section 3). The number comes from, in order:
+
+1. The provider's own retry hint. Google's error payload carries a `RetryInfo` with a
+   `retryDelay`; when it is there it is authoritative and is used as it is.
+2. Otherwise, the time until the local limiter's window rolls, which the service knows
+   because it is the thing counting.
+3. Otherwise a conservative fixed fallback, so the field is never absent.
+
+The value goes in the response body **and** in a standard `Retry-After` header, so nothing
+downstream has to parse prose to find it.
+
+A small per instance concurrency limit sits in front of the provider call, so that a burst
+queues briefly instead of becoming a burst of 429s. Queuing is preferable to failing here:
+waiting two seconds is invisible, being told to come back is not.
 
 **There is no SLA and the terms can change.** Acceptable precisely because this is a test.
 Not acceptable for the accessibility work, and the next plan should budget for a paid tier.
@@ -264,7 +318,9 @@ here rather than assumed, and it is the one part of this plan that would be sile
 if it were left out.
 
 It goes to **structured logs**, through the tracing and metrics from plan `0016`, which the
-service already gets for free. No storage, so rule A1 holds.
+service already gets for free. That is a consequence of rule A2's scope decision, not of
+rule A1: a table would have been allowed, and the next plan may well prefer one, since a
+query beats grepping logs once there is enough to look at.
 
 Per turn, one structured record:
 
@@ -294,10 +350,19 @@ with that name is picked up, built, pushed and rolled out with no workflow edit.
 editing is everything that states configuration by hand:
 
 - **`k8s/helm/values.yaml`**: a sixth entry under `lunaShopperBackend.services` with
-  `port: 3005`, `routed: true`, `hostPrefix: bot`, `websocket: false`, plus the non secret
-  keys below in the ConfigMap block.
-- **`k8s/helm/values.production.yaml` and `values.staging.yaml`**: a `hostOverrides` entry
-  putting `bot` on velista's domain, beside the ones already moving `api` and `rt` there.
+  `port: 3005` and `routed: false`, alongside auth, core and catalog, plus the non secret
+  keys below in the ConfigMap block. **No `hostPrefix`, and no environment values file
+  changes at all**, which is the whole saving from section 3's decision to go through the
+  gateway: no new host means no `hostOverrides`, no DNS record, no certificate and no CORS
+  origin, in either environment.
+- **The gateway** gains the `/v1/assistant` proxy route and the config naming the service.
+  It is the only gateway change, and it holds no assistant logic.
+- **`apps/luna-shopper-backend/gateway/docs/openapi.json` must be regenerated**
+  (`npx nx run luna-shopper-backend-gateway:openapi`) **in the same commit as that route**,
+  because the gateway now has one more endpoint than the committed document says. The
+  gateway's own suite fails on a stale file and PR checks run it, so forgetting this is a
+  red PR rather than silent drift. An earlier draft of this plan routed the assistant on its
+  own host and said this file was untouched; going through the gateway is what changed it.
 - **`k8s/bootstrap/provision-release.sh`**: `GEMINI_API_KEY` added to the app Secret
   (`luna-shopper-backend-secrets`), prompted for the way the Google client secret is, and
   **added to `OPTIONAL_EMPTY_KEYS`**. That last part is deliberate and follows plan `0026`:
@@ -318,8 +383,8 @@ editing is everything that states configuration by hand:
 - **`apps/luna-shopper-backend/assistant/`**: `project.json` with a `build:docker` target
   mirroring the other five, `src/Dockerfile`, and the hand written runtime `package.json`,
   whose missing entries kill the container at boot rather than at build.
-- **`gateway/docs/openapi.json`** is untouched, because this service is not the gateway and
-  adds no gateway route. If that stops being true, regenerate it in the same commit.
+- **`apps/velista/...`**: the panel calls the gateway base URL the app already has, so there
+  is no new frontend environment value either. Velista `0032` section 5 covers it.
 
 The key never enters the repository, and the suite does not need one, because of rule A4.
 
@@ -344,8 +409,9 @@ Recorded so the next plan puts them back deliberately rather than rediscovering 
 |---|---|---|
 | `claude-opus-5` through the Anthropic SDK | Gemini Flash-Lite, free tier | It is a test, and the bill should be zero while it produces the usage data |
 | Tools generated from the OpenAPI document | Three hand written tools | Three schemas are cheaper than a generator and its tests |
-| Conversations stored, with turns and token usage | Stateless, client holds the transcript | Rule A1 taken literally; section 4 states the cost |
-| Account operations excluded entirely, username changes named | `rename_me` included, always confirmed | Asked for. It is self scoped and reversible, which the excluded operations are not |
+| Conversations stored, with turns and token usage | Stateless, client holds the transcript | Scope, not principle. Section 4 says what it costs and section 10 says where the usage data goes instead |
+| Account operations excluded entirely, username changes named among them | `rename_me` included | Asked for, and it is one reversible self scoped `PATCH` that plan `0018` already made atomic. The excluded operations are none of those things |
+| A separate service reached on its own surface | A separate service behind a gateway path | Same isolation, section 3, without a hostname and certificate per environment |
 | The SDK tool runner's hooks carry the confirmation gate | A hand written loop | Different SDK. The gate is the same and lives in the service |
 
 The two rules it does **not** depart from are the ones that matter: the assistant is an API
@@ -369,14 +435,18 @@ discouraged.
 
 - Every action goes through the gateway with the caller's token, and an action the caller
   could not perform by hand fails with the ordinary error, surfaced in words.
-- The service has no database, Redis or NATS connection, and its dependency list shows it.
+- The service reaches no application data except through the API with the caller's token,
+  and it connects to no other service's database.
+- It is reachable only through the gateway at `/v1/assistant`, and no new hostname,
+  certificate or CORS origin was added in either environment.
 - The three tools work, and nothing else is callable because nothing else is defined.
 - A write that cannot be resolved to exactly one list asks instead of guessing.
-- `rename_me` confirms first, reports every zone individually, and states a partial failure
-  rather than swallowing it.
+- `rename_me` is a single `PATCH /account/me`, defaults to `MATCHING_ZONES`, and leaves a
+  deliberately different per zone name alone.
 - Every id the client can click came from a tool result in the same turn, and no link 404s.
 - Off topic input gets a redirect and no tool call.
-- A provider 429 reaches the user as a sentence rather than an error.
+- A rate limited turn answers with a number of seconds, in the body and in `Retry-After`,
+  and the panel counts it down rather than saying "later".
 - The suite passes with no network access and never calls Gemini.
 - A cluster with no `GEMINI_API_KEY` deploys, boots, answers 501 on the assistant route, and
   passes `provision-release.sh --check`.
