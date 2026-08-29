@@ -7,8 +7,8 @@ import { simpleHash } from './simple-hash';
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
-  // exec is unused by the build executor (it streams via spawn) but the push
-  // executor it imports promisifies exec at module load, so it must be a function.
+  // exec is unused by the build executor, which streams via spawn, but jest needs
+  // every named export the module surface promises to be present.
   exec: jest.fn(),
 }));
 
@@ -108,6 +108,41 @@ describe('Build Executor', () => {
       shell: true,
       stdio: 'inherit',
     });
+  });
+
+  // `--push` streams layers to the registry from the build. `--load` would instead
+  // export a tarball into the local daemon for `docker push` to read straight back
+  // out, which is a round trip nothing in CI reads.
+  it('pushes from the build instead of loading when pushToRegistry is set', async () => {
+    mockedSpawn.mockImplementation(mockSpawnExit(0));
+
+    const output = await executor(
+      { ...options, pushToRegistry: true },
+      context
+    );
+
+    expect(output.success).toBe(true);
+
+    const [command] = mockedSpawn.mock.calls[0];
+    expect(command).toContain('--push');
+    expect(command).not.toContain('--load');
+    // Both tags go up in the one build, rather than one push per tag.
+    expect(command).toContain('-t my-test-registry/my-test-image:latest');
+    expect(command).toContain('-t my-test-registry/my-test-image:0.0.1');
+    // The separate push executor is not invoked, so `docker push` never runs.
+    expect(jest.requireMock('child_process').exec).not.toHaveBeenCalled();
+  });
+
+  // An image that only copies a finished bundle wants the bundle as its context,
+  // not the workspace. The path is derived from the project name, so nothing has to
+  // repeat where the output lands.
+  it('uses the project build output as the context when context is dist', async () => {
+    mockedSpawn.mockImplementation(mockSpawnExit(0));
+
+    await executor({ ...options, context: 'dist' }, context);
+
+    const [command] = mockedSpawn.mock.calls[0];
+    expect(command).toContain(` ${path.join('dist/apps/my-test-project')} `);
   });
 
   it('handles missing project name', async () => {

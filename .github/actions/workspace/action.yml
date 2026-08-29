@@ -1,0 +1,55 @@
+name: Workspace
+description: >
+  Restores the workspace dependencies and the Nx cache for a job. Dependencies are
+  installed inside the pinned build image, so node_modules is produced by the same
+  environment that compiles the code (k8s/plans/0007, section 5).
+
+inputs:
+  build-image:
+    description: Digest pinned image the workspace is installed and built in.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # node_modules is produced by the build image, so the key names it: a Node bump
+    # must not silently reuse a tree built by the previous one.
+    - name: Restore node_modules
+      id: node-modules
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ inputs.build-image }}
+
+    # The Nx computation cache. `neverConnectToCloud` is set in nx.json, and this does
+    # not contradict it: a local cache directory restored from GitHub's cache is not a
+    # connection to anything.
+    #
+    # restore-keys is what makes this hit at all. The exact key never matches on a new
+    # commit; the prefix falls back to the most recent cache on the branch, which is
+    # the previous run.
+    - name: Restore the Nx cache
+      uses: actions/cache@v4
+      with:
+        path: .nx/cache
+        key: nx-cache-${{ runner.os }}-${{ github.sha }}
+        restore-keys: nx-cache-${{ runner.os }}-
+
+    # -u is not optional. Without it the container runs as root and everything it
+    # writes (node_modules, dist, .nx/cache) is root owned on the runner, so every
+    # later step, which runs as `runner`, fails to save a cache or read a build
+    # context. Some of those fail loudly and some do not.
+    #
+    # HOME follows from -u: a uid with no /etc/passwd entry in the image has no home
+    # directory for npm to resolve, so it needs one that is writable. The npm cache
+    # goes into the workspace for the same reason (and is gitignored).
+    - name: Install dependencies
+      if: steps.node-modules.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        docker run --rm \
+          -u "$(id -u):$(id -g)" \
+          -v "$PWD":/w -w /w \
+          -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+          "${{ inputs.build-image }}" \
+          npm ci --legacy-peer-deps

@@ -1,31 +1,26 @@
-ARG NODE_ENV=development
+# Serves a bundle that was built before this image.
+#
+# There is no build stage. `nx build` runs outside, once for the whole workspace, and
+# the finished `dist/apps/<project>` arrives here as the entire build context because
+# `build:docker` sets `"context": "dist"`. Compiling in here instead gave every image
+# its own empty Nx cache, so the shared libraries were rebuilt once per app; see
+# k8s/plans/0007.
+#
+# MFE_BASE_URL and MFE_REMOTE_URLS are no longer build args. The shell still bakes
+# where it loads its remotes from, which is what makes this image environment
+# specific, but webpack.prod.config.ts reads those from the environment of the
+# `nx build` that produced the bundle, so the workflow sets them there instead.
 ARG BUILDER_TAG=latest
 ARG TARGET_REGISTRY
+# Injected by the docker executor. Unused here, but declared so buildx does not warn
+# about a build arg nothing consumed.
 ARG NX_APP
-# Base URL where the shell loads its remotes from. Baked into the bundle at build
-# time, so staging and production builds differ only by this value.
-ARG MFE_BASE_URL
-# Alternative to MFE_BASE_URL: an explicit per-remote URL map (name=url,...), used
-# when each remote lives on its own origin/port (the local "port" mode).
-ARG MFE_REMOTE_URLS
 
-# Use the builder image to build the microfrontend app. BUILDER_TAG selects which
-# base image tag to build FROM (latest by default; set per build:docker configuration
-# in project.json, or forwarded from a BUILDER_TAG env var via the target's forwardEnv).
-FROM ${TARGET_REGISTRY}nx-portfolio/builder:${BUILDER_TAG} AS builder
-ARG NODE_ENV=development
-ENV NODE_ENV=$NODE_ENV
-ARG NX_APP
-ARG MFE_BASE_URL
-ENV MFE_BASE_URL=$MFE_BASE_URL
-ARG MFE_REMOTE_URLS
-ENV MFE_REMOTE_URLS=$MFE_REMOTE_URLS
-RUN npx nx build ${NX_APP} --configuration=${NODE_ENV}
-
-# Use the local-http-server image as the base for serving the app
+# BUILDER_TAG selects which base image tag to build FROM: latest by default, `dev`
+# from the development configuration in project.json, or a forwarded BUILDER_TAG.
 FROM ${TARGET_REGISTRY}nx-portfolio/local-http-server:${BUILDER_TAG}
 ARG NX_APP
-COPY --from=builder /app/dist/apps/${NX_APP} /var/www/html/
+COPY . /var/www/html/
 
 # Run nginx in the foreground to keep the container running
 CMD ["nginx", "-g", "daemon off;"]

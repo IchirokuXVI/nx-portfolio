@@ -4,6 +4,15 @@
 > code shows that an answer may have missed. This covers the whole build/deploy
 > foundation: the custom Nx docker plugin, Dockerfiles, CI/CD, and k3s/Helm.
 
+> **Superseded in places, as of 2026-08-29.** `k8s/plans/0007` changed the build
+> topology: apps are compiled once, outside Docker, in a digest pinned `node:24`, the
+> images are a base plus a `COPY` of the finished bundle, the executor pushes with
+> `buildx --push` instead of `--load` plus `docker push`, and both workflows are split
+> into per phase jobs. Answers and notes below that describe a build stage inside each
+> image, `forwardEnv` carrying `MFE_BASE_URL`, or `--push` as a future improvement
+> describe how it worked before that plan. They are left as written rather than
+> rewritten, because they are a record of the reasoning at the time.
+
 ## The custom Nx docker plugin (`tools/docker`, `@portfolio/docker`)
 
 **Q: Why write your own Nx docker plugin (build/push executors + generator) instead of an off-the-shelf one like `@nx-tools/nx-docker`?**
@@ -141,18 +150,19 @@ as a pair.
 around `nginx:latest` that clears the default html folder and swaps in the correct nginx config
 for serving an Angular app.
 
-> Note (Claude): Details behind each. **Builder** is `FROM node:22`; it copies every
+> Note (Claude): Details behind each. **Builder** is a digest pinned `node:24`; it copies every
 > `package*.json` first (`COPY --parents`, the `dockerfile:1-labs` syntax) and runs
 > `npm ci --legacy-peer-deps` before `COPY . .`, so the expensive dependency layer is cached
-> until the lockfile changes. It is the single toolchain image every app build and the CI test
-> step run FROM. **Reverse-proxy**'s image is literally just `FROM nginx:latest`; it ships no
+> until the lockfile changes. It used to be the image every app build and the CI test step ran
+> FROM. Since k8s/plans/0007 it is neither: the app images copy a bundle built outside them, and
+> CI builds and tests inside a digest pinned upstream `node:24` instead, so nothing is FROM this
+> image and neither workflow builds it. It survives for the local full stack (k8s/README.md). **Reverse-proxy**'s image is literally just `FROM nginx:latest`; it ships no
 > config of its own, the routing comes entirely from the Helm template mounted at runtime.
 > **Local-http-server** is `FROM nginx:latest`, `rm -rf` of the default html, and copies in
 > `nginx-static-app.conf` (the CORS + `.mjs` + SPA-fallback config above). **Certbot** is the
 > official `certbot/certbot` image plus `docker-cli`; `entrypoint.sh` requires a `DOMAINS` env
 > and issues each cert with the webroot HTTP-01 challenge (`certbot certonly --webroot -w
-> /var/www/certbot`), retrying with backoff (five 3-minute retries, then every 15 minutes, cap
-> 100) because ACME can fail transiently. It then enters a `certbot renew` loop every 12 hours.
+/var/www/certbot`), retrying with backoff (five 3-minute retries, then every 15 minutes, cap 100) because ACME can fail transiently. It then enters a `certbot renew` loop every 12 hours.
 > The key detail: certbot runs as a **sidecar in the same pod** as the reverse-proxy nginx, so
 > it reloads nginx with `pkill -HUP nginx` and they share two volumes: `/var/www/certbot` (where
 > nginx serves the ACME challenge) and `/certs` (where `deploy-hook.sh` copies `fullchain.pem` →
@@ -162,7 +172,7 @@ for serving an Angular app.
 
 ## CI/CD (`.github/workflows/docker-ci.yml`)
 
-**Q: The pipeline computes affected projects against the *last successful commit on the branch* (via `gh run list`) rather than the previous commit. Why, and what problem did that solve?**
+**Q: The pipeline computes affected projects against the _last successful commit on the branch_ (via `gh run list`) rather than the previous commit. Why, and what problem did that solve?**
 A: It is exactly that. Diffing only the previous commit has problems. A merge can bring in
 multiple commits at once, and the previous commit might itself have been skipped because its
 tests failed or it had compile errors. So the safest base is the last commit that actually
@@ -174,7 +184,7 @@ succeeded, which is the last one whose apps were really built and deployed.
 > (first run) it falls back to building everything, which is also how missing staging images
 > get bootstrapped.
 
-**Q: Why run tests *inside the builder docker image* (`docker run … builder:latest npx nx run-many -t test`) rather than on the runner directly?**
+**Q: Why run tests _inside the builder docker image_ (`docker run … builder:latest npx nx run-many -t test`) rather than on the runner directly?**
 A: Since the builder image is already built, I thought it was better to run the tests in a
 controlled environment rather than a barebones runner. If I ever need specific configuration to
 run the tests, I only have to tweak the builder, not the runner, and anyone who wants to run the

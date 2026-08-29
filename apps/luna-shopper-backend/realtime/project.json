@@ -24,24 +24,22 @@
     },
     "build:docker": {
       "executor": "@portfolio/docker:build",
+      "dependsOn": ["prune"],
       "options": {
         "imageName": "nx-portfolio/luna-shopper-backend-realtime",
-        "forwardEnv": ["BUILDER_TAG"]
+        "forwardEnv": ["BUILDER_TAG"],
+        "context": "dist"
       },
       "configurations": {
         "development": {
           "versionTags": ["dev"],
           "buildArgs": {
-            "NODE_ENV": "development",
             "BUILDER_TAG": "dev"
           }
         },
         "production": {
           "pushToRegistry": true,
-          "versionTags": ["latest"],
-          "buildArgs": {
-            "NODE_ENV": "production"
-          }
+          "versionTags": ["latest"]
         }
       },
       "defaultConfiguration": "development"
