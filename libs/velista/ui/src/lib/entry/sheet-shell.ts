@@ -2,12 +2,14 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   inject,
   input,
   output,
   signal,
 } from '@angular/core';
+import { OpenSheet, type FallingSheet } from '@portfolio/velista/platform';
 
 /**
  * The panel a mutation is asked for in: scrim, rounded panel, grab handle, and the
@@ -58,7 +60,7 @@ import {
     '(keydown)': 'wrapFocus($event)',
   },
 })
-export class SheetShell {
+export class SheetShell implements FallingSheet {
   /** The id of the title the caller rendered, so the dialog is named by it. */
   readonly labelledBy = input.required<string>();
 
@@ -82,15 +84,45 @@ export class SheetShell {
    * of an exit animation could be drawn. So the shell delays the navigation rather
    * than the destruction: the panel falls first, and `dismiss` is emitted when it
    * has landed.
+   *
+   * That covers the exits that start in here. The rest — the back button, the back
+   * gesture, and a submit that succeeded and leaves for somewhere else — change the
+   * route first, so they are held open from the outside instead: `sheetFallGuard`
+   * awaits {@link fall} on the way off the sheet's route. The animation is the same
+   * one either way, because both go through `_afterFall`.
    */
   readonly closing = signal(false);
 
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly _openSheet = inject(OpenSheet);
 
   /** Whatever had focus when the sheet opened, so it can be handed back. */
   private _returnFocusTo: HTMLElement | null = null;
 
+  /** Whether a fall has been started, so a second ask cannot restart it. */
+  private _fallStarted = false;
+
+  /** Whether the panel is already down, so a later ask resolves at once. */
+  private _landed = false;
+
+  /**
+   * Who is waiting for the panel to land, run from the timer itself.
+   *
+   * A list of callbacks rather than a promise the whole class hangs off, because the
+   * two things that wait are not the same shape. `dismiss` has to be emitted **in** the
+   * timer: a `.then` would move it to a microtask, which no spec advancing fake timers
+   * would ever see, and the emission is what the sheet's whole contract is written
+   * around. `fall` wraps the same list for the guard, which is happy with a promise.
+   */
+  private readonly _onLanded: Array<() => void> = [];
+
   constructor() {
+    // Registered for the whole life of the component rather than from the first
+    // render, because a navigation can be decided before the first frame is drawn and
+    // an unregistered sheet is one the guard cannot animate.
+    this._openSheet.register(this);
+    inject(DestroyRef).onDestroy(() => this._openSheet.release(this));
+
     afterNextRender(() => {
       const doc = this._host.nativeElement.ownerDocument;
       const active = doc.activeElement;
@@ -114,19 +146,62 @@ export class SheetShell {
       return;
     }
 
-    const duration = this._motionDuration();
     this._returnFocusTo?.focus();
+    this._afterFall(() => this.dismiss.emit());
+  }
 
-    if (duration === 0) {
-      this.dismiss.emit();
+  /**
+   * Play the fall, and resolve when the panel has landed.
+   *
+   * The exit animation offered as something an outsider can await, rather than only as
+   * a side effect of `requestDismiss`, so the exits that do **not** start in here can
+   * have one too. `sheetFallGuard` calls it on the way out of the sheet's route, which
+   * is what gives the back button and the back gesture the same animation Cancel has
+   * always had, and what stops a successful submit blinking the panel out of existence.
+   *
+   * Resolves at once when there is nothing to play: motion is off (`--app-motion-base`
+   * is `0ms` under `prefers-reduced-motion`, and unreadable in jsdom, so a spec never
+   * waits on a timer), or the panel is already down.
+   */
+  fall(): Promise<void> {
+    return new Promise<void>((resolve) => this._afterFall(resolve));
+  }
+
+  /**
+   * Run something once the panel is down, starting the fall if it is not falling yet.
+   *
+   * The one place that decides whether there is an animation at all, so `dismiss` and
+   * `fall` cannot disagree about it. Runs its callback immediately when there is
+   * nothing to wait for, which is what keeps a zero duration exit synchronous.
+   */
+  private _afterFall(then: () => void): void {
+    if (this._landed) {
+      then();
       return;
     }
 
+    if (this._fallStarted) {
+      this._onLanded.push(then);
+      return;
+    }
+
+    const duration = this._motionDuration();
+    const view = this._host.nativeElement.ownerDocument.defaultView;
+    if (duration === 0 || view === null) {
+      then();
+      return;
+    }
+
+    this._fallStarted = true;
     this.closing.set(true);
-    this._host.nativeElement.ownerDocument.defaultView?.setTimeout(
-      () => this.dismiss.emit(),
-      duration
-    );
+    this._onLanded.push(then);
+
+    view.setTimeout(() => {
+      this._landed = true;
+      for (const waiting of this._onLanded.splice(0)) {
+        waiting();
+      }
+    }, duration);
   }
 
   /**

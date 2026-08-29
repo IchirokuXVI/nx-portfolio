@@ -291,12 +291,14 @@ describe('AppShellRoutes', () => {
       it('offers the four sheets over it, as routes rather than flags', () => {
         // Rule E1: each covers the page without losing it, and Android's back button
         // has to dismiss it. Ticking a line off is deliberately not among them.
-        expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual([
-          'lines/:lineId/edit',
-          'lines/:lineId/comments',
-          'lines/:lineId/confirm/delete',
-          'settings',
-        ]);
+        expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual(
+          [
+            'lines/:lineId/edit',
+            'lines/:lineId/comments',
+            'lines/:lineId/confirm/delete',
+            'settings',
+          ]
+        );
       });
 
       it('guards none of the sheets, because write access is not knowable', () => {
@@ -404,5 +406,73 @@ describe('AppShellRoutes', () => {
         true
       );
     });
+  });
+});
+
+/**
+ * Plan 0011 section 5 gave the panel an exit animation. This is what makes it play on
+ * every way out of a sheet rather than only on the three that start inside
+ * `SheetShell`, and it is asserted over the whole table rather than route by route
+ * because the defect it guards against is a sheet added later that nobody remembers to
+ * stamp. Such a sheet looks fine in development, where back is a key and the exit that
+ * skipped the animation is the gesture, and is exactly the one somebody reports as
+ * "this one does not animate".
+ */
+describe('the sheets and their exit animation', () => {
+  /** Every route in the table, flattened, each with the path it is reached by. */
+  function everyRoute(
+    routes: readonly Route[],
+    prefix = ''
+  ): { path: string; route: Route }[] {
+    return routes.flatMap((route) => {
+      const path = `${prefix}/${route.path ?? ''}`;
+      return [{ path, route }, ...everyRoute(route.children ?? [], path)];
+    });
+  }
+
+  /**
+   * A sheet is a route whose component draws itself in a `SheetShell`, which the table
+   * cannot be asked directly without loading every lazy chunk. So the paths are named,
+   * and `puts the guard on nothing else` is what keeps this list honest in the other
+   * direction.
+   */
+  const SHEET_PATHS = [
+    'zones/new',
+    'zones/join',
+    'lists/new',
+    'settings',
+    'lines/:lineId/edit',
+    'lines/:lineId/comments',
+    'lines/:lineId/confirm/delete',
+    'name',
+    'confirm/delete',
+    ':membershipId/confirm/remove',
+    ':membershipId/confirm/ban',
+    ':membershipId/confirm/transfer',
+    ':membershipId/confirm/rename',
+  ];
+
+  const all = everyRoute(AppShellRoutes);
+  const sheets = all.filter(({ route }) =>
+    SHEET_PATHS.includes(route.path ?? '')
+  );
+
+  it('holds the navigation off every sheet until the panel has fallen', () => {
+    const missing = sheets
+      .filter(({ route }) => (route.canDeactivate ?? []).length === 0)
+      .map(({ path }) => path);
+
+    expect(missing).toEqual([]);
+  });
+
+  it('puts the guard on nothing else', () => {
+    // A page is not a panel, and delaying a navigation off one would be a stall with
+    // nothing on screen to explain it.
+    const overreach = all
+      .filter(({ route }) => (route.canDeactivate ?? []).length > 0)
+      .filter(({ route }) => !SHEET_PATHS.includes(route.path ?? ''))
+      .map(({ path }) => path);
+
+    expect(overreach).toEqual([]);
   });
 });
