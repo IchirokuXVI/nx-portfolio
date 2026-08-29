@@ -87,4 +87,4 @@ lunaShopperBackend:
   # Nightly pg_dump off the node (plan 0005). Production only: staging holds
   # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.
   backups:
-    enabled: false
+    enabled: true
