@@ -10,6 +10,7 @@ on top of them, and the page built from both.
 | `auth/` | `0009` signing in, registering, and the guest upgrade | https://claude.ai/code/artifact/5bc9cb60-284c-4f4a-9fc9-63e6ace1109a |
 | `list/` | `0012` the list page: its lines, and editing them | https://claude.ai/code/artifact/59311ab0-2a5f-4169-a115-af8f56f939be |
 | `account/` | `0015` the account page: your name, your email, and the two ways out | https://claude.ai/code/artifact/724e98ef-0b68-4d62-a19a-3ea29275af36 |
+| `install/` | `0032` installing the app: the page, the account row, and the invite | https://claude.ai/code/artifact/21a89b1f-e8b5-4800-b392-9c4b4670a70c |
 | `brand/` | The mark itself. Source of truth for both, see below | |
 
 ## How a folder is put together
