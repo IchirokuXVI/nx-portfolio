@@ -3,7 +3,6 @@ import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import os from 'os';
 import * as path from 'path';
-import push from '../push/push';
 import { resolveVersionTags } from '../version-tags';
 import { BuildExecutorSchema } from './schema';
 import { simpleHash } from './simple-hash';
@@ -29,8 +28,7 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   const projectRoot = path.join(context.root, project.root);
 
-  let registry =
-    options.registry || process.env.DOCKER_REGISTRY || '';
+  let registry = options.registry || process.env.DOCKER_REGISTRY || '';
 
   if (registry && !registry.endsWith('/')) {
     registry += '/';
@@ -46,6 +44,11 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     project: projectRoot,
     root: context.root,
     dockerfile: path.dirname(dockerfile),
+    // The project's own build output. For an image whose Dockerfile only copies a
+    // finished bundle, this is the whole context: a few megabytes instead of the
+    // workspace. The executor derives the path from the project name rather than
+    // taking one, so no project has to repeat where its output lands.
+    dist: path.join(context.root, 'dist', 'apps', context.projectName),
   } as const;
 
   const contextDir = mappedContexts[options.context];
@@ -64,7 +67,10 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
   // mean, only that the project asked for them to reach the Dockerfile. An explicit
   // buildArg already set for the same name wins.
   for (const name of options.forwardEnv || []) {
-    if (options.buildArgs[name] === undefined && process.env[name] !== undefined) {
+    if (
+      options.buildArgs[name] === undefined &&
+      process.env[name] !== undefined
+    ) {
       options.buildArgs[name] = process.env[name] as string;
     }
   }
@@ -136,7 +142,9 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
       process.env.DOCKER_BUILD_CACHE_SCOPE ||
       options.imageName.replace(/[^a-zA-Z0-9_.-]/g, '-');
     buildCommandArr.push(`--cache-from=type=gha,scope=${scope}`);
-    buildCommandArr.push(`--cache-to=type=gha,mode=${cacheMode},scope=${scope}`);
+    buildCommandArr.push(
+      `--cache-to=type=gha,mode=${cacheMode},scope=${scope}`
+    );
   } else if (cacheEnabled && cacheType === 'registry') {
     if (!registry) {
       console.warn(
@@ -158,7 +166,18 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
 
   buildCommandArr.push(contextDir);
 
-  buildCommandArr.push('--load');
+  // Where the finished image goes, and the reason this is not always `--load`.
+  //
+  // With the docker-container driver, `--load` exports the image out of the builder
+  // as a tarball and imports it into the local Docker daemon. When the image is
+  // bound for a registry that round trip is pure overhead: nothing reads it from the
+  // daemon, and `docker push` then reads it straight back out to upload it. `--push`
+  // streams layers to the registry from the build instead, which is why
+  // `pushToRegistry` skips the separate push executor below.
+  //
+  // Local development keeps `--load`, because an image in the local daemon is
+  // exactly the point there.
+  buildCommandArr.push(options.pushToRegistry ? '--push' : '--load');
 
   const buildCommand = buildCommandArr.filter((v) => v).join(' ');
 
@@ -186,14 +205,11 @@ const runExecutor: PromiseExecutor<BuildExecutorSchema> = async (
     }
   }
 
+  // `--push` above already uploaded every tag, so there is nothing left for the push
+  // executor to do. It stays reachable as a standalone `nx run <app>:push`, which
+  // builds first because `skipBuild` is falsy there.
   if (options.pushToRegistry) {
-    try {
-      // The image was just built and loaded above, so tell push not to build it
-      // again (it otherwise rebuilds once per tag).
-      await push({ ...options, skipBuild: true }, context);
-    } catch (err: any) {
-      throw new Error(`Error during Docker push: ${err.message}`);
-    }
+    console.log(`Pushed images: ${imagesToCreate.join(', ')}`);
   }
 
   return {

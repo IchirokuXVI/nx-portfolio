@@ -4,6 +4,16 @@ name: Production release
 # release commit, pushes each image under the immutable version tag, and pins
 # production to it. Rolling back is re-running deploy-release.sh with an older
 # version whose images still exist (see k8s/helm/deploy-release.sh).
+#
+# Four jobs rather than one (k8s/plans/0007). The deploy is its own leaf job, which
+# matters more here than on staging: GitHub's "Re-run failed jobs" re-runs only what
+# failed, so re-running this job is "deploy this exact version again", with no
+# rebuild. That is the operation you most want to be cheap and boring on the
+# environment where things go wrong at the worst time.
+#
+# Nothing compiles on the runner. Every `nx build` runs inside BUILD_IMAGE, a digest
+# pinned node:24, and the image builds pass --exclude-task-dependencies so they
+# cannot quietly recompile outside it.
 
 on:
   release:
@@ -12,46 +22,57 @@ on:
 # Serialize releases: only one production release runs at a time. If two releases are
 # published close together, the second waits for the first to finish rather than
 # running two builds/pushes and two `helm upgrade`s at once. cancel-in-progress is
-# false so a release in flight is never killed mid-deploy.
+# false so a release in flight is never killed mid-deploy. This is a property of the
+# Helm release, so it stays at workflow level and covers every job below.
 concurrency:
   group: production-release
   cancel-in-progress: false
 
+env:
+  # The one place the build environment is defined, for every job in this file.
+  # Bump deliberately, in a commit, with:
+  #   docker buildx imagetools inspect node:24 --format '{{println .Manifest.Digest}}'
+  BUILD_IMAGE: node:24@sha256:be23f54a88d34e8824c741b19b91064094f92c1c97b194144bfc8b50d67258e2
+  DOCKER_REGISTRY: ghcr.io/ichirokuxvi
+  DOCKER_SKIP_LOGIN: true
+  DOCKER_BUILD_CACHE: gha
+  DOCKER_BUILD_CACHE_MODE: min
+  # Where the shell loads its remotes from in production. Baked into the bundle by
+  # the `nx build`, not by a docker build arg, since the compilation no longer
+  # happens inside the image.
+  PROD_MFE_BASE_URL: https://mfe.ichirokuxvi.com
+  # ...and the remotes that are not on that host. velista is served from its own
+  # origin (plan 0013), which no base URL can produce, so it names itself here and
+  # overrides the base derived tuple. Per remote overrides win over the base, so
+  # the other three are unaffected and stay unlisted.
+  PROD_MFE_REMOTE_URLS: velista=https://velista.ichirokuxvi.com
+  # Which backend the production velista image talks to (velista plan 0014).
+  # Ignored by every app except velista, exactly as MFE_BASE_URL is ignored by
+  # every app except the shell. Note `rt.` for realtime: the chart routes it on
+  # its own host, and environment.prod.ts used to name `api.` for both.
+  PROD_LUNA_GATEWAY_URL: https://api.ichirokuxvi.com
+  PROD_LUNA_REALTIME_URL: https://rt.ichirokuxvi.com
+
 jobs:
-  production-release:
+  # ---------------------------------------------------------------------------
+  # The version, and what there is to build. No `affected` here: a release builds
+  # everything at the release commit, by design.
+  #
+  # These are job outputs rather than step outputs so the deploy job can read the
+  # version without depending on any other job's internals, which is what makes it
+  # re-runnable on its own.
+  # ---------------------------------------------------------------------------
+  setup:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      packages: write
-
-    env:
-      GH_TOKEN: ${{ github.token }}
-      DOCKER_REGISTRY: ghcr.io/ichirokuxvi
-      DOCKER_SKIP_LOGIN: true
-      # Use the GitHub Actions cache backend (type=gha) for every docker build.
-      DOCKER_BUILD_CACHE: gha
-      # Export only the final image layers to the cache (see docker-ci.yml).
-      DOCKER_BUILD_CACHE_MODE: min
-      # Where the shell loads its remotes from in production.
-      PROD_MFE_BASE_URL: https://mfe.ichirokuxvi.com
-      # ...and the remotes that are not on that host. velista is served from its own
-      # origin (plan 0013), which no base URL can produce, so it names itself here and
-      # overrides the base derived tuple. Per remote overrides win over the base, so
-      # the other three are unaffected and stay unlisted.
-      PROD_MFE_REMOTE_URLS: velista=https://velista.ichirokuxvi.com
-      # Which backend the production velista image talks to (velista plan 0014).
-      # Ignored by every app except velista, exactly as MFE_BASE_URL is ignored by
-      # every app except the shell. Note `rt.` for realtime: the chart routes it on
-      # its own host, and environment.prod.ts used to name `api.` for both.
-      PROD_LUNA_GATEWAY_URL: https://api.ichirokuxvi.com
-      PROD_LUNA_REALTIME_URL: https://rt.ichirokuxvi.com
-
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      static_apps: ${{ steps.lists.outputs.static_apps }}
+      testable: ${{ steps.lists.outputs.testable }}
+      apps_tobuild: ${{ steps.lists.outputs.apps_tobuild }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           ref: ${{ github.event.release.tag_name }}
 
       - name: Resolve release version
@@ -65,6 +86,87 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Releasing version $version"
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      - name: List the projects to build
+        id: lists
+        run: |
+          # Nx runs in the pinned image here too, so this job needs no Node on the
+          # runner and reads the same project graph the build will. CI=true is not
+          # decoration: the container does not inherit the runner's environment, and
+          # without it Nx starts its file watching daemon inside a container that is
+          # about to be thrown away.
+          #
+          # --json everywhere: `nx show projects` prints a JSON array when stdout is
+          # not a TTY and one name per line when it is, and parsing the pretty form
+          # silently finds nothing.
+          list() {
+            docker run --rm \
+              -u "$(id -u):$(id -g)" \
+              -v "$PWD":/w -w /w \
+              -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+              "$BUILD_IMAGE" \
+              npx nx show projects "$@" --json \
+              | jq -r 'join(",")'
+          }
+
+          {
+            echo "static_apps=$(list --type app --projects tag:type:static-docker)"
+            echo "testable=$(list --with-target test)"
+            echo "apps_tobuild=$(list --type app --with-target build:docker)"
+          } >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # A release re-runs the full suite on the release commit, so production is gated
+  # independently of what ran on the PR or the staging deploy. It hangs off `setup`
+  # alone and runs beside the build.
+  # ---------------------------------------------------------------------------
+  test:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      - name: Lint & test everything
+        run: |
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$PWD":/w -w /w \
+            -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+            "$BUILD_IMAGE" \
+            npx nx run-many -t lint test --projects "${{ needs.setup.outputs.testable }}"
+
+  # ---------------------------------------------------------------------------
+  # Build & push every micro-frontend under the immutable version tag, with the
+  # production URLs baked into the bundles that need them.
+  #
+  # Each image is tagged with the immutable version (used for pinning and rollback)
+  # and also moves `latest`, which keeps values.yaml's default meaningful. Both tags
+  # go up in the one `--push`, rather than one push per tag.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -80,78 +182,80 @@ jobs:
       - name: Expose GitHub Actions runtime for the gha cache
         uses: crazy-max/ghaction-github-runtime@v3
 
+      # Only to run the Nx CLI, which orchestrates buildx. Nothing is compiled here.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
-      - name: Get Nx version
-        id: nx-version
-        run: echo "NX_VERSION=$(npm pkg get devDependencies.nx | tr -d '\"')" >> $GITHUB_ENV
-
-      - name: Cache Nx
-        uses: actions/cache@v4
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
         with:
-          path: |
-            node_modules
-            ~/.npm
-          key: nx-${{ runner.os }}-${{ env.NX_VERSION }}
+          build-image: ${{ env.BUILD_IMAGE }}
 
-      - name: Install Nx
-        run: npm install nx@$NX_VERSION
-
-      - name: Set lowercase repo
-        run: |
-          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "REPO_LOWERCASE=$REPO_LC" >> $GITHUB_ENV
-
-      # The builder's gha cache scope is keyed by the lockfile hash so its npm ci
-      # layer is reused until dependencies change.
-      - name: Build docker builder
-        env:
-          DOCKER_BUILD_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
-        run: npx nx build docker/builder --configuration=production
-
-      # Infrastructure images (local http server base).
+      # Infrastructure images (the nginx base the frontend images are FROM).
       - name: Build static docker apps
         run: |
-          static_apps=$(npx nx show projects --type "app" --projects tag:type:static-docker | paste -sd, -)
-          npx nx run-many -t build --configuration production --projects name:$static_apps
+          npx nx run-many -t build --configuration production \
+            --projects "${{ needs.setup.outputs.static_apps }}"
 
-      # A release re-runs the full test suite on the release commit, so production is
-      # gated independently of what ran on the PR or the staging deploy.
-      - name: Test all apps
+      # One invocation, one container, one Nx cache, so the shared libraries are
+      # compiled once for the whole workspace rather than once per image.
+      - name: Build the bundles in the pinned image
         run: |
-          testable_apps=$(npx nx show projects --with-target test | paste -sd, -)
-          docker run \
-            --rm "ghcr.io/${{ env.REPO_LOWERCASE }}/builder:latest" \
-            npx nx run-many -t test --projects $testable_apps
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$PWD":/w -w /w \
+            -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+            -e MFE_BASE_URL="$PROD_MFE_BASE_URL" \
+            -e MFE_REMOTE_URLS="$PROD_MFE_REMOTE_URLS" \
+            -e LUNA_GATEWAY_URL="$PROD_LUNA_GATEWAY_URL" \
+            -e LUNA_REALTIME_URL="$PROD_LUNA_REALTIME_URL" \
+            "$BUILD_IMAGE" \
+            npx nx run-many -t build prune --configuration production \
+              --projects "${{ needs.setup.outputs.apps_tobuild }}"
 
-      # Build & push every micro-frontend under the immutable version tag, with the
-      # production MFE base URL baked into the shell.
-      # Tag each image with the immutable version (used for pinning/rollback) and
-      # also move `latest`, which keeps values.yaml's default meaningful.
+      # --exclude-task-dependencies is load bearing: without it a cold Nx cache would
+      # let this step recompile a bundle here, on the runner, outside the pinned
+      # image, and nothing would say so.
       - name: Build & push production images
         env:
-          DOCKER_IMAGE_TAG: ${{ steps.version.outputs.version }},latest
-          MFE_BASE_URL: ${{ env.PROD_MFE_BASE_URL }}
-          MFE_REMOTE_URLS: ${{ env.PROD_MFE_REMOTE_URLS }}
-          LUNA_GATEWAY_URL: ${{ env.PROD_LUNA_GATEWAY_URL }}
-          LUNA_REALTIME_URL: ${{ env.PROD_LUNA_REALTIME_URL }}
+          DOCKER_IMAGE_TAG: ${{ needs.setup.outputs.version }},latest
         run: |
-          apps_tobuild=$(npx nx show projects --type "app" --with-target build:docker | paste -sd, -)
-          npx nx run-many -t build:docker --configuration production --projects $apps_tobuild
+          npx nx run-many -t build:docker --configuration production \
+            --projects "${{ needs.setup.outputs.apps_tobuild }}" \
+            --exclude-task-dependencies
+
+  # ---------------------------------------------------------------------------
+  # The deploy, on its own, so it can be retried on its own without rebuilding.
+  #
+  # `!cancelled()` rather than `always()`: a cancelled release must not deploy. The
+  # results are tested against 'failure' rather than for 'success' to match the
+  # staging workflow, where jobs can legitimately be skipped.
+  # ---------------------------------------------------------------------------
+  deploy:
+    needs: [setup, test, build]
+    if: >-
+      !cancelled()
+      && needs.setup.result == 'success'
+      && needs.test.result != 'failure'
+      && needs.build.result != 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      # Only the chart is needed here, and only at the release tag.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       # Is there anywhere to deploy to?
       #
-      # Everything above this point (build, test, push) is worth doing whether or
-      # not a host exists: the release images land in the registry and can be
-      # deployed later, or pulled by a machine that is not this pipeline's to know
-      # about. Only the SSH steps below need a VPS.
+      # Everything upstream is worth doing whether or not a host exists: the release
+      # images land in the registry and can be deployed later, or pulled by a machine
+      # that is not this pipeline's to know about. Only the SSH steps need a VPS.
       #
       # Without this gate a missing host fails the release at the first ssh call,
       # which marks a release red that in fact published every image correctly.
-      # With it, the release succeeds and says plainly that it did not deploy.
       #
       # Secrets are read through `env` rather than interpolated into the script,
       # which keeps a secret's contents out of the shell command line.
@@ -172,18 +276,18 @@ jobs:
             echo "Production host is configured; the deploy will run."
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Production deploy skipped::Images for ${{ steps.version.outputs.version }} were built, tested and pushed to the registry, but no deploy ran because these repository secrets are unset:$missing. Set them to deploy automatically, or deploy by hand with k8s/helm/deploy-release.sh (VPS) or k8s/helm/deploy-homelab.sh (home machine)."
+            echo "::notice title=Production deploy skipped::Images for ${{ needs.setup.outputs.version }} were built, tested and pushed to the registry, but no deploy ran because these repository secrets are unset:$missing. Set them to deploy automatically, or deploy by hand with k8s/helm/deploy-release.sh (VPS) or k8s/helm/deploy-homelab.sh (home machine)."
             {
               echo "### Production deploy skipped"
               echo
-              echo "Release **${{ steps.version.outputs.version }}** was built, tested and pushed."
+              echo "Release **${{ needs.setup.outputs.version }}** was built, tested and pushed."
               echo "No host was deployed to because these secrets are unset:"
               echo
               for s in $missing; do echo "- \`$s\`"; done
               echo
               echo "Deploy it by hand with:"
               echo '```sh'
-              echo "./k8s/helm/deploy-homelab.sh ${{ steps.version.outputs.version }}"
+              echo "./k8s/helm/deploy-homelab.sh ${{ needs.setup.outputs.version }}"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -195,9 +299,7 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
 
       # SSH_DEPLOY_HOST stays the production VPS. Staging moved to its own host
-      # under SSH_DEPLOY_HOST_STAGING (k8s plan 0002, section 3); adding a secret
-      # rather than renaming both is what keeps this workflow — the one that is
-      # currently working — untouched by the split.
+      # under SSH_DEPLOY_HOST_STAGING (k8s plan 0002, section 3).
       #
       # The chart lands in the deploy user's home rather than /root. SSH_DEPLOY_USER
       # is an unprivileged account: it owns nothing outside its home and holds no
@@ -224,7 +326,7 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
-            "bash ~/k8s/helm/deploy-release.sh '${{ steps.version.outputs.version }}'"
+            "bash ~/k8s/helm/deploy-release.sh '${{ needs.setup.outputs.version }}'"
 
       # Events are the part that matters and the part people forget:
       # ImagePullBackOff, a PVC that cannot bind, and a failing readiness probe all

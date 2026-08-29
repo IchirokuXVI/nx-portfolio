@@ -90,3 +90,6 @@ Thumbs.db
 # The live ddclient config carries a Cloudflare API token that can rewrite every
 # record in the zone. Only the .example next to it is committed.
 docker/ddns/config/
+# npm cache, redirected into the workspace when installing inside the pinned build
+# container (see .github/actions/workspace).
+.npm
