@@ -54,7 +54,8 @@ version of it.
 
 ## 3. What is on the screen
 
-A transcript, a composer, a send button, and nothing else in this plan.
+A transcript, a composer, and one button that changes with the state (section 4). Nothing else
+in this plan.
 
 - The caller's messages and the bot's, in order, visually distinct, and selectable.
 - A pending state while a turn is in flight, with the composer disabled for its duration.
@@ -82,7 +83,71 @@ asks nothing of them and is honest about the cause.
 The countdown is a display of a value the server sent. The panel never invents one, and if
 the field is somehow absent it says the bot is busy without a number rather than guessing.
 
-## 4. The client holds the transcript
+## 4. Speaking to it
+
+The microphone is not deferred to a later plan. Speaking is the reason this panel exists, so
+it ships with it.
+
+### 4.1 One slot, three jobs
+
+The right hand button is 52px in the same corner throughout, and what it is depends only on
+the state:
+
+| State | Button |
+|---|---|
+| the field is empty | **microphone**, amber |
+| anything is typed | **send**, amber |
+| recording | **stop**, coral |
+
+Never two buttons competing for one intention, and nothing moves under the thumb. Stop
+inherits the microphone's exact position, so the finger that started a recording ends it
+without travelling.
+
+### 4.2 A press, not a hold
+
+**Press to start, press to stop.** Press and hold is the conventional voice gesture and it is
+the one this audience cannot perform: it asks for sustained, steady pressure for the length of
+the message, which is precisely what a tremor removes. A recording here survives a hand that
+shakes, drifts, or lets go.
+
+### 4.3 The control row, in one order, for one reason
+
+While recording, the composer's field is replaced by the controls, in this order left to
+right:
+
+**pause — elapsed length — stop**
+
+Pause sits at the far left and stop at the far right, as far apart as the container allows.
+They are the only two controls on screen and confusing them costs the whole message, so the
+distance is the safeguard. The length sits between them and doubles as the separator.
+
+Colour is never the only signal: stop is a square, pause is two bars, carry on is a triangle,
+and the dot beside the length is filled while listening and hollow while paused.
+
+### 4.4 Three minutes warns, five minutes stops
+
+Both warnings **grow the container and put the message at the top of it**. Growing rather
+than overlaying means nothing is covered and both buttons stay where the hand left them.
+
+- **At 3:00**, the message says five minutes is the maximum and how long is left. Recording
+  continues.
+- **At 5:00**, recording **pauses. It is not sent.** The pause button is disabled and stop
+  becomes the only way out, and the message says so.
+
+Pausing rather than sending is the decision worth defending. Sending on a timer takes the
+choice away from somebody who was mid sentence, and a message that leaves on its own is a
+message nobody agreed to send. Holding it costs one press and returns the decision to the
+person. The message at 5:00 is required rather than decorative: silence at the limit reads as
+the app having broken, and whoever is recording for five minutes is the person least able to
+work out what happened.
+
+### 4.5 What the recording is, and what this plan does not settle
+
+The audio is captured client side, in the browser, through `MediaRecorder`. What this plan
+does **not** decide is where it is turned into text, and section 10 says why that has to be
+settled in `0039` before this is built.
+
+## 5. The client holds the transcript
 
 Backend `0039` rule A2 makes the service stateless, so the conversation lives here and is
 sent whole on every turn.
@@ -95,7 +160,7 @@ sent whole on every turn.
   happen instead of having a turn silently truncated somewhere they cannot see.
 - When the cap bites, the oldest turns drop and the panel says so on a line of its own.
 
-## 5. It is an ordinary gateway call
+## 6. It is an ordinary gateway call
 
 The panel talks to `/v1/assistant` on the **gateway base URL the app already has** (backend
 `0039` section 3). There is no second origin and no new environment value.
@@ -105,7 +170,7 @@ attaches the token and the `Accept-Language` header, the existing data-access he
 already resolve the base URL per environment, and a signed out caller is already handled.
 The data-access piece for this feature is one method, not a client.
 
-## 6. The links, and where they come from
+## 7. The links, and where they come from
 
 Every reply carries a `references` array (backend `0039` section 8): the zones, lists and
 lines the turn genuinely read or wrote. The panel renders those as links under the message.
@@ -127,7 +192,7 @@ is the mode nobody looks at.
 | `list` | `zones/:zoneId/lists/:listId` |
 | `line` | `zones/:zoneId/lists/:listId`, with `?line=:lineId` |
 
-## 7. A line has no route, so it gets a query parameter
+## 8. A line has no route, so it gets a query parameter
 
 The list page has four sheets over it and three of them address a line: `lines/:lineId/edit`,
 `lines/:lineId/comments`, `lines/:lineId/confirm/delete`. All three **do something** to the
@@ -145,7 +210,7 @@ rather than an error.
 
 This is the only change this plan makes outside the panel.
 
-## 8. Language
+## 9. Language
 
 The panel is localized like everything else here, with its own namespace of keys.
 
@@ -154,22 +219,38 @@ is the caller's, because the request carries `Accept-Language` like every other 
 in this app and the existing `gatewayInterceptor` already sets it. Nothing here translates a
 reply and nothing should try.
 
-## 9. This is the ground for the voice work
+## 10. Audio is not text, and 0039 has to say where it becomes text
 
-Worth saying once, because it decides some small things now.
+**This is the one open dependency in this plan, and it is a real one.** Section 4 produces an
+audio file. Backend `0039` describes a service that takes text and returns text. Something
+between the two has to transcribe, and nothing currently says what.
 
-This exists because a portion of this app's intended users are of advanced age or have
-impaired motor control, and typing or tapping through several screens to put one item on a
-list is precisely what fails them. Backlog `0005` section 6 holds the voice design, and it
-is deliberately layered over a text in, text out service so that adding it later changes no
-server code.
+Backlog `0005` section 6 assumed the browser's own speech recognition, and that assumption
+does not survive this design. `SpeechRecognition` hands back **text and no file**: there is
+nothing to pause, nothing to hold at five minutes, and no recording to send. A five minute
+capture with a pause button is a `MediaRecorder` feature, and a `MediaRecorder` feature means
+a file leaves the device.
 
-What that costs this plan, and it is little: the composer is an ordinary text input with an
-ordinary submit, with no custom key handling and nothing that assumes a hardware keyboard,
-so a dictation button on the platform keyboard works into it on day one for free. Touch
-targets keep the app's existing sizes and are not shrunk to fit more transcript on screen.
+So `0039` has to choose one, before this is built:
 
-## 10. Testing
+- **Upload the audio to the assistant service**, which transcribes it and continues exactly as
+  it does for a typed turn. Needs a multipart endpoint, a size cap that agrees with five
+  minutes of the chosen codec, and either a speech to text provider or Gemini's own audio
+  input, which accepts audio natively where a text only API would not.
+- **Transcribe in the browser and send only text**, which keeps the service unchanged and
+  makes the recorder a local convenience. Then the five minute cap is about the transcript,
+  not an upload, and the pause button is harder to justify.
+
+The first is what section 4 draws. It is also the one that changes `0039`: a turn stops being
+cheap, the free tier's per minute limits start counting audio, and the privacy note in that
+plan's section 10 has to cover a voice recording rather than a sentence.
+
+What does **not** change either way: the field stays an ordinary text input with an ordinary
+submit and no custom key handling, so the platform keyboard's own dictation button keeps
+working into it beside the app's microphone. Somebody who already knows that gesture should
+not have to learn this one.
+
+## 11. Testing
 
 - The route exists, carries `authenticatedGuard`, and sits before the front door.
   `routes.spec.ts` is where that ordering assertion already lives.
@@ -182,9 +263,18 @@ targets keep the app's existing sizes and are not shrunk to fit more transcript 
 - A rate limited turn renders a countdown from the server's `retryAfterSeconds`, keeps the
   composer disabled while it runs, and re-enables it at zero without a reload.
 - A rate limited turn with no `retryAfterSeconds` says the bot is busy and invents no number.
+- The composer's button is a microphone on an empty field, send on a non empty one, and stop
+  while recording, and it never moves.
+- A recording starts and stops on single presses, and survives the pointer leaving the button.
+- The controls render pause, length, stop, in that order, and pause and stop are at opposite
+  ends of the container.
+- At 3:00 the container grows and the message names the limit and the time left; recording
+  continues.
+- At 5:00 recording pauses, is not sent, pause is disabled, and the message says so.
+- A refused microphone permission renders a state and never an unhandled rejection.
 - `ListPage` scrolls to and marks `?line=`, ignores an unknown one, and opens no sheet.
 
-## 11. Open decisions
+## 12. Open decisions
 
 - Whether the panel survives a full reload. It cannot without either client storage or the
   backend's, and both are the next plan's call.
@@ -193,8 +283,15 @@ targets keep the app's existing sizes and are not shrunk to fit more transcript 
   people use it for.
 - Whether a line the bot created is marked as such. Depends on the open decision of the same
   name in backend `0039` section 14.
+- **Whether stop sends immediately, or offers a review first.** It sends immediately as drawn.
+  For this audience an accidental stop is a sent message with no way back, and a confirm step
+  would tax every recording to protect the rare one. Worth settling before build; a middle
+  option is a brief undo on the sent message rather than a confirm before it.
+- **Where a recording is transcribed**, which section 10 states in full. It is the only thing
+  here that cannot be deferred: section 4 cannot be built until `0039` answers it.
+- Whether a recording survives leaving the panel mid capture. Drawn as though it does not.
 
-## 12. Exit criteria
+## 13. Exit criteria
 
 - The app bar's second button opens the assistant, and search is gone from the bar and from
   `HomePage`.
@@ -208,4 +305,9 @@ targets keep the app's existing sizes and are not shrunk to fit more transcript 
 - A busy provider and a dead network both read as a message in the transcript, and the busy
   one carries a countdown that re-enables the composer by itself.
 - The panel added no new origin and no new environment value.
-- The composer accepts platform keyboard dictation with no special handling.
+- The composer accepts platform keyboard dictation with no special handling, beside its own
+  microphone rather than instead of it.
+- A message can be spoken start to finish without holding anything down, paused and resumed,
+  and stopped, on a phone held in one unsteady hand.
+- The 3:00 and 5:00 states are reachable in a test without waiting five minutes, because the
+  two thresholds are injected rather than hardcoded.

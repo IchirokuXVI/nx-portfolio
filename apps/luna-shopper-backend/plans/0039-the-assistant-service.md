@@ -429,6 +429,17 @@ discouraged.
 
 ## 14. Open decisions
 
+- **Where a spoken turn is transcribed. This one blocks velista `0032` and cannot be
+  deferred.** That plan's section 4 records up to five minutes of audio with a pause button,
+  which is a `MediaRecorder` feature: the browser's own `SpeechRecognition` returns text and
+  no file, so there would be nothing to pause and nothing to hold at the limit. Backlog `0005`
+  section 6 assumed the browser, and that assumption does not survive the design. Either this
+  service grows a multipart endpoint and transcribes (a provider, or Gemini's own audio input,
+  which takes audio where a text only API would not), or the client transcribes and sends
+  text and the recorder becomes a local convenience. The first is what `0032` draws, and it is
+  the one that changes this plan: a turn stops being cheap, the free tier's limits start
+  counting minutes of audio rather than requests of text, and section 10's privacy line has to
+  cover a voice recording rather than a sentence.
 - Whether guests (the temporary users of plan `0005`) get the assistant at all. The cheapest
   abuse control available is to say no, and no is reversible.
 - Whether an assistant made change is marked as such in the data. Leaning yes, because "why

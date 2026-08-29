@@ -83,6 +83,12 @@
 #ab-Limits * { box-sizing: border-box; }
 #ab-Limits a { color: #ffb454; text-decoration: none; }
 #ab-Limits a:hover { color: #ffc271; }
+#ab-Recorder * { box-sizing: border-box; }
+#ab-Recorder a { color: #ffb454; text-decoration: none; }
+#ab-Recorder a:hover { color: #ffc271; }
+#ab-RecorderStates * { box-sizing: border-box; }
+#ab-RecorderStates a { color: #ffb454; text-decoration: none; }
+#ab-RecorderStates a:hover { color: #ffc271; }
 </style>
 
 <header>
@@ -98,7 +104,7 @@
 </div>
 
 <div class="viewport">
-  <div class="canvas" id="canvas" style="width: 2810px; height: 2790px;">
+  <div class="canvas" id="canvas" style="width: 2810px; height: 3720px;">
       <figure class="board" style="left: 0px; top: 500px; width: 470px;">
         <figcaption>The button that changes</figcaption>
         <div class="frame" id="ab-AppBar" style="width: 470px; height: 600px;">
@@ -182,10 +188,8 @@
                 <!-- COMPOSER: ordinary input, ordinary submit. A keyboard mic works into it -->
                 <div style="padding: 12px 16px 20px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 10px; align-items: flex-end;">
                   <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #6f7899;">Write a message</div>
-                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #262b40; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Send">
-                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M4.5 12h14M13 6.5l5.5 5.5L13 17.5"/>
-                    </svg>
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Record a message">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/></svg>
                   </button>
                 </div>
 
@@ -249,10 +253,8 @@
 
                 <div style="padding: 12px 16px 20px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 10px; align-items: flex-end;">
                   <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #6f7899;">Write a message</div>
-                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #262b40; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Send">
-                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M4.5 12h14M13 6.5l5.5 5.5L13 17.5"/>
-                    </svg>
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Record a message">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/></svg>
                   </button>
                 </div>
 
@@ -305,8 +307,8 @@
 
                 <div style="padding: 12px 16px 20px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 10px; align-items: flex-end;">
                   <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #6f7899;">Write a message</div>
-                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #262b40; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Send">
-                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12h14M13 6.5l5.5 5.5L13 17.5"/></svg>
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Record a message">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/></svg>
                   </button>
                 </div>
 
@@ -361,8 +363,8 @@
 
                 <div style="padding: 12px 16px 20px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 10px; align-items: flex-end;">
                   <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #6f7899;">Write a message</div>
-                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #262b40; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Send">
-                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12h14M13 6.5l5.5 5.5L13 17.5"/></svg>
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Record a message">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/></svg>
                   </button>
                 </div>
 
@@ -448,8 +450,8 @@
 
                 <div style="padding: 12px 16px 20px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 10px; align-items: flex-end;">
                   <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #6f7899;">Write a message</div>
-                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #262b40; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Send">
-                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12h14M13 6.5l5.5 5.5L13 17.5"/></svg>
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Record a message">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/></svg>
                   </button>
                 </div>
 
@@ -492,8 +494,8 @@
 
                 <div style="padding: 12px 16px 20px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 10px; align-items: flex-end;">
                   <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #6f7899;">Write a message</div>
-                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #262b40; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Send">
-                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12h14M13 6.5l5.5 5.5L13 17.5"/></svg>
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Record a message">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/></svg>
                   </button>
                 </div>
 
@@ -503,13 +505,206 @@
           </div>
         </div>
       </figure>
-      <aside class="note" style="left: 0px; top: 0px; width: 440px;"><p>The assistant panel, plan 0032, talking to the service in backend plan 0039. It can do three things: put a line on a list, answer a question about a list, and change your name.</p><p>WHY IT EXISTS IS NOT NOVELTY. A share of this app's intended users are of advanced age or have impaired motor control, and tapping through four screens to add one item is the thing that fails them. Backlog 0005 section 6 holds the voice design, layered later over a text in, text out service, which is why nothing here assumes a keyboard.</p><p>Phone only, 390x844, Night only. Per the folder README a Day artboard is drawn only when a page introduces a colour role Day has not already proven, and this one introduces none: amber action, the amber tint panel and coral for a refusal are all from 0003 and 0010.</p><p>The copy is English here to match the other folders. Users see their own language: the request carries Accept-Language and the model answers in it.</p></aside>
+      <figure class="board" style="left: 0px; top: 2740px; width: 900px;">
+        <figcaption>Speaking to it</figcaption>
+        <div class="frame" id="ab-Recorder" style="width: 900px; height: 970px;">
+          <div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ SPEAKING: a long list, dictated in one go ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SPEAKING &middot; pause left, stop right, far apart</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <header style="display: flex; align-items: center; gap: 6px; padding: 12px 12px 12px 8px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+                  </button>
+                  <span style="flex: 1; font-family: 'Marcellus', Georgia, serif; font-size: 20px; color: #f7f8fc;">Assistant</span>
+                </header>
+
+                <div style="flex: 1; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px;">
+
+                  <div style="align-self: flex-end; max-width: 84%; background: #262b40; border-radius: 18px 18px 5px 18px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">Add bread to the weekly shop</div>
+
+                  <div style="align-self: flex-start; max-width: 92%; width: 92%;">
+                    <div style="background: #161a28; border-radius: 18px 18px 18px 5px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">Added. Bread on the weekly shop.</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">
+                      <span style="display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 13px; border: 1px solid rgba(255,180,84,0.32); border-radius: 999px; background: rgba(255,180,84,0.07); font-size: 14px; color: #ffd39a;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+                        Bread
+                      </span>
+                    </div>
+                  </div>
+
+                </div>
+
+                <!-- THE COMPOSER IS NOW THE RECORDER. Same container, same height -->
+                <div style="border-top: 1px solid rgba(255,255,255,0.07); padding: 12px 16px 20px; display: flex; gap: 12px; align-items: center;">
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 1px solid #343a54; border-radius: 16px; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Pause">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#c2c8db" aria-hidden="true"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg>
+                  </button>
+                  <span style="width: 9px; height: 9px; flex: none; border-radius: 50%; background: #fb7185;"></span>
+                  <span style="flex: 1; font-size: 19px; font-weight: 600; color: #f7f8fc; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;">0:24</span>
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #fb7185; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Stop and send">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="#0a0c14" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2.4"/></svg>
+                  </button>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ FIVE MINUTES: held, and told ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">AT 5:00 &middot; held, not sent, and said so</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <header style="display: flex; align-items: center; gap: 6px; padding: 12px 12px 12px 8px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+                  </button>
+                  <span style="flex: 1; font-family: 'Marcellus', Georgia, serif; font-size: 20px; color: #f7f8fc;">Assistant</span>
+                </header>
+
+                <div style="flex: 1; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px;">
+
+                  <div style="align-self: flex-end; max-width: 84%; background: #262b40; border-radius: 18px 18px 5px 18px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">Add bread to the weekly shop</div>
+
+                  <div style="align-self: flex-start; max-width: 92%; width: 92%;">
+                    <div style="background: #161a28; border-radius: 18px 18px 18px 5px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">Added. Bread on the weekly shop.</div>
+                  </div>
+
+                </div>
+
+                <!-- CONTAINER GREW, MESSAGE ON TOP, PAUSE DISABLED -->
+                <div style="border-top: 1px solid rgba(255,255,255,0.07); padding: 12px 16px 20px;">
+                  <p style="margin: 0 0 12px; padding: 0 2px; font-size: 15px; line-height: 1.4; color: #ffd39a;">That is 5 minutes, so I stopped listening. <span style="color: #f7f8fc; font-weight: 600;">Press stop to send it.</span></p>
+                  <div style="display: flex; gap: 12px; align-items: center;">
+                    <button type="button" disabled style="width: 52px; height: 52px; flex: none; border: 1px solid #262b40; border-radius: 16px; background: transparent; display: flex; align-items: center; justify-content: center; cursor: not-allowed;" aria-label="Carry on recording">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="#3a4160" aria-hidden="true"><path d="M8 5.4v13.2L18.5 12z"/></svg>
+                    </button>
+                    <span style="width: 9px; height: 9px; flex: none; border-radius: 50%; border: 1.6px solid #525a78; background: transparent;"></span>
+                    <span style="flex: 1; font-size: 19px; font-weight: 600; color: #f7f8fc; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;">5:00</span>
+                    <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #fb7185; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Stop and send">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="#0a0c14" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2.4"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 960px; top: 2740px; width: 470px;">
+        <figcaption>The composer, in all six states</figcaption>
+        <div class="frame" id="ab-RecorderStates" style="width: 470px; height: 980px;">
+          <div style="width: 470px; height: 980px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; flex-direction: column; gap: 22px;">
+
+            <!-- 1. IDLE: empty field, so the button is the microphone -->
+            <div>
+              <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6f7899; margin-bottom: 9px;">1 &middot; Nothing typed</div>
+              <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px; display: flex; gap: 10px; align-items: flex-end;">
+                <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #6f7899;">Write a message</div>
+                <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Record a message">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. TYPED: the same slot becomes send -->
+            <div>
+              <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6f7899; margin-bottom: 9px;">2 &middot; Something typed &middot; same slot, send</div>
+              <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px; display: flex; gap: 10px; align-items: flex-end;">
+                <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #f7f8fc;">Add milk<span style="color: #ffb454;">|</span></div>
+                <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Send">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4.5 12h14M13 6.5l5.5 5.5L13 17.5"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 3. RECORDING: pause far left, length, stop far right -->
+            <div>
+              <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd39a; margin-bottom: 9px;">3 &middot; Recording</div>
+              <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px; display: flex; gap: 12px; align-items: center;">
+                <button type="button" style="width: 52px; height: 52px; flex: none; border: 1px solid #343a54; border-radius: 16px; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Pause">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#c2c8db" aria-hidden="true"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg>
+                </button>
+                <span style="width: 9px; height: 9px; flex: none; border-radius: 50%; background: #fb7185;"></span>
+                <span style="flex: 1; font-size: 19px; font-weight: 600; color: #f7f8fc; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;">0:12</span>
+                <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #fb7185; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Stop and send">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="#0a0c14" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2.4"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 4. THREE MINUTES: container grows, message on top -->
+            <div>
+              <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd39a; margin-bottom: 9px;">4 &middot; Past 3:00 &middot; container grows</div>
+              <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px;">
+                <p style="margin: 0 0 12px; padding: 0 2px; font-size: 15px; line-height: 1.4; color: #ffd39a;">5 minutes is the longest I can listen. <span style="color: #f7f8fc; font-weight: 600;">2 minutes left.</span></p>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 1px solid #343a54; border-radius: 16px; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Pause">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#c2c8db" aria-hidden="true"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg>
+                  </button>
+                  <span style="width: 9px; height: 9px; flex: none; border-radius: 50%; background: #fb7185;"></span>
+                  <span style="flex: 1; font-size: 19px; font-weight: 600; color: #f7f8fc; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;">3:04</span>
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #fb7185; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Stop and send">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="#0a0c14" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2.4"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. PAUSED BY THE PERSON: dot hollows, pause becomes resume -->
+            <div>
+              <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6f7899;">5 &middot; Paused by the person</div>
+              <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px; margin-top: 9px; display: flex; gap: 12px; align-items: center;">
+                <button type="button" style="width: 52px; height: 52px; flex: none; border: 1px solid #ffb454; border-radius: 16px; background: rgba(255,180,84,0.10); display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Carry on recording">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffb454" aria-hidden="true"><path d="M8 5.4v13.2L18.5 12z"/></svg>
+                </button>
+                <span style="width: 9px; height: 9px; flex: none; border-radius: 50%; border: 1.6px solid #6f7899; background: transparent;"></span>
+                <span style="flex: 1; font-size: 19px; font-weight: 600; color: #98a0bb; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;">1:47</span>
+                <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #fb7185; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Stop and send">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="#0a0c14" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2.4"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 6. FIVE MINUTES: paused by the app, pause disabled, stop is the only way out -->
+            <div>
+              <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd39a; margin-bottom: 9px;">6 &middot; 5:00 &middot; paused, not sent</div>
+              <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px;">
+                <p style="margin: 0 0 12px; padding: 0 2px; font-size: 15px; line-height: 1.4; color: #ffd39a;">That is 5 minutes, so I stopped listening. <span style="color: #f7f8fc; font-weight: 600;">Press stop to send it.</span></p>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                  <button type="button" disabled style="width: 52px; height: 52px; flex: none; border: 1px solid #262b40; border-radius: 16px; background: transparent; display: flex; align-items: center; justify-content: center; cursor: not-allowed;" aria-label="Carry on recording">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#3a4160" aria-hidden="true"><path d="M8 5.4v13.2L18.5 12z"/></svg>
+                  </button>
+                  <span style="width: 9px; height: 9px; flex: none; border-radius: 50%; border: 1.6px solid #525a78; background: transparent;"></span>
+                  <span style="flex: 1; font-size: 19px; font-weight: 600; color: #f7f8fc; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;">5:00</span>
+                  <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #fb7185; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Stop and send">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="#0a0c14" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2.4"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 440px;"><p>The assistant panel, plan 0032, talking to the service in backend plan 0039. It can do three things: put a line on a list, answer a question about a list, and change your name.</p><p>WHY IT EXISTS IS NOT NOVELTY. A share of this app's intended users are of advanced age or have impaired motor control, and tapping through four screens to add one item is the thing that fails them. That is also why the microphone is here rather than deferred: speaking is the whole point, and the rest of this panel is what it speaks to.</p><p>Phone only, 390x844, Night only. Per the folder README a Day artboard is drawn only when a page introduces a colour role Day has not already proven, and this one introduces none: amber action, the amber tint panel and coral for the recording state are all from 0003 and 0010.</p><p>The copy is English here to match the other folders. Users see their own language: the request carries Accept-Language and the model answers in it.</p></aside>
       <aside class="note" style="left: 480px; top: 0px; width: 440px;"><p>A ROUTE, NOT A SHEET, AND THE APP BAR IS WHY. Rule E1 from 0008 makes a sheet a child route of the page it covers. The app bar lives in AppLayout, so its button is on every page, and a sheet reachable from everywhere would have to be a child of everywhere: eight identical entries that must not drift, covering a page it has nothing to do with.</p><p>So it follows account from 0015, on that plan's own test: deep linkable, its own scroll, somewhere you go deliberately rather than something drawn over what you were reading. authenticatedGuard and nothing more, declared before the empty path front door like every other non empty path.</p><p>A floating panel toggled by a signal was rejected. Nothing is pushed onto the history stack, so Android's back button closes the app rather than the panel. That is the defect rule E1 exists to prevent and the one 0031 spent a whole plan repairing.</p><p>SEARCH IS NOT BEING REMOVED, IT IS BEING SPENT. HomePage.search() calls _notYetRouted('search') and always has. There is no search page, no service and no route behind it, so the slot costs nothing to take. SearchIcon stays exported.</p></aside>
       <aside class="note" style="left: 960px; top: 0px; width: 460px;"><p>THE CHIPS ARE NOT PARSED OUT OF THE SENTENCE. Rule A3 in 0039: every reply carries a references array built from the tool results the service actually executed, and the panel renders those. The reply text is never scanned for ids and never rendered as markdown.</p><p>The difference is whether a link can lie. An id in references came back from the gateway during that turn, so the row exists and the caller is allowed to see it. An id the model wrote into prose has neither property, and a chip pointing at a list that was never there is worse than no chip: it is the app vouching for something invented.</p><p>So the model is told the client draws these itself, and writes "it is on the weekly shop" rather than a link.</p><p>Each chip is a routerLink built with appPath(locale, basePath, ...), never an assembled string. That is what makes one chip correct at /velista/en/... mounted in the portfolio shell and at /en/... on velista's own origin. A hardcoded path is wrong in exactly one of the two run modes, and it is the mode nobody looks at.</p><p>A line has no route of its own: the three that address one all DO something to it. So a line chip goes to the list with ?line=, which scrolls to it and marks it and opens nothing.</p></aside>
-      <aside class="note" style="left: 1470px; top: 0px; width: 460px;"><p>THE TYPE IS BIGGER HERE THAN ANYWHERE ELSE IN THE APP, ON PURPOSE. Message text is 16.5px where the rest of velista sets body copy at 13.5px, and the reply bubbles carry the same size as what the person typed.</p><p>This is the one screen built for somebody who came to it because the ordinary controls are hard for them. Shrinking the type to fit more transcript would be optimising the exact thing this screen exists to avoid.</p><p>The composer is an ordinary text input with an ordinary submit: no custom key handling, nothing that assumes a hardware keyboard. That is what makes the platform keyboard's dictation button work into it on day one, at no cost, which is the whole bridge to the voice work.</p><p>Tap targets keep the app's existing sizes. The send button is 52px like every primary button in the app, the app bar buttons stay 44x44, and the choice buttons in the two confirm flows are 56px because they are the answer to a question rather than a control somebody hunts for.</p></aside>
+      <aside class="note" style="left: 1470px; top: 0px; width: 460px;"><p>THE TYPE IS BIGGER HERE THAN ANYWHERE ELSE IN THE APP, ON PURPOSE. Message text is 16.5px where the rest of velista sets body copy at 13.5px, and the reply bubbles carry the same size as what the person typed.</p><p>This is the one screen built for somebody who came to it because the ordinary controls are hard for them. Shrinking the type to fit more transcript would be optimising the exact thing this screen exists to avoid.</p><p>Tap targets keep the app's existing sizes. Every button in the composer is 52px like the app's primary buttons, the app bar buttons stay 44x44, and the choice buttons in the two confirm flows are 56px because they are the answer to a question rather than a control somebody hunts for.</p><p>The field is an ordinary text input with an ordinary submit: no custom key handling, nothing that assumes a hardware keyboard. So the platform keyboard's own dictation button works into it, alongside the app's microphone, for somebody who already knows that gesture.</p></aside>
       <aside class="note" style="left: 2350px; top: 1620px; width: 460px;"><p>IT ASKS RATHER THAN GUESSING, AND THE ASK IS THE COMMON CASE. 0039 section 6.1 resolves which list in four steps and stops at the first that answers: the list named, then the list the conversation has been about, then the caller's only list, then ask.</p><p>With two lists and a bare "add two litres of milk", step four is where it lands, so this frame is not an edge case. It has to read as a normal part of the conversation, which is why it is two large buttons and not an error.</p><p>A write that guessed is worse than a question. The guess is silent, it lands on somebody else's shared list, and the person who asked has no reason to check.</p><p>THE TAP IS RECORDED AS THE PERSON'S OWN TURN. It appears in the transcript as "Weekly shop" from them, not as invisible state, because the transcript is what gets sent back next turn (rule A2, the client holds it) and a choice that left no trace would have to be re-asked.</p><p>The refusal at the bottom is not the bot being careful. It is the ordinary 403 from the gateway, because the bot called the same endpoint the app calls with the same token (rule A1), reported in words.</p></aside>
-      <aside class="note" style="left: 2350px; top: 2120px; width: 460px;"><p>A NUMBER THAT SHRINKS, NEVER "TRY AGAIN LATER". Rule A5 in 0039. The free tier's limits are per Google Cloud project rather than per user, roughly ten to fifteen requests a minute shared across everybody, so with two replicas this is an ordinary event and not an edge case.</p><p>"Later" is the wrong string, and it is specifically wrong here: somebody who cannot easily type is left guessing, and guessing means pressing send again, which spends the next slot and lengthens the wait.</p><p>THE SECONDS RIDE IN THE PROBLEM BODY, NOT A Retry-After HEADER. Same reason as rule C3 from 0009 and the hourly note in the account folder: enableCors sets no exposedHeaders, so a browser cannot read that header cross origin, and velista.app calling api.velista.app is cross origin. A header alone would leave the panel with nothing to count.</p><p>The value is the server's. The panel never invents one, and if the field is absent it says the bot is busy with no number rather than guessing.</p><p>THE COMPOSER KEEPS WHAT WAS TYPED. It is held disabled, not cleared. Making somebody retype a sentence they already dictated is the failure this whole screen exists to avoid, and it is the cheapest thing here to get right.</p></aside>
+      <aside class="note" style="left: 2350px; top: 2120px; width: 460px;"><p>A NUMBER THAT SHRINKS, NEVER "TRY AGAIN LATER". Rule A5 in 0039. The free tier's limits are per Google Cloud project rather than per user, roughly ten to fifteen requests a minute shared across everybody, so with two replicas this is an ordinary event and not an edge case.</p><p>"Later" is the wrong string, and it is specifically wrong here: somebody who cannot easily type is left guessing, and guessing means pressing send again, which spends the next slot and lengthens the wait.</p><p>THE SECONDS RIDE IN THE PROBLEM BODY, NOT A Retry-After HEADER. Same reason as rule C3 from 0009 and the hourly note in the account folder: enableCors sets no exposedHeaders, so a browser cannot read that header cross origin, and velista.app calling api.velista.app is cross origin. A header alone would leave the panel with nothing to count.</p><p>The value is the server's. The panel never invents one, and if the field is absent it says the bot is busy with no number rather than guessing.</p><p>THE COMPOSER KEEPS WHAT WAS TYPED. It is held disabled, not cleared. Making somebody retype a sentence they already dictated is the failure this whole screen exists to avoid.</p></aside>
       <aside class="note" style="left: 2350px; top: 2620px; width: 460px;"><p>IT CANNOT DELETE BECAUSE THERE IS NO DELETE TOOL, not because the prompt asks it not to. 0039 section 12 keeps deletion, zone governance, account deletion and merge, creating or joining zones, and every platform admin route out of the catalog entirely.</p><p>That distinction is the whole safety argument. An instruction is a suggestion to a model; an absent capability is not reachable by any sentence anybody types. Freedom lives in the prose, the constraint lives in the actions.</p><p>So the off topic reply is written by the model, in the caller's language, untemplated, and it still cannot do anything it was not given a tool for. What it may do is explain where the screen is, which is what the delete answer does.</p><p>One consequence worth watching in the test: the redirect is a successful turn. It is not retried, it is not logged as an error, and it counts against the same rate limit as everything else, so a person having a chat about the weather can use up the slots of a person trying to add bread.</p></aside>
+      <aside class="note" style="left: 1490px; top: 2740px; width: 460px;"><p>ONE SLOT, THREE JOBS. The right hand button is 52px in the same corner throughout: a microphone while the field is empty, send the moment anything is typed, and stop while recording. There are never two buttons competing for the same intention, and nothing moves under the thumb.</p><p>A PRESS, NOT A HOLD. Press and hold is the single most common voice gesture and it is the one a tremor cannot perform: it demands sustained steady pressure for the whole message. Press to start, press to stop, and the recording survives a hand that shakes or lets go.</p><p>PAUSE LEFT, LENGTH MIDDLE, STOP RIGHT, and that order is the point rather than a preference. Stop keeps the microphone's own position, so the finger that started the recording ends it without moving. Pause goes to the far opposite end, because the two are the only controls on screen and confusing them costs the whole message. The length sits between them and doubles as the gap.</p><p>COLOUR IS NOT THE ONLY SIGNAL. Stop is a square, pause is two bars, carry on is a triangle, and the dot beside the length is filled while listening and hollow while paused. Somebody who cannot see the red still reads the state from the shapes.</p></aside>
+      <aside class="note" style="left: 1490px; top: 3260px; width: 460px;"><p>THE CONTAINER GROWS AND THE MESSAGE GOES ON TOP, twice: once at 3:00 to say five minutes is the maximum and how long is left, and again at 5:00 to say it stopped. It grows rather than overlaying, so nothing is covered and the two buttons stay exactly where the hand left them.</p><p>AT 5:00 IT IS PAUSED, NOT SENT. The pause button is disabled and stop is the only way out. This is the decision worth defending: sending on a timer takes the choice away from somebody who was mid sentence, and a message that leaves on its own is a message nobody agreed to send. Holding it costs one press and returns the decision.</p><p>THE 5:00 MESSAGE IS REQUIRED, NOT DECORATIVE. Silence at the limit reads as the app having broken, and the person most likely to be recording for five minutes is the person least able to work out what happened.</p><p>OPEN, AND FOR THE OWNER: stop currently sends straight away, with no review step. For this audience an accidental stop is a sent message with no way back. A confirm would cost a press on every single recording, which is its own tax. Worth a decision before build.</p><p>ALSO OPEN: no state is drawn for a refused microphone permission, and on iOS that refusal is permanent until the person changes it in system settings. That screen has to exist.</p></aside>
   </div>
 </div>
 
@@ -519,7 +714,7 @@
   (function () {
     var canvas = document.getElementById('canvas');
     var w = 2810;
-    var h = 2790;
+    var h = 3720;
     var buttons = document.querySelectorAll('.controls button');
     buttons.forEach(function (button) {
       button.addEventListener('click', function () {
