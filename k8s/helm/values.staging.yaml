@@ -28,7 +28,7 @@ environment: staging
 # naming this file, which is a better failure than a LoadBalancer sitting
 # <pending> forever with everything else looking healthy.
 # ---------------------------------------------------------------------------
-ipAddress: ''
+ipAddress: 152.53.50.209
 
 # Staging tracks the mutable tag CI overwrites on every push to main. The deploy
 # rolls the changed deployments so they re-pull it.

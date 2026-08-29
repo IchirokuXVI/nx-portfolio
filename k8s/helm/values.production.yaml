@@ -16,7 +16,7 @@ environment: production
 
 # The production VPS. MetalLB advertises this address, so it is the machine the
 # five production DNS records resolve to.
-ipAddress: 46.62.204.230
+ipAddress: 152.53.49.229
 
 # Overwritten per deploy by deploy-release.sh with the immutable release version
 # (e.g. "1.1.3"). `latest` is the floor, so a hand run `helm upgrade` with this
