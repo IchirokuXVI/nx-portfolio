@@ -31,6 +31,38 @@ spec:
       maxSurge: {{ $ls.rollout.maxSurge }}
   template:
     metadata:
+      annotations:
+        # Roll the pods when the ConfigMap changes, and only then (the CORS
+        # regression of 2026-08-29).
+        #
+        # Every value in `lunaShopperBackend.config` reaches the container as a
+        # `configMapKeyRef`, never as a literal in this file, so editing one
+        # leaves this Deployment byte for byte identical. `helm upgrade` then
+        # updates the ConfigMap, reports success, and changes nothing: env is
+        # read once at process start, so a running pod keeps the values it booted
+        # with forever. Kubernetes does not restart pods on a ConfigMap change and
+        # never has.
+        #
+        # That is how staging came to serve `staging.velista.app` from a gateway
+        # whose CORS_ORIGINS still named `velista.staging.ichirokuxvi.com`: the
+        # Gateway and HTTPRoute halves of the move reconciled immediately, because
+        # they are the objects themselves rather than something read at boot, so
+        # the routing and the certificate looked correct while every browser
+        # request was blocked.
+        #
+        # CI cannot cover this. Both workflows `rollout restart` the deployments
+        # in `nx affected`, and a change to a values file affects no Nx project,
+        # so the list is empty exactly when the ConfigMap is what changed.
+        #
+        # Hashing the rendered ConfigMap puts the change back into the pod spec,
+        # which is what makes `helm upgrade` roll these pods by itself. It is a
+        # hash of the content, so an upgrade that does not touch the config leaves
+        # it identical and rolls nothing.
+        #
+        # The Secrets are deliberately not hashed here: `provision-release.sh`
+        # creates them outside the chart, so Helm never renders them and there is
+        # nothing to hash. Rotating a secret still needs a manual restart.
+        checksum/config: {{ include (print $root.Template.BasePath "/luna-shopper-backend/configmap.yaml.tpl") $root | sha256sum }}
       labels:
         app: {{ .name }}
         app.kubernetes.io/part-of: luna-shopper-backend
