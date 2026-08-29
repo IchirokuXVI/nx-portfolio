@@ -307,6 +307,21 @@ where the error text was already going to `/dev/null`. If you see a script here
 stop silently, suspect a suppressed non-zero status in an assignment before
 suspecting the cluster.
 
+**One service in three crashloops, and its migration Job exits with
+`TypeError: Invalid URL` / `ERR_INVALID_URL` from inside `pg`.** Fixed. The
+database passwords were generated with `openssl rand -base64`, whose alphabet
+includes `/`, and they are interpolated into
+`postgres://user:PASSWORD@host:5432/db`. A `/` in the password ends the authority
+early, so the parser reads the port as everything up to that slash and rejects it
+as non numeric. Whether a 32 character base64 string contains a `/` is roughly a
+coin flip, which is why it hit one database and not the other two, and why the
+failure read as a bug in that one service's migration. Generation now uses
+base64url, and `--check` asserts each `*_DB_URL` actually parses, since a cluster
+provisioned before the fix still holds the bad string. To repair an existing one,
+rotate that database's password rather than editing the URL: `ALTER ROLE` inside
+the instance, write the new value to its `*-db-secret`, then re-run
+`provision-release.sh --env <env>`, which rebuilds the URL from it.
+
 **`--check` reports every `configmap/luna-shopper-backend-config` key missing on
 a cluster nothing has been deployed to yet.** Fixed. That ConfigMap belongs to
 the chart rather than to provisioning, so it could not exist before the first

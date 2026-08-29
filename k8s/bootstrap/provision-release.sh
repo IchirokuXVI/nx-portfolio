@@ -144,6 +144,67 @@ cluster_has_key() {
     2>/dev/null | grep -qxF "$3"
 }
 
+decoded_secret_value() {
+  # run_check runs before the provisioning half is even parsed, so it cannot use
+  # `existing` below; this is the same two lines, local to the preflight.
+  kubectl -n "$NAMESPACE" get secret "$1" -o "jsonpath={.data.$2}" 2>/dev/null \
+    | base64 -d 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# A connection string that a URL parser accepts.
+#
+# The password is interpolated into postgres://user:PASSWORD@host:5432/db, and a
+# '/' in the password ends the authority early: the parser takes everything
+# between ':' and that slash as the port, finds it is not a number, and throws
+# ERR_INVALID_URL from inside pg, nine frames deep, naming neither the variable
+# nor the Secret that supplied it.
+#
+# It reached production shaped like something else entirely. Whether a 32
+# character base64 string contains a '/' is close to a coin flip, so it struck
+# one database in three: two services migrated cleanly and the third failed in a
+# way that read as a bug in its own migration rather than in its credential.
+#
+# Hence both halves of this. Generation uses base64url, the same entropy over an
+# alphabet that is unreserved in a URL userinfo, so nothing downstream has to
+# encode or decode anything. The preflight then asserts the property directly,
+# because a cluster provisioned before this fix still holds the old URL and
+# nothing else would report it.
+# ---------------------------------------------------------------------------
+assert_url_safe() {
+  case "$1" in
+    ''|*[!A-Za-z0-9_-]*)
+      echo "Generated a password that is not URL safe. This is a bug in this" >&2
+      echo "script: see the note above generate_db_password." >&2
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+generate_db_password() {
+  # '\r' as well as '\n': an openssl that emits CRLF (Git Bash on Windows does,
+  # and this script is edited there) would otherwise leave a carriage return on
+  # the end of the password, where it survives into the Secret and corrupts the
+  # credential invisibly. assert_url_safe is what caught it.
+  local password
+  password="$(openssl rand -base64 24 | tr -d '\r\n' | tr '+/' '-_')"
+  assert_url_safe "$password" || return 1
+  printf '%s' "$password"
+}
+
+db_url_is_parseable() {
+  local url="$1" rest userinfo
+  case "$url" in postgres://*|postgresql://*) ;; *) return 1 ;; esac
+  rest="${url#*://}"
+  case "$rest" in *@*) ;; *) return 1 ;; esac
+  # The password may contain no '/', and cannot contain an '@', so the userinfo
+  # is everything up to the first one.
+  userinfo="${rest%%@*}"
+  case "$userinfo" in */*) return 1 ;; esac
+  return 0
+}
+
 run_check() {
   local failures=0
   local chart_failures=0
@@ -243,7 +304,21 @@ run_check() {
       continue
     fi
     if kubectl -n "$NAMESPACE" get "$kind" "$name" -o "jsonpath={.data.$key}" 2>/dev/null | grep -q .; then
-      echo "  ok      $kind/$name $key"
+      case "$kind/$key" in
+        secret/*_DB_URL)
+          # Present is not enough for a connection string: see the note above
+          # db_url_is_parseable for the failure this catches.
+          if db_url_is_parseable "$(decoded_secret_value "$name" "$key")"; then
+            echo "  ok      $kind/$name $key"
+          else
+            echo "  INVALID $key in $kind/$name is not a parseable postgres:// URL"
+            echo "          A '/' in the password ends the authority early. Re-provision"
+            echo "          this database's credential; see the note in this script."
+            failures=$((failures + 1))
+          fi
+          ;;
+        *) echo "  ok      $kind/$name $key" ;;
+      esac
     elif is_optional_empty "$key"; then
       echo "  ok      $kind/$name $key (empty, which this key is allowed to be)"
     else
@@ -353,9 +428,9 @@ ROTATED=false
 
 echo "Resolving credentials (existing values are kept; --rotate to regenerate)..."
 
-AUTH_DB_PASSWORD="$(keep_or_generate "$AUTH_DB_SECRET" POSTGRES_PASSWORD 'openssl rand -base64 24 | tr -d "\n"')"
-CORE_DB_PASSWORD="$(keep_or_generate "$CORE_DB_SECRET" POSTGRES_PASSWORD 'openssl rand -base64 24 | tr -d "\n"')"
-CATALOG_DB_PASSWORD="$(keep_or_generate "$CATALOG_DB_SECRET" POSTGRES_PASSWORD 'openssl rand -base64 24 | tr -d "\n"')"
+AUTH_DB_PASSWORD="$(keep_or_generate "$AUTH_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
+CORE_DB_PASSWORD="$(keep_or_generate "$CORE_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
+CATALOG_DB_PASSWORD="$(keep_or_generate "$CATALOG_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
 
 # The JWT keypair. Losing it does not lose data, but every issued access and
 # refresh token becomes unverifiable at once, which logs out every user
