@@ -5,35 +5,78 @@ that is work the pipeline has to do. It is one job running every step in a line,
 same workspace ten separate times inside ten separate containers, with no cache surviving
 between runs.
 
+Measured on a green 23m49s run, **11.2 minutes of that is compilation that should be about 4**,
+because the shared libraries are rebuilt once per image rather than once, and **2m38s is spent
+exporting and re-importing an image nothing reads from the local daemon**. Section 1 has the
+numbers; section 2.5 answers the question they raise, which is whether the builder image that
+causes most of this is worth what it costs.
+
 This plan restructures `.github/workflows/docker-ci.yml`. `release.yml` has the same shape and
 the same faults; it gets the same treatment once staging has proved the design, and section 8
 says why it is deliberately second rather than done in the same pass.
 
 ## 1. Where the time goes today
 
-Everything below happens in a single `staging-deploy` job, in this order, with each step
-waiting on the one before it. The figures are the expected shape rather than measured
-numbers, because the run logs are the one input this analysis did not have. **Step 0 of the
-work is to read the real per step timings off a recent run** and correct the ranking here if
-they disagree; the structural faults in section 2 hold either way, because they are visible
-in the file rather than in a stopwatch.
+Everything below happens in a single `staging-deploy` job, in this order, with each step waiting
+on the one before it. These are measured numbers, from run
+[33229050837](https://github.com/IchirokuXVI/nx-portfolio/actions/runs/33229050837), a green run
+of 23m49s. All ten apps were affected, which is the ordinary case here: anything touching a
+shared library affects everything.
 
-| #   | Step                                                                  | Rough cost |
-| --- | --------------------------------------------------------------------- | ---------- |
-| 1   | Checkout at `fetch-depth: 0`, buildx, node, `npm install nx@…`        | ~1.5 min   |
-| 2   | Build, `--load` and push the `builder` image                          | ~4 min     |
-| 3   | Seven separate `nx show projects` calls to compute affected           | ~1.5 min   |
-| 4   | `docker run builder … nx run-many -t test`, cold                      | ~4 min     |
-| 5   | `nx run-many -t build:docker` over up to ten apps                     | ~9 min     |
-| 6   | Frontend e2e: browser installs, compose stack, suites in a loop       | ~5 min     |
-| 7   | Luna tier 2 e2e: browser install again, compose stack, suite          | ~4 min     |
-| 8   | rsync, preflight, `helm upgrade --atomic`, rollout restart and status | ~3 min     |
+| #   | Step                                                                   | Measured | Share |
+| --- | ---------------------------------------------------------------------- | -------- | ----- |
+| 1   | Checkout, buildx, node, `npm install nx@…` (60s of it the npm install) | 1m25s    | 6%    |
+| 2   | Build, `--load` and push the `builder` image                           | 4m43s    | 20%   |
+| 3   | Seven `nx show projects` calls to compute affected                     | 13s      | 1%    |
+| 4   | Build affected static docker apps                                      | 18s      | 1%    |
+| 5   | `docker run builder … nx run-many -t test`                             | 3m40s    | 15%   |
+| 6   | `nx run-many -t build:docker` over ten apps                            | 7m30s    | 31%   |
+| 7   | Frontend e2e: browser installs, compose stack, five suites             | 3m56s    | 17%   |
+| 8   | Luna tier 2 e2e                                                        | 51s      | 4%    |
+| 9   | rsync, preflight, `helm upgrade --atomic`, rollout restart and status  | 50s      | 3%    |
 
-Steps 6 and 7 are conditional, so a commit that touches nothing testable is cheaper. A commit
-that touches a shared library, which is the common case in this repository, is affected by
-everything and pays all of it.
+Two estimates in an earlier draft of this plan were wrong and are worth recording as fixed.
+**Computing affected costs 13 seconds, not the minute and a half guessed**, so collapsing the
+seven graph boots is a tidiness change and not a performance one. **The deploy costs 50 seconds**,
+so the Helm rollout is not a floor worth designing around. Both corrections move effort toward
+steps 2, 5, 6 and 7, which are 83% of the run between them.
 
-## 2. The four structural faults
+### 1.1 Where the builder image's 4m43s goes
+
+From the buildx progress output in that run:
+
+| Phase                                                          | Cost   |
+| -------------------------------------------------------------- | ------ |
+| buildx start, gha cache manifest, ~1.09 GB of cached layers    | ~1m40s |
+| `--load`: `sending tarball` 65.7s, `importing to docker` 59.5s | 68s    |
+| exporting the build cache back to gha                          | 11s    |
+| `docker push` of `builder:latest`                              | 90s    |
+
+**The `npm ci` layer was `CACHED`.** The lockfile scoped gha cache is working exactly as
+designed. Nearly none of this 4m43s is dependency installation; **2m38s of it, 56%, is moving
+the image around rather than making it**, and most of that is avoidable outright (section 2.3).
+
+### 1.2 Where the image step's 7m30s goes
+
+The per project `nx build` timings, printed by Nx inside each image build:
+
+| Project       | Build  | Project                       | Build |
+| ------------- | ------ | ----------------------------- | ----- |
+| odontogram    | 103.0s | luna-shopper-backend-auth     | 48.1s |
+| damoclesSword | 95.9s  | luna-shopper-backend-catalog  | 46.6s |
+| landingV2     | 95.3s  | luna-shopper-backend-gateway  | 32.8s |
+| velista       | 94.2s  | luna-shopper-backend-core     | 30.3s |
+| shell         | ~95s   | luna-shopper-backend-realtime | 30.2s |
+
+That is **roughly 11.2 minutes of compilation**, which Nx's default `--parallel=3` compresses into
+7m30s of wall time. Every Angular line reads "and 2 tasks it depends on" or "and 4 tasks it
+depends on": those dependencies are the shared libraries, and they are rebuilt once per image
+because each build happens in its own container. On top of that, the five Luna images spend
+another 76s between them on `sending tarball` for `--load`.
+
+This is section 2.1 measured. The compilation is real work; doing it ten times is not.
+
+## 2. The structural faults
 
 ### 2.1 Every image compiles the whole workspace from scratch
 
@@ -154,12 +197,87 @@ and get them by cache luck or by an implicit `npx` download. `pr.yml` does this 
 run reuse without contradicting `neverConnectToCloud`. It is a local cache directory restored
 from GitHub's cache, not a connection to anything.
 
+### 2.5 The builder image: keep the guarantee, drop the image
+
+The builder image exists for a good reason, and this plan does not want to give that reason up.
+It is there so an app is built the same way every time, independent of whichever runner and
+whichever environment GitHub hands out. That is a correct thing to want, and the runner is
+genuinely a moving target: GitHub rebuilds `ubuntu-latest` continuously and rolls major versions
+under the same label.
+
+The question is not whether to keep the guarantee. It is whether **building an image of your own**
+is the way to get it. It is not, and it turns out to be both the most expensive option and a
+weaker guarantee than it looks.
+
+**The pin is not as firm as it appears.** The Dockerfile says `FROM node:22`, which is a mutable
+tag. In the measured run, buildx resolved it to `node:22@sha256:8a34c4ab…`, at build time. Nothing
+records that digest, so the next time the `npm ci` layer is invalidated by a lockfile change, a
+different `node:22` can be resolved and nobody will notice. What exists today is not "always the
+same environment"; it is "the same environment until dependencies next change", which is a
+weaker property than the design intends.
+
+**The expensive part is not the part that guarantees anything.** From section 1.1, `npm ci` is
+already `CACHED`, and 2m38s of the 4m43s is tarball export, import and push. None of that
+contributes to reproducibility. It is the cost of _distributing_ an image, paid on every push to
+main, for an image whose only CI consumer is the next step of the same job.
+
+**A digest pinned upstream image gives more, for almost nothing.** Pin `node:22` by digest in the
+workflow and run the build inside it:
+
+```yaml
+env:
+  # The one place the build environment is defined. Bump deliberately, in a commit.
+  BUILD_IMAGE: node:22@sha256:8a34c4ab3ea2c5cd194f07e317b2a8f09461d3c8b05c4e34c8ccd56d56024c4d
+
+steps:
+  - run: docker run --rm -v "$PWD":/w -w /w "$BUILD_IMAGE" npm ci --legacy-peer-deps
+  - run: |
+      docker run --rm -v "$PWD":/w -w /w \
+        -e MFE_BASE_URL -e MFE_REMOTE_URLS -e LUNA_GATEWAY_URL -e LUNA_REALTIME_URL \
+        "$BUILD_IMAGE" npx nx run-many -t build --configuration production --projects "$APPS"
+```
+
+Compare that against what the builder image provides today, point by point.
+
+- **Same Debian base, same glibc, same system libraries.** Identical, because it is the same
+  upstream image.
+- **`node_modules` produced by that same environment**, so native modules match what runs the
+  build. Preserved, because `npm ci` runs in the container too.
+- **Insulation from GitHub changing the runner image.** Preserved. The runner only starts
+  containers; it does not compile anything.
+- **Reproducibility over time.** _Improved._ A digest in a committed workflow file is explicit,
+  reviewable, and changes only when a person changes it. Today's `node:22` cannot make that
+  claim.
+- **Cost.** A pull of `node:22` rather than a build, export, import and push. Roughly 4m43s
+  becomes tens of seconds.
+- **The Nx cache.** _Newly possible._ Because the workspace is bind mounted rather than baked in,
+  one `nx run-many` builds all ten apps in one container, sharing the library graph, and
+  `.nx/cache` survives on the runner to be saved by `actions/cache`. This is the 11.2 minutes of
+  duplicated compilation from section 1.2, and the current design structurally cannot recover it.
+
+A job level `container:` would also work and reads more cleanly, but it makes running buildx in
+the same job awkward, and the `docker run` form keeps the bind mounted `.nx/cache` that matters
+most here.
+
+**What happens to the builder project.** It stays. `k8s/README.md` uses it for the local full
+stack, and that is a real use with no deadline attached to it. What stops is building and pushing
+it on every push to main. If it drifts behind the lockfile, a person refreshes it when they next
+want the local full stack, which is exactly when they would notice.
+
+**The middle option, for the record.** If a self built image is still wanted, the minimum repair
+is to make it dependencies only, dropping `COPY . .`, and tag it by lockfile hash so it is
+rebuilt only when dependencies actually change rather than on every commit. That removes most of
+the 4m43s. It does **not** recover section 1.2's duplicated compilation, because each app would
+still compile in its own container with its own empty Nx cache. It is strictly worse than the
+digest pin and strictly better than today.
+
 ## 3. Smaller faults, worth fixing in the same pass
 
 **Seven graph boots to compute affected.** The `Get affected apps` and `Get affected e2e`
 steps call `nx show projects` seven times, and each call constructs the project graph. One
 `nx show projects --affected --json` plus filtering in `jq` gives the same six lists from one
-boot.
+boot. Measured at 13 seconds in total, so this is a legibility change, not a speed one. It earns
+its place only because the split in 5.8 needs those lists as job outputs anyway.
 
 **Playwright and Cypress are installed twice, uncached.** `npx playwright install --with-deps
 chromium` appears in both the frontend e2e step and the Luna tier 2 step, and `npx cypress
@@ -199,20 +317,31 @@ build:docker` is both faster and simpler. If measurement later shows the image p
 material, a matrix is an easy follow up, and splitting the bundle build out as an artifact is
 what makes it possible.
 
-**The two e2e jobs are genuinely independent** and are the reason the current pipeline spends
-nine minutes where it could spend five. They both need the pushed images, so they hang off the
-build job and not off `setup`.
+**The two e2e jobs are genuinely independent.** Today they cost 3m56s and 51s in series; in
+parallel they cost 3m56s.
 
 **`lint + test` hangs off `setup` alone**, not off the build, because nothing about a unit test
-needs an image. It gates the deploy and otherwise stays out of the way.
+needs an image. It gates the deploy and otherwise stays out of the way. Today it costs 3m40s on
+the critical path; here it costs nothing, because it finishes well inside the build job.
 
 **The deploy needs all three**, which is the existing guarantee: a red suite means the mutable
 `staging` tag is not rolled out.
 
-Expected critical path: setup ~1.5, build and push ~4 cold or ~1.5 on a warm Nx cache, the
-slower e2e job ~5, deploy ~3. That is roughly **13 minutes cold and closer to 10 warm**, against
-24 today, and the floor is then set by the e2e suites and the Helm rollout rather than by
-compilation.
+Against the measured run, the critical path becomes roughly:
+
+| Job              | Estimate | Reasoning                                                     |
+| ---------------- | -------- | ------------------------------------------------------------- |
+| setup            | ~1m      | `npm ci` with the npm cache, one graph boot                   |
+| build and push   | ~4m cold | one `nx run-many` over ten apps, then ten `COPY` image builds |
+| e2e (the slower) | ~4m      | unchanged by this plan                                        |
+| deploy           | ~50s     | unchanged, measured                                           |
+
+That is **about 10 minutes cold**, against 23m49s measured today. The build job is the only
+estimate with real uncertainty: 11.2 minutes of compilation with the shared libraries built once
+instead of ten times, and running at the runner's full parallelism rather than `--parallel=3`,
+should land near 4 minutes, and much less whenever the Nx cache hits. **The frontend e2e suite
+then becomes the largest single item in the pipeline**, which is the right problem to have next
+and is not addressed here.
 
 ## 5. Changes, in order
 
@@ -221,14 +350,27 @@ the two largest wins land first and so nothing depends on a later step.
 
 ### 5.1 Measure
 
-Read the per step durations off the last few green runs of `docker-ci.yml` and record them in
-this section. Everything below is ranked on the analysis in section 2; the ranking should
-survive contact with real numbers, but the numbers are what will show whether the e2e suites
-or the image builds become the new ceiling.
+Done, in section 1, against run 33229050837. Repeat it after 5.3 and after 5.8, because those
+are the two steps that move enough to change what the ceiling is. The prediction worth checking
+is that the frontend e2e suite (3m56s today, and untouched by any of this) becomes the largest
+single item once compilation stops being one.
 
-### 5.2 Move the compilation out of Docker
+### 5.2 Pin the build environment by digest, and build once
 
-The change with the largest effect and the widest blast radius, so it goes first and alone.
+This is 2.5 and 2.1 landing together, because they are the same edit: the moment compilation
+moves out of the per image containers it has to happen somewhere, and that somewhere should be a
+digest pinned `node:22` rather than the runner's bare filesystem.
+
+Add `BUILD_IMAGE` to the workflow env as a digest pinned `node:22`, run `npm ci` and one
+`nx run-many -t build` inside it over a bind mounted workspace, and keep `.nx/cache` on the
+runner where `actions/cache` can save it (5.5). The reproducibility argument and the point by
+point comparison against today's builder image are in 2.5.
+
+### 5.3 Reduce the images to a copy
+
+The other half of 5.2, and together with it the change with the widest blast radius, so the two
+land together and alone. Once the bundles exist on the runner, the images have nothing left to
+compile.
 
 All ten Dockerfiles end their build stage by copying exactly `dist/apps/${NX_APP}` and nothing
 else, which is what makes this a mechanical change rather than a redesign.
@@ -305,7 +447,7 @@ comes out of the app `project.json` files. **And the build environment changes**
 lockfile. That is the environment `pr.yml` has always built and tested in, so it is not new
 ground, but it is the thing to look at first if a bundle comes out different.
 
-### 5.3 Push instead of load
+### 5.4 Push instead of load
 
 In `tools/docker/src/executors/build/build.ts`, choose the output mode from whether the image
 is going to a registry:
@@ -321,17 +463,23 @@ repeated `-t` with a single `--push`.
 `--load` stays the default for local development, where the point is to end up with an image in
 the local daemon.
 
-### 5.4 Take the builder image off the critical path
+This one is worth doing even if nothing else in this plan is. Measured, it removes 68s from the
+builder image alone and another 76s spread across the five Luna images, for a change of one
+expression.
 
-With 5.2 landed, nothing in CI is `FROM nx-portfolio/builder`, and the `Build main docker
+### 5.5 Take the builder image off the critical path
+
+With 5.2 and 5.3 landed, nothing in CI is `FROM nx-portfolio/builder`, and the `Build main docker
 builder` step and the `docker run builder … nx run-many -t test` step both come out of the
-workflow. The project itself stays, because `k8s/README.md` uses it for the local full stack.
+workflow. That is the 4m43s from section 1.1, in full. The project itself stays, because
+`k8s/README.md` uses it for the local full stack; 2.5 covers what is and is not given up by no
+longer publishing it on every push.
 
 Its `production` configuration keeps `pushToRegistry`, so a person can still refresh the
 published image by hand when the local full stack needs it. It is simply no longer something
 every push to main pays for.
 
-### 5.5 Fix the dependency install and cache the Nx cache
+### 5.6 Fix the dependency install and cache the Nx cache
 
 Replace the `Cache Nx` and `Install Nx` pair with the same shape `pr.yml` uses:
 
@@ -356,7 +504,7 @@ and add, in every job that runs an Nx target:
 `restore-keys` is what makes this work: an exact key never hits on a new commit, and the prefix
 falls back to the most recent cache on the branch, which is the previous run.
 
-### 5.6 One graph boot for the affected lists
+### 5.7 One graph boot for the affected lists
 
 Collapse the seven `nx show projects` calls into one `--affected --json` invocation plus `jq`
 filtering, and emit the six lists as job outputs the downstream jobs consume. The `build_all`
@@ -366,7 +514,7 @@ While in there: the Luna affected step exists only because `nx show projects` pr
 stdout is not a TTY and lines when it is, and the workflow was parsing both shapes. Reading
 `--json` everywhere and parsing it with `jq` retires that whole class of bug.
 
-### 5.7 Split into jobs
+### 5.8 Split into jobs
 
 Build the graph from section 4. `setup` publishes the affected lists; `lint-test`,
 `build-and-push`, `e2e-frontend`, `e2e-luna` and `deploy` consume them. Each job restores
@@ -379,7 +527,7 @@ serialisation guarantee is about the Helm release and must survive the split.
 The two `if: … != ''` guards that currently skip e2e become job level `if:` conditions, so a
 commit that affects no suite skips the job rather than every step in it.
 
-### 5.8 Cache the browsers
+### 5.9 Cache the browsers
 
 `~/.cache/ms-playwright` keyed on the version from `require('@playwright/test/package.json')`,
 `~/.cache/Cypress` keyed on the Cypress version, and `--with-deps` reduced to a single system
@@ -393,13 +541,13 @@ this is unlikely. The check is direct: build one app both ways at the same commi
 `dist/apps/<app>`. Do it for `shell`, because it is the app with build time configuration baked
 in, and for one Luna service, because `nx prune` writes a lockfile.
 
-**The build context becomes the new bottleneck.** This is the trap in 5.2, and the reason that
+**The build context becomes the new bottleneck.** This is the trap in 5.3, and the reason that
 step specifies a `dist` context rather than the more obvious `root`. Sending the workspace to
 the daemon ten times a run would undo a good part of the win. It is easy to verify: the buildx
 log prints the context transfer size, and it should read as megabytes per image, not hundreds.
 
 **An app whose image needs something outside `dist/apps/<project>`.** None does today, which
-section 5.2 establishes by inspection of all ten Dockerfiles. But a `dist` context makes that a
+section 5.3 establishes by inspection of all ten Dockerfiles. But a `dist` context makes that a
 constraint rather than a coincidence, and a future app wanting a config file next to its bundle
 has to either emit it into `dist` as a build output or use `root` and accept the context cost.
 Worth knowing before someone hits it and reaches for `root` without noticing what it costs.
@@ -437,5 +585,5 @@ Staging exists to absorb exactly this kind of change, and a pipeline rewrite is 
 change that finds its problems in the second week rather than the first run. Production deploys
 on a published release, which is rare enough that 20 minutes costs little and a broken deploy
 path costs a lot. So: land this on staging, let it run for a few weeks of ordinary pushes, and
-then port it, at which point the Dockerfile and executor changes from 5.2 and 5.3 are already
+then port it, at which point the Dockerfile and executor changes from 5.2, 5.3 and 5.4 are already
 shared and only the workflow file is left to write.
