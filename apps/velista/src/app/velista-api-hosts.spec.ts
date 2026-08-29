@@ -24,20 +24,28 @@ describe('velista production API hosts', () => {
     let dir = __dirname;
     while (!existsSync(join(dir, 'nx.json'))) {
       const parent = dirname(dir);
-      if (parent === dir) throw new Error('could not locate the workspace root');
+      if (parent === dir)
+        throw new Error('could not locate the workspace root');
       dir = parent;
     }
     return dir;
   }
 
-  const chart = readFileSync(
-    resolve(workspaceRoot(), 'k8s/helm/values.yaml'),
-    'utf8'
-  );
-  const production = readFileSync(
-    resolve(workspaceRoot(), 'k8s/helm/values.production.yaml'),
-    'utf8'
-  );
+  /**
+   * Read a values file with its line endings normalised. A Windows checkout hands
+   * back CRLF, and a multi line pattern anchored on `\n` (the `hostOverrides` block
+   * below) then matches nothing at all, which fails as a wrong hostname rather than
+   * as a parse error.
+   */
+  function readValues(path: string): string {
+    return readFileSync(resolve(workspaceRoot(), path), 'utf8').replace(
+      /\r\n/g,
+      '\n'
+    );
+  }
+
+  const chart = readValues('k8s/helm/values.yaml');
+  const production = readValues('k8s/helm/values.production.yaml');
 
   /** The domain the production cluster serves, from its environment values file. */
   function baseDomain(): string {
@@ -47,21 +55,45 @@ describe('velista production API hosts', () => {
   }
 
   /**
-   * The `hostPrefix` the chart routes one backend service on. Since plan 0002 the
-   * services list is environment agnostic and carries a prefix under
-   * `baseDomain` rather than a full hostname, so the production host is the two
-   * composed.
+   * The `hostOverrides` block of the production values file, as a map. It names the
+   * entries that do not sit under `baseDomain` at all, which since velista got its
+   * own domain is velista and both of its backend services.
    */
-  function hostOf(serviceName: string): string {
+  function hostOverrides(): Record<string, string> {
+    const block = /^hostOverrides:\n((?:[ \t]+\S[^\n]*\n?)+)/m.exec(production);
+    if (!block) return {};
+    const map: Record<string, string> = {};
+    for (const line of block[1].split('\n')) {
+      const entry = /^\s+([\w-]+):\s*(\S+)\s*$/.exec(line);
+      if (entry) map[entry[1]] = entry[2];
+    }
+    return map;
+  }
+
+  /**
+   * The host the chart routes one `apps` / `services` entry on, by the same
+   * precedence the `charts.host` helper uses: an environment override wins,
+   * otherwise the entry's `hostPrefix` composed under `baseDomain`.
+   *
+   * Both halves are asserted rather than only the second, because the override is
+   * exactly where a rename now happens: the day one of these three names moves
+   * domains again, it moves in values.production.yaml alone.
+   */
+  function hostOf(entryName: string): string {
+    const override = hostOverrides()[entryName];
+    if (override) return `https://${override}`;
     const entry = new RegExp(
-      `- name: ${serviceName}\\b[\\s\\S]*?hostPrefix: (\\S+)`
+      `- name: ${entryName}\\b[\\s\\S]*?hostPrefix: (\\S+)`
     ).exec(chart);
-    if (!entry) throw new Error(`no hostPrefix for ${serviceName} in values.yaml`);
+    if (!entry)
+      throw new Error(`no hostPrefix for ${entryName} in values.yaml`);
     return `https://${entry[1]}.${baseDomain()}`;
   }
 
   it('points the gateway URL at the routed REST service', () => {
-    expect(DEFAULT_LUNA_GATEWAY_URL).toBe(hostOf('luna-shopper-backend-gateway'));
+    expect(DEFAULT_LUNA_GATEWAY_URL).toBe(
+      hostOf('luna-shopper-backend-gateway')
+    );
   });
 
   it('points the realtime URL at the routed realtime service', () => {
@@ -81,8 +113,21 @@ describe('velista production API hosts', () => {
     // blocked (values.production.yaml, corsOrigins).
     const origins = /^\s*corsOrigins:\s*(\S+)\s*$/m.exec(production);
     expect(origins).not.toBeNull();
-    expect(origins?.[1].split(',')).toContain(
-      `https://velista.${baseDomain()}`
+    expect(origins?.[1].split(',')).toContain(hostOf('velista'));
+  });
+
+  it('serves the app and its backend from the same domain', () => {
+    // Not a style preference. velista is installable, so it is identified by its
+    // origin, and the whole point of moving it off the portfolio's domain was that
+    // the thing it talks to came too. A backend left behind still works, but it
+    // means one more name on the certificate, in CORS and in the Google console.
+    const domainOf = (url: string) =>
+      new URL(url).hostname.split('.').slice(-2).join('.');
+    expect(domainOf(DEFAULT_LUNA_GATEWAY_URL)).toBe(
+      domainOf(hostOf('velista'))
+    );
+    expect(domainOf(DEFAULT_LUNA_REALTIME_URL)).toBe(
+      domainOf(hostOf('velista'))
     );
   });
 });

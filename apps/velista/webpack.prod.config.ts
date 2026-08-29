@@ -10,8 +10,12 @@ import mfeConfig from './module-federation.config';
  * `velista-api-hosts.spec.ts` asserts these against the routed Luna services in
  * `k8s/helm/values.yaml`, because the reason the realtime host was wrong for so
  * long is that two files had to agree and nothing checked that they did.
+ *
+ * They are on `velista.app`, not on the portfolio's domain: the backend serves this
+ * app and nothing else, so it followed the app onto its own domain. The chart states
+ * the same three names in `hostOverrides`, and the spec compares the two.
  */
-export const DEFAULT_LUNA_GATEWAY_URL = 'https://api.ichirokuxvi.com';
+export const DEFAULT_LUNA_GATEWAY_URL = 'https://api.velista.app';
 
 /**
  * Note `rt.`, not `api.`. `environment.prod.ts` carried `api.` for both, but the
@@ -19,7 +23,7 @@ export const DEFAULT_LUNA_GATEWAY_URL = 'https://api.ichirokuxvi.com';
  * and SSE connection was being attempted against the REST gateway, which does not
  * serve them. That was wrong in production, not only in staging.
  */
-export const DEFAULT_LUNA_REALTIME_URL = 'https://rt.ichirokuxvi.com';
+export const DEFAULT_LUNA_REALTIME_URL = 'https://rt.velista.app';
 
 /**
  * The production build. It differs from `webpack.config.ts` in one thing: the two

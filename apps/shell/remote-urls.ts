@@ -31,7 +31,7 @@ export const REMOTE_NAMES = [
 
 /**
  * Parse `MFE_REMOTE_URLS` — a comma separated list of `name=url` pairs, e.g.
- * `"velista=https://velista.ichirokuxvi.com,landingV2=http://localhost:8081"` — into a
+ * `"velista=https://velista.app,landingV2=http://localhost:8081"` — into a
  * `{ name: url }` map. Returns undefined when unset or empty, so a caller can tell
  * "no override" from "override to nothing".
  *

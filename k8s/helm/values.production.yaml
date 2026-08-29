@@ -14,6 +14,29 @@
 baseDomain: ichirokuxvi.com
 environment: production
 
+# velista has its own domain, and its backend went with it.
+#
+# `velista.ichirokuxvi.com` is gone: velista is a product rather than a page of the
+# portfolio, and an installable app is identified by its origin, so it owns one.
+# `api.` and `rt.` follow because they exist only to serve it, and leaving them on
+# the portfolio domain would have kept a second, unrelated name in play for every
+# certificate and every CORS decision.
+#
+# `ichirokuxvi.com/velista` is unaffected. The shell still mounts the remote at that
+# path, it just loads `remoteEntry.mjs` from the new origin (MFE_REMOTE_URLS in
+# .github/workflows/release.yml), which is why https://ichirokuxvi.com stays on
+# corsOrigins below.
+#
+# The three names must resolve to `ipAddress` BEFORE this deploys: cert-manager
+# requests a certificate per Gateway listener the moment the chart applies, and
+# Let's Encrypt rate limits failed validations hard. `.app` is on the HSTS preload
+# list, so there is no plain HTTP fallback to fall back to while a certificate is
+# pending; the site is simply unreachable until it issues.
+hostOverrides:
+  velista: velista.app
+  luna-shopper-backend-gateway: api.velista.app
+  luna-shopper-backend-realtime: rt.velista.app
+
 # The production VPS. MetalLB advertises this address, so it is the machine the
 # five production DNS records resolve to.
 ipAddress: 152.53.49.229
@@ -28,18 +51,20 @@ lunaShopperBackend:
   config:
     logLevel: info
     # Both origins, because after plan 0013 both can be serving velista: the
-    # portfolio at `/velista` and velista's own host. Comma separated, and the
-    # gateway splits and trims it. Plan 0013 section 9 claimed CORS was
-    # unaffected by the move; it is not. The gateway was never same origin with
-    # the app, but it allows an explicit list of hosts, so an origin that is not
-    # on the list has every request blocked. Once D5's redirect lands the
-    # portfolio entry can go.
-    corsOrigins: https://ichirokuxvi.com,https://velista.ichirokuxvi.com
+    # portfolio at `/velista` and velista's own host, which is `velista.app` now.
+    # Comma separated, and the gateway splits and trims it. Plan 0013 section 9
+    # claimed CORS was unaffected by the move; it is not. The gateway was never
+    # same origin with the app, but it allows an explicit list of hosts, so an
+    # origin that is not on the list has every request blocked. Once D5's
+    # redirect lands the portfolio entry can go.
+    corsOrigins: https://ichirokuxvi.com,https://velista.app
     authJwtKid: prod-1
     # The path the gateway actually serves: its controllers are versioned, so the
     # callback lives under /v1. It must match a URI pre-registered with Google
-    # exactly, which is why it is spelled out rather than derived from baseDomain.
-    googleCallbackUrl: https://api.ichirokuxvi.com/v1/auth/google/callback
+    # exactly, which is why it is spelled out rather than derived from a domain.
+    # Moving it to velista.app means registering the new URI in the Google console
+    # before this deploys: an unregistered redirect_uri fails the whole sign in.
+    googleCallbackUrl: https://api.velista.app/v1/auth/google/callback
     # Where the Google callback hands the browser back (plan 0023, section 3.4).
     # `{locale}` is substituted with the locale the flow started in.
     #
@@ -47,10 +72,17 @@ lunaShopperBackend:
     # canonical URL D5 wants the flow to land on: shell plan 0003 gave each app
     # ownership of the segment below its own mount, and on a standalone origin
     # the mount is empty, so the rule degenerates to `/{locale}`.
-    appBaseUrl: https://velista.ichirokuxvi.com/{locale}
+    appBaseUrl: https://velista.app/{locale}
+    # The sender stays on ichirokuxvi.com, which is the domain that has mail set
+    # up. Moving it to velista.app is a DNS job (MX, SPF, DKIM, DMARC), not a
+    # values change, and a From: on a domain with no SPF record is how a
+    # confirmation mail lands in spam. SMTP is off in this cluster either way
+    # (smtpHost is empty), so nothing here is live yet.
     mailFrom: Luna Shopper <no-reply@ichirokuxvi.com>
-    mailVerifyBaseUrl: https://ichirokuxvi.com/verify-email
-    mailResetBaseUrl: https://ichirokuxvi.com/reset-password
+    # The links inside those mails, on the other hand, point at the app, and the
+    # app is on velista.app now.
+    mailVerifyBaseUrl: https://velista.app/verify-email
+    mailResetBaseUrl: https://velista.app/reset-password
 
   # Nightly pg_dump off the node (plan 0005). Production only: staging holds
   # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.

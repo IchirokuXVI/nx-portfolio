@@ -149,13 +149,22 @@ else looking healthy.
 Then point the five records at it. `mfe` carries three remotes, and velista has
 its own origin because it is installable there as a PWA.
 
-| Production                | Staging                           |
-| ------------------------- | --------------------------------- |
-| `ichirokuxvi.com`         | `staging.ichirokuxvi.com`         |
-| `mfe.ichirokuxvi.com`     | `mfe.staging.ichirokuxvi.com`     |
-| `velista.ichirokuxvi.com` | `velista.staging.ichirokuxvi.com` |
-| `api.ichirokuxvi.com`     | `api.staging.ichirokuxvi.com`     |
-| `rt.ichirokuxvi.com`      | `rt.staging.ichirokuxvi.com`      |
+**The five live in two zones.** The portfolio is on `ichirokuxvi.com`; velista is
+a product with a domain of its own, and its backend (`api.`, `rt.`) exists only to
+serve it, so all three sit under `velista.app`. Both zones point at the same
+cluster address, so this is a naming split rather than a second deploy.
+
+| Production            | Staging                       |
+| --------------------- | ----------------------------- |
+| `ichirokuxvi.com`     | `staging.ichirokuxvi.com`     |
+| `mfe.ichirokuxvi.com` | `mfe.staging.ichirokuxvi.com` |
+| `velista.app`         | `staging.velista.app`         |
+| `api.velista.app`     | `api.staging.velista.app`     |
+| `rt.velista.app`      | `rt.staging.velista.app`      |
+
+Each row is its own A record. On the staging side in particular, a record on
+`staging.velista.app` does **not** cover `api.staging.velista.app`, and a wildcard
+`*.velista.app` matches one label, so it does not either.
 
 **Move them before the first deploy, and confirm with `dig` rather than a
 browser.** cert-manager requests a certificate per Gateway listener the moment
@@ -163,6 +172,17 @@ the chart applies, and Let's Encrypt rate limits failed validations far more
 tightly than successful ones. Five listeners retrying against records that still
 point somewhere else is how you lose the rest of the day. If you are cutting over
 live records, lower their TTL a day ahead.
+
+Two things `.app` adds that `ichirokuxvi.com` did not:
+
+- It is on the **HSTS preload list**, so a browser upgrades every request to
+  https on its own and offers no way past a certificate warning. There is no
+  plain HTTP window while a certificate is pending: the name is simply
+  unreachable until it issues. This does not affect the ACME HTTP-01 challenge
+  itself, which Let's Encrypt fetches with a client that is not a browser.
+- If the zone carries a **CAA** record it has to permit Let's Encrypt
+  (`0 issue "letsencrypt.org"`), or every issuance fails with an unhelpful
+  message. No CAA record at all is also fine.
 
 ## 5. Secrets
 

@@ -69,9 +69,29 @@ label, and the environment supplies the `baseDomain` it sits under. An empty
 prefix is the domain root, which is where the shell lives. So the lists are
 identical in both clusters and the domain is the only thing that moves.
 
-`host` on the entry wins when set. That is the escape hatch the local values
+Three names no longer sit under that domain at all. velista has a product domain
+of its own (velista.app, staging.velista.app), and the two routed Luna services
+are velista's backend, so `api.` and `rt.` follow it there. Which domain a name
+lands on is a per environment fact exactly like `baseDomain` itself, so the
+environment values file states it as `hostOverrides`, keyed by the entry name:
+
+  hostOverrides:
+    velista: velista.app
+    luna-shopper-backend-gateway: api.velista.app
+    luna-shopper-backend-realtime: rt.velista.app
+
+An entry with no override still composes `hostPrefix` under `baseDomain`, which
+is why this is a map in the environment file rather than a second domain in
+values.yaml: a single domain deploy (values.homelab.yaml, and any future cluster
+serving one name) needs no entry at all and renders exactly what it rendered
+before the move. Do not express one as a `hostPrefix` change instead: the prefix
+is shared by every environment and the domain is what differs.
+
+`host` on the entry wins over both. That is the escape hatch the local values
 files use, where the hostnames (portfolio.localhost, localhost) do not follow the
-prefix-under-a-domain pattern the two clusters do.
+prefix-under-a-domain pattern the two clusters do. Those files redefine the whole
+`apps` list, which is what makes a per entry key workable there and a map the
+better fit for a cluster that inherits the list from values.yaml.
 
 Call with a dict:
   (dict "item" <entry> "root" $)
@@ -79,8 +99,14 @@ Call with a dict:
 {{- define "charts.host" -}}
 {{- $item := .item -}}
 {{- $root := .root -}}
+{{- $override := "" -}}
+{{- if and $item.name $root.Values.hostOverrides -}}
+{{- $override = (index $root.Values.hostOverrides $item.name | default "") -}}
+{{- end -}}
 {{- if $item.host -}}
 {{- $item.host -}}
+{{- else if $override -}}
+{{- $override -}}
 {{- else -}}
 {{- $base := required "baseDomain is not set. Pass an environment values file (values.production.yaml or values.staging.yaml) alongside values.yaml, or set an explicit `host` on every apps/services entry." $root.Values.baseDomain -}}
 {{- if $item.hostPrefix -}}

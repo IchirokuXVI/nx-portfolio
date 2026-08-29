@@ -18,8 +18,9 @@ export default composePlugins(async (config) => {
 
   // ...and a remote that has outgrown that host names its own. velista is served from
   // its own origin now (plan 0013), which is a URL no base can produce, so CI passes
-  // `MFE_REMOTE_URLS=velista=https://velista.ichirokuxvi.com` (staging passes the
-  // staging host) and the tuple below is replaced.
+  // `MFE_REMOTE_URLS=velista=https://velista.app` (staging passes the staging host)
+  // and the tuple below is replaced. It is a domain of its own rather than a label
+  // under the portfolio's, which no base URL could produce either way.
   //
   // Read from the environment rather than hardcoded here, because the hostname differs
   // per environment and the shell is built once per environment anyway. Hardcoding it
