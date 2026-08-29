@@ -27,6 +27,19 @@ baseDomain: ''
 # backend pod). It labels traces and metrics; nothing in the chart branches on it.
 environment: ''
 
+# The names that do NOT sit under `baseDomain`, keyed by the `apps` /
+# `lunaShopperBackend.services` entry name.
+#
+# One cluster serves two domains since velista got its own (velista.app): the
+# portfolio under `baseDomain`, and velista's app plus its backend (`api.`, `rt.`)
+# under velista's. The entry lists below stay environment agnostic either way, so
+# the environment values file names the exceptions here and nothing else moves.
+#
+# Empty by default, and a deploy that serves a single domain leaves it that way:
+# with no entry an item composes `hostPrefix` under `baseDomain` exactly as it
+# always did. See the `charts.host` helper for the full precedence.
+hostOverrides: {}
+
 # Pull policy for the micro-frontend app images. A cluster deploy pulls the
 # freshly pushed images from the registry (Always). A local dev deploy builds the
 # images straight into the Docker Desktop image store and overrides this to
@@ -145,6 +158,11 @@ apps:
   # velista is served from its **own origin**, not from the micro-frontend host under
   # a path (plan 0013). One image serves both roles: `/` is the standalone app that a
   # phone installs, and `/remoteEntry.mjs` on the same host is what the shell loads.
+  #
+  # Since velista got a domain of its own that origin is `velista.app` rather than a
+  # label under `baseDomain`, so both clusters override this entry's host (see
+  # `hostOverrides` above). The `velista` prefix below is what a single domain deploy
+  # falls back to, which is what values.homelab.yaml still serves.
   #
   # This entry **moved**, it was not added. A second velista entry would run the same
   # image twice on two hostnames, which is the two origin hazard D5 exists to avoid,
@@ -274,7 +292,10 @@ lunaShopperBackend:
     metricsEnabled: true
 
   # Each backend service: one Deployment + Service (+ PDB). `routed` services get
-  # an HTTPRoute on `hostPrefix`.`baseDomain`; the rest are ClusterIP only.
+  # an HTTPRoute on `hostPrefix`.`baseDomain` — or on the host the environment
+  # overrides for them, which is where both clusters put `api.` and `rt.` now that
+  # velista, the only thing that calls them, has its own domain. The rest are
+  # ClusterIP only.
   # `websocket` additionally earns the one implementation specific timeout
   # policy. `role` drives which env vars (and thus which secret keys) the pod
   # receives, so only the auth pod ever sees the JWT private key. Images are the

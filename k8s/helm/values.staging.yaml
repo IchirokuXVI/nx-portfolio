@@ -13,6 +13,20 @@
 baseDomain: staging.ichirokuxvi.com
 environment: staging
 
+# velista's own domain, staging half. Same three names as production, one label
+# further down: `staging.velista.app` is to `velista.app` what
+# `staging.ichirokuxvi.com` is to `ichirokuxvi.com`.
+#
+# Each is a record of its own. `api.staging.velista.app` is NOT covered by an A
+# record on `staging.velista.app`, and a wildcard on `*.velista.app` does not reach
+# it either: a wildcard matches one label. All three have to exist and resolve to
+# `ipAddress` before this deploys, or cert-manager burns Let's Encrypt's failed
+# validation budget retrying names that cannot answer.
+hostOverrides:
+  velista: staging.velista.app
+  luna-shopper-backend-gateway: api.staging.velista.app
+  luna-shopper-backend-realtime: rt.staging.velista.app
+
 # ---------------------------------------------------------------------------
 # The staging VPS address. MUST be set to the new machine's IP before the first
 # staging deploy, and the five `*.staging.ichirokuxvi.com` DNS records moved to
@@ -39,13 +53,17 @@ lunaShopperBackend:
   config:
     logLevel: debug
     # Both origins while both are live, exactly as production.
-    corsOrigins: https://staging.ichirokuxvi.com,https://velista.staging.ichirokuxvi.com
+    corsOrigins: https://staging.ichirokuxvi.com,https://staging.velista.app
     authJwtKid: staging-1
-    googleCallbackUrl: https://api.staging.ichirokuxvi.com/v1/auth/google/callback
-    appBaseUrl: https://velista.staging.ichirokuxvi.com/{locale}
+    # Register this URI in the Google console beside the production one. Google
+    # matches redirect_uri exactly, so the two are two entries, not a pattern.
+    googleCallbackUrl: https://api.staging.velista.app/v1/auth/google/callback
+    appBaseUrl: https://staging.velista.app/{locale}
+    # Sender on the domain that has mail set up, links on the app's domain, for
+    # the reasons spelled out in values.production.yaml.
     mailFrom: Luna Shopper (staging) <no-reply@staging.ichirokuxvi.com>
-    mailVerifyBaseUrl: https://staging.ichirokuxvi.com/verify-email
-    mailResetBaseUrl: https://staging.ichirokuxvi.com/reset-password
+    mailVerifyBaseUrl: https://staging.velista.app/verify-email
+    mailResetBaseUrl: https://staging.velista.app/reset-password
     # Staging is the natural place to switch tracing on first, once a collector
     # lands in the cluster. Off until then, same as production.
 

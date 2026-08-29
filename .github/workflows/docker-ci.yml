@@ -64,10 +64,15 @@ env:
   # origin (plan 0013), which no base URL can produce, so it names itself here and
   # overrides the base derived tuple. Per remote overrides win over the base, so
   # the other three are unaffected and stay unlisted.
-  STAGING_MFE_REMOTE_URLS: velista=https://velista.staging.ichirokuxvi.com
-  # Which backend the staging velista image talks to (velista plan 0014).
-  STAGING_LUNA_GATEWAY_URL: https://api.staging.ichirokuxvi.com
-  STAGING_LUNA_REALTIME_URL: https://rt.staging.ichirokuxvi.com
+  # That origin is staging.velista.app now, velista's own domain rather than a
+  # label under the portfolio's. `staging.ichirokuxvi.com/velista` is unaffected:
+  # the shell still mounts the remote there and only the fetch moves. The chart
+  # has to agree (k8s/helm/values.staging.yaml, hostOverrides).
+  STAGING_MFE_REMOTE_URLS: velista=https://staging.velista.app
+  # Which backend the staging velista image talks to (velista plan 0014). On
+  # velista's domain too, since these two exist only to serve it.
+  STAGING_LUNA_GATEWAY_URL: https://api.staging.velista.app
+  STAGING_LUNA_REALTIME_URL: https://rt.staging.velista.app
   # Options for every SSH in this file, rsync's transport included.
   #
   # ServerAliveInterval is not a nicety. GitHub hosted runners reach the VPS
@@ -373,8 +378,10 @@ jobs:
           # list because it is served from an origin of its own (velista plan 0013)
           # and the shell initialises every remote container while it boots: leave
           # this host pointing at the real internet and the shell dies on an
-          # unreachable remoteEntry, taking every suite with it.
-          echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com velista.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
+          # unreachable remoteEntry, taking every suite with it. It is on velista's
+          # own domain now, which is why the entry does not read `*.ichirokuxvi.com`
+          # like the two beside it.
+          echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com staging.velista.app" | sudo tee -a /etc/hosts
 
           REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           export E2E_IMAGE_PREFIX="ghcr.io/$REPO_LC"
@@ -399,7 +406,7 @@ jobs:
             https://mfe.staging.ichirokuxvi.com/odontogram/remoteEntry.mjs \
             https://mfe.staging.ichirokuxvi.com/damoclesSword/remoteEntry.mjs \
             https://mfe.staging.ichirokuxvi.com/landingV2/remoteEntry.mjs \
-            https://velista.staging.ichirokuxvi.com/remoteEntry.mjs; do
+            https://staging.velista.app/remoteEntry.mjs; do
             if curl -kfsS -o /dev/null "$entry"; then
               echo "  ok  $entry"
             else
