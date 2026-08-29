@@ -1,36 +1,27 @@
-ARG NODE_ENV=development
+# Serves a bundle that was built before this image.
+#
+# There is no build stage. `nx build` runs outside, once for the whole workspace, and
+# the finished `dist/apps/<project>` arrives here as the entire build context because
+# `build:docker` sets `"context": "dist"`. Compiling in here instead gave every image
+# its own empty Nx cache, so the shared libraries were rebuilt once per app; see
+# k8s/plans/0007.
+#
+# LUNA_GATEWAY_URL and LUNA_REALTIME_URL are no longer build args. velista is still
+# the one frontend whose image is not environment agnostic, because it is the one with
+# a backend (plan 0014), but the DefinePlugin in webpack.prod.config.ts reads both from
+# the environment of the `nx build` that produced the bundle, so the workflow sets them
+# there instead.
 ARG BUILDER_TAG=latest
 ARG TARGET_REGISTRY
+# Injected by the docker executor. Unused here, but declared so buildx does not warn
+# about a build arg nothing consumed.
 ARG NX_APP
 
-# Use the builder image to build the microfrontend app. BUILDER_TAG selects which
-# base image tag to build FROM (latest by default; set per build:docker configuration
-# in project.json, or forwarded from a BUILDER_TAG env var via the target's forwardEnv).
-FROM ${TARGET_REGISTRY}nx-portfolio/builder:${BUILDER_TAG} AS builder
-ARG NODE_ENV=development
-ENV NODE_ENV=$NODE_ENV
-ARG NX_APP
-
-# The backend this image talks to (plan 0014). velista is the only frontend in the
-# workspace with a backend, so it is the only one whose image is not environment
-# agnostic. Both are baked into the bundle at build time by a DefinePlugin in
-# webpack.prod.config.ts, exactly as the shell bakes MFE_BASE_URL, so the staging
-# and production images differ only in two strings rather than in build semantics.
-#
-# The ARG/ENV pair is what carries them: `forwardEnv` in project.json puts them on
-# the docker build as arguments, and only an ENV makes them visible to the webpack
-# process below. With neither set the DefinePlugin's production defaults apply.
-ARG LUNA_GATEWAY_URL
-ARG LUNA_REALTIME_URL
-ENV LUNA_GATEWAY_URL=$LUNA_GATEWAY_URL
-ENV LUNA_REALTIME_URL=$LUNA_REALTIME_URL
-
-RUN npx nx build ${NX_APP} --configuration=${NODE_ENV}
-
-# Use the local-http-server image as the base for serving the app
+# BUILDER_TAG selects which base image tag to build FROM: latest by default, `dev`
+# from the development configuration in project.json, or a forwarded BUILDER_TAG.
 FROM ${TARGET_REGISTRY}nx-portfolio/local-http-server:${BUILDER_TAG}
 ARG NX_APP
-COPY --from=builder /app/dist/apps/${NX_APP} /var/www/html/
+COPY . /var/www/html/
 
 # Run nginx in the foreground to keep the container running
 CMD ["nginx", "-g", "daemon off;"]

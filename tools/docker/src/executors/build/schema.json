@@ -21,8 +21,8 @@
     },
     "context": {
       "type": "string",
-      "enum": ["project", "root", "dockerfile"],
-      "description": "Docker build context",
+      "enum": ["project", "root", "dockerfile", "dist"],
+      "description": "Docker build context. 'dist' is the project's own build output (dist/apps/<project>), for an image whose Dockerfile only copies a finished bundle.",
       "default": "dockerfile"
     },
     "versionTags": {

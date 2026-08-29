@@ -3,6 +3,21 @@ name: Staging deploy (main)
 # Every push to main builds the affected micro-frontends, pushes them under the
 # mutable `staging` image tag, and rolls the changed staging deployments so they
 # re-pull. Production is untouched here; it is deployed only by release.yml.
+#
+# Six jobs rather than one long one (k8s/plans/0007). Two reasons:
+#
+#   Speed. The suites and the build have no dependency on each other, so they run at
+#   the same time instead of in a line.
+#
+#   Retries. GitHub's "Re-run failed jobs" re-runs only what failed and what depends
+#   on it, reusing the successful jobs' outputs. A deploy that dies on a dropped SSH
+#   connection is retried by itself, in about a minute, against images that are
+#   already in the registry. It used to mean rebuilding ten images first.
+#
+# Nothing compiles on the runner. Every `nx build` runs inside BUILD_IMAGE, a digest
+# pinned node:24, which is what makes a build independent of whichever runner GitHub
+# hands out. The image builds afterwards pass --exclude-task-dependencies so they
+# cannot quietly recompile outside it.
 
 on:
   push:
@@ -21,52 +36,198 @@ on:
 # Serialize staging deploys: only one runs at a time. A run triggered while another
 # is in progress waits for it to finish instead of racing the build/push and the
 # helm upgrade. cancel-in-progress is false so an in-flight deploy is never killed
-# mid-way.
+# mid-way. This is a property of the Helm release, so it stays at workflow level and
+# covers every job below.
 concurrency:
   group: staging-deploy
   cancel-in-progress: false
 
+env:
+  # The one place the build environment is defined, for every job in this file.
+  # Bump deliberately, in a commit, with:
+  #   docker buildx imagetools inspect node:24 --format '{{println .Manifest.Digest}}'
+  BUILD_IMAGE: node:24@sha256:be23f54a88d34e8824c741b19b91064094f92c1c97b194144bfc8b50d67258e2
+  DOCKER_REGISTRY: ghcr.io/ichirokuxvi
+  DOCKER_SKIP_LOGIN: true
+  # Use the GitHub Actions cache backend (type=gha) for every docker build, instead
+  # of the local-dir cache + actions/cache tarball round-trip.
+  DOCKER_BUILD_CACHE: gha
+  # The images are now a base plus a COPY of a finished bundle, so there is no
+  # expensive intermediate stage left to cache. `min` writes the least.
+  DOCKER_BUILD_CACHE_MODE: min
+  # Where the shell loads its remotes from on staging. Baked into the shell bundle by
+  # the `nx build` below (ignored by the other, environment-agnostic apps). These
+  # reach webpack as ordinary environment variables now, not as docker build args,
+  # because the compilation no longer happens inside the image.
+  STAGING_MFE_BASE_URL: https://mfe.staging.ichirokuxvi.com
+  # ...and the remotes that are not on that host. velista is served from its own
+  # origin (plan 0013), which no base URL can produce, so it names itself here and
+  # overrides the base derived tuple. Per remote overrides win over the base, so
+  # the other three are unaffected and stay unlisted.
+  STAGING_MFE_REMOTE_URLS: velista=https://velista.staging.ichirokuxvi.com
+  # Which backend the staging velista image talks to (velista plan 0014).
+  STAGING_LUNA_GATEWAY_URL: https://api.staging.ichirokuxvi.com
+  STAGING_LUNA_REALTIME_URL: https://rt.staging.ichirokuxvi.com
+
 jobs:
-  staging-deploy:
+  # ---------------------------------------------------------------------------
+  # What changed. Everything downstream reads these outputs rather than
+  # recomputing them, which is also what lets the deploy job be re-run on its own:
+  # a job may depend on another job's outputs, never on its step outputs.
+  # ---------------------------------------------------------------------------
+  setup:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      packages: write
-
+    outputs:
+      docker_apps: ${{ steps.lists.outputs.docker_apps }}
+      testable: ${{ steps.lists.outputs.testable }}
+      apps_tobuild: ${{ steps.lists.outputs.apps_tobuild }}
+      deployments: ${{ steps.lists.outputs.deployments }}
+      e2e: ${{ steps.lists.outputs.e2e }}
+      luna: ${{ steps.lists.outputs.luna }}
     env:
       GH_TOKEN: ${{ github.token }}
-      DOCKER_REGISTRY: ghcr.io/ichirokuxvi
-      DOCKER_SKIP_LOGIN: true
-      # Use the GitHub Actions cache backend (type=gha) for every docker build,
-      # instead of the local-dir cache + actions/cache tarball round-trip. Needs the
-      # docker-container buildx driver (set up below) and the Actions runtime env
-      # (exposed below).
-      DOCKER_BUILD_CACHE: gha
-      # Export only the final image layers to the cache. The app images' builder
-      # stage (the `nx build`) re-runs every commit regardless, so caching it buys
-      # little; `min` writes less. Flip back to `max` to compare.
-      DOCKER_BUILD_CACHE_MODE: min
-      # Where the shell loads its remotes from on staging. Baked into the shell
-      # bundle at build time (ignored by the other, environment-agnostic apps).
-      STAGING_MFE_BASE_URL: https://mfe.staging.ichirokuxvi.com
-      # ...and the remotes that are not on that host. velista is served from its own
-      # origin (plan 0013), which no base URL can produce, so it names itself here and
-      # overrides the base derived tuple. Per remote overrides win over the base, so
-      # the other three are unaffected and stay unlisted.
-      STAGING_MFE_REMOTE_URLS: velista=https://velista.staging.ichirokuxvi.com
-      # Which backend the staging velista image talks to (velista plan 0014).
-      # velista is the only app that reads these; every other one ignores them,
-      # exactly as MFE_BASE_URL is ignored by every app except the shell.
-      STAGING_LUNA_GATEWAY_URL: https://api.staging.ichirokuxvi.com
-      STAGING_LUNA_REALTIME_URL: https://rt.staging.ichirokuxvi.com
-
     steps:
-      # Checkout full history so Nx can detect changes
+      # Full history so Nx can diff against an arbitrary earlier SHA.
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      - name: Get last successful commit on current branch
+        id: last_success
+        run: |
+          last_run=$(gh run list \
+            --branch "${GITHUB_REF_NAME}" \
+            --workflow "${GITHUB_WORKFLOW}" \
+            --json headSha,conclusion \
+            --jq '[.[] | select(.conclusion=="success")][0].headSha')
+
+          echo "sha=$last_run" >> "$GITHUB_OUTPUT"
+          echo "Last successful commit SHA: ${last_run:-(none)}"
+
+      - name: Work out what is affected
+        id: lists
+        run: |
+          base_sha="${{ steps.last_success.outputs.sha }}"
+
+          # Build everything when there is no previous successful commit to diff
+          # against (first run), or when manually dispatched with build_all. This
+          # is how missing staging images get bootstrapped.
+          if [ -z "$base_sha" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.build_all }}" = "true" ]; }; then
+            echo "Building all apps (first run or manual build_all)."
+            scope=""
+          else
+            scope="--affected --base $base_sha --head ${{ github.sha }}"
+          fi
+
+          # Nx runs in the pinned image here too, so this job needs no Node on the
+          # runner and reads the same project graph the build will. CI=true is not
+          # decoration: the container does not inherit the runner's environment, and
+          # without it Nx starts its file watching daemon inside a container that is
+          # about to be thrown away.
+          #
+          # --json everywhere. `nx show projects` prints a JSON array when stdout is
+          # not a TTY and one name per line when it is, and parsing the pretty form
+          # silently finds nothing. Reading JSON and splitting it with jq is what
+          # retires that whole class of bug.
+          list() {
+            docker run --rm \
+              -u "$(id -u):$(id -g)" \
+              -v "$PWD":/w -w /w \
+              -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+              "$BUILD_IMAGE" \
+              npx nx show projects $scope "$@" --json \
+              | jq -r 'join(",")'
+          }
+
+          docker_apps=$(list --type app --projects tag:type:static-docker)
+          testable=$(list --with-target test)
+          apps_tobuild=$(list --type app --with-target build:docker)
+          e2e=$(list --with-target e2e)
+
+          # odontogram-e2e is excluded (pre-existing tsconfig/spec breakage; see
+          # k8s/README.md).
+          e2e=$(echo "$e2e" | tr ',' '\n' | sed '/^$/d' | grep -vE '^odontogram-e2e$' | paste -sd, - || true)
+
+          # The deployment name is the lowercased project name. The `-staging` suffix
+          # went away with the env dimension (k8s plan 0002): staging is a different
+          # cluster, not a differently named half of the same release.
+          deployments=$(echo "$apps_tobuild" | tr ',' '\n' | sed '/^$/d' | tr '[:upper:]' '[:lower:]' | paste -sd' ' -)
+
+          luna=$(echo "$apps_tobuild" | tr ',' '\n' | sed '/^$/d' | grep -E '^luna-shopper-backend-' | paste -sd, - || true)
+
+          {
+            echo "docker_apps=$docker_apps"
+            echo "testable=$testable"
+            echo "apps_tobuild=$apps_tobuild"
+            echo "deployments=$deployments"
+            echo "e2e=$e2e"
+            echo "luna=$luna"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Affected"
+            echo
+            echo "- apps to build: \`${apps_tobuild:-(none)}\`"
+            echo "- testable: \`${testable:-(none)}\`"
+            echo "- e2e: \`${e2e:-(none)}\`"
+            echo "- deployments: \`${deployments:-(none)}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Unit tests and lint. These also run on the pull request (pr.yml), but they run
+  # again here on the actual merged commit, which is what makes the merge to main
+  # the thorough gate independently of what the PR tested.
+  #
+  # It hangs off `setup` alone, never off the build: nothing about a unit test needs
+  # an image. It used to run inside the builder image and therefore had to wait for
+  # that image to be built, exported and pushed first.
+  # ---------------------------------------------------------------------------
+  lint-test:
+    needs: setup
+    if: needs.setup.outputs.testable != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      - name: Lint & test affected
+        run: |
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$PWD":/w -w /w \
+            -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+            "$BUILD_IMAGE" \
+            npx nx run-many -t lint test --projects "${{ needs.setup.outputs.testable }}"
+
+  # ---------------------------------------------------------------------------
+  # Bundles once, then images.
+  #
+  # The bundles are built by ONE `nx run-many` inside the pinned image, so the shared
+  # libraries are compiled once for the whole workspace rather than once per image,
+  # and the Nx cache spans every app. The images that follow are a base plus a COPY
+  # of `dist/apps/<project>`, which is also their entire build context.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: setup
+    if: needs.setup.outputs.apps_tobuild != '' || needs.setup.outputs.docker_apps != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -84,166 +245,116 @@ jobs:
       - name: Expose GitHub Actions runtime for the gha cache
         uses: crazy-max/ghaction-github-runtime@v3
 
-      # Setup Node.js & Nx
+      # Only to run the Nx CLI, which orchestrates buildx. Nothing is compiled here:
+      # the bundle step below happens inside BUILD_IMAGE, and the image step passes
+      # --exclude-task-dependencies so it cannot fall back to compiling.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
-      # Read the Nx version dynamically from package.json
-      - name: Get Nx version
-        id: nx-version
-        run: echo "NX_VERSION=$(npm pkg get devDependencies.nx | tr -d '\"')" >> $GITHUB_ENV
-
-      # Cache Nx installation
-      - name: Cache Nx
-        id: cache-nx
-        uses: actions/cache@v4
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
         with:
-          path: |
-            node_modules
-            ~/.npm
-          key: nx-${{ runner.os }}-${{ env.NX_VERSION }}
-
-      - name: Install Nx
-        run: npm install nx@$NX_VERSION
+          build-image: ${{ env.BUILD_IMAGE }}
 
       - name: Set lowercase repo
+        run: echo "REPO_LOWERCASE=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      # Infrastructure images (the nginx base the frontend images are FROM). The
+      # builder image is deliberately absent: since plan 0007 nothing in CI is FROM
+      # it, and it is kept only for the local full stack (k8s/README.md).
+      - name: Build affected static docker apps
+        if: needs.setup.outputs.docker_apps != ''
         run: |
-          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "REPO_LOWERCASE=$REPO_LC" >> $GITHUB_ENV
+          npx nx run-many -t build --configuration production \
+            --projects "${{ needs.setup.outputs.docker_apps }}"
 
-      # The builder image gets its own gha cache scope keyed by the lockfile hash,
-      # so its expensive `npm ci` layer is reused across runs until dependencies
-      # actually change, and it is isolated from the (larger, churnier) app-image
-      # caches. Other images use the default per-image scope.
-      - name: Build main docker builder
-        env:
-          DOCKER_BUILD_CACHE_SCOPE: builder-${{ hashFiles('**/package-lock.json') }}
-        run: npx nx build docker/builder --configuration=production
-
-      - name: Get last successful commit on current branch
-        id: last_success
+      # One invocation, one container, one Nx cache. `prune` is a no-op for projects
+      # that do not have it and writes the pruned manifest and lockfile beside the
+      # bundle for the five Luna services, which is what their runtime install needs.
+      - name: Build the bundles in the pinned image
+        if: needs.setup.outputs.apps_tobuild != ''
         run: |
-          branch="${GITHUB_REF_NAME}"
-          workflow_id="${GITHUB_WORKFLOW}"
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$PWD":/w -w /w \
+            -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
+            -e MFE_BASE_URL="$STAGING_MFE_BASE_URL" \
+            -e MFE_REMOTE_URLS="$STAGING_MFE_REMOTE_URLS" \
+            -e LUNA_GATEWAY_URL="$STAGING_LUNA_GATEWAY_URL" \
+            -e LUNA_REALTIME_URL="$STAGING_LUNA_REALTIME_URL" \
+            "$BUILD_IMAGE" \
+            npx nx run-many -t build prune --configuration production \
+              --projects "${{ needs.setup.outputs.apps_tobuild }}"
 
-          # Find the most recent successful run (excluding the current one)
-          last_run=$(gh run list \
-            --branch "$branch" \
-            --workflow "$workflow_id" \
-            --json headSha,conclusion \
-            --jq '[.[] | select(.conclusion=="success")][0].headSha')
-
-          echo "sha=$last_run" >> $GITHUB_OUTPUT
-
-      - name: Print last successful commit
-        run: |
-          echo "Last successful commit SHA: ${{ steps.last_success.outputs.sha }}"
-
-      - name: Get affected apps
-        id: get-affected-apps
-        run: |
-          base_sha="${{ steps.last_success.outputs.sha }}"
-
-          docker_apps=$(npx nx show projects --type "app" --projects tag:type:static-docker | paste -sd, -)
-          echo "docker_apps=$docker_apps" >> "$GITHUB_OUTPUT"
-
-          testable_apps=$(npx nx show projects --with-target test | paste -sd, -)
-          echo "testable_apps=$testable_apps" >> "$GITHUB_OUTPUT"
-
-          apps_tobuild=$(npx nx show projects --type "app" --with-target build:docker | paste -sd, -)
-          echo "apps_tobuild=$apps_tobuild" >> "$GITHUB_OUTPUT"
-
-          # Build everything when there is no previous successful commit to diff
-          # against (first run), or when manually dispatched with build_all. This
-          # is how missing staging images get bootstrapped.
-          if [ -z "$base_sha" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.build_all }}" = "true" ]; }; then
-            echo "Building all apps (first run or manual build_all)."
-            affected_docker_apps="$docker_apps"
-            affected_testable_apps="$testable_apps"
-            affected_apps_tobuild="$apps_tobuild"
-          else
-            affected_docker_apps=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$docker_apps" | paste -sd, -)
-            affected_testable_apps=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$testable_apps" | paste -sd, -)
-            affected_apps_tobuild=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$apps_tobuild" | paste -sd, -)
-          fi
-
-          echo "affected_docker_apps=$affected_docker_apps" >> "$GITHUB_OUTPUT"
-          echo "affected_testable_apps=$affected_testable_apps" >> "$GITHUB_OUTPUT"
-          echo "affected_apps_tobuild=$affected_apps_tobuild" >> "$GITHUB_OUTPUT"
-
-          # The deployment name is now just the lowercased project name. The
-          # `-staging` suffix went away with the env dimension (k8s plan 0002):
-          # staging is a different cluster, not a differently named half of the
-          # same release, so deriving a name by string surgery is over.
-          affected_deployments=$(echo "$affected_apps_tobuild" | tr ',' '\n' | sed '/^$/d' | tr '[:upper:]' '[:lower:]' | paste -sd' ' -)
-          echo "affected_deployments=$affected_deployments" >> "$GITHUB_OUTPUT"
-
-          echo "Affected apps to build: $affected_apps_tobuild"
-          echo "Affected deployments: $affected_deployments"
-
-      # Build affected static docker apps (builder base, local http server)
-      - name: Build affected docker apps
-        if: ${{ steps.get-affected-apps.outputs.affected_docker_apps != '' }}
-        run: |
-          npx nx run-many -t build --configuration production --projects name:${{ steps.get-affected-apps.outputs.affected_docker_apps }}
-
-      # Unit tests also run on the PR (pr.yml) for fast feedback, but they run again
-      # here on the actual merged commit — together with the e2e below, this makes
-      # the merge to main the thorough gate, independent of what the PR tested.
-      - name: Test affected apps
-        if: ${{ steps.get-affected-apps.outputs.affected_testable_apps != '' }}
-        run: |
-          docker run \
-            --rm "ghcr.io/${{ env.REPO_LOWERCASE }}/builder:latest" \
-            npx nx run-many -t test --projects ${{ steps.get-affected-apps.outputs.affected_testable_apps }}
-
-      # Build & push affected micro-frontends under the mutable `staging` tag.
-      # The shell reads MFE_BASE_URL and MFE_REMOTE_URLS; the other apps ignore both.
+      # --exclude-task-dependencies is load bearing: without it a cold Nx cache would
+      # let this step recompile a bundle here, on the runner, outside the pinned
+      # image, and nothing would say so.
       - name: Build & push staging images
-        if: ${{ steps.get-affected-apps.outputs.affected_apps_tobuild != '' }}
+        if: needs.setup.outputs.apps_tobuild != ''
         env:
           DOCKER_IMAGE_TAG: staging
-          MFE_BASE_URL: ${{ env.STAGING_MFE_BASE_URL }}
-          MFE_REMOTE_URLS: ${{ env.STAGING_MFE_REMOTE_URLS }}
-          LUNA_GATEWAY_URL: ${{ env.STAGING_LUNA_GATEWAY_URL }}
-          LUNA_REALTIME_URL: ${{ env.STAGING_LUNA_REALTIME_URL }}
         run: |
-          npx nx run-many -t build:docker --configuration production --projects ${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}
+          npx nx run-many -t build:docker --configuration production \
+            --projects "${{ needs.setup.outputs.apps_tobuild }}" \
+            --exclude-task-dependencies
 
-      # ---------------------------------------------------------------------------
-      # e2e against the exact staging images that were just pushed. k8s/e2e/portfolio-frontend/compose.yml
-      # stands up the shell + remotes behind a reverse proxy on the staging hostnames
-      # (mirroring the Kubernetes topology), so the real staging shell — which bakes
-      # the staging MFE host — is tested unchanged. Runs after the push and before the
-      # deploy: a failure gates the deploy (the mutable staging tag is simply not
-      # rolled out).
-      # ---------------------------------------------------------------------------
-      - name: Get affected e2e projects
-        id: get-affected-e2e
+  # ---------------------------------------------------------------------------
+  # e2e against the exact staging images that were just pushed.
+  # k8s/e2e/portfolio-frontend/compose.yml stands up the shell + remotes behind a
+  # reverse proxy on the staging hostnames (mirroring the Kubernetes topology), so
+  # the real staging shell, which bakes the staging MFE host, is tested unchanged.
+  # A failure gates the deploy: the mutable staging tag is simply not rolled out.
+  # ---------------------------------------------------------------------------
+  e2e-frontend:
+    needs: [setup, build]
+    if: needs.setup.outputs.e2e != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # The suites run on the runner rather than in BUILD_IMAGE: they need browsers
+      # and their system dependencies, which the build image has no reason to carry.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      - name: Resolve browser versions
+        id: browsers
         run: |
-          base_sha="${{ steps.last_success.outputs.sha }}"
+          echo "playwright=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "cypress=$(node -p "require('cypress/package.json').version")" >> "$GITHUB_OUTPUT"
 
-          all_e2e=$(npx nx show projects --with-target e2e | paste -sd, -)
+      # A cold browser download is a large fraction of this job's wall time, and the
+      # browsers only change when the tools do, so key the caches on those.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.browsers.outputs.playwright }}
 
-          if [ -z "$base_sha" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.build_all }}" = "true" ]; }; then
-            affected_e2e="$all_e2e"
-          else
-            affected_e2e=$(npx nx show projects --affected --base "$base_sha" --head="${{ github.sha }}" --projects "$all_e2e" | paste -sd, -)
-          fi
+      - name: Cache Cypress binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ steps.browsers.outputs.cypress }}
 
-          # odontogram-e2e is excluded (pre-existing tsconfig/spec breakage; see
-          # k8s/README.md).
-          affected_e2e=$(echo "$affected_e2e" | tr ',' '\n' | sed '/^$/d' | grep -vE '^(odontogram-e2e)$' | paste -sd, -)
-
-          echo "projects=$affected_e2e" >> "$GITHUB_OUTPUT"
-          echo "Affected e2e projects: $affected_e2e"
+      - name: Install browsers
+        run: |
+          npx playwright install --with-deps chromium
+          npx cypress install
 
       - name: Start the staging e2e stack
-        if: ${{ steps.get-affected-e2e.outputs.projects != '' }}
         env:
-          E2E_IMAGE_PREFIX: ghcr.io/${{ env.REPO_LOWERCASE }}
           E2E_IMAGE_TAG: staging
         run: |
           # The staging shell bakes https://mfe.staging.ichirokuxvi.com, so make the
@@ -253,6 +364,9 @@ jobs:
           # this host pointing at the real internet and the shell dies on an
           # unreachable remoteEntry, taking every suite with it.
           echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com velista.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
+
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          export E2E_IMAGE_PREFIX="ghcr.io/$REPO_LC"
 
           docker compose -f k8s/e2e/portfolio-frontend/compose.yml up -d --pull always
 
@@ -287,21 +401,11 @@ jobs:
           fi
 
       - name: Run affected e2e against the staging stack
-        if: ${{ steps.get-affected-e2e.outputs.projects != '' }}
-        # The job inherits GitHub's 6 hour default, which is no bound at all for a
-        # suite that can stall: one stalled run reached 2h10m before a person
-        # killed it by hand. A healthy pass over every affected frontend suite is
-        # a few minutes, so a run anywhere near this ceiling is wedged and should
-        # fail on its own while the log is still worth reading.
-        timeout-minutes: 45
         env:
           E2E_BASE_URL: https://staging.ichirokuxvi.com
         run: |
-          npx playwright install --with-deps chromium
-          npx cypress install
-
           rc=0
-          IFS=',' read -ra PROJECTS <<< "${{ steps.get-affected-e2e.outputs.projects }}"
+          IFS=',' read -ra PROJECTS <<< "${{ needs.setup.outputs.e2e }}"
           for p in "${PROJECTS[@]}"; do
             # The nx project name can differ from its directory (e.g. landingV2-e2e
             # lives in apps/landing-v2-e2e), so resolve the real root.
@@ -317,69 +421,81 @@ jobs:
           exit $rc
 
       - name: Tear down the staging e2e stack
-        if: ${{ always() && steps.get-affected-e2e.outputs.projects != '' }}
+        if: always()
         run: docker compose -f k8s/e2e/portfolio-frontend/compose.yml down -v || true
 
-      # ---------------------------------------------------------------------------
-      # Tier 2 of plan 0015: the Luna Shopper backend e2e suite against the five
-      # images that were just built and pushed, not against `node dist/...`.
-      #
-      # The pull request gate (pr.yml's verify-infra) already proved the
-      # application logic on this commit; what it could not prove is the image —
-      # entrypoint, non root user, the runtime dependency install, baked config,
-      # and SIGTERM reaching PID 1. Those images exist by this point in the job, so
-      # this costs the stack boot and the suite, not a rebuild.
-      #
-      # It runs BEFORE the helm upgrade, so a red suite stops the deploy and a
-      # broken image never reaches staging. That is what makes the staging deploy
-      # gated rather than optimistic.
-      # ---------------------------------------------------------------------------
-      - name: Are any Luna Shopper backend images affected
-        id: luna-affected
-        run: |
-          # `nx show projects` prints a JSON array when stdout is not a TTY and one
-          # name per line when it is, so the upstream output can arrive either as
-          # `a,b` or as `["a","b"]`. Strip the JSON punctuation before splitting so
-          # this reads the same list either way.
-          luna=$(echo "${{ steps.get-affected-apps.outputs.affected_apps_tobuild }}" \
-            | tr -d '[]" ' | tr ',' '\n' | sed '/^$/d' \
-            | grep -E '^luna-shopper-backend-' | paste -sd, - || true)
-          echo "projects=$luna" >> "$GITHUB_OUTPUT"
-          echo "Affected Luna Shopper backend images: ${luna:-(none)}"
+  # ---------------------------------------------------------------------------
+  # Tier 2 of plan 0015: the Luna Shopper backend e2e suite against the five images
+  # that were just built and pushed, not against `node dist/...`.
+  #
+  # pr.yml's verify-infra already proved the application logic on this commit; what
+  # it could not prove is the image: entrypoint, non root user, the runtime
+  # dependency install, baked config, and SIGTERM reaching PID 1.
+  #
+  # It gates the deploy, so a broken image never reaches staging. It now runs beside
+  # the frontend suite rather than after it.
+  # ---------------------------------------------------------------------------
+  e2e-luna:
+    needs: [setup, build]
+    if: needs.setup.outputs.luna != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # A skip, an empty suite, or a stack that fails to come up fails the job, and
+      # therefore blocks the deploy.
+      LUNA_REQUIRE_STACK: '1'
+      COMPOSE_PROJECT_NAME: luna-tier2-${{ github.run_id }}
+      LUNA_IMAGE_TAG: staging
+      E2E_SEED: '1'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Restore the workspace
+        uses: ./.github/actions/workspace
+        with:
+          build-image: ${{ env.BUILD_IMAGE }}
+
+      - name: Resolve the Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Configure the Luna Shopper service environment
-        if: ${{ steps.luna-affected.outputs.projects != '' }}
         run: |
           # Writes the service .env files (which the migration CLI reads) and a
-          # throwaway JWT keypair the images mount. One definition of what a
-          # service needs to boot, shared with local development.
+          # throwaway JWT keypair the images mount. One definition of what a service
+          # needs to boot, shared with local development.
           bash k8s/e2e/luna-shopper-backend/luna-slot.sh 0
           rm -f k8s/e2e/luna-shopper-backend/.env.slot
 
       - name: Luna Shopper e2e against the built images
-        if: ${{ steps.luna-affected.outputs.projects != '' }}
-        # Same reasoning as the frontend e2e step above: a stall here would
-        # otherwise run against the job's 6 hour default.
-        timeout-minutes: 30
-        env:
-          # A skip, an empty suite, or a stack that fails to come up fails the job
-          # — and therefore blocks the deploy.
-          LUNA_REQUIRE_STACK: '1'
-          COMPOSE_PROJECT_NAME: luna-tier2-${{ github.run_id }}
-          LUNA_IMAGE_PREFIX: ghcr.io/${{ env.REPO_LOWERCASE }}
-          LUNA_IMAGE_TAG: staging
-          E2E_SEED: '1'
         run: |
-          npx playwright install --with-deps chromium
-          # Pull all five at the staging tag: only the affected ones were rebuilt
-          # in this run, and the rest are the staging images currently deployed,
-          # which is exactly the combination about to be rolled out.
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          export LUNA_IMAGE_PREFIX="ghcr.io/$REPO_LC"
+
+          # Pull all five at the staging tag: only the affected ones were rebuilt in
+          # this run, and the rest are the staging images currently deployed, which
+          # is exactly the combination about to be rolled out.
           docker compose -f k8s/e2e/luna-shopper-backend/compose.yml \
             -f k8s/e2e/luna-shopper-backend/compose.apps.yml pull
           bash k8s/e2e/luna-shopper-backend/stack.sh e2e-images
 
       - name: Upload Luna Shopper tier 2 diagnostics
-        if: ${{ failure() && steps.luna-affected.outputs.projects != '' }}
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: luna-shopper-tier2-${{ github.run_id }}
@@ -390,24 +506,46 @@ jobs:
             dist/.playwright/apps/luna-shopper-backend-e2e/
 
       - name: Tear down the Luna Shopper tier 2 stack
-        if: ${{ always() && steps.luna-affected.outputs.projects != '' }}
-        env:
-          COMPOSE_PROJECT_NAME: luna-tier2-${{ github.run_id }}
+        if: always()
         run: |
           docker compose -f k8s/e2e/luna-shopper-backend/compose.yml \
             -f k8s/e2e/luna-shopper-backend/compose.apps.yml down -v --remove-orphans || true
 
+  # ---------------------------------------------------------------------------
+  # The deploy, on its own, so it can be retried on its own.
+  #
+  # The `if` is not decoration. A job whose `needs` contains a SKIPPED job is skipped
+  # by default, and e2e-frontend / e2e-luna skip whenever nothing relevant is
+  # affected, so a plain needs list would silently refuse to deploy on exactly the
+  # commits that are cheapest to deploy. Testing each result against 'failure' rather
+  # than for 'success' is what lets `skipped` through, and `!cancelled()` rather than
+  # `always()` is what stops a cancelled run from deploying anyway.
+  # ---------------------------------------------------------------------------
+  deploy:
+    needs: [setup, lint-test, build, e2e-frontend, e2e-luna]
+    if: >-
+      !cancelled()
+      && needs.setup.result == 'success'
+      && needs.lint-test.result != 'failure'
+      && needs.build.result != 'failure'
+      && needs.e2e-frontend.result != 'failure'
+      && needs.e2e-luna.result != 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      # Only the chart is needed here, and only at this commit.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       # Is there a staging host to deploy to?
       #
-      # Everything above (build, test, e2e, push) stands on its own: the staging
-      # images are in the registry and the suites have run. Only the SSH steps
-      # below need a machine, and staging is the environment most likely not to
-      # have one, since it is disposable by design and gets stood down whenever it
-      # is not earning its keep.
+      # Everything upstream stands on its own: the staging images are in the registry
+      # and the suites have run. Only the SSH steps need a machine, and staging is
+      # the environment most likely not to have one, since it is disposable by design
+      # and gets stood down whenever it is not earning its keep.
       #
-      # Without this gate, no staging host turns every push to main red at the
-      # first ssh call, hiding whether the build and the tests actually passed.
-      # With it, the run stays green and says plainly that it did not deploy.
+      # Without this gate, no staging host turns every push to main red at the first
+      # ssh call, hiding whether the build and the tests actually passed. With it,
+      # the run stays green and says plainly that it did not deploy.
       #
       # Secrets are read through `env` rather than interpolated into the script,
       # which keeps a secret's contents out of the shell command line.
@@ -451,9 +589,7 @@ jobs:
       # ---------------------------------------------------------------------------
       # Everything below targets SSH_DEPLOY_HOST_STAGING, a different machine from
       # production's SSH_DEPLOY_HOST (k8s plan 0002, section 3). Two clusters, two
-      # releases, one chart. Adding a secret rather than renaming both keeps the
-      # production workflow untouched, which matters because production is the one
-      # that is currently working.
+      # releases, one chart.
       #
       # The chart lands in the deploy user's home rather than /root. SSH_DEPLOY_USER
       # is an unprivileged account: it owns nothing outside its home and holds no
@@ -481,16 +617,12 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
-            "bash -s -- '${{ steps.get-affected-apps.outputs.affected_deployments }}'" << 'EOF'
+            "bash -s -- '${{ needs.setup.outputs.deployments }}'" << 'EOF'
             set -e
             AFFECTED="$1"
 
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-            # No prod-tag.yaml plumbing any more. It existed only because a
-            # staging deploy and a production deploy shared one release, so the
-            # staging upgrade had to avoid clobbering the pinned production
-            # version. Two releases on two clusters cannot collide.
             echo "Applying chart (staging)..."
 
             # --atomic implies --wait and rolls back on failure, which is exactly
@@ -531,11 +663,6 @@ jobs:
             # --wait cannot cover, because the restarts happen after Helm has
             # finished. `rollout status` exits non zero on timeout, which fails
             # the step, which is the entire point.
-            #
-            # The `|| true` that used to be here is gone: a restart that cannot be
-            # requested is a real failure, and now that deployment names are just
-            # the lowercased project names, a mismatch is a bug rather than a
-            # naming quirk to tolerate.
             for dep in $AFFECTED; do
               kubectl rollout status "deployment/$dep" -n nx-portfolio --timeout=5m
             done
