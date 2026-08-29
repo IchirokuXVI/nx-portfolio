@@ -410,10 +410,10 @@ steps:
       docker run --rm \
         -u "$(id -u):$(id -g)" \
         -v "$PWD":/w -w /w \
-        -e HOME=/tmp -e npm_config_cache=/w/.npm \
+        -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
         -e MFE_BASE_URL -e MFE_REMOTE_URLS -e LUNA_GATEWAY_URL -e LUNA_REALTIME_URL \
         "$BUILD_IMAGE" \
-        npx nx run-many -t build --configuration production --projects "$APPS"
+        npx nx run-many -t build prune --configuration production --projects "$APPS"
 ```
 
 **`-u "$(id -u):$(id -g)"` is not optional.** Without it the container runs as root and everything
@@ -424,6 +424,22 @@ upload fails. Some of those fail loudly and some do not, which is the worst comb
 **`-e HOME=/tmp` is the consequence of that.** With a uid that has no entry in the image's
 `/etc/passwd`, npm has no home directory to resolve and falls over. Pointing `HOME` at `/tmp` and
 `npm_config_cache` inside the workspace gives it somewhere writable. Add `.npm/` to `.gitignore`.
+
+**`-e CI=true` because a container inherits nothing.** Actions sets `CI` on the runner, and Nx
+reads it to decide not to start its file watching daemon. Inside the container that variable is
+gone, so Nx would start a daemon in something about to be deleted. Every `docker run` in both
+workflows passes it.
+
+**`-t build prune`, not `-t build`.** `prune` exists only on the five Luna services and writes the
+pruned manifest and lockfile beside the bundle, which their runtime install needs. Naming both
+targets in the one invocation is a no-op for the projects that lack `prune`.
+
+**The image builds that follow must pass `--exclude-task-dependencies`.** Without it, a cold Nx
+cache lets `nx run-many -t build:docker` satisfy its own `dependsOn` by compiling the bundle right
+there, on the runner, outside the pinned image, and nothing in the log says that is what happened.
+The flag is what turns "we build in a container" from a convention into a property. It is a real
+flag and it works: with it, Nx reports running `build:docker` alone, with no "and N tasks it
+depends on".
 
 **A job level `container:` would read better** and was considered. It makes running buildx in the
 same job awkward, and it does not obviously keep the bind mounted `.nx/cache` that this design
@@ -530,24 +546,41 @@ No per app path is needed, because the executor already knows the project name. 
 a few megabytes of finished bundle. Add `"context": "dist"` to each app's `build:docker`.
 `docker/builder` keeps `context: "root"` and is the one project that still wants a `.dockerignore`.
 
-Then declare the dependency rather than relying on CI ordering:
+Then declare the dependency rather than relying on CI ordering, **in each app's own
+`project.json`**:
 
 ```jsonc
-// nx.json, targetDefaults
-"build:docker": {
-  "dependsOn": ["build"]
-}
+// apps/<frontend>/project.json, in the build:docker target
+"dependsOn": ["build"]
 ```
 
-Keyed on the target name and not the executor, deliberately: `docker/builder` and
-`docker/local-http-server` use the same executor under a target literally named `build`, and an
-executor keyed default would make those two depend on themselves.
+An earlier draft of this plan put that in `nx.json` `targetDefaults` under the key
+`build:docker`, and it silently did nothing. **Nx reads a targetDefaults key containing a colon
+as `plugin:executor`**, so `build:docker` was taken as executor `docker` from plugin `build`,
+which matches no target in the workspace. `nx show project <app> --json` reported no `dependsOn`
+at all, and the only symptom would have been an image built from a stale `dist`. Keying it by
+executor is not the repair either: `docker/builder` and `docker/local-http-server` run that same
+executor under a target literally named `build`, so an executor keyed default would make those
+two depend on themselves. Ten explicit entries it is.
 
-The five Luna services override it with `"dependsOn": ["prune"]`, because their image needs more
-than the bundle. `prune` already depends on `build` and writes `package.json`,
-`package-lock.json` and `workspace_modules` into the same `dist/apps/<project>` directory, which is
-what the runtime stage's `npm ci --omit=dev` consumes. Depending on `build` alone produces an image
-that cannot install its dependencies.
+The five Luna services use `"dependsOn": ["prune"]` instead, because their image needs more than
+the bundle. `prune` already depends on `build` and writes `package.json`, `package-lock.json` and
+`workspace_modules` into the same `dist/apps/<project>` directory, which is what the runtime
+stage's `npm ci --omit=dev` consumes. Depending on `build` alone produces an image that cannot
+install its dependencies.
+
+Two related traps, both found by building it:
+
+**`nx run <project>:build:docker` is ambiguous** and does not mean what it looks like. `nx run`
+parses `project:target:configuration`, so the second colon is read as a configuration name. Use
+the `nx run-many -t build:docker --projects <app>` form, which is what CI uses and what these
+target names require.
+
+**`--graph=stdout` renders the task id with the target's `defaultConfiguration`**, not the one
+that will actually run, so a `build:docker` task shows as `…:development` even under
+`--configuration production`. It is a display artefact and nothing more: the executor logs its
+resolved options, and those correctly show `pushToRegistry: true` and `versionTags: ['latest']`.
+Do not go debugging a configuration bug that is not there.
 
 One consequence to state plainly: **`MFE_BASE_URL`, `MFE_REMOTE_URLS`, `LUNA_GATEWAY_URL` and
 `LUNA_REALTIME_URL` now go on the `nx build`**, because that is where webpack reads them.
@@ -598,6 +631,55 @@ survive the split.
 `~/.cache/ms-playwright` keyed on the version from `require('@playwright/test/package.json')`,
 `~/.cache/Cypress` keyed on the Cypress version, and `--with-deps` reduced to one system dependency
 install per job. Copy the pattern from `pr.yml` rather than inventing a second one.
+
+### 6.9 What implementation verified, and what it could not
+
+Recorded here because the gap matters for reading the first real run.
+
+Verified on a Windows workstation with Docker Desktop, at implementation time:
+
+- **One `nx run-many -t build prune` builds all ten apps**, reporting "10 projects and 14 tasks
+  they depend on". Fourteen, not ten times fourteen: the shared libraries are built once, which is
+  the whole claim of section 2.1.
+- **The four config values reach the bundles through the `nx build`**, not through docker build
+  args. `mfe.staging.…` and `velista.staging.…` appear in the shell's `runtime.js` and manifests,
+  and `api.staging.…` / `rt.staging.…` in velista's bundle.
+- **All ten images build from a `dist` context**, and the build context transfer reads as 13.79 MB
+  for an Angular app rather than the workspace.
+- **A frontend image serves the app**: `docker run` on the landingV2 image answers 200 with the
+  Angular document.
+- **A Luna image runs on Node 24**: `node --version` reports v24.20.0 inside it, the pruned
+  `package.json`, lockfile and `workspace_modules` are all present, and Nest bootstraps far enough
+  to fail on missing runtime environment variables rather than on a module load or a native binary.
+  That is the strongest signal available without the full stack.
+- **The executor's unit tests cover both new behaviours**, `--push` when bound for a registry and
+  the `dist` context, and the whole plugin suite passes.
+
+**The near miss worth recording.** Rewriting the five Luna Dockerfiles from one template quietly
+deleted a documented exception: `auth` uses `npm install --omit=dev`, not `npm ci`, because nx
+22.7's `prune-lockfile` misplaces `entities@2.2.0` in the mailer's optional CSS inlining chain, and
+`npm ci` refuses the resulting tree. The original file said so in a ten line comment. The image
+build failed, and finding out why took a detour through the wrong hypothesis (that npm 11 was
+stricter than npm 10, which an A/B against `node:22-slim` and `node:24-slim` disproved: both reject
+it).
+
+Two lessons, both of which generalise past this plan. **A file that looks like four identical
+siblings and one odd one out is usually carrying a reason**, and rewriting from a template is how
+that reason gets lost. **And the exception had been invisible in CI**, because the last run served
+`auth`'s install layer from the build cache: the log reads `#11 CACHED` against a command
+(`npm install`) that no longer matched what a fresh build would run. Layer caching had been hiding
+whether that step still worked. The `dist` context and this plan's smaller images make that kind of
+masking less likely, since there is far less left to cache.
+
+Not verifiable off a Linux runner, and therefore the things to watch on the first run:
+
+- **The `-u`/`HOME` container mechanics.** File ownership across a bind mount behaves differently
+  on Windows, so the uid mapping in 5.2 is written from the known correct pattern rather than
+  demonstrated here. If it is wrong the symptom is a cache that fails to save or a buildx context
+  it cannot read, in the first job that runs.
+- **Actual timings.** Every number in section 4 is still a projection.
+- **The skipped-`needs` condition in 4.4.** It can only be exercised by a real commit that affects
+  nothing, which is the test named in section 7.
 
 ## 7. What could go wrong
 

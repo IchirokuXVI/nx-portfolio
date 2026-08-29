@@ -44,3 +44,14 @@ Thumbs.db
 
 # Certbot files (causes file permission issues)
 **/certbot/certs
+
+# Build output and history. Only the builder image takes the workspace as its
+# context; the app images take `dist/apps/<project>` and so read that directory's
+# own .dockerignore, not this one. Excluding dist here therefore shrinks the builder
+# context without hiding anything from the images that need it.
+dist
+.git
+
+# npm's cache, redirected into the workspace when installing inside the pinned build
+# container (see .github/actions/workspace).
+.npm

@@ -1,31 +1,26 @@
 # Luna Shopper auth image (plan 0002, section 3).
 #
-# A long running Node process: primarily a NATS microservice, exposing only a
-# small HTTP health port. Multi stage: build with the shared builder image, run
-# the pruned output on a slim node runtime. All config is runtime environment;
-# secrets (DB URL, JWT private key, OAuth, SMTP) arrive as Kubernetes Secrets.
-ARG NODE_ENV=production
-ARG BUILDER_TAG=latest
-ARG TARGET_REGISTRY
+# A long running Node process. No build time config is baked in; every value comes
+# from the runtime environment, including the JWT keys.
+#
+# There is no build stage. `nx build` and `nx prune` run outside, once for the whole
+# workspace, and their output directory arrives here as the entire build context
+# because `build:docker` sets `"context": "dist"`. That directory already holds the
+# bundle, the pruned package.json and the pruned lockfile, which is exactly what the
+# install below needs. Compiling in here instead gave every image its own empty Nx
+# cache; see k8s/plans/0007.
+#
+# The base is pinned by digest rather than by the `node:24-slim` tag, so the runtime
+# is identical until someone changes this line on purpose. Bump it deliberately with
+# `docker buildx imagetools inspect node:24-slim --format '{{println .Manifest.Digest}}'`.
 ARG NX_APP
 
-# ---- Build stage: reuse the repo builder image (full workspace + deps) ------
-FROM ${TARGET_REGISTRY}nx-portfolio/builder:${BUILDER_TAG} AS builder
-ARG NODE_ENV=production
-ENV NODE_ENV=$NODE_ENV
-ARG NX_APP
-# Build the service bundle, then prune a production package.json + lockfile
-# (and any workspace libraries) next to it for a reproducible runtime install.
-RUN npx nx build ${NX_APP} --configuration=${NODE_ENV} \
-  && npx nx prune ${NX_APP}
-
-# ---- Runtime stage: slim long running Node process --------------------------
-FROM node:22-slim AS runtime
+FROM node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS runtime
 ARG NX_APP
 ENV NODE_ENV=production
 WORKDIR /app
 
-COPY --from=builder --chown=node:node /app/dist/apps/${NX_APP}/ ./
+COPY --chown=node:node . ./
 # `npm install` rather than the `npm ci` the other four services use. The mailer
 # drags in an optional CSS inlining chain (juice, posthtml-parser) that nx 22.7's
 # prune-lockfile misplaces: the root lockfile nests entities@2.2.0 under
@@ -35,6 +30,10 @@ COPY --from=builder --chown=node:node /app/dist/apps/${NX_APP}/ ./
 # does not help, because the tree is validated before anything is omitted.
 # `npm install` repairs the one bad branch and still takes every other version
 # from the pruned lockfile. Restore `npm ci` once the pruner is fixed upstream.
+#
+# Verified still necessary on 2026-08-29, against both npm 10 (node:22-slim) and
+# npm 11 (node:24-slim): both reject the pruned tree, so this is the pruner and
+# not the Node bump.
 RUN npm install --omit=dev --legacy-peer-deps && npm cache clean --force
 
 USER node
