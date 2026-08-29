@@ -191,8 +191,12 @@ bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --check --env <env>
 ```
 
 `--check` renders the chart and asserts every `secretKeyRef` and
-`configMapKeyRef` it references exists. This is the same command CI runs before
-each deploy, so a pass here means the preflight will pass there.
+`configMapKeyRef` it references can be satisfied. What this script provisions has
+to exist in the cluster. What the chart creates itself, today only
+`luna-shopper-backend-config`, is checked against the render instead and marked
+`(chart)`, because helm creates it during the very deploy this check gates. This
+is the same command CI runs before each deploy, so a pass here means the
+preflight will pass there.
 
 ## 6. Backups, production only
 
@@ -302,6 +306,19 @@ not exist exits non-zero, `pipefail` carried it, and `set -e` ended the script
 where the error text was already going to `/dev/null`. If you see a script here
 stop silently, suspect a suppressed non-zero status in an assignment before
 suspecting the cluster.
+
+**`--check` reports every `configmap/luna-shopper-backend-config` key missing on
+a cluster nothing has been deployed to yet.** Fixed. That ConfigMap belongs to
+the chart rather than to provisioning, so it could not exist before the first
+`helm upgrade`, and the check was gating the deploy that would have created it.
+CI deadlocked the same way, since both workflows run `--check` before their
+deploy step. Chart owned objects are now checked against the render, so the
+preflight passes on a freshly provisioned cluster and the first deploy creates
+the ConfigMap. Fixed in the same change: `GOOGLE_CLIENT_SECRET` and `SMTP_PASS`
+left blank at the prompts were counted as failures, though plan 0026 makes both
+a supported configuration. Only those two may be empty; every other key must
+still carry a value, and one that does not now reads `EMPTY` rather than
+`MISSING`.
 
 **A step works by hand and fails from CI.** CI arrives through
 `ssh host "bash ..."`, which is non interactive and reads no shell profile, so

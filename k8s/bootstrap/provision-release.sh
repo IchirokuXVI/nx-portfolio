@@ -88,19 +88,65 @@ BACKUP_SECRET=luna-shopper-backend-backup-secret
 #
 # Provisioning correctly is worth less than knowing you provisioned correctly.
 # This renders the chart, extracts every Secret and ConfigMap key the manifests
-# actually reference, and asserts each one exists in the cluster.
+# actually reference, and asserts each one can be satisfied.
 #
 # It inverts the failure. Instead of a pod crashlooping on a missing environment
-# variable — a message that names AUTH_JWT_PRIVATE_KEY rather than the Secret
-# that was supposed to supply it, one indirection away from its cause — you get a
-# list of exactly which Secret is missing which key, before anything is deployed.
+# variable, a message that names AUTH_JWT_PRIVATE_KEY rather than the Secret that
+# was supposed to supply it, one indirection away from its cause, you get a list
+# of exactly which Secret is missing which key, before anything is deployed.
 #
 # It also catches the reverse drift, where the chart starts referencing a key
 # provisioning was never taught to create. That is the shape this defect will take
 # the next time a configuration value is added.
+#
+# A reference is satisfied by one of two things, and treating them as one thing
+# deadlocked the first deploy to a fresh cluster:
+#
+#   * An object THIS SCRIPT provisions has to exist in the cluster. Those are the
+#     prerequisites, and asserting them is the whole point.
+#
+#   * An object THE CHART creates, today only luna-shopper-backend-config, is
+#     checked against the render instead. It cannot exist yet: helm creates it
+#     during the very deploy this check gates, so demanding it in the cluster made
+#     the gate unpassable on a cluster nothing had been deployed to, while the
+#     only thing that could have created it was the deploy the gate was refusing.
+#     CI deadlocked the same way, because both workflows run --check before their
+#     helm upgrade. Checking the render still catches the drift worth catching, a
+#     manifest naming a key its own ConfigMap does not define, and it catches it
+#     one deploy earlier than the cluster ever could.
+#
+# Emptiness is the second distinction. A key that is present but empty starts a
+# pod perfectly well; only an absent key holds it in CreateContainerConfigError.
+# GOOGLE_CLIENT_SECRET and SMTP_PASS are legitimately empty (plan 0026: the Google
+# routes and registration answer 501 rather than the service refusing to boot), so
+# an operator who left both prompts blank, which the provisioning half explicitly
+# invites, was then told by this half that the deploy would fail when it would
+# not. They are allowed to be empty by name. Every other key still may not be,
+# because an empty AUTH_JWT_PRIVATE_KEY is an outage that boots cleanly.
 # ---------------------------------------------------------------------------
+
+# The only keys allowed to exist with no value. See the note above.
+OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS"
+
+is_optional_empty() {
+  case " $OPTIONAL_EMPTY_KEYS " in
+    *" $1 "*) return 0 ;;
+    *)        return 1 ;;
+  esac
+}
+
+cluster_has_key() {
+  # Present-but-empty has to be distinguishable from absent, and
+  # `jsonpath={.data.KEY}` prints nothing for either, so ask for the key NAMES and
+  # look for this one among them.
+  kubectl -n "$NAMESPACE" get "$1" "$2" \
+    -o go-template='{{if .data}}{{range $k, $_ := .data}}{{println $k}}{{end}}{{end}}' \
+    2>/dev/null | grep -qxF "$3"
+}
+
 run_check() {
   local failures=0
+  local chart_failures=0
 
   echo "Rendering the chart for $ENVIRONMENT..."
   local rendered
@@ -127,32 +173,98 @@ run_check() {
     return 1
   fi
 
+  # What the chart DEFINES, as "object kind name" per Secret/ConfigMap document
+  # and "key kind name KEY" for each key that document carries.
+  #
+  # Only a column-zero `kind:` opens a document, which is what keeps the Gateway's
+  # indented `- kind: Secret` (a certificateRef, not a Secret of its own) out of
+  # this list. Data keys are read one per line, true of every value this chart
+  # renders; a block scalar would need a real parser rather than awk.
+  local defined
+  defined="$(printf '%s\n' "$rendered" | awk '
+    /^---/ { kind = ""; name = ""; section = ""; next }
+    /^kind:[[:space:]]/ {
+      kind = ""
+      if ($2 == "ConfigMap") { kind = "configmap" }
+      if ($2 == "Secret")    { kind = "secret" }
+      name = ""; section = ""; next
+    }
+    kind == "" { next }
+    /^metadata:/ { section = "metadata"; next }
+    /^(data|stringData):/ { section = "data"; next }
+    /^[^[:space:]#]/ { section = ""; next }
+    section == "metadata" && /^[[:space:]]+name:[[:space:]]/ {
+      sub(/^[[:space:]]+name:[[:space:]]*/, ""); gsub(/"/, "")
+      name = $0
+      print "object", kind, name
+      next
+    }
+    section == "data" && name != "" && /^[[:space:]]+[A-Za-z0-9_.-]+:/ {
+      sub(/^[[:space:]]+/, ""); sub(/:.*$/, "")
+      print "key", kind, name, $0
+    }
+  ')"
+
+  local chart_objects chart_keys
+  chart_objects="$(printf '%s\n' "$defined" | awk '$1 == "object" { print $2, $3 }' | sort -u)"
+  chart_keys="$(printf '%s\n' "$defined" | awk '$1 == "key" { print $2, $3, $4 }' | sort -u)"
+
   echo
-  echo "Checking $(printf '%s\n' "$refs" | wc -l | tr -d ' ') referenced keys against the cluster..."
+  echo "Checking $(printf '%s\n' "$refs" | wc -l | tr -d ' ') referenced keys."
+  echo "What this script provisions is checked against the cluster. What the chart"
+  echo "creates is checked against the render, and marked (chart)."
   echo
 
   while read -r kind name key; do
     [ -z "$kind" ] && continue
+
+    # 1. The chart's own object. It does not exist before the first deploy, so
+    #    the render is the only thing that can answer for it.
+    if printf '%s\n' "$chart_objects" | grep -qxF "$kind $name"; then
+      if printf '%s\n' "$chart_keys" | grep -qxF "$kind $name $key"; then
+        echo "  ok      $kind/$name $key (chart)"
+      else
+        echo "  MISSING key '$key' in $kind/$name, which the chart renders (chart)"
+        chart_failures=$((chart_failures + 1))
+        failures=$((failures + 1))
+      fi
+      continue
+    fi
+
+    # 2. A prerequisite. It has to be in the cluster already.
     if ! kubectl -n "$NAMESPACE" get "$kind" "$name" >/dev/null 2>&1; then
       echo "  MISSING $kind/$name (needed for key $key)"
       failures=$((failures + 1))
       continue
     fi
-    if ! kubectl -n "$NAMESPACE" get "$kind" "$name" -o "jsonpath={.data.$key}" 2>/dev/null | grep -q .; then
+    if ! cluster_has_key "$kind" "$name" "$key"; then
       echo "  MISSING key '$key' in $kind/$name"
       failures=$((failures + 1))
       continue
     fi
-    echo "  ok      $kind/$name $key"
+    if kubectl -n "$NAMESPACE" get "$kind" "$name" -o "jsonpath={.data.$key}" 2>/dev/null | grep -q .; then
+      echo "  ok      $kind/$name $key"
+    elif is_optional_empty "$key"; then
+      echo "  ok      $kind/$name $key (empty, which this key is allowed to be)"
+    else
+      echo "  EMPTY   key '$key' in $kind/$name exists but has no value"
+      failures=$((failures + 1))
+    fi
   done <<< "$refs"
 
   echo
   if [ "$failures" -gt 0 ]; then
     echo "$failures reference(s) cannot be satisfied. The deploy would fail." >&2
-    echo "Run this script without --check to provision them." >&2
+    if [ "$chart_failures" -gt 0 ]; then
+      echo "The lines marked (chart) are a chart bug rather than a provisioning gap:" >&2
+      echo "a manifest reads a key that the ConfigMap beside it does not render." >&2
+    fi
+    if [ "$failures" -gt "$chart_failures" ]; then
+      echo "For the rest, run this script without --check to provision them." >&2
+    fi
     return 1
   fi
-  echo "Every key the chart references exists. The deploy can proceed."
+  echo "Every key the chart references can be satisfied. The deploy can proceed."
   return 0
 }
 
