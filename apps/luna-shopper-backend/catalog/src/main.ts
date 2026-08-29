@@ -30,6 +30,10 @@ async function bootstrap() {
       transport: Transport.NATS,
       options: {
         servers: [config.natsUrl],
+        // The queue group. See the note in the auth service: without it every
+        // replica receives every message, so at replicaCount 2 each request is
+        // handled twice.
+        queue: 'luna-shopper-backend-catalog',
       },
     },
     { inheritAppConfig: true }

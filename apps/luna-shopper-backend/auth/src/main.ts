@@ -31,6 +31,18 @@ async function bootstrap() {
       transport: Transport.NATS,
       options: {
         servers: [config.natsUrl],
+        // The queue group, and it is load bearing above one replica (plan 0004,
+        // section 3). Without it Nest subscribes plainly, so core NATS delivers
+        // every message to EVERY subscriber: at replicaCount 2 both pods run the
+        // handler for the same request. Request/reply hides it, because the
+        // caller keeps the first reply and discards the second, so the duplicate
+        // is invisible at the gateway and shows up only as work done twice, a
+        // second row written or a second email sent. With a queue group exactly
+        // one member of the group receives each message.
+        //
+        // The name is per service, so replicas of THIS service share a group and
+        // the other services keep their own.
+        queue: 'luna-shopper-backend-auth',
       },
     },
     { inheritAppConfig: true }

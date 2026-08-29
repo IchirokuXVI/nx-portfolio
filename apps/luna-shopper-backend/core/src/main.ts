@@ -31,6 +31,12 @@ async function bootstrap() {
       transport: Transport.NATS,
       options: {
         servers: [config.natsUrl],
+        // The queue group. See the note in the auth service: without it every
+        // replica receives every message, so at replicaCount 2 each request is
+        // handled twice. It matters most here, because core carries the two
+        // @EventPattern reconciliation handlers (a deleted user, a renamed one),
+        // and an event has no reply to deduplicate the second run away.
+        queue: 'luna-shopper-backend-core',
       },
     },
     { inheritAppConfig: true }
