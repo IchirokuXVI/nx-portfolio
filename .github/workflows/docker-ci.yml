@@ -60,6 +60,18 @@ jobs:
       # exactly as MFE_BASE_URL is ignored by every app except the shell.
       STAGING_LUNA_GATEWAY_URL: https://api.staging.ichirokuxvi.com
       STAGING_LUNA_REALTIME_URL: https://rt.staging.ichirokuxvi.com
+      # Options for every SSH in this job, rsync's transport included.
+      #
+      # ServerAliveInterval is not a nicety. GitHub hosted runners reach the VPS
+      # through Azure's outbound SNAT, which drops a flow that has carried no
+      # packets for 4 minutes, and `helm --wait` prints nothing at all while it
+      # waits. A first install waits far longer than four minutes, so the flow is
+      # reaped mid deploy, the client's next write fails, and the step dies with
+      # `client_loop: send disconnect: Broken pipe` while the deploy it was
+      # watching carries on running on the host. A keepalive every 30 seconds
+      # keeps packets on the flow; CountMax 10 still gives up after five minutes
+      # of a genuinely unresponsive host, so a dead VPS is still a failed step.
+      SSH_OPTS: '-o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=10'
 
     steps:
       # Checkout full history so Nx can detect changes
@@ -464,7 +476,7 @@ jobs:
       - name: Sync chart to the staging host
         if: steps.deploy-target.outputs.configured == 'true'
         run: |
-          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
             ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }}:~/k8s/
 
       # A deploy that cannot possibly work is rejected in seconds here rather than
@@ -472,14 +484,14 @@ jobs:
       - name: Preflight the staging Secrets
         if: steps.deploy-target.outputs.configured == 'true'
         run: |
-          ssh -o StrictHostKeyChecking=no \
+          ssh $SSH_OPTS \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
             "bash ~/k8s/bootstrap/provision-release.sh --check --env staging"
 
       - name: Deploy staging via Helm
         if: steps.deploy-target.outputs.configured == 'true'
         run: |
-          ssh -o StrictHostKeyChecking=no \
+          ssh $SSH_OPTS \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
             "bash -s -- '${{ steps.get-affected-apps.outputs.affected_deployments }}'" << 'EOF'
             set -e
@@ -550,7 +562,7 @@ jobs:
       - name: Diagnose the failed deploy
         if: failure() && steps.deploy-target.outputs.configured == 'true'
         run: |
-          ssh -o StrictHostKeyChecking=no \
+          ssh $SSH_OPTS \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
             "bash -s" << 'EOF'
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
