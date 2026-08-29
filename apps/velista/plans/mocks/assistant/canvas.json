@@ -1,0 +1,89 @@
+{
+  "title": "Velista Assistant Panel",
+  "lede": "The design for plan <code>0032</code>, the panel behind the app bar's second button, and the client half of backend plan <code>0039</code>. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "artboards": [
+    {
+      "file": "AppBar.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 470,
+      "h": 600,
+      "title": "The button that changes"
+    },
+    {
+      "file": "Panel.dc.html",
+      "x": 530,
+      "y": 0,
+      "w": 900,
+      "h": 970,
+      "title": "Opening it, and asking it something"
+    },
+    {
+      "file": "Ask.dc.html",
+      "x": 0,
+      "y": 1120,
+      "w": 900,
+      "h": 970,
+      "title": "Writing a line"
+    },
+    {
+      "file": "Limits.dc.html",
+      "x": 960,
+      "y": 1120,
+      "w": 1330,
+      "h": 970,
+      "title": "Busy, off topic, and the rename"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -500,
+      "w": 440,
+      "text": "The assistant panel, plan 0032, talking to the service in backend plan 0039. It can do three things: put a line on a list, answer a question about a list, and change your name.\nWHY IT EXISTS IS NOT NOVELTY. A share of this app's intended users are of advanced age or have impaired motor control, and tapping through four screens to add one item is the thing that fails them. Backlog 0005 section 6 holds the voice design, layered later over a text in, text out service, which is why nothing here assumes a keyboard.\nPhone only, 390x844, Night only. Per the folder README a Day artboard is drawn only when a page introduces a colour role Day has not already proven, and this one introduces none: amber action, the amber tint panel and coral for a refusal are all from 0003 and 0010.\nThe copy is English here to match the other folders. Users see their own language: the request carries Accept-Language and the model answers in it."
+    },
+    {
+      "id": "route-not-sheet",
+      "x": 480,
+      "y": -500,
+      "w": 440,
+      "text": "A ROUTE, NOT A SHEET, AND THE APP BAR IS WHY. Rule E1 from 0008 makes a sheet a child route of the page it covers. The app bar lives in AppLayout, so its button is on every page, and a sheet reachable from everywhere would have to be a child of everywhere: eight identical entries that must not drift, covering a page it has nothing to do with.\nSo it follows account from 0015, on that plan's own test: deep linkable, its own scroll, somewhere you go deliberately rather than something drawn over what you were reading. authenticatedGuard and nothing more, declared before the empty path front door like every other non empty path.\nA floating panel toggled by a signal was rejected. Nothing is pushed onto the history stack, so Android's back button closes the app rather than the panel. That is the defect rule E1 exists to prevent and the one 0031 spent a whole plan repairing.\nSEARCH IS NOT BEING REMOVED, IT IS BEING SPENT. HomePage.search() calls _notYetRouted('search') and always has. There is no search page, no service and no route behind it, so the slot costs nothing to take. SearchIcon stays exported."
+    },
+    {
+      "id": "references",
+      "x": 960,
+      "y": -500,
+      "w": 460,
+      "text": "THE CHIPS ARE NOT PARSED OUT OF THE SENTENCE. Rule A3 in 0039: every reply carries a references array built from the tool results the service actually executed, and the panel renders those. The reply text is never scanned for ids and never rendered as markdown.\nThe difference is whether a link can lie. An id in references came back from the gateway during that turn, so the row exists and the caller is allowed to see it. An id the model wrote into prose has neither property, and a chip pointing at a list that was never there is worse than no chip: it is the app vouching for something invented.\nSo the model is told the client draws these itself, and writes \"it is on the weekly shop\" rather than a link.\nEach chip is a routerLink built with appPath(locale, basePath, ...), never an assembled string. That is what makes one chip correct at /velista/en/... mounted in the portfolio shell and at /en/... on velista's own origin. A hardcoded path is wrong in exactly one of the two run modes, and it is the mode nobody looks at.\nA line has no route of its own: the three that address one all DO something to it. So a line chip goes to the list with ?line=, which scrolls to it and marks it and opens nothing."
+    },
+    {
+      "id": "legible",
+      "x": 1470,
+      "y": -500,
+      "w": 460,
+      "text": "THE TYPE IS BIGGER HERE THAN ANYWHERE ELSE IN THE APP, ON PURPOSE. Message text is 16.5px where the rest of velista sets body copy at 13.5px, and the reply bubbles carry the same size as what the person typed.\nThis is the one screen built for somebody who came to it because the ordinary controls are hard for them. Shrinking the type to fit more transcript would be optimising the exact thing this screen exists to avoid.\nThe composer is an ordinary text input with an ordinary submit: no custom key handling, nothing that assumes a hardware keyboard. That is what makes the platform keyboard's dictation button work into it on day one, at no cost, which is the whole bridge to the voice work.\nTap targets keep the app's existing sizes. The send button is 52px like every primary button in the app, the app bar buttons stay 44x44, and the choice buttons in the two confirm flows are 56px because they are the answer to a question rather than a control somebody hunts for."
+    },
+    {
+      "id": "resolution",
+      "x": 2350,
+      "y": 1120,
+      "w": 460,
+      "text": "IT ASKS RATHER THAN GUESSING, AND THE ASK IS THE COMMON CASE. 0039 section 6.1 resolves which list in four steps and stops at the first that answers: the list named, then the list the conversation has been about, then the caller's only list, then ask.\nWith two lists and a bare \"add two litres of milk\", step four is where it lands, so this frame is not an edge case. It has to read as a normal part of the conversation, which is why it is two large buttons and not an error.\nA write that guessed is worse than a question. The guess is silent, it lands on somebody else's shared list, and the person who asked has no reason to check.\nTHE TAP IS RECORDED AS THE PERSON'S OWN TURN. It appears in the transcript as \"Weekly shop\" from them, not as invisible state, because the transcript is what gets sent back next turn (rule A2, the client holds it) and a choice that left no trace would have to be re-asked.\nThe refusal at the bottom is not the bot being careful. It is the ordinary 403 from the gateway, because the bot called the same endpoint the app calls with the same token (rule A1), reported in words."
+    },
+    {
+      "id": "countdown",
+      "x": 2350,
+      "y": 1620,
+      "w": 460,
+      "text": "A NUMBER THAT SHRINKS, NEVER \"TRY AGAIN LATER\". Rule A5 in 0039. The free tier's limits are per Google Cloud project rather than per user, roughly ten to fifteen requests a minute shared across everybody, so with two replicas this is an ordinary event and not an edge case.\n\"Later\" is the wrong string, and it is specifically wrong here: somebody who cannot easily type is left guessing, and guessing means pressing send again, which spends the next slot and lengthens the wait.\nTHE SECONDS RIDE IN THE PROBLEM BODY, NOT A Retry-After HEADER. Same reason as rule C3 from 0009 and the hourly note in the account folder: enableCors sets no exposedHeaders, so a browser cannot read that header cross origin, and velista.app calling api.velista.app is cross origin. A header alone would leave the panel with nothing to count.\nThe value is the server's. The panel never invents one, and if the field is absent it says the bot is busy with no number rather than guessing.\nTHE COMPOSER KEEPS WHAT WAS TYPED. It is held disabled, not cleared. Making somebody retype a sentence they already dictated is the failure this whole screen exists to avoid, and it is the cheapest thing here to get right."
+    },
+    {
+      "id": "no-such-tool",
+      "x": 2350,
+      "y": 2120,
+      "w": 460,
+      "text": "IT CANNOT DELETE BECAUSE THERE IS NO DELETE TOOL, not because the prompt asks it not to. 0039 section 12 keeps deletion, zone governance, account deletion and merge, creating or joining zones, and every platform admin route out of the catalog entirely.\nThat distinction is the whole safety argument. An instruction is a suggestion to a model; an absent capability is not reachable by any sentence anybody types. Freedom lives in the prose, the constraint lives in the actions.\nSo the off topic reply is written by the model, in the caller's language, untemplated, and it still cannot do anything it was not given a tool for. What it may do is explain where the screen is, which is what the delete answer does.\nOne consequence worth watching in the test: the redirect is a successful turn. It is not retried, it is not logged as an error, and it counts against the same rate limit as everything else, so a person having a chat about the weather can use up the slots of a person trying to add bread."
+    }
+  ]
+}

@@ -277,9 +277,18 @@ engineered around, and the requirement is that it be legible when it happens.
 number.** "Try again later" is the wrong answer: somebody who cannot type is left guessing,
 and guessing means tapping send again, which spends the next slot and extends the outage.
 
-So the service returns a 429 of its own carrying `retryAfterSeconds`, and the client renders
-a countdown and holds the composer disabled until it reaches zero (velista `0032`
-section 3). The number comes from, in order:
+So the service returns a 429 of its own carrying `retryAfterSeconds` **in the problem body**,
+and the client renders a countdown and holds the composer disabled until it reaches zero
+(velista `0032` section 3.1).
+
+The body, not a `Retry-After` header, and that is rule C3 from plan `0009` rather than a
+preference: `main.ts` calls `enableCors({ origin, credentials: true })` with no
+`exposedHeaders`, so a browser cannot read that header cross origin, and `velista.app`
+calling `api.velista.app` is cross origin. A header alone leaves the panel with nothing to
+count. Plan `0015`'s hourly rename throttle already learned this and answers the same way;
+setting the header too is harmless for non browser callers, but nothing may depend on it.
+
+The number comes from, in order:
 
 1. The provider's own retry hint. Google's error payload carries a `RetryInfo` with a
    `retryDelay`; when it is there it is authoritative and is used as it is.
@@ -287,8 +296,8 @@ section 3). The number comes from, in order:
    because it is the thing counting.
 3. Otherwise a conservative fixed fallback, so the field is never absent.
 
-The value goes in the response body **and** in a standard `Retry-After` header, so nothing
-downstream has to parse prose to find it.
+Whichever it came from, it is a number in a field. Nothing downstream parses prose to find
+it, and the panel never derives one of its own.
 
 A small per instance concurrency limit sits in front of the provider call, so that a burst
 queues briefly instead of becoming a burst of 429s. Queuing is preferable to failing here:
@@ -445,8 +454,8 @@ discouraged.
   deliberately different per zone name alone.
 - Every id the client can click came from a tool result in the same turn, and no link 404s.
 - Off topic input gets a redirect and no tool call.
-- A rate limited turn answers with a number of seconds, in the body and in `Retry-After`,
-  and the panel counts it down rather than saying "later".
+- A rate limited turn answers with a number of seconds **in the problem body**, and the panel
+  counts it down rather than saying "later".
 - The suite passes with no network access and never calls Gemini.
 - A cluster with no `GEMINI_API_KEY` deploys, boots, answers 501 on the assistant route, and
   passes `provision-release.sh --check`.

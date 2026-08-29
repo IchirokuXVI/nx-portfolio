@@ -7,7 +7,11 @@
 > with a plan of its own, when there is something to search.
 >
 > Prerequisite reading: backend plan `0039`, which is the service this talks to and whose
-> rules A2 and A3 decide who holds the transcript and where links come from.
+> rules A2, A3 and A5 decide who holds the transcript, where links come from, and what a
+> rate limited turn says.
+>
+> The design is in `mocks/assistant/`, published at
+> https://claude.ai/code/artifact/0fedd982-86de-47c5-99e1-2458dd04cf2f
 
 ## 1. The button
 
