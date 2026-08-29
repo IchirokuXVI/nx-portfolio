@@ -151,7 +151,7 @@ export_service_ports() {
 }
 
 # Services with their own database and their own committed migrations.
-MIGRATED_SERVICES=(auth core catalog)
+MIGRATED_SERVICES=(auth core catalog harvester)
 
 # --- configuration bootstrap ------------------------------------------------
 #
@@ -170,8 +170,8 @@ MIGRATED_SERVICES=(auth core catalog)
 # workflow already calls it for exactly this reason. Slot 0 is the plain default
 # ports, which is what a developer's own machine wants.
 
-# Every file luna-slot.sh writes. The services read all six; the migrations below
-# read only their own.
+# Every file luna-slot.sh writes. The services read all seven; the migrations
+# below read only their own.
 ENV_FILES=(
   'apps/luna-shopper-backend/.env.luna-shopper-backend'
   'apps/luna-shopper-backend/gateway/.env'
@@ -179,6 +179,7 @@ ENV_FILES=(
   'apps/luna-shopper-backend/auth/.env'
   'apps/luna-shopper-backend/core/.env'
   'apps/luna-shopper-backend/catalog/.env'
+  'apps/luna-shopper-backend/harvester/.env'
 )
 
 # The subset `up` cannot proceed without, because each migration resolves its
@@ -187,6 +188,7 @@ REQUIRED_ENV_FILES=(
   'apps/luna-shopper-backend/auth/.env'
   'apps/luna-shopper-backend/core/.env'
   'apps/luna-shopper-backend/catalog/.env'
+  'apps/luna-shopper-backend/harvester/.env'
 )
 
 KEYPAIR="$root/apps/luna-shopper-backend/secrets/jwt.key"

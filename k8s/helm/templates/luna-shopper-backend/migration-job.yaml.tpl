@@ -5,7 +5,8 @@
 {{- $secName := "luna-shopper-backend-secrets" }}
 {{- $tag := $root.Values.imageTag }}
 {{- range $ls.services }}
-{{- if or (eq .role "auth") (eq .role "core") (eq .role "catalog") }}
+{{- if not (include "lunaShopperBackend.entryEnabled" (dict "entry" . "ls" $ls)) }}{{- continue }}{{- end }}
+{{- if or (eq .role "auth") (eq .role "core") (eq .role "catalog") (eq .role "harvester") }}
 ---
 # Database migrations on deploy (plan 0002, section 5 and 6). A Helm pre upgrade
 # hook runs this service's migrations against its database before the new pods

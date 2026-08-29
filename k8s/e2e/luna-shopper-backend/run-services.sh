@@ -33,6 +33,12 @@ root="$(cd "$here/../../.." && pwd)"
 cd "$root"
 
 # Nx project name per service; the dist directory matches it.
+#
+# The harvester (plan 0038) is deliberately NOT here. This script is what CI's
+# e2e job starts, and the e2e suite exercises the app: the harvester answers no
+# subject the app calls, refuses to spawn with HARVEST_ENABLED false, and would
+# only add a sixth process and a sixth boot to wait for. Start it by hand with
+# `npx nx serve luna-shopper-backend-harvester` when working on it.
 SERVICES=(gateway realtime auth core catalog)
 
 # Slot 0 defaults, used when a service has no .env yet.

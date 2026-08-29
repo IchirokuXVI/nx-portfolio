@@ -1,0 +1,54 @@
+{
+  "id": "4241",
+  "ean": "8480000135636",
+  "slug": "aceite-de-oliva-04-hacendado-botella",
+  "brand": "Hacendado",
+  "limit": 30,
+  "origin": "España",
+  "packaging": "Botella",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/4241/aceite-de-oliva-04-hacendado-botella",
+  "thumbnail": "https://prod-mercadona.imgix.net/images/4241.jpg",
+  "display_name": "Aceite de oliva 0,4º Hacendado",
+  "unavailable_from": null,
+  "price_instructions": {
+    "iva": 5,
+    "is_new": false,
+    "is_pack": false,
+    "pack_size": null,
+    "size_format": "l",
+    "total_units": null,
+    "unit_name": "Botella",
+    "unit_price": "8.75",
+    "bulk_price": "8.75",
+    "unit_size": 1.0,
+    "tax_percentage": 5.0,
+    "previous_unit_price": null,
+    "price_decreased": false,
+    "reference_price": "8.75",
+    "reference_format": "L",
+    "drained_weight": null,
+    "selling_method": 0
+  },
+  "categories": [
+    {
+      "id": 112,
+      "name": "Aceite, especias y salsas",
+      "level": 0,
+      "order": 1,
+      "categories": [
+        {
+          "id": 12,
+          "name": "Aceite, vinagre y sal",
+          "level": 1,
+          "order": 1
+        }
+      ]
+    }
+  ],
+  "photos": [],
+  "details": {
+    "legal_name": "Aceite de oliva 0,4º",
+    "suppliers": [{ "name": "Sovena España, S.A.U." }]
+  }
+}

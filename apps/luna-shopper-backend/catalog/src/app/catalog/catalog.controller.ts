@@ -2,9 +2,27 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ITEM_PATTERNS,
+  PRICE_SCOPE_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
+  SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  type CreatePriceScopeRequest,
+  type FindItemByEanRequest,
+  type FindItemByEanResult,
+  type GetSupermarketLocationItemRequest,
+  type ListPriceScopesRequest,
+  type ListSupermarketItemsByScopeRequest,
+  type ListSupermarketLocationItemsRequest,
+  type PriceScopeIdRequest,
+  type PriceScopePage,
+  type PriceScopeView,
+  type SupermarketLocationItemPage,
+  type SupermarketLocationItemView,
+  type UpdatePriceScopeRequest,
+  type UpsertSupermarketItemBatchRequest,
+  type UpsertSupermarketItemBatchResult,
+  type UpsertSupermarketLocationItemRequest,
   type CreateItemRequest,
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
@@ -32,7 +50,9 @@ import {
   type UpsertSupermarketItemRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { ItemService } from './item.service';
+import { PriceScopeService } from './price-scope.service';
 import { SupermarketItemService } from './supermarket-item.service';
+import { SupermarketLocationItemService } from './supermarket-location-item.service';
 import { SupermarketLocationService } from './supermarket-location.service';
 import { SupermarketService } from './supermarket.service';
 
@@ -48,7 +68,9 @@ export class CatalogController {
     private readonly supermarkets: SupermarketService,
     private readonly locations: SupermarketLocationService,
     private readonly items: ItemService,
-    private readonly supermarketItems: SupermarketItemService
+    private readonly supermarketItems: SupermarketItemService,
+    private readonly priceScopes: PriceScopeService,
+    private readonly locationItems: SupermarketLocationItemService
   ) {}
 
   // --- Supermarkets --------------------------------------------------------
@@ -152,6 +174,66 @@ export class CatalogController {
     return this.items.search(req);
   }
 
+  @MessagePattern(ITEM_PATTERNS.findByEan)
+  findItemByEan(
+    @Payload() req: FindItemByEanRequest
+  ): Promise<FindItemByEanResult> {
+    return this.items.findByEan(req);
+  }
+
+  // --- Price scopes (plan 0038) --------------------------------------------
+
+  @MessagePattern(PRICE_SCOPE_PATTERNS.create)
+  createPriceScope(
+    @Payload() req: CreatePriceScopeRequest
+  ): Promise<PriceScopeView> {
+    return this.priceScopes.create(req);
+  }
+
+  @MessagePattern(PRICE_SCOPE_PATTERNS.update)
+  updatePriceScope(
+    @Payload() req: UpdatePriceScopeRequest
+  ): Promise<PriceScopeView> {
+    return this.priceScopes.update(req);
+  }
+
+  @MessagePattern(PRICE_SCOPE_PATTERNS.delete)
+  deletePriceScope(
+    @Payload() req: PriceScopeIdRequest
+  ): Promise<{ id: string }> {
+    return this.priceScopes.delete(req);
+  }
+
+  @MessagePattern(PRICE_SCOPE_PATTERNS.list)
+  listPriceScopes(
+    @Payload() req: ListPriceScopesRequest
+  ): Promise<PriceScopePage> {
+    return this.priceScopes.list(req);
+  }
+
+  // --- Per store rows (plan 0038, section 5.2) -----------------------------
+
+  @MessagePattern(SUPERMARKET_LOCATION_ITEM_PATTERNS.upsert)
+  upsertLocationItem(
+    @Payload() req: UpsertSupermarketLocationItemRequest
+  ): Promise<SupermarketLocationItemView> {
+    return this.locationItems.upsert(req);
+  }
+
+  @MessagePattern(SUPERMARKET_LOCATION_ITEM_PATTERNS.get)
+  getLocationItem(
+    @Payload() req: GetSupermarketLocationItemRequest
+  ): Promise<SupermarketLocationItemView> {
+    return this.locationItems.get(req);
+  }
+
+  @MessagePattern(SUPERMARKET_LOCATION_ITEM_PATTERNS.listByLocation)
+  listLocationItems(
+    @Payload() req: ListSupermarketLocationItemsRequest
+  ): Promise<SupermarketLocationItemPage> {
+    return this.locationItems.listByLocation(req);
+  }
+
   // --- Supermarket items (per location price/position) ---------------------
 
   @MessagePattern(SUPERMARKET_ITEM_PATTERNS.upsert)
@@ -159,6 +241,13 @@ export class CatalogController {
     @Payload() req: UpsertSupermarketItemRequest
   ): Promise<SupermarketItemView> {
     return this.supermarketItems.upsert(req);
+  }
+
+  @MessagePattern(SUPERMARKET_ITEM_PATTERNS.upsertBatch)
+  upsertSupermarketItemBatch(
+    @Payload() req: UpsertSupermarketItemBatchRequest
+  ): Promise<UpsertSupermarketItemBatchResult> {
+    return this.supermarketItems.upsertBatch(req);
   }
 
   @MessagePattern(SUPERMARKET_ITEM_PATTERNS.delete)
@@ -187,5 +276,12 @@ export class CatalogController {
     @Payload() req: ListSupermarketItemsByLocationRequest
   ): Promise<SupermarketItemPage> {
     return this.supermarketItems.listByLocation(req);
+  }
+
+  @MessagePattern(SUPERMARKET_ITEM_PATTERNS.listByScope)
+  listSupermarketItemsByScope(
+    @Payload() req: ListSupermarketItemsByScopeRequest
+  ): Promise<SupermarketItemPage> {
+    return this.supermarketItems.listByScope(req);
   }
 }

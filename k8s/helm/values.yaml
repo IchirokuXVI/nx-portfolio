@@ -291,6 +291,84 @@ lunaShopperBackend:
     # It costs nothing until something scrapes it.
     metricsEnabled: true
 
+  # -------------------------------------------------------------------------
+  # The harvester (plan 0038), and the one switch that decides whether it exists
+  # in a cluster at all.
+  #
+  # OFF EVERYWHERE, INCLUDING PRODUCTION AND STAGING, and that is the decision
+  # rather than an oversight. The work is genuinely heavy and genuinely optional:
+  # a catalog discovery run is 4,383 HTTP requests over eighteen minutes at the
+  # default rate, and running it needs a third Postgres with its own volume plus a
+  # sixth Node process. A developer machine has room for that. The two VPSs this
+  # chart deploys to have a 256Mi Postgres budget per instance and are sized for
+  # the app, not for a crawler.
+  #
+  # Nothing else in the chart branches on this. Both the service entry and the
+  # database instance carry `optional: harvester`, and every template that walks
+  # those lists skips an entry whose `optional` is not enabled here. So with this
+  # false there is no Deployment, no Service, no PDB, no migration Job, no
+  # StatefulSet, no PVC and no backup CronJob: the harvester is described by the
+  # chart and absent from the cluster.
+  #
+  # Turning it on in a cluster later is this flag plus two Secret keys
+  # (HARVESTER_DB_URL and the harvester-db instance secret, both of which
+  # provision-release.sh writes) — and then `config.harvestEnabled` below, which is
+  # a second, separate decision: the pod existing and the pod fetching from a third
+  # party are not the same thing.
+  # -------------------------------------------------------------------------
+  harvester:
+    enabled: false
+
+    # The uuid the harvester writes to catalog as (backlog 0001, section 4.1). It
+    # must also appear in `config.platformAdminUserIds` above, because catalog
+    # gates every write on that allowlist and does not know the harvester is
+    # special. Empty means the harvester cannot write anything, which is the safe
+    # default and exactly what it should do when nobody has set it up.
+    actorId: ''
+
+    # Whether the pod may start a run at all. Separate from `enabled` on purpose:
+    # bringing the service up and letting it fetch from a third party are two
+    # decisions, and this one is reversible in seconds.
+    harvestEnabled: false
+
+    # And the same again for the one storefront (plan 0038, section 8.1). If
+    # Mercadona ever objects, this goes false and the catalog keeps working on
+    # hand entered prices, which is the property backlog 0001 section 5.4 designs
+    # for. Off in every environment here; the local compose stack is where runs
+    # actually happen.
+    mercadonaEnabled: false
+
+    # An HONEST User-Agent naming the app and a contact address, and specifically
+    # not the Chrome impersonation the public reference implementations use. Set
+    # the contact to a mailbox someone reads.
+    userAgent: 'LunaShopper/0.1 (+https://velista.app; personal price comparison; contact@velista.app)'
+
+    # Two knobs doing two different jobs (plan 0038, section 6.3): `workers`
+    # bounds how many requests are in flight, `maxRequestsPerSecond` bounds our
+    # impact on the source. They are separate because one shared token bucket is
+    # what makes the configured rate the rate the source actually sees; a per
+    # worker delay would be four times the intended rate at four workers.
+    #
+    # 4 req/s is the only number in that section with no evidence behind it, and
+    # it decides whether a run takes 9 minutes or 73. Watch for 429s and halve it
+    # rather than retrying harder.
+    defaultWorkers: 4
+    defaultMaxRps: 4
+    batchSize: 200
+
+    # A RUNNING run whose heartbeat is older than this (seconds) is reaped as
+    # STALE and its lock released. The only recovery path for a force killed
+    # harvester, and none other is designed: a lost run costs one refresh cycle.
+    staleAfterSeconds: 900
+
+    # A run fails outright once this fraction of its planned work has failed.
+    failureRatio: '0.25'
+
+    # Empty means each library's public default. OVERPASS_URL exists so a self
+    # hosted instance can be pointed at without a code change if usage ever grows.
+    overpassUrl: ''
+    nominatimUrl: ''
+
   # Each backend service: one Deployment + Service (+ PDB). `routed` services get
   # an HTTPRoute on `hostPrefix`.`baseDomain` — or on the host the environment
   # overrides for them, which is where both clusters put `api.` and `rt.` now that
@@ -330,6 +408,29 @@ lunaShopperBackend:
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-catalog
       port: 3004
       routed: false
+    # The harvester (plan 0038). Internal, with no route of its own: its callers
+    # are the gateway and itself.
+    #
+    # `optional: harvester` is what keeps it OFF in both clusters. Every template
+    # that walks this list skips an entry whose `optional` names a feature that is
+    # not enabled, and `harvester.enabled` below is false everywhere. The entry
+    # lives here rather than being added by an environment values file because a
+    # Helm list is replaced wholesale, not appended to: describing it once and
+    # gating it is the only way the two clusters and a local deploy stay in step.
+    #
+    # `replicas: 1` and `strategy: Recreate` (see the deployment template): a run
+    # holds an in memory work queue and an AbortController, so a second replica
+    # would not share the work, it would start a second run. The database's active
+    # run index refuses that, but a rolling update briefly running two pods would
+    # mean the new one cannot start until the old one's run finishes.
+    - name: luna-shopper-backend-harvester
+      role: harvester
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-harvester
+      port: 3005
+      routed: false
+      optional: harvester
+      replicas: 1
+      strategy: Recreate
 
   # Stateful dependencies. Three Postgres instances (auth, core and catalog each
   # own one, so the no shared database rule holds) and one NATS server with
@@ -392,6 +493,17 @@ lunaShopperBackend:
         secret: luna-shopper-backend-catalog-db-secret
         backupSchedule: '57 2 * * *'
         urlSecretKey: CATALOG_DB_URL
+      # The harvester's own database (plan 0038, section 4.1), gated by the same
+      # `harvester.enabled` switch as its service: with the harvester off, this
+      # StatefulSet and its 2Gi volume are never created, which is most of what
+      # keeping it off a small VPS is worth.
+      - name: luna-shopper-backend-harvester-db
+        database: luna_harvester
+        user: luna_harvester
+        secret: luna-shopper-backend-harvester-db-secret
+        backupSchedule: '7 3 * * *'
+        urlSecretKey: HARVESTER_DB_URL
+        optional: harvester
 
   nats:
     image: nats:2.10-alpine
