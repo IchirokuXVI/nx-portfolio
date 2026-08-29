@@ -95,6 +95,10 @@ something other than `main`.
 
 The script is idempotent. Re-running it keeps existing accounts and does not add
 a key twice, so it is also the way to reconcile a host someone set up by hand.
+The keys are only required by an account that has none yet, so a later run that
+just wants `--firewall`, a missing package or a fresh `--k3s` needs neither
+`--admin-key` nor `--deploy-key`. That matters because the run people skip is
+the one whose arguments they cannot produce from memory.
 
 At the end it prints the account summary, the node, and specifically whether the
 `deploy` user can reach the cluster, which is the thing that decides whether CI
@@ -114,13 +118,20 @@ ssh -i $env:USERPROFILE\.ssh\nx_<env>_deploy deploy@<IP> id
 Both must print a user id. Then:
 
 ```powershell
-ssh root@<IP> "bash /tmp/provision-host.sh --admin-key '$admin' --deploy-key '$deploy' --lock-root"
+ssh -t root@<IP> "bash /tmp/provision-host.sh --lock-root"
 ```
 
-That sets `PermitRootLogin no` and `PasswordAuthentication no`, validates the
-result with `sshd -t` before reloading anything, and refuses to run at all if
-either account is missing a key. Re-running with the same keys is a no-op on the
-accounts.
+No keys this time: both accounts already have one, which is the condition the
+script checks anyway. `-t` gives the remote script a terminal to ask its
+question on, because it asks one **every time** and there is no flag to skip it.
+Type `lock root` at the prompt to go ahead; anything else, or no terminal at
+all, leaves sshd untouched. An unattended `--lock-root` left over from a copied
+command line is the way this step goes wrong, so it cannot run unattended.
+
+Beyond the prompt it sets `PermitRootLogin no` and `PasswordAuthentication no`,
+validates the result with `sshd -t` before reloading anything, and refuses
+outright if either account is missing a usable key. A placeholder line does not
+count as one.
 
 ## 4. The address and the DNS records
 
@@ -354,10 +365,10 @@ $deploy = (Get-Content $env:USERPROFILE\.ssh\nx_<env>_deploy.pub -Raw).Trim()
 scp k8s/bootstrap/provision-host.sh root@<IP>:/tmp/
 ssh root@<IP> "bash /tmp/provision-host.sh --admin-key '$admin' --deploy-key '$deploy' --k3s"
 
-# 3. prove both logins, THEN close the door
+# 3. prove both logins, THEN close the door (it asks you to type 'lock root')
 ssh -i $env:USERPROFILE\.ssh\nx_<env>_admin ichiroku@<IP> id
 ssh -i $env:USERPROFILE\.ssh\nx_<env>_deploy deploy@<IP> id
-ssh root@<IP> "bash /tmp/provision-host.sh --admin-key '$admin' --deploy-key '$deploy' --lock-root"
+ssh -t root@<IP> "bash /tmp/provision-host.sh --lock-root"
 ```
 
 ```sh

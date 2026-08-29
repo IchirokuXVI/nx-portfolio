@@ -28,7 +28,15 @@
 # behind you:
 #
 #   ssh ichiroku@HOST id && ssh deploy@HOST id
-#   ssh root@HOST "bash /tmp/provision-host.sh --admin-key ... --deploy-key ... --lock-root"
+#   ssh root@HOST "bash /tmp/provision-host.sh --lock-root"
+#
+# The keys are only needed by an account that has none yet, which is why that
+# second run does not repeat them. Demanding them on every run made every later
+# run depend on a file the first run needed, so a host that only wanted a
+# missing package or the firewall went unprovisioned rather than send somebody
+# looking for a .pub file they did not have to hand. An account that is already
+# keyed is already reachable, and reachable is the only thing the requirement
+# was ever there to prove.
 #
 # Idempotent: existing users are kept, an authorized key already present is not
 # added twice, and every step re-runs safely. Deliberately separate from
@@ -36,14 +44,17 @@
 # want to keep re-running later as yourself.
 #
 # Options:
-#   --admin-key <key>     public key for the sudo account            (required)
-#   --deploy-key <key>    public key for the CI account              (required)
+#   --admin-key <key>     public key for the sudo account. Required only while
+#                         that account still has no key of its own.
+#   --deploy-key <key>    public key for the CI account, under the same rule.
 #   --admin-user <name>   default: ichiroku
 #   --deploy-user <name>  default: deploy
 #   --k3s                 clone the repo and run install.sh --k3s
 #   --repo <url>          default: https://github.com/IchirokuXVI/nx-portfolio.git
 #   --ref <branch>        default: main
-#   --lock-root           disable root login and password auth (do this LAST)
+#   --lock-root           disable root login and password auth (do this LAST).
+#                         Asks for a typed confirmation every time, and refuses
+#                         unless both accounts already hold a usable key.
 #   --firewall            ufw: 22/80/443 plus the k3s pod and service CIDRs
 #
 # Environment:
@@ -76,7 +87,7 @@ while [ $# -gt 0 ]; do
     --k3s)         RUN_K3S=true;      shift ;;
     --lock-root)   LOCK_ROOT=true;    shift ;;
     --firewall)    FIREWALL=true;     shift ;;
-    -h|--help)     sed -n '2,54p' "$0"; exit 0 ;;
+    -h|--help)     sed -n '2,65p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -86,6 +97,33 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
+echo "==> host: $(hostname), admin: $ADMIN_USER, deploy: $DEPLOY_USER"
+
+# ---------------------------------------------------------------------------
+# How many usable keys an account already holds.
+#
+# Placeholder lines do not count, because the question being asked is whether
+# somebody can log in as this account, not whether the file is non empty. Both
+# the optional key rule below and the --lock-root guard at the end rest on that
+# distinction being a real one.
+# ---------------------------------------------------------------------------
+count_keys() {
+  local user="$1" home ak n
+  id -u "$user" >/dev/null 2>&1 || { echo 0; return; }
+  home="$(getent passwd "$user" | cut -d: -f6)"
+  ak="$home/.ssh/authorized_keys"
+  if [ ! -f "$ak" ]; then echo 0; return; fi
+  # Key shaped lines, minus the documentation placeholder, which is key shaped
+  # too: `ssh-ed25519 AAAA... you@laptop` passes any test that only looks at the
+  # start of the line. It is the same line install_key deletes and check_key
+  # rejects, so all three agree on what is not a key.
+  #
+  # grep exits 1 when nothing matches, so the status is dropped and the count it
+  # printed is what gets used.
+  n="$(grep '^ssh-\|^ecdsa-\|^sk-' "$ak" 2>/dev/null | grep -vc 'AAAA\.\.\.' || true)"
+  echo "${n:-0}"
+}
+
 # ---------------------------------------------------------------------------
 # Key validation, which exists because of a real mistake.
 #
@@ -93,11 +131,21 @@ fi
 # verbatim produces an authorized_keys file that looks populated, passes every
 # `ls -l` check, and refuses every login. Rejecting anything with an ellipsis in
 # it costs one line and turns a confusing lockout into a message.
+#
+# A key is demanded only from an account that has none, for the reason set out
+# at the top of the file: one that is already keyed already satisfies what the
+# requirement was there to guarantee.
 # ---------------------------------------------------------------------------
 check_key() {
-  local label="$1" key="$2"
+  local label="$1" key="$2" user="$3"
   if [ -z "$key" ]; then
-    echo "$label is required. Pass the CONTENTS of the .pub file, quoted." >&2
+    if [ "$(count_keys "$user")" -gt 0 ]; then
+      echo "    $label not given, and $user already has a key. Keeping it."
+      return
+    fi
+    echo "$label is required: $user has no authorized key yet, so provisioning" >&2
+    echo "without one would leave an account nobody can log in as. Pass the" >&2
+    echo "CONTENTS of the .pub file, quoted." >&2
     exit 1
   fi
   case "$key" in
@@ -121,16 +169,17 @@ check_key() {
 # to be worth handling rather than debugging.
 ADMIN_KEY="${ADMIN_KEY%$'\r'}"
 DEPLOY_KEY="${DEPLOY_KEY%$'\r'}"
-check_key --admin-key "$ADMIN_KEY"
-check_key --deploy-key "$DEPLOY_KEY"
+check_key --admin-key "$ADMIN_KEY" "$ADMIN_USER"
+check_key --deploy-key "$DEPLOY_KEY" "$DEPLOY_USER"
 
-if [ "$ADMIN_KEY" = "$DEPLOY_KEY" ]; then
+# Only checked when a key was actually given. Two accounts keeping the keys they
+# already hold may well have been set up from one keypair long ago, and refusing
+# to run at all would take away the tool needed to fix that.
+if [ -n "$ADMIN_KEY" ] && [ "$ADMIN_KEY" = "$DEPLOY_KEY" ]; then
   echo "The admin and deploy keys are identical. Use two keypairs, so that" >&2
   echo "revoking CI's access never touches your own." >&2
   exit 1
 fi
-
-echo "==> host: $(hostname), admin: $ADMIN_USER, deploy: $DEPLOY_USER"
 
 # ---------------------------------------------------------------------------
 # 1. Packages.
@@ -239,6 +288,10 @@ fi
 # ---------------------------------------------------------------------------
 install_key() {
   local user="$1" key="$2" home ak
+  if [ -z "$key" ]; then
+    echo "    $user: no key given, keeping the $(count_keys "$user") already installed"
+    return
+  fi
   home="$(getent passwd "$user" | cut -d: -f6)"
   ak="$home/.ssh/authorized_keys"
   install -d -m 700 -o "$user" -g "$user" "$home/.ssh"
@@ -335,18 +388,63 @@ fi
 # ---------------------------------------------------------------------------
 # 7. Closing the door, last and only on request.
 #
-# Guarded rather than trusted: locking root out of a machine whose replacement
-# accounts cannot authenticate is the one mistake here with no way back except
-# the provider's rescue console.
+# Guarded twice rather than trusted once: locking root out of a machine whose
+# replacement accounts cannot authenticate is the one mistake here with no way
+# back except the provider's rescue console.
+#
+# The first guard is mechanical. Both accounts must already hold a usable key,
+# counted the way count_keys counts them, so a placeholder line cannot stand in
+# for one. The old test was `-s` on the file, and a file holding nothing but the
+# documentation placeholder is not empty.
+#
+# The second guard is a person. --lock-root sits at the end of a long command
+# line that is usually copied from the run before it, which is exactly how it
+# ends up in a run nobody meant to harden. So it asks every time, and there is
+# no flag to skip the question: a confirmation that can be turned off is a
+# confirmation that will be.
 # ---------------------------------------------------------------------------
+confirm_lock_root() {
+  local answer=""
+
+  echo
+  echo "    About to disable root login and password authentication on $(hostname)."
+  echo "    After this the only way in is a key for $ADMIN_USER or $DEPLOY_USER."
+  echo "    Confirm from a SECOND terminal that 'ssh $ADMIN_USER@<host> id' works"
+  echo "    before answering, and keep this root session open afterwards."
+  printf "    Type 'lock root' to continue: "
+
+  # /dev/tty first, so a run whose stdin is a file or a pipe still reaches the
+  # person at the keyboard. Opening it fails when there is no controlling
+  # terminal, which is what `ssh root@HOST "bash ..."` without -t gives you, and
+  # there plain stdin is still the local terminal. If both are closed the read
+  # sees EOF, the answer stays empty and nothing is locked: unattended is
+  # precisely the situation this refuses to act in.
+  if exec 3</dev/tty 2>/dev/null; then
+    IFS= read -r answer <&3 || answer=""
+    exec 3<&-
+  else
+    IFS= read -r answer || answer=""
+  fi
+  echo
+
+  if [ "$answer" != "lock root" ]; then
+    echo "Not confirmed, so sshd was left exactly as it was." >&2
+    echo "Every step before this one has already been applied." >&2
+    exit 1
+  fi
+}
+
 if [ "$LOCK_ROOT" = true ]; then
   for user in "$ADMIN_USER" "$DEPLOY_USER"; do
-    home="$(getent passwd "$user" | cut -d: -f6)"
-    if [ ! -s "$home/.ssh/authorized_keys" ]; then
-      echo "$user has no authorized keys. Refusing to disable root login." >&2
+    if [ "$(count_keys "$user")" -eq 0 ]; then
+      echo "$user has no authorized key, so disabling root login would leave this" >&2
+      echo "host reachable only through the provider's rescue console. Refusing." >&2
+      echo "Re-run with --admin-key/--deploy-key to give it one first." >&2
       exit 1
     fi
   done
+
+  confirm_lock_root
 
   echo "==> hardening sshd"
   HARDENING="PermitRootLogin no
@@ -386,10 +484,8 @@ fi
 echo
 echo "==> accounts"
 for user in "$ADMIN_USER" "$DEPLOY_USER"; do
-  home="$(getent passwd "$user" | cut -d: -f6)"
   printf '    %-12s groups: %-24s keys: %s\n' \
-    "$user" "$(id -nG "$user" | tr ' ' ',')" \
-    "$(grep -c '^ssh-\|^ecdsa-\|^sk-' "$home/.ssh/authorized_keys" 2>/dev/null || echo 0)"
+    "$user" "$(id -nG "$user" | tr ' ' ',')" "$(count_keys "$user")"
 done
 
 if [ "$RUN_K3S" = true ]; then
@@ -410,7 +506,9 @@ echo
 echo "Done. Next, in order:"
 echo "  1. From a second terminal: ssh $ADMIN_USER@<host> id, and ssh $DEPLOY_USER@<host> id"
 if [ "$LOCK_ROOT" = false ]; then
-  echo "  2. Re-run this script with --lock-root to disable root login"
+  echo "  2. Once both work, re-run this script with just --lock-root to disable"
+  echo "     root login. The keys are not needed again, and it asks you to"
+  echo "     confirm before it touches sshd."
 fi
 echo "  3. Set ipAddress in k8s/helm/values.<env>.yaml and move the five DNS records"
 echo "  4. As $ADMIN_USER, in an interactive shell (it prompts for two secrets):"
