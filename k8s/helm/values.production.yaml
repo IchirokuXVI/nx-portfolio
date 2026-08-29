@@ -24,6 +24,7 @@ ipAddress: 152.53.49.229
 imageTag: latest
 
 lunaShopperBackend:
+  enabled: true
   config:
     logLevel: info
     # Both origins, because after plan 0013 both can be serving velista: the

@@ -35,6 +35,7 @@ ipAddress: 152.53.50.209
 imageTag: staging
 
 lunaShopperBackend:
+  enabled: true
   config:
     logLevel: debug
     # Both origins while both are live, exactly as production.
