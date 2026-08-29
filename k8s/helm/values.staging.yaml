@@ -55,6 +55,7 @@ lunaShopperBackend:
     # Both origins while both are live, exactly as production.
     corsOrigins: https://staging.ichirokuxvi.com,https://staging.velista.app
     authJwtKid: staging-1
+    googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # Register this URI in the Google console beside the production one. Google
     # matches redirect_uri exactly, so the two are two entries, not a pattern.
     googleCallbackUrl: https://api.staging.velista.app/v1/auth/google/callback

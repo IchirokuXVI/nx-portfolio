@@ -59,6 +59,7 @@ lunaShopperBackend:
     # redirect lands the portfolio entry can go.
     corsOrigins: https://ichirokuxvi.com,https://velista.app
     authJwtKid: prod-1
+    googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # The path the gateway actually serves: its controllers are versioned, so the
     # callback lives under /v1. It must match a URI pre-registered with Google
     # exactly, which is why it is spelled out rather than derived from a domain.
