@@ -22,7 +22,7 @@
 # Environment overrides:
 #   RELEASE_NAME    helm release name        (default: nx-portfolio)
 #   NAMESPACE       kubernetes namespace     (default: nx-portfolio)
-#   TIMEOUT         helm/rollout wait        (default: 10m)
+#   TIMEOUT         helm/rollout wait        (default: 10m, 20m on a first install)
 #   KUBECONFIG      kubeconfig path          (default: /etc/rancher/k3s/k3s.yaml)
 
 set -euo pipefail
@@ -37,8 +37,77 @@ fi
 CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RELEASE_NAME="${RELEASE_NAME:-nx-portfolio}"
 NAMESPACE="${NAMESPACE:-nx-portfolio}"
-TIMEOUT="${TIMEOUT:-10m}"
 export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+
+# ---------------------------------------------------------------------------
+# What state is the release in before anything touches it?
+#
+# helm refuses to work on a release stuck in a pending state, with "another
+# operation (install/upgrade/rollback) is in progress". A release gets stuck
+# that way when a deploy is KILLED rather than failed: helm records pending
+# before it starts waiting, and if the process dies in between, nothing ever
+# writes the outcome. The way that happens here is the SSH connection CI runs
+# this over going away mid `--wait`, which sends the whole remote process group
+# a SIGHUP.
+#
+# Without this block the next attempt fails on the wreckage of the previous one
+# instead of on anything real, and the message names an operation that is not in
+# progress and has not been for hours. That is a considerably more confusing
+# failure than whatever caused the original disconnect.
+# ---------------------------------------------------------------------------
+RELEASE_STATUS="$(helm status "$RELEASE_NAME" --namespace "$NAMESPACE" 2>/dev/null \
+  | sed -n 's/^STATUS: //p' | head -1 || true)"
+RELEASE_STATUS="${RELEASE_STATUS:-none}"
+
+case "$RELEASE_STATUS" in
+  pending-install)
+    # Cleared automatically, because there is provably nothing to lose. A
+    # pending-install release has never completed once, so no revision of it has
+    # ever served traffic, and there is no earlier revision to roll back to:
+    # removing the record and installing again is the only way forward.
+    #
+    # It does not take the databases with it either. The only persistent storage
+    # in this chart comes from StatefulSet volumeClaimTemplates (postgres and
+    # nats), and Kubernetes deliberately leaves those PVCs behind when the
+    # StatefulSet goes away. There are no standalone PVCs in the chart, so
+    # `helm uninstall` cannot delete a volume.
+    echo "Release '${RELEASE_NAME}' is stuck in pending-install from an earlier"
+    echo "attempt that was killed rather than finished. Removing that record and"
+    echo "installing again; no revision of it ever served traffic, and the"
+    echo "postgres and nats volumes are not helm's to delete."
+    helm uninstall "$RELEASE_NAME" --namespace "$NAMESPACE" --wait --timeout 5m
+    RELEASE_STATUS=none
+    ;;
+  pending-upgrade|pending-rollback)
+    # NOT cleared automatically, because here an earlier revision did deploy and
+    # its pods may be serving production right now. Choosing between rolling
+    # back and letting the operation stand is a judgement about live traffic,
+    # and a deploy script that silently makes it is a script nobody can trust
+    # with the next release. It says what to run instead.
+    echo "Release '${RELEASE_NAME}' is stuck in ${RELEASE_STATUS}, left behind by a" >&2
+    echo "deploy that was killed mid flight. An earlier revision is still live, so" >&2
+    echo "this script will not decide for you. Look at what is running, then:" >&2
+    echo >&2
+    echo "  helm history ${RELEASE_NAME} --namespace ${NAMESPACE}" >&2
+    echo "  helm rollback ${RELEASE_NAME} --namespace ${NAMESPACE}   # to the last deployed revision" >&2
+    echo >&2
+    echo "and run this script again." >&2
+    exit 1
+    ;;
+esac
+
+# A first install is a different amount of work from an upgrade, so it gets a
+# different budget. 10m is measured against the slowest ordinary path: three
+# migration Jobs, then Deployments rolling behind a readiness probe. A first
+# install adds every image pull in the chart on a single small node, which is
+# the one case that reliably exceeds it, and a --wait that times out fails the
+# release rather than merely reporting slowly.
+if [ "$RELEASE_STATUS" = none ]; then
+  TIMEOUT="${TIMEOUT:-20m}"
+  echo "No existing release, so this is a first install. Waiting up to ${TIMEOUT}."
+else
+  TIMEOUT="${TIMEOUT:-10m}"
+fi
 
 echo "Upgrading helm release '${RELEASE_NAME}' in namespace '${NAMESPACE}' to ${VERSION}"
 

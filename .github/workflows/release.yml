@@ -52,6 +52,17 @@ env:
   # its own host, and environment.prod.ts used to name `api.` for both.
   PROD_LUNA_GATEWAY_URL: https://api.ichirokuxvi.com
   PROD_LUNA_REALTIME_URL: https://rt.ichirokuxvi.com
+  # Options for every SSH in this file, rsync's transport included.
+  #
+  # ServerAliveInterval is not a nicety. GitHub hosted runners reach the VPS
+  # through Azure's outbound SNAT, which drops a flow that has carried no packets
+  # for 4 minutes, and `helm --wait` prints nothing at all while it waits. The
+  # v0.2.1 deploy died at 4m24s with `client_loop: send disconnect: Broken pipe`,
+  # and the diagnose step reconnected to the same host 2 seconds later: the host
+  # was fine, the idle flow was not. A keepalive every 30 seconds keeps packets on
+  # it; CountMax 10 still gives up after five minutes, so a genuinely unreachable
+  # host is still a failed step rather than a hang.
+  SSH_OPTS: '-o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=10'
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -309,7 +320,7 @@ jobs:
       - name: Sync chart to the production host
         if: steps.deploy-target.outputs.configured == 'true'
         run: |
-          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" \
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
             ./k8s/ ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }}:~/k8s/
 
       # Reject a deploy that cannot possibly work in seconds, rather than
@@ -317,14 +328,14 @@ jobs:
       - name: Preflight the production Secrets
         if: steps.deploy-target.outputs.configured == 'true'
         run: |
-          ssh -o StrictHostKeyChecking=no \
+          ssh $SSH_OPTS \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
             "bash ~/k8s/bootstrap/provision-release.sh --check --env production"
 
       - name: Deploy production release
         if: steps.deploy-target.outputs.configured == 'true'
         run: |
-          ssh -o StrictHostKeyChecking=no \
+          ssh $SSH_OPTS \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
             "bash ~/k8s/helm/deploy-release.sh '${{ needs.setup.outputs.version }}'"
 
@@ -334,7 +345,7 @@ jobs:
       - name: Diagnose the failed release
         if: failure() && steps.deploy-target.outputs.configured == 'true'
         run: |
-          ssh -o StrictHostKeyChecking=no \
+          ssh $SSH_OPTS \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST }} \
             "bash -s" << 'EOF'
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
