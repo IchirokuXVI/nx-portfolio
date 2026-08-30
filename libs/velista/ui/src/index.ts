@@ -37,6 +37,7 @@ export * from './lib/install/install-benefits';
 export * from './lib/install/install-panel';
 export * from './lib/install/install-steps';
 export * from './lib/layout/app-layout';
+export * from './lib/list/audio-player';
 export * from './lib/list/comment-composer';
 export * from './lib/list/comment-row';
 export * from './lib/list/line-composer';

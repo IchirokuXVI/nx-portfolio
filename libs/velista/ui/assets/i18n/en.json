@@ -438,7 +438,21 @@
       "empty": "Nothing said about this yet",
       "someone": "Someone in the group",
       "loading": "Loading what people said",
-      "readOnly": "You can read what people said here, not add to it"
+      "readOnly": "You can read what people said here, not add to it",
+      "startRecording": "Say it instead of typing",
+      "stopRecording": "Stop recording",
+      "recordingPlaceholder": "Recording. Press stop when you are done",
+      "recording": "Recording, {{seconds}}s",
+      "recordingHeld": "A {{seconds}}s recording, ready to send",
+      "recordingEmpty": "That recording came out empty. Try again",
+      "recordingTooBig": "That recording is over the {{limit}} MB limit. It is still here, so you can record a shorter one",
+      "micRefused": "Velista could not use the microphone. Check the permission in your browser, or type it instead",
+      "sending": "Sending a recording",
+      "transcribing": "Writing this down",
+      "noTranscript": "A recording. It could not be written down",
+      "play": "Play this recording",
+      "pause": "Pause",
+      "playFailed": "That recording would not play"
     },
     "settings": {
       "title": "List settings",

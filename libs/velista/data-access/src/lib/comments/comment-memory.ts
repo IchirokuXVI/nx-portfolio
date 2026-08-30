@@ -19,6 +19,9 @@ export class CommentMemory implements CommentServiceI {
     new Map(Object.entries(SEED_COMMENTS))
   );
 
+  /** Blobs by comment id, so a recording left here can be played back. */
+  private readonly _audio = new Map<string, Blob>();
+
   private _nextWriteFails: GatewayError['code'] | null = null;
 
   /** Newest first, which is the order core returns and the order the sheet draws. */
@@ -50,24 +53,74 @@ export class CommentMemory implements CommentServiceI {
     }
 
     const comment: Comment = {
-      id:
-        typeof crypto?.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `cm-${Math.random().toString(36).slice(2, 10)}`,
+      id: newId(),
       lineId,
       authorUserId: SEED_USER_ID,
       body,
+      recording: null,
+      transcription: null,
       createdAt: new Date(),
     };
 
     this._byLine.update((current) =>
-      new Map(current).set(lineId, [
-        ...(current.get(lineId) ?? []),
-        comment,
-      ])
+      new Map(current).set(lineId, [...(current.get(lineId) ?? []), comment])
     );
 
     return comment;
+  }
+
+  /**
+   * A voice comment, in memory.
+   *
+   * It settles as `READY` with a fixed transcript rather than staying `PENDING`,
+   * because there is no provider here to fill one in later and a bubble that waits
+   * forever is a worse fixture than one that finished. Ask for a different outcome
+   * with {@link setComments} when the state under test is the untranscribed one.
+   *
+   * The recording is a real blob and its object URL is real, so a player driven
+   * against this memory plays silence rather than failing to load.
+   */
+  async addVoiceComment(
+    lineId: string,
+    recording: Blob,
+    durationSeconds: number
+  ): Promise<Comment> {
+    const code = this._nextWriteFails;
+    if (code !== null) {
+      this._nextWriteFails = null;
+      throw memoryFailure(code);
+    }
+
+    const id = newId();
+    this._audio.set(id, recording);
+
+    const comment: Comment = {
+      id,
+      lineId,
+      authorUserId: SEED_USER_ID,
+      body: 'A recording, transcribed by nothing in particular',
+      recording: {
+        contentType: recording.type || 'audio/webm',
+        byteLength: recording.size,
+        durationSeconds: durationSeconds > 0 ? durationSeconds : null,
+      },
+      transcription: 'READY',
+      createdAt: new Date(),
+    };
+
+    this._byLine.update((current) =>
+      new Map(current).set(lineId, [...(current.get(lineId) ?? []), comment])
+    );
+
+    return comment;
+  }
+
+  async commentAudioUrl(commentId: string): Promise<string> {
+    const blob = this._audio.get(commentId);
+    if (blob === undefined) {
+      throw memoryFailure('not_found');
+    }
+    return URL.createObjectURL(blob);
   }
 
   /** Test and development seam: replace one line's comments outright. */
@@ -90,7 +143,13 @@ function at(minutes: number): Date {
 
 const SEED_COMMENTS: Readonly<Record<string, readonly Comment[]>> = {
   'ln-w-01': [
-    comment('cm-01', 'ln-w-01', 'user-toni', 'The big one, not the small one', 0),
+    comment(
+      'cm-01',
+      'ln-w-01',
+      'user-toni',
+      'The big one, not the small one',
+      0
+    ),
     comment('cm-02', 'ln-w-01', SEED_USER_ID, 'Got it', 12),
     // The author has left the group, so no membership names them. The row falls back
     // to a neutral word rather than to this id, and never to "Unknown" (section 5.4).
@@ -108,13 +167,27 @@ function comment(
   body: string,
   minutes: number
 ): Comment {
-  return { id, lineId, authorUserId, body, createdAt: at(minutes) };
+  return {
+    id,
+    lineId,
+    authorUserId,
+    body,
+    recording: null,
+    transcription: null,
+    createdAt: at(minutes),
+  };
+}
+
+function newId(): string {
+  return typeof crypto?.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `cm-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function memoryFailure(code: GatewayError['code']): GatewayError {
   return new GatewayError({
     code,
-    status: code === 'forbidden' ? 403 : 400,
+    status: code === 'forbidden' ? 403 : code === 'not_found' ? 404 : 400,
     correlationId: `memory-${Math.random().toString(36).slice(2, 10)}`,
     detail: 'produced by CommentMemory, no request was sent',
   });

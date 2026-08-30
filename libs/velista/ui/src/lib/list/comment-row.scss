@@ -43,3 +43,11 @@
   // overflowing on a long word.
   overflow-wrap: anywhere;
 }
+
+// The neutral phrase that stands in for a body: a transcript that has not landed
+// yet, one that never will, or a recording still on its way up. Set apart from a
+// real comment because it is the app talking rather than a person.
+.body.waiting {
+  color: var(--app-text-muted);
+  font-style: italic;
+}

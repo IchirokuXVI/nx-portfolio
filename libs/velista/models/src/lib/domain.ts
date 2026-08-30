@@ -1,4 +1,5 @@
 import type {
+  CommentTranscription,
   LineApprovalStatus,
   LineStatus,
   ListPermission,
@@ -200,12 +201,38 @@ export interface Line {
   readonly version: number;
 }
 
+/** What a comment's recording weighs and how long it runs. */
+export interface CommentRecording {
+  readonly contentType: string;
+  readonly byteLength: number;
+  /**
+   * How long it runs, or null when the server has no figure.
+   *
+   * It comes from the comment rather than from the file, which is what lets a row
+   * be drawn correctly before anything is downloaded (plan 0039, section 4).
+   */
+  readonly durationSeconds: number | null;
+}
+
 /** A comment on a line. The only view the API gives a timestamp. */
 export interface Comment {
   readonly id: string;
   readonly lineId: string;
   readonly authorUserId: string;
+  /**
+   * What was said.
+   *
+   * For a voice comment this is the transcript, which is the whole of plan 0039
+   * section 3: a voice comment lands in the thread as text, in the same bubble,
+   * read by the same row component, and it carries a recording that can be
+   * played. **It can be empty**, and the row draws a neutral phrase rather than
+   * an empty bubble when it is.
+   */
   readonly body: string;
+  /** The recording, when this comment is one. Null for a typed comment. */
+  readonly recording: CommentRecording | null;
+  /** Null for a typed comment, which has no transcript to wait for. */
+  readonly transcription: CommentTranscription | null;
   readonly createdAt: Date;
 }
 
