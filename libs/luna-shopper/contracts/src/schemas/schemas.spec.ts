@@ -3,10 +3,19 @@ import { RealtimeEvent } from '../lib/events/realtime.events';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
   ITEM_PATTERNS,
+  PRICE_SCOPE_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
+  SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
 } from '../lib/messages/catalog.messages';
+import {
+  DISCOVERED_PLACE_PATTERNS,
+  HARVEST_PATTERNS,
+  ITEM_SOURCE_REF_PATTERNS,
+  SOURCE_ENTRY_PATTERNS,
+  SUPERMARKET_SOURCE_PATTERNS,
+} from '../lib/messages/harvest.messages';
 import {
   COMMENT_PATTERNS,
   LINE_PATTERNS,
@@ -52,6 +61,13 @@ describe('contract schemas', () => {
       ...Object.values(SUPERMARKET_LOCATION_PATTERNS),
       ...Object.values(ITEM_PATTERNS),
       ...Object.values(SUPERMARKET_ITEM_PATTERNS),
+      ...Object.values(SUPERMARKET_LOCATION_ITEM_PATTERNS),
+      ...Object.values(PRICE_SCOPE_PATTERNS),
+      ...Object.values(HARVEST_PATTERNS),
+      ...Object.values(DISCOVERED_PLACE_PATTERNS),
+      ...Object.values(ITEM_SOURCE_REF_PATTERNS),
+      ...Object.values(SOURCE_ENTRY_PATTERNS),
+      ...Object.values(SUPERMARKET_SOURCE_PATTERNS),
       ...Object.values(STATS_PATTERNS),
     ];
 
@@ -334,11 +350,92 @@ describe('contract schemas', () => {
               brand: null,
               imageUrl: null,
               sku: null,
+              ean: null,
+              unitSize: null,
               category: 'DAIRY',
               defaultUnit: 'LITER',
             },
           ],
           nextCursor: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('harvest.spawn request + harvest.run.get response (plan 0038)', () => {
+      expect(
+        validateMessageRequest('harvest.spawn', {
+          userId: 'owner',
+          mode: 'STORE_DISCOVERY',
+          postalCode: '14013',
+          country: 'ES',
+          radiusMetres: 3000,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('harvest.run.get', {
+          id: 'r',
+          // Null because a store discovery run belongs to a postal code and a
+          // radius, not to one chain (plan 0038, section 4.2).
+          supermarketId: null,
+          sourceId: null,
+          mode: 'STORE_DISCOVERY',
+          trigger: 'MANUAL',
+          status: 'RUNNING',
+          requestedAt: '2026-08-30T10:00:00.000Z',
+          startedAt: '2026-08-30T10:00:01.000Z',
+          finishedAt: null,
+          heartbeatAt: '2026-08-30T10:00:11.000Z',
+          totalPlanned: 26,
+          processed: 12,
+          created: 12,
+          updated: 0,
+          unchanged: 0,
+          notFound: 0,
+          failed: 0,
+          stage: 'OVERPASS',
+          stageLabel: 'Querying OpenStreetMap',
+          abortRequestedAt: null,
+          error: null,
+          correlationId: 'c',
+          requestedByUserId: 'owner',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('supermarketItem.upsertBatch reports what it refused to overwrite (plan 0038, section 6.5)', () => {
+      expect(
+        validateMessageRequest('supermarketItem.upsertBatch', {
+          userId: 'owner',
+          priceScopeId: 'scope-1',
+          priceSourceKind: 'OFFICIAL_API',
+          entries: [
+            {
+              itemId: 'i',
+              price: 1.8,
+              currency: 'EUR',
+              unitPrice: 4.5,
+              // The source's own label, verbatim. It reads "100 ml" on a per
+              // litre number, which is why it is text and not a unit.
+              unitPriceLabel: '100 ml',
+              available: true,
+              priceObservedAt: '2026-08-30T10:00:00.000Z',
+            },
+          ],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('supermarketItem.upsertBatch', {
+          created: 0,
+          updated: 0,
+          unchanged: 0,
+          skipped: [
+            {
+              itemId: 'i',
+              storedPrice: 1.75,
+              storedSourceKind: 'ADMIN',
+              fetchedPrice: 1.8,
+            },
+          ],
         }).valid
       ).toBe(true);
     });

@@ -1,0 +1,33 @@
+{
+  "id": "45011",
+  "ean": "8480000320117",
+  "slug": "film-transparente-bosque-verde",
+  "brand": "Bosque Verde",
+  "packaging": "Rollo",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/45011/film-transparente-bosque-verde",
+  "display_name": "Film transparente Bosque Verde",
+  "price_instructions": {
+    "iva": 21,
+    "is_pack": false,
+    "size_format": "m",
+    "total_units": null,
+    "unit_price": "1.30",
+    "bulk_price": "0.04",
+    "unit_size": 30.0,
+    "reference_format": "m",
+    "price_decreased": false,
+    "previous_unit_price": null
+  },
+  "categories": [
+    {
+      "id": 200,
+      "name": "Limpieza y hogar",
+      "level": 0,
+      "order": 20,
+      "categories": [
+        { "id": 213, "name": "Papel de cocina y film", "level": 1, "order": 5 }
+      ]
+    }
+  ]
+}

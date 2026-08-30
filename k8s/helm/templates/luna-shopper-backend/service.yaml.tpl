@@ -1,6 +1,8 @@
 {{- if .Values.lunaShopperBackend.enabled }}
 {{- $root := . }}
-{{- range .Values.lunaShopperBackend.services }}
+{{- $ls := .Values.lunaShopperBackend }}
+{{- range $ls.services }}
+{{- if not (include "lunaShopperBackend.entryEnabled" (dict "entry" . "ls" $ls)) }}{{- continue }}{{- end }}
 ---
 apiVersion: v1
 kind: Service

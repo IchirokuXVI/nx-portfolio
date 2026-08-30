@@ -1,0 +1,31 @@
+{
+  "id": "99120",
+  "ean": null,
+  "slug": "bolsa-reutilizable-mercadona",
+  "brand": "",
+  "packaging": "Unidad",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/99120/bolsa-reutilizable-mercadona",
+  "display_name": "Bolsa reutilizable",
+  "price_instructions": {
+    "iva": 21,
+    "is_pack": false,
+    "size_format": "ud",
+    "total_units": null,
+    "unit_price": "0.15",
+    "bulk_price": "0.15",
+    "unit_size": 1.0,
+    "reference_format": "ud",
+    "price_decreased": false,
+    "previous_unit_price": null
+  },
+  "categories": [
+    {
+      "id": 200,
+      "name": "Limpieza y hogar",
+      "level": 0,
+      "order": 20,
+      "categories": [{ "id": 214, "name": "Bolsas", "level": 1, "order": 6 }]
+    }
+  ]
+}

@@ -42,6 +42,7 @@ export class SupermarketService {
         name: req.name,
         logoUrl: req.logoUrl ?? null,
         websiteUrl: req.websiteUrl ?? null,
+        externalBrandKey: req.externalBrandKey ?? null,
       })
     );
     return toSupermarketView(saved);
@@ -58,6 +59,12 @@ export class SupermarketService {
     }
     if (req.websiteUrl !== undefined) {
       row.websiteUrl = req.websiteUrl;
+    }
+    // Owner editable on purpose (plan 0038, section 5.4): the QID splits
+    // `Carrefour` from `Carrefour Express`, which may or may not be what the
+    // owner wants, so discovery's guess is a default rather than an oracle.
+    if (req.externalBrandKey !== undefined) {
+      row.externalBrandKey = req.externalBrandKey;
     }
     return toSupermarketView(await this.supermarkets.save(row));
   }

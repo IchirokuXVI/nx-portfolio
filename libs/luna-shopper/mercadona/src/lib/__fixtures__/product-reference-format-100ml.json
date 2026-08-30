@@ -1,0 +1,32 @@
+{
+  "id": "69028",
+  "ean": "8480000512048",
+  "slug": "nata-para-cocinar-hacendado-brik",
+  "brand": "Hacendado",
+  "packaging": "Brik",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/69028/nata-para-cocinar-hacendado-brik",
+  "display_name": "Nata para cocinar Hacendado",
+  "price_instructions": {
+    "iva": 10,
+    "is_pack": false,
+    "size_format": "l",
+    "total_units": null,
+    "unit_price": "1.80",
+    "bulk_price": "4.50",
+    "unit_size": 0.4,
+    "reference_price": "4.50",
+    "reference_format": "100 ml",
+    "price_decreased": false,
+    "previous_unit_price": null
+  },
+  "categories": [
+    {
+      "id": 78,
+      "name": "Huevos, leche y mantequilla",
+      "level": 0,
+      "order": 3,
+      "categories": [{ "id": 81, "name": "Nata", "level": 1, "order": 4 }]
+    }
+  ]
+}

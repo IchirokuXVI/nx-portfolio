@@ -665,12 +665,32 @@ jobs:
               --values $HOME/k8s/helm/values.staging.yaml \
               --atomic --timeout 10m
 
+            # An affected app whose image CI built is not necessarily deployed in
+            # this cluster. The harvester (plan 0038) is the first of those: the
+            # chart describes it, `harvester.enabled` is false in both clusters,
+            # and CI still builds its image because it is an affected project.
+            # Restarting a Deployment that was never rendered fails the step and
+            # takes an otherwise good deploy down with it.
+            #
+            # So the list is narrowed to what actually exists, and what was
+            # dropped is PRINTED rather than silently skipped: a deployment
+            # missing because it is switched off and one missing because the chart
+            # is broken look identical here, and only the log can tell them apart.
+            DEPLOYED=""
+            for dep in $AFFECTED; do
+              if kubectl get "deployment/$dep" -n nx-portfolio >/dev/null 2>&1; then
+                DEPLOYED="$DEPLOYED $dep"
+              else
+                echo "Skipping deployment/$dep: not present in this cluster (is it disabled in values?)"
+              fi
+            done
+
             # The staging tag is mutable, so a plain upgrade will not restart the
             # pods; roll the affected ones so they re-pull the new image.
             #
             # Two loops, not one: all restarts are requested before any is
             # awaited, so the rollouts overlap instead of serialising.
-            for dep in $AFFECTED; do
+            for dep in $DEPLOYED; do
               echo "Restarting deployment/$dep ..."
               kubectl rollout restart "deployment/$dep" -n nx-portfolio
             done
@@ -681,7 +701,7 @@ jobs:
             # --wait cannot cover, because the restarts happen after Helm has
             # finished. `rollout status` exits non zero on timeout, which fails
             # the step, which is the entire point.
-            for dep in $AFFECTED; do
+            for dep in $DEPLOYED; do
               kubectl rollout status "deployment/$dep" -n nx-portfolio --timeout=5m
             done
 

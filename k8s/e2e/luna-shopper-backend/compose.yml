@@ -14,11 +14,16 @@
 #      apps/luna-shopper-backend/.env.luna-shopper-backend   # then fill in the keypair
 #   npx nx serve luna-shopper-backend-auth      # and gateway / core / realtime
 #
-# There are two separate Postgres instances on purpose: auth and core each own a
-# private database and never share one, so the "no shared database" rule holds
-# even locally. Redis is here as of plan 0028, and it is the cache, the presence
-# store and the socket backplane; the services are only correct at more than one
-# replica because it exists.
+# There are separate Postgres instances on purpose: auth, core, catalog and (as of
+# plan 0038) the harvester each own a private database and never share one, so the
+# "no shared database" rule holds even locally. Redis is here as of plan 0028, and
+# it is the cache, the presence store and the socket backplane; the services are
+# only correct at more than one replica because it exists.
+#
+# The harvester's database is on by default HERE and its service is switched off in
+# both clusters. That asymmetry is deliberate: a catalog discovery run is 4,383
+# requests over tens of minutes plus a third Postgres, which a developer machine
+# has room for and a small VPS does not.
 
 # The project name (container/network/volume namespace) is overridable so that
 # several git worktrees can each run a fully isolated copy of this stack at the
@@ -83,6 +88,31 @@ services:
       timeout: 5s
       retries: 10
 
+  # Harvester service database (plan 0038, section 4.1). The third instance, and
+  # a separate one for the same reason as the others: the harvester owns its own
+  # schema and holds every cross service id as an opaque uuid, so it never joins
+  # against catalog and must never share a database with it.
+  #
+  # Unlike the cluster, this one is on by default here. That is the whole point of
+  # the arrangement: the harvester runs LOCALLY, where a discovery run has the
+  # memory and the minutes to spare, and stays switched off on both VPSs.
+  harvester-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_harvester
+      POSTGRES_PASSWORD: luna_harvester
+      POSTGRES_DB: luna_harvester
+    ports:
+      - '${LUNA_HARVESTER_DB_PORT:-5435}:5432'
+    volumes:
+      - harvester-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_harvester']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # --- Opt-in test databases (plan 0013, section 3.1) -----------------------
   # A dedicated database per service so a test run never touches the developer's
   # own dev data. They are gated behind the `test` profile, so a plain `up` never
@@ -140,6 +170,24 @@ services:
       - catalog-db-test-data:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U luna_catalog']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  harvester-db-test:
+    image: postgres:16-alpine
+    profiles: ['test']
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luna_harvester
+      POSTGRES_PASSWORD: luna_harvester
+      POSTGRES_DB: luna_harvester_test
+    ports:
+      - '${LUNA_HARVESTER_DB_TEST_PORT:-5445}:5432'
+    volumes:
+      - harvester-db-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luna_harvester']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -316,9 +364,11 @@ volumes:
   auth-db-data:
   core-db-data:
   catalog-db-data:
+  harvester-db-data:
   auth-db-test-data:
   core-db-test-data:
   catalog-db-test-data:
+  harvester-db-test-data:
   nats-data:
   prometheus-data:
   grafana-data:

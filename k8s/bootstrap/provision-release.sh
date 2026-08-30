@@ -81,6 +81,13 @@ APP_SECRET=luna-shopper-backend-secrets
 AUTH_DB_SECRET=luna-shopper-backend-auth-db-secret
 CORE_DB_SECRET=luna-shopper-backend-core-db-secret
 CATALOG_DB_SECRET=luna-shopper-backend-catalog-db-secret
+# The harvester's database (plan 0038). Provisioned unconditionally even though
+# `harvester.enabled` is false in both clusters: a Secret that exists and is
+# unused costs nothing, and the alternative is that turning the harvester on is
+# two operations with a CreateContainerConfigError in between. --check only
+# asserts the keys the RENDERED chart references, so this stays quiet until the
+# harvester is actually deployed.
+HARVESTER_DB_SECRET=luna-shopper-backend-harvester-db-secret
 BACKUP_SECRET=luna-shopper-backend-backup-secret
 
 # ---------------------------------------------------------------------------
@@ -431,6 +438,7 @@ echo "Resolving credentials (existing values are kept; --rotate to regenerate)..
 AUTH_DB_PASSWORD="$(keep_or_generate "$AUTH_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
 CORE_DB_PASSWORD="$(keep_or_generate "$CORE_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
 CATALOG_DB_PASSWORD="$(keep_or_generate "$CATALOG_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
+HARVESTER_DB_PASSWORD="$(keep_or_generate "$HARVESTER_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
 
 # The JWT keypair. Losing it does not lose data, but every issued access and
 # refresh token becomes unverifiable at once, which logs out every user
@@ -480,6 +488,7 @@ fi
 AUTH_DB_URL="postgres://luna_auth:${AUTH_DB_PASSWORD}@luna-shopper-backend-auth-db:5432/luna_auth"
 CORE_DB_URL="postgres://luna_core:${CORE_DB_PASSWORD}@luna-shopper-backend-core-db:5432/luna_core"
 CATALOG_DB_URL="postgres://luna_catalog:${CATALOG_DB_PASSWORD}@luna-shopper-backend-catalog-db:5432/luna_catalog"
+HARVESTER_DB_URL="postgres://luna_harvester:${HARVESTER_DB_PASSWORD}@luna-shopper-backend-harvester-db:5432/luna_harvester"
 
 apply_secret() {
   # `create --dry-run=client -o yaml | apply -f -` is the idempotent form:
@@ -495,11 +504,13 @@ echo "Applying Secrets..."
 apply_secret "$AUTH_DB_SECRET"    --from-literal=POSTGRES_PASSWORD="$AUTH_DB_PASSWORD"
 apply_secret "$CORE_DB_SECRET"    --from-literal=POSTGRES_PASSWORD="$CORE_DB_PASSWORD"
 apply_secret "$CATALOG_DB_SECRET" --from-literal=POSTGRES_PASSWORD="$CATALOG_DB_PASSWORD"
+apply_secret "$HARVESTER_DB_SECRET" --from-literal=POSTGRES_PASSWORD="$HARVESTER_DB_PASSWORD"
 
 apply_secret "$APP_SECRET" \
   --from-literal=AUTH_DB_URL="$AUTH_DB_URL" \
   --from-literal=CORE_DB_URL="$CORE_DB_URL" \
   --from-literal=CATALOG_DB_URL="$CATALOG_DB_URL" \
+  --from-literal=HARVESTER_DB_URL="$HARVESTER_DB_URL" \
   --from-literal=AUTH_JWT_PRIVATE_KEY="$JWT_PRIVATE_KEY" \
   --from-literal=AUTH_JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
   --from-literal=GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
@@ -547,6 +558,7 @@ namespace: ${NAMESPACE}
 ${AUTH_DB_SECRET}/POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
 ${CORE_DB_SECRET}/POSTGRES_PASSWORD: ${CORE_DB_PASSWORD}
 ${CATALOG_DB_SECRET}/POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD}
+${HARVESTER_DB_SECRET}/POSTGRES_PASSWORD: ${HARVESTER_DB_PASSWORD}
 
 ${APP_SECRET}/AUTH_DB_URL: ${AUTH_DB_URL}
 ${APP_SECRET}/CORE_DB_URL: ${CORE_DB_URL}

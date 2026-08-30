@@ -20,6 +20,7 @@ import { Logger } from 'nestjs-pino';
 import { GatewayAccountModule } from './account/account.module';
 import { GatewayAuthModule } from './auth/auth.module';
 import { GatewayCatalogModule } from './catalog/catalog.module';
+import { GatewayHarvestModule } from './harvest/harvest.module';
 import type { GatewayConfig } from './config/app-config';
 import {
   gatewayConfiguration,
@@ -103,8 +104,12 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayMergeModule,
     // Account deletion endpoint (plan 0011).
     GatewayAccountModule,
-    // Catalog endpoints — items, supermarkets, per location prices (plan 0012).
+    // Catalog endpoints — items, supermarkets, per scope prices (plan 0012, and
+    // plan 0038 for the scopes).
     GatewayCatalogModule,
+    // The harvester's admin surface (plan 0038). Every route is platform admin
+    // gated inside the harvester service; nothing here is open to users.
+    GatewayHarvestModule,
     // Public platform totals (plan 0017).
     GatewayStatsModule,
   ],

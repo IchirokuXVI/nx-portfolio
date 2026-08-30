@@ -1,0 +1,35 @@
+{
+  "id": "34215",
+  "ean": "8480000181077",
+  "slug": "cafe-espresso-capsulas-hacendado",
+  "brand": "Hacendado",
+  "packaging": "Caja",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/34215/cafe-espresso-capsulas-hacendado",
+  "display_name": "Café espresso en cápsulas Hacendado",
+  "price_instructions": {
+    "iva": 10,
+    "is_pack": true,
+    "pack_size": 20,
+    "size_format": "ud",
+    "total_units": 20,
+    "unit_price": "2.60",
+    "bulk_price": "0.13",
+    "unit_size": 0.11,
+    "reference_price": "0.13",
+    "reference_format": "ud",
+    "price_decreased": false,
+    "previous_unit_price": null
+  },
+  "categories": [
+    {
+      "id": 156,
+      "name": "Cacao, café e infusiones",
+      "level": 0,
+      "order": 8,
+      "categories": [
+        { "id": 158, "name": "Café cápsula y monodosis", "level": 1, "order": 2 }
+      ]
+    }
+  ]
+}
