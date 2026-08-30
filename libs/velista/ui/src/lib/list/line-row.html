@@ -46,7 +46,22 @@
         <span aria-hidden="true">&#9650;</span>
       </button>
 
-      <lib-grip-icon class="grip" />
+      <!--
+        The grip proper, and what a pointer takes hold of.
+
+        `touch-action: none` is what makes the drag reach the list at all: without it
+        the browser reads the downward movement as a scroll of the page, which is why
+        the grip answered the arrows and nothing else. Still `aria-hidden` and still
+        unfocusable, because the two buttons around it are the accessible way to do
+        the same thing and they are already labelled and announced.
+      -->
+      <span
+        (pointerdown)="startDrag($event)"
+        aria-hidden="true"
+        class="grip-handle"
+      >
+        <lib-grip-icon class="grip" />
+      </span>
 
       <button
         (click)="move('moveDown')"

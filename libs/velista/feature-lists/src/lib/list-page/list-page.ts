@@ -693,6 +693,31 @@ export class ListPage {
    * client already holds every line.
    */
   private async _move(lineId: string, by: number): Promise<void> {
+    await this._reorder(lineId, (from) => from + by);
+  }
+
+  /**
+   * A drag on the grip that ended somewhere else.
+   *
+   * The finished index and not each row it passed over, because `line.reorder` takes
+   * the whole order: a drag across four rows is one request rather than four, and the
+   * orders it passed through on the way were never anything anybody asked for.
+   */
+  async moveTo(move: { lineId: string; to: number }): Promise<void> {
+    await this._reorder(move.lineId, () => move.to);
+  }
+
+  /**
+   * Both ways of moving a line, which differ only in how the destination is worked out.
+   *
+   * Sharing this is the point: the keyboard path and the drag path have to produce the
+   * same request and the same sentence, and a second copy of the splice is a second
+   * place for the announcement to go stale.
+   */
+  private async _reorder(
+    lineId: string,
+    destination: (from: number) => number
+  ): Promise<void> {
     const current = this.loaded();
     if (current === null) {
       return;
@@ -700,8 +725,12 @@ export class ListPage {
 
     const ids = current.lines.map((line) => line.id);
     const from = ids.indexOf(lineId);
-    const to = from + by;
-    if (from < 0 || to < 0 || to >= ids.length) {
+    if (from < 0) {
+      return;
+    }
+
+    const to = destination(from);
+    if (to < 0 || to >= ids.length || to === from) {
       return;
     }
 
