@@ -68,6 +68,22 @@ export const COMMENT_BODY_MAX_LENGTH = 2000;
 export const VOICE_COMMENT_MAX_SECONDS = 60;
 
 /**
+ * How long the list composer will listen before it stops itself (plan 0038).
+ *
+ * Much shorter than anything else that records here, because this is one
+ * sentence about a shopping list rather than a message: "half a dozen eggs and
+ * some bread" is five seconds, and thirty is generous for somebody who paused to
+ * look in the fridge.
+ *
+ * The short cap is also what keeps every recording comfortably inside the
+ * service's byte limit without the client having to think about bytes at all.
+ * The silence detector normally ends a recording long before this; the cap is
+ * there because a microphone left open in a kitchen is a bill and a privacy
+ * problem.
+ */
+export const LINE_VOICE_MAX_SECONDS = 30;
+
+/**
  * When a voice comment starts saying how long is left (plan 0041, section 6.2).
  *
  * Fifteen seconds of notice, which is the same proportion the assistant gives at

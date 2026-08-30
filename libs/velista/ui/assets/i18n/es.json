@@ -370,7 +370,17 @@
       "action": "Añadir",
       "quantity": "Cuántos",
       "more": "Uno más",
-      "fewer": "Uno menos"
+      "fewer": "Uno menos",
+      "startListening": "Di lo que necesitas",
+      "stopListening": "Dejar de escuchar",
+      "listening": "Escuchando",
+      "heard": "He oído",
+      "micRefused": "Velista no puede oírte. El micrófono está desactivado para esta aplicación, así que actívalo en el navegador, o escríbelo",
+      "micMissing": "Este dispositivo no tiene micrófono, así que escríbelo",
+      "notHeard": "No te he entendido",
+      "voiceFailed": "Eso no se ha enviado. No se ha añadido nada, así que inténtalo otra vez o escríbelo",
+      "voiceBusy": "Mucha gente está preguntando a la vez. Inténtalo dentro de {{count}} segundos",
+      "dismissHeard": "Cerrar"
     },
     "empty": {
       "title": "Todavía no hay nada en esta lista",

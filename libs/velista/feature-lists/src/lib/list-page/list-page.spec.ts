@@ -7,6 +7,8 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ASSISTANT_SERVICE,
+  AssistantMemory,
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
@@ -206,6 +208,11 @@ async function render(options: Options = {}): Promise<{
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       { provide: ActivatedRoute, useValue: route(options.line) },
+      // The composer's microphone posts through this (plan 0038). Every test in
+      // this file is about the typed path, so it is the in-memory service rather
+      // than a stub: a real implementation that never gets called is cheaper to
+      // keep true than a hand written one that drifts.
+      { provide: ASSISTANT_SERVICE, useClass: AssistantMemory },
     ],
   }).compileComponents();
 

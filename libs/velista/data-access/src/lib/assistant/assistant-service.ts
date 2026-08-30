@@ -59,6 +59,31 @@ export interface AssistantServiceI {
     transcript: readonly AssistantTurn[],
     recording: Blob
   ): Promise<AssistantReply>;
+
+  /**
+   * A spoken turn that may only touch one list (velista `0038`, backend `0044`).
+   *
+   * The same route and the same reply as {@link askAloud}, with the zone and list
+   * the page is showing stated on the request. Two things follow, and both are
+   * the point of doing it this way:
+   *
+   * - **The turn never has to resolve a list**, so it never answers with a
+   *   question about which one. On a screen showing one list, that question is
+   *   the assistant failing to understand where it is.
+   * - **The turn cannot touch anything else.** Not another list, not the account,
+   *   not the username. That is enforced by the tool catalog the server assembles
+   *   for a scoped turn, which is the only place it can be enforced. This side's
+   *   job is to state the scope truthfully.
+   *
+   * There is no transcript argument. This is not a conversation: the page shows
+   * what was heard and what was done, and somebody who wants to talk has the
+   * assistant panel.
+   */
+  askAboutList(
+    zoneId: string,
+    listId: string,
+    recording: Blob
+  ): Promise<AssistantReply>;
 }
 
 /**

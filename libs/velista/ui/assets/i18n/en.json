@@ -370,7 +370,17 @@
       "action": "Add",
       "quantity": "How many",
       "more": "One more",
-      "fewer": "One fewer"
+      "fewer": "One fewer",
+      "startListening": "Say what you need",
+      "stopListening": "Stop listening",
+      "listening": "Listening",
+      "heard": "I heard",
+      "micRefused": "Velista cannot hear you. The microphone is switched off for this app, so turn it back on in your browser, or type it instead",
+      "micMissing": "There is no microphone on this device, so type it instead",
+      "notHeard": "I did not catch that",
+      "voiceFailed": "That did not send. Nothing was added, so try again or type it",
+      "voiceBusy": "A lot of people are asking at once. Try again in {{count}} seconds",
+      "dismissHeard": "Close"
     },
     "empty": {
       "title": "Nothing on this list yet",

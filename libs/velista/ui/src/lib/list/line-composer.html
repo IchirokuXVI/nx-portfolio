@@ -1,42 +1,87 @@
 <!--
+  While it listens, the whole row is replaced (plan 0038, section 4.1): the stop
+  square, and a level meter that moves with the voice.
+
+  The meter is not decoration. The single most common failure of a voice control
+  is that the microphone was not picking anything up, and a still meter says that
+  before the transcript does. There is no clock and no waveform: the assistant
+  panel's clock earns its place at five minutes, and a thirty second cap does not.
+-->
+@if (listening()) {
+  <div class="listening">
+    <button
+      (click)="stop()"
+      [attr.aria-label]="'list.add.stopListening' | rokuT"
+      class="stop"
+      type="button"
+    >
+      <lib-stop-icon class="send-glyph" />
+    </button>
+
+    <div aria-hidden="true" class="meter">
+      <div [style.inline-size.%]="levelPercent()" class="meter-fill"></div>
+    </div>
+
+    <p class="hint">{{ 'list.add.listening' | rokuT }}</p>
+  </div>
+} @else {
+  <!--
   A form, so Enter on the field submits without a keydown handler and the phone's
   keyboard offers a Go key rather than a newline.
 -->
-<form (submit)="onSubmit($event)" class="composer">
-  <div class="field-wrap">
-    <input
-      (input)="onInput($event)"
-      [attr.aria-label]="'list.add.placeholder' | rokuT"
-      [attr.maxlength]="maxLength"
-      [placeholder]="'list.add.placeholder' | rokuT"
-      [value]="content()"
-      #field
-      autocomplete="off"
-      class="field"
-      enterkeyhint="send"
-      name="content"
-      type="text"
-    />
+  <form (submit)="onSubmit($event)" class="composer">
+    <div class="field-wrap">
+      <input
+        (input)="onInput($event)"
+        [attr.aria-label]="'list.add.placeholder' | rokuT"
+        [attr.maxlength]="maxLength"
+        [placeholder]="'list.add.placeholder' | rokuT"
+        [value]="content()"
+        #field
+        autocomplete="off"
+        class="field"
+        enterkeyhint="send"
+        name="content"
+        type="text"
+      />
 
-    <!--
+      <!--
       Only past 350. A live region so the number is announced as it approaches, and
       `polite` so it never interrupts the character being typed.
     -->
-    @if (showCounter()) {
-      <span aria-live="polite" class="counter">
-        {{ content().length }}/{{ maxLength }}
-      </span>
-    }
-  </div>
+      @if (showCounter()) {
+        <span aria-live="polite" class="counter">
+          {{ content().length }}/{{ maxLength }}
+        </span>
+      }
+    </div>
 
-  <lib-quantity-stepper [(value)]="quantity" [disabled]="busy()" />
+    <lib-quantity-stepper [(value)]="quantity" [disabled]="busy()" />
 
-  <button
-    [attr.aria-label]="'list.add.action' | rokuT"
-    [disabled]="!canSubmit() || busy()"
-    class="send"
-    type="submit"
-  >
-    <lib-plus-icon class="send-glyph" />
-  </button>
-</form>
+    <!--
+    One slot, two jobs, and the empty field decides (plan 0038, section 2). A
+    plus when there is something typed, a microphone when there is not.
+
+    **The field's emptiness is the switch**, not a mode somebody selects. Two
+    buttons side by side, one of them always inert, is a row of controls that has
+    to be read before either can be used, and this row already carries a stepper.
+
+    It also keeps the property the composer exists for: adding happens in runs.
+    Somebody typing never sees the microphone and somebody speaking never has the
+    keyboard open, so neither mode interrupts the other.
+  -->
+    <button
+      (click)="press()"
+      [attr.aria-label]="buttonLabel() | rokuT"
+      [disabled]="busy() || (button() === 'add' && !canSubmit())"
+      [type]="button() === 'add' ? 'submit' : 'button'"
+      class="send"
+    >
+      @if (button() === 'add') {
+        <lib-plus-icon class="send-glyph" />
+      } @else {
+        <lib-mic-icon class="send-glyph" />
+      }
+    </button>
+  </form>
+}

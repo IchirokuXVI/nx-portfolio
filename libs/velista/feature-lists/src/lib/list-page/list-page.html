@@ -140,7 +140,46 @@
 -->
 @if (loaded(); as page) {
   @if (page.abilities.canWrite && !reordering()) {
+    <!--
+      What was heard and what was done, above the composer (plan 0038, section 5).
+
+      Mishearing is the characteristic failure of a voice interface, and an action
+      you cannot see is an action you cannot check. It is `polite`, it is
+      dismissible, and the next recording **replaces** it rather than adding to
+      it: this is not a chat. Somebody who wants a conversation has the assistant
+      panel, and this page has a list.
+    -->
+    @if (voiceStrip(); as strip) {
+      <div aria-live="polite" class="voice-strip">
+        <div class="voice-said">
+          @if (strip.heard) {
+            <p class="voice-heard">
+              {{ 'list.add.heard' | rokuT }}: “{{ strip.heard }}”
+            </p>
+          }
+          @if (strip.messageKey) {
+            <p class="voice-reply">
+              {{ strip.messageKey | rokuT: strip.messageArgs ?? {} }}
+            </p>
+          } @else if (strip.reply) {
+            <p class="voice-reply">{{ strip.reply }}</p>
+          }
+        </div>
+
+        <button
+          (click)="dismissVoice()"
+          [attr.aria-label]="'list.add.dismissHeard' | rokuT"
+          class="voice-dismiss"
+          type="button"
+        >
+          <lib-close-icon class="voice-dismiss-glyph" />
+        </button>
+      </div>
+    }
+
     <lib-line-composer
+      (recordingFailed)="onRecordingFailed()"
+      (spoke)="addAloud($event)"
       (submitted)="add($event)"
       [busy]="composerBusy()"
       [takeFocus]="page.empty"
