@@ -41,6 +41,20 @@ export const ERROR_CODES = {
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
 /**
+ * 426 Upgrade Required, named here because Nest does not name it.
+ *
+ * `HttpStatus` stops at 424 Failed Dependency and resumes at 428 Precondition
+ * Required, so the enum has no member for 426 to import. Reaching for one is
+ * worse than a missing constant: it fails the type check, and wherever the type
+ * check is skipped it reads as `undefined` at runtime, which would leave a
+ * refused client with whatever status the response layer makes of nothing.
+ *
+ * The cast keeps the map below typed as statuses rather than widening it to
+ * `number`, which is the property that stops an unrelated integer landing there.
+ */
+const UPGRADE_REQUIRED = 426 as HttpStatus;
+
+/**
  * The single source of truth mapping each code to its HTTP status. The gateway
  * uses it to translate a broker error into a response status; the exception
  * filter uses it for locally thrown domain exceptions.
@@ -60,6 +74,6 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 426 rather than 400 or 403. The request may have been valid and the caller may
   // be perfectly authorised; what is wrong is the software that sent it, and
   // "Upgrade Required" is the one status that says exactly that.
-  [ERROR_CODES.CLIENT_TOO_OLD]: HttpStatus.UPGRADE_REQUIRED,
+  [ERROR_CODES.CLIENT_TOO_OLD]: UPGRADE_REQUIRED,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };
