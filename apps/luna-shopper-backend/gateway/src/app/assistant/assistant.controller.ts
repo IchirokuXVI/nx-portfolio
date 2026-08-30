@@ -89,6 +89,9 @@ export class AssistantController {
       authorization,
       transcript: dto.transcript,
       message: dto.message,
+      // Forwarded as it arrived. The scope is a claim the service verifies by
+      // reading the list with this same token (plan 0044, section 3).
+      scope: dto.scope,
     });
   }
 
@@ -130,6 +133,18 @@ export class AssistantController {
             'The conversation so far, oldest first, as a JSON array of {role, content}.',
           example: '[{"role":"USER","content":"add milk to the weekly shop"}]',
         },
+        zoneId: {
+          type: 'string',
+          format: 'uuid',
+          description:
+            'Narrow this turn to one list: the zone it is in. Send it with listId or not at all.',
+        },
+        listId: {
+          type: 'string',
+          format: 'uuid',
+          description:
+            'Narrow this turn to one list: the list itself. Send it with zoneId or not at all.',
+        },
       },
     },
   })
@@ -160,6 +175,13 @@ export class AssistantController {
       // the whitelist, and a gateway that second guessed the container would be a
       // second place to edit when a browser changes its mind.
       mimeType: audio.mimetype,
+      // Two flat form fields become the one object the contract carries. Both or
+      // neither: half a scope is ambiguous rather than narrow, and the service
+      // would have to decide what it meant (plan 0044).
+      scope:
+        dto.zoneId !== undefined && dto.listId !== undefined
+          ? { zoneId: dto.zoneId, listId: dto.listId }
+          : undefined,
     });
   }
 }

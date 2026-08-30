@@ -26,6 +26,7 @@ export const ASSISTANT_SCHEMA_IDS = {
   turnRequest: schemaId('msg/assistant/turnRequest'),
   turnResponse: schemaId('msg/assistant/turnResponse'),
   voiceRequest: schemaId('msg/assistant/voiceRequest'),
+  turnScope: schemaId('assistant/TurnScope'),
   transcribeRequest: schemaId('msg/assistant/transcribeRequest'),
   transcribeResponse: schemaId('msg/assistant/transcribeResponse'),
 } as const;
@@ -51,6 +52,22 @@ const assistantReference = object(
   ['kind', 'zoneId', 'listId', 'lineId', 'label']
 );
 
+/**
+ * The one list a scoped turn may touch (plan 0044).
+ *
+ * Both ids required together: a zone with no list, or a list with no zone, is
+ * not a narrower scope but an ambiguous one, and the service would have to
+ * decide what it meant.
+ */
+const turnScope = object(
+  ASSISTANT_SCHEMA_IDS.turnScope,
+  {
+    zoneId: nonEmptyString(),
+    listId: nonEmptyString(),
+  },
+  ['zoneId', 'listId']
+);
+
 const turnRequest = object(
   ASSISTANT_SCHEMA_IDS.turnRequest,
   {
@@ -62,6 +79,8 @@ const turnRequest = object(
     authorization: nonEmptyString(),
     transcript: array(ref(ASSISTANT_SCHEMA_IDS.message)),
     message: nonEmptyString(),
+    // Optional, and its absence is the unscoped turn plan 0039 built.
+    scope: ref(ASSISTANT_SCHEMA_IDS.turnScope),
   },
   ['userId', 'authorization', 'transcript', 'message']
 );
@@ -87,6 +106,7 @@ const voiceRequest = object(
     transcript: array(ref(ASSISTANT_SCHEMA_IDS.message)),
     audio: nonEmptyString(),
     mimeType: nonEmptyString(),
+    scope: ref(ASSISTANT_SCHEMA_IDS.turnScope),
   },
   ['userId', 'authorization', 'transcript', 'audio', 'mimeType']
 );
@@ -134,6 +154,7 @@ const transcribeResponse = object(
 export const assistantSchemas: JsonSchema[] = [
   assistantMessage,
   assistantReference,
+  turnScope,
   turnRequest,
   voiceRequest,
   turnResponse,

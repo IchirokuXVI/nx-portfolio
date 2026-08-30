@@ -12,6 +12,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   DEFAULT_LOCALE,
+  ForbiddenException,
   getRequestContext,
   NotConfiguredException,
   RateLimitedException,
@@ -34,8 +35,13 @@ import { ConcurrencyGate, TurnLimiter } from '../provider/turn-limiter';
 import { GatewayApiClient } from './gateway-api.client';
 import { buildSystemPrompt } from './prompt';
 import { ReferenceCollector } from './references';
-import { findTool, TOOL_DECLARATIONS, type ToolRuntime } from './tools';
-import { TurnContextFactory } from './turn-context';
+import {
+  findTool,
+  SCOPED_TOOL_DECLARATIONS,
+  TOOL_DECLARATIONS,
+  type ToolRuntime,
+} from './tools';
+import { ScopeUnavailableError, TurnContextFactory } from './turn-context';
 
 /**
  * One conversation turn (plan 0039).
@@ -254,11 +260,31 @@ export class AssistantService {
       this.config.maxChars
     );
 
-    const context = await this.contexts.open({
-      authorization: request.authorization,
-      locale,
-    });
+    const caller = { authorization: request.authorization, locale };
+
+    // A scope collapses the context fetch: one read of the scoped list rather
+    // than the zone index and every list in it (plan 0044, section 2.3). That
+    // read is also what authorizes the turn, so it is never skipped.
+    const scope = request.scope;
+    let context;
+    try {
+      context =
+        scope === undefined
+          ? await this.contexts.open(caller)
+          : await this.contexts.openScoped(caller, scope);
+    } catch (error) {
+      // A scope that does not hold is the gateway's own refusal, relayed rather
+      // than translated into anything cleverer (plan 0044, section 3). It costs
+      // no provider request, which is the point of doing the fetch first.
+      if (error instanceof ScopeUnavailableError) {
+        throw new ForbiddenException(
+          'that list is not one you can use from here'
+        );
+      }
+      throw error;
+    }
     const contextReadyAtMs = Date.now();
+    const scoped = context.scopedListId !== null;
 
     const references = new ReferenceCollector();
     let listResolution: ListResolutionBranch | undefined;
@@ -282,6 +308,10 @@ export class AssistantService {
     ];
 
     const system = buildSystemPrompt({ context, locale });
+    // The catalog is assembled from the scope rather than filtered inside a
+    // tool, because an absent capability is a much harder boundary than an
+    // instruction (plan 0044, section 2.2).
+    const tools = scoped ? SCOPED_TOOL_DECLARATIONS : TOOL_DECLARATIONS;
     const calledTools: ToolCallRecord[] = [];
     let usage: ModelUsage | null = null;
     // Seeded with the transcription's own time on a spoken turn, so the record's
@@ -292,7 +322,7 @@ export class AssistantService {
     for (let round = 0; ; round += 1) {
       const askedAtMs = Date.now();
       const reply = await this.ask(
-        { system, turns, tools: TOOL_DECLARATIONS, locale },
+        { system, turns, tools, locale },
         request.userId
       );
       providerMs += Date.now() - askedAtMs;
@@ -336,7 +366,12 @@ export class AssistantService {
       });
       turns.push({
         role: ModelTurnRole.TOOL,
-        toolResults: await this.runTools(reply.toolCalls, runtime, calledTools),
+        toolResults: await this.runTools(
+          reply.toolCalls,
+          runtime,
+          calledTools,
+          scoped
+        ),
       });
     }
   }
@@ -352,7 +387,9 @@ export class AssistantService {
   private async runTools(
     calls: ModelToolCall[],
     runtime: ToolRuntime,
-    calledTools: ToolCallRecord[]
+    calledTools: ToolCallRecord[],
+    /** Which catalog this turn was given, so a name is looked up in that one. */
+    scoped: boolean
   ): Promise<{ id?: string; name: string; result: unknown }[]> {
     const results: { id?: string; name: string; result: unknown }[] = [];
 
@@ -364,7 +401,7 @@ export class AssistantService {
       call.id !== undefined ? { id: call.id } : {};
 
     for (const call of calls) {
-      const tool = findTool(call.name);
+      const tool = findTool(call.name, scoped);
       if (!tool) {
         calledTools.push(record(call, false));
         results.push({

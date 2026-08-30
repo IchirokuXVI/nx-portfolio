@@ -5,7 +5,9 @@ import {
   ArrayMaxSize,
   IsArray,
   IsEnum,
+  IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
   ValidateNested,
@@ -29,6 +31,31 @@ export class AssistantMessageDto {
   @IsString()
   @MaxLength(4000)
   content!: string;
+}
+
+/**
+ * The one list a turn may touch (plan 0044).
+ *
+ * Stated by the client and **verified by being used**: the assistant service
+ * reads this list with the caller's own token, so somebody who cannot read it
+ * gets a refusal before the model is called. Nothing is checked here, and adding
+ * a check would be a second answer to a question the list routes are already the
+ * authority on.
+ *
+ * Both ids together or neither. A zone with no list is not a narrower scope but
+ * an ambiguous one, and the service would have to decide what it meant.
+ */
+export class TurnScopeDto {
+  @ApiProperty({ format: 'uuid', description: 'The zone the list is in.' })
+  @IsUUID()
+  zoneId!: string;
+
+  @ApiProperty({
+    format: 'uuid',
+    description: 'The only list this turn may touch.',
+  })
+  @IsUUID()
+  listId!: string;
 }
 
 /**
@@ -57,6 +84,17 @@ export class AssistantTurnDto {
   @ValidateNested({ each: true })
   @Type(() => AssistantMessageDto)
   transcript!: AssistantMessageDto[];
+
+  @ApiProperty({
+    type: TurnScopeDto,
+    required: false,
+    description:
+      'Narrow this turn to one list. Omit it for the ordinary assistant.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TurnScopeDto)
+  scope?: TurnScopeDto;
 }
 
 /**
@@ -98,6 +136,34 @@ export class AssistantVoiceDto {
   @ValidateNested({ each: true })
   @Type(() => AssistantMessageDto)
   transcript!: AssistantMessageDto[];
+
+  /**
+   * The scope, as two flat fields rather than a nested object.
+   *
+   * A multipart body has no shape for a nested object either, and unlike the
+   * transcript these are two ids: a JSON string holding two uuids would be
+   * ceremony for nothing, and two form fields are what a browser's `FormData`
+   * naturally sends.
+   */
+  @ApiProperty({
+    format: 'uuid',
+    required: false,
+    description:
+      'The zone the scoped list is in. Send it with listId or not at all.',
+  })
+  @IsOptional()
+  @IsUUID()
+  zoneId?: string;
+
+  @ApiProperty({
+    format: 'uuid',
+    required: false,
+    description:
+      'The only list this turn may touch. Send it with zoneId or not at all.',
+  })
+  @IsOptional()
+  @IsUUID()
+  listId?: string;
 }
 
 /**

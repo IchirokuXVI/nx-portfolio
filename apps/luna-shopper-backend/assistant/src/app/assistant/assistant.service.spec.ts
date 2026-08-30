@@ -238,6 +238,17 @@ function turnRequest(
   };
 }
 
+/** A turn narrowed to one list, which is what the list page's microphone sends. */
+function scopedRequest(
+  message: string,
+  scope: { zoneId: string; listId: string } = {
+    zoneId: 'zone-home',
+    listId: 'list-flat',
+  }
+): AssistantTurnRequest {
+  return { ...turnRequest(message), scope };
+}
+
 /**
  * A spoken turn, with a recording that is bytes and nothing more (plan 0041).
  *
@@ -1479,3 +1490,160 @@ function line(
     updatedAt: '2026-08-30T00:00:00.000Z',
   };
 }
+
+// ---------------------------------------------------------------------------
+
+describe('a turn that may only touch one list (plan 0044)', () => {
+  /**
+   * Two lists in two zones, so that "the other list" is a real thing the model
+   * could name and the scope is doing work rather than describing the only
+   * option there was.
+   */
+  function twoLists(): RecordingApi {
+    const api = new RecordingApi();
+    api.zones = [zone('zone-home', 'Casa'), zone('zone-work', 'Oficina')];
+    api.listsByZone = new Map([
+      ['zone-home', [list('list-flat', 'zone-home', 'Piso')]],
+      ['zone-work', [list('list-office', 'zone-work', 'Oficina')]],
+    ]);
+    api.linesByList = new Map([
+      ['list-flat', []],
+      ['list-office', []],
+    ]);
+    return api;
+  }
+
+  it('fetches the scoped list and never the zone index', async () => {
+    // The saving, and the one that silently regresses (section 2.3). An open turn
+    // reads the zones and then every list in each of them; this reads one zone's
+    // lists and stops.
+    const api = twoLists();
+    const service = build(
+      new FakeModelProvider([FakeModelProvider.says('Vale.')]),
+      api
+    );
+
+    await service.turn(scopedRequest('qué falta'));
+
+    expect(api.calls.map((call) => call.method)).not.toContain('listZones');
+    expect(
+      api.calls.filter((call) => call.method === 'listLists')
+    ).toHaveLength(1);
+  });
+
+  it('offers four fewer tools, and never rename_me', async () => {
+    // Asserted on what is handed to the provider rather than on what the provider
+    // does with it: an absent capability is a much harder boundary than an
+    // instruction, and that argument only holds if the absence is real.
+    const api = twoLists();
+    const provider = new FakeModelProvider([FakeModelProvider.says('Vale.')]);
+    const service = build(provider, api);
+
+    await service.turn(scopedRequest('llámame Marta'));
+
+    const offered = provider.requests[0].tools.map((tool) => tool.name);
+    expect(offered).toContain('upsert_lines');
+    expect(offered).toContain('query_lists');
+    expect(offered).not.toContain('rename_me');
+  });
+
+  it('still offers rename_me on an ordinary turn', async () => {
+    // The real acceptance criterion of this plan is that the unscoped assistant
+    // is the feature it was, so the negative above needs its opposite beside it.
+    const api = twoLists();
+    const provider = new FakeModelProvider([FakeModelProvider.says('Vale.')]);
+    const service = build(provider, api);
+
+    await service.turn(turnRequest('llámame Marta'));
+
+    expect(provider.requests[0].tools.map((tool) => tool.name)).toContain(
+      'rename_me'
+    );
+  });
+
+  it('writes to the scoped list without being told which', async () => {
+    const api = twoLists();
+    const service = build(
+      new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'leche' }],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]),
+      api
+    );
+
+    const response = await service.turn(scopedRequest('añade leche'));
+
+    const written = api.calls.find(
+      (call) => call.method === 'addLine' || call.method === 'addLines'
+    );
+    expect(written?.detail['listId']).toBe('list-flat');
+    // Never a question about which list: on a screen showing one list, that
+    // question is the assistant failing to understand where it is.
+    expect(response.reply).toBe('Hecho.');
+  });
+
+  it('refuses a call that named a different list, and writes nothing', async () => {
+    const api = twoLists();
+    const provider = new FakeModelProvider([
+      FakeModelProvider.calls('upsert_lines', {
+        list: 'Oficina',
+        items: [{ product: 'leche' }],
+      }),
+      FakeModelProvider.says('Esa lista está en otra pantalla.'),
+    ]);
+    const service = build(provider, api);
+
+    await service.turn(scopedRequest('añade leche a la de la oficina'));
+
+    expect(
+      api.calls.filter(
+        (call) => call.method === 'addLine' || call.method === 'addLines'
+      )
+    ).toHaveLength(0);
+    expect(JSON.stringify(provider.requests[1].turns.at(-1))).toContain(
+      'outOfScope'
+    );
+  });
+
+  it('refuses a scope the caller cannot use, before the provider is called', async () => {
+    const api = twoLists();
+    const provider = new FakeModelProvider([FakeModelProvider.says('Vale.')]);
+    const service = build(provider, api);
+
+    const refusal = await service
+      .turn(
+        scopedRequest('añade leche', {
+          zoneId: 'zone-home',
+          listId: 'list-office',
+        })
+      )
+      .then(
+        () => null,
+        (error: unknown) => error
+      );
+
+    expect(refusal).not.toBeNull();
+    expect(isDomainException(refusal)).toBe(true);
+
+    // The fetch is what authorizes the turn, so nothing was spent at the
+    // provider on a scope that did not hold (section 3).
+    expect(provider.requests).toHaveLength(0);
+  });
+
+  it('tells the model there is one list, and names it', async () => {
+    const api = twoLists();
+    const provider = new FakeModelProvider([FakeModelProvider.says('Vale.')]);
+    const service = build(provider, api);
+
+    await service.turn(scopedRequest('qué falta'));
+
+    const system = provider.requests[0].system;
+    expect(system).toContain('Piso');
+    expect(system).toContain('Never ask which list');
+    // The zone index is not in a scoped prompt at all: there is nothing to
+    // resolve against and the other zone is not this turn's business.
+    expect(system).not.toContain('Oficina');
+  });
+});

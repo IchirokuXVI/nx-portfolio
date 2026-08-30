@@ -112,6 +112,26 @@ export interface AssistantReference {
  * token, carries no service account, and opens no database connection: it is an
  * API client that happens to talk to a model.
  */
+/**
+ * A turn that may only touch one list (plan 0044).
+ *
+ * Stated by the caller, and the caller is a browser, so it is a **claim** in
+ * exactly the sense rule D4 means. It is verified by being used: the context
+ * fetch reads this list with the caller's own token, and somebody who cannot
+ * read it gets the gateway's refusal before the model is called at all. There is
+ * nothing extra to enforce, and a second check would be a second answer to a
+ * question the gateway is already the authority on.
+ *
+ * A field on the turn rather than a route of its own. The multipart handling,
+ * the byte cap, the transcription step and the rate limit answer are identical
+ * either way, so a second route would be a copy of plan 0041 section 4 with one
+ * thing changed.
+ */
+export interface TurnScope {
+  readonly zoneId: string;
+  readonly listId: string;
+}
+
 export interface AssistantTurnRequest {
   /** The caller, for the structured turn record (section 10) and nothing else. */
   userId: string;
@@ -121,6 +141,13 @@ export interface AssistantTurnRequest {
   transcript: AssistantMessage[];
   /** What the caller just said. */
   message: string;
+  /**
+   * The one list this turn may touch, when the caller stated one.
+   *
+   * Absent, the turn is exactly what plan 0039 built and every existing test
+   * keeps testing the thing it tested.
+   */
+  scope?: TurnScope;
 }
 
 /**
@@ -146,6 +173,8 @@ export interface AssistantVoiceRequest {
   audio: string;
   /** What the browser said it recorded. Checked against a whitelist, then sent on. */
   mimeType: string;
+  /** The one list this turn may touch, when the caller stated one (plan 0044). */
+  scope?: TurnScope;
 }
 
 /**
