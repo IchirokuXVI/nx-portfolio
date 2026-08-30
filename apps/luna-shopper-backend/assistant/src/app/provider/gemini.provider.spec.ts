@@ -1,7 +1,9 @@
 import {
   readReply,
   readRetryDelaySeconds,
+  readTranscription,
   toGeminiRequest,
+  toTranscriptionRequest,
 } from './gemini.provider';
 import { ModelTurnRole } from './model-provider';
 
@@ -295,6 +297,107 @@ describe('readReply', () => {
     // A safety block or a filtered response arrives this way, and the loop's
     // answer to "no tool calls and no text" is already correct.
     expect(readReply({})).toEqual({ text: '', toolCalls: [], usage: null });
+  });
+});
+
+/**
+ * The transcription call's wire shape (plan 0041, section 3.1).
+ *
+ * Rule A4 again: no audio is sent anywhere here, and the bytes below are a
+ * handful of numbers. What is checked is that the request carries no tools and no
+ * history, because those two absences are the whole reason transcription is a
+ * call of its own rather than the turn with a recording bolted on.
+ */
+describe('toTranscriptionRequest', () => {
+  const audio = new Uint8Array([1, 2, 3, 4]);
+
+  it('sends the audio inline, base64, under the type it was given', () => {
+    const request = toTranscriptionRequest({
+      audio,
+      mimeType: 'audio/webm;codecs=opus',
+      locale: 'es',
+    });
+
+    expect(request['contents']).toEqual([
+      {
+        role: 'user',
+        parts: [
+          {
+            inlineData: {
+              mimeType: 'audio/webm;codecs=opus',
+              data: Buffer.from(audio).toString('base64'),
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('declares no tools and carries no conversation', () => {
+    const request = toTranscriptionRequest({
+      audio,
+      mimeType: 'audio/webm',
+      locale: 'en',
+    });
+
+    // An absent capability is a much harder boundary than an instruction, and a
+    // transcription that called a tool would be a turn nobody asked for.
+    expect(request['tools']).toBeUndefined();
+    expect(request['contents']).toHaveLength(1);
+  });
+
+  it("names the caller's language in the instruction", () => {
+    const request = toTranscriptionRequest({
+      audio,
+      mimeType: 'audio/webm',
+      locale: 'es',
+    });
+
+    const instruction = (
+      request['systemInstruction'] as { parts: { text: string }[] }
+    ).parts[0].text;
+
+    expect(instruction).toContain('es');
+    expect(instruction).toContain('return only the transcription');
+  });
+});
+
+describe('readTranscription', () => {
+  it('joins the text parts and trims', () => {
+    expect(
+      readTranscription({
+        candidates: [
+          { content: { parts: [{ text: ' añade ' }, { text: 'leche ' }] } },
+        ],
+      })
+    ).toBe('añade leche');
+  });
+
+  it('reads text and only text', () => {
+    // A transcription that came back with a function call on it is a bug worth
+    // noticing rather than a field to ignore, which is why this does not reuse
+    // `readReply`.
+    expect(
+      readTranscription({
+        candidates: [
+          {
+            content: {
+              parts: [
+                { functionCall: { name: 'upsert_line', args: {} } },
+                { text: 'añade leche' },
+              ],
+            },
+          },
+        ],
+      })
+    ).toBe('añade leche');
+  });
+
+  it('reads a reply with nothing in it as an empty string', () => {
+    // The honest failure, and the one the service answers "I did not catch
+    // that" to rather than running a turn against nothing.
+    expect(readTranscription({ candidates: [] })).toBe('');
+    expect(readTranscription({})).toBe('');
   });
 });
 

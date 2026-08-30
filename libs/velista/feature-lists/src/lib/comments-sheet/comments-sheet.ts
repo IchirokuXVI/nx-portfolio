@@ -25,6 +25,7 @@ import {
   APP_BASE_PATH,
   type Comment,
   type CommentRowVm,
+  type RecordedAudio,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -32,7 +33,6 @@ import {
   listIdOf,
   SheetNavigation,
   zoneIdOf,
-  type VoiceRecording,
 } from '@portfolio/velista/platform';
 import { CommentComposer, CommentRow, SheetShell } from '@portfolio/velista/ui';
 import { listErrorKey } from '../list-error-copy';
@@ -298,7 +298,7 @@ export class CommentsSheet {
    * Somebody just spoke for forty seconds, and losing that to a dropped connection
    * is the worst outcome in this plan.
    */
-  async sendVoice(recording: VoiceRecording): Promise<void> {
+  async sendVoice(recording: RecordedAudio): Promise<void> {
     this.sending.set(true);
     this._sendingVoice.set(true);
     this.errorKey.set(null);

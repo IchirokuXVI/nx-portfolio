@@ -41,6 +41,17 @@ export const LOG_LEVELS = [
 export const APP_BASE_URL_LOCALE_PLACEHOLDER = '{locale}';
 
 /**
+ * 2 MB, the default cap on an uploaded recording (plan 0041, section 4.2).
+ *
+ * The same number the assistant service defaults to, written out in both places
+ * rather than imported across an app boundary — these are two deployables and a
+ * shared constant between them would be a library nobody else wants. The
+ * arithmetic it belongs to: base64 takes 2 MB to about 2.7 MB on the broker leg,
+ * the transcript and envelope take it under 3 MB, and NATS `max_payload` is 8 MB.
+ */
+export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
  * An absolute http(s) URL that may carry {@link APP_BASE_URL_LOCALE_PLACEHOLDER}.
  *
  * `Joi.string().uri()` cannot be used directly: braces are not valid URI
@@ -124,14 +135,33 @@ export const gatewayValidationSchema = Joi.object({
     ),
 
   /**
-   * The voice comment caps (plan 0045, section 6).
+   * The byte cap on a spoken assistant turn's recording (plan 0041, sections
+   * 4.1 and 5).
    *
-   * The byte cap is set on the **multipart interceptor** and not only checked
-   * afterwards, which is the whole of plan 0041 section 5's point: the global
-   * `ValidationPipe` never sees a file and Express's own body limits do not apply
-   * to a multipart stream, so a cap that is not on the interceptor is a cap that
-   * is not enforced. Core checks the same number again on the far side of the
-   * broker; the two are not a duplication to be tidied away.
+   * Stated here as well as in the assistant service, and the two are not
+   * redundant: this one is enforced by the multipart interceptor, which is the
+   * only thing standing between a phone and the gateway's memory, and the
+   * service's is enforced on a payload that has already crossed the broker. A
+   * cap that is not on the interceptor is a cap that is not enforced — the global
+   * `ValidationPipe` never sees a file, and Express's own body limits do not
+   * apply to a multipart stream.
+   */
+  ASSISTANT_AUDIO_MAX_BYTES: Joi.number()
+    .integer()
+    .min(1024)
+    .default(DEFAULT_AUDIO_MAX_BYTES),
+
+  /**
+   * The voice **comment** caps (plan 0045, section 6).
+   *
+   * Separate from the assistant's cap above rather than sharing it, because they
+   * are limits on two different routes with two different audiences: a spoken
+   * turn is a question somebody is waiting on an answer to, and a voice comment
+   * is a message left for the people they shop with. Tuning one should not move
+   * the other.
+   *
+   * The same interceptor rule applies here and for the same reason, and core
+   * checks the byte cap again on the far side of the broker.
    */
   VOICE_COMMENT_MAX_BYTES: Joi.number()
     .integer()
@@ -188,6 +218,9 @@ export interface GatewayConfig {
    * serves every one of them. Read by `MinClientVersionGuard` and by nothing else.
    */
   minClientVersion: string;
+  /** The byte cap the voice route's multipart interceptor enforces (plan 0041). */
+  assistantAudioMaxBytes: number;
+  /** The voice comment route's own caps (plan 0045). */
   voiceComment: {
     maxBytes: number;
     /** Base types, lowercased, with no parameters. */
@@ -243,6 +276,9 @@ export const gatewayConfiguration = registerAs(
       ),
     },
     minClientVersion: process.env.MIN_CLIENT_VERSION ?? '',
+    assistantAudioMaxBytes: Number(
+      process.env.ASSISTANT_AUDIO_MAX_BYTES ?? DEFAULT_AUDIO_MAX_BYTES
+    ),
     voiceComment: {
       maxBytes: Number(
         process.env.VOICE_COMMENT_MAX_BYTES ?? VOICE_COMMENT_MAX_BYTES

@@ -406,10 +406,15 @@ GOOGLE_CALLBACK_URL=http://localhost:$gateway/v1/auth/google/callback
 # Where the callback sends the browser. {locale} is substituted with the locale
 # the flow started in; the app sits under a path that follows the locale segment.
 APP_BASE_URL=http://localhost:$shellPort/{locale}/velista
-# Voice comments (plan 0045). The cap is set on the multipart interceptor here,
-# which is the only place a byte cap is actually a cap, and core checks the same
-# number again on the far side of the broker. Both files carry it, so a slot
-# cannot end up with a gateway that accepts what core refuses.
+# The byte cap the spoken turn route's multipart interceptor enforces (plan
+# 0041). The gateway is where an upload is actually refused, so the number lives
+# here as well as in the assistant's env.
+ASSISTANT_AUDIO_MAX_BYTES=2097152
+# Voice comments (plan 0045), a different route with its own cap. It is set on
+# the multipart interceptor here, which is the only place a byte cap is actually
+# a cap, and core checks the same number again on the far side of the broker.
+# Both files carry it, so a slot cannot end up with a gateway that accepts what
+# core refuses.
 VOICE_COMMENT_MAX_BYTES=2097152
 # Empty falls back to the contract's list, which is what browsers really produce:
 # WebM/Opus in Chrome, Ogg/Opus in Firefox, MP4/AAC in Safari.
@@ -479,6 +484,11 @@ $(Get-TelemetryEnv 'catalog' $otlpHttp)
 GATEWAY_INTERNAL_URL=http://localhost:$gateway
 GEMINI_API_KEY=
 ASSISTANT_MODEL=gemini-3.5-flash-lite
+# Voice input (plan 0041). An empty transcription model means the model that
+# answers the turn also transcribes it, which is the default everywhere.
+ASSISTANT_TRANSCRIPTION_MODEL=
+ASSISTANT_AUDIO_MAX_BYTES=2097152
+ASSISTANT_AUDIO_MIME_TYPES=audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac
 ASSISTANT_MAX_TURNS=20
 ASSISTANT_MAX_CHARS=8000
 ASSISTANT_MAX_TOOL_CALLS=6

@@ -199,12 +199,16 @@ services:
   nats:
     image: nats:2.10-alpine
     restart: unless-stopped
-    # `max_payload` is raised from the one megabyte default so a voice recording
-    # can cross this broker as base64 (plan 0041, section 4.2; plan 0045,
-    # section 3). It lives in `nats.conf` because it is a **configuration file
-    # option and not a flag**: `nats-server` refuses to start with
-    # `--max_payload`, which is the one thing plan 0041 section 4.2 gets wrong
-    # about the mechanism.
+    # `-c` for one setting: `max_payload` is raised above the broker's 1 MB default
+    # so a voice recording can reach the assistant at all (plan 0041, section 4.2)
+    # and a voice comment can reach core (plan 0045, section 3), and it is **config
+    # file only** — there is no `--max_payload` flag, and passing one makes
+    # nats-server print its usage and exit, which brings the container up unhealthy
+    # and takes every service behind it with it. `nats.conf` beside this file
+    # carries the number and the reasoning.
+    #
+    # The rest stays on the command line, because CLI flags win over the file and
+    # this way the service still says what it is at a glance.
     #
     # **This and `k8s/helm/templates/luna-shopper-backend/nats.yaml.tpl` are one
     # decision and change together.** A raise here and not there is a feature that

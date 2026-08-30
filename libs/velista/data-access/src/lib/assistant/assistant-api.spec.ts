@@ -103,6 +103,89 @@ describe('AssistantApi', () => {
     });
   });
 
+  /**
+   * The spoken turn (backend `0041`, section 4.1).
+   *
+   * A separate route and a separate body shape, and neither is visible in a type
+   * either: `FormData` takes anything, so only a test can say the parts are the ones
+   * the gateway's interceptor and DTO are looking for.
+   */
+  describe('a spoken turn', () => {
+    const recording = () => new Blob(['audio'], { type: 'audio/webm' });
+
+    it('posts the recording and the transcript as multipart', async () => {
+      const transcript: AssistantTurn[] = [
+        { speaker: 'caller', text: 'Add milk' },
+        { speaker: 'bot', text: 'Added.' },
+      ];
+
+      const turn = api.askAloud(transcript, recording());
+      const request = httpMock.expectOne(`${ENDPOINT}/voice`);
+      const body = request.request.body as FormData;
+
+      expect(request.request.method).toBe('POST');
+      expect(body).toBeInstanceOf(FormData);
+      expect(body.get('audio')).toBeInstanceOf(Blob);
+      // The same words the typed route uses, from the same builder: two routes that
+      // disagreed about what a transcript is would be a bug waiting for whichever was
+      // edited second.
+      expect(JSON.parse(body.get('transcript') as string)).toEqual([
+        { role: 'USER', content: 'Add milk' },
+        { role: 'ASSISTANT', content: 'Added.' },
+      ]);
+
+      request.flush({ reply: 'Added.', references: [], heard: 'and eggs' });
+      await turn;
+    });
+
+    it('writes no Content-Type of its own', async () => {
+      // The assertion with something to lose. The browser has to write the boundary
+      // itself, and a hand written `multipart/form-data` header omits it and produces
+      // a body the server cannot split — which fails as a 400 with nothing obviously
+      // wrong in the request.
+      const turn = api.askAloud([], recording());
+      const request = httpMock.expectOne(`${ENDPOINT}/voice`);
+
+      expect(request.request.headers.get('Content-Type')).toBeNull();
+
+      request.flush({ reply: 'Vale.', references: [] });
+      await turn;
+    });
+
+    it('reads back what the service heard', async () => {
+      const turn = api.askAloud([], recording());
+      httpMock
+        .expectOne(`${ENDPOINT}/voice`)
+        .flush({ reply: 'Added.', references: [], heard: 'add milk' });
+
+      await expect(turn).resolves.toMatchObject({
+        text: 'Added.',
+        heard: 'add milk',
+      });
+    });
+
+    it('carries an empty transcription rather than dropping it', async () => {
+      // Empty is a real answer: the recording had nothing recognisable in it. It is
+      // not the same as absent, which means the service said nothing about what it
+      // heard, so the two must not collapse into one.
+      const turn = api.askAloud([], recording());
+      httpMock
+        .expectOne(`${ENDPOINT}/voice`)
+        .flush({ reply: 'I did not catch that.', references: [], heard: '' });
+
+      await expect(turn).resolves.toMatchObject({ heard: '' });
+    });
+
+    it('leaves heard absent when the service sent none', async () => {
+      const turn = api.askAloud([], recording());
+      httpMock
+        .expectOne(`${ENDPOINT}/voice`)
+        .flush({ reply: 'Added.', references: [] });
+
+      await expect(turn).resolves.not.toHaveProperty('heard');
+    });
+  });
+
   describe('the answer', () => {
     it('reads reply, and the uppercase reference kinds', async () => {
       const turn = api.ask([], 'Is there milk?');

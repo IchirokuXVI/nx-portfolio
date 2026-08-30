@@ -49,6 +49,55 @@ export class AssistantApi implements AssistantServiceI {
 
     return required(toAssistantReply(answer), 'assistant.ask');
   }
+
+  /**
+   * A spoken turn: the recording, and the conversation it continues.
+   *
+   * `multipart/form-data`, because the recording is the one leg of this journey that
+   * costs the person something — a phone on mobile data — and base64 in a JSON body
+   * would inflate it by a third. The transcript rides as a JSON string in a form
+   * field rather than as repeated fields, because it is a nested array and a
+   * multipart body has no shape for one.
+   *
+   * **No `Content-Type` is set**, and that is the one thing here that must not be
+   * tidied: the browser has to write the boundary itself, and a hand written header
+   * omits it and produces a body the server cannot split.
+   *
+   * There is no `message` argument, which is the shape of the whole feature: what the
+   * caller said is inside the recording, and this side does not know it until the
+   * reply comes back carrying `heard`.
+   */
+  async askAloud(
+    transcript: readonly AssistantTurn[],
+    recording: Blob
+  ): Promise<AssistantReply> {
+    const form = new FormData();
+    form.set('transcript', JSON.stringify(toTranscript(transcript)));
+    form.set('audio', recording, fileNameFor(recording));
+
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway('/v1/assistant/voice'),
+        form,
+        { context: operation('assistant.askAloud') }
+      )
+    );
+
+    return required(toAssistantReply(answer), 'assistant.askAloud');
+  }
+}
+
+/**
+ * A filename for the part, derived from what the recorder actually produced.
+ *
+ * Multipart wants one and nothing reads it: the service goes by the part's content
+ * type, which the browser sets from the blob. It is derived rather than hardcoded to
+ * `message.webm` only so that a log or a proxy trace does not describe a Safari
+ * recording as a webm, which is the sort of small lie that costs an hour later.
+ */
+function fileNameFor(recording: Blob): string {
+  const container = recording.type.split(';')[0].split('/')[1] ?? 'webm';
+  return `message.${container}`;
 }
 
 /**

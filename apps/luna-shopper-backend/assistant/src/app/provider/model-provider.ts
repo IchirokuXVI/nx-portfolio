@@ -140,17 +140,24 @@ export class ProviderUnavailableError extends Error {
 }
 
 /**
- * A recording to write down (plan 0041, section 3.2).
+ * A recording, on its way to being words (plan 0041, section 3.2).
  *
  * Separate from {@link ModelRequest} rather than an audio part on a
  * {@link ModelTurn}, because it is a different job: no tools, no history, and no
- * reply to parse. There is nothing to carry about who spoke or what list they
- * were looking at, and that absence is the contract rather than an omission.
+ * reply to parse. What comes back is the sentence and nothing else, and there is
+ * nothing to carry about who spoke or what list they were looking at — that
+ * absence is the contract rather than an omission.
+ *
+ * **Two callers, one seam.** A spoken assistant turn transcribes before running
+ * the turn loop (plan 0041); a voice comment transcribes after the message is
+ * already stored (plan 0045, section 4.1). Neither knows about the other, and
+ * nothing here distinguishes them.
  */
 export interface TranscriptionRequest {
   audio: Uint8Array;
+  /** What the browser recorded, checked against the service's whitelist first. */
   mimeType: string;
-  /** BCP 47, the same locale a reply would be written in. */
+  /** BCP 47, the same locale the reply will be written in (section 2). */
   locale: string;
 }
 
@@ -162,25 +169,40 @@ export interface ModelProvider {
   readonly configured: boolean;
 
   /**
-   * False when this provider cannot take audio at all.
+   * False when this provider cannot take audio at all (plan 0041, section 3.2).
    *
    * A **field rather than a thrown error**, because "this deployment will never
-   * transcribe anything" and "this transcription failed" are different facts with
-   * different answers: the first settles a voice comment to `UNAVAILABLE` at once
-   * and the second is worth one bounded retry. A provider that could only say so
-   * by throwing would make the two indistinguishable at the call site.
+   * transcribe anything" and "this transcription failed" are different facts
+   * with different answers, and both callers need to tell them apart:
+   *
+   * - a deployment pointed at a provider that does not do audio should lose the
+   *   microphone and **keep the assistant**, so the voice route answers 501
+   *   while the typed route goes on working;
+   * - a voice comment settles to `UNAVAILABLE` at once rather than waiting for a
+   *   transcript that is never coming (plan 0045, section 4.2), where a call
+   *   that merely failed is worth one bounded retry.
+   *
+   * Both are facts about the deployment, knowable before a request arrives. A
+   * throw would only ever tell somebody after they had spoken.
    */
   readonly transcriptionSupported: boolean;
 
   generate(request: ModelRequest): Promise<ModelReply>;
 
   /**
-   * The words, or an empty string when the provider heard nothing.
+   * The recording, as the words in it, or an empty string when the provider
+   * heard nothing.
    *
-   * Empty is an answer and not an error: a recording of silence is a real thing
-   * somebody uploads. {@link ProviderRateLimitedError} and
-   * {@link ProviderUnavailableError} are thrown from here exactly as from
-   * {@link generate}, so rule A5's answer needs no second implementation.
+   * Empty is a real answer and not an error: it means the recording had nothing
+   * recognisable in it, which is a thing people genuinely upload. A spoken turn
+   * says so and runs no turn; a voice comment records that it has no transcript
+   * and stays playable.
+   *
+   * Throws {@link ProviderRateLimitedError} and {@link ProviderUnavailableError}
+   * exactly as {@link generate} does, so rule A5's answer needs no second
+   * implementation: a spoken turn rate limited during transcription produces the
+   * same problem body, with the same number in it, that a rate limited typed turn
+   * produces.
    */
   transcribe(request: TranscriptionRequest): Promise<string>;
 }

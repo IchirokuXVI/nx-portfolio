@@ -670,8 +670,7 @@
       "placeholder": "Write a message",
       "record": "Record a message",
       "send": "Send",
-      "stop": "Stop and send",
-      "spoken": "A spoken message"
+      "stop": "Stop and send"
     },
     "recorder": {
       "pause": "Pause",
@@ -695,6 +694,9 @@
     },
     "failed": "That did not reach me. Your message is still here, so try again.",
     "unconfigured": "The assistant is not switched on here. That is on us, not on you, and trying again will not change it.",
-    "dropped": "The start of this conversation is too long to keep, so I let it go."
+    "dropped": "The start of this conversation is too long to keep, so I let it go.",
+    "spoken": "You said something. I am listening to it now.",
+    "tooLong": "That recording was too big to send. I can take up to {{limit}} MB at a time, so a shorter message will get through.",
+    "badFormat": "Your browser recorded that in a way I cannot read. You can still type it."
   }
 }

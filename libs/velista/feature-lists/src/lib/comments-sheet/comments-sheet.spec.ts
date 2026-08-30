@@ -25,10 +25,10 @@ import type {
   ShoppingListSummary,
 } from '@portfolio/velista/models';
 import {
+  AUDIO_CAPTURE,
   provideVelistaTesting,
-  VOICE_CAPTURE,
-  type VoiceCaptureI,
-  type VoiceCaptureSession,
+  type AudioCaptureI,
+  type AudioCaptureSession,
 } from '@portfolio/velista/platform';
 import { CommentComposer } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
@@ -102,22 +102,20 @@ function list(permissions: readonly ListPermission[]): ShoppingListSummary {
  */
 function fakeVoiceCapture(
   options: { supported?: boolean; blob?: Blob; failOpen?: boolean } = {}
-): VoiceCaptureI & { closed: number } {
+): AudioCaptureI & { closed: number } {
   const blob =
     options.blob ?? new Blob(['x'.repeat(64)], { type: 'audio/webm' });
   const capture = {
     closed: 0,
     supported: () => options.supported !== false,
-    open: async (): Promise<VoiceCaptureSession> => {
+    open: async (): Promise<AudioCaptureSession> => {
       if (options.failOpen === true) {
         throw new Error('permission refused');
       }
       return {
-        stop: async () => ({
-          blob,
-          mimeType: blob.type,
-          durationSeconds: 4,
-        }),
+        pause: () => undefined,
+        resume: () => undefined,
+        stop: async () => blob,
         close: () => {
           capture.closed += 1;
         },
@@ -130,7 +128,7 @@ function fakeVoiceCapture(
 interface RenderOptions {
   page?: readonly Comment[];
   permissions?: readonly ListPermission[];
-  capture?: VoiceCaptureI;
+  capture?: AudioCaptureI;
   /** What `addVoiceComment` does. Throwing is how a failed send is driven. */
   addVoice?: CommentServiceI['addVoiceComment'];
   audioUrl?: CommentServiceI['commentAudioUrl'];
@@ -203,7 +201,7 @@ async function render(
       provideFakeSessionStore('REGISTERED'),
       { provide: COMMENT_SERVICE, useValue: comments },
       {
-        provide: VOICE_CAPTURE,
+        provide: AUDIO_CAPTURE,
         useValue: options.capture ?? fakeVoiceCapture(),
       },
       { provide: Router, useValue: { navigateByUrl: jest.fn() } },

@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { ASSISTANT_MESSAGE_MAX_LENGTH } from '@portfolio/velista/models';
-import { Dictation } from '@portfolio/velista/platform';
+import { AudioRecorder } from '@portfolio/velista/platform';
 import {
   MicIcon,
   PauseIcon,
@@ -22,7 +22,7 @@ import {
 export type ComposerButton = 'record' | 'send' | 'stop';
 
 /**
- * The field, the dictation, and the one button that is both (plan 0032, section 4).
+ * The field, the recorder, and the one button that is both (plan 0032, section 4).
  *
  * ## One slot, three jobs
  *
@@ -46,13 +46,13 @@ export type ComposerButton = 'record' | 'send' | 'stop';
  * keyboard's own dictation button keeps working into it beside this one (section 10).
  * Somebody who already knows that gesture should not have to learn this one.
  *
- * ## Why it injects the dictation
+ * ## Why it injects the recorder
  *
- * `Dictation` is in `platform`, which rule D1 permits this library to reach, the way
- * `AppLayout` already reaches `ThemeStore`. What D1 forbids is `data-access`, and there
- * is none here: the words leave as an output and this component never learns what
- * becomes of them. Keeping the capture beside the controls is what stops five signals
- * and four callbacks being threaded through the page above.
+ * `AudioRecorder` is in `platform`, which rule D1 permits this library to reach, the
+ * way `AppLayout` already reaches `ThemeStore`. What D1 forbids is `data-access`, and
+ * there is none here: the recording leaves as an output and this component never
+ * learns what becomes of it. Keeping the capture beside the controls is what stops
+ * five signals and four callbacks being threaded through the page above.
  */
 @Component({
   selector: 'lib-assistant-composer',
@@ -69,7 +69,7 @@ export type ComposerButton = 'record' | 'send' | 'stop';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AssistantComposer {
-  private readonly _dictation = inject(Dictation);
+  private readonly _recorder = inject(AudioRecorder);
 
   /**
    * Whether the composer may be used at all.
@@ -86,11 +86,11 @@ export class AssistantComposer {
   /** What has been typed. Owned here; the page is told only when it is sent. */
   protected readonly text = signal('');
 
-  protected readonly dictation = this._dictation;
+  protected readonly recorder = this._recorder;
 
   /** The elapsed length as `m:ss`, which is what sits between pause and stop. */
   protected readonly elapsed = computed(() => {
-    const seconds = this._dictation.elapsedSeconds();
+    const seconds = this._recorder.elapsedSeconds();
 
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   });
@@ -102,7 +102,7 @@ export class AssistantComposer {
    * microphone still open is a state where stop is unambiguously the next thing.
    */
   protected readonly button = computed<ComposerButton>(() =>
-    this._dictation.active()
+    this._recorder.active()
       ? 'stop'
       : this.text().trim().length > 0
         ? 'send'
@@ -113,20 +113,18 @@ export class AssistantComposer {
   readonly send = output<string>();
 
   /**
-   * A message they spoke, as the words.
+   * A message they spoke. The recording, and nothing said about where it goes.
    *
-   * A string and not a recording, because the service that shipped takes text and has
-   * no audio route at all (backend `0039`); `SpeechCapture` carries the account. The
-   * happy consequence is that the caller's own bubble can show what was understood
-   * straight away, which under an audio upload would have needed the service to send
-   * the transcription back.
+   * A file rather than the words, because the service transcribes (backend `0041`).
+   * The cost is that the caller's own bubble cannot fill in until the reply comes
+   * back; the page draws a placeholder for that stretch and never a guess.
    *
    * **It still sends immediately**, which is what section 12 settled: for this audience
    * an accidental stop is a sent message with no way back, and a confirm step would tax
-   * every message to protect the rare one. Seeing the words appear as the caller's own
-   * bubble is the check, and it costs no press.
+   * every message to protect the rare one. Seeing what the service heard appear as the
+   * caller's own bubble is the check, and it costs no press.
    */
-  readonly spoke = output<string>();
+  readonly spoke = output<Blob>();
 
   protected onInput(event: Event): void {
     this.text.set((event.target as HTMLInputElement).value);
@@ -144,7 +142,7 @@ export class AssistantComposer {
         this._submit();
         return;
       case 'record':
-        void this._dictation.start();
+        void this._recorder.start();
         return;
       default:
         void this._stop();
@@ -161,23 +159,23 @@ export class AssistantComposer {
   }
 
   protected pauseOrResume(): void {
-    if (this._dictation.state() === 'paused') {
-      this._dictation.resume();
+    if (this._recorder.state() === 'paused') {
+      this._recorder.resume();
       return;
     }
 
-    this._dictation.pause();
+    this._recorder.pause();
   }
 
   /**
    * Dismiss the "it did not start" state, so the composer comes back.
    *
-   * A refused microphone leaves the dictation in `refused` and the panel says so; the
+   * A refused microphone leaves the recorder in `refused` and the panel says so; the
    * way out of it is this rather than a retry, because pressing the microphone again
    * against a permission the browser has remembered produces the same state silently.
    */
-  protected dismissDictationState(): void {
-    this._dictation.cancel();
+  protected dismissRecorderState(): void {
+    this._recorder.cancel();
   }
 
   private _submit(): void {
@@ -191,13 +189,12 @@ export class AssistantComposer {
   }
 
   private async _stop(): Promise<void> {
-    const said = await this._dictation.stop();
+    const recording = await this._recorder.stop();
 
-    // Null is no session, an empty string is a microphone that heard nothing
-    // recognisable, and both are the same as an empty field: the press ended the
-    // dictation and sent nothing, rather than sending an empty message.
-    if (said !== null && said.length > 0) {
-      this.spoke.emit(said);
+    // Null means the recorder had nothing, which is the same as an empty field: the
+    // press ended the recording and sent nothing rather than sending an empty message.
+    if (recording !== null && recording.size > 0) {
+      this.spoke.emit(recording);
     }
   }
 }

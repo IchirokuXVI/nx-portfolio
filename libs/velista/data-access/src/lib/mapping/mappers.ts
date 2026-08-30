@@ -614,10 +614,18 @@ export function toAssistantReply(raw: unknown): AssistantReply | null {
 
   const resolution = LIST_RESOLUTIONS[strOr(raw['listResolution'], '')];
 
+  // What the service heard, on a spoken turn (backend `0041`). Carried only when it
+  // is genuinely a string: an absent `heard` and one that arrived as some other type
+  // both mean the panel does not know the words, and the bubble shows a placeholder
+  // rather than a guess. An **empty** string is a real answer and is kept — it means
+  // the recording had nothing recognisable in it.
+  const heard = raw['heard'];
+
   return {
     text,
     references: mapArray(raw['references'], toAssistantReference),
     ...(resolution === undefined ? {} : { listResolution: resolution }),
+    ...(typeof heard === 'string' ? { heard } : {}),
   };
 }
 

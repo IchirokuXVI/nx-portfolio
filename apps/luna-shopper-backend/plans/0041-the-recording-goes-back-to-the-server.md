@@ -143,6 +143,29 @@ sends a byte of audio anywhere.
 
 ### 3.3 The format question, which has to be settled before anything is built
 
+> **Settled, and in the good direction: `audio/webm` is accepted.** The provider's current
+> documentation lists wav, mp3, aiff, aac, ogg, flac, mpeg, m4a, l16, opus, alaw, mulaw
+> **and webm**; the Firebase/Vertex list adds mp4. So the commonest browser's container is
+> fine, Safari's is fine, and **the container rewrite this section names as a fallback was
+> not built and is not needed.** The fear below was justified when it was written and the
+> fact had gone stale, which is exactly what it predicted about itself.
+>
+> `ASSISTANT_AUDIO_MIME_TYPES` defaults to
+> `audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac`, and the
+> client negotiates `audio/webm;codecs=opus` first through `MediaRecorder.isTypeSupported`,
+> falling through to ogg and then to whatever the browser picks for itself.
+>
+> The one thing the spike could not do is the "one real request" this section also asks
+> for: rule A4 forbids any test here from reaching the provider, and there is no key in
+> this environment. Two independent published sources agree, and the service refuses an
+> unknown container with a sentence rather than a stack trace, so the cost of the
+> documentation being wrong is a legible refusal rather than a broken feature.
+>
+> **Also confirmed, for section 7:** audio is billed at **32 tokens per second**, so a
+> minute is 1,920 tokens and the five minute ceiling is about 9,600. That is a different
+> order of thing from a typed message, and it is one more reason the client's five minute
+> limit pauses rather than sends.
+
 This is the one thing in this plan that can invalidate a week of work, so it goes first in
 the build order rather than being discovered.
 
@@ -215,6 +238,23 @@ So `max_payload` is raised, deliberately and in both places at once:
 - `k8s/e2e/luna-shopper-backend/compose.yml`, on the broker's `command`.
 - `k8s/helm/templates/luna-shopper-backend/nats.yaml.tpl`, on its `args`, from a value in
   `values.yaml` beside the image and the storage size, so the number is stated once.
+
+> **As built, and the two lines above are wrong about how.** `max_payload` is
+> **config file only**: `nats-server` has no `--max_payload` flag, and passing one makes
+> it print its usage and exit — the container comes up unhealthy and every service behind
+> it fails to connect. That is not a thing a chart render or a unit test can catch, and it
+> was found by standing the stack up.
+>
+> So the number lives in a file in both places instead, and the broker is pointed at it
+> with `-c`: `k8s/e2e/luna-shopper-backend/nats.conf`, mounted read only, and a ConfigMap
+> in the chart rendered from the same `values.yaml` entry. Everything else stays on the
+> command line, because CLI flags win over the file and the container still says what it
+> is at a glance.
+>
+> One more trap in the chart, for the same reason the same value nearly broke twice: Helm
+> carries a YAML integer as a float64, so rendering 8388608 unaided writes
+> `8.388608e+06`, which the broker will not parse. `int64` before it, in the ConfigMap and
+> in `ASSISTANT_AUDIO_MAX_BYTES` alike.
 
 **Both, in the same commit.** A raise applied in one and not the other is a feature that
 works on the development machine and fails in the cluster with a broker error, which is
@@ -493,8 +533,9 @@ breaking rule A4.
 
 ## 13. Open decisions
 
-- **The format question in section 3.3**, which is a spike rather than a decision and
-  which blocks everything else. Run it first.
+- ~~**The format question in section 3.3.**~~ **Run, and settled:** `audio/webm` is on the
+  provider's accepted list, so no container rewrite was built. Section 3.3 carries the
+  answer and what it could not check.
 - **Whether the transcription model is the turn model.** The config key exists so they can
   differ; whether they should is a quality question that has no answer before there is
   usage.

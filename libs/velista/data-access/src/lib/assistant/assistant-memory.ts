@@ -25,6 +25,8 @@ export class AssistantMemory implements AssistantServiceI {
   private _nextTurnFails: { code: GatewayError['code']; wait?: number } | null =
     null;
 
+  private _heardNothing = false;
+
   async ask(
     _transcript: readonly AssistantTurn[],
     message: string
@@ -36,6 +38,45 @@ export class AssistantMemory implements AssistantServiceI {
     }
 
     return answerFor(message);
+  }
+
+  /**
+   * A spoken turn, without transcribing anything.
+   *
+   * It cannot hear, so it answers as though it heard a sentence about adding
+   * something, and says so in `heard`. That is enough to exercise the one behaviour
+   * the panel has that a typed turn does not: the caller's own bubble starts as a
+   * placeholder and is rewritten to the words the service reports.
+   *
+   * `heardNothing` is how a spec reaches the other branch, which is a recording with
+   * nothing recognisable in it.
+   */
+  async askAloud(
+    _transcript: readonly AssistantTurn[],
+    _recording: Blob
+  ): Promise<AssistantReply> {
+    const failure = this._nextTurnFails;
+    if (failure !== null) {
+      this._nextTurnFails = null;
+      throw memoryFailure(failure.code, failure.wait);
+    }
+
+    if (this._heardNothing) {
+      this._heardNothing = false;
+      return {
+        text: 'I did not catch that. Could you say it again?',
+        references: [],
+        heard: '',
+      };
+    }
+
+    const heard = 'add milk to the weekly shop';
+    return { ...answerFor(heard), heard };
+  }
+
+  /** Make the next spoken turn come back having heard nothing. */
+  hearNothingNext(): void {
+    this._heardNothing = true;
   }
 
   /** Make the next turn fail. One turn, then it forgets, so a retry succeeds. */

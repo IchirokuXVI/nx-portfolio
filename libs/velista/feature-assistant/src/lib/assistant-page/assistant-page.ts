@@ -15,10 +15,15 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   APP_BASE_PATH,
+  ASSISTANT_AUDIO_MAX_MB,
   type AssistantEntry,
   type AssistantReference,
 } from '@portfolio/velista/models';
-import { appPath, BrowserFacade, Dictation } from '@portfolio/velista/platform';
+import {
+  appPath,
+  AudioRecorder,
+  BrowserFacade,
+} from '@portfolio/velista/platform';
 import {
   AssistantComposer,
   AssistantIntro,
@@ -83,7 +88,7 @@ import { AssistantStore } from '../assistant-store';
   // Both are scoped to this page and destroyed with it, which is what decides two
   // things the plan states as behaviour: the conversation survives leaving the panel
   // and coming back within a session and does not survive a reload (section 5), and a
-  // message does not survive leaving mid dictation, because destroying `Dictation`
+  // message does not survive leaving mid capture, because destroying `AudioRecorder`
   // releases the microphone (section 12).
   //
   // Here rather than in the route's `providers`, which is where the plan puts the
@@ -91,7 +96,7 @@ import { AssistantStore } from '../assistant-store';
   // barrel, and that file is loaded before any page: the panel would land in the
   // shell's initial payload and `routes.spec.ts` would rightly fail its assertion that
   // every page is lazy. The lifetime is identical either way.
-  providers: [AssistantStore, Dictation],
+  providers: [AssistantStore, AudioRecorder],
 })
 export class AssistantPage {
   private readonly _store = inject(AssistantStore);
@@ -169,13 +174,12 @@ export class AssistantPage {
   /**
    * A message spoken into the app's own microphone.
    *
-   * The same call as a typed one, because the words arrive as words: the browser
-   * transcribes and the service takes text (plan 0032, section 10, settled by what
-   * backend `0039` shipped). It is bound separately from `(send)` only because the
-   * composer distinguishes the two gestures, not because anything below does.
+   * Its own call rather than `send`, because the two requests genuinely differ: this
+   * one carries a recording and no words, and the words come back on the reply
+   * (backend `0041`). Everything after that is the same turn.
    */
-  async spoke(said: string): Promise<void> {
-    await this._store.say(said);
+  async spoke(recording: Blob): Promise<void> {
+    await this._store.speak(recording);
   }
 
   private _toMessage(
@@ -215,6 +219,22 @@ export class AssistantPage {
         return this._translator.t('assistant.unconfigured');
       case 'dropped':
         return this._translator.t('assistant.dropped');
+      // The caller's own bubble for a turn they spoke, before the words come back
+      // (backend `0041`, section 8.4). It says that something was said and is being
+      // listened to, and it is what stays on screen when a reply carries no `heard`:
+      // a placeholder is honest and a guess at what somebody said is not.
+      case 'spoken':
+        return this._translator.t('assistant.spoken');
+      // The limit goes into the sentence, the way rule A5 puts the seconds into the
+      // one about waiting. A refusal with no number in it is not an answer.
+      case 'tooLong':
+        // The values go in the fourth argument; the two before them are the
+        // namespace and the locale, and both take their defaults here.
+        return this._translator.t('assistant.tooLong', undefined, undefined, {
+          limit: ASSISTANT_AUDIO_MAX_MB,
+        });
+      case 'badFormat':
+        return this._translator.t('assistant.badFormat');
       default:
         return this._translator.t('assistant.failed');
     }

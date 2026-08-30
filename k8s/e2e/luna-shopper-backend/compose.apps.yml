@@ -64,10 +64,15 @@ services:
       # the locale the flow started in; the app lives under a path that follows
       # the locale segment, so a plain prefix could not express it.
       APP_BASE_URL: http://localhost:4200/{locale}/velista
-      # Voice comments (plan 0045). Stated rather than left to the defaults,
-      # because this file states its environment by hand and inherits nothing:
-      # the suite asserts the byte cap's refusal names the limit, so the number it
-      # names has to be the number this stack is running with.
+      # The byte cap the spoken turn route's multipart interceptor enforces
+      # (plan 0041). The gateway is where an upload is actually refused, so the
+      # number has to be here as well as on the assistant.
+      ASSISTANT_AUDIO_MAX_BYTES: '2097152'
+      # Voice comments (plan 0045), which are a different route with their own
+      # cap. Stated rather than left to the defaults, because this file states its
+      # environment by hand and inherits nothing: the suite asserts the byte cap's
+      # refusal names the limit, so the number it names has to be the number this
+      # stack is running with.
       VOICE_COMMENT_MAX_BYTES: '2097152'
       # Empty falls back to the contract's list, which is what browsers produce.
       VOICE_COMMENT_CONTENT_TYPES: ''
@@ -271,6 +276,11 @@ services:
       GATEWAY_INTERNAL_URL: http://gateway:3000
       GEMINI_API_KEY: ''
       ASSISTANT_MODEL: gemini-3.5-flash-lite
+      # Voice input (plan 0041). Empty transcription model means the same model
+      # answers and transcribes, which is the default everywhere.
+      ASSISTANT_TRANSCRIPTION_MODEL: ''
+      ASSISTANT_AUDIO_MAX_BYTES: '2097152'
+      ASSISTANT_AUDIO_MIME_TYPES: 'audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac'
       ASSISTANT_MAX_TURNS: '20'
       ASSISTANT_MAX_CHARS: '8000'
       ASSISTANT_MAX_TOOL_CALLS: '6'

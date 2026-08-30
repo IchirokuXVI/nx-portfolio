@@ -670,8 +670,7 @@
       "placeholder": "Escribe un mensaje",
       "record": "Grabar un mensaje",
       "send": "Enviar",
-      "stop": "Parar y enviar",
-      "spoken": "Un mensaje hablado"
+      "stop": "Parar y enviar"
     },
     "recorder": {
       "pause": "Pausar",
@@ -695,6 +694,9 @@
     },
     "failed": "Eso no me llegó. Tu mensaje sigue aquí, inténtalo otra vez.",
     "unconfigured": "El asistente no está activado aquí. Es cosa nuestra, no tuya, y volver a intentarlo no lo cambiará.",
-    "dropped": "El principio de esta conversación es demasiado largo para guardarlo, así que lo he soltado."
+    "dropped": "El principio de esta conversación es demasiado largo para guardarlo, así que lo he soltado.",
+    "spoken": "Has dicho algo. Lo estoy escuchando ahora.",
+    "tooLong": "Esa grabación era demasiado grande para enviarla. Puedo recibir hasta {{limit}} MB de una vez, así que un mensaje más corto sí llegará.",
+    "badFormat": "Tu navegador grabó eso de una forma que no puedo leer. Puedes escribirlo igualmente."
   }
 }

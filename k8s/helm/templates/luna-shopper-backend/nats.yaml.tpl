@@ -3,20 +3,18 @@
 {{- $ls := .Values.lunaShopperBackend }}
 {{- $nats := $ls.nats }}
 ---
-# The broker's configuration, which exists for exactly one setting.
+# The broker's configuration file, which exists for exactly one setting.
 #
-# `max_payload` is **not a command line flag**. `nats-server` refuses to start
-# with `--max_payload` ("flag provided but not defined"): it is a configuration
-# file option only, so raising it means giving the broker a config file and
-# pointing `-c` at it. Plan 0041 section 4.2 says to set it "on its args", which
-# is the one thing that section gets wrong about the mechanism; the number and
-# the reasoning behind it are unchanged.
+# `max_payload` is raised above the 1 MB default so a voice recording can reach
+# the assistant at all (luna plan 0041 section 4.2, luna plan 0045 section 3),
+# and it is **config file only**: nats-server has no `--max_payload` flag, and
+# passing one makes it print its usage and exit — the pod then crashloops and
+# takes every service behind it with it. Both plans assumed a command line
+# argument; it is not one.
 #
-# A voice recording crosses this broker as base64 (plan 0045, section 3): a two
-# megabyte upload is about 2.7 MB encoded and under 3 MB with its envelope,
-# against a default ceiling of one megabyte. The headroom above that is
-# deliberate, since setting the ceiling just above the cap would mean the next
-# change to either number has to move both.
+# `int64` before the value, and it is load bearing: Sprig carries a YAML integer
+# as a float64, so rendering 8388608 unaided writes "8.388608e+06", which the
+# broker will not parse.
 #
 # **This and `k8s/e2e/luna-shopper-backend/nats.conf` are one decision and change
 # together.** A raise in one and not the other is a feature that works on the
@@ -31,7 +29,7 @@ metadata:
     app.kubernetes.io/part-of: luna-shopper-backend
 data:
   nats.conf: |
-    max_payload: {{ $nats.maxPayload | default "8MB" }}
+    max_payload: {{ $nats.maxPayload | default 8388608 | int64 }}
 ---
 apiVersion: v1
 kind: Service
@@ -84,8 +82,10 @@ spec:
           # JetStream enabled with a persistent store so durable streams survive a
           # restart; monitoring on 8222 backs the readiness/liveness probes.
           #
-          # `-c` points at the ConfigMap above, which carries `max_payload`. See
-          # that comment for why it cannot be an argument here.
+          # `-c` for the ConfigMap above, which carries `max_payload` and nothing
+          # else. The rest stays here rather than moving into the file, because
+          # CLI flags win over it and this way the container still says what it is
+          # at a glance. See that comment for why the ceiling cannot be a flag.
           args: ['-c', '/etc/nats/nats.conf', '-js', '-sd', '/data', '-m', '8222']
           ports:
             - name: client

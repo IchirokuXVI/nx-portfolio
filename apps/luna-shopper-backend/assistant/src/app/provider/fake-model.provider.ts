@@ -20,21 +20,28 @@ import type {
  */
 export class FakeModelProvider implements ModelProvider {
   readonly requests: ModelRequest[] = [];
+  /**
+   * The transcriptions asked for, in order (plan 0041).
+   *
+   * Kept in its own list rather than mixed into {@link requests}, so a test can
+   * say "the second provider call is byte for byte what a typed turn sends"
+   * without first having to skip past the transcription. That assertion is the
+   * one that holds the plan's central claim: from the message onward there is no
+   * such thing as a spoken turn.
+   */
+  readonly transcriptions: TranscriptionRequest[] = [];
   configured = true;
   transcriptionSupported = true;
 
-  /**
-   * What {@link transcribe} was asked, so a test can assert the mime type and
-   * locale reached the provider without ever producing a byte of real audio
-   * (rule A4).
-   */
-  readonly transcriptions: TranscriptionRequest[] = [];
-
   private readonly replies: (ModelReply | Error)[];
-  private readonly heard: (string | Error)[] = [];
+  private readonly heard: (string | Error)[];
 
-  constructor(replies: (ModelReply | Error)[] = []) {
+  constructor(
+    replies: (ModelReply | Error)[] = [],
+    heard: (string | Error)[] = []
+  ) {
     this.replies = [...replies];
+    this.heard = [...heard];
   }
 
   /**
@@ -48,21 +55,6 @@ export class FakeModelProvider implements ModelProvider {
   willHear(...results: (string | Error)[]): this {
     this.heard.push(...results);
     return this;
-  }
-
-  async transcribe(request: TranscriptionRequest): Promise<string> {
-    this.transcriptions.push(request);
-    const next = this.heard.shift();
-    if (next === undefined) {
-      // Silence rather than a throw, unlike `generate` below. A provider that
-      // heard nothing is a real answer this feature has to handle, and it is the
-      // one a test that scripted nothing most likely means.
-      return '';
-    }
-    if (next instanceof Error) {
-      throw next;
-    }
-    return next;
   }
 
   /** A reply that is only text: what an off topic redirect or an answer looks like. */
@@ -93,6 +85,33 @@ export class FakeModelProvider implements ModelProvider {
     if (next === undefined) {
       throw new Error(
         `FakeModelProvider ran out of scripted replies (call ${this.requests.length})`
+      );
+    }
+    if (next instanceof Error) {
+      throw next;
+    }
+    return next;
+  }
+
+  /**
+   * Scripted the same way, and for the same reason (plan 0041).
+   *
+   * **No audio is ever inspected here and none is ever sent anywhere.** Rule A4
+   * covers a recording exactly as it covers a prompt, and this class is what
+   * makes the whole voice path testable without a byte leaving the process.
+   *
+   * Running out throws rather than answering silence, which is the same rule
+   * {@link generate} follows: a provider that heard nothing is a state both
+   * callers handle (a spoken turn says so and runs no turn; a voice comment
+   * records that it has no transcript), so a test that means it scripts `''`
+   * and a test that scripted nothing has a bug worth failing on.
+   */
+  async transcribe(request: TranscriptionRequest): Promise<string> {
+    this.transcriptions.push(request);
+    const next = this.heard.shift();
+    if (next === undefined) {
+      throw new Error(
+        `FakeModelProvider ran out of scripted transcriptions (call ${this.transcriptions.length})`
       );
     }
     if (next instanceof Error) {

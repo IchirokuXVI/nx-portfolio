@@ -74,6 +74,21 @@ export interface AssistantReply {
   readonly references: readonly AssistantReference[];
 
   /**
+   * What the service heard, on a spoken turn (backend `0041`, section 3.1).
+   *
+   * The panel puts it in the caller's own bubble, so the person can see the sentence
+   * the machine believed and check the answer against it. Mishearing is the
+   * characteristic failure of a voice interface, and an answer to a question you
+   * cannot see is an answer you cannot check.
+   *
+   * **Optional, and the panel must never invent it.** A typed turn carries none, and
+   * a service that sends none on a spoken turn is not broken: the bubble falls back to
+   * a neutral placeholder, because a guess at what somebody said is worse than showing
+   * that the words are not known.
+   */
+  readonly heard?: string;
+
+  /**
    * Present when the turn resolved a list for a write, absent otherwise.
    *
    * **Nothing in this app's behaviour turns on it yet**, and it is carried rather than
@@ -105,6 +120,17 @@ export interface AssistantReply {
  * `dropped` is not a speaker's turn at all: it is the line the panel writes on its own
  * when the cap bites, so that losing the oldest turns is something a person sees
  * happen rather than something that happened somewhere they cannot look (section 5).
+ *
+ * `spoken` is the caller's own bubble for a turn they **said**, before the words come
+ * back. It carries no text on purpose: the client has nothing to write there, because
+ * the service transcribes (backend `0041`, section 8.4). It becomes a `said` carrying
+ * `heard` when the reply lands, and stays a `spoken` when the reply carries none —
+ * showing a placeholder is right, and showing a guess at what somebody said is not.
+ *
+ * `tooLong` and `badFormat` are the two recordings that never left: over the byte cap,
+ * and in a container this deployment cannot read. Both are the app speaking, both say
+ * so in a sentence in the transcript rather than a banner, and `tooLong` names the
+ * limit (backend `0041`, section 9).
  */
 export interface AssistantEntry {
   readonly id: string;
@@ -114,9 +140,12 @@ export interface AssistantEntry {
   readonly kind:
     | 'said'
     | 'pending'
+    | 'spoken'
     | 'failed'
     | 'throttled'
     | 'unconfigured'
+    | 'tooLong'
+    | 'badFormat'
     | 'dropped';
   readonly retryAfterSeconds?: number;
 }

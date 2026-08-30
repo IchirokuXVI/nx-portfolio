@@ -15,12 +15,12 @@ import {
   COMMENT_BODY_MAX_LENGTH,
   VOICE_COMMENT_MAX_BYTES,
   VOICE_COMMENT_MAX_SECONDS,
+  type RecordedAudio,
 } from '@portfolio/velista/models';
 import {
-  VOICE_CAPTURE,
-  type VoiceCaptureI,
-  type VoiceCaptureSession,
-  type VoiceRecording,
+  AUDIO_CAPTURE,
+  type AudioCaptureI,
+  type AudioCaptureSession,
 } from '@portfolio/velista/platform';
 import { MicIcon, SendIcon, StopIcon } from '../icons/icons';
 
@@ -151,7 +151,7 @@ export class CommentComposer {
    * The container uploads it and reports back through {@link busy}; on failure it
    * calls nothing, and the blob stays here to be sent again.
    */
-  readonly recorded = output<VoiceRecording>();
+  readonly recorded = output<RecordedAudio>();
 
   readonly body = signal('');
   readonly maxLength = COMMENT_BODY_MAX_LENGTH;
@@ -161,12 +161,12 @@ export class CommentComposer {
   readonly errorKey = signal<string | null>(null);
   readonly errorArgs = signal<Record<string, string | number>>({});
 
-  private readonly _capture = inject<VoiceCaptureI>(VOICE_CAPTURE);
+  private readonly _capture = inject<AudioCaptureI>(AUDIO_CAPTURE);
   private readonly _field = viewChild<ElementRef<HTMLTextAreaElement>>('field');
 
-  private _session: VoiceCaptureSession | null = null;
+  private _session: AudioCaptureSession | null = null;
   private _ticker: ReturnType<typeof setInterval> | null = null;
-  private readonly _held = signal<VoiceRecording | null>(null);
+  private readonly _held = signal<RecordedAudio | null>(null);
 
   /**
    * Whether the microphone is drawn at all.
@@ -325,7 +325,15 @@ export class CommentComposer {
       return;
     }
 
-    const recording = await session.stop();
+    const blob = await session.stop();
+    // The recorder keeps no clock on purpose, so the duration is the one this
+    // composer was already counting for the cap, and the type comes off the blob
+    // rather than being asked for separately.
+    const recording: RecordedAudio = {
+      blob,
+      mimeType: blob.type,
+      durationSeconds: this.elapsed(),
+    };
     this.mode.set('idle');
 
     if (recording.blob.size === 0) {

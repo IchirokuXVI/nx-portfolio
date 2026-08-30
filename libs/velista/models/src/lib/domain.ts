@@ -215,6 +215,25 @@ export interface Line {
   readonly version: number;
 }
 
+/**
+ * A recording somebody just made, on its way to being sent (velista plan 0039).
+ *
+ * It lives here rather than beside the recorder because it crosses a component
+ * boundary: the comment composer produces one and the sheet uploads it, and
+ * neither should have to name a platform device to describe what it is holding.
+ *
+ * `AudioCapture` deliberately keeps no clock (backend plan 0041 built it that
+ * way, since pausing is arithmetic rather than a device capability), so the
+ * duration here is measured by whoever ran the recording.
+ */
+export interface RecordedAudio {
+  blob: Blob;
+  /** What the browser negotiated, taken from the blob itself. */
+  mimeType: string;
+  /** How long the recorder ran, in seconds. Never trusted by the server. */
+  durationSeconds: number;
+}
+
 /** What a comment's recording weighs and how long it runs. */
 export interface CommentRecording {
   readonly contentType: string;

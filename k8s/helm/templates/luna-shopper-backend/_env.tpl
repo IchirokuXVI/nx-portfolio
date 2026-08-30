@@ -91,12 +91,15 @@ because it is the only public HTTP surface: the realtime service carries no requ
 bodies and reads no floor, and a stale client is caught on its next REST call.
 */}}
 {{- /*
-Voice comments (plan 0045). The gateway holds the cap because it holds the
-multipart interceptor, and a byte cap that is not on the interceptor is not a cap:
-the global ValidationPipe never sees a file and Express's body limits do not apply
-to a multipart stream. Core receives the same two keys and checks them again.
+The two byte caps a multipart interceptor enforces, for the two routes that take
+an upload: a spoken assistant turn (plan 0041) and a voice comment (plan 0045).
+Gateway only, because the interceptor is the one thing standing between a phone
+and this pod's memory, and a cap that is not on it is not a cap: the global
+ValidationPipe never sees a file and Express's body limits do not apply to a
+multipart stream. The assistant and core each apply their own number again to
+what actually crossed the broker.
 */}}
-{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS") }}
+{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
@@ -183,7 +186,7 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: GEMINI_API_KEY
-{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_MODEL" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK") }}
+{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_MODEL" "ASSISTANT_TRANSCRIPTION_MODEL" "ASSISTANT_AUDIO_MAX_BYTES" "ASSISTANT_AUDIO_MIME_TYPES" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
