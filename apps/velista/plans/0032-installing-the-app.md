@@ -138,6 +138,13 @@ The install page renders, from the first frame, the instructions for the browser
 being read in. If a prompt arrives, a primary button appears **above** them and the
 steps stay where they are, folded behind *Prefer to do it by hand?*.
 
+That control is a **disclosure and never a navigation**. It unfolds the steps on this
+page, because the steps being the floor is the entire decision and a second screen would
+put a navigation between somebody and the only thing that works on their browser. So it
+is drawn as a bordered summary row with the caret at the far end, carrying
+`aria-expanded`, rather than as a line of text with a caret beside it, which reads as a
+link to somewhere else. Same control, same shape, in the `installed` state (D7).
+
 The inverse design, a button that falls back to instructions, cannot be built: it would
 have to decide which one to draw before the browser has told it anything, and it would
 be wrong on Safari every time.
@@ -208,8 +215,8 @@ finds it on the account page a minute later, which is where D5's row lives.
 Per 2.4, `installed` is a belief with no uninstall event behind it. So:
 
 - The install page's `installed` state is **not** a dead end. It confirms, and below the
-  confirmation it keeps *Not on your home screen? Show the steps*, which opens the same
-  guide the `manual` state renders.
+  confirmation it keeps *Not on your home screen? Show the steps*, the same disclosure
+  D3 describes, unfolding the same guide the `manual` state renders, on the same page.
 - The account row's `installed` form is a **statement, not a disabled button**: a value
   row with an `ok` chip, exactly the shape `0015` already uses for a confirmed email. A
   disabled control invites a reader to work out why; a statement does not.

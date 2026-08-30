@@ -52,15 +52,19 @@
           Install Velista
         </button>
 
-        <!-- The steps, folded. Still there, never removed (D3). -->
-        <button type="button" style="width: 100%; margin-top: 14px; background: transparent; border: 0; padding: 12px 0; font-family: inherit; font-size: 13.5px; color: #6f7899; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px;">
-          Prefer to do it by hand?
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <!--
+          The steps, folded. Still on this page, never removed and never a second
+          screen (D3). Drawn as a summary row so the caret cannot be read as a
+          navigation: full width, bordered, label left, caret at the far end.
+        -->
+        <button type="button" aria-expanded="false" style="width: 100%; min-height: 46px; margin-top: 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09); border-radius: 11px; padding: 0 14px; font-family: inherit; font-size: 13.5px; color: #98a0bb; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <span>Prefer to do it by hand?</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex: none;" aria-hidden="true">
             <path d="M5.5 9.5L12 16l6.5-6.5"/>
           </svg>
         </button>
 
-        <div style="height: 1px; background: rgba(255,255,255,0.07); margin: 14px 0 22px;"></div>
+        <div style="height: 1px; background: rgba(255,255,255,0.07); margin: 22px 0 22px;"></div>
 
         <!-- THE THREE BENEFITS -->
         <div style="display: flex; flex-direction: column; gap: 18px;">
@@ -225,15 +229,16 @@
           <span style="font-size: 14.5px; font-weight: 620; color: #f7f8fc;">Nothing left to do</span>
         </div>
 
-        <!-- D7: the way back to the steps is always here -->
-        <button type="button" style="width: 100%; margin-top: 14px; background: transparent; border: 0; padding: 12px 0; font-family: inherit; font-size: 13.5px; color: #6f7899; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px;">
-          Not on your home screen? Show the steps
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <!-- D7: the way back to the steps is always here, and it is the same
+             in place disclosure as the one on the ready screen. -->
+        <button type="button" aria-expanded="false" style="width: 100%; min-height: 46px; margin-top: 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09); border-radius: 11px; padding: 0 14px; font-family: inherit; font-size: 13.5px; color: #98a0bb; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <span>Not on your home screen? Show the steps</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex: none;" aria-hidden="true">
             <path d="M5.5 9.5L12 16l6.5-6.5"/>
           </svg>
         </button>
 
-        <div style="height: 1px; background: rgba(255,255,255,0.07); margin: 14px 0 22px;"></div>
+        <div style="height: 1px; background: rgba(255,255,255,0.07); margin: 22px 0 22px;"></div>
 
         <div style="display: flex; flex-direction: column; gap: 18px;">
           <div style="display: flex; gap: 13px; align-items: flex-start;">
