@@ -3,6 +3,36 @@
 {{- $ls := .Values.lunaShopperBackend }}
 {{- $nats := $ls.nats }}
 ---
+# The broker's configuration, which exists for exactly one setting.
+#
+# `max_payload` is **not a command line flag**. `nats-server` refuses to start
+# with `--max_payload` ("flag provided but not defined"): it is a configuration
+# file option only, so raising it means giving the broker a config file and
+# pointing `-c` at it. Plan 0041 section 4.2 says to set it "on its args", which
+# is the one thing that section gets wrong about the mechanism; the number and
+# the reasoning behind it are unchanged.
+#
+# A voice recording crosses this broker as base64 (plan 0045, section 3): a two
+# megabyte upload is about 2.7 MB encoded and under 3 MB with its envelope,
+# against a default ceiling of one megabyte. The headroom above that is
+# deliberate, since setting the ceiling just above the cap would mean the next
+# change to either number has to move both.
+#
+# **This and `k8s/e2e/luna-shopper-backend/nats.conf` are one decision and change
+# together.** A raise in one and not the other is a feature that works on the
+# development machine and fails in the cluster with a broker level rejection.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: luna-shopper-backend-nats-config
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    app: luna-shopper-backend-nats
+    app.kubernetes.io/part-of: luna-shopper-backend
+data:
+  nats.conf: |
+    max_payload: {{ $nats.maxPayload | default "8MB" }}
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -54,27 +84,9 @@ spec:
           # JetStream enabled with a persistent store so durable streams survive a
           # restart; monitoring on 8222 backs the readiness/liveness probes.
           #
-          # `--max_payload` is raised from the one megabyte default because a voice
-          # comment travels gateway to core, and a recording to the assistant, as
-          # base64 over this broker (plan 0041, section 4.2; plan 0045, section 3).
-          # A two megabyte upload is about 2.7 MB encoded and under 3 MB with its
-          # envelope, so the ceiling has deliberate headroom: setting it just above
-          # the cap would mean the next change to either number has to move both.
-          #
-          # **This and `compose.yml` are one decision and change together.** A raise
-          # applied here and not there, or there and not here, is a feature that
-          # works on the development machine and fails in the cluster with a broker
-          # level rejection, which is the slowest possible way to find out.
-          args:
-            [
-              '-js',
-              '-sd',
-              '/data',
-              '-m',
-              '8222',
-              '--max_payload',
-              '{{ $nats.maxPayload | default "8MB" }}',
-            ]
+          # `-c` points at the ConfigMap above, which carries `max_payload`. See
+          # that comment for why it cannot be an argument here.
+          args: ['-c', '/etc/nats/nats.conf', '-js', '-sd', '/data', '-m', '8222']
           ports:
             - name: client
               containerPort: 4222
@@ -101,6 +113,13 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: config
+              mountPath: /etc/nats
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: luna-shopper-backend-nats-config
   volumeClaimTemplates:
     - metadata:
         name: data
