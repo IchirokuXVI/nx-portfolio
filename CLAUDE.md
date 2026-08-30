@@ -245,4 +245,7 @@ with each library's `capture-fixtures` target, never by hand.
 
 ## Git workflow
 
-- **Never push code.** Commit locally only, unless the user explicitly asks for a push. Even when a push is explicitly requested, confirm with the user before running it — a prior "yes" does not carry forward to later pushes.
+- **Finish a task by pushing it and opening a pull request against `dev`.** Commit, push the working branch, then `gh pr create --base dev`. No confirmation is needed for either step; this standing instruction is the authorization.
+- **Wait for the PR checks.** Opening the PR is not the end of the task. Watch the run (`gh pr checks --watch`), and if it fails, fix the cause and push again rather than handing back a red PR.
+- **Post the PR link in the conversation**, every time one is created, so it is in the transcript beside the work it came from.
+- `main` is still off limits: never push to it, never force-push, never merge. A pull request into `dev` is the only way work lands.

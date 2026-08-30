@@ -26,6 +26,10 @@
   the destructive control is the red one and the committing control is the amber one.
 - **Two different caps**, injected, because a comment is a minute and a message to the
   assistant is five.
+- **The voice comment player made visible**, which is a two line stylesheet fix to a bar
+  that has never been drawn, and **a line saying the transcript was written by a machine**.
+  Section 9. Both belong here rather than in a plan of their own: they are the playback half
+  of the same feature, and the second one is what `0039` section 3 owed the reader.
 
 ## 2. Why the comment composer changes at all
 
@@ -148,11 +152,43 @@ library icon dependency for one glyph would be a new coupling for no gain.
 second caller, and that a shared component with one caller is a guess about the second one.
 It has its second caller now, so the extraction happens here rather than in `0038`.
 
-**`RecordingRow` in `ui`**: inputs for the state, the elapsed string, whether the cap has
-been reached and what the warning says; outputs `stop` and `discard`. It injects nothing and
-knows nothing about `AudioRecorder`, per rule D1, so the assistant panel and the comments
-sheet each own their own recorder and hand it down. What stays behind in each composer is
-its own field, its own placeholder and its own submit.
+**`RecordingRow` in `ui`**: inputs for the state, the elapsed string and whether the cap has
+been reached; outputs `stop` and `discard`. It injects nothing and knows nothing about
+`AudioRecorder`, per rule D1, so the assistant panel and the comments sheet each own their
+own recorder and hand it down. What stays behind in each composer is its own field, its own
+placeholder and its own submit.
+
+### 6.1 It is a default, not a cage
+
+The two callers are alike enough today to share a component and they are **not** guaranteed
+to stay that way: one lives in a panel that is the whole screen and one in a sheet under a
+conversation, and a difference that shows up later must not force a fork or a boolean named
+after a caller. So the component is drawn to be adapted from outside, along three axes and
+no more:
+
+- **Labels are inputs, not literals.** Every string it renders is a translation key handed
+  in, including the two on the buttons. The component holds no copy of its own, which is
+  also what lets the assistant say "press stop to send it" where a comment sheet says
+  something shorter.
+- **The middle is a slot.** Trash, then `<ng-content />`, then stop. What sits between the
+  two controls is the caller's: today both pass the dot and the length, which the component
+  offers as a small `RecordingElapsed` piece so neither has to redraw it, and a caller that
+  later wants a level meter there (`0038` section 4.1 asks for one) adds it without touching
+  this file.
+- **The notice above it is the caller's too.** The warning and the cap message grow the
+  container and sit at the top of it (`0032` section 4.4), and they are already written
+  per composer because the sentences differ. They stay outside `RecordingRow`, which starts
+  at the row.
+
+What is deliberately **not** configurable is the geometry: trash on the far left, stop on
+the far right, as far apart as the container allows. That is the safeguard section 4 rests
+on, and a caller that wants them closer together wants a different component.
+
+The rule this follows is the one `0038` section 7 stated for the move: the control takes its
+state as inputs and emits, and the pages own the posting. A caller needing something this
+shape cannot express should extend the inputs rather than reach inside it, and if two
+callers ever need genuinely different rows, the honest answer is two components rather than
+one with a mode.
 
 **The comment composer starts injecting `AudioRecorder`** instead of `AUDIO_CAPTURE`
 directly, which deletes the `setInterval` clock, the `_session` handle, the `_held` signal
@@ -164,7 +200,7 @@ tick that fires late or a tab that was backgrounded corrects itself instead of d
 comments sheet provides its own, so leaving the sheet releases the microphone, and a recorder
 open in a comment cannot collide with one open in the assistant.
 
-### 6.1 Two caps, one token
+### 6.2 Two caps, one token
 
 `RECORDING_LIMITS` is already injected and already defaults to `{ warnAtSeconds: 180,
 maxSeconds: 300 }`, which is the assistant's. The comments sheet provides its own beside its
@@ -235,23 +271,115 @@ failure lands.
   `0038` section 9's exit criterion arriving with the extraction it belongs to. The ones
   asserting pause and resume are deleted rather than adapted: the control is gone, and a
   spec for a control that does not exist is a spec that will be read as a requirement.
+- **The auto transcript note** is drawn when `transcription` is set, is absent on a typed
+  comment, and is absent on both neutral phrases.
+- **`RecordingRow` takes its labels from inputs**, asserted by rendering it with two
+  different sets and finding both, which is the cheapest guard against a literal creeping
+  back into a shared component.
 - No spec touches a real microphone, a real `MediaRecorder` or the network.
 
-## 9. What is already built, and is not touched
+The invisible track is the one thing here a spec cannot hold: jsdom computes no layout, so
+`getBoundingClientRect` answers zero for a bar that works and zero for one that does not.
+The guard is the comment in the stylesheet saying why `box-sizing` is overridden locally,
+and a look at the running app. Writing an assertion that passes either way would be worse
+than writing none, because it would be read as cover.
 
-Item by item, because the request that prompted this plan asked for some things that exist:
+## 9. The player, which is built and cannot be seen
 
-- **The player under a voice comment** is `AudioPlayer` and it is done: play and pause on one
-  button, the length before it plays and the position while it does, a scrubbable bar, one
-  player at a time, nothing fetched until play is pressed, and no media element created per
-  row. `0039` section 4 in full.
-- **The transcript as the comment's body** is done, including the two neutral phrases for a
-  transcription that is still running and one that failed.
-- **The pending bubble** is done and is what makes section 3 safe.
+`AudioPlayer` is `0039` section 4 in full: play and pause on one button, the length before it
+plays and the position while it does, a scrubbable track, one player at a time, nothing
+fetched until play is pressed, and no media element created per row. The transcript as the
+body is done as well, with both neutral phrases, and so is the pending bubble that makes
+section 3 safe.
 
-The one change in that area is a consequence of section 3 rather than a request: with no
-held state, `list.comments.recordingHeld` and `list.comments.recordingPlaceholder` have no
-state left to describe and are removed from both locale files.
+**The track is nonetheless invisible, and it has been since it was written.** In
+`audio-player.scss`:
+
+```scss
+.track {
+  block-size: var(--app-audio-track-size); // 6px
+  padding-block: var(--app-space-2); // 4px, twice
+  background-clip: content-box;
+}
+```
+
+`apps/velista/src/styles.scss` sets `box-sizing: border-box` on everything, so `block-size`
+is the **outer** height. Six pixels of box minus eight pixels of padding leaves a content
+box of zero, and `background-clip: content-box` paints the track's background only inside
+that content box. So the bar is drawn nowhere, and `.fill`, whose `block-size: 100%`
+resolves against the same zero, is drawn nowhere either. What is left on screen is a round
+play button and an 11px clock with a gap between them, which reads as a control that has no
+progress bar rather than as one whose progress bar failed, and that is why the feature was
+missed rather than reported.
+
+The intent in that file is unambiguous and the two comments beside the rule say it: six
+pixels of visible track, with padding making a hit area "generous without a generous
+appearance". The fix is to make `block-size` mean what it was written to mean:
+
+```scss
+.track {
+  box-sizing: content-box;
+  block-size: var(--app-audio-track-size);
+  padding-block: var(--app-space-2);
+}
+```
+
+Six pixels of bar inside a fourteen pixel target, which is what was designed. `content-box`
+rather than a larger `block-size`, because the number in the token is the bar and the
+padding is the reach, and collapsing them into one figure loses which is which.
+
+This is worth one line of comment in the file. A local `box-sizing` override against a
+global reset is exactly the kind of thing a later reader deletes as redundant, and deleting
+it puts the bar back to zero.
+
+### 9.1 The clock
+
+`--app-text-2xs` is 11px, and the file's own comment on the token says "dense metadata
+only, never body copy". The timestamp in a comment's header is dense metadata; the length
+of a recording sitting beside the control that plays it is a number somebody is trying to
+read before deciding whether to press play, and it is the only text in the row.
+
+It goes to `--app-text-xs`, 12px, which is the token described as "timestamps, helper text"
+and is what the comment header's author line already uses. It stays `tabular-nums` and it
+stays muted. This is a small change and it is made because the row has been sized as though
+the bar were carrying most of the width, and once the bar is visible the clock is a
+label beside it rather than the only thing to look at.
+
+### 9.2 The transcript says it was written by a machine
+
+A voice comment's body is a transcript, and nothing on screen says so. That matters more
+here than in the assistant panel, because of what `0039` section 3 decided: the transcript
+**is** the comment, in the same bubble as everything somebody typed, in the same order and
+the same type. Read cold, a transcription error is indistinguishable from somebody in your
+group having written something odd, and it is attributed to them by name.
+
+`0039` section 3 acknowledged the cost and answered it with the recording: the audio is the
+record and the transcript is the reading of it. That answer only works if the reader knows
+which one they are looking at.
+
+So a voice comment carries a short line between its body and its player, in the quiet
+`.waiting` treatment the two neutral phrases already use: **"Written automatically from the
+recording"**, and "Escrito automáticamente a partir de la grabación". A new key,
+`list.comments.autoTranscript`.
+
+- **It is drawn from `transcription !== null`**, which `CommentRowVm` already carries and
+  which is documented as null exactly when the comment was typed. No new field, and no
+  inferring it from the presence of a recording.
+- **It is not drawn for the two neutral phrases**, which already say the transcript is
+  missing or still coming; saying a machine wrote the sentence that says no machine could
+  write it would be nonsense.
+- **It is not a warning.** No icon, no colour, no `role="alert"`. It is a fact about where
+  the words came from and it reads as one.
+- **It stays out of the author line**, which is short, ellipsised and shared with the
+  timestamp.
+
+The player still sits below it, which keeps the reading order right: this is what was said,
+this is where the words came from, here is the recording itself.
+
+### 9.3 The consequence of section 3
+
+With no held state, `list.comments.recordingHeld` and `list.comments.recordingPlaceholder`
+have nothing left to describe and are removed from both locale files.
 
 ## 10. Exit criteria
 
@@ -267,3 +395,9 @@ state left to describe and are removed from both locale files.
 - A comment recording stops at a minute and an assistant recording at five, and both say so
   before they get there.
 - A send that fails still leaves the recording where the person can send it again.
+- A voice comment's progress bar is visible before it is played, fills as it plays, and can
+  be dragged.
+- A voice comment says its words were written automatically, and a typed one says nothing of
+  the kind.
+- `RecordingRow` is used by two composers with different strings and different caps, and
+  neither of them needed to change it to get what it wanted.
