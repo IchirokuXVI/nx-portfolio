@@ -42,4 +42,30 @@ export class ShoppingList extends BaseEntity {
    */
   @Column({ type: 'boolean', default: false })
   autoApproveLines!: boolean;
+
+  /**
+   * Whether this list is open to every approved member of its zone (plan 0042,
+   * section 2.1).
+   *
+   * List configuration, changed with `MANAGE`, and the column this one most
+   * resembles is `autoApproveLines` beside it: both govern what happens to the
+   * next thing rather than acting on what is already there.
+   *
+   * It exists because sharing used to be an **action** taken once at creation.
+   * `shareWithZone` granted every member approved at that instant and was then
+   * over, so everybody invited afterwards saw nothing and no query could recover
+   * the intent: a list shared with a group of one looked exactly like a private
+   * one. As state it can be read later, which is what lets the approval path
+   * grant a new member the zone's shared lists.
+   *
+   * Turning it **off** revokes nobody. It stops new members being granted and
+   * leaves every existing row alone, because a switch that silently removed
+   * eight people from a list they had been using all week would be doing
+   * something other than what it says (section 2.2).
+   *
+   * Defaults to false so a row the backfill misses is private rather than
+   * accidentally open.
+   */
+  @Column({ type: 'boolean', default: false })
+  sharedWithZone!: boolean;
 }

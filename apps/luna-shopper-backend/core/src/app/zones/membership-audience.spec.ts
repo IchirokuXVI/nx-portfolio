@@ -3,7 +3,9 @@ import {
   RealtimeEvent,
   ZoneRole,
 } from '@portfolio/luna-shopper/contracts';
+import type { DataSource, EntityManager } from 'typeorm';
 import type { ZoneMembership } from '../entities';
+import type { SharedListGrantService } from '../lists/shared-list-grant.service';
 import { MembershipService } from './membership.service';
 
 /**
@@ -42,9 +44,22 @@ function build(target: Partial<ZoneMembership> = {}) {
   };
   const counts = { emitZoneCounts: jest.fn(async () => undefined) };
   const events = { emit: jest.fn(), emitTo: jest.fn() };
+  // The approval grant put `approve` inside a transaction (plan 0042, section
+  // 2.3). The manager hands back the same membership double, so the assertions
+  // about what was saved are unchanged, and the grant itself is stubbed: what it
+  // writes is `shared-list-grant.spec.ts`'s subject, not this file's.
+  const dataSource = {
+    transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
+      run({ getRepository: () => memberships } as unknown as EntityManager),
+  } as unknown as DataSource;
+  const sharedGrant = {
+    grantZoneSharedLists: async () => [],
+  } as unknown as SharedListGrantService;
   const svc = new MembershipService(
+    dataSource,
     memberships as never,
     authz as never,
+    sharedGrant,
     counts as never,
     events as never
   );

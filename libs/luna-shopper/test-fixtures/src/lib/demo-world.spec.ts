@@ -13,6 +13,9 @@ import {
   ITEM_BREAD_ID,
   ITEM_MILK_ID,
   LINE_MILK_ID,
+  LIST_FLAT_SUPPLIES_ID,
+  MEMBERSHIP_CAROL_FLAT_ID,
+  ZONE_FLAT_ID,
   ZONE_WEEKLY_ID,
 } from './ids';
 
@@ -30,13 +33,17 @@ describe('demoWorld', () => {
     expect(core.lines.find((l) => l.content === 'Milk')?.id).toBe(LINE_MILK_ID);
   });
 
-  it('has exactly one temporary user and one zone owner', () => {
+  it('has exactly one temporary user and one owner per zone', () => {
     const temps = auth.users.filter((u) => u.kind === UserKind.TEMPORARY);
     expect(temps).toHaveLength(1);
-    const owners = core.memberships.filter((m) => m.role === ZoneRole.OWNER);
-    expect(owners).toHaveLength(1);
-    expect(owners[0].userId).toBe(auth.users[0].id);
-    expect(owners[0].userId).toBe(core.zones[0].ownerUserId);
+    for (const zone of core.zones) {
+      const owners = core.memberships.filter(
+        (m) => m.zoneId === zone.id && m.role === ZoneRole.OWNER
+      );
+      expect(owners).toHaveLength(1);
+      expect(owners[0].userId).toBe(zone.ownerUserId);
+    }
+    expect(core.zones[0].ownerUserId).toBe(auth.users[0].id);
   });
 
   it('spans both line state machines and a pending membership', () => {
@@ -113,9 +120,62 @@ describe('demoWorld', () => {
     }
   });
 
-  it('keeps zone usernames unique', () => {
-    const names = core.memberships.map((m) => m.username);
-    expect(new Set(names).size).toBe(names.length);
+  it('keeps zone usernames unique within each zone', () => {
+    // Per zone, because that is the scope of the name: `username` is the display
+    // name inside one group and the same person carries a different one in each
+    // (plan 0018). Asserting it globally would forbid the second zone reusing a
+    // name it is entitled to reuse.
+    for (const zone of core.zones) {
+      const names = core.memberships
+        .filter((m) => m.zoneId === zone.id)
+        .map((m) => m.username);
+      expect(new Set(names).size).toBe(names.length);
+    }
+  });
+
+  it('never stores an access row for a group owner or admin', () => {
+    // Plan 0042, section 1.2. Such a row says nothing a staff membership does not
+    // already hold by derivation, `getAccess` filters it out, and `setAccess`
+    // refuses any entry naming one, so a fixture carrying one would describe a
+    // world the service cannot produce and cannot be asked to change.
+    const staff = new Set(
+      core.memberships
+        .filter((m) => m.role === ZoneRole.OWNER || m.role === ZoneRole.ADMIN)
+        .map((m) => m.id)
+    );
+    for (const access of core.listAccess) {
+      expect(staff.has(access.membershipId)).toBe(false);
+    }
+  });
+
+  it('holds a member approved after the lists of a shared group existed', () => {
+    // The shape plan 0042 is about (section 4). Carol is approved into the flat,
+    // which has one shared list and one private one, and holds the shared set on
+    // exactly the shared one: the approval grant is what wrote it, and the
+    // private list is what it correctly left alone.
+    const carol = core.memberships.find(
+      (m) => m.id === MEMBERSHIP_CAROL_FLAT_ID
+    );
+    expect(carol?.status).toBe(MembershipStatus.APPROVED);
+
+    const flatLists = core.lists.filter((l) => l.zoneId === ZONE_FLAT_ID);
+    expect(flatLists.map((l) => l.sharedWithZone).sort()).toEqual([
+      false,
+      true,
+    ]);
+
+    const hers = core.listAccess.filter(
+      (a) => a.membershipId === MEMBERSHIP_CAROL_FLAT_ID
+    );
+    expect(hers).toHaveLength(1);
+    expect(hers[0].listId).toBe(LIST_FLAT_SUPPLIES_ID);
+    expect(new Set(hers[0].permissions)).toEqual(
+      new Set([
+        ListPermission.READ,
+        ListPermission.WRITE,
+        ListPermission.DECIDE,
+      ])
+    );
   });
 });
 

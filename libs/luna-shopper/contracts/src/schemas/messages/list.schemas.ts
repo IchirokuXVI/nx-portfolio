@@ -78,6 +78,7 @@ const listView = object(
     createdByUserId: nonEmptyString(),
     counts: ref(LIST_SCHEMA_IDS.listCounts),
     autoApproveLines: boolean(),
+    sharedWithZone: boolean(),
     myPermissions: array(ref(ENUM_IDS.listPermission)),
     ...timestamps,
   },
@@ -88,6 +89,7 @@ const listView = object(
     'createdByUserId',
     'counts',
     'autoApproveLines',
+    'sharedWithZone',
     'myPermissions',
     ...timestampKeys,
   ]
@@ -209,6 +211,7 @@ const updateListRequest = object(
     listId: nonEmptyString(),
     name: string(),
     autoApproveLines: boolean(),
+    sharedWithZone: boolean(),
   },
   ['userId', 'listId']
 );

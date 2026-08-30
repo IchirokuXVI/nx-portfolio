@@ -91,6 +91,11 @@ export interface SeedList {
   createdByUserId: string;
   /** Whether a new line arrives already approved (plan 0037, section 3). */
   autoApproveLines: boolean;
+  /**
+   * Whether the list is open to every approved member of its zone, people who
+   * join later included (plan 0042, section 2.1).
+   */
+  sharedWithZone: boolean;
 }
 
 /**

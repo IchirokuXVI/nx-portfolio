@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   ListPermission,
-  MembershipStatus,
   RealtimeEvent,
+  ZoneRole,
   type CreateListRequest,
   type GetListAccessRequest,
   type ListAccessView,
@@ -23,13 +23,7 @@ import {
   encodeCursor,
   ForbiddenException,
 } from '@portfolio/luna-shopper/platform';
-import {
-  DataSource,
-  In,
-  Repository,
-  type EntityManager,
-  type SelectQueryBuilder,
-} from 'typeorm';
+import { DataSource, In, Repository, type SelectQueryBuilder } from 'typeorm';
 import { ListAccess, ShoppingList, ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
@@ -41,22 +35,17 @@ import {
   ListAccessService,
 } from './list-access.service';
 import { EMPTY_LIST_COUNTS, toListView } from './list.mappers';
+import {
+  SHARED_WITH_ZONE_PERMISSIONS,
+  SharedListGrantService,
+  type GrantedAccess,
+} from './shared-list-grant.service';
 
 interface ListCursor {
   order: ListOrder;
   value: string;
   id: string;
 }
-
-/**
- * What every other approved member of the zone gets when a list is shared with
- * it (plan 0036, section 2.6). Read, add, and tick off; not govern.
- */
-const SHARED_WITH_ZONE_PERMISSIONS: ListPermission[] = [
-  ListPermission.READ,
-  ListPermission.WRITE,
-  ListPermission.DECIDE,
-];
 
 /**
  * The set `setAccess` will actually store for one entry (plan 0036, rule 4).
@@ -104,6 +93,7 @@ export class ListService {
     private readonly access: Repository<ListAccess>,
     private readonly authz: ZoneAuthzService,
     private readonly listAccess: ListAccessService,
+    private readonly sharedGrant: SharedListGrantService,
     private readonly zoneCounts: ZoneCountsService,
     private readonly events: CoreEventsPublisher
   ) {}
@@ -156,15 +146,26 @@ export class ListService {
    * `MANAGE` is not in it, because governing the list is the thing the creator
    * kept, and only group staff may hand that bit out afterwards (section 5).
    *
-   * Pending and rejected memberships are left out. Access follows the membership
-   * row, so somebody approved later has no row here and is granted nothing, which
-   * is the same gap `setAccess` has always had and is the share sheet's job.
+   * Pending and rejected memberships are left out. A member approved **later** is
+   * no longer the gap it was: `shareWithZone` is stored on the list as
+   * `sharedWithZone` and the approval path reads it (plan 0042, section 2).
+   *
+   * ## No row is written for a staff membership (plan 0042, section 1.2)
+   *
+   * Neither the creator's, when the creator is the group's owner or an admin,
+   * nor the shared grant's, for the other admins. Such a row is meaningless,
+   * because staff hold all four by derivation whether it exists or not, and it is
+   * exactly the row `setAccess` rule 2 refuses: the creator of the first list in
+   * a new group is that group's owner, so a staff row was in the access table of
+   * essentially every list in the product, the read returned it, and the share
+   * sheet handed it straight back to a write that rejected it. Nothing is lost by
+   * not writing it, and the feature that has never worked starts working.
    */
   async create(req: CreateListRequest): Promise<ListView> {
     const membership = await this.authz.requireApproved(req.zoneId, req.userId);
     // Absent means shared. See `CreateListRequest.shareWithZone`: a client written
     // before this field existed must keep getting what it always got.
-    const shareWithZone = req.shareWithZone !== false;
+    const sharedWithZone = req.shareWithZone !== false;
 
     const list = await this.dataSource.transaction(async (manager) => {
       const list = await manager.getRepository(ShoppingList).save(
@@ -172,27 +173,39 @@ export class ListService {
           zoneId: req.zoneId,
           name: req.name,
           createdByUserId: req.userId,
+          sharedWithZone,
         })
       );
 
-      const membershipIds = shareWithZone
-        ? await this.approvedMembershipIds(manager, req.zoneId, membership.id)
+      const membershipIds = sharedWithZone
+        ? await this.sharedGrant.grantableMembershipIds(
+            manager,
+            req.zoneId,
+            membership.id
+          )
         : [];
 
-      await manager.getRepository(ListAccess).save([
+      const rows = membershipIds.map((membershipId) =>
         manager.getRepository(ListAccess).create({
           listId: list.id,
-          membershipId: membership.id,
-          permissions: [...ALL_LIST_PERMISSIONS],
-        }),
-        ...membershipIds.map((membershipId) =>
+          membershipId,
+          permissions: [...SHARED_WITH_ZONE_PERMISSIONS],
+        })
+      );
+      // The creator's own row, unless the creator is staff and it would say
+      // nothing they do not already hold.
+      if (!isZoneStaff(membership)) {
+        rows.unshift(
           manager.getRepository(ListAccess).create({
             listId: list.id,
-            membershipId,
-            permissions: SHARED_WITH_ZONE_PERMISSIONS,
+            membershipId: membership.id,
+            permissions: [...ALL_LIST_PERMISSIONS],
           })
-        ),
-      ]);
+        );
+      }
+      if (rows.length > 0) {
+        await manager.getRepository(ListAccess).save(rows);
+      }
       return list;
     });
 
@@ -207,32 +220,6 @@ export class ListService {
     this.events.emit(RealtimeEvent.ListCreated, req.zoneId, view, view.id);
     await this.zoneCounts.emitZoneCounts(req.zoneId);
     return view;
-  }
-
-  /**
-   * Every approved membership of a zone but the creator's, as ids.
-   *
-   * Ids rather than entities, because that is all the grant needs and a zone with a
-   * large membership should not load a row's worth of columns per member to write
-   * one uuid each. It runs on the transaction's manager so it sees the same snapshot
-   * as the insert beside it: a member approved between the read and the write is
-   * exactly the race the share sheet exists to settle, and is not worth a lock here.
-   */
-  private async approvedMembershipIds(
-    manager: EntityManager,
-    zoneId: string,
-    exceptMembershipId: string
-  ): Promise<string[]> {
-    const rows = await manager
-      .getRepository(ZoneMembership)
-      .createQueryBuilder('m')
-      .select('m.id', 'id')
-      .where('m.zoneId = :zoneId', { zoneId })
-      .andWhere('m.status = :status', { status: MembershipStatus.APPROVED })
-      .andWhere('m.id != :exceptMembershipId', { exceptMembershipId })
-      .getRawMany<{ id: string }>();
-
-    return rows.map((row) => row.id);
   }
 
   /**
@@ -389,10 +376,23 @@ export class ListService {
   /**
    * Read a list's stored access table (plan 0036, section 6). `MANAGE` only.
    *
-   * Stored rows only. Group staff are absent by construction, since their grant
-   * is derived and there is nothing stored to return, and the client already
-   * knows who they are from its membership store; putting them in the payload
-   * would be a second, staler copy of a fact the caller has.
+   * Stored rows only, and **never a row for a staff membership** (plan 0042,
+   * section 1.2). Plan 0036 said staff were absent by construction, which was
+   * true of what the checks read and not of what the table contains: creation
+   * wrote the creator's row whoever they were, and the shared grant wrote one for
+   * every other approved member including the other admins. So the read returned
+   * rows the write refuses, and the share sheet, which sent back what it was
+   * given, could not be saved on any list in a group that has an owner, which is
+   * every group.
+   *
+   * The filter is on the membership's **current** role rather than on anything
+   * recorded on the access row, and that is the part worth reading twice. A
+   * member with an ordinary stored row who is promoted to admin has an inert row:
+   * the derived grant is wider than anything it says, so returning it would offer
+   * to change something that cannot change. Demoted again, the same row becomes
+   * meaningful and comes back holding exactly what they held before, which is the
+   * best available answer and is free. Nothing deletes those rows for the same
+   * reason.
    *
    * `MANAGE` rather than `READ`, though `READ` is otherwise genuinely everything
    * else on a list: who else can write to a list is governance, not content.
@@ -403,10 +403,16 @@ export class ListService {
    */
   async getAccess(req: GetListAccessRequest): Promise<ListAccessView> {
     await this.listAccess.requireManage(req.listId, req.userId);
-    const rows = await this.access.find({
-      where: { listId: req.listId },
-      order: { createdAt: 'ASC', id: 'ASC' },
-    });
+    const rows = await this.access
+      .createQueryBuilder('a')
+      .innerJoin(ZoneMembership, 'm', 'm.id = a."membershipId"')
+      .where('a."listId" = :listId', { listId: req.listId })
+      .andWhere('m.role NOT IN (:...staff)', {
+        staff: [ZoneRole.OWNER, ZoneRole.ADMIN],
+      })
+      .orderBy('a.createdAt', 'ASC')
+      .addOrderBy('a.id', 'ASC')
+      .getMany();
     return {
       listId: req.listId,
       entries: rows.map((row) => ({
@@ -424,6 +430,23 @@ export class ListService {
    * exactly what gating it on `MANAGE` means. It does not act retroactively:
    * turning it on leaves existing pending lines pending, because they are
    * somebody's outstanding question and a settings toggle is not an answer to it.
+   *
+   * ## `sharedWithZone` is the same kind of field and not the same kind of change
+   *
+   * It is list configuration gated on `MANAGE` like everything else here, but the
+   * two directions are deliberately asymmetric (plan 0042, section 2.2):
+   *
+   * - **off to on** grants `{READ, WRITE, DECIDE}` to every currently approved
+   *   non staff member, exactly as creation does, widening rather than replacing
+   *   what anybody already holds. Somebody who had `MANAGE` keeps it.
+   * - **on to off revokes nobody.** It stops the *next* person being granted, and
+   *   every existing row stays. Somebody who turns it off to keep new members out
+   *   and thereby silently removes eight people from a list they have been using
+   *   all week has been handed a control that does something other than what it
+   *   says. Removing one person is one row in the share sheet.
+   *
+   * The write and the grant share one transaction, so a list is never briefly
+   * marked shared with nobody granted, or granted with the flag unset.
    */
   async update(req: UpdateListRequest): Promise<ListView> {
     const { list, permissions } = await this.listAccess.resolve(
@@ -441,12 +464,46 @@ export class ListService {
     if (req.autoApproveLines !== undefined) {
       list.autoApproveLines = req.autoApproveLines;
     }
+    // Only the transition matters. Sending `true` on a list that is already
+    // shared re-grants nobody, because the grant skips a row that already says
+    // everything it would say.
+    const opening = req.sharedWithZone === true && !list.sharedWithZone;
+    if (req.sharedWithZone !== undefined) {
+      list.sharedWithZone = req.sharedWithZone;
+    }
+
+    let granted: GrantedAccess[] = [];
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const saved = await manager.getRepository(ShoppingList).save(list);
+      if (opening) {
+        granted = await this.sharedGrant.grantListToZone(manager, saved);
+      }
+      return saved;
+    });
+
     const view = toListView(
-      await this.lists.save(list),
+      saved,
       await this.countsFor(req.listId),
       permissions
     );
     this.events.emit(RealtimeEvent.ListUpdated, list.zoneId, view, view.id);
+    // One event per person the flip actually reached. Unlike the approval grant
+    // (plan 0042, section 2.3), nothing else tells them: they are already members
+    // looking at a zone they have no reason to refetch, and this is precisely the
+    // case plan 0036 section 8 names, access changing under somebody who is
+    // already looking.
+    for (const member of granted) {
+      const payload: ListMyAccessChangedEvent = {
+        listId: req.listId,
+        zoneId: list.zoneId,
+        permissions: member.permissions,
+      };
+      this.events.emitTo(
+        RealtimeEvent.ListMyAccessChanged,
+        { userIds: [member.userId], zoneId: list.zoneId, listId: req.listId },
+        payload
+      );
+    }
     return view;
   }
 

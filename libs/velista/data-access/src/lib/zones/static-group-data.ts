@@ -265,6 +265,9 @@ function list(
     lineCount,
     readyCount,
     autoApproveLines: false,
+    // Shared with the group, which is what every list a household makes together is,
+    // and what the settings sheet's switch draws on (velista plan 0036, section 7).
+    sharedWithZone: true,
     // Empty here and never read: `myPermissions` is the one field on a list that is
     // about the reader rather than the list, so a fixture cannot hold it. `ListMemory`
     // stamps the caller's real set on every list it hands out, worked out from

@@ -196,7 +196,12 @@ export class ListStore {
           // per caller set to carry, and empty is the safe reading: the card draws, and
           // the page corrects it from the load or refresh it runs when somebody opens
           // the list.
-          ...(existing ?? { lineCount: 0, readyCount: 0, myPermissions: [] }),
+          ...(existing ?? {
+            lineCount: 0,
+            readyCount: 0,
+            myPermissions: [],
+            sharedWithZone: false,
+          }),
           id: list.id,
           zoneId: list.zoneId,
           name: list.name,

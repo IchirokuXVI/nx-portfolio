@@ -146,6 +146,20 @@ export interface ShoppingList {
    * before the response tell the truth.
    */
   readonly autoApproveLines: boolean;
+  /**
+   * Whether everybody in the group may use this list, people who join later included
+   * (backend plan 0042, section 2.1).
+   *
+   * List configuration like `autoApproveLines` beside it, and for the same reason: it
+   * is the same answer for everybody looking at the list, so it rides the realtime
+   * `list.updated` payload rather than being a fact about the reader.
+   *
+   * It is here at all because sharing used to be an **action** taken once at creation
+   * and then over. Nothing recorded it, so a member approved a minute later got nothing
+   * and no screen could offer to change it. As state the settings sheet can read it and
+   * flip it, which is what velista plan 0036 section 7 does with it.
+   */
+  readonly sharedWithZone: boolean;
 }
 
 /**
