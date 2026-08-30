@@ -1,7 +1,6 @@
 {{- if and .Values.lunaShopperBackend.enabled .Values.lunaShopperBackend.migrations.enabled }}
 {{- $root := . }}
 {{- $ls := .Values.lunaShopperBackend }}
-{{- $cfgName := "luna-shopper-backend-config" }}
 {{- $secName := "luna-shopper-backend-secrets" }}
 {{- $tag := $root.Values.imageTag }}
 {{- range $ls.services }}
@@ -51,8 +50,14 @@
 # The upgrade path is untouched: pre-upgrade still runs before any new pod
 # takes traffic, which is the property the expand/contract argument above
 # depends on. And a first install whose migration fails leaves a release that
-# exists, so the retry is an upgrade and takes the pre-upgrade path, where the
-# ConfigMap is now there.
+# exists, so the retry is an upgrade and takes the pre-upgrade path.
+#
+# The ConfigMap is the reason this Job takes `lunaShopperBackend.migrationEnv`
+# rather than the env every other pod gets. On the pre-upgrade path the ConfigMap
+# exists, but it is the PREVIOUS release's copy, so a key the chart adds in this
+# release is not in it yet and the kubelet fails the container the same way an
+# absent ConfigMap does. Reading none of it is what makes the hook independent of
+# the release it is part of; the helper has the full account.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -82,8 +87,13 @@ spec:
         - name: migrate
           image: {{ .image }}:{{ $tag }}
           command: {{ toYaml $ls.migrations.command | nindent 12 }}
+          # The role's own DB URL and nothing else, from the Secret, which the
+          # chart does not render. NOT `lunaShopperBackend.env`: on the
+          # pre-upgrade path the ConfigMap is still the previous release's, so
+          # every ConfigMap key this Job reads is a key that may not exist yet.
+          # `lunaShopperBackend.migrationEnv` carries the whole argument.
           env:
-            {{- include "lunaShopperBackend.env" (dict "svc" . "cfg" $cfgName "sec" $secName "env" $root.Values.environment "tag" $tag) | nindent 12 }}
+            {{- include "lunaShopperBackend.migrationEnv" (dict "svc" . "sec" $secName) | nindent 12 }}
 {{- end }}
 {{- end }}
 {{- end }}

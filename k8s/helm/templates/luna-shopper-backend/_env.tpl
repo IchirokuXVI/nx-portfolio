@@ -230,3 +230,48 @@ payload that reached the broker without passing the interceptor.
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+Luna Shopper migration Job env (plan 0002, section 5; the failure below is plan
+0045).
+
+Deliberately NOT `lunaShopperBackend.env` above. A migrate.js reads exactly one
+variable, its own `<ROLE>_DB_URL`, and the Job that runs it is a pre upgrade
+hook, which is what makes handing it the full runtime env actively harmful.
+
+Helm applies hooks BEFORE the chart's own resources, so when this Job's pod is
+created the `luna-shopper-backend-config` ConfigMap is still the one the
+PREVIOUS release left behind. A release that adds a ConfigMap key and gives it to
+a service whose role also migrates therefore dies on a key the chart renders
+perfectly well:
+
+  Error: couldn't find key VOICE_COMMENT_MAX_BYTES in ConfigMap
+  nx-portfolio/luna-shopper-backend-config
+  CreateContainerConfigError, x26 over 10m
+
+which is what staging did when voice comments shipped, retrying for the full ten
+minute timeout until --atomic rolled the release back. It is invisible before the
+fact: `provision-release.sh --check` compares the render against itself, and in
+the render the key is present, so preflight passes and the deploy still fails.
+
+The Secret carries no such hazard, because the chart does not render it.
+provision-release.sh creates it out of band before helm runs at all, so a
+secretKeyRef in a hook resolves against a Secret that is already current. That is
+why the one variable a migration needs is safe to take from there, and why
+nothing else is passed.
+
+Anything a migration genuinely needs in future has to come from the Secret for
+the same reason. Reaching for a ConfigMap key here brings the failure straight
+back.
+
+Call with a dict:
+  (dict "svc" <service> "sec" <secretName>)
+*/}}
+{{- define "lunaShopperBackend.migrationEnv" -}}
+{{- $key := printf "%s_DB_URL" (upper .svc.role) -}}
+- name: {{ $key }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .sec }}
+      key: {{ $key }}
+{{- end -}}
