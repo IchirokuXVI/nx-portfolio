@@ -602,6 +602,7 @@ describe('contract schemas', () => {
           createdByUserId: 'u',
           counts: { lineCount: 0, readyCount: 0 },
           autoApproveLines: false,
+          sharedWithZone: true,
           myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',

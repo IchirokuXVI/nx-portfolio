@@ -41,16 +41,37 @@ export const MEMBERSHIP_BOB_ID = 'de3b0000-0000-4000-a000-000000000002';
 export const MEMBERSHIP_CAROL_ID = 'de3b0000-0000-4000-a000-000000000003';
 export const MEMBERSHIP_TEMP_ID = 'de3b0000-0000-4000-a000-000000000004';
 
+/**
+ * The second zone (plan 0042, section 4): a group whose member was approved
+ * **after** its lists were made, which is the shape the whole plan is about and
+ * the one shape the demo world did not contain.
+ *
+ * Bob owns it, so it is also where the other half of plan 0042 is visible: the
+ * owner created both lists and has **no** stored access row on either, because a
+ * row for a staff membership says nothing their derived grant does not.
+ */
+export const ZONE_FLAT_ID = '20de0000-0000-4000-a000-000000000002';
+export const ZONE_FLAT_JOIN_CODE = 'FLATSHR1';
+
+export const MEMBERSHIP_BOB_FLAT_ID = 'de3b0000-0000-4000-b000-000000000001';
+/** Carol, approved into the flat after both of its lists already existed. */
+export const MEMBERSHIP_CAROL_FLAT_ID = 'de3b0000-0000-4000-b000-000000000002';
+
 // --- Core: lists + access ----------------------------------------------------
 export const LIST_GROCERIES_ID = '115e0000-0000-4000-a000-000000000001';
 export const LIST_HARDWARE_ID = '115e0000-0000-4000-a000-000000000002';
+/** Shared with the flat, so approving Carol granted her the three. */
+export const LIST_FLAT_SUPPLIES_ID = '115e0000-0000-4000-b000-000000000001';
+/** Not shared, so approving Carol granted her nothing and she cannot see it. */
+export const LIST_FLAT_GIFTS_ID = '115e0000-0000-4000-b000-000000000002';
 
-export const ACCESS_ALICE_GROCERIES_ID = 'acce0000-0000-4000-a000-000000000001';
-export const ACCESS_ALICE_HARDWARE_ID = 'acce0000-0000-4000-a000-000000000002';
 export const ACCESS_BOB_GROCERIES_ID = 'acce0000-0000-4000-a000-000000000003';
 export const ACCESS_BOB_HARDWARE_ID = 'acce0000-0000-4000-a000-000000000004';
 /** The guest's row: DECIDE without WRITE, one of plan 0036's two new states. */
 export const ACCESS_TEMP_GROCERIES_ID = 'acce0000-0000-4000-a000-000000000005';
+/** What the approval grant wrote for Carol: read, add, and tick off. */
+export const ACCESS_CAROL_FLAT_SUPPLIES_ID =
+  'acce0000-0000-4000-b000-000000000001';
 
 // --- Core: lines + comments --------------------------------------------------
 export const LINE_MILK_ID = '11e00000-0000-4000-a000-000000000001';

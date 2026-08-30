@@ -95,15 +95,27 @@
   margin-block-start: var(--app-space-2);
 }
 
+// A band rather than small print (plan 0035, section 5.2). It used to be one grey line
+// in the size this app uses for metadata, which is what "the list will never update
+// again" was worth on the only screen that said it at all, and this is not metadata.
+//
+// `attention` and not a warning colour: there is no yellow role here on purpose
+// (`0002` section 4.4), amber being the brand action colour, and being disconnected is
+// a state waiting on something rather than an error the reader made. Violet against the
+// muted grey it replaces is the larger jump in salience of the two.
 .stale {
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
   margin: var(--app-space-2) 0 0;
-  font-size: var(--app-text-2xs);
-  color: var(--app-text-muted);
+  padding: var(--app-space-2) var(--app-space-3);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-status-attention-bg);
+  font-size: var(--app-text-xs);
+  color: var(--app-status-attention-fg);
 }
 
 .stale-glyph {
+  flex-shrink: 0;
   font-size: var(--app-icon-sm);
 }

@@ -59,6 +59,19 @@ export enum RealtimeEvent {
   LineReordered = 'line.reordered',
   LineDeleted = 'line.deleted',
   CommentAdded = 'comment.added',
+  /**
+   * A comment changed after it was created (plan 0045, section 4).
+   *
+   * There is exactly one thing that can change one: a voice comment's transcript
+   * arriving, or failing to. A comment is not editable and neither is its
+   * recording, so this is not the general "somebody edited a comment" event and
+   * should not become one without a plan saying so.
+   *
+   * It carries the whole comment and the client upserts, which is the same shape
+   * {@link CommentAdded} already has and the reason the sheet needs no new code
+   * path to receive it.
+   */
+  CommentUpdated = 'comment.updated',
 
   // Account merge (plan 0008). `MergeApproved` also implies a `MemberKicked` for
   // the source membership, emitted alongside it.
@@ -120,6 +133,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.LineReordered,
   RealtimeEvent.LineDeleted,
   RealtimeEvent.CommentAdded,
+  RealtimeEvent.CommentUpdated,
   RealtimeEvent.MergeRequested,
   RealtimeEvent.MergeApproved,
   RealtimeEvent.MergeRejected,

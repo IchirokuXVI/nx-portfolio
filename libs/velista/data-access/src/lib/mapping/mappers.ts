@@ -1,4 +1,6 @@
 import {
+  COMMENT_TRANSCRIPTION_FALLBACK,
+  COMMENT_TRANSCRIPTIONS,
   LINE_APPROVAL_STATUS_FALLBACK,
   LINE_APPROVAL_STATUSES,
   LINE_STATUS_FALLBACK,
@@ -15,6 +17,8 @@ import {
   type AssistantReference,
   type AssistantReply,
   type Comment,
+  type CommentRecording,
+  type CommentTranscription,
   type Line,
   type ListAccessEntry,
   type ListPermission,
@@ -291,6 +295,11 @@ export function toShoppingList(raw: unknown): ShoppingList | null {
     // approved and corrected a frame later, which is the defect backend plan 0037 is
     // about, in the other direction.
     autoApproveLines: raw['autoApproveLines'] === true,
+    // Same reading, opposite safe direction and the same conclusion: a list assumed
+    // shared would draw the switch on for a list nobody opened, and turning a switch
+    // off that was never on is the one gesture here that cannot be undone by turning
+    // it back on, because turning it on grants.
+    sharedWithZone: raw['sharedWithZone'] === true,
   };
 }
 
@@ -341,13 +350,63 @@ export function toComment(raw: unknown): Comment | null {
     return null;
   }
 
+  const recording = toCommentRecording(raw['recording']);
+
   return {
     id,
     lineId,
     authorUserId: strOr(raw['authorUserId'], ''),
+    // Empty is not a missing field here since backend plan 0045: a voice comment
+    // whose transcription failed carries no body and is still a real comment.
     body: strOr(raw['body'], ''),
+    recording,
+    // Only meaningful beside a recording. A typed comment from an older gateway
+    // carries neither, and reading a transcription state onto one would have the
+    // row waiting for a transcript that was never coming.
+    transcription: recording === null ? null : toTranscription(raw),
     createdAt,
   };
+}
+
+/**
+ * The recording metadata on a `CommentView`, or null for a typed comment.
+ *
+ * A missing or unreadable `contentType` is the single test for "no recording":
+ * without it nothing can be played and the row must draw as an ordinary comment,
+ * whatever else the object claimed.
+ */
+function toCommentRecording(raw: unknown): CommentRecording | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const contentType = str(raw['contentType']);
+  if (contentType === null) {
+    return null;
+  }
+
+  const durationSeconds = raw['durationSeconds'];
+
+  return {
+    contentType,
+    byteLength: numOr(raw['byteLength'], 0),
+    // Null rather than zero when the server has no figure, because zero is a
+    // length the player would draw and "unknown" is not (plan 0039, section 4).
+    durationSeconds:
+      typeof durationSeconds === 'number' &&
+      Number.isFinite(durationSeconds) &&
+      durationSeconds > 0
+        ? durationSeconds
+        : null,
+  };
+}
+
+function toTranscription(raw: Record<string, unknown>): CommentTranscription {
+  return oneOf(
+    raw['transcription'],
+    COMMENT_TRANSCRIPTIONS,
+    COMMENT_TRANSCRIPTION_FALLBACK
+  );
 }
 
 export function toPresenceUser(raw: unknown): PresenceUser | null {

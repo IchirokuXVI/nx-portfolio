@@ -452,6 +452,7 @@ describe('toShoppingList', () => {
         name: 'Weekly',
         createdByUserId: 'u1',
         autoApproveLines: true,
+        sharedWithZone: true,
       })
     ).toEqual({
       id: 'l1',
@@ -459,6 +460,20 @@ describe('toShoppingList', () => {
       name: 'Weekly',
       createdByUserId: 'u1',
       autoApproveLines: true,
+      sharedWithZone: true,
+    });
+  });
+
+  it('reads anything but a literal true as not shared with the zone', () => {
+    // The same safe direction, for the switch a person flips rather than for a row the
+    // page draws: a list assumed shared would draw the control on for a list nobody
+    // opened, and turning it off from there revokes nobody but does say something
+    // untrue about who can use it.
+    expect(
+      toShoppingList({ id: 'l1', zoneId: 'z1', sharedWithZone: 'yes' })
+    ).toMatchObject({ sharedWithZone: false });
+    expect(toShoppingList({ id: 'l1', zoneId: 'z1' })).toMatchObject({
+      sharedWithZone: false,
     });
   });
 

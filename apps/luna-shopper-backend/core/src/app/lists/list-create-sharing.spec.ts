@@ -1,6 +1,7 @@
 import {
   ListPermission,
   MembershipStatus,
+  ZoneRole,
   type CreateListRequest,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
@@ -10,6 +11,7 @@ import type { ZoneAuthzService } from '../zones/zone-authz.service';
 import type { ZoneCountsService } from '../zones/zone-counts.service';
 import type { ListAccessService } from './list-access.service';
 import { ListService } from './list.service';
+import { SharedListGrantService } from './shared-list-grant.service';
 
 /**
  * Who a new list reaches (plan 0034).
@@ -36,7 +38,10 @@ interface Written {
  * which rows are written and in which transaction, and a mock deep enough to fake a
  * query builder is a mock that can be made to agree with anything.
  */
-function serviceWith(approvedMembershipIds: string[]): {
+function serviceWith(
+  grantableMembershipIds: string[],
+  creatorRole: ZoneRole = ZoneRole.MEMBER
+): {
   service: ListService;
   written: Written;
 } {
@@ -79,7 +84,7 @@ function serviceWith(approvedMembershipIds: string[]): {
               where: () => qb,
               andWhere: () => qb,
               getRawMany: async () =>
-                approvedMembershipIds.map((id) => ({ id })),
+                grantableMembershipIds.map((id) => ({ id })),
             };
             return qb;
           },
@@ -99,9 +104,13 @@ function serviceWith(approvedMembershipIds: string[]): {
     { createQueryBuilder: () => ({}) } as never,
     {} as never,
     {
-      requireApproved: async () => ({ id: CREATOR_MEMBERSHIP }),
+      requireApproved: async () => ({
+        id: CREATOR_MEMBERSHIP,
+        role: creatorRole,
+      }),
     } as unknown as ZoneAuthzService,
     {} as unknown as ListAccessService,
+    new SharedListGrantService(),
     { emitZoneCounts: async () => undefined } as unknown as ZoneCountsService,
     { emit: () => undefined } as unknown as CoreEventsPublisher
   );
@@ -224,6 +233,46 @@ describe('creating a list', () => {
     // out. A grant written outside it could survive a rolled back list.
     expect(written.lists).toHaveLength(1);
     expect(written.access.every((row) => row.listId === 'l-new')).toBe(true);
+  });
+
+  it('writes no row for a creator who is the group owner', async () => {
+    // Plan 0042, section 1.2. The creator of the first list in a new group is
+    // that group's owner, and a row for them says nothing their derived grant
+    // does not: it is inert, `getAccess` hides it, and `setAccess` refuses any
+    // entry naming it, which is the whole of why the share sheet never saved.
+    const { service, written } = serviceWith(['m-2'], ZoneRole.OWNER);
+
+    await service.create(request(true));
+
+    expect(written.access.map((row) => row.membershipId)).toEqual(['m-2']);
+  });
+
+  it('writes nothing at all for a staff creator keeping the list to themselves', async () => {
+    const { service, written } = serviceWith(['m-2'], ZoneRole.ADMIN);
+
+    await service.create(request(false));
+
+    expect(written.access).toHaveLength(0);
+  });
+
+  it('stores the sharing decision on the list rather than only acting on it', async () => {
+    // Plan 0042, section 2.1. `shareWithZone` used to be an action that was over
+    // the moment it ran, so a member approved a minute later got nothing and
+    // nothing could recover the intent. As a column it can be read afterwards,
+    // which is what the approval grant reads.
+    const shared = serviceWith(['m-2']);
+    await shared.service.create(request(true));
+    expect(shared.written.lists[0].sharedWithZone).toBe(true);
+
+    const priv = serviceWith(['m-2']);
+    await priv.service.create(request(false));
+    expect(priv.written.lists[0].sharedWithZone).toBe(false);
+
+    // Absent still means shared, so the column agrees with the grant an older
+    // client already gets.
+    const absent = serviceWith(['m-2']);
+    await absent.service.create(request());
+    expect(absent.written.lists[0].sharedWithZone).toBe(true);
   });
 
   it('asks only for approved memberships', async () => {

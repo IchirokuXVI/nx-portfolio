@@ -4,6 +4,8 @@ import {
   AssistantRole,
   ListResolutionBranch,
   type AssistantMessage,
+  type AssistantTranscribeRequest,
+  type AssistantTranscribeResponse,
   type AssistantTurnRequest,
   type AssistantTurnResponse,
   type AssistantVoiceRequest,
@@ -76,6 +78,61 @@ export class AssistantService {
     this.config = configService.getOrThrow<AssistantConfig>('assistant');
     this.limiter = new TurnLimiter(this.config.turnsPerMinute);
     this.gate = new ConcurrencyGate(this.config.concurrency);
+  }
+
+  /**
+   * Words out of a recording, and nothing else (plan 0041, section 3).
+   *
+   * It shares the concurrency gate with {@link turn} and shares nothing else. In
+   * particular it does **not** take a turn from {@link TurnLimiter}: the two
+   * callers of this are a spoken assistant turn, which takes its own turn from
+   * that bucket a moment later, and a voice comment, which is not a turn at all
+   * and would otherwise spend somebody's conversation quota on leaving a message.
+   * The upload has its own rate limit at the gateway, which is where a limit on
+   * uploading belongs.
+   *
+   * Nothing about the recording is logged, at any level, not even its length
+   * (plan 0041, section 6). The transcription is what the structured turn record
+   * carries when a turn follows; the audio is held for the length of this call and
+   * dropped.
+   */
+  async transcribe(
+    request: AssistantTranscribeRequest
+  ): Promise<AssistantTranscribeResponse> {
+    if (!this.provider.configured || !this.provider.transcriptionSupported) {
+      throw new NotConfiguredException(
+        'this deployment cannot turn a recording into words'
+      );
+    }
+
+    const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+
+    try {
+      const text = await this.gate.run(() =>
+        this.provider.transcribe({
+          audio: Buffer.from(request.audio, 'base64'),
+          mimeType: request.mimeType,
+          locale: request.locale || locale,
+        })
+      );
+      return { text: text.trim() };
+    } catch (error) {
+      if (error instanceof ProviderRateLimitedError) {
+        // Rule A5's answer, unchanged: a number of seconds in the problem body.
+        // The caller of a voice comment does not count it down (the comment is
+        // already saved and playable), but a spoken assistant turn does, and the
+        // two must not get different shapes from the same failure.
+        throw this.rateLimited(
+          error.retryAfterSeconds ?? this.config.retryAfterFallbackSeconds,
+          'transcription',
+          'provider'
+        );
+      }
+      if (error instanceof ProviderUnavailableError) {
+        this.logger.warn(`assistant provider unavailable: ${error.message}`);
+      }
+      throw error;
+    }
   }
 
   async turn(request: AssistantTurnRequest): Promise<AssistantTurnResponse> {
@@ -225,7 +282,7 @@ export class AssistantService {
     ];
 
     const system = buildSystemPrompt({ context, locale });
-    const calledTools: { name: string; args: unknown; ok: boolean }[] = [];
+    const calledTools: ToolCallRecord[] = [];
     let usage: ModelUsage | null = null;
     // Seeded with the transcription's own time on a spoken turn, so the record's
     // `provider` latency is what was actually spent at the provider rather than
@@ -295,7 +352,7 @@ export class AssistantService {
   private async runTools(
     calls: ModelToolCall[],
     runtime: ToolRuntime,
-    calledTools: { name: string; args: unknown; ok: boolean }[]
+    calledTools: ToolCallRecord[]
   ): Promise<{ id?: string; name: string; result: unknown }[]> {
     const results: { id?: string; name: string; result: unknown }[] = [];
 
@@ -309,7 +366,7 @@ export class AssistantService {
     for (const call of calls) {
       const tool = findTool(call.name);
       if (!tool) {
-        calledTools.push({ name: call.name, args: call.args, ok: false });
+        calledTools.push(record(call, false));
         results.push({
           ...against(call),
           name: call.name,
@@ -320,11 +377,9 @@ export class AssistantService {
 
       try {
         const result = await tool.execute(call.args, runtime);
-        calledTools.push({
-          name: call.name,
-          args: call.args,
-          ok: (result as { ok?: unknown })?.ok === true,
-        });
+        calledTools.push(
+          record(call, (result as { ok?: unknown })?.ok === true)
+        );
         results.push({ ...against(call), name: call.name, result });
       } catch (error) {
         // A tool that threw is a bug here, not a refusal from the API, which the
@@ -335,7 +390,7 @@ export class AssistantService {
           `assistant tool ${call.name} threw`,
           error instanceof Error ? error.stack : String(error)
         );
-        calledTools.push({ name: call.name, args: call.args, ok: false });
+        calledTools.push(record(call, false));
         results.push({
           ...against(call),
           name: call.name,
@@ -527,7 +582,7 @@ export class AssistantService {
     locale: SupportedLocale;
     said: string;
     replied: string;
-    calledTools: { name: string; args: unknown; ok: boolean }[];
+    calledTools: ToolCallRecord[];
     listResolution: ListResolutionBranch | undefined;
     usage: ModelUsage | null;
     providerMs: number;
@@ -556,6 +611,40 @@ export class AssistantService {
       })
     );
   }
+}
+
+/**
+ * One tool call as the turn record keeps it (plan 0039, section 10).
+ *
+ * `items` is plan 0040, section 7.4: the arguments of a write are now an array,
+ * and the count rides as a field of its own rather than being left to be counted
+ * out of a serialized argument blob later. The question it answers is whether
+ * people ask for one thing or for a basket, which is the question that decides
+ * whether that plan was worth building.
+ */
+interface ToolCallRecord {
+  name: string;
+  args: unknown;
+  ok: boolean;
+  items?: number;
+}
+
+/**
+ * The record for one call, with the item count lifted out of its arguments.
+ *
+ * Read off the argument shape rather than from a name, because "how many things
+ * were asked for in one call" is a property of a batched argument and not of one
+ * particular tool. A call with no `items` array carries no count, rather than a
+ * one that would then be counted as a basket of one.
+ */
+function record(call: ModelToolCall, ok: boolean): ToolCallRecord {
+  const items = (call.args as { items?: unknown } | undefined)?.items;
+  return {
+    name: call.name,
+    args: call.args,
+    ok,
+    ...(Array.isArray(items) ? { items: items.length } : {}),
+  };
 }
 
 /**

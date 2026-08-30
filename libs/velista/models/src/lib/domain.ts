@@ -1,4 +1,5 @@
 import type {
+  CommentTranscription,
   LineApprovalStatus,
   LineStatus,
   ListPermission,
@@ -146,6 +147,20 @@ export interface ShoppingList {
    * before the response tell the truth.
    */
   readonly autoApproveLines: boolean;
+  /**
+   * Whether everybody in the group may use this list, people who join later included
+   * (backend plan 0042, section 2.1).
+   *
+   * List configuration like `autoApproveLines` beside it, and for the same reason: it
+   * is the same answer for everybody looking at the list, so it rides the realtime
+   * `list.updated` payload rather than being a fact about the reader.
+   *
+   * It is here at all because sharing used to be an **action** taken once at creation
+   * and then over. Nothing recorded it, so a member approved a minute later got nothing
+   * and no screen could offer to change it. As state the settings sheet can read it and
+   * flip it, which is what velista plan 0036 section 7 does with it.
+   */
+  readonly sharedWithZone: boolean;
 }
 
 /**
@@ -200,12 +215,57 @@ export interface Line {
   readonly version: number;
 }
 
+/**
+ * A recording somebody just made, on its way to being sent (velista plan 0039).
+ *
+ * It lives here rather than beside the recorder because it crosses a component
+ * boundary: the comment composer produces one and the sheet uploads it, and
+ * neither should have to name a platform device to describe what it is holding.
+ *
+ * `AudioCapture` deliberately keeps no clock (backend plan 0041 built it that
+ * way, since pausing is arithmetic rather than a device capability), so the
+ * duration here is measured by whoever ran the recording.
+ */
+export interface RecordedAudio {
+  blob: Blob;
+  /** What the browser negotiated, taken from the blob itself. */
+  mimeType: string;
+  /** How long the recorder ran, in seconds. Never trusted by the server. */
+  durationSeconds: number;
+}
+
+/** What a comment's recording weighs and how long it runs. */
+export interface CommentRecording {
+  readonly contentType: string;
+  readonly byteLength: number;
+  /**
+   * How long it runs, or null when the server has no figure.
+   *
+   * It comes from the comment rather than from the file, which is what lets a row
+   * be drawn correctly before anything is downloaded (plan 0039, section 4).
+   */
+  readonly durationSeconds: number | null;
+}
+
 /** A comment on a line. The only view the API gives a timestamp. */
 export interface Comment {
   readonly id: string;
   readonly lineId: string;
   readonly authorUserId: string;
+  /**
+   * What was said.
+   *
+   * For a voice comment this is the transcript, which is the whole of plan 0039
+   * section 3: a voice comment lands in the thread as text, in the same bubble,
+   * read by the same row component, and it carries a recording that can be
+   * played. **It can be empty**, and the row draws a neutral phrase rather than
+   * an empty bubble when it is.
+   */
   readonly body: string;
+  /** The recording, when this comment is one. Null for a typed comment. */
+  readonly recording: CommentRecording | null;
+  /** Null for a typed comment, which has no transcript to wait for. */
+  readonly transcription: CommentTranscription | null;
   readonly createdAt: Date;
 }
 

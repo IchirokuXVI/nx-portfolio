@@ -40,6 +40,7 @@ export function toListView(
     createdByUserId: list.createdByUserId,
     counts,
     autoApproveLines: list.autoApproveLines,
+    sharedWithZone: list.sharedWithZone,
     myPermissions: PERMISSION_ORDER.filter((p) => myPermissions.has(p)),
     createdAt: list.createdAt.toISOString(),
     updatedAt: list.updatedAt.toISOString(),
@@ -72,12 +73,33 @@ export function toLineView(line: ListLine): LineView {
   };
 }
 
+/**
+ * A comment on the wire.
+ *
+ * `recording` is built from the comment's own columns and never from
+ * `comment_audio`, which is the whole reason those columns exist: a listing draws
+ * a player, a length and a transcription state without the bytes ever entering the
+ * query (plan 0045, section 2).
+ *
+ * `audioContentType` is the single test for "this is a voice comment". A typed
+ * comment answers null for both `recording` and `transcription`, which is what
+ * tells a client there is nothing to play and no transcript to wait for.
+ */
 export function toCommentView(comment: LineComment): CommentView {
   return {
     id: comment.id,
     lineId: comment.lineId,
     authorUserId: comment.authorUserId,
     body: comment.body,
+    recording:
+      comment.audioContentType === null
+        ? null
+        : {
+            contentType: comment.audioContentType,
+            byteLength: comment.audioByteLength ?? 0,
+            durationSeconds: comment.audioDurationSeconds ?? null,
+          },
+    transcription: comment.transcription,
     createdAt: comment.createdAt.toISOString(),
   };
 }

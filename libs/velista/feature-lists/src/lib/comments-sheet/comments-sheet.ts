@@ -25,6 +25,7 @@ import {
   APP_BASE_PATH,
   type Comment,
   type CommentRowVm,
+  type RecordedAudio,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -44,6 +45,28 @@ import { selectAbilities } from '../select-list-state';
  * a gap of a few pixels at what any reader would call the bottom.
  */
 const AT_NEWEST_SLACK_PX = 32;
+
+/**
+ * The bubble that stands in for a voice comment while it uploads (plan 0039,
+ * section 5).
+ *
+ * A constant rather than something built per send, because there is nothing about
+ * it that varies: it says a recording is being sent and **never shows a guess at
+ * the words**. The client has nothing to guess from, and a bubble with invented
+ * text is worse than one that says it is waiting.
+ *
+ * Its id cannot collide with a real comment's, which is a uuid from the server.
+ */
+const PENDING_ROW: CommentRowVm = {
+  id: 'pending-voice-comment',
+  author: null,
+  body: '',
+  recording: null,
+  transcription: null,
+  pending: true,
+  createdAt: new Date(0),
+  mine: true,
+};
 
 /**
  * What people have said about one line.
@@ -116,6 +139,20 @@ export class CommentsSheet {
   readonly errorKey = signal<string | null>(null);
 
   /**
+   * Whether a voice comment is on its way up (plan 0039, section 5).
+   *
+   * A voice send takes seconds: an upload over mobile data, then a transcription
+   * at the provider. A composer sitting disabled for four seconds with no bubble
+   * on screen reads as a failure, and people press again. So a bubble appears the
+   * moment sending starts and is replaced by the real comment when the response
+   * lands, or removed when it fails.
+   *
+   * **The typed path is untouched.** One fast request with nothing racing it does
+   * not need a bubble that can be wrong.
+   */
+  private readonly _sendingVoice = signal(false);
+
+  /**
    * The conversation, from `LineStore` (plan 0018, gap 2).
    *
    * It was a signal here, and that was the bug: the sheet appended the comment the
@@ -140,15 +177,31 @@ export class CommentsSheet {
     const zoneId = this.zoneId();
     const me = this._session.userId();
 
-    return this._raw()
+    const rows = this._raw()
       .map((comment) => ({
         id: comment.id,
         author: this._names.nameOf(zoneId, comment.authorUserId),
         body: comment.body,
+        // The row draws the player from this, and the player fetches only when
+        // play is pressed: the source is an id to ask for, never a URL that has
+        // already been downloaded (plan 0039, section 4).
+        recording:
+          comment.recording === null
+            ? null
+            : {
+                src: comment.id,
+                durationSeconds: comment.recording.durationSeconds,
+              },
+        transcription: comment.transcription,
+        pending: false,
         createdAt: comment.createdAt,
         mine: comment.authorUserId === me,
       }))
       .reverse();
+
+    // At the bottom, which is where the newest thing said always is, and in the
+    // caller's own position because it is theirs.
+    return this._sendingVoice() ? [...rows, PENDING_ROW] : rows;
   });
 
   readonly empty = computed(
@@ -174,6 +227,17 @@ export class CommentsSheet {
 
   private readonly _scroller =
     viewChild<ElementRef<HTMLElement>>('conversation');
+
+  /**
+   * The composer, so a send can tell it what happened.
+   *
+   * Reached by view child rather than driven by an input, because what the sheet
+   * needs to say is "that worked, let go of it" and "that failed, hold on to it",
+   * and both are events rather than state: an input would make the held recording
+   * the sheet's to own, and it is the composer's precisely so a failed send cannot
+   * lose it.
+   */
+  private readonly _composer = viewChild(CommentComposer);
 
   /**
    * Whether the reader is sitting at the newest comment.
@@ -213,6 +277,55 @@ export class CommentsSheet {
   trackPosition(list: HTMLElement): void {
     const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
     this._atNewest = fromBottom <= AT_NEWEST_SLACK_PX;
+  }
+
+  /**
+   * Fetch one comment's recording, for the player in its row.
+   *
+   * The sheet supplies this rather than the row reaching for a service, because a
+   * `ui` component may not know about the API (rule D1). The URL it answers is an
+   * object URL the player owns and revokes.
+   */
+  readonly loadAudio = (commentId: string): Promise<string> =>
+    this._comments.commentAudioUrl(commentId);
+
+  /**
+   * Send a recording (plan 0039, section 5).
+   *
+   * **A failed send never discards the recording.** Nothing here touches what the
+   * composer is holding: on success it is told to clear, and on failure it is told
+   * what went wrong and keeps the blob, so the send button can be pressed again.
+   * Somebody just spoke for forty seconds, and losing that to a dropped connection
+   * is the worst outcome in this plan.
+   */
+  async sendVoice(recording: RecordedAudio): Promise<void> {
+    this.sending.set(true);
+    this._sendingVoice.set(true);
+    this.errorKey.set(null);
+
+    try {
+      const comment = await this._comments.addVoiceComment(
+        this.lineId(),
+        recording.blob,
+        recording.durationSeconds
+      );
+      // The same upsert the typed path makes, and for the same reason: this
+      // comment arrives twice, once here and once on the socket. It arrives a
+      // third time later as `comment.updated`, carrying the transcript, and that
+      // upserts over this one.
+      this._lines.addComment(comment);
+      this._composer()?.clear();
+    } catch (error) {
+      const key = listErrorKey(error, 'comments');
+      this.errorKey.set(key);
+      // `listErrorKey` answers null for the one failure that is meant to be
+      // silent, and the composer still has to be told the send failed so it holds
+      // on to the recording. The generic line stands in for that case.
+      this._composer()?.reportError(key ?? 'list.error.failed');
+    } finally {
+      this._sendingVoice.set(false);
+      this.sending.set(false);
+    }
   }
 
   async send(body: string): Promise<void> {

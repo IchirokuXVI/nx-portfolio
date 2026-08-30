@@ -91,11 +91,15 @@ because it is the only public HTTP surface: the realtime service carries no requ
 bodies and reads no floor, and a stale client is caught on its next REST call.
 */}}
 {{- /*
-The byte cap the voice route's multipart interceptor enforces (plan 0041). Gateway
-only: it is the one thing standing between a phone and this pod's memory, and the
-assistant applies the same number again to what actually crossed the broker.
+The two byte caps a multipart interceptor enforces, for the two routes that take
+an upload: a spoken assistant turn (plan 0041) and a voice comment (plan 0045).
+Gateway only, because the interceptor is the one thing standing between a phone
+and this pod's memory, and a cap that is not on it is not a cap: the global
+ValidationPipe never sees a file and Express's body limits do not apply to a
+multipart stream. The assistant and core each apply their own number again to
+what actually crossed the broker.
 */}}
-{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES") }}
+{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
@@ -114,6 +118,18 @@ assistant applies the same number again to what actually crossed the broker.
     secretKeyRef:
       name: {{ $sec }}
       key: AUTH_JWT_PUBLIC_KEY
+{{- /*
+The second half of plan 0045 section 6's cap, from the same two ConfigMap keys the
+gateway reads. Core owns the `bytea` the recording is written into, so it refuses a
+payload that reached the broker without passing the interceptor.
+*/}}
+{{- range $key := (list "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES") }}
+- name: {{ $key }}
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: {{ $key }}
+{{- end }}
 {{- end }}
 {{- if eq $svc.role "catalog" }}
 - name: CATALOG_DB_URL

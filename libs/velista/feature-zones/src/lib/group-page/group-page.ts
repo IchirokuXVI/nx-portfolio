@@ -237,6 +237,15 @@ export class GroupPage {
    */
   readonly canShare = this._browser.window?.navigator.share !== undefined;
 
+  /**
+   * Whether the live connection is up, for the app bar's offline mark (plan 0035,
+   * section 5.3).
+   *
+   * Straight off the client rather than through a store: it is a fact about the
+   * transport, and every screen that draws the bar reports the same one.
+   */
+  readonly connected = this._realtime.connected;
+
   readonly accountInitial = computed(() => {
     const username = this._session.username();
     return username === null

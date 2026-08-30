@@ -558,6 +558,7 @@ export function fakeListStore(options: FakeListStateOptions = {}) {
         lineCount: 0,
         readyCount: 0,
         autoApproveLines: false,
+        sharedWithZone: shareWithZone,
         // All four, because the person who just created a list holds all four on it
         // (backend plan 0036, section 2.5). A double that answered an empty set would
         // have the page draw a read only banner over a list its reader had just made.

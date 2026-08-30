@@ -44,6 +44,19 @@ export class FakeModelProvider implements ModelProvider {
     this.heard = [...heard];
   }
 
+  /**
+   * Script what the next transcription answers, or throws.
+   *
+   * A separate queue from the reply script rather than sharing one, because the
+   * two calls happen at different moments for different reasons and a test that
+   * had to interleave them would be asserting the order of the implementation
+   * rather than of the feature.
+   */
+  willHear(...results: (string | Error)[]): this {
+    this.heard.push(...results);
+    return this;
+  }
+
   /** A reply that is only text: what an off topic redirect or an answer looks like. */
   static says(text: string): ModelReply {
     return { text, toolCalls: [], usage: null };
@@ -86,6 +99,12 @@ export class FakeModelProvider implements ModelProvider {
    * **No audio is ever inspected here and none is ever sent anywhere.** Rule A4
    * covers a recording exactly as it covers a prompt, and this class is what
    * makes the whole voice path testable without a byte leaving the process.
+   *
+   * Running out throws rather than answering silence, which is the same rule
+   * {@link generate} follows: a provider that heard nothing is a state both
+   * callers handle (a spoken turn says so and runs no turn; a voice comment
+   * records that it has no transcript), so a test that means it scripts `''`
+   * and a test that scripted nothing has a bug worth failing on.
    */
   async transcribe(request: TranscriptionRequest): Promise<string> {
     this.transcriptions.push(request);

@@ -1,5 +1,6 @@
 export * from './lib/access-token-expiry';
 export * from './lib/app-path';
+export * from './lib/app-resumed';
 export * from './lib/app-updates';
 export * from './lib/audio-capture';
 export * from './lib/audio-recorder';

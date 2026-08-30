@@ -144,6 +144,11 @@ now saves.
 
 ### 6.1 `upsert_line`
 
+> **Superseded by plan `0040` section 7: the tool is `upsert_lines` and takes a list
+> of items with a per item `set` / `add` choice.** Everything below still holds,
+> including the four resolution branches and the one list per call rule; only the
+> name and the shape of the arguments changed, and the catalog is still three tools.
+
 Adds a line to a list, or edits one already there.
 
 The model supplies the product text, an optional quantity and unit, and the list. **It

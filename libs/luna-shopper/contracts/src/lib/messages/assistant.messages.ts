@@ -30,7 +30,54 @@ export const ASSISTANT_PATTERNS = {
    * point of the plan: a spoken turn becomes a typed turn as early as possible.
    */
   voice: 'assistant.voice',
+  /**
+   * Words out of a recording, and nothing else (plan 0041, section 3.2).
+   *
+   * **Not the same thing as {@link voice}**, and the difference is the caller
+   * rather than the audio: `voice` is a conversation turn that happens to have
+   * been spoken, and this is a transcription for somebody who is not having a
+   * conversation at all. It runs no tools, keeps no history, has no reply to
+   * parse, and gives rule A1 nothing to enforce because nothing is being read.
+   * It carries no list, no line and nothing about who spoke.
+   *
+   * Its caller is a voice comment (plan 0045, section 4.1), which is stored
+   * before anything is transcribed and gets its transcript handed back
+   * afterwards, so that a provider outage costs a transcript and never a message.
+   *
+   * The assistant owns both because the assistant holds the provider credential.
+   * Core does not gain a model provider and must not: core is the database and
+   * the rules, and a dependency from core on a provider key would make the list
+   * service unbootable without a credential it has no other use for.
+   */
+  transcribe: 'assistant.transcribe',
 } as const;
+
+/**
+ * A recording to write down (plan 0041, section 3.2).
+ *
+ * The audio is held for the length of the call and never written anywhere: no
+ * disk, no database, no cache, and never a log line, not even a hash (plan 0041,
+ * section 6). That is rule A2 rather than an exception to it.
+ */
+export interface AssistantTranscribeRequest {
+  /** Base64, because this crosses the broker (plan 0041, section 4.2). */
+  audio: string;
+  /** What the browser recorded in. The service refuses what it cannot read. */
+  mimeType: string;
+  /** BCP 47, the same locale a reply would be written in. */
+  locale: string;
+}
+
+/**
+ * What was heard.
+ *
+ * `text` is empty when the provider returned nothing, which is a real answer and
+ * not an error: the caller records that no transcript exists rather than retrying
+ * forever, and the recording is intact either way.
+ */
+export interface AssistantTranscribeResponse {
+  text: string;
+}
 
 /** One entry of the transcript the client holds and resends every turn. */
 export interface AssistantMessage {

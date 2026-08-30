@@ -15,7 +15,7 @@
     <ul (scroll)="trackPosition(conversation)" #conversation class="comments">
       @for (comment of comments(); track comment.id) {
         <li class="comment">
-          <lib-comment-row [comment]="comment" />
+          <lib-comment-row [comment]="comment" [loadAudio]="loadAudio" />
         </li>
       }
     </ul>
@@ -36,7 +36,11 @@
     section 3.1).
   -->
   @if (canComment()) {
-    <lib-comment-composer (submitted)="send($event)" [busy]="sending()" />
+    <lib-comment-composer
+      (recorded)="sendVoice($event)"
+      (submitted)="send($event)"
+      [busy]="sending()"
+    />
   } @else {
     <p class="read-only">{{ 'list.comments.readOnly' | rokuT }}</p>
   }

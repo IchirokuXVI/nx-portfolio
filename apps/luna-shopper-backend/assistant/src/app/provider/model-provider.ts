@@ -37,8 +37,9 @@ export interface ModelToolCall {
    *
    * Carried so that the result of a call can be returned against the call it
    * answers rather than against a name. One turn can ask for the same tool twice
-   * ("add milk and bread" is two `upsert_line` calls), and matching those by name
-   * is a coin toss the moment their results differ.
+   * ("is there milk, and is there bread on the office list" is two `query_lists`
+   * calls), and matching those by name is a coin toss the moment their results
+   * differ.
    */
   id?: string;
   /**
@@ -143,7 +144,14 @@ export class ProviderUnavailableError extends Error {
  *
  * Separate from {@link ModelRequest} rather than an audio part on a
  * {@link ModelTurn}, because it is a different job: no tools, no history, and no
- * reply to parse. What comes back is the sentence and nothing else.
+ * reply to parse. What comes back is the sentence and nothing else, and there is
+ * nothing to carry about who spoke or what list they were looking at — that
+ * absence is the contract rather than an omission.
+ *
+ * **Two callers, one seam.** A spoken assistant turn transcribes before running
+ * the turn loop (plan 0041); a voice comment transcribes after the message is
+ * already stored (plan 0045, section 4.1). Neither knows about the other, and
+ * nothing here distinguishes them.
  */
 export interface TranscriptionRequest {
   audio: Uint8Array;
@@ -159,29 +167,42 @@ export interface ModelProvider {
    * pretending, and the pod still boots (plan 0026, applied in section 11).
    */
   readonly configured: boolean;
+
   /**
    * False when this provider cannot take audio at all (plan 0041, section 3.2).
    *
-   * A field rather than an exception, because the two outcomes are different
-   * things: a deployment pointed at a provider that does not do audio should
-   * lose the microphone and **keep the assistant**, which means the voice route
-   * answers 501 while the typed route goes on working. That is a fact about the
-   * deployment, knowable before a request arrives, and a throw would only ever
-   * tell somebody after they had spoken.
+   * A **field rather than a thrown error**, because "this deployment will never
+   * transcribe anything" and "this transcription failed" are different facts
+   * with different answers, and both callers need to tell them apart:
+   *
+   * - a deployment pointed at a provider that does not do audio should lose the
+   *   microphone and **keep the assistant**, so the voice route answers 501
+   *   while the typed route goes on working;
+   * - a voice comment settles to `UNAVAILABLE` at once rather than waiting for a
+   *   transcript that is never coming (plan 0045, section 4.2), where a call
+   *   that merely failed is worth one bounded retry.
+   *
+   * Both are facts about the deployment, knowable before a request arrives. A
+   * throw would only ever tell somebody after they had spoken.
    */
   readonly transcriptionSupported: boolean;
+
   generate(request: ModelRequest): Promise<ModelReply>;
+
   /**
-   * The recording, as the words in it.
+   * The recording, as the words in it, or an empty string when the provider
+   * heard nothing.
+   *
+   * Empty is a real answer and not an error: it means the recording had nothing
+   * recognisable in it, which is a thing people genuinely upload. A spoken turn
+   * says so and runs no turn; a voice comment records that it has no transcript
+   * and stays playable.
    *
    * Throws {@link ProviderRateLimitedError} and {@link ProviderUnavailableError}
    * exactly as {@link generate} does, so rule A5's answer needs no second
-   * implementation: a spoken turn that is rate limited during transcription
-   * produces the same problem body, with the same number in it, that a rate
-   * limited typed turn produces.
-   *
-   * An empty string is a real answer and means the recording had nothing
-   * recognisable in it. The caller says so and runs no turn.
+   * implementation: a spoken turn rate limited during transcription produces the
+   * same problem body, with the same number in it, that a rate limited typed turn
+   * produces.
    */
   transcribe(request: TranscriptionRequest): Promise<string>;
 }

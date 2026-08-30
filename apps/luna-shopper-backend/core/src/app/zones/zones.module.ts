@@ -8,6 +8,7 @@ import {
   CoreEventsPublisher,
   NATS_EVENTS,
 } from '../events/core-events.publisher';
+import { SharedListGrantModule } from '../lists/shared-list-grant.module';
 import { MemberListingService } from './member-listing.service';
 import { MembershipController } from './membership.controller';
 import { MembershipService } from './membership.service';
@@ -26,6 +27,10 @@ import { ZoneService } from './zone.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Zone, ZoneMembership]),
+    // Approving somebody into a zone grants them its shared lists (plan 0042,
+    // section 2.3). The grant lives in a module of its own precisely so this
+    // import is not `ListsModule`, which imports this one.
+    SharedListGrantModule,
     ClientsModule.registerAsync([
       {
         name: NATS_EVENTS,

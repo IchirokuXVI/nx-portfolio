@@ -98,6 +98,7 @@
     "@swc/helpers": "0.5.18",
     "@types/deep-equal": "^1.0.4",
     "@types/jest": "30.0.0",
+    "@types/multer": "^2.2.0",
     "@types/node": "20.19.9",
     "@types/multer": "^2.2.0",
     "@types/nodemailer": "^8.0.1",

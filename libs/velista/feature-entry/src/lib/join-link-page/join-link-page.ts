@@ -20,6 +20,7 @@ import { appPath, InstallStore } from '@portfolio/velista/platform';
 import {
   AccountLostPanel,
   AlertIcon,
+  AppVersion,
   BrandWordmark,
   InfoIcon,
   isCompleteJoinCode,
@@ -48,6 +49,7 @@ import { entryErrorKey } from '../entry-error-copy';
     RokuTranslatorPipe,
     AccountLostPanel,
     AlertIcon,
+    AppVersion,
     BrandWordmark,
     InfoIcon,
     MemberAddIcon,

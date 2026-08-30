@@ -26,6 +26,8 @@ export const ASSISTANT_SCHEMA_IDS = {
   turnRequest: schemaId('msg/assistant/turnRequest'),
   turnResponse: schemaId('msg/assistant/turnResponse'),
   voiceRequest: schemaId('msg/assistant/voiceRequest'),
+  transcribeRequest: schemaId('msg/assistant/transcribeRequest'),
+  transcribeResponse: schemaId('msg/assistant/transcribeResponse'),
 } as const;
 
 const assistantMessage = object(
@@ -102,12 +104,41 @@ const turnResponse = object(
   ['reply', 'references']
 );
 
+/**
+ * Words out of a recording (plan 0041, section 3.2).
+ *
+ * No `userId` and no `authorization`, and their absence is the contract: nothing
+ * is being read on anybody's behalf, so there is nothing for rule A1 to enforce
+ * and no credential this call could need.
+ */
+const transcribeRequest = object(
+  ASSISTANT_SCHEMA_IDS.transcribeRequest,
+  {
+    // Base64. Non-empty, because a transcription of nothing is a caller bug
+    // rather than a state worth answering.
+    audio: nonEmptyString(),
+    mimeType: nonEmptyString(),
+    locale: nonEmptyString(),
+  },
+  ['audio', 'mimeType', 'locale']
+);
+
+// `text` and not `nonEmptyString`: an empty transcript is the honest answer when
+// the provider heard nothing, and the caller records that rather than retrying.
+const transcribeResponse = object(
+  ASSISTANT_SCHEMA_IDS.transcribeResponse,
+  { text: string() },
+  ['text']
+);
+
 export const assistantSchemas: JsonSchema[] = [
   assistantMessage,
   assistantReference,
   turnRequest,
   voiceRequest,
   turnResponse,
+  transcribeRequest,
+  transcribeResponse,
 ];
 
 export const assistantMessageContracts: Record<
@@ -123,5 +154,11 @@ export const assistantMessageContracts: Record<
   [ASSISTANT_PATTERNS.voice]: {
     request: ASSISTANT_SCHEMA_IDS.voiceRequest,
     response: ASSISTANT_SCHEMA_IDS.turnResponse,
+  },
+  // A transcription answers words and nothing else, which is why it has a reply
+  // shape of its own rather than borrowing the turn's.
+  [ASSISTANT_PATTERNS.transcribe]: {
+    request: ASSISTANT_SCHEMA_IDS.transcribeRequest,
+    response: ASSISTANT_SCHEMA_IDS.transcribeResponse,
   },
 };

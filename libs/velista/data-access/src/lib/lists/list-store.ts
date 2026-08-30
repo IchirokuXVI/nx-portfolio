@@ -196,7 +196,12 @@ export class ListStore {
           // per caller set to carry, and empty is the safe reading: the card draws, and
           // the page corrects it from the load or refresh it runs when somebody opens
           // the list.
-          ...(existing ?? { lineCount: 0, readyCount: 0, myPermissions: [] }),
+          ...(existing ?? {
+            lineCount: 0,
+            readyCount: 0,
+            myPermissions: [],
+            sharedWithZone: false,
+          }),
           id: list.id,
           zoneId: list.zoneId,
           name: list.name,
@@ -263,6 +268,7 @@ export class ListStore {
       case 'line.deleted':
       case 'line.reordered':
       case 'comment.added':
+      case 'comment.updated':
         // The line counts on a row would move for these, and the events do not carry
         // enough to recompute one: `line.updated` fires for status changes too, so
         // `readyCount` cannot be derived from it without knowing the line's previous

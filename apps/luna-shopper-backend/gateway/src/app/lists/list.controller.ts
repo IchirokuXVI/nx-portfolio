@@ -3,19 +3,33 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpStatus,
   Param,
   Patch,
   Post,
   Put,
   Query,
+  Req,
+  Res,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiProduces,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import {
+  baseContentType,
   COMMENT_PATTERNS,
   LINE_PATTERNS,
   LIST_PATTERNS,
+  type CommentAudioView,
   type CommentPage,
   type CommentView,
   type LinePage,
@@ -24,14 +38,20 @@ import {
   type ListPage,
   type ListView,
 } from '@portfolio/luna-shopper/contracts';
+import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
+import type { Request, Response } from 'express';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
+import { CommentTranscriptionService } from './comment-transcription.service';
 import {
   AddCommentDto,
   AddLineDto,
+  AddLineQuantityDto,
+  AddLinesDto,
+  AddVoiceCommentDto,
   CreateListDto,
   LineQueryDto,
   ListQueryDto,
@@ -42,6 +62,11 @@ import {
   UpdateLineDto,
   UpdateListDto,
 } from './list.dto';
+import {
+  VOICE_RECORDING_FIELD,
+  VoiceRecordingInterceptor,
+  type VoiceRecording,
+} from './voice-recording.interceptor';
 
 /** Shopping lists scoped to a zone (plan 0007). */
 @ApiTags('lists')
@@ -107,6 +132,7 @@ export class ListsController {
       listId: id,
       name: dto.name,
       autoApproveLines: dto.autoApproveLines,
+      sharedWithZone: dto.sharedWithZone,
     });
   }
 
@@ -190,6 +216,34 @@ export class ListsController {
     });
   }
 
+  /**
+   * Add several lines at once (plan 0040, section 6).
+   *
+   * Not restricted to the assistant, and not called from velista today, which is
+   * stated because it is the one thing here that reads as an oversight. "Paste a
+   * shopping list", "add the usual" and importing last week's list are all this
+   * route, and it is a genuine gap in the API that the assistant happened to be
+   * the first caller to hit.
+   *
+   * It stays on the default throttle bucket (section 6.4). A named limit would be
+   * a number chosen with no evidence behind it, and the write is cheap and
+   * already capped by the array's `maxItems`.
+   */
+  @Post(':id/lines/batch')
+  @ApiContractResponse(LINE_PATTERNS.addMany, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
+  addLines(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: AddLinesDto
+  ): Promise<LineView[]> {
+    return this.nats.send<LineView[]>(LINE_PATTERNS.addMany, {
+      userId: user.userId,
+      listId: id,
+      items: dto.items,
+    });
+  }
+
   @Post(':id/lines/reorder')
   @ApiContractResponse(LINE_PATTERNS.reorder, { status: HttpStatus.CREATED })
   @ApiProblemResponses({ body: true })
@@ -213,7 +267,10 @@ export class ListsController {
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'lines', version: '1' })
 export class LinesController {
-  constructor(private readonly nats: NatsClient) {}
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly transcription: CommentTranscriptionService
+  ) {}
 
   @Patch(':id')
   @ApiContractResponse(LINE_PATTERNS.update)
@@ -229,6 +286,40 @@ export class LinesController {
       content: dto.content,
       quantity: dto.quantity,
       itemId: dto.itemId,
+    });
+  }
+
+  /**
+   * Add units to a line, or take them off (plan 0040, section 3).
+   *
+   * A sub resource rather than a `quantityDelta` field on the `PATCH`, for the
+   * reason `:id/approval` and `:id/status` are also sub resources: `PATCH` means
+   * "here is the new value", and a body where one field is absolute and another
+   * is relative needs a mutual exclusion rule that every existing client then has
+   * to be told never to trip. {@link UpdateLineDto} is what velista already sends
+   * from three places, and giving it a field it must never populate is a trap
+   * with no upside.
+   *
+   * It answers with the line as it now stands, like every other line route. The
+   * caller knows the delta it sent and `quantity` is the new count, so "two more,
+   * five now" is available from the response plus what the caller already had; a
+   * bespoke envelope on one route out of ten would be a cost paid by every reader
+   * of the API for a subtraction.
+   */
+  @Post(':id/quantity')
+  @ApiContractResponse(LINE_PATTERNS.addQuantity, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  addQuantity(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: AddLineQuantityDto
+  ): Promise<LineView> {
+    return this.nats.send<LineView>(LINE_PATTERNS.addQuantity, {
+      userId: user.userId,
+      lineId: id,
+      delta: dto.delta,
     });
   }
 
@@ -304,5 +395,147 @@ export class LinesController {
       lineId: id,
       body: dto.body,
     });
+  }
+
+  /**
+   * Leave a comment that is a recording (plan 0045).
+   *
+   * **A sibling route rather than a second shape on the one above**, and the one
+   * above is untouched. A file interceptor on a route that also accepts a JSON
+   * body means the global `ValidationPipe` sees a different thing depending on
+   * the content type, and the typed comment path is the busiest write in the
+   * product.
+   *
+   * The response comes back the moment the comment and its bytes are stored,
+   * carrying a recording and no body yet. The transcript is asked for afterwards,
+   * and when it lands core emits `comment.updated` to the line's room. That order
+   * is what makes a provider outage cost a transcript and never a message.
+   *
+   * Its own rate limit bucket, stricter than the default: an upload is orders of
+   * magnitude more expensive than a sentence, and that bucket was sized for
+   * sentences.
+   */
+  @Post(':id/comments/voice')
+  @Throttle(THROTTLE_LIMITS.voiceComment)
+  @UseInterceptors(VoiceRecordingInterceptor)
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: [VOICE_RECORDING_FIELD],
+      properties: {
+        [VOICE_RECORDING_FIELD]: { type: 'string', format: 'binary' },
+        durationSeconds: { type: 'number', minimum: 0, maximum: 3600 },
+      },
+    },
+  })
+  @ApiContractResponse(COMMENT_PATTERNS.addVoice, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  async addVoiceComment(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Req() request: Request,
+    @Body() dto: AddVoiceCommentDto
+  ): Promise<CommentView> {
+    // Put there by the interceptor, which has already enforced the byte cap on
+    // the stream and the content type against the allowlist.
+    //
+    // `multer` has already dropped the parameters, so `mimetype` is the bare
+    // container rather than the `audio/webm;codecs=opus` the browser negotiated.
+    // `baseContentType` is applied anyway, because this line must not depend on
+    // that being true: core matches on the base type and so does the provider.
+    const file = (request as { file?: VoiceRecording }).file as VoiceRecording;
+    const contentType = baseContentType(file.mimetype);
+
+    const comment = await this.nats.send<CommentView>(
+      COMMENT_PATTERNS.addVoice,
+      {
+        userId: user.userId,
+        lineId: id,
+        // Base64 over the broker, which is the third of a megabyte of inflation
+        // the raised `max_payload` accounts for (plan 0041, section 4.2).
+        audio: file.buffer.toString('base64'),
+        contentType,
+        durationSeconds: dto.durationSeconds ?? null,
+      }
+    );
+
+    // Started, not awaited. Nobody should wait on a model to leave a comment,
+    // and the comment is already stored and playable by this point.
+    //
+    // The normalised type, the same one core stored, so a recording is described
+    // to the provider exactly as it is described in the database.
+    this.transcription.schedule(comment, file.buffer, contentType);
+
+    return comment;
+  }
+}
+
+/**
+ * A comment's recording, on its own controller because it hangs off the comment
+ * rather than the line (plan 0045, section 5).
+ */
+@ApiTags('comments')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'comments', version: '1' })
+export class CommentsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * The bytes, gated on `READ` of the comment's list.
+   *
+   * That is the same gate as reading the comment's text, and there is
+   * deliberately no separate permission: plan 0036 section 4.3 says `READ` is
+   * genuinely everything else about a list's content, and a recording somebody
+   * left on a line is that.
+   *
+   * **The whole body, no range requests.** A hundred kilobyte file does not need
+   * a 206, and scrubbing inside one that is already fetched is the browser's
+   * problem rather than the server's. If a longer format ever ships, ranges are
+   * added then, deliberately.
+   *
+   * **`Cache-Control: private, immutable`** with a long age. The bytes never
+   * change: a comment is not editable and neither is its recording. This is the
+   * one route in the product where an immutable cache is unambiguously correct,
+   * and it is what keeps a re-listened thread from re-downloading. `private`
+   * because the response is gated on who is asking, so no shared cache may hold
+   * it.
+   *
+   * **Never a redirect to storage.** The bytes come from this route today, and if
+   * plan 0045 section 2's exit is ever taken they still come from this route,
+   * from somewhere else. Handing clients a storage URL would make the storage
+   * decision part of the API.
+   *
+   * It writes the response itself rather than returning a value, because the body
+   * is audio rather than JSON. `@ApiResponse` documents that in place of
+   * `ApiContractResponse`, which describes a JSON contract shape this route has
+   * none of.
+   */
+  @Get(':id/audio')
+  @Header('Cache-Control', 'private, max-age=31536000, immutable')
+  @ApiProduces('audio/*')
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'The recording, as the bytes the browser produced.',
+    content: { 'audio/*': { schema: { type: 'string', format: 'binary' } } },
+  })
+  async getCommentAudio(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Res() response: Response
+  ): Promise<void> {
+    const audio = await this.nats.send<CommentAudioView>(
+      COMMENT_PATTERNS.getAudio,
+      { userId: user.userId, commentId: id }
+    );
+
+    const bytes = Buffer.from(audio.audio, 'base64');
+    response.setHeader('Content-Type', audio.contentType);
+    response.setHeader('Content-Length', bytes.byteLength);
+    response.end(bytes);
   }
 }

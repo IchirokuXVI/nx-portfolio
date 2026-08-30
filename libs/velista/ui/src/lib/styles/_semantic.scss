@@ -196,6 +196,13 @@ $app-content-max: 480px;
   // is a different job from separating two surfaces.
   --app-mark-ring-width: 2px;
 
+  // The scrub bar on a voice comment's player (plan 0039, section 4). Thin on
+  // purpose: it sits inside a comment bubble in a scrolling thread, and anything
+  // taller reads as a second control rather than as this one's progress. Its hit
+  // area is padding around it rather than height, so it stays draggable with a
+  // thumb without looking like a slider.
+  --app-audio-track-size: 6px;
+
   // The transcript's bubbles. The tail corner is small rather than square, so the
   // speaker is read from which side the corner is on and not from colour alone.
   --app-bubble-radius: 18px;

@@ -1866,6 +1866,60 @@
           ]
         },
         {
+          "name": "Add units to the line",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lines/{{lineId}}/quantity",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lines",
+                "{{lineId}}",
+                "quantity"
+              ]
+            },
+            "description": "Plan 0040. Adds to what is there without reading it first, so two people adding at once both land. The line stood at 3 after the edit above, so the answer is 5 and it is the server that says so.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delta\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "pm.test('the delta was applied to what was there', function () {",
+                  "  pm.expect(b.quantity).to.eql(5);",
+                  "});",
+                  "pm.test('it is the same line, one version on', function () {",
+                  "  pm.expect(b.id).to.eql(pm.collectionVariables.get('lineId'));",
+                  "  pm.expect(b.version).to.be.above(Number(pm.collectionVariables.get('lineVersion')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Mark it ready",
           "request": {
             "method": "POST",
@@ -2155,6 +2209,65 @@
                   "pm.test('lineCount is 2 and readyCount is 1', function () {",
                   "  pm.expect(l.counts.lineCount).to.eql(2);",
                   "  pm.expect(l.counts.readyCount).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add several lines at once",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines/batch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lists",
+                "{{listId}}",
+                "lines",
+                "batch"
+              ]
+            },
+            "description": "Plan 0040. All or nothing, and the answer is the created lines in request order. Last in the folder because it changes the line count the checks above assert.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"content\": \"Rice\", \"quantity\": 2 },\n    { \"content\": \"Coffee\" }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "pm.test('both lines came back, in request order', function () {",
+                  "  pm.expect(b).to.be.an('array').with.lengthOf(2);",
+                  "  pm.expect(b.map(function (l) { return l.content; })).to.eql(['Rice', 'Coffee']);",
+                  "});",
+                  "pm.test('the quantities are the ones asked for, defaulting to one', function () {",
+                  "  pm.expect(b[0].quantity).to.eql(2);",
+                  "  pm.expect(b[1].quantity).to.eql(1);",
+                  "});",
+                  "pm.test('they landed on consecutive positions, after what was there', function () {",
+                  "  pm.expect(b[1].position).to.be.above(b[0].position);",
                   "});"
                 ]
               }

@@ -92,6 +92,9 @@ export class ListApi implements ListServiceI {
       ...(changes.autoApproveLines === undefined
         ? {}
         : { autoApproveLines: changes.autoApproveLines }),
+      ...(changes.sharedWithZone === undefined
+        ? {}
+        : { sharedWithZone: changes.sharedWithZone }),
     };
 
     const body = await firstValueFrom(

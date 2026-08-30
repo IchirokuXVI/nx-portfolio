@@ -9,6 +9,7 @@ import {
   UsernamePropagation,
 } from '../lib/enums/auth.enums';
 import {
+  CommentTranscription,
   LineApprovalStatus,
   LineStatus,
   ListPermission,
@@ -37,6 +38,7 @@ export const ENUM_IDS = {
   listPermission: schemaId('enums/ListPermission'),
   lineApprovalStatus: schemaId('enums/LineApprovalStatus'),
   lineStatus: schemaId('enums/LineStatus'),
+  commentTranscription: schemaId('enums/CommentTranscription'),
   mergeRequestStatus: schemaId('enums/MergeRequestStatus'),
   assistantRole: schemaId('enums/AssistantRole'),
   assistantReferenceKind: schemaId('enums/AssistantReferenceKind'),
@@ -53,6 +55,7 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.listPermission, Object.values(ListPermission)),
   enumOf(ENUM_IDS.lineApprovalStatus, Object.values(LineApprovalStatus)),
   enumOf(ENUM_IDS.lineStatus, Object.values(LineStatus)),
+  enumOf(ENUM_IDS.commentTranscription, Object.values(CommentTranscription)),
   enumOf(ENUM_IDS.mergeRequestStatus, Object.values(MergeRequestStatus)),
   enumOf(ENUM_IDS.assistantRole, Object.values(AssistantRole)),
   enumOf(

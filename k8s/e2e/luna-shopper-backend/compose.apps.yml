@@ -64,10 +64,22 @@ services:
       # the locale the flow started in; the app lives under a path that follows
       # the locale segment, so a plain prefix could not express it.
       APP_BASE_URL: http://localhost:4200/{locale}/velista
-      # The byte cap the voice route's multipart interceptor enforces (plan 0041).
-      # The gateway is where an upload is actually refused, so the number has to
-      # be here as well as on the assistant.
+      # The byte cap the spoken turn route's multipart interceptor enforces
+      # (plan 0041). The gateway is where an upload is actually refused, so the
+      # number has to be here as well as on the assistant.
       ASSISTANT_AUDIO_MAX_BYTES: '2097152'
+      # Voice comments (plan 0045), which are a different route with their own
+      # cap. Stated rather than left to the defaults, because this file states its
+      # environment by hand and inherits nothing: the suite asserts the byte cap's
+      # refusal names the limit, so the number it names has to be the number this
+      # stack is running with.
+      VOICE_COMMENT_MAX_BYTES: '2097152'
+      # Empty falls back to the contract's list, which is what browsers produce.
+      VOICE_COMMENT_CONTENT_TYPES: ''
+      # Short here on purpose. The assistant in this tier has no key, so every
+      # transcription settles as UNAVAILABLE without a provider call and this
+      # deadline is never reached; a long one would only slow a failing suite.
+      VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: '5000'
       # Names this container on every span and metric (plan 0016, section 4.2).
       # Tracing stays off unless OTEL_ENABLED and an endpoint are supplied, so
       # this tier runs unchanged without a collector.
@@ -183,6 +195,11 @@ services:
       CORE_DB_URL: postgres://luna_core:luna_core@core-db:5432/luna_core
       AUTH_JWT_PUBLIC_KEY_FILE: /run/secrets/luna/jwt.pub
       ZONE_REAPER_ENABLED: 'false'
+      # The same two numbers the gateway above is running with (plan 0045,
+      # section 6). Core checks them again on the far side of the broker, and the
+      # two disagreeing is a recording the gateway accepts and core refuses.
+      VOICE_COMMENT_MAX_BYTES: '2097152'
+      VOICE_COMMENT_CONTENT_TYPES: ''
       PORT: '3003'
       OTEL_SERVICE_NAME: luna-shopper-backend-core
       DEPLOYMENT_ENVIRONMENT: development

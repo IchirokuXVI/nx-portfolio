@@ -619,18 +619,24 @@ lunaShopperBackend:
     storageClassName: local-path
     storageSize: 1Gi
     # The largest message the broker will carry, in bytes (luna plan 0041,
-    # section 4.2). NATS defaults to 1 MB, and a voice recording base64'd for the
-    # gateway -> assistant hop does not fit in one: 2 MB of audio is about 2.7 MB
-    # encoded, and the broker would refuse it at its own level, which is a failure
-    # nothing in the service could report nicely.
+    # section 4.2; luna plan 0045, section 3). NATS defaults to 1 MB, and a voice
+    # recording base64'd for the gateway -> assistant hop does not fit in one:
+    # 2 MB of audio is about 2.7 MB encoded, and the broker would refuse it at its
+    # own level, which is a failure nothing in the service could report nicely.
     #
     # 8 MB rather than just over 3, on purpose. This is a broker wide ceiling that
     # nothing else here comes close to, and setting it snug against the upload cap
     # would mean the next change to either number has to move both.
     #
-    # **It is stated here and applied in two places**: this template's `args` and
-    # `k8s/e2e/luna-shopper-backend/compose.yml`. Raised in one and not the other
-    # is a feature that works on the development machine and fails in the cluster.
+    # **A plain integer, and not "8MB".** The template renders it through `int64`
+    # to dodge Sprig's float64 carrying (see `nats.yaml.tpl`), and `int64` applied
+    # to a string like "8MB" would parse as 8 — an eight byte ceiling that refuses
+    # every message the system sends.
+    #
+    # **It is stated here and applied in two places**: this chart's NATS ConfigMap
+    # and `k8s/e2e/luna-shopper-backend/nats.conf`. Raised in one and not the
+    # other is a feature that works on the development machine and fails in the
+    # cluster.
     maxPayload: 8388608
     # Guaranteed QoS, for the same reason as Postgres above.
     resources:

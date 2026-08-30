@@ -5,8 +5,10 @@ import {
   type ZoneCountsUpdatedPayload,
 } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
+import type { DataSource, EntityManager } from 'typeorm';
 import type { ZoneMembership } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import type { SharedListGrantService } from '../lists/shared-list-grant.service';
 import { MembershipService } from './membership.service';
 import type { ZoneAuthzService } from './zone-authz.service';
 import { ZoneCountsService } from './zone-counts.service';
@@ -128,9 +130,22 @@ describe('MembershipService republishes the counts', () => {
       emit: jest.fn(),
       emitTo: jest.fn(),
     } as unknown as CoreEventsPublisher;
+    // The approval grant put `approve` inside a transaction (plan 0042, section
+    // 2.3). The manager hands back the same membership double, so the assertions
+    // about what was saved are unchanged, and the grant itself is stubbed: what it
+    // writes is `shared-list-grant.spec.ts`'s subject, not this file's.
+    const dataSource = {
+      transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
+        run({ getRepository: () => memberships } as unknown as EntityManager),
+    } as unknown as DataSource;
+    const sharedGrant = {
+      grantZoneSharedLists: async () => [],
+    } as unknown as SharedListGrantService;
     const svc = new MembershipService(
+      dataSource,
       memberships as never,
       authz,
+      sharedGrant,
       counts as never,
       events
     );
