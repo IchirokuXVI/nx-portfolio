@@ -34,6 +34,7 @@ export const environment: {
   production: boolean;
   version: string;
   api: AppApiConfig;
+  appUrl: string;
 } = {
   production: true,
   /**
@@ -46,6 +47,9 @@ export const environment: {
    * itself as what it is rather than impersonating a release.
    */
   version: process.env['VELISTA_APP_VERSION'] as string,
+  // The app's own origin (plan 0033 D10), which differs between staging and
+  // production exactly as the two backend URLs do, and arrives the same way.
+  appUrl: process.env['VELISTA_APP_URL'] as string,
   api: {
     gatewayBaseUrl: process.env['LUNA_GATEWAY_URL'] as string,
     realtimeBaseUrl: process.env['LUNA_REALTIME_URL'] as string,

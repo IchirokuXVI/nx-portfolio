@@ -3,6 +3,8 @@ export * from './lib/app-path';
 export * from './lib/app-updates';
 export * from './lib/browser-facade';
 export * from './lib/connection-state';
+export * from './lib/install-state';
+export * from './lib/install-store';
 export * from './lib/platform-providers';
 export * from './lib/reload-blocker';
 export * from './lib/retry-clock';

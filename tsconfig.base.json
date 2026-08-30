@@ -120,6 +120,9 @@
       "@portfolio/velista/feature-entry": [
         "./libs/velista/feature-entry/src/index.ts"
       ],
+      "@portfolio/velista/feature-install": [
+        "./libs/velista/feature-install/src/index.ts"
+      ],
       "@portfolio/velista/feature-home": [
         "./libs/velista/feature-home/src/index.ts"
       ],

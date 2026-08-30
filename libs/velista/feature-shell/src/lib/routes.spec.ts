@@ -359,6 +359,34 @@ describe('AppShellRoutes', () => {
   });
 
   /**
+   * Installing the app (plan 0033). The three assertions its section 8 asks for, and
+   * the middle one is the deliberate part: this page carries no guard on purpose.
+   */
+  describe('the install page', () => {
+    const install = pages.find((route) => route.path === 'install');
+
+    it('is declared, before the empty front door', () => {
+      const paths = pages.map((route) => route.path);
+
+      expect(install).toBeDefined();
+      expect(paths.indexOf('install')).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('is public, which is the whole point of a link', () => {
+      // It can be sent to somebody who has never signed in, and it makes no request.
+      // An absent guard reads as an oversight, so it is asserted rather than left to
+      // the route table to imply.
+      expect(install?.canActivate).toBeUndefined();
+      expect(install?.canMatch).toBeUndefined();
+    });
+
+    it('is a destination and not a sheet, so it has no children and stays lazy', () => {
+      expect(install?.children).toBeUndefined();
+      expect(install?.loadComponent).toBeDefined();
+    });
+  });
+
+  /**
    * The account (plan 0015). A route rather than a sheet, by the same test `0009`
    * section 4.1 used: it is deep linkable, it has its own scroll, and it is where
    * somebody goes deliberately.

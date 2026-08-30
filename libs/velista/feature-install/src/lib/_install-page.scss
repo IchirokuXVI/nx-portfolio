@@ -1,0 +1,46 @@
+// The page furniture this library's one screen uses.
+//
+// A fourth copy of the same shapes, for the reason `feature-account`'s
+// `_account-page.scss` gives at length: Sass resolves `@use` against the filesystem
+// rather than against this workspace's TypeScript path aliases, so a mixin cannot cross
+// a library boundary. The geometry that must not drift between the copies is a token,
+// which is what makes the duplication survivable.
+
+@mixin focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// One column. The width cap is `AppLayout`'s and is deliberately not repeated here.
+@mixin page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+  flex: 1;
+  padding: var(--app-space-5);
+  padding-block-end: calc(var(--app-space-10) + var(--app-safe-bottom));
+  overflow-y: auto;
+}
+
+@mixin back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-inline-start: calc(var(--app-space-2) * -1);
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+@mixin back-glyph {
+  font-size: var(--app-icon-md);
+}

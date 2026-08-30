@@ -36,11 +36,13 @@ import {
   APP_API_CONFIG,
   APP_BASE_PATH,
   APP_BRAND,
+  APP_STANDALONE_ORIGIN,
   APP_VERSION,
   AppBrand,
 } from '@portfolio/velista/models';
 import {
   AppUpdates,
+  InstallStore,
   VELISTA_PLATFORM_PROVIDERS,
 } from '@portfolio/velista/platform';
 import { environment } from '../environments/environment';
@@ -106,6 +108,15 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // and so no way for this app to update itself, but the requests still go to the
   // same gateway and are still worth identifying.
   { provide: APP_VERSION, useValue: environment.version },
+
+  // Where this app answers on its own origin (plan 0033 D10). Read by the three
+  // surfaces that have to point at it when they are running as the portfolio's
+  // mounted copy, where an install would install the portfolio.
+  //
+  // On this list rather than beside the mount in `appRootRoute`, because unlike the
+  // mount it is the **same value in both run modes**: it is velista's address, not a
+  // statement about where this particular copy is.
+  { provide: APP_STANDALONE_ORIGIN, useValue: environment.appUrl },
 
   // The app's translations, on **this** injector rather than on the route table that
   // owns every page, which is where plan 0006 section 3 put them and where they lived
@@ -208,4 +219,15 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // is no enabled worker, so under the shell this costs one object, and keeping the
   // line unconditional means there is no second place where the two modes disagree.
   provideEnvironmentInitializer(() => void inject(AppUpdates)),
+
+  // Start listening for `beforeinstallprompt` (plan 0033 D1). Nothing injects this
+  // until somebody opens the install page or the account screen, and by then the
+  // event has already fired and been dropped: Chromium fires it once, early, at its
+  // own discretion, and a page cannot ask for another. Constructed here, the listener
+  // is running on whatever route the visitor actually arrived on.
+  //
+  // An **environment** initializer for the same reason `ConnectionRecovery` is one:
+  // `APP_INITIALIZER` is read once from the root injector at bootstrap, and nothing
+  // asks a route injector for it, so under the shell it would never run at all.
+  provideEnvironmentInitializer(() => void inject(InstallStore)),
 ];

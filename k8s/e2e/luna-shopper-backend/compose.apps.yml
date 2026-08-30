@@ -1,5 +1,9 @@
-# Tier 2 overlay: the five Luna Shopper services as their BUILT IMAGES, on top of
-# the infrastructure in compose.yml (plan 0015, section 2).
+# Tier 2 overlay: the Luna Shopper services as their BUILT IMAGES, on top of the
+# infrastructure in compose.yml (plan 0015, section 2).
+#
+# Five of the six here. The harvester is absent on purpose: it is off in both
+# clusters (plan 0038) and a run is eighteen minutes of fetching from a third
+# party, which is not something a stack boot should be able to start.
 #
 # Tier 1 (the pull request gate) runs the services as plain `node dist/.../main.js`
 # processes, which is fast and tests everything except the image itself. This
@@ -219,6 +223,54 @@ services:
         [
           'CMD-SHELL',
           'node -e "fetch(\"http://127.0.0.1:3004/health/ready\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # The assistant (plan 0039). The only service here with no database and no
+  # database url, because rule A1 says it reaches application data only through
+  # the API, carrying the caller's own token — which is why it depends on the
+  # gateway rather than on a Postgres.
+  #
+  # This block states its environment SEPARATELY from the chart and inherits
+  # nothing from it. A variable added in `_env.tpl` and not here, or the reverse,
+  # produces one dead service while the gateway stays up and returns 500s, which
+  # is a slow thing to diagnose from the outside. Keep the two in step by hand.
+  #
+  # GEMINI_API_KEY is empty on purpose and the suite needs it to stay that way:
+  # rule A4 forbids any test in this repository from reaching a model provider, so
+  # a stack that could answer a real turn is a stack that could spend somebody's
+  # quota from CI. Empty means /v1/assistant answers 501, which is exactly what an
+  # e2e suite should assert.
+  assistant:
+    image: ${LUNA_IMAGE_PREFIX:-ghcr.io/ichirokuxvi/nx-portfolio}/luna-shopper-backend-assistant:${LUNA_IMAGE_TAG:-staging}
+    restart: 'no'
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      LOG_LEVEL: debug
+      GATEWAY_INTERNAL_URL: http://gateway:3000
+      GEMINI_API_KEY: ''
+      ASSISTANT_MODEL: gemini-3.5-flash-lite
+      ASSISTANT_MAX_TURNS: '20'
+      ASSISTANT_MAX_CHARS: '8000'
+      ASSISTANT_MAX_TOOL_CALLS: '6'
+      ASSISTANT_TURNS_PER_MINUTE: '8'
+      ASSISTANT_CONCURRENCY: '2'
+      ASSISTANT_RETRY_AFTER_FALLBACK: '30'
+      PORT: '3006'
+      OTEL_SERVICE_NAME: luna-shopper-backend-assistant
+      DEPLOYMENT_ENVIRONMENT: development
+    ports:
+      - '${LUNA_ASSISTANT_PORT:-3006}:3006'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:3006/health/ready\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
         ]
       interval: 5s
       timeout: 5s

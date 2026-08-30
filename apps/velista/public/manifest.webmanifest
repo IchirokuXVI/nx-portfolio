@@ -1,6 +1,8 @@
 {
   "name": "Velista",
   "short_name": "Velista",
+  "description": "Shared shopping lists for the people you actually shop with. Make a group, add what you need, and everybody sees it change as it happens.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -25,6 +27,22 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/narrow-home.png",
+      "sizes": "1170x2532",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "A shared list, with everyone who is looking at it"
+    },
+    {
+      "src": "screenshots/wide-home.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "A shared list, with everyone who is looking at it"
     }
   ]
 }

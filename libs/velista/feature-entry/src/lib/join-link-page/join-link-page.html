@@ -31,20 +31,58 @@
       }
 
       @if (usable) {
-        <button
-          (click)="submit()"
-          [attr.aria-busy]="submitting()"
-          [disabled]="!canSubmit()"
-          class="primary"
-          type="button"
-        >
-          @if (submitting()) {
-            <lib-spinner-icon class="glyph" />
-            {{ 'entry.joinZone.submitting' | rokuT }}
-          } @else {
-            {{ 'entry.joinZone.submit' | rokuT }}
-          }
-        </button>
+        @if (canInstall()) {
+          <!--
+            One press does both (plan 0033 D6). This is the single best moment to ask:
+            somebody is arriving at the product for the first time, from a message in
+            another app, and they are about to want it again tomorrow.
+          -->
+          <button
+            (click)="installAndJoin()"
+            [attr.aria-busy]="submitting()"
+            [disabled]="!canSubmit()"
+            class="primary"
+            type="button"
+          >
+            @if (submitting()) {
+              <lib-spinner-icon class="glyph" />
+              {{ 'entry.joinZone.submitting' | rokuT }}
+            } @else {
+              {{ 'entry.joinLink.installAndJoin' | rokuT }}
+            }
+          </button>
+
+          <!--
+            A real button and a full alternative, not a quiet link. It is not a lesser
+            choice: somebody on a shared or a work phone should not have to decline
+            something in order to accept the thing they came for.
+          -->
+          <button
+            (click)="submit()"
+            [disabled]="!canSubmit()"
+            class="alternative"
+            type="button"
+          >
+            {{ 'entry.joinLink.joinOnly' | rokuT }}
+          </button>
+
+          <p class="install-note">{{ 'entry.joinLink.installNote' | rokuT }}</p>
+        } @else {
+          <button
+            (click)="submit()"
+            [attr.aria-busy]="submitting()"
+            [disabled]="!canSubmit()"
+            class="primary"
+            type="button"
+          >
+            @if (submitting()) {
+              <lib-spinner-icon class="glyph" />
+              {{ 'entry.joinZone.submitting' | rokuT }}
+            } @else {
+              {{ 'entry.joinZone.submit' | rokuT }}
+            }
+          </button>
+        }
       }
 
       <button (click)="decline()" class="decline" type="button">

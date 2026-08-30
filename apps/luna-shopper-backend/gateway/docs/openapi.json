@@ -9005,6 +9005,92 @@
           "stats"
         ]
       }
+    },
+    "/v1/assistant": {
+      "post": {
+        "operationId": "AssistantController_turn_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantTurnDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `assistant.turn` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.assistant.turnResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`not_configured` — That sign in method is not available on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "assistant"
+        ]
+      }
     }
   },
   "info": {
@@ -10006,6 +10092,83 @@
           "enabled"
         ]
       },
+      "AssistantMessageDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ASSISTANT"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ]
+      },
+      "AssistantTurnDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "What the caller just said."
+          },
+          "transcript": {
+            "maxItems": 100,
+            "description": "The conversation so far, oldest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantMessageDto"
+            }
+          }
+        },
+        "required": [
+          "message",
+          "transcript"
+        ]
+      },
+      "assistant.AssistantReference": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/enums.AssistantReferenceKind"
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lineId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "zoneId",
+          "listId",
+          "lineId",
+          "label"
+        ],
+        "additionalProperties": false
+      },
       "auth.AuthTokens": {
         "type": "object",
         "properties": {
@@ -10634,6 +10797,14 @@
           "manual"
         ]
       },
+      "enums.AssistantReferenceKind": {
+        "type": "string",
+        "enum": [
+          "ZONE",
+          "LIST",
+          "LINE"
+        ]
+      },
       "enums.DiscoveredPlaceStatus": {
         "type": "string",
         "enum": [
@@ -10727,6 +10898,15 @@
           "WRITE",
           "DECIDE",
           "MANAGE"
+        ]
+      },
+      "enums.ListResolutionBranch": {
+        "type": "string",
+        "enum": [
+          "NAMED",
+          "CONVERSATION",
+          "ONLY_LIST",
+          "ASKED"
         ]
       },
       "enums.MembershipStatus": {
@@ -11807,6 +11987,28 @@
           "requestedByUserId",
           "status",
           "resolvedByUserId"
+        ],
+        "additionalProperties": false
+      },
+      "msg.assistant.turnResponse": {
+        "type": "object",
+        "properties": {
+          "reply": {
+            "type": "string"
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/assistant.AssistantReference"
+            }
+          },
+          "listResolution": {
+            "$ref": "#/components/schemas/enums.ListResolutionBranch"
+          }
+        },
+        "required": [
+          "reply",
+          "references"
         ],
         "additionalProperties": false
       },

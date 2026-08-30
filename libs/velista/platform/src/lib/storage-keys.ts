@@ -26,6 +26,15 @@ export const StorageKeys = {
   theme: `theme:${APP_KEY}`,
   /** The last list the user opened, so the home page can offer to resume it (plan 0003). */
   lastList: `last-list:${APP_KEY}`,
+  /**
+   * That `appinstalled` fired on this origin (plan 0033, section 2.4).
+   *
+   * The event fires once, in the tab that installed, and the installed window is a
+   * separate document that never sees it, so without this the belief would last until
+   * the next reload. There is no matching uninstall event anywhere, which is why every
+   * screen that renders it has to stay useful when it is wrong (rule I4).
+   */
+  installed: `installed:${APP_KEY}`,
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];

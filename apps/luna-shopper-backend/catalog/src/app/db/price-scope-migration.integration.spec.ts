@@ -44,6 +44,20 @@ describeIntegration('price scope migration (real Postgres)', () => {
       schema: SCHEMA,
       migrations: CATALOG_MIGRATIONS,
       synchronize: false,
+      // `schema` alone does NOT put the migrations in the scratch schema. It
+      // qualifies the names TypeORM generates from entity metadata, and a
+      // migration is raw SQL naming `"items"` with no schema at all, so every
+      // statement here resolves against the connection's search_path, which is
+      // `public`. Against a database the stack has already migrated that means
+      // `CREATE TYPE "item_category"` fails as already existing, and, worse,
+      // the undo below would drop the developer's real tables.
+      //
+      // Postgres has no `SET SCHEMA` for a session, so the search_path is set
+      // for the connection itself, through the startup parameter pg forwards.
+      // `public` is deliberately left out rather than kept as a fallback: an
+      // object this test fails to create in the scratch schema must error,
+      // never silently resolve to the real one and get dropped.
+      extra: { options: `-c search_path=${SCHEMA}` },
     });
     await dataSource.initialize();
   }, 60_000);

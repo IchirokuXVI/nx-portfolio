@@ -150,6 +150,29 @@ bodies and reads no floor, and a stale client is caught on its next REST call.
       key: {{ $key }}
 {{- end }}
 {{- end }}
+{{- if eq $svc.role "assistant" }}
+# The assistant (plan 0039). The shortest block here, and the shape of it is the
+# point: **no database url of any kind**, because rule A1 says the service reaches
+# application data only through the API carrying the caller's own token, and it
+# holds no credential of its own beyond the provider key below.
+#
+# GEMINI_API_KEY is in `OPTIONAL_EMPTY_KEYS` in provision-release.sh, so an
+# operator with no key gets a service that boots and answers 501 on its one route
+# rather than a pod stuck in CreateContainerConfigError and a cluster that never
+# comes up (plan 0026). Nothing here may be made required without breaking that.
+- name: GEMINI_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: GEMINI_API_KEY
+{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_MODEL" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK") }}
+- name: {{ $key }}
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: {{ $key }}
+{{- end }}
+{{- end }}
 {{- if eq $svc.role "auth" }}
 - name: AUTH_DB_URL
   valueFrom:

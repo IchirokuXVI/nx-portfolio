@@ -133,7 +133,12 @@ BACKUP_SECRET=luna-shopper-backend-backup-secret
 # ---------------------------------------------------------------------------
 
 # The only keys allowed to exist with no value. See the note above.
-OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS"
+#
+# GEMINI_API_KEY joins them for the same reason and by the same rule (plan 0039,
+# section 11): with it empty the assistant boots, its health probes pass, and
+# /v1/assistant answers 501 not_configured. An operator who never wanted an
+# assistant should not be told their deploy will fail when it will not.
+OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS GEMINI_API_KEY"
 
 is_optional_empty() {
   case " $OPTIONAL_EMPTY_KEYS " in
@@ -457,11 +462,13 @@ if [ -z "$JWT_PRIVATE_KEY" ] || [ "$ROTATE" = true ]; then
   rm -f "$tmp_key" "$tmp_pub"
 fi
 
-# What cannot be generated. Both may be empty: since plan 0026 that is a
-# supported configuration rather than a broken one — the Google routes answer 501
-# and registration answers 501, instead of the service failing to boot.
+# What cannot be generated. All three may be empty: since plan 0026 that is a
+# supported configuration rather than a broken one — the Google routes answer 501,
+# registration answers 501, and (plan 0039) the assistant answers 501, instead of
+# the service failing to boot.
 GOOGLE_CLIENT_SECRET="$(existing "$APP_SECRET" GOOGLE_CLIENT_SECRET)"
 SMTP_PASS="$(existing "$APP_SECRET" SMTP_PASS)"
+GEMINI_API_KEY="$(existing "$APP_SECRET" GEMINI_API_KEY)"
 if [ -t 0 ]; then
   if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
     read -rsp "  Google client secret (blank to leave Google unconfigured): " GOOGLE_CLIENT_SECRET
@@ -471,8 +478,12 @@ if [ -t 0 ]; then
     read -rsp "  SMTP password (blank to leave email unconfigured): " SMTP_PASS
     echo
   fi
+  if [ -z "$GEMINI_API_KEY" ]; then
+    read -rsp "  Gemini API key (blank to leave the assistant unconfigured): " GEMINI_API_KEY
+    echo
+  fi
 else
-  echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET and SMTP_PASS as they are"
+  echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET, SMTP_PASS and GEMINI_API_KEY as they are"
 fi
 
 # ---------------------------------------------------------------------------
@@ -514,7 +525,8 @@ apply_secret "$APP_SECRET" \
   --from-literal=AUTH_JWT_PRIVATE_KEY="$JWT_PRIVATE_KEY" \
   --from-literal=AUTH_JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
   --from-literal=GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
-  --from-literal=SMTP_PASS="$SMTP_PASS"
+  --from-literal=SMTP_PASS="$SMTP_PASS" \
+  --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY"
 
 # The backup credentials (plan 0005). Only production renders the CronJobs, but
 # creating an empty placeholder in staging would be worse than nothing: --check
@@ -565,6 +577,7 @@ ${APP_SECRET}/CORE_DB_URL: ${CORE_DB_URL}
 ${APP_SECRET}/CATALOG_DB_URL: ${CATALOG_DB_URL}
 ${APP_SECRET}/GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
 ${APP_SECRET}/SMTP_PASS: ${SMTP_PASS}
+${APP_SECRET}/GEMINI_API_KEY: ${GEMINI_API_KEY}
 
 ${APP_SECRET}/AUTH_JWT_PRIVATE_KEY:
 ${JWT_PRIVATE_KEY}
