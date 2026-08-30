@@ -61,6 +61,12 @@ export interface LineWriteNote {
  * key, and an event naming an id the store has already claimed is dropped rather than
  * inserted. An event for an id it has never seen, in a list it has loaded, is somebody
  * else's line and is inserted (section 5.2).
+ *
+ * That claim cannot be made before the response names the id, and on a deployed
+ * environment the echo usually arrives first, so **the two orders are settled in
+ * `_settleAdd` rather than by the claim alone**. Read it before touching either half:
+ * the version that only claimed left the same id in the list twice whenever the socket
+ * beat the response, which is the ordinary order everywhere except localhost.
  */
 // Provided by the app layer, never root: rule D5, plan 0004 section 9. It resolves
 // `LINE_SERVICE` in the injector where the app binds it, and at the root it would
@@ -322,7 +328,7 @@ export class LineStore {
     // The server's row replaces the local one in place, keeping its position in the
     // rendered order, so nothing jumps at the moment the response lands.
     this._mine.add(outcome.value.id);
-    this._replace(listId, clientKey, outcome.value);
+    this._settleAdd(listId, clientKey, outcome.value);
     return { state: 'added', line: outcome.value };
   }
 
@@ -796,13 +802,41 @@ export class LineStore {
     );
   }
 
-  private _replace(listId: string, fromId: string, line: Line): void {
+  /**
+   * Put the server's row where the optimistic one was, whichever arrived first.
+   *
+   * `_mine` is what stops `line.added` drawing a second row for a line this client
+   * added, and it can only be written once the response names an id. On a deployed
+   * environment the echo usually gets there **before** that response does: it travels
+   * core to NATS to the socket, while the response travels core to the gateway to the
+   * proxy to the browser. So the ordinary order in production is the one the claim
+   * cannot cover, and the event, finding an id it has never seen, inserts a row beside
+   * the pending one. The response then rewrote the client keyed row into that same
+   * server row and the list held the id twice, which a `track line.id` renders as two
+   * identical items until the next load. Locally the response wins the race, which is
+   * why this never showed up in development.
+   *
+   * So the claim is made order independent here rather than being made earlier:
+   * whichever of the two arrives second reconciles the row the first one left, and the
+   * list never holds one id twice. The optimistic row's slot is the one kept, so the
+   * item does not jump when the response lands.
+   */
+  private _settleAdd(listId: string, clientKey: string, line: Line): void {
     this._byList.update((current) => {
       const lines = current.get(listId) ?? [];
-      return new Map(current).set(
-        listId,
-        lines.map((existing) => (existing.id === fromId ? line : existing))
-      );
+      const pending = lines.some((existing) => existing.id === clientKey);
+      const settled = pending
+        ? // Drop the echo where there is one, and let the client keyed row become the
+          // server row, so the item stays in the slot the person watched it appear in.
+          lines
+            .filter((existing) => existing.id !== line.id)
+            .map((existing) => (existing.id === clientKey ? line : existing))
+        : // No pending row left to settle: either the echo is all there is, and it is
+          // refreshed in place, or the list was forgotten while the request was out and
+          // nothing is written, which is what `_replace` did here before.
+          lines.map((existing) => (existing.id === line.id ? line : existing));
+
+      return new Map(current).set(listId, settled);
     });
   }
 

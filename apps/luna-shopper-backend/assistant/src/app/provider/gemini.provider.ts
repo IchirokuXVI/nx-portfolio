@@ -9,6 +9,7 @@ import {
   type ModelReply,
   type ModelRequest,
   type ModelToolCall,
+  type ModelTurn,
   type ModelUsage,
 } from './model-provider';
 
@@ -140,12 +141,11 @@ export function toGeminiRequest(
   };
 }
 
-function toGeminiContent(turn: {
-  role: ModelTurnRole;
-  text?: string;
-  toolCalls?: ModelToolCall[];
-  toolResults?: { name: string; result: unknown }[];
-}): Record<string, unknown> {
+// `ModelTurn` itself rather than the same shape written out again. It was written
+// out again once, and the copy went stale the moment a field was added to the
+// real one: the build broke and the suite did not, because the mapping is
+// exercised through this function and never through its parameter list.
+function toGeminiContent(turn: ModelTurn): Record<string, unknown> {
   if (turn.role === ModelTurnRole.TOOL) {
     return {
       // Gemini calls the side that carries a function result `user`; there is no
@@ -154,6 +154,9 @@ function toGeminiContent(turn: {
       role: 'user',
       parts: (turn.toolResults ?? []).map((entry) => ({
         functionResponse: {
+          // The call's own id when it had one, so a reply that asked for the same
+          // tool twice gets each result against the call it answers.
+          ...(entry.id !== undefined ? { id: entry.id } : {}),
           name: entry.name,
           // Always an object: the API rejects a bare array or scalar here, and a
           // tool that returns a list is the ordinary case.
@@ -168,7 +171,24 @@ function toGeminiContent(turn: {
     parts.push({ text: turn.text });
   }
   for (const call of turn.toolCalls ?? []) {
-    parts.push({ functionCall: { name: call.name, args: call.args } });
+    parts.push({
+      functionCall: {
+        ...(call.id !== undefined ? { id: call.id } : {}),
+        name: call.name,
+        args: call.args,
+      },
+      // The thought signature, back on the part it arrived on. Gemini 3 answers
+      // 400 INVALID_ARGUMENT to a replayed `functionCall` part that has lost it,
+      // so without this line the second round of every tool using turn fails and
+      // the caller sees a bare 500 for anything the bot actually had to do.
+      //
+      // Conditional because it is genuinely absent sometimes: in a reply with
+      // several calls only the first is signed, and a bare part is accepted while
+      // an invented signature is not.
+      ...(call.signature !== undefined
+        ? { thoughtSignature: call.signature }
+        : {}),
+    });
   }
   // A content with no parts is rejected, and an empty model turn is reachable
   // (a reply that was only tool calls, replayed with its calls stripped).
@@ -197,15 +217,23 @@ export function readReply(payload: unknown): ModelReply {
   const toolCalls: ModelToolCall[] = [];
   for (const part of parts) {
     const call = part['functionCall'] as
-      | { name?: unknown; args?: unknown }
+      | { id?: unknown; name?: unknown; args?: unknown }
       | undefined;
     if (call && typeof call.name === 'string') {
+      // The signature belongs to the part rather than to the call inside it, and
+      // it has to survive the round trip unread: it is the model's own record of
+      // the thinking that led to this call, and Gemini refuses to continue a tool
+      // using conversation whose calls have lost it.
+      const signature = part['thoughtSignature'];
+
       toolCalls.push({
         name: call.name,
         args:
           call.args && typeof call.args === 'object'
             ? (call.args as Record<string, unknown>)
             : {},
+        ...(typeof call.id === 'string' ? { id: call.id } : {}),
+        ...(typeof signature === 'string' ? { signature } : {}),
       });
     }
   }

@@ -45,10 +45,19 @@ function service(seed: readonly Line[]) {
   let failWith: Error | null = null;
   /** What the next write answers, so a version race can be staged rather than raced. */
   let answerWith: Line | null = null;
+  /** Set while writes are held open, resolved by `releaseWrites`. */
+  let held: Promise<void> | null = null;
+  let release: (() => void) | null = null;
   const calls: string[] = [];
 
   const answer = async (fallback: Line): Promise<Line> => {
     calls.push('write');
+    if (held !== null) {
+      // The write is left in flight so a spec can stage what reaches the store while
+      // it is out. A deployed environment does this by itself: the echo off the socket
+      // is quicker than the response back through the gateway.
+      await held;
+    }
     if (failWith !== null) {
       const error = failWith;
       failWith = null;
@@ -126,6 +135,16 @@ function service(seed: readonly Line[]) {
     },
     answerNext: (value: Line) => {
       answerWith = value;
+    },
+    holdWrites: () => {
+      held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    },
+    releaseWrites: () => {
+      held = null;
+      release?.();
+      release = null;
     },
   };
 }
@@ -233,6 +252,31 @@ describe('LineStore', () => {
       );
 
       expect(store.linesIn(LIST)).toHaveLength(1);
+    });
+
+    it('does not draw a second row when the echo arrives before the response', async () => {
+      // The order a deployed environment actually produces, and the one this store got
+      // wrong: `line.added` travels core to NATS to the socket while the response is
+      // still coming back through the gateway, so the id is not claimed yet when the
+      // event lands. The event inserted a row, the response then rewrote the client
+      // keyed row into the same server row, and the list held one id twice, which
+      // `track line.id` draws as two identical items until the next load. Locally the
+      // response wins the race, which is why only staging and production showed it.
+      const { store, realtime, lines } = await build();
+      await store.load(LIST);
+
+      lines.holdWrites();
+      const adding = store.addLine(LIST, 'Milk', 2, ME, ASKS_FIRST);
+      realtime.emit(
+        'line.added',
+        line('server-id', { content: 'Milk', quantity: 2 })
+      );
+      lines.releaseWrites();
+      await adding;
+
+      expect(store.linesIn(LIST)).toHaveLength(1);
+      expect(store.linesIn(LIST)[0].id).toBe('server-id');
+      expect(store.linesIn(LIST)[0].content).toBe('Milk');
     });
 
     it('inserts somebody else’s line', async () => {

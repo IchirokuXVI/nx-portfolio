@@ -192,14 +192,22 @@ export class AssistantService {
     calls: ModelToolCall[],
     runtime: ToolRuntime,
     calledTools: { name: string; args: unknown; ok: boolean }[]
-  ): Promise<{ name: string; result: unknown }[]> {
-    const results: { name: string; result: unknown }[] = [];
+  ): Promise<{ id?: string; name: string; result: unknown }[]> {
+    const results: { id?: string; name: string; result: unknown }[] = [];
+
+    // The provider's handle for the call, when it gave one, so a result goes back
+    // against the call it answers. A turn can ask for one tool twice, and by the
+    // time the results are a list of names there is nothing left to tell them
+    // apart by.
+    const against = (call: ModelToolCall) =>
+      call.id !== undefined ? { id: call.id } : {};
 
     for (const call of calls) {
       const tool = findTool(call.name);
       if (!tool) {
         calledTools.push({ name: call.name, args: call.args, ok: false });
         results.push({
+          ...against(call),
           name: call.name,
           result: { ok: false, problem: 'there is no such tool' },
         });
@@ -213,7 +221,7 @@ export class AssistantService {
           args: call.args,
           ok: (result as { ok?: unknown })?.ok === true,
         });
-        results.push({ name: call.name, result });
+        results.push({ ...against(call), name: call.name, result });
       } catch (error) {
         // A tool that threw is a bug here, not a refusal from the API, which the
         // tools already convert. Log it with the context to reproduce it and let
@@ -225,6 +233,7 @@ export class AssistantService {
         );
         calledTools.push({ name: call.name, args: call.args, ok: false });
         results.push({
+          ...against(call),
           name: call.name,
           result: { ok: false, problem: 'that did not work' },
         });
