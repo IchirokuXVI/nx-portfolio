@@ -85,7 +85,12 @@ them.
     secretKeyRef:
       name: {{ $sec }}
       key: GOOGLE_CLIENT_SECRET
-{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL") }}
+{{- /*
+The oldest velista build this deployment serves (velista plan 0034). Gateway only,
+because it is the only public HTTP surface: the realtime service carries no request
+bodies and reads no floor, and a stale client is caught on its next REST call.
+*/}}
+{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

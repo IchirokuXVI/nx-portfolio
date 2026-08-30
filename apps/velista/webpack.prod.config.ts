@@ -2,6 +2,7 @@ import { withModuleFederation } from '@nx/module-federation/angular';
 import { composePlugins } from '@nx/webpack';
 import { DefinePlugin } from 'webpack';
 import merge from 'webpack-merge';
+import { DEFAULT_APP_VERSION } from './app-version';
 import mfeConfig from './module-federation.config';
 
 /**
@@ -64,6 +65,13 @@ export default composePlugins(async (config) => {
         ),
         'process.env.LUNA_REALTIME_URL': JSON.stringify(
           process.env.LUNA_REALTIME_URL || DEFAULT_LUNA_REALTIME_URL
+        ),
+        // Which build this is (plan 0034 D4). CI sets it to the string it also
+        // passes as `DOCKER_IMAGE_TAG`, so the version a client reports is the
+        // version of the image serving it. Unset, this is a production build that
+        // is not a release, and the default says so rather than guessing.
+        'process.env.VELISTA_APP_VERSION': JSON.stringify(
+          process.env.VELISTA_APP_VERSION || DEFAULT_APP_VERSION
         ),
       }),
     ],

@@ -20,6 +20,7 @@ import { Logger } from 'nestjs-pino';
 import { GatewayAccountModule } from './account/account.module';
 import { GatewayAuthModule } from './auth/auth.module';
 import { GatewayCatalogModule } from './catalog/catalog.module';
+import { MinClientVersionGuard } from './client-version/min-client-version.guard';
 import { GatewayHarvestModule } from './harvest/harvest.module';
 import type { GatewayConfig } from './config/app-config';
 import {
@@ -118,6 +119,16 @@ import { GatewayZonesModule } from './zones/zones.module';
     // limit for themselves. The platform subclass is used rather than the
     // library's own so a 429 carries the wait in the body (plan 0021, section 2).
     { provide: APP_GUARD, useClass: ProblemThrottlerGuard },
+    // Advertises the oldest supported client on every response and refuses the ones
+    // below it (velista plan 0034). Inert until `MIN_CLIENT_VERSION` is set, which
+    // it is in neither cluster by default.
+    //
+    // Deliberately after the throttler. Nest runs global guards in the order they
+    // are declared, and a client hammering the gateway should be told it is being
+    // rate limited before it is told it is out of date: the first is the reason the
+    // requests are being refused, and answering the second would let an old client
+    // burn its bucket learning the same thing once per request.
+    { provide: APP_GUARD, useClass: MinClientVersionGuard },
   ],
 })
 export class AppModule {}

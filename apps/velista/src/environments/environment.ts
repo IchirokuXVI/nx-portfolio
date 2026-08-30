@@ -33,8 +33,27 @@ import { AppApiConfig } from '@portfolio/velista/models';
  */
 declare const process: { env: Record<string, string | undefined> };
 
-export const environment: { production: boolean; api: AppApiConfig } = {
+export const environment: {
+  production: boolean;
+  version: string;
+  api: AppApiConfig;
+} = {
   production: false,
+  /**
+   * Which build this is, as one string, and the only source of that identity
+   * (plan 0034 D4).
+   *
+   * It leaves the app in the `x-client-version` header on every gateway request,
+   * which is what lets a deployment say a client is too old to be served. In
+   * development it is the `0.0.0-dev` default, which by D6 does not parse as a
+   * release version and so is never compared against a floor: a local build is
+   * never stale and never refused.
+   *
+   * Deliberately not read from `ngsw-config.json`'s `appData`. That file is static
+   * JSON, so a version written there is hand maintained and drifts from the build
+   * it claims to describe; `appData` carries the `critical` flag and nothing else.
+   */
+  version: process.env['VELISTA_APP_VERSION'] as string,
   api: {
     // The luna-shopper gateway (PORT defaults to 3000 in its config schema).
     gatewayBaseUrl: process.env['LUNA_GATEWAY_URL'] as string,

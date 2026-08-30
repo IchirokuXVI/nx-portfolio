@@ -2,6 +2,7 @@ import { withModuleFederation } from '@nx/module-federation/angular';
 import { composePlugins } from '@nx/webpack';
 import { DefinePlugin } from 'webpack';
 import merge from 'webpack-merge';
+import { DEFAULT_APP_VERSION } from './app-version';
 import mfeConfig from './module-federation.config';
 
 /**
@@ -55,6 +56,13 @@ export default composePlugins(async (config) => {
         ),
         'process.env.LUNA_REALTIME_URL': JSON.stringify(
           process.env.LUNA_REALTIME_URL || DEV_LUNA_REALTIME_URL
+        ),
+        // Which build this is (plan 0034 D4). Substituted in development as well
+        // as production for the same reason as the two URLs above: `environment.ts`
+        // reads it, and an unsubstituted `process.env` throws at startup in a
+        // browser. Nothing sets it locally, so a served app is always the default.
+        'process.env.VELISTA_APP_VERSION': JSON.stringify(
+          process.env.VELISTA_APP_VERSION || DEFAULT_APP_VERSION
         ),
       }),
     ],

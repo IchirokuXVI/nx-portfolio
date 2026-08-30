@@ -11845,6 +11845,7 @@
               "conflict",
               "rate_limited",
               "not_configured",
+              "client_too_old",
               "internal"
             ],
             "description": "The stable machine code the client branches on."
