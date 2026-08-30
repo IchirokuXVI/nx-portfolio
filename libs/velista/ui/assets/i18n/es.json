@@ -440,7 +440,21 @@
       "empty": "Todavía nadie ha dicho nada",
       "someone": "Alguien del grupo",
       "loading": "Cargando lo que se ha dicho",
-      "readOnly": "Puedes leer lo que se ha dicho, pero no escribir aquí"
+      "readOnly": "Puedes leer lo que se ha dicho, pero no escribir aquí",
+      "startRecording": "Dilo en vez de escribirlo",
+      "stopRecording": "Parar de grabar",
+      "recordingPlaceholder": "Grabando. Pulsa parar cuando termines",
+      "recording": "Grabando, {{seconds}}s",
+      "recordingHeld": "Una grabación de {{seconds}}s, lista para enviar",
+      "recordingEmpty": "Esa grabación ha salido vacía. Inténtalo otra vez",
+      "recordingTooBig": "Esa grabación pasa del límite de {{limit}} MB. Sigue aquí, así que puedes grabar una más corta",
+      "micRefused": "Velista no ha podido usar el micrófono. Revisa el permiso en el navegador, o escríbelo",
+      "sending": "Enviando una grabación",
+      "transcribing": "Escribiendo esto",
+      "noTranscript": "Una grabación. No se ha podido escribir",
+      "play": "Reproducir esta grabación",
+      "pause": "Pausar",
+      "playFailed": "Esa grabación no se ha podido reproducir"
     },
     "settings": {
       "title": "Ajustes de la lista",

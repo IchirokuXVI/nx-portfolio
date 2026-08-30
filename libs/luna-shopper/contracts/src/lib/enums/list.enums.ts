@@ -44,3 +44,31 @@ export enum LineStatus {
   READY = 'READY',
   NOT_AVAILABLE = 'NOT_AVAILABLE',
 }
+
+/**
+ * How far a voice comment's transcription got (plan 0045, sections 4.2 and 8).
+ *
+ * It rides on the comment rather than being inferred from an empty body, because
+ * "nobody has transcribed this yet" and "nothing could be transcribed from it"
+ * look identical on screen for about three seconds and completely different after
+ * a minute. A client that could only see an empty body would have to poll to tell
+ * them apart, and there is nothing to poll.
+ *
+ * A typed comment carries no state at all: `CommentView.transcription` is null for
+ * one, and these four describe only a comment that has a recording.
+ */
+export enum CommentTranscription {
+  /** Stored, and the transcript has been asked for. The ordinary first state. */
+  PENDING = 'PENDING',
+  /** The words are in `body`. */
+  READY = 'READY',
+  /** It was attempted and produced nothing. The recording is still the message. */
+  FAILED = 'FAILED',
+  /**
+   * Nothing was attempted: the deployment has no provider key, or the provider
+   * cannot take audio at all. Distinct from {@link FAILED} because it is a
+   * property of the deployment rather than of this recording, and because it will
+   * not change by waiting.
+   */
+  UNAVAILABLE = 'UNAVAILABLE',
+}

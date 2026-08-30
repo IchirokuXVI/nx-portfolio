@@ -90,7 +90,13 @@ The oldest velista build this deployment serves (velista plan 0034). Gateway onl
 because it is the only public HTTP surface: the realtime service carries no request
 bodies and reads no floor, and a stale client is caught on its next REST call.
 */}}
-{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION") }}
+{{- /*
+Voice comments (plan 0045). The gateway holds the cap because it holds the
+multipart interceptor, and a byte cap that is not on the interceptor is not a cap:
+the global ValidationPipe never sees a file and Express's body limits do not apply
+to a multipart stream. Core receives the same two keys and checks them again.
+*/}}
+{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
@@ -109,6 +115,18 @@ bodies and reads no floor, and a stale client is caught on its next REST call.
     secretKeyRef:
       name: {{ $sec }}
       key: AUTH_JWT_PUBLIC_KEY
+{{- /*
+The second half of plan 0045 section 6's cap, from the same two ConfigMap keys the
+gateway reads. Core owns the `bytea` the recording is written into, so it refuses a
+payload that reached the broker without passing the interceptor.
+*/}}
+{{- range $key := (list "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES") }}
+- name: {{ $key }}
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: {{ $key }}
+{{- end }}
 {{- end }}
 {{- if eq $svc.role "catalog" }}
 - name: CATALOG_DB_URL

@@ -268,6 +268,7 @@ export class ListStore {
       case 'line.deleted':
       case 'line.reordered':
       case 'comment.added':
+      case 'comment.updated':
         // The line counts on a row would move for these, and the events do not carry
         // enough to recompute one: `line.updated` fires for status changes too, so
         // `readyCount` cannot be derived from it without knowing the line's previous

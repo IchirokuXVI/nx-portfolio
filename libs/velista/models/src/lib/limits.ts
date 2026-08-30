@@ -53,6 +53,35 @@ export const LINE_QUANTITY_MAX = 100000;
 export const COMMENT_BODY_MAX_LENGTH = 2000;
 
 /**
+ * How long a voice comment may run before the recorder stops itself (plan 0039,
+ * section 2.1).
+ *
+ * Longer than the line composer's ceiling, because a message is longer than a
+ * line: somebody leaving a comment pauses to think, and a minute is enough for
+ * anything that is not really a phone call.
+ *
+ * **The cap stops rather than sends**, which is plan 0032 section 4.4's rule and
+ * holds for the same reason: a message that leaves on its own is a message nobody
+ * agreed to send. The recording stays in the composer and the send button is
+ * there to press.
+ */
+export const VOICE_COMMENT_MAX_SECONDS = 60;
+
+/**
+ * The byte cap the gateway enforces (backend `VOICE_COMMENT_MAX_BYTES`).
+ *
+ * The client's copy is never the authority and a mismatch is a worse message
+ * rather than an open door, which is the same paragraph as the rest of this file.
+ * It is here so somebody sees the limit named in words with the recording still
+ * in the composer, instead of watching an upload fail.
+ *
+ * At the speech grade bitrate the recorder asks for, a minute is roughly 180 KB,
+ * so this is an order of magnitude of headroom rather than a limit anybody meets
+ * by talking.
+ */
+export const VOICE_COMMENT_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
  * How much conversation one turn may carry (backend `0039`, `ASSISTANT_MAX_TURNS` and
  * `ASSISTANT_MAX_CHARS`).
  *

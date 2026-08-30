@@ -20,7 +20,49 @@ import type {
 export const ASSISTANT_PATTERNS = {
   /** One conversation turn: transcript in, reply and references out. */
   turn: 'assistant.turn',
+  /**
+   * Words out of a recording, and nothing else (plan 0041, section 3.2).
+   *
+   * A second subject rather than an audio part on a turn, because it is a
+   * different job: no tools, no history, no reply to parse, and nothing for rule
+   * A1 to enforce because nothing is being read. It carries no list, no line and
+   * nothing about who spoke; it is a transcription, not a turn.
+   *
+   * The assistant owns it because the assistant holds the provider credential.
+   * Core does not gain a model provider and must not: core is the database and
+   * the rules, and a dependency from core on a provider key would make the list
+   * service unbootable without a credential it has no other use for (plan 0045,
+   * section 4.1).
+   */
+  transcribe: 'assistant.transcribe',
 } as const;
+
+/**
+ * A recording to write down (plan 0041, section 3.2).
+ *
+ * The audio is held for the length of the call and never written anywhere: no
+ * disk, no database, no cache, and never a log line, not even a hash (plan 0041,
+ * section 6). That is rule A2 rather than an exception to it.
+ */
+export interface AssistantTranscribeRequest {
+  /** Base64, because this crosses the broker (plan 0041, section 4.2). */
+  audio: string;
+  /** What the browser recorded in. The service refuses what it cannot read. */
+  mimeType: string;
+  /** BCP 47, the same locale a reply would be written in. */
+  locale: string;
+}
+
+/**
+ * What was heard.
+ *
+ * `text` is empty when the provider returned nothing, which is a real answer and
+ * not an error: the caller records that no transcript exists rather than retrying
+ * forever, and the recording is intact either way.
+ */
+export interface AssistantTranscribeResponse {
+  text: string;
+}
 
 /** One entry of the transcript the client holds and resends every turn. */
 export interface AssistantMessage {

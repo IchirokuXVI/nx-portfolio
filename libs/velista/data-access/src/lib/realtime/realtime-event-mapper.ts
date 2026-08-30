@@ -199,7 +199,8 @@ export function toRealtimeEvent(
         : { type: name, lineId, listId };
     }
 
-    case 'comment.added': {
+    case 'comment.added':
+    case 'comment.updated': {
       const comment = toComment(payload);
       return comment === null ? null : { type: name, comment };
     }

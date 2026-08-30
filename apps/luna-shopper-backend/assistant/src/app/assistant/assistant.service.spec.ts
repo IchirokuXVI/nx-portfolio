@@ -1001,6 +1001,128 @@ describe('capTranscript', () => {
   });
 });
 
+/**
+ * Words out of a recording (plan 0041, section 3).
+ *
+ * Rule A4 holds here exactly as above and the fake is the same one: no byte of
+ * audio reaches a provider, and the only audio in this file is a base64 string
+ * nobody decodes into sound.
+ */
+describe('AssistantService.transcribe', () => {
+  const AUDIO = Buffer.from('not really audio').toString('base64');
+
+  it('hands the provider the recording, its type and the locale', async () => {
+    const provider = new FakeModelProvider().willHear('Bring the big one');
+    const service = build(provider, new RecordingApi());
+
+    const heard = await service.transcribe({
+      audio: AUDIO,
+      mimeType: 'audio/webm;codecs=opus',
+      locale: 'es',
+    });
+
+    expect(heard.text).toBe('Bring the big one');
+    expect(provider.transcriptions).toHaveLength(1);
+    // The negotiated type as the browser produced it, parameters and all: the
+    // container is what decides whether this works, and tidying the string here
+    // would only hide the answer.
+    expect(provider.transcriptions[0].mimeType).toBe('audio/webm;codecs=opus');
+    expect(provider.transcriptions[0].locale).toBe('es');
+    expect(Buffer.from(provider.transcriptions[0].audio).toString()).toBe(
+      'not really audio'
+    );
+  });
+
+  it('spends no conversation turn, because leaving a message is not a turn', async () => {
+    // One turn a minute, and three transcriptions. A voice comment must not spend
+    // somebody's assistant quota on a message they left for their flatmate.
+    const provider = new FakeModelProvider().willHear('one', 'two', 'three');
+    const service = build(provider, new RecordingApi(), { turnsPerMinute: 1 });
+
+    for (let i = 0; i < 3; i += 1) {
+      await service.transcribe({
+        audio: AUDIO,
+        mimeType: 'audio/webm',
+        locale: 'en',
+      });
+    }
+
+    expect(provider.transcriptions).toHaveLength(3);
+  });
+
+  it('answers an empty string when the provider heard nothing', async () => {
+    const provider = new FakeModelProvider().willHear('   ');
+    const service = build(provider, new RecordingApi());
+
+    // Not an error: a recording of silence is a real thing somebody uploads, and
+    // the caller records that no transcript exists rather than retrying forever.
+    await expect(
+      service.transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+    ).resolves.toEqual({ text: '' });
+  });
+
+  it('answers not_configured where the deployment has no provider', async () => {
+    const provider = new FakeModelProvider();
+    provider.configured = false;
+    const service = build(provider, new RecordingApi());
+
+    // A statement about the server: nothing the caller changes makes it work, so
+    // the voice comment settles as UNAVAILABLE rather than waiting for a
+    // transcript that is never coming.
+    const error = await service
+      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .catch((thrown: unknown) => thrown);
+
+    expect(isDomainException(error)).toBe(true);
+    expect((error as { code: string }).code).toBe('not_configured');
+  });
+
+  it('answers not_configured where the provider cannot take audio', async () => {
+    const provider = new FakeModelProvider();
+    provider.transcriptionSupported = false;
+    const service = build(provider, new RecordingApi());
+
+    // The distinction the field exists for: a provider that will never transcribe
+    // says so in a field rather than by throwing, so the two are told apart at the
+    // call site rather than guessed at from an error.
+    const error = await service
+      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .catch((thrown: unknown) => thrown);
+
+    expect((error as { code: string }).code).toBe('not_configured');
+  });
+
+  it('carries the retry hint through, so rule A5 needs no second implementation', async () => {
+    const provider = new FakeModelProvider().willHear(
+      new ProviderRateLimitedError('slow down', 27)
+    );
+    const service = build(provider, new RecordingApi());
+
+    const error = await service
+      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .catch((thrown: unknown) => thrown);
+
+    expect(isDomainException(error)).toBe(true);
+    expect(retryAfterSecondsOf(error as never)).toBe(27);
+  });
+
+  it('supplies a number when the provider gave none', async () => {
+    const provider = new FakeModelProvider().willHear(
+      new ProviderRateLimitedError('slow down')
+    );
+    const service = build(provider, new RecordingApi());
+
+    const error = await service
+      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .catch((thrown: unknown) => thrown);
+
+    // Mandatory by the time it reaches the client, whatever the provider said.
+    expect(retryAfterSecondsOf(error as never)).toBe(
+      CONFIG.retryAfterFallbackSeconds
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // fixtures
 // ---------------------------------------------------------------------------

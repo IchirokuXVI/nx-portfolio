@@ -869,6 +869,7 @@ export class ZoneStore {
       case 'line.reordered':
       case 'line.deleted':
       case 'comment.added':
+      case 'comment.updated':
         // List-scoped traffic reaching the zone room. `ListStore` owns these; the zone
         // summary's per-list counts are refreshed by its own load rather than being
         // recomputed from a stream the store only sees part of.

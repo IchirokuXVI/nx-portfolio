@@ -199,12 +199,25 @@ services:
   nats:
     image: nats:2.10-alpine
     restart: unless-stopped
-    command: ['-js', '-sd', '/data', '-m', '8222']
+    # `max_payload` is raised from the one megabyte default so a voice recording
+    # can cross this broker as base64 (plan 0041, section 4.2; plan 0045,
+    # section 3). It lives in `nats.conf` because it is a **configuration file
+    # option and not a flag**: `nats-server` refuses to start with
+    # `--max_payload`, which is the one thing plan 0041 section 4.2 gets wrong
+    # about the mechanism.
+    #
+    # **This and `k8s/helm/templates/luna-shopper-backend/nats.yaml.tpl` are one
+    # decision and change together.** A raise here and not there is a feature that
+    # works on this machine and fails in the cluster with a broker level rejection.
+    command: ['-c', '/etc/nats/nats.conf', '-js', '-sd', '/data', '-m', '8222']
     ports:
       - '${LUNA_NATS_PORT:-4222}:4222'
       - '${LUNA_NATS_MONITOR_PORT:-8222}:8222'
     volumes:
       - nats-data:/data
+      # Read only, because nothing should be able to rewrite the broker's own
+      # ceiling from inside the container.
+      - ./nats.conf:/etc/nats/nats.conf:ro
     # `docker compose up --wait` blocks on healthchecks, and it is what the stack
     # targets and both CI tiers use instead of a sleep (plan 0015, section 4).
     # Without a check here compose calls NATS started the moment the container

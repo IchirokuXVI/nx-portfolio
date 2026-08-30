@@ -52,6 +52,23 @@ data:
   # `default` cannot express that, because it would turn an intentional `false`
   # back into `true`.
   METRICS_ENABLED: {{ if hasKey $cfg "metricsEnabled" }}{{ $cfg.metricsEnabled | quote }}{{ else }}"true"{{ end }}
+  # --- Voice comments (plan 0045) -------------------------------------------
+  #
+  # Both the gateway and core receive these two, and the duplication is the design
+  # rather than an oversight: the gateway's copy sets the limit on the multipart
+  # interceptor, which is the only place a byte cap is actually a cap, and core's
+  # copy stops a payload that reached the broker some other way being written to
+  # the database. One ConfigMap key feeds both, so they cannot disagree.
+  #
+  # The content type list is empty by default and falls back to the contract's own
+  # list, which is what browsers actually produce: WebM/Opus from Chrome,
+  # Ogg/Opus from Firefox, MP4/AAC from Safari. Set it only to tighten.
+  VOICE_COMMENT_MAX_BYTES: {{ $cfg.voiceCommentMaxBytes | default 2097152 | quote }}
+  VOICE_COMMENT_CONTENT_TYPES: {{ $cfg.voiceCommentContentTypes | default "" | quote }}
+  # How long the gateway waits for a transcript it is not holding a request open
+  # for. The comment is already stored and playable; this only stops a hung
+  # provider holding a task behind a request that was answered.
+  VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: {{ $cfg.voiceCommentTranscribeTimeoutMs | default 45000 | quote }}
   # --- The harvester (plan 0038) --------------------------------------------
   #
   # Rendered unconditionally, even with `harvester.enabled` false and no harvester

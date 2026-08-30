@@ -406,6 +406,15 @@ GOOGLE_CALLBACK_URL=http://localhost:$gateway/v1/auth/google/callback
 # Where the callback sends the browser. {locale} is substituted with the locale
 # the flow started in; the app sits under a path that follows the locale segment.
 APP_BASE_URL=http://localhost:$shellPort/{locale}/velista
+# Voice comments (plan 0045). The cap is set on the multipart interceptor here,
+# which is the only place a byte cap is actually a cap, and core checks the same
+# number again on the far side of the broker. Both files carry it, so a slot
+# cannot end up with a gateway that accepts what core refuses.
+VOICE_COMMENT_MAX_BYTES=2097152
+# Empty falls back to the contract's list, which is what browsers really produce:
+# WebM/Opus in Chrome, Ogg/Opus in Firefox, MP4/AAC in Safari.
+VOICE_COMMENT_CONTENT_TYPES=
+VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS=45000
 $(Get-TelemetryEnv 'gateway' $otlpHttp)
 "@
 
@@ -443,6 +452,11 @@ $(Get-TelemetryEnv 'auth' $otlpHttp)
 CORE_DB_URL=postgres://luna_core:luna_core@localhost:$coreDb/luna_core
 AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
 PORT=$core
+# The same two numbers the gateway is running with (plan 0045, section 6). Core
+# owns the bytea a recording is written into, so it refuses a payload that
+# reached the broker without passing the interceptor.
+VOICE_COMMENT_MAX_BYTES=2097152
+VOICE_COMMENT_CONTENT_TYPES=
 $(Get-TelemetryEnv 'core' $otlpHttp)
 "@
 

@@ -1,4 +1,5 @@
 import type {
+  CommentTranscription,
   LineApprovalStatus,
   LineStatus,
   ListPermission,
@@ -342,7 +343,43 @@ export interface CommentRowVm {
    * which reads like an error rather than like a person who left (section 5.4).
    */
   readonly author: string | null;
+  /**
+   * What was said, which for a voice comment is its transcript.
+   *
+   * Empty when the transcription failed or has not landed yet. The row draws
+   * `list.comments.noTranscript` in its place rather than an empty bubble: a
+   * recording nobody could transcribe is still a message somebody left (plan
+   * 0039, section 3).
+   */
   readonly body: string;
+  /**
+   * The recording to play, when this comment is one.
+   *
+   * `src` is the URL the player fetches **when play is pressed** and never
+   * before: a thread with fifteen voice comments must not fetch fifteen files
+   * because somebody opened it, and the length here is what lets the row be drawn
+   * correctly before anything is downloaded (plan 0039, section 4).
+   */
+  readonly recording: {
+    readonly src: string;
+    readonly durationSeconds: number | null;
+  } | null;
+  /** How far the transcript got, so the row can say which. Null when typed. */
+  readonly transcription: CommentTranscription | null;
+  /**
+   * A voice comment that is still being sent (plan 0039, section 5).
+   *
+   * A voice send takes seconds, and a composer sitting disabled with no bubble on
+   * screen reads as a failure and gets pressed again. So a bubble appears the
+   * moment sending starts, in the caller's own position, saying that a recording
+   * is being sent. **It never shows a guess at the words**, because the client has
+   * nothing to guess from and a bubble with invented text is worse than one that
+   * says it is waiting.
+   *
+   * The typed path is untouched: one request with nothing racing it needs no
+   * bubble that can be wrong.
+   */
+  readonly pending: boolean;
   readonly createdAt: Date;
   /** Whether this one is the caller's, which the sheet draws differently. */
   readonly mine: boolean;

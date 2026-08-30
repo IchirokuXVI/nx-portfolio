@@ -1,0 +1,82 @@
+.player {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin-block-start: var(--app-space-2);
+}
+
+// A round control, sized to the touch target rather than to the glyph: this sits
+// inside a bubble in a scrolling thread, so it is pressed with a thumb while the
+// list is moving.
+.control {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--app-action-bg);
+  color: var(--app-text-on-action);
+  cursor: pointer;
+}
+
+.control:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.control:focus-visible {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  outline-offset: var(--app-focus-ring-offset);
+}
+
+// Icons in this library size themselves from `font-size`, so the glyph follows the
+// button's type rather than carrying a width of its own.
+.glyph {
+  font-size: var(--app-icon-sm);
+}
+
+// The track is decorative for a screen reader (the button and the live region
+// carry the whole state), but it is a real scrub target for a pointer, so it is
+// tall enough to hit without being tall enough to look like a separate control.
+.track {
+  flex: 1;
+  block-size: var(--app-audio-track-size);
+  border-radius: var(--app-radius-full);
+  background: var(--app-border-subtle);
+  cursor: pointer;
+  // A generous hit area without a generous appearance.
+  padding-block: var(--app-space-2);
+  background-clip: content-box;
+}
+
+.fill {
+  block-size: 100%;
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-fg);
+}
+
+.clock {
+  flex-shrink: 0;
+  font-size: var(--app-text-2xs);
+  // Tabular, so the row does not shift on every second while it plays.
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+}
+
+.failed {
+  flex-basis: 100%;
+  font-size: var(--app-text-2xs);
+  color: var(--app-status-danger-fg);
+}
+
+.sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

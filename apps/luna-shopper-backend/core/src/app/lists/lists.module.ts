@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
+  CommentAudio,
   LineComment,
   ListAccess,
   ListLine,
@@ -27,6 +28,7 @@ import { SharedListGrantModule } from './shared-list-grant.module';
       ListAccess,
       ListLine,
       LineComment,
+      CommentAudio,
       ZoneMembership,
     ]),
     ZonesModule,

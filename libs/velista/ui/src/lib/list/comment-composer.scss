@@ -62,6 +62,61 @@
   }
 }
 
+// The microphone sits between the field and the send button, so all three read as
+// one composer. Quiet rather than filled: speaking is an alternative to typing, not
+// the primary action, and two filled buttons side by side would say otherwise.
+.mic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: var(--app-touch-target);
+  min-block-size: var(--app-touch-target);
+  padding: 0;
+  background: var(--app-surface-sunken);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// While recording, the control is a stop and says so by colour as well as by glyph.
+.mic.recording {
+  background: var(--app-status-danger-bg);
+  border-color: var(--app-status-danger-fg);
+  color: var(--app-status-danger-fg);
+}
+
+// The field is dimmed rather than removed while recording, because removing it
+// would move the send button under the thumb that is about to press stop.
+.field:disabled {
+  opacity: 0.5;
+}
+
+.status {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+}
+
+.error {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--app-status-danger-fg);
+}
+
 .glyph {
   font-size: var(--app-icon-md);
 }

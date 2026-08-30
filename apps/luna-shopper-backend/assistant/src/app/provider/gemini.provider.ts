@@ -11,6 +11,7 @@ import {
   type ModelToolCall,
   type ModelTurn,
   type ModelUsage,
+  type TranscriptionRequest,
 } from './model-provider';
 
 /**
@@ -44,6 +45,77 @@ export class GeminiProvider implements ModelProvider {
 
   get configured(): boolean {
     return this.config.geminiApiKey.length > 0;
+  }
+
+  /**
+   * Gemini takes audio natively, so the answer is simply whether there is a key.
+   *
+   * It tracks {@link configured} rather than being a constant true, because the
+   * caller's question is "will this deployment transcribe anything", and a
+   * deployment with no key will not.
+   */
+  get transcriptionSupported(): boolean {
+    return this.configured;
+  }
+
+  /**
+   * Words out of a recording (plan 0041, section 3.1).
+   *
+   * One `generateContent` with the audio inline, **no tools and no history**, and
+   * a system instruction that says to return the words and nothing else. That is
+   * the whole call: the audio could have been dropped into the turn as the user's
+   * content and the tool loop run on it directly, and that would be one request
+   * instead of two, but nothing would then ever emit a transcript the caller can
+   * check. Asking the model to also write out what it heard, in prose, beside its
+   * answer means parsing prose for a fact, which is what rule A3 refuses to do for
+   * references and refuses to do here for the same reason.
+   *
+   * The recording is inlined as base64 rather than uploaded to the Files API,
+   * because the cap is two megabytes and inline data is good to twenty: a second
+   * request, a handle to clean up and a lifetime to reason about would buy
+   * nothing.
+   */
+  async transcribe(request: TranscriptionRequest): Promise<string> {
+    const url = `${this.config.geminiBaseUrl}/models/${encodeURIComponent(
+      this.config.model
+    )}:generateContent`;
+
+    const abort = new AbortController();
+    const deadline = setTimeout(
+      () => abort.abort(),
+      this.config.providerTimeoutMs
+    );
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        signal: abort.signal,
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': this.config.geminiApiKey,
+        },
+        body: JSON.stringify(toTranscriptionRequest(request)),
+      });
+    } catch (error) {
+      throw new ProviderUnavailableError(
+        abort.signal.aborted
+          ? `the model did not answer within ${this.config.providerTimeoutMs}ms`
+          : 'the model could not be reached',
+        { cause: error }
+      );
+    } finally {
+      clearTimeout(deadline);
+    }
+
+    if (!response.ok) {
+      throw await this.readError(response);
+    }
+
+    // `readReply` and not a second parser: a transcription comes back as an
+    // ordinary candidate with text parts, and the one thing that must not happen
+    // here is a copy of that parsing going stale against the real one.
+    return readReply(await response.json()).text;
   }
 
   async generate(request: ModelRequest): Promise<ModelReply> {
@@ -113,6 +185,64 @@ export class GeminiProvider implements ModelProvider {
       `the model provider answered ${response.status}`
     );
   }
+}
+
+/**
+ * What the model is told before it hears anything.
+ *
+ * Deliberately narrow. It is not an assistant here and has no business
+ * interpreting, summarising, answering or apologising: every one of those turns
+ * a message somebody left into something they did not say. "Return the words and
+ * nothing else" is the whole job, and the empty string for silence is the honest
+ * answer rather than a sentence explaining that there was silence.
+ *
+ * The locale is stated rather than left to the model, so the recognition follows
+ * the same value the reply would (plan 0041, section 2): the gateway already
+ * resolves `Accept-Language`, and this is that value.
+ */
+export function transcriptionSystemPrompt(locale: string): string {
+  return [
+    'You transcribe a short spoken message, usually about groceries or a shopping list.',
+    `Write it down in ${locale} if that is the language spoken; otherwise write it down in the language actually spoken.`,
+    'Return only the words that were said.',
+    'Do not translate, summarise, answer, explain, or add punctuation the speaker did not imply.',
+    'Do not add any preamble, quotation marks, or commentary.',
+    'If nothing intelligible was said, return an empty response.',
+  ].join(' ');
+}
+
+/**
+ * The transcription request on the wire. Exported for its own spec, like the
+ * turn mapper beside it, because it is the part with a shape to get wrong.
+ *
+ * No `tools` key at all rather than an empty array: a catalog the model cannot
+ * call is still a catalog it reads, and this call has nothing to call.
+ */
+export function toTranscriptionRequest(
+  request: TranscriptionRequest
+): Record<string, unknown> {
+  return {
+    systemInstruction: {
+      parts: [{ text: transcriptionSystemPrompt(request.locale) }],
+    },
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            inlineData: {
+              // Passed through exactly as it arrived. In practice that is the
+              // bare container (`multer` drops the parameters at the gateway),
+              // and the container is what decides whether this works; inventing
+              // a different string here would only hide the answer.
+              mimeType: request.mimeType,
+              data: Buffer.from(request.audio).toString('base64'),
+            },
+          },
+        ],
+      },
+    ],
+  };
 }
 
 /** The wire shape, mapped from the neutral one. Exported for its own spec. */

@@ -1,8 +1,10 @@
+import type { ConfigService } from '@nestjs/config';
 import {
   LineApprovalStatus,
   LineStatus,
   ListPermission,
   MembershipStatus,
+  VOICE_COMMENT_CONTENT_TYPES,
   ZoneRole,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource } from 'typeorm';
@@ -184,10 +186,30 @@ function world(options: {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     }),
   };
+  // The audio repository and the config are both here for the constructor's sake:
+  // nothing in this file leaves a voice comment, and the point of these specs is
+  // who may do what rather than what a recording weighs.
+  const audioRepo = {
+    create: (data: unknown) => data,
+    save: async (row: unknown) => row,
+    findOne: async () => null,
+  };
+  const config = {
+    getOrThrow: () => ({
+      voiceComment: {
+        maxBytes: 2 * 1024 * 1024,
+        contentTypes: [...VOICE_COMMENT_CONTENT_TYPES],
+      },
+    }),
+  } as unknown as ConfigService;
+
   const comments = new CommentService(
     commentRepo as never,
+    audioRepo as never,
+    dataSource,
     listAccess,
-    publisher
+    publisher,
+    config
   );
 
   return { listAccess, lines, comments, saved, deleted, events, list };

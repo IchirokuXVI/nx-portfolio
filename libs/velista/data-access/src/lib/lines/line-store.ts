@@ -732,6 +732,19 @@ export class LineStore {
         break;
       }
 
+      case 'comment.updated': {
+        // A transcript landing on a comment that already exists (backend plan
+        // 0045). `addComment` upserts by id, so an open sheet redraws the bubble
+        // with its words in it.
+        //
+        // **No count is touched, in either branch.** The comment was counted when
+        // it was added, and a line whose comments were never loaded has nothing to
+        // update: incrementing here would make a thread of five voice comments
+        // report ten the moment they were transcribed.
+        this.addComment(event.comment);
+        break;
+      }
+
       default:
         // Zone, member, list, merge and presence traffic. `ZoneStore` and `ListStore`
         // own all of it, and `list.deleted` and `list.accessChanged` in particular are

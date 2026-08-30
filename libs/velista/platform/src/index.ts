@@ -17,3 +17,4 @@ export * from './lib/speech-capture';
 export * from './lib/storage-keys';
 export * from './lib/testing/velista-testing';
 export * from './lib/theme-store';
+export * from './lib/voice-capture';
