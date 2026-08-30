@@ -11,6 +11,45 @@ import {
 } from '@angular/core';
 import { OpenSheet, type FallingSheet } from '@portfolio/velista/platform';
 
+/** The motion tokens this component reads, by name, so a typo is one place wrong. */
+const MOTION_BASE = '--app-motion-base';
+const MOTION_FAST = '--app-motion-fast';
+
+/**
+ * How much of the panel has to be pulled down before letting go closes it.
+ *
+ * A quarter, which is what a drag has to look like to be one. Less and a sheet is lost
+ * to a thumb resting on the handle while reading; more and the gesture stops feeling
+ * like it is holding the sheet at all.
+ */
+const DISMISS_FRACTION = 0.25;
+
+/**
+ * The floor under that fraction, in pixels.
+ *
+ * The confirm sheets are two lines and a pair of buttons, and a quarter of one of those
+ * is under 40px, which a thumb crosses without meaning anything by it.
+ */
+const MIN_DISMISS_DISTANCE = 56;
+
+/**
+ * Downward pixels per millisecond that count as a flick regardless of distance.
+ *
+ * The fast gesture is the short one: somebody throwing a sheet away moves perhaps 40px
+ * and lets go. Distance alone would spring that back, which reads as the sheet refusing
+ * the most natural way there is to dismiss it.
+ */
+const FLICK_SPEED = 0.5;
+
+/**
+ * How much of the end of a drag the speed is measured over, in milliseconds.
+ *
+ * Long enough to average out the jitter between individual pointer events, and short
+ * enough that only the end of the gesture counts: a sheet dragged down quickly, held,
+ * and then released was not thrown anywhere.
+ */
+const SPEED_WINDOW = 120;
+
 /**
  * The panel a mutation is asked for in: scrim, rounded panel, grab handle, and the
  * modal behaviour that makes it a dialog rather than a box that happens to be on top.
@@ -116,6 +155,36 @@ export class SheetShell implements FallingSheet {
    */
   private readonly _onLanded: Array<() => void> = [];
 
+  /**
+   * How far the panel has been pulled down by the handle, in pixels, or null when
+   * nothing is holding it.
+   *
+   * Bound to the panel's own `transform`, so the sheet tracks the finger rather than
+   * waiting to find out where it ended up. Null rather than zero when idle, so the
+   * declaration is absent entirely and the rise and the fall animate against nothing.
+   */
+  readonly dragOffset = signal<number | null>(null);
+
+  /** Set while a finger is on the handle, which is what suspends the snap back. */
+  readonly dragging = signal(false);
+
+  /** Set while the panel is springing back to closed, for the one transition it has. */
+  readonly settling = signal(false);
+
+  /** Where the finger went down, in viewport coordinates. */
+  private _dragFrom = 0;
+
+  /**
+   * The recent history of the drag, newest last, for the speed at release.
+   *
+   * A window rather than the last pair of events, because the last pair is noise: a
+   * phone delivers a move every 8ms or so, and whether the final one happens to have
+   * covered 2px or 12px says nothing about how fast the sheet was thrown. Trimmed to
+   * {@link SPEED_WINDOW}, so a drag that was held still and then released reads as
+   * still, which is what it was.
+   */
+  private _dragTrail: Array<{ offset: number; at: number }> = [];
+
   constructor() {
     // Registered for the whole life of the component rather than from the first
     // render, because a navigation can be decided before the first frame is drawn and
@@ -148,6 +217,143 @@ export class SheetShell implements FallingSheet {
 
     this._returnFocusTo?.focus();
     this._afterFall(() => this.dismiss.emit());
+  }
+
+  /**
+   * A finger, or a mouse, goes down on the handle.
+   *
+   * The handle has advertised a downward drag since the sheet existed and has never
+   * answered one: it was decorative, and the gesture it drew went to the browser, which
+   * read a pull at the top of the document as a request to reload the page. So the
+   * sheet lost its own gesture *and* the page came back from the network.
+   *
+   * The pointer is captured so the rest of the drag arrives here even once the finger
+   * has left the strip, which it does immediately: the whole gesture is a move away
+   * from where it started.
+   */
+  startDrag(event: PointerEvent): void {
+    if (!this.dismissible() || this.closing()) {
+      return;
+    }
+
+    const strip = event.currentTarget;
+    if (strip instanceof Element) {
+      strip.setPointerCapture(event.pointerId);
+    }
+
+    this._dragFrom = event.clientY;
+    this._dragTrail = [{ offset: 0, at: event.timeStamp }];
+    this.settling.set(false);
+    this.dragging.set(true);
+    this.dragOffset.set(0);
+  }
+
+  /**
+   * The panel follows the finger, downward only.
+   *
+   * Upward is not a gesture a bottom sheet has: it is already against the bottom of
+   * the screen, there is nothing above it to reveal, and following the finger up would
+   * open a strip of scrim beneath the panel where the sheet's own padding should be.
+   * `max` rather than an early return, so a finger that overshoots upward and comes
+   * back down is still dragging the same sheet.
+   */
+  onDrag(event: PointerEvent): void {
+    if (!this.dragging()) {
+      return;
+    }
+
+    const offset = Math.max(0, event.clientY - this._dragFrom);
+
+    this._dragTrail.push({ offset, at: event.timeStamp });
+    // Drop everything older than the window, but never the sample the window is
+    // measured from: a flick can be three events long, and an empty trail has no speed.
+    while (
+      this._dragTrail.length > 2 &&
+      event.timeStamp - this._dragTrail[1].at > SPEED_WINDOW
+    ) {
+      this._dragTrail.shift();
+    }
+
+    this.dragOffset.set(offset);
+  }
+
+  /**
+   * The finger comes off, and the sheet either goes or comes back.
+   *
+   * Two ways to mean it, because they are two different gestures. A deliberate pull
+   * past a quarter of the panel is one, and a flick is the other: on a phone the fast
+   * gesture barely moves, so distance alone would ignore the most natural way anybody
+   * throws a sheet away. Either one continues into the same fall the scrim plays, from
+   * wherever the panel currently is, so letting go never looks like a separate event
+   * from the drag.
+   *
+   * Anything short of both springs back. `pointercancel` arrives here too, which is
+   * what the browser sends when it takes the gesture over, and a cancelled drag is a
+   * drag that did not happen.
+   */
+  endDrag(event: PointerEvent): void {
+    if (!this.dragging()) {
+      return;
+    }
+
+    this.dragging.set(false);
+
+    const offset = this.dragOffset() ?? 0;
+    const dismissed =
+      event.type !== 'pointercancel' &&
+      (offset >= this._dismissDistance() || this._dragSpeed() >= FLICK_SPEED);
+
+    if (dismissed) {
+      // The offset stays put. A CSS animation outranks an inline declaration, so the
+      // fall's implicit first frame is wherever the finger left the panel and the two
+      // read as one movement rather than as a jump back up and a drop.
+      this.requestDismiss();
+      return;
+    }
+
+    this.settling.set(true);
+    this.dragOffset.set(0);
+
+    const view = this._host.nativeElement.ownerDocument.defaultView;
+    view?.setTimeout(() => {
+      this.settling.set(false);
+      this.dragOffset.set(null);
+    }, this._motionDuration(MOTION_FAST));
+  }
+
+  /**
+   * How fast the panel was moving downward when the finger came off, in px per ms.
+   *
+   * Measured across the trail rather than between the last two events, so a real flick
+   * is not missed because its final sample happened to be short, and a drag that was
+   * parked for half a second before release does not inherit the speed it had on the
+   * way there. Zero when there is nothing to measure across.
+   */
+  private _dragSpeed(): number {
+    const first = this._dragTrail[0];
+    const last = this._dragTrail[this._dragTrail.length - 1];
+    if (first === undefined || last === undefined) {
+      return 0;
+    }
+
+    const elapsed = last.at - first.at;
+
+    return elapsed > 0 ? (last.offset - first.offset) / elapsed : 0;
+  }
+
+  /**
+   * How far down counts as meaning it: a quarter of the panel, and never less than
+   * {@link MIN_DISMISS_DISTANCE}.
+   *
+   * A fraction on its own is wrong at both ends. The confirm sheets are short enough
+   * that a quarter of them is an accident, and the comments sheet is tall enough that a
+   * quarter is most of a screen. The floor fixes the first; the flick fixes the second.
+   */
+  private _dismissDistance(): number {
+    const panel = this._host.nativeElement.querySelector('.panel');
+    const height = panel?.getBoundingClientRect().height ?? 0;
+
+    return Math.max(MIN_DISMISS_DISTANCE, height * DISMISS_FRACTION);
   }
 
   /**
@@ -205,16 +411,20 @@ export class SheetShell implements FallingSheet {
   }
 
   /**
-   * `--app-motion-base` in ms, or 0 when there is no stylesheet to read it from.
+   * A motion token in ms, or 0 when there is no stylesheet to read it from.
    *
    * Reading the token rather than holding a number here buys two things. Under
-   * `prefers-reduced-motion` the token is already `0ms`, so the sheet closes at once
-   * with no second code path to keep in step. And in jsdom no stylesheet is loaded,
-   * so the property resolves to an empty string, the parse fails, the duration is
-   * zero and `dismiss` is emitted synchronously: a spec never has to know about the
+   * `prefers-reduced-motion` every one of them is already `0ms`, so the sheet closes
+   * at once with no second code path to keep in step. And in jsdom no stylesheet is
+   * loaded, so the property resolves to an empty string, the parse fails, the duration
+   * is zero and `dismiss` is emitted synchronously: a spec never has to know about the
    * timer.
+   *
+   * Takes the token's name because the snap back is not the fall: springing a panel
+   * that did not go anywhere back into place is a correction, and a correction that
+   * takes as long as a dismissal reads as hesitation.
    */
-  private _motionDuration(): number {
+  private _motionDuration(token = MOTION_BASE): number {
     const view = this._host.nativeElement.ownerDocument.defaultView;
     if (view === null) {
       return 0;
@@ -222,7 +432,7 @@ export class SheetShell implements FallingSheet {
 
     const raw = view
       .getComputedStyle(this._host.nativeElement)
-      .getPropertyValue('--app-motion-base');
+      .getPropertyValue(token);
     const ms = Number.parseFloat(raw);
 
     return Number.isFinite(ms) ? ms : 0;

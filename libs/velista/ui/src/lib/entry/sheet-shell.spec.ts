@@ -204,4 +204,156 @@ describe('SheetShell', () => {
       expect(fixture.componentInstance.dismissals()).toBe(0);
     });
   });
+
+  /**
+   * The handle has advertised a downward drag since the sheet existed and answered
+   * none of them: it was decorative, so the gesture went to the browser, which reads a
+   * pull at the top of the document as a request to reload. The sheet lost its own
+   * gesture and the page came back from the network.
+   *
+   * jsdom has no layout, so the panel measures zero and `MIN_DISMISS_DISTANCE` is the
+   * whole threshold here, and no motion token resolves so a dismissal is synchronous.
+   * Both are what make the distances in these tests readable rather than incidental.
+   */
+  describe('the drag handle', () => {
+    /** A pointer event jsdom will construct, since it has no `PointerEvent`. */
+    function pointer(
+      type: string,
+      clientY: number,
+      timeStamp: number
+    ): PointerEvent {
+      const event = new MouseEvent(type, {
+        clientY,
+        bubbles: true,
+      }) as unknown as { pointerId: number; timeStamp: number };
+      event.pointerId = 1;
+      // `timeStamp` is read only on a real event, and the speed of a drag is the one
+      // thing these tests have to be able to state exactly.
+      Object.defineProperty(event, 'timeStamp', { value: timeStamp });
+
+      return event as unknown as PointerEvent;
+    }
+
+    /**
+     * Drag the handle down `distance` px over `overMs`, in five steps, and let go.
+     *
+     * Five, so the trail has something to measure a speed across; the count itself is
+     * not meaningful and no assertion depends on it.
+     */
+    function drag(
+      fixture: ComponentFixture<SheetHost>,
+      distance: number,
+      overMs: number
+    ): void {
+      const grabber = query(fixture, '.grabber') as HTMLElement;
+      // jsdom has no pointer capture, and the shell asks for it unconditionally.
+      grabber.setPointerCapture = () => undefined;
+
+      grabber.dispatchEvent(pointer('pointerdown', 0, 0));
+      for (let step = 1; step <= 5; step++) {
+        grabber.dispatchEvent(
+          pointer('pointermove', (distance * step) / 5, (overMs * step) / 5)
+        );
+      }
+      grabber.dispatchEvent(pointer('pointerup', distance, overMs));
+      fixture.detectChanges();
+    }
+
+    it('follows the finger down while the drag is in progress', async () => {
+      const fixture = await render();
+      const grabber = query(fixture, '.grabber') as HTMLElement;
+      grabber.setPointerCapture = () => undefined;
+
+      grabber.dispatchEvent(pointer('pointerdown', 0, 0));
+      grabber.dispatchEvent(pointer('pointermove', 40, 16));
+      fixture.detectChanges();
+
+      const panel = query(fixture, '.panel') as HTMLElement;
+      expect(panel.style.transform).toBe('translateY(40px)');
+      expect(panel.classList.contains('dragging')).toBe(true);
+    });
+
+    it('does not follow it up, because there is nothing above a bottom sheet', async () => {
+      const fixture = await render();
+      const grabber = query(fixture, '.grabber') as HTMLElement;
+      grabber.setPointerCapture = () => undefined;
+
+      grabber.dispatchEvent(pointer('pointerdown', 0, 0));
+      grabber.dispatchEvent(pointer('pointermove', -80, 16));
+      fixture.detectChanges();
+
+      expect((query(fixture, '.panel') as HTMLElement).style.transform).toBe(
+        'translateY(0px)'
+      );
+    });
+
+    it('closes when the pull goes far enough', async () => {
+      const fixture = await render();
+
+      drag(fixture, 120, 400);
+
+      expect(fixture.componentInstance.dismissals()).toBe(1);
+    });
+
+    it('closes on a flick, which barely moves', async () => {
+      // The fast gesture is the short one. Distance alone would spring this back,
+      // which reads as the sheet refusing the most natural way to throw it away.
+      const fixture = await render();
+
+      drag(fixture, 40, 40);
+
+      expect(fixture.componentInstance.dismissals()).toBe(1);
+    });
+
+    it('springs back from a short, slow pull', async () => {
+      // A thumb resting on the handle while reading is not a dismissal.
+      const fixture = await render();
+
+      drag(fixture, 20, 400);
+
+      expect(fixture.componentInstance.dismissals()).toBe(0);
+      expect((query(fixture, '.panel') as HTMLElement).style.transform).toBe(
+        'translateY(0px)'
+      );
+    });
+
+    it('springs back when the browser takes the gesture over', async () => {
+      // `pointercancel`, which is the browser saying it has claimed the pointer. A
+      // drag that did not happen must not close anything, however far it had gone.
+      const fixture = await render();
+      const grabber = query(fixture, '.grabber') as HTMLElement;
+      grabber.setPointerCapture = () => undefined;
+
+      grabber.dispatchEvent(pointer('pointerdown', 0, 0));
+      grabber.dispatchEvent(pointer('pointermove', 300, 100));
+      grabber.dispatchEvent(pointer('pointercancel', 300, 120));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.dismissals()).toBe(0);
+    });
+
+    it('cannot be dragged away while a mutation is in flight', async () => {
+      const fixture = await render();
+      fixture.componentInstance.dismissible.set(false);
+      fixture.detectChanges();
+
+      drag(fixture, 300, 200);
+
+      expect(fixture.componentInstance.dismissals()).toBe(0);
+      expect((query(fixture, '.panel') as HTMLElement).style.transform).toBe(
+        ''
+      );
+    });
+
+    it('stays out of the focus trap', async () => {
+      // Dragging is a convenience on top of Escape, Cancel and the back button. A
+      // fourth control, first in document order, would take the field's focus.
+      const fixture = await render();
+      const grabber = query(fixture, '.grabber') as HTMLElement;
+
+      expect(grabber.getAttribute('aria-hidden')).toBe('true');
+      expect(grabber.hasAttribute('tabindex')).toBe(false);
+      expect(document.activeElement).toBe(query(fixture, '.first'));
+    });
+  });
 });
