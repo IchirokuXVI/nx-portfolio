@@ -32,6 +32,31 @@ export interface ModelToolDeclaration {
 export interface ModelToolCall {
   name: string;
   args: Record<string, unknown>;
+  /**
+   * The provider's own handle for this call, when it gave one.
+   *
+   * Carried so that the result of a call can be returned against the call it
+   * answers rather than against a name. One turn can ask for the same tool twice
+   * ("add milk and bread" is two `upsert_line` calls), and matching those by name
+   * is a coin toss the moment their results differ.
+   */
+  id?: string;
+  /**
+   * An opaque token the provider attached to this call and expects to receive
+   * back, unread and unchanged, when the call's result is fed in.
+   *
+   * It is deliberately untyped beyond `string` and this layer never looks inside
+   * one. Gemini calls it a thought signature and **rejects the next request with
+   * a 400 when a replayed function call arrives without it**, which is what made
+   * every turn that actually did something answer 500; another provider may call
+   * it something else or nothing at all, which is why it is optional and why the
+   * name here describes the job rather than the vendor.
+   *
+   * Not every call in a turn carries one: with several calls in one reply Gemini
+   * signs the first and leaves the rest bare. So this round trips **per call, as
+   * it arrived** — never invented, never copied from a sibling.
+   */
+  signature?: string;
 }
 
 /**
@@ -54,7 +79,7 @@ export interface ModelTurn {
   /** Present on a MODEL turn that asked for tools. */
   toolCalls?: ModelToolCall[];
   /** Present on a TOOL turn: what each call returned, in call order. */
-  toolResults?: { name: string; result: unknown }[];
+  toolResults?: { id?: string; name: string; result: unknown }[];
 }
 
 export interface ModelRequest {

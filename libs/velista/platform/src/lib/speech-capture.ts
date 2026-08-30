@@ -48,6 +48,15 @@ export const SPEECH_CAPTURE = new InjectionToken<SpeechCaptureI>(
 );
 
 /**
+ * How long a deliberate stop waits for the engine to settle its last phrase
+ * before giving back what it already has.
+ *
+ * Long enough that the ordinary case never hits it, short enough that a person
+ * who pressed stop does not sit looking at a composer that did nothing.
+ */
+const STOP_GRACE_MS = 1500;
+
+/**
  * The browser's own dictation, through `SpeechRecognition` (plan 0032, section 10).
  *
  * ## Why this and not `MediaRecorder`
@@ -115,6 +124,21 @@ export class WebSpeechCapture implements SpeechCaptureI {
     let listening = false;
     /** Set while a pause or a stop is deliberate, so `onend` does not restart. */
     let ending = false;
+    /**
+     * Whether the engine is actually running right now, which is **not** the same
+     * as whether this session is open.
+     *
+     * It is false while paused, false after the app has stopped at its own limit,
+     * and false for the gap between the engine ending itself on silence and the
+     * restart below getting an audio stream back. In every one of those a
+     * `stop()` would produce no `end` event, and waiting for one loses the
+     * message. Tracked here rather than inferred, because only the engine knows.
+     */
+    let running = false;
+
+    recognition.addEventListener('start', () => {
+      running = true;
+    });
 
     recognition.addEventListener('result', (event) => {
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
@@ -130,6 +154,8 @@ export class WebSpeechCapture implements SpeechCaptureI {
     // between items. So a stop nobody asked for restarts it, and only a deliberate
     // pause or stop is allowed to end the session.
     recognition.addEventListener('end', () => {
+      running = false;
+
       if (ending || !listening) {
         return;
       }
@@ -177,12 +203,46 @@ export class WebSpeechCapture implements SpeechCaptureI {
         new Promise<string>((resolve) => {
           ending = true;
           listening = false;
+
+          // Nothing is listening, so no `end` is coming: `stop()` on an engine
+          // that is not running is ignored by the browser and fires nothing at
+          // all. This is the ordinary way out of a paused dictation and the only
+          // way out of one the app stopped at its own limit — which is the case
+          // the panel explicitly tells somebody to press stop for — so waiting
+          // for that event used to hold the promise open forever and swallow the
+          // message. `abort` first because the engine may be between an automatic
+          // end and its restart, and that restart must not leave the microphone
+          // open behind a session nobody holds any more.
+          if (!running) {
+            recognition.abort();
+            resolve(settled);
+            return;
+          }
+
+          let done = false;
+          const settle = () => {
+            if (done) {
+              return;
+            }
+            done = true;
+            clearTimeout(guard);
+            resolve(settled);
+          };
+
+          // The guard is armed before the listener is attached and before the
+          // engine is asked to stop, so that whichever of the two settles this
+          // first has the other one to cancel.
+          //
+          // It is here because waiting for `end` indefinitely is not safe: an
+          // engine that dies without an event is rare, and the cost of trusting
+          // it is the whole message.
+          const guard = setTimeout(settle, STOP_GRACE_MS);
+
           // Wait for `end` rather than resolving immediately, because the engine
           // settles its last phrase on the way out and that phrase is usually the
           // most important word in the sentence.
-          recognition.addEventListener('end', () => resolve(settled), {
-            once: true,
-          });
+          recognition.addEventListener('end', settle, { once: true });
+
           recognition.stop();
         }),
       close: () => {

@@ -101,6 +101,108 @@ describe('toGeminiRequest', () => {
     ]);
   });
 
+  it('puts a signed tool call back on the wire with its signature', () => {
+    // The defect this whole seam exists for. Gemini 3 answers 400
+    // INVALID_ARGUMENT to a replayed `functionCall` part whose thought signature
+    // has gone missing, so a turn that called a tool used to fail on its second
+    // round and reach the caller as a bare 500. Round tripping the token unread
+    // is the fix, and this is the assertion that keeps it.
+    const request = toGeminiRequest({
+      system: 's',
+      turns: [
+        {
+          role: ModelTurnRole.MODEL,
+          toolCalls: [
+            {
+              name: 'upsert_line',
+              args: { product: 'leche' },
+              id: 'call_1',
+              signature: 'opaque-token',
+            },
+          ],
+        },
+      ],
+      tools: [],
+      locale: 'en',
+    });
+
+    expect(request['contents']).toEqual([
+      {
+        role: 'model',
+        parts: [
+          {
+            functionCall: {
+              id: 'call_1',
+              name: 'upsert_line',
+              args: { product: 'leche' },
+            },
+            thoughtSignature: 'opaque-token',
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('leaves an unsigned call bare rather than inventing a signature', () => {
+    // A reply that asks for two things signs the first call and leaves the second
+    // without one. A bare part is accepted; a borrowed signature is not, so the
+    // absence has to survive as an absence.
+    const request = toGeminiRequest({
+      system: 's',
+      turns: [
+        {
+          role: ModelTurnRole.MODEL,
+          toolCalls: [
+            { name: 'upsert_line', args: {}, id: 'a', signature: 'signed' },
+            { name: 'upsert_line', args: {}, id: 'b' },
+          ],
+        },
+      ],
+      tools: [],
+      locale: 'en',
+    });
+
+    const parts = (
+      request['contents'] as { parts: Record<string, unknown>[] }[]
+    )[0].parts;
+
+    expect(parts[0]['thoughtSignature']).toBe('signed');
+    expect(parts[1]).not.toHaveProperty('thoughtSignature');
+  });
+
+  it('returns a result against the id of the call it answers', () => {
+    // One turn can ask for the same tool twice ("add milk and bread"), and by the
+    // time the results are a list of names there is nothing left to match on.
+    const request = toGeminiRequest({
+      system: 's',
+      turns: [
+        {
+          role: ModelTurnRole.TOOL,
+          toolResults: [
+            { id: 'call_2', name: 'upsert_line', result: { ok: true } },
+          ],
+        },
+      ],
+      tools: [],
+      locale: 'en',
+    });
+
+    expect(request['contents']).toEqual([
+      {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              id: 'call_2',
+              name: 'upsert_line',
+              response: { result: { ok: true } },
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
   it('never emits a content with no parts', () => {
     // Reachable: a model turn that was only tool calls, replayed. The API
     // rejects an empty parts array outright.
@@ -144,6 +246,38 @@ describe('readReply', () => {
       toolCalls: [{ name: 'query_lists', args: { item: 'leche' } }],
       usage: { promptTokens: 120, responseTokens: 8, totalTokens: 128 },
     });
+  });
+
+  it('keeps the id and the thought signature the part arrived with', () => {
+    // The signature belongs to the part rather than to the call inside it, and it
+    // has to come back out of here or the next request cannot carry it.
+    const reply = readReply({
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                functionCall: {
+                  id: 'call_9',
+                  name: 'upsert_line',
+                  args: { product: 'pan' },
+                },
+                thoughtSignature: 'opaque-token',
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(reply.toolCalls).toEqual([
+      {
+        name: 'upsert_line',
+        args: { product: 'pan' },
+        id: 'call_9',
+        signature: 'opaque-token',
+      },
+    ]);
   });
 
   it('treats a function call with no args as a call with empty args', () => {

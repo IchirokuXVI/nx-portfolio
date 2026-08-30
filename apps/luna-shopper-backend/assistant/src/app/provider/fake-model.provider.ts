@@ -28,9 +28,21 @@ export class FakeModelProvider implements ModelProvider {
     return { text, toolCalls: [], usage: null };
   }
 
-  /** A reply that asks for one tool and says nothing yet. */
-  static calls(name: string, args: Record<string, unknown>): ModelReply {
-    return { text: '', toolCalls: [{ name, args }], usage: null };
+  /**
+   * A reply that asks for one tool and says nothing yet.
+   *
+   * `handles` is what a real provider attaches to the call and expects back on
+   * the next request: an id, and an opaque continuity token. They are optional
+   * here because most tests do not care, and they exist because one test very
+   * much does — the loop has to replay them unread, and a fake that could not
+   * carry them could not prove it.
+   */
+  static calls(
+    name: string,
+    args: Record<string, unknown>,
+    handles: { id?: string; signature?: string } = {}
+  ): ModelReply {
+    return { text: '', toolCalls: [{ name, args, ...handles }], usage: null };
   }
 
   async generate(request: ModelRequest): Promise<ModelReply> {
