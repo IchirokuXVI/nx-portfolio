@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ BUSY: a number that shrinks, not "try later" ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">BUSY &middot; the server&rsquo;s seconds, counting down</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <header style="display: flex; align-items: center; gap: 6px; padding: 12px 12px 12px 8px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+        <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        </button>
+        <span style="flex: 1; font-family: 'Marcellus', Georgia, serif; font-size: 20px; color: #f7f8fc;">Assistant</span>
+      </header>
+
+      <div style="flex: 1; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px;">
+
+        <div style="align-self: flex-end; max-width: 84%; background: #262b40; border-radius: 18px 18px 5px 18px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">Add tomatoes</div>
+
+        <!-- NOT AN ERROR BANNER. A message, in the column, like everything else -->
+        <div style="align-self: flex-start; max-width: 92%; width: 92%;">
+          <div style="background: #161a28; border: 1px solid rgba(255,180,84,0.28); border-radius: 18px 18px 18px 5px; padding: 15px 16px;">
+            <div style="display: flex; align-items: baseline; gap: 10px;">
+              <span style="font-size: 34px; font-weight: 300; line-height: 1; color: #ffd39a; font-variant-numeric: tabular-nums;">18</span>
+              <span style="font-size: 16.5px; color: #c2c8db;">seconds</span>
+            </div>
+            <p style="margin: 10px 0 0; font-size: 16px; line-height: 1.45; color: #f7f8fc;">A lot of people are asking at once. I&rsquo;ll be ready in a moment, and your message is still here.</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- COMPOSER HELD, WITH THE TEXT KEPT -->
+      <div style="padding: 12px 16px 20px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 10px; align-items: flex-end; opacity: 0.55;">
+        <div style="flex: 1; min-height: 52px; border: 1px solid #262b40; border-radius: 16px; background: #11141f; padding: 15px 16px; font-size: 16.5px; color: #98a0bb;">Add tomatoes</div>
+        <button type="button" disabled style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #1a1e2e; display: flex; align-items: center; justify-content: center; cursor: not-allowed;" aria-label="Send">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12h14M13 6.5l5.5 5.5L13 17.5"/></svg>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ OFF TOPIC: redirected, and no tool ran ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">OFF TOPIC &middot; a redirect, and no tool call</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <header style="display: flex; align-items: center; gap: 6px; padding: 12px 12px 12px 8px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+        <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        </button>
+        <span style="flex: 1; font-family: 'Marcellus', Georgia, serif; font-size: 20px; color: #f7f8fc;">Assistant</span>
+      </header>
+
+      <div style="flex: 1; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px;">
+
+        <div style="align-self: flex-end; max-width: 84%; background: #262b40; border-radius: 18px 18px 5px 18px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">What&rsquo;s the weather tomorrow?</div>
+
+        <div style="align-self: flex-start; max-width: 92%; width: 92%;">
+          <div style="background: #161a28; border-radius: 18px 18px 18px 5px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">I only know about your lists, I&rsquo;m afraid. I can add something, tell you what&rsquo;s on one, or change your name.</div>
+        </div>
+
+        <div style="align-self: flex-end; max-width: 84%; background: #262b40; border-radius: 18px 18px 5px 18px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">Delete the weekly shop then</div>
+
+        <!-- NOT REFUSED BY THE PROMPT. THERE IS NO SUCH TOOL -->
+        <div style="align-self: flex-start; max-width: 92%; width: 92%;">
+          <div style="background: #161a28; border-radius: 18px 18px 18px 5px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">I can&rsquo;t delete anything. That one is on the list&rsquo;s own settings, under the three dots.</div>
+        </div>
+
+      </div>
+
+      <div style="padding: 12px 16px 20px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 10px; align-items: flex-end;">
+        <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #6f7899;">Write a message</div>
+        <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Record a message">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/></svg>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ RENAME: one confirm, then one PATCH ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">RENAME &middot; confirmed once, then one request</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <header style="display: flex; align-items: center; gap: 6px; padding: 12px 12px 12px 8px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+        <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        </button>
+        <span style="flex: 1; font-family: 'Marcellus', Georgia, serif; font-size: 20px; color: #f7f8fc;">Assistant</span>
+      </header>
+
+      <div style="flex: 1; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px;">
+
+        <div style="align-self: flex-end; max-width: 84%; background: #262b40; border-radius: 18px 18px 5px 18px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">Call me Marta instead</div>
+
+        <div style="align-self: flex-start; max-width: 92%; width: 92%;">
+          <div style="background: #161a28; border-radius: 18px 18px 18px 5px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">You&rsquo;re <strong style="font-weight: 650;">Marta G</strong> now. Shall I make it <strong style="font-weight: 650;">Marta</strong> everywhere you&rsquo;re still called Marta G?</div>
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px;">
+            <button type="button" style="width: 100%; min-height: 56px; border: 0; border-radius: 16px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 17px; font-weight: 650; cursor: pointer;">Yes, in my groups too</button>
+            <button type="button" style="width: 100%; min-height: 56px; border: 1px solid #343a54; border-radius: 16px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 17px; font-weight: 600; cursor: pointer;">Only my account</button>
+          </div>
+          <!-- WHAT IS NOT TOUCHED, SAID BEFORE IT IS NOT TOUCHED -->
+          <p style="margin: 12px 2px 0; font-size: 14.5px; line-height: 1.5; color: #6f7899;">In <strong style="color: #98a0bb; font-weight: 600;">Mum&rsquo;s house</strong> you chose <strong style="color: #98a0bb; font-weight: 600;">Mam&aacute;</strong>. That one stays either way.</p>
+        </div>
+
+        <div style="align-self: flex-end; max-width: 84%; background: #262b40; border-radius: 18px 18px 5px 18px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">Yes, in my groups too</div>
+
+        <div style="align-self: flex-start; max-width: 92%; width: 92%;">
+          <div style="background: #161a28; border-radius: 18px 18px 18px 5px; padding: 13px 16px; font-size: 16.5px; line-height: 1.45; color: #f7f8fc;">Done. You&rsquo;re Marta in the flat, and still Mam&aacute; at your mum&rsquo;s.</div>
+        </div>
+
+      </div>
+
+      <div style="padding: 12px 16px 20px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 10px; align-items: flex-end;">
+        <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #6f7899;">Write a message</div>
+        <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Record a message">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/></svg>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
