@@ -147,6 +147,11 @@ work out what happened.
 > `0039` shipped no audio endpoint. Section 10's blockquote is the account. Nothing in
 > 4.1 to 4.4 changes: the clock, both thresholds and the pause are this app's, not the
 > capture's.
+>
+> **Superseded by backend plan `0041`**, which builds the audio endpoint and returns this
+> to `MediaRecorder`. The sentence above stays true of both: nothing in 4.1 to 4.4 changed
+> going one way and nothing changes coming back, which is the useful thing this note
+> records.
 
 The speech is captured client side, in the browser. What this plan originally left open was
 where it is turned into text, and section 10 records how `0039` answered it.
@@ -225,6 +230,12 @@ reply and nothing should try.
 
 ## 10. Audio is not text, and 0039 has to say where it becomes text
 
+> **Reopened by backend plan `0041`, which chooses the first option.** The verdict below
+> was settled by the absence of an endpoint; `0041` builds it, and its section 2 gives the
+> reasons that were never available when this was written. The account below stays as the
+> record of the `SpeechRecognition` period, and its observation that every control in
+> section 4 survives holds in both directions.
+>
 > **Settled, by what `0039` shipped: the second option.** That service went in with a
 > text only `POST /v1/assistant` taking `{ message, transcript }`, no multipart route,
 > no size cap and no speech provider anywhere in it. So there is nothing for a recording

@@ -347,6 +347,12 @@ and the transcript text is what a person typed about groceries, which is ordinar
 data: the retention on these logs is short and stated, and this is the one place in the
 service where anything a user wrote outlives the request.
 
+> **Plan `0041` rewrites this paragraph.** Once a spoken turn uploads a recording, a voice
+> reaches this service and reaches the provider, which is personal data of a different
+> character from a typed sentence. `0041` section 6 says what is true afterwards: the audio
+> is held in memory for the turn, written nowhere, and never logged at any level, while the
+> **transcription** is recorded here on exactly the terms a typed message already is.
+
 What comes out of it is the input to the next plan: whether one list is inferable in
 practice, which of the three tools anybody actually uses, how much of the traffic is
 off topic, and whether the free tier's limits made the thing feel broken.
@@ -428,6 +434,12 @@ client carrying the caller's token, and the destructive surface is absent rather
 discouraged.
 
 ## 14. Open decisions
+
+> **Reopened by plan `0041`, in the other direction.** The first decision below was
+> settled by the absence of an audio endpoint rather than by an argument, and `0041`
+> builds the endpoint. Read that plan's section 2 before treating the paragraph below as
+> current; its section 6 replaces section 10's privacy line, which the paragraph below
+> promises stays as written.
 
 - ~~**Where a spoken turn is transcribed.**~~ **Settled by what this service shipped:
   the client transcribes.** There is no multipart route here, no size cap and no speech

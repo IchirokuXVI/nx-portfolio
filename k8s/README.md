@@ -1,8 +1,8 @@
 # Kubernetes / Helm
 
-The Helm chart in [`helm/`](./helm) deploys the whole micro-frontend system — the
-`shell` host plus the `landing`, `odontogram`, `damoclesSword`, `landingV2` remotes —
-as one release. The same chart runs in three shapes:
+The Helm chart in [`helm/`](./helm) deploys the whole system as one release: the
+`shell` host, the `odontogram`, `damoclesSword`, `landingV2` and `velista` remotes,
+and the Luna Shopper backend behind velista. The same chart runs in three shapes:
 
 | Environment | Driven by | Notes |
 | --- | --- | --- |

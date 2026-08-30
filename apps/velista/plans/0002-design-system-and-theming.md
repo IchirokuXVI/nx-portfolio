@@ -395,11 +395,16 @@ the device and looks native.
 --app-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace;
 ```
 
-A display face is permitted in exactly two places: **the wordmark**, and **the hero
-headline on the public home page**. Both are on the unauthenticated surface, where the
-first impression is the job, and both are absent from every authenticated screen, so the
-app itself stays on the system stack. Load it as an asset rather than as a render blocking
-web font. Note that Audiowide appears throughout `libs/damoclesSword/ui`: that is that
+A display face is permitted in exactly three places: **the wordmark**, **the hero
+headline on the public home page**, and **a destination header that stands in for the
+wordmark**. The first two are on the unauthenticated surface, where the first impression
+is the job. The third is the narrow authenticated case, added by `0037`: a destination
+that replaces the app bar rather than sitting under it draws its own title where the mark
+stood, and that title is set as the mark is, size and tracking both, so walking into the
+destination does not make the word in the top left change. The assistant (`0032`) is the
+only one today. Everything else authenticated stays on the system stack, which is what
+this rule is protecting: a title in a header is not a product set in a serif. Load it as
+an asset rather than as a render blocking web font. Note that Audiowide appears throughout `libs/damoclesSword/ui`: that is that
 project's identity and must not be borrowed here.
 
 **The display face is Marcellus.** The first attempt used Instrument Serif and it was
@@ -414,7 +419,8 @@ wider round letters and open counters, which is what the word needed.
 Two rules that came out of fixing it:
 
 - **The wordmark carries `letter-spacing: 0.05em`.** A short word set in a wide serif still
-  needs air between the characters to read as a mark rather than as a word.
+  needs air between the characters to read as a mark rather than as a word. A destination
+  header standing in for the mark carries it too, for the same reason and at the same size.
 - **The hero headline does not inherit that tracking.** At 41px the same value is far too
   loose. The hero sits near zero, and the two are set separately on purpose rather than
   sharing one value.
