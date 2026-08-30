@@ -25,6 +25,32 @@ import { RouterOutlet } from '@angular/router';
   selector: 'app-velista-root',
   imports: [RouterOutlet],
   template: `<router-outlet />`,
+  // The one thing this component does draw, and it is not chrome: the vertical space
+  // `AppLayout` sizes itself against.
+  //
+  // `AppLayout` reaches full height by being a stretched flex item of whatever holds
+  // it, and mounted in the portfolio that holder is the shell's own root, which is
+  // `display: flex` with `min-height: 100dvh` (`apps/shell/src/app/app.scss`). A
+  // stretched item of a flex container whose height is settled has a *definite*
+  // height, which is what lets `.app-main`'s `height: 100%`, and every page's
+  // `block-size: 100%` below it, resolve to something.
+  //
+  // On velista's own origin this component is that holder, and with no styles it was
+  // an inline box: `AppLayout` filled the viewport through its own `min-block-size`,
+  // but a minimum is not a definite height, so every percentage below it resolved to
+  // `auto` and each page collapsed onto its content. A bottom action bar such as
+  // "Get shopping list" then sat directly under the last paragraph rather than at the
+  // foot of the screen (plan 0013 D3, the mode split).
+  //
+  // So the standalone root states the same two declarations the shell's root does.
+  // Nothing else about it is shared, and this is the whole of what the mounted build
+  // was borrowing.
+  styles: `
+    :host {
+      display: flex;
+      min-block-size: 100dvh;
+    }
+  `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppRoot {}
