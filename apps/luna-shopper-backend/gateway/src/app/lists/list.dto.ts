@@ -64,6 +64,20 @@ export class UpdateListDto {
   @IsOptional()
   @IsBoolean()
   autoApproveLines?: boolean;
+
+  /**
+   * Whether everybody in the group may use this list, people who join later
+   * included (plan 0042, section 2.1).
+   *
+   * The property `shareWithZone` performed once at creation, now stored and
+   * changeable afterwards. Turning it **on** grants read, write and decide to
+   * everybody currently approved; turning it **off** revokes nobody, and stops
+   * only the next person from being granted.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  sharedWithZone?: boolean;
 }
 
 export class ListAccessEntryDto {

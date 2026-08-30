@@ -13,6 +13,7 @@ import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 import { ListController } from './list.controller';
 import { ListService } from './list.service';
+import { SharedListGrantModule } from './shared-list-grant.module';
 
 /**
  * Shopping lists, lines and comments (plan 0007): the second domain slice of
@@ -29,6 +30,7 @@ import { ListService } from './list.service';
       ZoneMembership,
     ]),
     ZonesModule,
+    SharedListGrantModule,
   ],
   controllers: [ListController],
   providers: [ListService, LineService, CommentService, ListAccessService],

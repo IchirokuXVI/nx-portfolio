@@ -59,6 +59,17 @@ export interface ListView {
    */
   autoApproveLines: boolean;
   /**
+   * Whether every approved member of the zone may use this list, including
+   * people who join later (plan 0042, section 2.1).
+   *
+   * State on the list rather than the one time action `shareWithZone` used to
+   * be. `create` stores it, `update` may change it with `MANAGE`, and it is what
+   * the approval path reads to decide what a new member is granted. Turning it
+   * off revokes nobody: it governs who arrives next, and removing one person is
+   * a row in the share sheet (section 2.2).
+   */
+  sharedWithZone: boolean;
+  /**
    * What the **caller** may do on this list (plan 0036, section 7), including the
    * derived grant a zone OWNER or ADMIN holds on every list in the zone.
    *
@@ -147,6 +158,15 @@ export interface UpdateListRequest {
   name?: string;
   /** Turn approval on a new line on or off (plan 0037, section 3). `MANAGE`. */
   autoApproveLines?: boolean;
+  /**
+   * Open the list to its zone, or stop opening it (plan 0042, section 2.1).
+   * `MANAGE`.
+   *
+   * Turning it **on** grants `{READ, WRITE, DECIDE}` to every currently approved
+   * non staff member, exactly as creation does, widening rather than replacing
+   * what anybody already holds. Turning it **off** revokes nobody.
+   */
+  sharedWithZone?: boolean;
 }
 
 /** Read a list's stored access table (plan 0036, section 6). `MANAGE` only. */

@@ -9319,6 +9319,9 @@
           },
           "autoApproveLines": {
             "type": "boolean"
+          },
+          "sharedWithZone": {
+            "type": "boolean"
           }
         }
       },
@@ -11895,6 +11898,9 @@
           "autoApproveLines": {
             "type": "boolean"
           },
+          "sharedWithZone": {
+            "type": "boolean"
+          },
           "myPermissions": {
             "type": "array",
             "items": {
@@ -11917,6 +11923,7 @@
           "createdByUserId",
           "counts",
           "autoApproveLines",
+          "sharedWithZone",
           "myPermissions",
           "createdAt",
           "updatedAt"

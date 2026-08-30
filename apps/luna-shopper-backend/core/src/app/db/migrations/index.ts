@@ -1,5 +1,6 @@
 import { InitialCoreSchema1756000100000 } from './1756000100000-InitialCoreSchema';
 import { ListPermissionsAndAutoApprove1756000200000 } from './1756000200000-ListPermissionsAndAutoApprove';
+import { ListSharedWithZone1756000300000 } from './1756000300000-ListSharedWithZone';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -13,4 +14,5 @@ import { ListPermissionsAndAutoApprove1756000200000 } from './1756000200000-List
 export const CORE_MIGRATIONS = [
   InitialCoreSchema1756000100000,
   ListPermissionsAndAutoApprove1756000200000,
+  ListSharedWithZone1756000300000,
 ];

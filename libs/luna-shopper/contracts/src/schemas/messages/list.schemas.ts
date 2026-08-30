@@ -71,6 +71,7 @@ const listView = object(
     createdByUserId: nonEmptyString(),
     counts: ref(LIST_SCHEMA_IDS.listCounts),
     autoApproveLines: boolean(),
+    sharedWithZone: boolean(),
     myPermissions: array(ref(ENUM_IDS.listPermission)),
     ...timestamps,
   },
@@ -81,6 +82,7 @@ const listView = object(
     'createdByUserId',
     'counts',
     'autoApproveLines',
+    'sharedWithZone',
     'myPermissions',
     ...timestampKeys,
   ]
@@ -160,7 +162,11 @@ const commentPage = paginated(
 
 const createListRequest = object(
   LIST_SCHEMA_IDS.createListRequest,
-  { userId: nonEmptyString(), zoneId: nonEmptyString(), name: nonEmptyString() },
+  {
+    userId: nonEmptyString(),
+    zoneId: nonEmptyString(),
+    name: nonEmptyString(),
+  },
   ['userId', 'zoneId', 'name']
 );
 const setAccessRequest = object(
@@ -184,6 +190,7 @@ const updateListRequest = object(
     listId: nonEmptyString(),
     name: string(),
     autoApproveLines: boolean(),
+    sharedWithZone: boolean(),
   },
   ['userId', 'listId']
 );
@@ -272,7 +279,11 @@ const listLinesRequest = object(
 );
 const addCommentRequest = object(
   LIST_SCHEMA_IDS.addCommentRequest,
-  { userId: nonEmptyString(), lineId: nonEmptyString(), body: nonEmptyString() },
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    body: nonEmptyString(),
+  },
   ['userId', 'lineId', 'body']
 );
 const listCommentsRequest = object(

@@ -40,6 +40,7 @@ export function toListView(
     createdByUserId: list.createdByUserId,
     counts,
     autoApproveLines: list.autoApproveLines,
+    sharedWithZone: list.sharedWithZone,
     myPermissions: PERMISSION_ORDER.filter((p) => myPermissions.has(p)),
     createdAt: list.createdAt.toISOString(),
     updatedAt: list.updatedAt.toISOString(),

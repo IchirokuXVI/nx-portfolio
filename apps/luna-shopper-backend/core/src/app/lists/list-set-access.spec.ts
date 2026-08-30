@@ -20,6 +20,7 @@ import { ZoneAuthzService } from '../zones/zone-authz.service';
 import type { ZoneCountsService } from '../zones/zone-counts.service';
 import { ListAccessService } from './list-access.service';
 import { ListService } from './list.service';
+import { SharedListGrantService } from './shared-list-grant.service';
 
 /**
  * Who may grant what, and what the people affected are told (plan 0036, sections
@@ -138,6 +139,34 @@ function build(options: {
       return { affected: 1 };
     },
     find: async () => [...rows.values()],
+    /**
+     * The read `getAccess` performs, which is a join rather than a `find` since
+     * plan 0042: the rows whose membership is **currently** not group staff.
+     *
+     * The double resolves the role through the same membership store the service
+     * would join to, so a row for a member promoted to admin disappears here for
+     * the same reason it disappears in Postgres.
+     */
+    createQueryBuilder: () => {
+      const roleOf = (membershipId: string): ZoneRole =>
+        membershipId === 'm-caller'
+          ? options.callerRole
+          : (options.members.find((m) => m.id === membershipId)?.role ??
+            ZoneRole.MEMBER);
+      const qb = {
+        innerJoin: () => qb,
+        where: () => qb,
+        andWhere: () => qb,
+        orderBy: () => qb,
+        addOrderBy: () => qb,
+        getMany: async () =>
+          [...rows.values()].filter((row) => {
+            const role = roleOf(row.membershipId);
+            return role !== ZoneRole.OWNER && role !== ZoneRole.ADMIN;
+          }),
+      };
+      return qb;
+    },
   };
 
   const manager = {
@@ -178,6 +207,7 @@ function build(options: {
     accessRepo as never,
     authz,
     listAccess,
+    new SharedListGrantService(),
     { emitZoneCounts: async () => undefined } as unknown as ZoneCountsService,
     events
   );
@@ -689,5 +719,81 @@ describe('reading the access table back (acceptance 9)', () => {
     const view = await service.getAccess({ userId: CALLER, listId: LIST_ID });
 
     expect(view.entries.map((e) => e.membershipId)).toEqual(['m-2']);
+  });
+
+  it('hides a staff row that IS in the table (plan 0042, section 1.2)', async () => {
+    // The defect. Creation wrote the creator's row whoever they were, and the
+    // owner is who creates the first list in a new group, so a staff row was in
+    // the table of essentially every list. The read handed it to the share sheet
+    // and the write refused it, which is why nobody could save the sheet.
+    const { service } = build({
+      callerRole: ZoneRole.OWNER,
+      members: [MEMBER, GROUP_ADMIN],
+      existing: {
+        'm-2': [ListPermission.READ],
+        'm-4': [
+          ListPermission.READ,
+          ListPermission.WRITE,
+          ListPermission.DECIDE,
+        ],
+      },
+    });
+
+    const view = await service.getAccess({ userId: CALLER, listId: LIST_ID });
+
+    expect(view.entries.map((e) => e.membershipId)).toEqual(['m-2']);
+  });
+
+  it('drops a member promoted to admin, and returns them unchanged when demoted', async () => {
+    // Current role, not anything recorded on the row (plan 0042, section 1.2). A
+    // promoted member's row is inert, because the derived grant is wider than
+    // anything it says; demoted, the same row is meaningful again and comes back
+    // holding exactly what they held before, which is free and is the best
+    // available answer.
+    const stored = { 'm-2': [ListPermission.READ, ListPermission.WRITE] };
+
+    const promoted = build({
+      callerRole: ZoneRole.OWNER,
+      members: [{ ...MEMBER, role: ZoneRole.ADMIN }],
+      existing: stored,
+    });
+    await expect(
+      promoted.service.getAccess({ userId: CALLER, listId: LIST_ID })
+    ).resolves.toMatchObject({ entries: [] });
+
+    const demoted = build({
+      callerRole: ZoneRole.OWNER,
+      members: [MEMBER],
+      existing: stored,
+    });
+    await expect(
+      demoted.service.getAccess({ userId: CALLER, listId: LIST_ID })
+    ).resolves.toMatchObject({
+      entries: [
+        {
+          membershipId: 'm-2',
+          permissions: [ListPermission.READ, ListPermission.WRITE],
+        },
+      ],
+    });
+  });
+
+  it('still refuses an entry naming staff, which rule 2 was not relaxed for', async () => {
+    // The assertion that plan 0042 chose (a) and (b) rather than (c). Filtering
+    // the read is not permission to write one: a staff row is meaningless, so
+    // naming one stays an error even for a caller who is staff themselves.
+    const { service, written } = build({
+      callerRole: ZoneRole.OWNER,
+      members: [GROUP_ADMIN],
+    });
+
+    await expect(
+      service.setAccess({
+        userId: CALLER,
+        listId: LIST_ID,
+        entries: [{ membershipId: 'm-4', permissions: [ListPermission.READ] }],
+      })
+    ).rejects.toThrow();
+    expect(written.saved).toHaveLength(0);
   });
 });

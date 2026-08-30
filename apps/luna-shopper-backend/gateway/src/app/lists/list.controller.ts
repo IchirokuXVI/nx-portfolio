@@ -107,6 +107,7 @@ export class ListsController {
       listId: id,
       name: dto.name,
       autoApproveLines: dto.autoApproveLines,
+      sharedWithZone: dto.sharedWithZone,
     });
   }
 

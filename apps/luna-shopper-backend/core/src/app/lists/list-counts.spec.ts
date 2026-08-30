@@ -13,6 +13,7 @@ import { LIST_COUNTS_COLUMN, LIST_COUNTS_SQL } from '../zones/zone-summary.sql';
 import type { ListAccessService } from './list-access.service';
 import { EMPTY_LIST_COUNTS, toLineView, toListView } from './list.mappers';
 import { ListService } from './list.service';
+import { SharedListGrantService } from './shared-list-grant.service';
 
 /**
  * List and line counts (plan 0017, sections 3.4 and 4.2), plus the timestamps
@@ -129,6 +130,7 @@ function build(rows: ShoppingList[], counts: ListCounts) {
     access as never,
     authz,
     listAccess,
+    new SharedListGrantService(),
     zoneCounts as never,
     events
   );
