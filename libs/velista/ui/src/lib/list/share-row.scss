@@ -6,7 +6,34 @@
   display: flex;
   flex-direction: column;
   gap: var(--app-space-2);
+}
+
+// The whole header is the disclosure control, not a chevron beside it (plan 0036,
+// section 6): the target is then the full width of the row, which is what a thumb
+// needs, and the chevron is left being what it should be, a state indicator.
+//
+// A bare button, styled back to the row it replaces. It carries the row's vertical
+// padding, so a closed row is exactly the height it was.
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin: 0;
+  border: 0;
   padding-block: var(--app-space-3);
+  padding-inline: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
 }
 
 .who {
@@ -14,6 +41,62 @@
   align-items: baseline;
   gap: var(--app-space-2);
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+// What the row is when it is closed, which is how every row starts. Pushed to the end
+// so the eye reads name on the left and answer on the right down the whole list, and
+// allowed to wrap rather than shrink, because "Can add" and "Can tick off" together
+// will not fit beside a long name on a narrow phone.
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--app-space-hair);
+  flex: 0 1 auto;
+}
+
+.badge {
+  border-radius: var(--app-radius-full);
+  padding: 0 var(--app-space-2);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-2xs);
+  line-height: calc(var(--app-text-2xs) * 2);
+  white-space: nowrap;
+}
+
+// No access is a state and not a permission, so it reads as an absence rather than as
+// one more thing somebody holds.
+.none {
+  background: none;
+  padding-inline: 0;
+  color: var(--app-text-muted);
+  font-style: italic;
+}
+
+// An edit that has not been saved yet, marked here rather than by leaving the row open
+// (plan 0036, section 6). Quiet, because it is a note about this sitting and not about
+// what the person can do.
+.edited {
+  align-self: center;
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-2xs);
+  white-space: nowrap;
+}
+
+// A state indicator, and deliberately not a hit area of its own: the header around it
+// is the target. It turns rather than being swapped for a second glyph, so the rotation
+// is the animation and there is one file to load.
+.chevron {
+  flex-shrink: 0;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+  transition: transform var(--app-motion-fast) var(--app-motion-ease);
+
+  .header.open & {
+    transform: rotate(180deg);
+  }
 }
 
 .name {
@@ -41,8 +124,15 @@
   flex-direction: column;
   gap: var(--app-space-hair);
   margin: 0;
-  padding: 0;
+  padding: 0 0 var(--app-space-3);
   border: 0;
+
+  // The region stays in the DOM so `aria-controls` names something real, and `hidden`
+  // is what closes it. `display: flex` above outranks the user agent's `[hidden]` rule,
+  // so the hiding has to be said again here or a closed row would draw open.
+  &[hidden] {
+    display: none;
+  }
 }
 
 // Visually hidden and still announced. `display: none` would take it out of the

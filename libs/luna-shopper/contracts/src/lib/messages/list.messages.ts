@@ -22,13 +22,37 @@ export const LIST_PATTERNS = {
 
 export const LINE_PATTERNS = {
   add: 'line.add',
+  addMany: 'line.addMany',
   update: 'line.update',
+  addQuantity: 'line.addQuantity',
   setApproval: 'line.setApproval',
   setStatus: 'line.setStatus',
   reorder: 'line.reorder',
   delete: 'line.delete',
   list: 'line.list',
 } as const;
+
+/**
+ * The bounds a line's quantity has to satisfy, stated once (plan 0040, section
+ * 3.5).
+ *
+ * The ceiling used to live only in the gateway DTO, which was survivable while
+ * every write carried an absolute value the gateway had already checked. A delta
+ * is computed **inside core**, so core is now the only place that can check the
+ * result, and a bound written in two files is a bound that disagrees with itself
+ * the first time one of them moves.
+ */
+export const LINE_QUANTITY_MIN = 1;
+export const LINE_QUANTITY_MAX = 100000;
+
+/**
+ * How many lines one `line.addMany` may carry (plan 0040, section 6.1).
+ *
+ * A bound rather than a budget: fifty is well past any spoken sentence and past
+ * any plausible paste, and its job is to stop one request writing an unbounded
+ * number of rows.
+ */
+export const LINE_BATCH_MAX_ITEMS = 50;
 
 export const COMMENT_PATTERNS = {
   add: 'comment.add',
@@ -75,6 +99,17 @@ export interface ListView {
    * `MANAGE`, and it governs only what a **new** line starts as.
    */
   autoApproveLines: boolean;
+  /**
+   * Whether every approved member of the zone may use this list, including
+   * people who join later (plan 0042, section 2.1).
+   *
+   * State on the list rather than the one time action `shareWithZone` used to
+   * be. `create` stores it, `update` may change it with `MANAGE`, and it is what
+   * the approval path reads to decide what a new member is granted. Turning it
+   * off revokes nobody: it governs who arrives next, and removing one person is
+   * a row in the share sheet (section 2.2).
+   */
+  sharedWithZone: boolean;
   /**
    * What the **caller** may do on this list (plan 0036, section 7), including the
    * derived grant a zone OWNER or ADMIN holds on every list in the zone.
@@ -204,6 +239,15 @@ export interface UpdateListRequest {
   name?: string;
   /** Turn approval on a new line on or off (plan 0037, section 3). `MANAGE`. */
   autoApproveLines?: boolean;
+  /**
+   * Open the list to its zone, or stop opening it (plan 0042, section 2.1).
+   * `MANAGE`.
+   *
+   * Turning it **on** grants `{READ, WRITE, DECIDE}` to every currently approved
+   * non staff member, exactly as creation does, widening rather than replacing
+   * what anybody already holds. Turning it **off** revokes nobody.
+   */
+  sharedWithZone?: boolean;
 }
 
 /** Read a list's stored access table (plan 0036, section 6). `MANAGE` only. */
@@ -251,6 +295,37 @@ export interface AddLineRequest {
   itemId?: string | null;
 }
 
+/** One line of a {@link AddLinesRequest} batch (plan 0040, section 6.5). */
+export interface AddLinesItem {
+  content: string;
+  quantity?: number;
+  /** The same optional catalog Item reference {@link AddLineRequest} carries. */
+  itemId?: string | null;
+}
+
+/**
+ * Add up to {@link LINE_BATCH_MAX_ITEMS} lines in one transaction (plan 0040,
+ * section 6).
+ *
+ * **All or nothing**, and the response is the created lines in request order.
+ * Nothing that can fail for one item can succeed for its neighbour: access is a
+ * property of the list and the caller, the approval rules are a property of their
+ * permissions and the list's `autoApproveLines`, and the per item bounds have
+ * already produced a 400 for the whole request at the gateway. So a per item
+ * result envelope would be a new response idiom describing a partial failure the
+ * design cannot produce.
+ *
+ * **It adds, and it does not merge** (section 6.3). Two items naming the same
+ * thing produce two lines: merging is a decision about a person's intention, and
+ * the caller pasting a list may well have meant two entries. The upsert rule
+ * belongs to the assistant, which is where it lives.
+ */
+export interface AddLinesRequest {
+  userId: string;
+  listId: string;
+  items: AddLinesItem[];
+}
+
 export interface UpdateLineRequest {
   userId: string;
   lineId: string;
@@ -258,6 +333,28 @@ export interface UpdateLineRequest {
   quantity?: number;
   /** Set/clear the optional catalog Item reference (plan 0012). `null` clears it. */
   itemId?: string | null;
+}
+
+/**
+ * Add units to a line, or take them off, without reading it first (plan 0040,
+ * section 3).
+ *
+ * `delta` is a non zero integer and the **resulting** quantity is what
+ * {@link LINE_QUANTITY_MIN} and {@link LINE_QUANTITY_MAX} apply to. It is
+ * arithmetic in front of the edit that already exists, so it introduces no new
+ * permission, no new transition and no new event: an approved line's quantity
+ * still moves only for a caller holding `DECIDE`, adding to a rejected line still
+ * returns it to `PENDING`, and a negative delta on an approved line still splits
+ * the remainder exactly as an absolute lowering does.
+ *
+ * A negative delta is allowed on purpose (section 3.3). Refusing one would leave
+ * "one less" as the single thing a caller still has to do with a read and a
+ * write, which is precisely the lost update this message exists to remove.
+ */
+export interface AddLineQuantityRequest {
+  userId: string;
+  lineId: string;
+  delta: number;
 }
 
 export interface SetLineApprovalRequest {

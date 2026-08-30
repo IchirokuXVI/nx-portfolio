@@ -81,6 +81,15 @@ export interface UpdateListRequest {
    * and a switch is not an answer to one.
    */
   readonly autoApproveLines?: boolean;
+  /**
+   * Whether everybody in the group may use this list (backend plan 0042, section 2.1).
+   *
+   * Turning it **on** gives read, write and decide to everybody currently in the group,
+   * widening rather than replacing what anybody already holds. Turning it **off**
+   * revokes nobody: it stops the next person from being granted, and the rows that
+   * exist stay exactly as they are.
+   */
+  readonly sharedWithZone?: boolean;
 }
 
 /**

@@ -1,5 +1,6 @@
 {
   "app-title": "Velista",
+  "app-version": "Version {{version}}",
   "vocabulary": {
     "zone": "Group",
     "zones": "Groups"
@@ -126,6 +127,7 @@
     }
   },
   "connection": {
+    "notLive": "Live updates are off",
     "lost": {
       "title": "You have lost connection",
       "body": "Check your wifi or mobile data. This page reloads on its own as soon as you are back.",
@@ -464,6 +466,10 @@
         "label": "Add without asking",
         "hint": "New lines go straight onto the list instead of waiting for approval. The ones already waiting stay as they are"
       },
+      "sharedWithZone": {
+        "label": "Everybody in this group can use this list",
+        "hint": "People who join later get it too. Turning this off does not take it away from anybody who already has it"
+      },
       "delete": "Delete this list",
       "accessFor": "What {{name}} can do with this list",
       "access": {
@@ -472,6 +478,14 @@
         "decide": "Can tick off and decide what goes on it",
         "manage": "List admin",
         "creator": "Created this list",
+        "edited": "Changed",
+        "summary": {
+          "read": "View",
+          "write": "Add",
+          "decide": "Tick off",
+          "manage": "Admin",
+          "none": "No access"
+        },
         "staffNote": "Group admins always have full access to every list in the group. This cannot be changed here",
         "manageLocked": "Only group admins can appoint list admins"
       }

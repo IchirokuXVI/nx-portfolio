@@ -448,4 +448,26 @@ export interface ShareRowVm {
    * the group, or only group admins appoint list admins.
    */
   readonly fixedReasonKey: string | null;
+  /**
+   * What this person can do, in one word, for the row while it is closed (velista plan
+   * 0036, section 5).
+   *
+   * A **subset of `permissions`** rather than a second answer: `selectShareSummary` is
+   * the pure function that computes it, and the container calls it. It is on the view
+   * model rather than in the row component because it is the row when the row is
+   * collapsed, which is how every row starts, so it is the primary thing this type says
+   * about a member and not a rendering detail.
+   *
+   * Empty means no access, which the row draws in words instead of as a badge. Group
+   * staff summarise as `MANAGE` like anybody holding it, because the summary is about
+   * what somebody can do and not about where it came from.
+   */
+  readonly summary: readonly ListPermission[];
+  /**
+   * Whether this row has been changed in this sitting and not yet saved.
+   *
+   * Marked in the summary rather than left open (section 6), so working through eight
+   * members does not grow the sheet under the thumb that is about to press Save.
+   */
+  readonly edited: boolean;
 }

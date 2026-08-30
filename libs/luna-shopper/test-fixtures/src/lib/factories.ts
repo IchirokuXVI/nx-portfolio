@@ -120,6 +120,9 @@ export function makeList(overrides: Partial<SeedList> = {}): SeedList {
     name: 'A List',
     createdByUserId: uuid(),
     autoApproveLines: false,
+    // Private by default, which is the same direction the column defaults in and
+    // the answer that grants nobody anything a test did not ask for.
+    sharedWithZone: false,
     ...overrides,
   };
 }

@@ -8,6 +8,7 @@ import {
 } from '@portfolio/velista/platform';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
+import { hasResponse } from '../errors';
 import { toSessionTokens } from '../mapping/mappers';
 import { anonymous } from './http-context';
 
@@ -128,8 +129,11 @@ export class TokenStore {
   /**
    * Force a refresh, sharing one in-flight request between all callers.
    *
-   * On failure the session is cleared, because a rejected refresh token cannot be
-   * retried: it is single use, so a failure means it is spent or revoked either way.
+   * On a refresh the server **answered** the session is cleared, because a rejected
+   * refresh token cannot be retried: it is single use, so an answered failure means it
+   * is spent or revoked either way. On a refresh that reached no server the pair is
+   * kept, because nothing was spent (plan 0035, section 2). Either way this returns
+   * null, so no caller has to tell them apart.
    */
   refresh(): Promise<SessionTokens | null> {
     this._refreshing ??= this._performRefresh().finally(() => {
@@ -151,6 +155,14 @@ export class TokenStore {
    * difference between "nobody is signed in" and "the guest we had is gone". A failed
    * refresh over a `TEMPORARY` identity is the second case, and only that one needs
    * telling.
+   *
+   * **A refresh that got no response is neither** (plan 0035, section 2). The pair
+   * survives it, so the account is exactly where it was, and telling a guest it is
+   * gone because their phone was in a lift is the one false alarm in this app with no
+   * way back from it. The session still standing afterwards is how that case is
+   * recognised, and it is the only reading of `hasSession` here: the request that
+   * follows refreshes again, and either it works or it fails on the network like
+   * everything else and raises the blocking screen.
    */
   async authorizeOptionalAuthCall(): Promise<OptionalAuthResult> {
     const before = this._tokens();
@@ -163,7 +175,7 @@ export class TokenStore {
       return { state: 'authenticated', accessToken: token };
     }
 
-    return before.kind === 'TEMPORARY'
+    return before.kind === 'TEMPORARY' && !this.hasSession()
       ? { state: 'guest-account-lost' }
       : { state: 'anonymous' };
   }
@@ -191,10 +203,26 @@ export class TokenStore {
 
       this.set(tokens);
       return tokens;
-    } catch {
-      // Includes a network failure, which is indistinguishable here from a revoked
-      // token. Clearing is the safe reading: a stale pair kept around would be sent
-      // to an optional-auth route later and mint a duplicate guest account.
+    } catch (error) {
+      if (!hasResponse(error)) {
+        // **A network failure is not a rejected token** (plan 0035, section 2). The
+        // refresh never reached a server, so nothing was spent and nothing was
+        // revoked, and the pair being thrown away is the only way back into the
+        // account. Angular reports that as status 0, which is exactly the test
+        // `ConnectionRecovery` makes for exactly this reason.
+        //
+        // Returning null without clearing leaves every caller where it was: the
+        // interceptor's retry fails, the request surfaces its ordinary error,
+        // `ConnectionState` raises the blocking screen and `ConnectionRecovery`
+        // probes until the backend answers. The session is simply still there when it
+        // comes back, which is the whole of the fix for an app that was resumed with
+        // an expired access token and a radio still waking up.
+        return null;
+      }
+
+      // The server answered, whatever it answered. A refresh token is single use, so a
+      // rejected one is spent or revoked either way, and a stale pair kept around would
+      // be sent to an optional-auth route later and mint a duplicate guest account.
       this.clear();
       return null;
     }

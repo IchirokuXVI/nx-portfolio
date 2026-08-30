@@ -14,6 +14,7 @@ export * from './lib/auth/outcome-screen';
 export * from './lib/auth/password-field';
 export * from './lib/auth/resend-sentence';
 export * from './lib/auth/success-note';
+export * from './lib/brand/app-version';
 export * from './lib/brand/brand-mark';
 export * from './lib/brand/brand-wordmark';
 export * from './lib/entry/account-lost-panel';

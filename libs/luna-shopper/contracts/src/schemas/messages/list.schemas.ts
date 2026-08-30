@@ -1,6 +1,9 @@
 import {
   COMMENT_PATTERNS,
+  LINE_BATCH_MAX_ITEMS,
   LINE_PATTERNS,
+  LINE_QUANTITY_MAX,
+  LINE_QUANTITY_MIN,
   LIST_PATTERNS,
 } from '../../lib/messages/list.messages';
 import {
@@ -25,6 +28,7 @@ export const LIST_SCHEMA_IDS = {
   listAccessEntry: schemaId('list/ListAccessEntry'),
   listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
+  lineViewList: schemaId('list/LineViewList'),
   commentView: schemaId('list/CommentView'),
   commentRecording: schemaId('list/CommentRecording'),
   commentAudioView: schemaId('list/CommentAudioView'),
@@ -38,6 +42,9 @@ export const LIST_SCHEMA_IDS = {
   listIdRequest: schemaId('msg/list.listId/request'),
   listListsRequest: schemaId('msg/list.list/request'),
   addLineRequest: schemaId('msg/line.add/request'),
+  addLinesItem: schemaId('list/AddLinesItem'),
+  addLinesRequest: schemaId('msg/line.addMany/request'),
+  addLineQuantityRequest: schemaId('msg/line.addQuantity/request'),
   updateLineRequest: schemaId('msg/line.update/request'),
   setApprovalRequest: schemaId('msg/line.setApproval/request'),
   setStatusRequest: schemaId('msg/line.setStatus/request'),
@@ -78,6 +85,7 @@ const listView = object(
     createdByUserId: nonEmptyString(),
     counts: ref(LIST_SCHEMA_IDS.listCounts),
     autoApproveLines: boolean(),
+    sharedWithZone: boolean(),
     myPermissions: array(ref(ENUM_IDS.listPermission)),
     ...timestamps,
   },
@@ -88,6 +96,7 @@ const listView = object(
     'createdByUserId',
     'counts',
     'autoApproveLines',
+    'sharedWithZone',
     'myPermissions',
     ...timestampKeys,
   ]
@@ -199,6 +208,20 @@ const commentAudioView = object(
   ['commentId', 'contentType', 'audio']
 );
 
+/**
+ * The batch add's answer: the created lines in request order (plan 0040, 6.1).
+ *
+ * A bare array rather than a page, because it is neither paginated nor open
+ * ended: it is exactly as long as the request was, and `reorder` set the
+ * precedent that a batch write on this resource answers in a shape every client
+ * already knows how to read.
+ */
+const lineViewList: JsonSchema = {
+  $id: LIST_SCHEMA_IDS.lineViewList,
+  type: 'array',
+  items: ref(LIST_SCHEMA_IDS.lineView),
+};
+
 const listPage = paginated(LIST_SCHEMA_IDS.listPage, LIST_SCHEMA_IDS.listView);
 const linePage = paginated(LIST_SCHEMA_IDS.linePage, LIST_SCHEMA_IDS.lineView);
 const commentPage = paginated(
@@ -236,6 +259,7 @@ const updateListRequest = object(
     listId: nonEmptyString(),
     name: string(),
     autoApproveLines: boolean(),
+    sharedWithZone: boolean(),
   },
   ['userId', 'listId']
 );
@@ -261,11 +285,52 @@ const addLineRequest = object(
     userId: nonEmptyString(),
     listId: nonEmptyString(),
     content: string(),
-    quantity: integer({ minimum: 1 }),
+    quantity: integer({
+      minimum: LINE_QUANTITY_MIN,
+      maximum: LINE_QUANTITY_MAX,
+    }),
     // Optional opaque catalog Item reference (plan 0012); null or absent = none.
     itemId: nullableString(),
   },
   ['userId', 'listId', 'content']
+);
+const addLinesItem = object(
+  LIST_SCHEMA_IDS.addLinesItem,
+  {
+    content: nonEmptyString(),
+    quantity: integer({
+      minimum: LINE_QUANTITY_MIN,
+      maximum: LINE_QUANTITY_MAX,
+    }),
+    itemId: nullableString(),
+  },
+  ['content']
+);
+const addLinesRequest = object(
+  LIST_SCHEMA_IDS.addLinesRequest,
+  {
+    userId: nonEmptyString(),
+    listId: nonEmptyString(),
+    items: {
+      ...array(ref(LIST_SCHEMA_IDS.addLinesItem)),
+      minItems: 1,
+      maxItems: LINE_BATCH_MAX_ITEMS,
+    },
+  },
+  ['userId', 'listId', 'items']
+);
+const addLineQuantityRequest = object(
+  LIST_SCHEMA_IDS.addLineQuantityRequest,
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    // Signed, and bounded in both directions so neither can be used to write a
+    // number nobody meant. Zero is refused in the DTO rather than here: JSON
+    // Schema states "not zero" only as a `not`, which reads far worse than the
+    // one decorator that says it (plan 0040, section 3.7).
+    delta: integer({ minimum: -LINE_QUANTITY_MAX, maximum: LINE_QUANTITY_MAX }),
+  },
+  ['userId', 'lineId', 'delta']
 );
 const updateLineRequest = object(
   LIST_SCHEMA_IDS.updateLineRequest,
@@ -273,7 +338,10 @@ const updateLineRequest = object(
     userId: nonEmptyString(),
     lineId: nonEmptyString(),
     content: string(),
-    quantity: integer({ minimum: 1 }),
+    quantity: integer({
+      minimum: LINE_QUANTITY_MIN,
+      maximum: LINE_QUANTITY_MAX,
+    }),
     // Set or clear the catalog Item reference (plan 0012); null clears it.
     itemId: nullableString(),
   },
@@ -379,6 +447,7 @@ export const listSchemas: JsonSchema[] = [
   listAccessEntry,
   listAccessView,
   lineView,
+  lineViewList,
   commentRecording,
   commentView,
   commentAudioView,
@@ -392,6 +461,9 @@ export const listSchemas: JsonSchema[] = [
   listIdRequest,
   listListsRequest,
   addLineRequest,
+  addLinesItem,
+  addLinesRequest,
+  addLineQuantityRequest,
   updateLineRequest,
   setApprovalRequest,
   setStatusRequest,
@@ -437,8 +509,16 @@ export const listMessageContracts: Record<
     request: LIST_SCHEMA_IDS.addLineRequest,
     response: LIST_SCHEMA_IDS.lineView,
   },
+  [LINE_PATTERNS.addMany]: {
+    request: LIST_SCHEMA_IDS.addLinesRequest,
+    response: LIST_SCHEMA_IDS.lineViewList,
+  },
   [LINE_PATTERNS.update]: {
     request: LIST_SCHEMA_IDS.updateLineRequest,
+    response: LIST_SCHEMA_IDS.lineView,
+  },
+  [LINE_PATTERNS.addQuantity]: {
+    request: LIST_SCHEMA_IDS.addLineQuantityRequest,
     response: LIST_SCHEMA_IDS.lineView,
   },
   [LINE_PATTERNS.setApproval]: {

@@ -43,13 +43,21 @@
   font-size: var(--app-icon-md);
 }
 
+// The third place the display face is permitted (plan 0002, section 6): a destination
+// header that stands in for the wordmark. This title replaces the app bar rather than
+// sitting under it, so it is set exactly as `BrandWordmark` is. `2xl` is the page title
+// step and "Assistant" is the title of a page; at `xl` the word in the top left shrank
+// on the way in from home, in the same face and the same colour, for no visible reason.
 .title {
   margin: 0;
   color: var(--app-text-primary);
   font-family: var(--app-font-display);
-  font-size: var(--app-text-xl);
+  font-size: var(--app-text-2xl);
   font-weight: 400;
   line-height: var(--app-leading-heading);
+  // The mark's tracking comes with the mark's size. The hero declines this value
+  // because at 41px it is far too loose; that reason does not apply at 2xl.
+  letter-spacing: var(--app-tracking-wordmark);
 }
 
 .column {

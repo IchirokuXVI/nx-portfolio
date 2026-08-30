@@ -14,9 +14,10 @@ import {
   validateUsername,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { SharedListGrantService } from '../lists/shared-list-grant.service';
 import { ZoneAuthzService } from './zone-authz.service';
 import { ZoneCountsService } from './zone-counts.service';
 import { toMembershipView } from './zone.mappers';
@@ -29,9 +30,11 @@ import { toMembershipView } from './zone.mappers';
 @Injectable()
 export class MembershipService {
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(ZoneMembership)
     private readonly memberships: Repository<ZoneMembership>,
     private readonly authz: ZoneAuthzService,
+    private readonly sharedGrant: SharedListGrantService,
     private readonly counts: ZoneCountsService,
     private readonly events: CoreEventsPublisher
   ) {}
@@ -52,7 +55,32 @@ export class MembershipService {
     return target;
   }
 
-  /** Approve a PENDING member (plan 0006, section 4). */
+  /**
+   * Approve a PENDING member (plan 0006, section 4), and hand them the lists
+   * their new group shares (plan 0042, section 2.3).
+   *
+   * The grant is here because approval is the only door: `join` always writes a
+   * `PENDING` membership regardless of who is joining, so there is no second path
+   * by which somebody becomes an approved member. Without it, the ordinary way a
+   * household uses this product, one person sets it up, makes the lists, and then
+   * invites everybody else, produced a member who could see nothing at all, and
+   * the only cure was somebody opening each list's settings and ticking four
+   * boxes per person.
+   *
+   * `ZoneService.transferOwnership` also sets a target to `APPROVED`, and needs
+   * no branch of its own: that target is by definition about to be `OWNER`, and
+   * staff hold every permission on every list in the zone by derivation. The
+   * absence is written down here so it does not read as an oversight.
+   *
+   * One transaction, so a member is never approved into a zone whose shared lists
+   * they were not granted.
+   *
+   * **No burst of events.** A member approved into a zone with nine shared lists
+   * does not produce nine `list.my_access_changed` events. Their client is
+   * transitioning from pending to a member and fetches the zone's lists as a
+   * matter of course; the approval event below is the signal, and the list query
+   * that follows returns the lists.
+   */
   async approve(req: MembershipActionRequest): Promise<MembershipView> {
     const target = await this.governable(req);
     if (target.status !== MembershipStatus.PENDING) {
@@ -60,7 +88,15 @@ export class MembershipService {
     }
     target.status = MembershipStatus.APPROVED;
     target.approvedByUserId = req.userId;
-    const saved = await this.memberships.save(target);
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const saved = await manager.getRepository(ZoneMembership).save(target);
+      await this.sharedGrant.grantZoneSharedLists(
+        manager,
+        saved.zoneId,
+        saved.id
+      );
+      return saved;
+    });
     this.emit(RealtimeEvent.MemberApproved, saved);
     // Approving the first requester makes the next one the answer to
     // `firstPendingRequesterName`, and no other event carries that name.

@@ -1,5 +1,6 @@
 {
   "app-title": "Velista",
+  "app-version": "Versión {{version}}",
   "vocabulary": {
     "zone": "Grupo",
     "zones": "Grupos"
@@ -126,6 +127,7 @@
     }
   },
   "connection": {
+    "notLive": "Las actualizaciones en directo están desactivadas",
     "lost": {
       "title": "Te has quedado sin conexión",
       "body": "Comprueba tu wifi o tus datos móviles. Esta página se recargará sola en cuanto vuelvas a tener conexión.",
@@ -464,6 +466,10 @@
         "label": "Añadir sin preguntar",
         "hint": "Las líneas nuevas entran directamente en la lista en vez de esperar aprobación. Las que ya estaban esperando se quedan como están"
       },
+      "sharedWithZone": {
+        "label": "Todo el mundo de este grupo puede usar esta lista",
+        "hint": "Quien se una más adelante también la tendrá. Desactivarlo no se la quita a nadie que ya la tenga"
+      },
       "delete": "Eliminar esta lista",
       "accessFor": "Qué puede hacer {{name}} con esta lista",
       "access": {
@@ -472,6 +478,14 @@
         "decide": "Puede marcar y decidir qué entra",
         "manage": "Administra la lista",
         "creator": "Creó esta lista",
+        "edited": "Cambiado",
+        "summary": {
+          "read": "Ver",
+          "write": "Añadir",
+          "decide": "Marcar",
+          "manage": "Admin",
+          "none": "Sin acceso"
+        },
         "staffNote": "Los administradores del grupo siempre tienen acceso completo a todas las listas del grupo. Esto no se puede cambiar aquí",
         "manageLocked": "Solo los administradores del grupo pueden nombrar administradores de lista"
       }

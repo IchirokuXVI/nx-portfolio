@@ -3090,6 +3090,111 @@
         ]
       }
     },
+    "/v1/lists/{id}/lines/batch": {
+      "post": {
+        "operationId": "ListsController_addLines_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddLinesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `line.addMany` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/list.LineViewList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lists"
+        ]
+      }
+    },
     "/v1/lists/{id}/lines/reorder": {
       "post": {
         "operationId": "ListsController_reorder_v1",
@@ -3318,6 +3423,111 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lines"
+        ]
+      }
+    },
+    "/v1/lines/{id}/quantity": {
+      "post": {
+        "operationId": "LinesController_addQuantity_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddLineQuantityDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `line.addQuantity` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/list.LineView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -9524,6 +9734,9 @@
           },
           "autoApproveLines": {
             "type": "boolean"
+          },
+          "sharedWithZone": {
+            "type": "boolean"
           }
         }
       },
@@ -9590,6 +9803,22 @@
           "content"
         ]
       },
+      "AddLinesDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddLineDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
       "ReorderLinesDto": {
         "type": "object",
         "properties": {
@@ -9624,6 +9853,20 @@
             "description": "Set or clear the catalog item link; null clears it (plan 0012)"
           }
         }
+      },
+      "AddLineQuantityDto": {
+        "type": "object",
+        "properties": {
+          "delta": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000,
+            "description": "How many to add, or a negative number to take off. Never zero. The resulting quantity has to stay within the line quantity bounds."
+          }
+        },
+        "required": [
+          "delta"
+        ]
       },
       "SetApprovalDto": {
         "type": "object",
@@ -12050,6 +12293,12 @@
         ],
         "additionalProperties": false
       },
+      "list.LineViewList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/list.LineView"
+        }
+      },
       "list.ListAccessEntry": {
         "type": "object",
         "properties": {
@@ -12156,6 +12405,9 @@
           "autoApproveLines": {
             "type": "boolean"
           },
+          "sharedWithZone": {
+            "type": "boolean"
+          },
           "myPermissions": {
             "type": "array",
             "items": {
@@ -12178,6 +12430,7 @@
           "createdByUserId",
           "counts",
           "autoApproveLines",
+          "sharedWithZone",
           "myPermissions",
           "createdAt",
           "updatedAt"

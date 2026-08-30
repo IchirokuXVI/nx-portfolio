@@ -295,6 +295,11 @@ export function toShoppingList(raw: unknown): ShoppingList | null {
     // approved and corrected a frame later, which is the defect backend plan 0037 is
     // about, in the other direction.
     autoApproveLines: raw['autoApproveLines'] === true,
+    // Same reading, opposite safe direction and the same conclusion: a list assumed
+    // shared would draw the switch on for a list nobody opened, and turning a switch
+    // off that was never on is the one gesture here that cannot be undone by turning
+    // it back on, because turning it on grants.
+    sharedWithZone: raw['sharedWithZone'] === true,
   };
 }
 
