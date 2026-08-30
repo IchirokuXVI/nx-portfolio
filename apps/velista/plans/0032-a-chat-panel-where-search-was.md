@@ -143,13 +143,22 @@ work out what happened.
 
 ### 4.5 What the recording is
 
-> **As built:** the browser's own `SpeechRecognition`, not `MediaRecorder`, because
-> `0039` shipped no audio endpoint. Section 10's blockquote is the account. Nothing in
-> 4.1 to 4.4 changes: the clock, both thresholds and the pause are this app's, not the
-> capture's.
+> **As built:** `MediaRecorder`, as this section originally drew. The recording is uploaded
+> and the service transcribes it (backend `0041`). Section 10 is the account, including the
+> period in between when it was the browser's own `SpeechRecognition` instead.
+>
+> **Nothing in 4.1 to 4.4 changed in either direction**, which is the useful thing this
+> note records: the clock, both thresholds and the pause are this app's rather than the
+> capture's, so the controls survived a reversal and its undoing without an edit. The
+> composer's fourteen tests passed both times without their assertions being touched.
+>
+> One thing here **did** change, and it is easy to miss because it looks like a recovery:
+> the recorder now asks for a low, speech grade bitrate explicitly. Left to its own choice
+> Chrome records generously enough that five minutes lands several megabytes past the
+> service's cap. Section 5 of `0041` has the arithmetic.
 
-The speech is captured client side, in the browser. What this plan originally left open was
-where it is turned into text, and section 10 records how `0039` answered it.
+The speech is captured client side, in the browser, as a file. Where it is turned into text
+was left open here and section 10 records how it was answered, twice.
 
 ## 5. The client holds the transcript
 
@@ -225,29 +234,43 @@ reply and nothing should try.
 
 ## 10. Audio is not text, and 0039 has to say where it becomes text
 
-> **Settled, by what `0039` shipped: the second option.** That service went in with a
-> text only `POST /v1/assistant` taking `{ message, transcript }`, no multipart route,
-> no size cap and no speech provider anywhere in it. So there is nothing for a recording
-> to be uploaded to, and the browser transcribes.
+> **Settled by backend plan `0041`: the first option.** `POST /v1/assistant/voice` takes
+> the recording as multipart, the assistant transcribes it with the provider it already
+> holds a credential for, and the existing turn loop answers the sentence that comes out.
+> The client is `MediaRecorder`, exactly as section 4.5 drew.
 >
-> The paragraph below predicted that would cost the pause button. It does not. There is
-> nothing to pause in a _file_, but there is something to pause in a **session**:
-> stopping recognition and starting it again with the words so far kept is a pause in
-> every sense the person cares about, and the clock and the two thresholds were never
-> properties of the audio — they live in `Dictation`. **Every control section 4 draws
-> survives unchanged.**
+> **It was settled the other way in between, and that period is worth keeping straight**,
+> because the second answer was not a mistake: `0039` shipped with a text only
+> `POST /v1/assistant`, no multipart route, no size cap and no speech provider, so the
+> browser's own `SpeechRecognition` was the only place left. It was settled by what
+> existed rather than on the merits. `0041` section 2 is the argument, made once the
+> endpoint was on the table.
 >
-> What is genuinely different: no recording leaves the device, so the privacy note in
-> `0039` section 10 stays accurate as written; Firefox has no `SpeechRecognition` and
-> gets a field that still works and no microphone button; and Chrome and Safari do this
-> server side, so speech reaches the browser vendor rather than this app's backend,
-> which is a different destination from the one the first option would have used and is
-> worth saying out loud. The five minute cap is now about the turn rather than a codec,
-> and it protects the gateway's 2000 character `message` field.
+> What that period actually cost, now that there is a record of it rather than a
+> prediction:
 >
-> One gain that was not available under the first option: the client knows the words, so
-> the caller's own bubble shows what was understood immediately, with no round trip and
-> nothing added to the contract.
+> - **Firefox lost its microphone**, because it has no `SpeechRecognition` at all.
+>   `getUserMedia` and `MediaRecorder` are everywhere, so it has one again.
+> - **The engine ends itself on silence**, so the code above it restarted recognition on
+>   every `end` and tracked whether it was really running, because `stop()` on a stopped
+>   engine fires nothing. A whole shipped bug lived in that machinery: a paused dictation
+>   could not be stopped, the promise never settled, and the message was lost with nothing
+>   on screen saying so. A file has no seams; pause and resume are one recording now.
+> - **The privacy gain was smaller than it looked.** Chrome and Safari implement
+>   `SpeechRecognition` by sending audio to the browser vendor. The choice was never
+>   between sending a recording and not sending one; it was between sending it as this
+>   app's request, under terms this project has read, and as the browser's, under terms
+>   nobody here can see.
+>
+> What it genuinely bought, and what giving it back costs: the client knew the words as
+> they were spoken, so the caller's own bubble filled in with no round trip. It no longer
+> does. The bubble now says that something was said and is being listened to, and is
+> replaced by what the service reports hearing. It must never **invent** the words — there
+> is nothing on this side to invent them from, and a guess at what somebody said is worse
+> than showing that it is waiting.
+>
+> **What did not change, either time: every control in section 4.** That is the thing this
+> whole entry is really a record of.
 
 **This was the one open dependency in this plan, and it was a real one.** Section 4 produces an
 audio file. Backend `0039` describes a service that takes text and returns text. Something

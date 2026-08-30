@@ -1,4 +1,5 @@
 import type {
+  CommentTranscription,
   LineApprovalStatus,
   LineStatus,
   ListPermission,
@@ -342,7 +343,43 @@ export interface CommentRowVm {
    * which reads like an error rather than like a person who left (section 5.4).
    */
   readonly author: string | null;
+  /**
+   * What was said, which for a voice comment is its transcript.
+   *
+   * Empty when the transcription failed or has not landed yet. The row draws
+   * `list.comments.noTranscript` in its place rather than an empty bubble: a
+   * recording nobody could transcribe is still a message somebody left (plan
+   * 0039, section 3).
+   */
   readonly body: string;
+  /**
+   * The recording to play, when this comment is one.
+   *
+   * `src` is the URL the player fetches **when play is pressed** and never
+   * before: a thread with fifteen voice comments must not fetch fifteen files
+   * because somebody opened it, and the length here is what lets the row be drawn
+   * correctly before anything is downloaded (plan 0039, section 4).
+   */
+  readonly recording: {
+    readonly src: string;
+    readonly durationSeconds: number | null;
+  } | null;
+  /** How far the transcript got, so the row can say which. Null when typed. */
+  readonly transcription: CommentTranscription | null;
+  /**
+   * A voice comment that is still being sent (plan 0039, section 5).
+   *
+   * A voice send takes seconds, and a composer sitting disabled with no bubble on
+   * screen reads as a failure and gets pressed again. So a bubble appears the
+   * moment sending starts, in the caller's own position, saying that a recording
+   * is being sent. **It never shows a guess at the words**, because the client has
+   * nothing to guess from and a bubble with invented text is worse than one that
+   * says it is waiting.
+   *
+   * The typed path is untouched: one request with nothing racing it needs no
+   * bubble that can be wrong.
+   */
+  readonly pending: boolean;
   readonly createdAt: Date;
   /** Whether this one is the caller's, which the sheet draws differently. */
   readonly mine: boolean;
@@ -411,4 +448,26 @@ export interface ShareRowVm {
    * the group, or only group admins appoint list admins.
    */
   readonly fixedReasonKey: string | null;
+  /**
+   * What this person can do, in one word, for the row while it is closed (velista plan
+   * 0036, section 5).
+   *
+   * A **subset of `permissions`** rather than a second answer: `selectShareSummary` is
+   * the pure function that computes it, and the container calls it. It is on the view
+   * model rather than in the row component because it is the row when the row is
+   * collapsed, which is how every row starts, so it is the primary thing this type says
+   * about a member and not a rendering detail.
+   *
+   * Empty means no access, which the row draws in words instead of as a badge. Group
+   * staff summarise as `MANAGE` like anybody holding it, because the summary is about
+   * what somebody can do and not about where it came from.
+   */
+  readonly summary: readonly ListPermission[];
+  /**
+   * Whether this row has been changed in this sitting and not yet saved.
+   *
+   * Marked in the summary rather than left open (section 6), so working through eight
+   * members does not grow the sheet under the thumb that is about to press Save.
+   */
+  readonly edited: boolean;
 }

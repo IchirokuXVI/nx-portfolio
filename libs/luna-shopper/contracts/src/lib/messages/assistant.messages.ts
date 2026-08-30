@@ -20,7 +20,64 @@ import type {
 export const ASSISTANT_PATTERNS = {
   /** One conversation turn: transcript in, reply and references out. */
   turn: 'assistant.turn',
+  /**
+   * The same turn, spoken (plan 0041): a recording in, the same answer out plus
+   * what was heard.
+   *
+   * A second subject rather than an optional audio field on {@link turn},
+   * because the two requests carry different things and only one of them can be
+   * megabytes. Everything after the transcription is the same code, which is the
+   * point of the plan: a spoken turn becomes a typed turn as early as possible.
+   */
+  voice: 'assistant.voice',
+  /**
+   * Words out of a recording, and nothing else (plan 0041, section 3.2).
+   *
+   * **Not the same thing as {@link voice}**, and the difference is the caller
+   * rather than the audio: `voice` is a conversation turn that happens to have
+   * been spoken, and this is a transcription for somebody who is not having a
+   * conversation at all. It runs no tools, keeps no history, has no reply to
+   * parse, and gives rule A1 nothing to enforce because nothing is being read.
+   * It carries no list, no line and nothing about who spoke.
+   *
+   * Its caller is a voice comment (plan 0045, section 4.1), which is stored
+   * before anything is transcribed and gets its transcript handed back
+   * afterwards, so that a provider outage costs a transcript and never a message.
+   *
+   * The assistant owns both because the assistant holds the provider credential.
+   * Core does not gain a model provider and must not: core is the database and
+   * the rules, and a dependency from core on a provider key would make the list
+   * service unbootable without a credential it has no other use for.
+   */
+  transcribe: 'assistant.transcribe',
 } as const;
+
+/**
+ * A recording to write down (plan 0041, section 3.2).
+ *
+ * The audio is held for the length of the call and never written anywhere: no
+ * disk, no database, no cache, and never a log line, not even a hash (plan 0041,
+ * section 6). That is rule A2 rather than an exception to it.
+ */
+export interface AssistantTranscribeRequest {
+  /** Base64, because this crosses the broker (plan 0041, section 4.2). */
+  audio: string;
+  /** What the browser recorded in. The service refuses what it cannot read. */
+  mimeType: string;
+  /** BCP 47, the same locale a reply would be written in. */
+  locale: string;
+}
+
+/**
+ * What was heard.
+ *
+ * `text` is empty when the provider returned nothing, which is a real answer and
+ * not an error: the caller records that no transcript exists rather than retrying
+ * forever, and the recording is intact either way.
+ */
+export interface AssistantTranscribeResponse {
+  text: string;
+}
 
 /** One entry of the transcript the client holds and resends every turn. */
 export interface AssistantMessage {
@@ -67,6 +124,31 @@ export interface AssistantTurnRequest {
 }
 
 /**
+ * A spoken turn (plan 0041).
+ *
+ * Everything {@link AssistantTurnRequest} carries except `message`, which is the
+ * one thing this request does not have: what the caller said is inside `audio`
+ * and is not known to anybody until the service has transcribed it.
+ *
+ * The recording travels **base64 over the broker**, which is why `max_payload`
+ * is raised to 8 MB in both the compose stack and the chart (section 4.2). The
+ * alternative was a second transport for one service pair, and one transport per
+ * pair is worth more than a third of a megabyte inside the cluster.
+ */
+export interface AssistantVoiceRequest {
+  /** The caller, for the structured turn record (section 10) and nothing else. */
+  userId: string;
+  /** The caller's `Authorization` header, forwarded to the gateway verbatim. */
+  authorization: string;
+  /** The conversation so far, oldest first. Capped by the service on arrival. */
+  transcript: AssistantMessage[];
+  /** The recording, base64 encoded. Capped on arrival, in bytes, not in base64. */
+  audio: string;
+  /** What the browser said it recorded. Checked against a whitelist, then sent on. */
+  mimeType: string;
+}
+
+/**
  * The answer: free form text, plus the references the turn actually earned.
  *
  * `references` is empty for a redirect, a refusal or a turn that called no tool,
@@ -81,4 +163,18 @@ export interface AssistantTurnResponse {
    * own behaviour differs between a write and a question (velista 0032).
    */
   listResolution?: ListResolutionBranch;
+  /**
+   * What the service heard, on a spoken turn only (plan 0041, section 3.1).
+   *
+   * The reason transcription is a call of its own rather than audio dropped into
+   * the tool loop: mishearing is the characteristic failure of a voice interface,
+   * so an answer the caller cannot check against the words it answered is an
+   * answer they cannot check at all. The client puts this in the caller's own
+   * bubble.
+   *
+   * Optional, and absent on every typed turn. A client that receives no `heard`
+   * shows a neutral placeholder rather than inventing the words, because a guess
+   * at what somebody said is worse than saying nothing.
+   */
+  heard?: string;
 }

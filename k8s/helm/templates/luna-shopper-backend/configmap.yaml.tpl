@@ -52,6 +52,23 @@ data:
   # `default` cannot express that, because it would turn an intentional `false`
   # back into `true`.
   METRICS_ENABLED: {{ if hasKey $cfg "metricsEnabled" }}{{ $cfg.metricsEnabled | quote }}{{ else }}"true"{{ end }}
+  # --- Voice comments (plan 0045) -------------------------------------------
+  #
+  # Both the gateway and core receive these two, and the duplication is the design
+  # rather than an oversight: the gateway's copy sets the limit on the multipart
+  # interceptor, which is the only place a byte cap is actually a cap, and core's
+  # copy stops a payload that reached the broker some other way being written to
+  # the database. One ConfigMap key feeds both, so they cannot disagree.
+  #
+  # The content type list is empty by default and falls back to the contract's own
+  # list, which is what browsers actually produce: WebM/Opus from Chrome,
+  # Ogg/Opus from Firefox, MP4/AAC from Safari. Set it only to tighten.
+  VOICE_COMMENT_MAX_BYTES: {{ $cfg.voiceCommentMaxBytes | default 2097152 | quote }}
+  VOICE_COMMENT_CONTENT_TYPES: {{ $cfg.voiceCommentContentTypes | default "" | quote }}
+  # How long the gateway waits for a transcript it is not holding a request open
+  # for. The comment is already stored and playable; this only stops a hung
+  # provider holding a task behind a request that was answered.
+  VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: {{ $cfg.voiceCommentTranscribeTimeoutMs | default 45000 | quote }}
   # --- The harvester (plan 0038) --------------------------------------------
   #
   # Rendered unconditionally, even with `harvester.enabled` false and no harvester
@@ -91,6 +108,23 @@ data:
   # disappoints, and the version numbers do not order those two the way they look.
   GATEWAY_INTERNAL_URL: {{ $assistant.gatewayInternalUrl | default (printf "http://luna-shopper-backend-gateway.%s.svc.cluster.local" .Values.namespace) | quote }}
   ASSISTANT_MODEL: {{ $assistant.model | default "gemini-3.5-flash-lite" | quote }}
+  # Voice input (plan 0041). The transcription model is its own key so a different
+  # model can do that job than answers the turn without a code change; empty means
+  # the same one, which is the default and the only setting anybody has evidence
+  # for yet.
+  ASSISTANT_TRANSCRIPTION_MODEL: {{ $assistant.transcriptionModel | default "" | quote }}
+  # The byte cap on a recording, before base64. The gateway's multipart
+  # interceptor enforces the same number on the upload; this one is applied to
+  # what actually crossed the broker, because a cap the client could have chosen
+  # is not a cap.
+  # `int64` before `quote`, for the same reason the NATS template needs it: Sprig
+  # carries a YAML integer as a float64, so `quote` alone writes 2097152 as
+  # "2.097152e+06" into the ConfigMap.
+  ASSISTANT_AUDIO_MAX_BYTES: {{ $assistant.audioMaxBytes | default 2097152 | int64 | quote }}
+  # Containers this deployment will forward to the provider. A recording in
+  # anything else is refused with a sentence, and the type is named in the log so
+  # somebody can add it here rather than in a stack trace.
+  ASSISTANT_AUDIO_MIME_TYPES: {{ $assistant.audioMimeTypes | default "audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac" | quote }}
   # Caps on the client supplied transcript. The service stores nothing between
   # turns (rule A2), so the whole conversation arrives on every request and is
   # untrusted input: these are applied on arrival, not trusted from the client.

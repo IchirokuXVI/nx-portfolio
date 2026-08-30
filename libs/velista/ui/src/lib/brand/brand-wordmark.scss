@@ -12,9 +12,9 @@
 }
 
 .wordmark__name {
-  // One of the two places the display face is permitted (plan 0002, section 6),
-  // the other being the hero headline on the public home page. It is absent from
-  // every authenticated screen, so the app itself stays on the system stack.
+  // One of the three places the display face is permitted (plan 0002, section 6),
+  // the others being the hero headline on the public home page and a destination
+  // header that stands in for this mark. Every other screen stays on the system stack.
   font-family: var(--app-font-display);
   font-size: var(--app-text-2xl);
   font-weight: 400;

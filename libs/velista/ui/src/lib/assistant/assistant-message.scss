@@ -56,6 +56,15 @@
   opacity: 0.62;
 }
 
+// The caller's own bubble for a spoken turn, before the words come back (backend
+// `0041`, section 8.4). Italic because it is the app describing the message rather
+// than the message itself, which is the one thing that must not be mistaken here: what
+// it holds is a placeholder, and it is about to be replaced by what was actually
+// heard.
+.placeholder {
+  font-style: italic;
+}
+
 // A turn that produced no reply. It is a message like every other one; the border is
 // what marks it, because a red bubble in a column of grey ones reads as an alarm and
 // nothing alarming has happened.

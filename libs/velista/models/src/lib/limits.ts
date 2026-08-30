@@ -53,6 +53,35 @@ export const LINE_QUANTITY_MAX = 100000;
 export const COMMENT_BODY_MAX_LENGTH = 2000;
 
 /**
+ * How long a voice comment may run before the recorder stops itself (plan 0039,
+ * section 2.1).
+ *
+ * Longer than the line composer's ceiling, because a message is longer than a
+ * line: somebody leaving a comment pauses to think, and a minute is enough for
+ * anything that is not really a phone call.
+ *
+ * **The cap stops rather than sends**, which is plan 0032 section 4.4's rule and
+ * holds for the same reason: a message that leaves on its own is a message nobody
+ * agreed to send. The recording stays in the composer and the send button is
+ * there to press.
+ */
+export const VOICE_COMMENT_MAX_SECONDS = 60;
+
+/**
+ * The byte cap the gateway enforces (backend `VOICE_COMMENT_MAX_BYTES`).
+ *
+ * The client's copy is never the authority and a mismatch is a worse message
+ * rather than an open door, which is the same paragraph as the rest of this file.
+ * It is here so somebody sees the limit named in words with the recording still
+ * in the composer, instead of watching an upload fail.
+ *
+ * At the speech grade bitrate the recorder asks for, a minute is roughly 180 KB,
+ * so this is an order of magnitude of headroom rather than a limit anybody meets
+ * by talking.
+ */
+export const VOICE_COMMENT_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
  * How much conversation one turn may carry (backend `0039`, `ASSISTANT_MAX_TURNS` and
  * `ASSISTANT_MAX_CHARS`).
  *
@@ -96,6 +125,47 @@ export const ASSISTANT_MESSAGE_MAX_LENGTH = 2000;
  */
 export const ASSISTANT_ENTRY_MAX_LENGTH = 4000;
 export const ASSISTANT_TRANSCRIPT_MAX_ENTRIES = 100;
+
+/**
+ * What a recording may weigh, in bytes (backend `0041`, sections 4.2 and 5).
+ *
+ * `ASSISTANT_AUDIO_MAX_BYTES`, which the gateway's multipart interceptor enforces and
+ * the assistant applies again to what crossed the broker. The same paragraph as the
+ * rest of this file applies twice over here: **the client's copy is never the
+ * authority**, and a mismatch is a worse panel rather than an open door.
+ *
+ * It is worth having on this side because of what the alternative looks like: a person
+ * who cannot easily type speaks for five minutes, presses stop, waits for an upload,
+ * and is told it was too big. Checked here, the sentence arrives at once and with the
+ * limit in it.
+ *
+ * In practice nothing should ever reach it. `MediaRecorderCapture` records speech at
+ * 24 kbps, so five minutes — the longest recording the panel permits — is roughly
+ * 900 KB, and the limit a person runs into is their own five minutes.
+ */
+export const ASSISTANT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
+
+/** The same number as megabytes, for the sentence that names it. */
+export const ASSISTANT_AUDIO_MAX_MB = 2;
+
+/**
+ * The containers the service will forward to its provider.
+ *
+ * A superset of what `MediaRecorderCapture` asks for, because a browser is free to
+ * ignore the preference and record in something of its own choosing — Safari does
+ * exactly that. Compared against the container alone: `audio/webm;codecs=opus` and
+ * `audio/webm` are the same file, and only one of them is a browser's idea of how to
+ * say so.
+ */
+export const ASSISTANT_AUDIO_MIME_TYPES: readonly string[] = [
+  'audio/webm',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/wav',
+  'audio/mpeg',
+  'audio/aac',
+  'audio/flac',
+];
 
 /**
  * What the list page asks for in one request.

@@ -1,3 +1,4 @@
+import { CommentAudio } from './comment-audio.entity';
 import { LineComment } from './line-comment.entity';
 import { ListAccess } from './list-access.entity';
 import { ListLine } from './list-line.entity';
@@ -8,6 +9,7 @@ import { ZoneMembership } from './zone-membership.entity';
 import { Zone } from './zone.entity';
 
 export { BaseEntity } from './base.entity';
+export { CommentAudio } from './comment-audio.entity';
 export { LineComment } from './line-comment.entity';
 export { ListAccess } from './list-access.entity';
 export { ListLine } from './list-line.entity';
@@ -25,6 +27,7 @@ export const CORE_ENTITIES = [
   ListAccess,
   ListLine,
   LineComment,
+  CommentAudio,
   MergeRequest,
   ProcessedEvent,
 ];

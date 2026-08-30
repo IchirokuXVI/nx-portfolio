@@ -418,6 +418,24 @@ lunaShopperBackend:
     # look.
     model: 'gemini-3.5-flash-lite'
 
+    # Voice input (plan 0041). A spoken turn is transcribed by the provider the
+    # service already holds a credential for, and then runs the identical code a
+    # typed turn runs, so there is no second secret here and nothing new in
+    # provision-release.sh.
+    #
+    # Empty means "the same model that answers the turn", which is the default
+    # and the only setting anybody has evidence for. The key exists so the two can
+    # differ by an env edit if the transcription quality ever asks for it.
+    transcriptionModel: ''
+    # 2 MB, before base64. The gateway's multipart interceptor enforces the same
+    # number on the upload; this one is applied to what actually crossed the
+    # broker, because a cap the client could have chosen is not a cap. It sits
+    # inside `nats.maxPayload` above with deliberate headroom.
+    audioMaxBytes: 2097152
+    # Every one of these is on the provider's own accepted list. The first three
+    # are what browsers actually produce: Chrome webm, Firefox ogg, Safari mp4.
+    audioMimeTypes: 'audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac'
+
     # Caps on the client supplied transcript. The service stores nothing between
     # turns (rule A2), so the whole conversation arrives on every request and is
     # untrusted input.
@@ -600,6 +618,26 @@ lunaShopperBackend:
     image: nats:2.10-alpine
     storageClassName: local-path
     storageSize: 1Gi
+    # The largest message the broker will carry, in bytes (luna plan 0041,
+    # section 4.2; luna plan 0045, section 3). NATS defaults to 1 MB, and a voice
+    # recording base64'd for the gateway -> assistant hop does not fit in one:
+    # 2 MB of audio is about 2.7 MB encoded, and the broker would refuse it at its
+    # own level, which is a failure nothing in the service could report nicely.
+    #
+    # 8 MB rather than just over 3, on purpose. This is a broker wide ceiling that
+    # nothing else here comes close to, and setting it snug against the upload cap
+    # would mean the next change to either number has to move both.
+    #
+    # **A plain integer, and not "8MB".** The template renders it through `int64`
+    # to dodge Sprig's float64 carrying (see `nats.yaml.tpl`), and `int64` applied
+    # to a string like "8MB" would parse as 8 — an eight byte ceiling that refuses
+    # every message the system sends.
+    #
+    # **It is stated here and applied in two places**: this chart's NATS ConfigMap
+    # and `k8s/e2e/luna-shopper-backend/nats.conf`. Raised in one and not the
+    # other is a feature that works on the development machine and fails in the
+    # cluster.
+    maxPayload: 8388608
     # Guaranteed QoS, for the same reason as Postgres above.
     resources:
       requests:

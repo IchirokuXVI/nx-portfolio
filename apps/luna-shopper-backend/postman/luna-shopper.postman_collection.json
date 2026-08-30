@@ -1866,6 +1866,60 @@
           ]
         },
         {
+          "name": "Add units to the line",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lines/{{lineId}}/quantity",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lines",
+                "{{lineId}}",
+                "quantity"
+              ]
+            },
+            "description": "Plan 0040. Adds to what is there without reading it first, so two people adding at once both land. The line stood at 3 after the edit above, so the answer is 5 and it is the server that says so.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delta\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "pm.test('the delta was applied to what was there', function () {",
+                  "  pm.expect(b.quantity).to.eql(5);",
+                  "});",
+                  "pm.test('it is the same line, one version on', function () {",
+                  "  pm.expect(b.id).to.eql(pm.collectionVariables.get('lineId'));",
+                  "  pm.expect(b.version).to.be.above(Number(pm.collectionVariables.get('lineVersion')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Mark it ready",
           "request": {
             "method": "POST",
@@ -2155,6 +2209,65 @@
                   "pm.test('lineCount is 2 and readyCount is 1', function () {",
                   "  pm.expect(l.counts.lineCount).to.eql(2);",
                   "  pm.expect(l.counts.readyCount).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add several lines at once",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines/batch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lists",
+                "{{listId}}",
+                "lines",
+                "batch"
+              ]
+            },
+            "description": "Plan 0040. All or nothing, and the answer is the created lines in request order. Last in the folder because it changes the line count the checks above assert.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"content\": \"Rice\", \"quantity\": 2 },\n    { \"content\": \"Coffee\" }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const b = pm.response.json();",
+                  "pm.test('both lines came back, in request order', function () {",
+                  "  pm.expect(b).to.be.an('array').with.lengthOf(2);",
+                  "  pm.expect(b.map(function (l) { return l.content; })).to.eql(['Rice', 'Coffee']);",
+                  "});",
+                  "pm.test('the quantities are the ones asked for, defaulting to one', function () {",
+                  "  pm.expect(b[0].quantity).to.eql(2);",
+                  "  pm.expect(b[1].quantity).to.eql(1);",
+                  "});",
+                  "pm.test('they landed on consecutive positions, after what was there', function () {",
+                  "  pm.expect(b[1].position).to.be.above(b[0].position);",
                   "});"
                 ]
               }
@@ -3258,7 +3371,177 @@
       "description": "The failure paths. These matter as much as the happy path: a backend that 500s where it should 404 is broken even when every green test passes."
     },
     {
-      "name": "09 · Cleanup",
+      "name": "09 · Assistant",
+      "description": "The assistant, both routes (plan 0039, and plan 0041 for the spoken one).\n\nWith no GEMINI_API_KEY these answer 501 not_configured, and that is a supported deployment rather than a broken one (plan 0026): the pod boots, the health probes pass, and this route says plainly it is not implemented here. So every test below accepts a 501 as a pass, and checks the shape of a real answer only when a key is configured.\n\nThe spoken route is multipart. Postman cannot carry a recording in a checked-in file, so pick any small audio file for the  part: nothing here decodes it, and with no key the request is refused before it would be read anyway.",
+      "item": [
+        {
+          "name": "A typed turn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistant",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assistant"
+              ]
+            },
+            "description": "The transcript is the conversation so far and `message` is what was just said. They are separate fields: the thing being answered must not also appear in the history of the question.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"add milk to the weekly shop\",\n  \"transcript\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 501) {",
+                  "  pm.test('SKIPPED: no GEMINI_API_KEY on this deployment', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('not_configured');",
+                  "  });",
+                  "} else if (pm.response.code === 429) {",
+                  "  pm.test('SKIPPED: the free tier is rate limiting, which rule A5 says is ordinary', function () {",
+                  "    pm.expect(pm.response.json().retryAfterSeconds).to.be.a('number');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "  pm.test('it answered in words, with references it can back up', function () {",
+                  "    pm.expect(pm.response.json().reply).to.be.a('string');",
+                  "    pm.expect(pm.response.json().references).to.be.an('array');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A spoken turn (pick an audio file)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistant/voice",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assistant",
+                "voice"
+              ]
+            },
+            "description": "multipart/form-data: the recording as a file part, the transcript as a JSON string.\n\nDo NOT set Content-Type by hand. Postman writes the boundary itself, and a hand written multipart/form-data header omits it and produces a body the server cannot split.\n\nThe cap is `ASSISTANT_AUDIO_MAX_BYTES` (2 MB by default) and it is enforced by the multipart interceptor, so a larger file is refused here before it reaches the broker.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "audio",
+                  "type": "file",
+                  "src": [],
+                  "description": "Any small recording: webm, ogg, mp4 or wav."
+                },
+                {
+                  "key": "transcript",
+                  "value": "[]",
+                  "type": "text",
+                  "description": "The conversation so far, oldest first, as JSON."
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 400 && !pm.request.body.formdata.find(function (p) { return p.key === 'audio' && p.src && p.src.length; })) {",
+                  "  pm.test('SKIPPED: pick an audio file for the audio part first', function () {",
+                  "    pm.expect(pm.response.code).to.eql(400);",
+                  "  });",
+                  "} else if (pm.response.code === 501) {",
+                  "  pm.test('SKIPPED: no GEMINI_API_KEY on this deployment', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('not_configured');",
+                  "  });",
+                  "} else if (pm.response.code === 429) {",
+                  "  pm.test('SKIPPED: the free tier is rate limiting', function () {",
+                  "    pm.expect(pm.response.json().retryAfterSeconds).to.be.a('number');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "  pm.test('it says what it heard, so the answer can be checked against it', function () {",
+                  "    pm.expect(pm.response.json().heard).to.be.a('string');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A spoken turn with no recording is 400",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assistant/voice",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assistant",
+                "voice"
+              ]
+            },
+            "description": "The interceptor enforces the size of a part that is there; it does not insist one was sent. That is the controller, and it is a 400 rather than an empty buffer travelling to the service to be refused there.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "transcript",
+                  "value": "[]",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 · Cleanup",
       "item": [
         {
           "name": "Delete the second line",

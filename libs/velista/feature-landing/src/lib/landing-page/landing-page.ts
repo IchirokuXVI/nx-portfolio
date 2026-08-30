@@ -16,6 +16,7 @@ import { AccountNotice } from '@portfolio/velista/data-access';
 import { APP_KEY, type PreviewLineVm } from '@portfolio/velista/models';
 import {
   AppBar,
+  AppVersion,
   AuthActions,
   HomeHero,
   ListPreviewCard,
@@ -44,6 +45,7 @@ import {
     RokuTranslatorPipe,
     RouterOutlet,
     AppBar,
+    AppVersion,
     AuthActions,
     HomeHero,
     ListPreviewCard,

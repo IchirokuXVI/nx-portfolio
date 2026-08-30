@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AssistantReferenceKind,
@@ -7,6 +8,7 @@ import {
   ListResolutionBranch,
   UsernamePropagation,
   type AssistantTurnRequest,
+  type AssistantVoiceRequest,
   type LineView,
   type ListView,
   type MyZoneView,
@@ -23,10 +25,15 @@ import {
 } from '../config/app-config';
 import { FakeModelProvider } from '../provider/fake-model.provider';
 import {
+  ModelTurnRole,
   ProviderRateLimitedError,
   type ModelProvider,
 } from '../provider/model-provider';
-import { AssistantService, capTranscript } from './assistant.service';
+import {
+  AssistantService,
+  capTranscript,
+  NOTHING_HEARD,
+} from './assistant.service';
 import {
   GatewayApiClient,
   GatewayApiError,
@@ -94,6 +101,39 @@ class RecordingApi {
     return line('line-new', listId, body.content, body.quantity ?? 1);
   }
 
+  async addLines(
+    caller: ApiCaller,
+    listId: string,
+    items: { content: string; quantity?: number }[]
+  ): Promise<LineView[]> {
+    this.record('addLines', caller, { listId, items });
+    this.throwIfArmed();
+    return items.map((item, index) =>
+      line(`line-new-${index}`, listId, item.content, item.quantity ?? 1)
+    );
+  }
+
+  async addLineQuantity(
+    caller: ApiCaller,
+    lineId: string,
+    delta: number
+  ): Promise<LineView> {
+    this.record('addLineQuantity', caller, { lineId, delta });
+    this.throwIfArmed();
+    // The server's answer, which is the whole point of the route: the count the
+    // bot reports is the one the row holds, not one it worked out (plan 0040,
+    // section 2). This stand in adds the delta to whatever it was told is there.
+    const existing = [...this.linesByList.values()]
+      .flat()
+      .find((row) => row.id === lineId);
+    return line(
+      lineId,
+      existing?.listId ?? 'list-flat',
+      existing?.content ?? 'leche',
+      (existing?.quantity ?? 1) + delta
+    );
+  }
+
   async updateLine(
     caller: ApiCaller,
     lineId: string,
@@ -156,6 +196,9 @@ const CONFIG: AssistantConfig = {
   geminiApiKey: 'not-used-by-the-fake',
   geminiBaseUrl: 'http://provider.invalid',
   model: DEFAULT_ASSISTANT_MODEL,
+  transcriptionModel: DEFAULT_ASSISTANT_MODEL,
+  audioMaxBytes: 2 * 1024 * 1024,
+  audioMimeTypes: ['audio/webm', 'audio/ogg', 'audio/mp4'],
   maxTurns: 20,
   maxChars: 8000,
   maxToolCalls: 6,
@@ -195,6 +238,29 @@ function turnRequest(
   };
 }
 
+/**
+ * A spoken turn, with a recording that is bytes and nothing more (plan 0041).
+ *
+ * **There is no audio fixture in this repository and there does not need to be
+ * one.** Rule A4 forbids reaching a provider, so nothing here ever decodes,
+ * plays or inspects a recording: what the service does with these bytes is count
+ * them, check the container it was told about, and hand them to
+ * {@link FakeModelProvider}. A buffer of zeros exercises every one of those.
+ */
+function voiceRequest(
+  bytes: number,
+  mimeType = 'audio/webm;codecs=opus',
+  transcript: AssistantTurnRequest['transcript'] = []
+): AssistantVoiceRequest {
+  return {
+    userId: 'user-1',
+    authorization: TOKEN,
+    transcript,
+    audio: Buffer.alloc(bytes, 7).toString('base64'),
+    mimeType,
+  };
+}
+
 // ---------------------------------------------------------------------------
 
 describe('AssistantService', () => {
@@ -203,7 +269,9 @@ describe('AssistantService', () => {
       const api = new RecordingApi();
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', { product: 'leche' }),
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+          }),
           FakeModelProvider.says('Hecho, la leche está en Piso.'),
         ]),
         api
@@ -228,7 +296,9 @@ describe('AssistantService', () => {
       );
 
       const provider = new FakeModelProvider([
-        FakeModelProvider.calls('upsert_line', { product: 'leche' }),
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'leche' }],
+        }),
         FakeModelProvider.says('No puedes escribir en esa lista.'),
       ]);
       const service = build(provider, api);
@@ -251,9 +321,8 @@ describe('AssistantService', () => {
       const api = new RecordingApi();
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', {
-            product: 'leche',
-            quantity: 2,
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche', quantity: 2 }],
           }),
           FakeModelProvider.says('Añadida.'),
         ]),
@@ -274,7 +343,7 @@ describe('AssistantService', () => {
           kind: AssistantReferenceKind.LINE,
           zoneId: 'zone-home',
           listId: 'list-flat',
-          lineId: 'line-new',
+          lineId: 'line-new-0',
           label: 'leche',
         },
       ]);
@@ -309,8 +378,8 @@ describe('AssistantService', () => {
 
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', {
-            product: 'leche',
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
             list: 'Lista inventada',
           }),
           FakeModelProvider.says('¿A cuál de las dos?'),
@@ -325,7 +394,7 @@ describe('AssistantService', () => {
           (reference) => reference.kind !== AssistantReferenceKind.LINE
         )
       ).toBe(true);
-      expect(api.of('addLine')).toHaveLength(0);
+      expect(api.of('addLines')).toHaveLength(0);
     });
   });
 
@@ -339,7 +408,9 @@ describe('AssistantService', () => {
 
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', { product: 'leche' }),
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+          }),
           FakeModelProvider.says('¿En Piso o en Playa?'),
         ]),
         api
@@ -348,7 +419,7 @@ describe('AssistantService', () => {
       const response = await service.turn(turnRequest('añade leche'));
 
       expect(response.listResolution).toBe(ListResolutionBranch.ASKED);
-      expect(api.of('addLine')).toHaveLength(0);
+      expect(api.of('addLines')).toHaveLength(0);
       expect(api.of('updateLine')).toHaveLength(0);
     });
 
@@ -356,7 +427,9 @@ describe('AssistantService', () => {
       const api = new RecordingApi();
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', { product: 'leche' }),
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+          }),
           FakeModelProvider.says('Añadida.'),
         ]),
         api
@@ -365,7 +438,7 @@ describe('AssistantService', () => {
       const response = await service.turn(turnRequest('añade leche'));
 
       expect(response.listResolution).toBe(ListResolutionBranch.ONLY_LIST);
-      expect(api.of('addLine')).toHaveLength(1);
+      expect(api.of('addLines')).toHaveLength(1);
     });
 
     it('edits the line already there rather than adding a second one', async () => {
@@ -376,9 +449,8 @@ describe('AssistantService', () => {
 
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', {
-            product: 'leche',
-            quantity: 3,
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche', quantity: 3 }],
           }),
           FakeModelProvider.says('Ahora son tres.'),
         ]),
@@ -387,11 +459,244 @@ describe('AssistantService', () => {
 
       await service.turn(turnRequest('que sean tres leches'));
 
-      expect(api.of('addLine')).toHaveLength(0);
+      expect(api.of('addLines')).toHaveLength(0);
       expect(api.of('updateLine')[0].detail).toMatchObject({
         lineId: 'line-existing',
         quantity: 3,
       });
+    });
+  });
+
+  describe('plan 0040, section 7: a basket in one call', () => {
+    it('writes ten new items with one batch request, not ten', async () => {
+      const api = new RecordingApi();
+      const products = [
+        'leche',
+        'pan',
+        'huevos',
+        'arroz',
+        'aceite',
+        'café',
+        'azúcar',
+        'sal',
+        'té',
+        'harina',
+      ];
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: products.map((product) => ({ product })),
+          }),
+          FakeModelProvider.says('Añadidos los diez.'),
+        ]),
+        api
+      );
+
+      await service.turn(turnRequest('añade ' + products.join(', ')));
+
+      // Two gateway calls for the whole basket: one read of the list, one write.
+      // The read is what decides between an edit and an add and there is no way
+      // around it; the ten writes are the part this plan removes.
+      expect(api.of('addLines')).toHaveLength(1);
+      expect(api.of('addLine')).toHaveLength(0);
+      expect(api.of('listLines')).toHaveLength(1);
+      expect(api.of('addLines')[0].detail['items']).toHaveLength(10);
+    });
+
+    it('completes inside the round cap however the model shaped its reply', async () => {
+      // The wall, not the cost. `maxToolCalls` bounds rounds rather than calls,
+      // so a model emitting ten writes a few at a time used to run out of rounds
+      // and answer "I got stuck" with an unknown number of them written. One call
+      // per list is one round whatever the model does with it.
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }, { product: 'pan' }],
+          }),
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'huevos' }, { product: 'arroz' }],
+          }),
+          FakeModelProvider.says('Listo.'),
+        ]),
+        api,
+        { maxToolCalls: 3 }
+      );
+
+      const response = await service.turn(turnRequest('añade cuatro cosas'));
+
+      expect(response.reply).toBe('Listo.');
+      expect(api.of('addLines')).toHaveLength(2);
+    });
+
+    it("mode 'add' calls the quantity route and never reads then writes", async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-existing', 'list-flat', 'leche', 3),
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'leche', quantity: 2, mode: 'add' }],
+        }),
+        FakeModelProvider.says('Ahora hay cinco.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade dos leches más'));
+
+      expect(api.of('addLineQuantity')[0].detail).toEqual({
+        lineId: 'line-existing',
+        delta: 2,
+      });
+      // Never the read-compute-write it replaces: no absolute quantity is sent,
+      // so there is nothing between a read and a write for a second writer to
+      // land in.
+      expect(api.of('updateLine')).toHaveLength(0);
+      // And the count it reports is the server's, not one it worked out.
+      expect(
+        JSON.stringify(provider.requests[1].turns.at(-1)?.toolResults)
+      ).toContain('5');
+    });
+
+    it('folds the same product named twice into one write', async () => {
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [
+              { product: 'leche', quantity: 2 },
+              { product: 'leche', quantity: 1, mode: 'add' },
+            ],
+          }),
+          FakeModelProvider.says('Tres leches.'),
+        ]),
+        api
+      );
+
+      await service.turn(turnRequest('dos leches, y otra más'));
+
+      // One line, and the quantities folded before anything was written: a second
+      // write would have been computed against a read that predates the first.
+      expect(api.of('addLines')).toHaveLength(1);
+      expect(api.of('addLines')[0].detail['items']).toEqual([
+        { content: 'leche', quantity: 3 },
+      ]);
+    });
+
+    it('writes nothing for a bare mention of something already on the list', async () => {
+      // Section 7.2's defect: the edit this used to send bumped the version, sent
+      // a LineUpdated, quietly reopened a rejected line, and on an approved one
+      // refused a caller without DECIDE for what was in substance a question.
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-existing', 'list-flat', 'leche', 4),
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'leche' }],
+        }),
+        FakeModelProvider.says('Ya hay cuatro.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('pon leche'));
+
+      expect(api.of('updateLine')).toHaveLength(0);
+      expect(api.of('addLineQuantity')).toHaveLength(0);
+      expect(api.of('addLines')).toHaveLength(0);
+      // It reports the count that is there, which is the honest answer and the
+      // one thing the caller actually wanted to know.
+      const result = JSON.stringify(
+        provider.requests[1].turns.at(-1)?.toolResults
+      );
+      expect(result).toContain('unchanged');
+      expect(result).toContain('4');
+    });
+
+    it('reports the items in the order they were said, however they were written', async () => {
+      // The writes are grouped, because the new ones go in one request and the
+      // rest one at a time. The report is not: the model is composing a sentence
+      // about what somebody just said, in the order they said it.
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-existing', 'list-flat', 'pan', 1),
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [
+            { product: 'leche' },
+            { product: 'pan', quantity: 2 },
+            { product: 'huevos' },
+          ],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('leche, dos panes y huevos'));
+
+      const result = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+        .result as { items: { product: string }[] };
+      expect(result.items.map((item) => item.product)).toEqual([
+        'leche',
+        'pan',
+        'huevos',
+      ]);
+    });
+
+    it('records the item count as a field of the turn record', async () => {
+      // Section 7.4: the arguments are an array now, and the question the record
+      // has to answer is whether people ask for one thing or for a basket.
+      const api = new RecordingApi();
+      const logged: string[] = [];
+      jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation((message: unknown) => {
+          logged.push(String(message));
+        });
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }, { product: 'pan' }],
+          }),
+          FakeModelProvider.says('Añadidos.'),
+        ]),
+        api
+      );
+
+      await service.turn(turnRequest('añade leche y pan'));
+
+      const record = logged
+        .map((entry) => JSON.parse(entry) as Record<string, unknown>)
+        .find((entry) => entry['event'] === 'assistant.turn');
+      expect((record?.['tools'] as { items?: number }[])[0].items).toBe(2);
+
+      jest.restoreAllMocks();
+    });
+
+    it('emits a reference for every line it wrote, each from a response', async () => {
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }, { product: 'pan' }],
+          }),
+          FakeModelProvider.says('Añadidos.'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('añade leche y pan'));
+
+      const lineIds = response.references
+        .filter((reference) => reference.kind === AssistantReferenceKind.LINE)
+        .map((reference) => reference.lineId);
+      expect(lineIds).toEqual(['line-new-0', 'line-new-1']);
     });
   });
 
@@ -551,8 +856,12 @@ describe('AssistantService', () => {
 
       await build(provider, api).turn(turnRequest('hola'));
 
+      // Plan 0040 renamed the write and gave it an array; it did not add a tool.
+      // Adding units is not a new capability, it is the write that already
+      // existed reached by different arithmetic, so section 7 of plan 0039 and
+      // its list of what is absent are untouched.
       expect(provider.requests[0].tools.map((tool) => tool.name)).toEqual([
-        'upsert_line',
+        'upsert_lines',
         'query_lists',
         'rename_me',
       ]);
@@ -665,6 +974,296 @@ describe('AssistantService', () => {
     });
   });
 
+  /**
+   * Plan 0041. The claim under test is one sentence: **a spoken turn becomes a
+   * typed turn as early as possible and is indistinguishable after that.**
+   *
+   * Every case below runs against {@link FakeModelProvider}, and no test in this
+   * file sends a byte of audio anywhere (rule A4, which covers a recording
+   * exactly as it covers a prompt).
+   */
+  describe('plan 0041: a spoken turn', () => {
+    it('transcribes, then runs the ordinary turn with what it heard', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider(
+        [FakeModelProvider.says('Añadida.')],
+        ['añade leche']
+      );
+      const service = build(provider, api);
+
+      const answer = await service.voice(voiceRequest(2048));
+
+      expect(provider.transcriptions).toHaveLength(1);
+      expect(provider.requests).toHaveLength(1);
+      // The transcription became the message, and nothing else came with it.
+      const spoken = provider.requests[0];
+      expect(spoken.turns).toEqual([
+        { role: ModelTurnRole.USER, text: 'añade leche' },
+      ]);
+      expect(answer.reply).toBe('Añadida.');
+    });
+
+    it('sends the provider byte for byte what a typed turn sends', async () => {
+      // The central claim, asserted rather than described: the request the loop
+      // makes on a spoken turn is deep equal to the one it makes on the typed
+      // turn with the same words. Any divergence — a marker on the prompt, an
+      // extra turn, a different catalog — fails here.
+      const spokenApi = new RecordingApi();
+      const spokenProvider = new FakeModelProvider(
+        [FakeModelProvider.says('Vale.')],
+        ['añade leche']
+      );
+      await build(spokenProvider, spokenApi).voice(voiceRequest(1024));
+
+      const typedApi = new RecordingApi();
+      const typedProvider = new FakeModelProvider([
+        FakeModelProvider.says('Vale.'),
+      ]);
+      await build(typedProvider, typedApi).turn(turnRequest('añade leche'));
+
+      expect(spokenProvider.requests[0]).toEqual(typedProvider.requests[0]);
+    });
+
+    it('carries the transcription as `heard`, not anything the model replied', async () => {
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider(
+          [FakeModelProvider.says('He añadido leche a la lista.')],
+          ['añade leche']
+        ),
+        api
+      );
+
+      const answer = await service.voice(voiceRequest(1024));
+
+      expect(answer.heard).toBe('añade leche');
+      expect(answer.reply).toBe('He añadido leche a la lista.');
+    });
+
+    it('answers a recording it could not make out without running a turn', async () => {
+      const api = new RecordingApi();
+      // No scripted reply at all: if the loop ran, the fake would throw for
+      // having run out, which is exactly the failure this asserts cannot happen.
+      const provider = new FakeModelProvider([], ['']);
+      const service = build(provider, api);
+
+      const answer = await service.voice(voiceRequest(1024));
+
+      expect(answer.reply).toBe(NOTHING_HEARD);
+      expect(answer.heard).toBe('');
+      expect(provider.requests).toHaveLength(0);
+      // And it cost the gateway nothing either: no context was fetched for a
+      // turn that was never going to run.
+      expect(api.calls).toHaveLength(0);
+    });
+
+    it('answers a rate limit during transcription the way rule A5 says', async () => {
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider([], [new ProviderRateLimitedError('429', 27)]),
+        api
+      );
+
+      const error = await service.voice(voiceRequest(1024)).catch((e) => e);
+
+      // The same problem body, with the same number in it, that a rate limited
+      // typed turn produces. There is one implementation of this and both paths
+      // reach it.
+      expect(isDomainException(error)).toBe(true);
+      expect(error.code).toBe('rate_limited');
+      expect(retryAfterSecondsOf(error)).toBe(27);
+    });
+
+    it('counts a spoken turn as one turn against the local limit', async () => {
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider(
+          [FakeModelProvider.says('uno')],
+          ['hola', 'otra vez']
+        ),
+        api,
+        { turnsPerMinute: 1 }
+      );
+
+      await service.voice(voiceRequest(1024));
+      const error = await service.voice(voiceRequest(1024)).catch((e) => e);
+
+      // Two provider requests, one turn: the budget is the caller's patience and
+      // the deployment's quota, and somebody who spoke asked one question.
+      expect(isDomainException(error)).toBe(true);
+      expect(error.code).toBe('rate_limited');
+    });
+
+    it('refuses a caller who is over the limit before spending a transcription', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider(
+        [FakeModelProvider.says('uno')],
+        ['hola']
+      );
+      const service = build(provider, api, { turnsPerMinute: 1 });
+
+      await service.voice(voiceRequest(1024));
+      await service.voice(voiceRequest(1024)).catch(() => undefined);
+
+      // One transcription, not two. The limiter is taken before the provider is
+      // called, so a refused turn costs the deployment nothing.
+      expect(provider.transcriptions).toHaveLength(1);
+    });
+
+    it('answers not_configured on voice while text keeps working', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider(
+        [FakeModelProvider.says('¡Hola!')],
+        ['hola']
+      );
+      provider.transcriptionSupported = false;
+      const service = build(provider, api);
+
+      const error = await service.voice(voiceRequest(1024)).catch((e) => e);
+
+      expect(isDomainException(error)).toBe(true);
+      expect(error.code).toBe('not_configured');
+      expect(provider.transcriptions).toHaveLength(0);
+
+      // The whole point of the field: this deployment loses the microphone and
+      // keeps the assistant.
+      await expect(service.turn(turnRequest('hola'))).resolves.toMatchObject({
+        reply: '¡Hola!',
+      });
+    });
+
+    it('refuses a recording over the byte cap before calling the provider', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider([], ['never reached']);
+      const service = build(provider, api, { audioMaxBytes: 4096 });
+
+      const error = await service.voice(voiceRequest(8192)).catch((e) => e);
+
+      expect(isDomainException(error)).toBe(true);
+      expect(error.code).toBe('validation_failed');
+      expect(provider.transcriptions).toHaveLength(0);
+    });
+
+    it('says the limit in words, with the number in it', async () => {
+      const api = new RecordingApi();
+      const service = build(new FakeModelProvider([], []), api, {
+        audioMaxBytes: 2 * 1024 * 1024,
+      });
+
+      const error = await service
+        .voice(voiceRequest(3 * 1024 * 1024))
+        .catch((e) => e);
+
+      // The number rides in `messageArgs`, so the localized message the caller
+      // reads carries the limit whatever language they read it in — the same
+      // reason rule A5 puts the seconds in a field rather than in prose.
+      expect(error.messageArgs).toEqual({ limit: '2 MB' });
+      expect(error.message).toContain('2 MB');
+    });
+
+    it('refuses a container it cannot read, and does not name it to the caller', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider([], ['never reached']);
+      const service = build(provider, api);
+
+      const error = await service
+        .voice(voiceRequest(1024, 'audio/x-caf'))
+        .catch((e) => e);
+
+      expect(isDomainException(error)).toBe(true);
+      expect(error.code).toBe('validation_failed');
+      expect(provider.transcriptions).toHaveLength(0);
+      // The type is a fact for whoever has to add that browser's format to the
+      // whitelist. It is nothing at all to the person holding the phone.
+      expect(error.message).not.toContain('audio/x-caf');
+    });
+
+    it('accepts a container whose codec parameters the browser tacked on', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider(
+        [FakeModelProvider.says('Vale.')],
+        ['hola']
+      );
+      const service = build(provider, api);
+
+      // Chrome says `audio/webm;codecs=opus` and Firefox says
+      // `audio/ogg;codecs=opus`. Both are the container the whitelist names.
+      await service.voice(voiceRequest(1024, 'audio/webm;codecs=opus'));
+      expect(provider.transcriptions).toHaveLength(1);
+      // Forwarded as it arrived, parameters and all: the provider is entitled to
+      // the codec hint even though the whitelist ignored it.
+      expect(provider.transcriptions[0].mimeType).toBe(
+        'audio/webm;codecs=opus'
+      );
+    });
+
+    it("transcribes in the caller's own language", async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider(
+        [FakeModelProvider.says('Vale.')],
+        ['añade leche']
+      );
+      const service = build(provider, api);
+
+      await runWithRequestContext({ correlationId: 'c-1', locale: 'es' }, () =>
+        service.voice(voiceRequest(1024))
+      );
+
+      // Ours rather than the browser's, which is one of section 2's reasons for
+      // moving this back to the server at all.
+      expect(provider.transcriptions[0].locale).toBe('es');
+    });
+
+    it('never writes the recording to a log line, at any level', async () => {
+      const api = new RecordingApi();
+      const request = voiceRequest(1024);
+      const service = build(
+        new FakeModelProvider(
+          [FakeModelProvider.says('Vale.')],
+          ['añade leche']
+        ),
+        api
+      );
+
+      const written: string[] = [];
+      const levels = ['log', 'warn', 'error', 'debug', 'verbose'] as const;
+      const spies = levels.map((level) =>
+        jest
+          .spyOn(Logger.prototype, level)
+          .mockImplementation((...args: unknown[]) => {
+            written.push(args.map((arg) => String(arg)).join(' '));
+          })
+      );
+
+      try {
+        await service.voice(request);
+      } finally {
+        spies.forEach((spy) => spy.mockRestore());
+      }
+
+      const everything = written.join('\n');
+      // Not the audio, not a slice of it, and not a hash of it (section 6). The
+      // transcription is what the record carries, on exactly the terms a typed
+      // message already lives in the logs on.
+      expect(everything).not.toContain(request.audio);
+      expect(everything).not.toContain(request.audio.slice(0, 64));
+      expect(everything).toContain('añade leche');
+    });
+
+    it('answers not_configured with no key, before anything else', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider([], ['never reached']);
+      provider.configured = false;
+
+      const error = await build(provider, api)
+        .voice(voiceRequest(1024))
+        .catch((e) => e);
+
+      expect(error.code).toBe('not_configured');
+      expect(provider.transcriptions).toHaveLength(0);
+    });
+  });
+
   describe("section 7: it answers in the caller's language", () => {
     it("names the caller's language to the model", async () => {
       const api = new RecordingApi();
@@ -721,6 +1320,128 @@ describe('capTranscript', () => {
 
   it('accepts an empty transcript, which is the first turn of every conversation', () => {
     expect(capTranscript([], 20, 8000)).toEqual([]);
+  });
+});
+
+/**
+ * Words out of a recording (plan 0041, section 3).
+ *
+ * Rule A4 holds here exactly as above and the fake is the same one: no byte of
+ * audio reaches a provider, and the only audio in this file is a base64 string
+ * nobody decodes into sound.
+ */
+describe('AssistantService.transcribe', () => {
+  const AUDIO = Buffer.from('not really audio').toString('base64');
+
+  it('hands the provider the recording, its type and the locale', async () => {
+    const provider = new FakeModelProvider().willHear('Bring the big one');
+    const service = build(provider, new RecordingApi());
+
+    const heard = await service.transcribe({
+      audio: AUDIO,
+      mimeType: 'audio/webm;codecs=opus',
+      locale: 'es',
+    });
+
+    expect(heard.text).toBe('Bring the big one');
+    expect(provider.transcriptions).toHaveLength(1);
+    // The negotiated type as the browser produced it, parameters and all: the
+    // container is what decides whether this works, and tidying the string here
+    // would only hide the answer.
+    expect(provider.transcriptions[0].mimeType).toBe('audio/webm;codecs=opus');
+    expect(provider.transcriptions[0].locale).toBe('es');
+    expect(Buffer.from(provider.transcriptions[0].audio).toString()).toBe(
+      'not really audio'
+    );
+  });
+
+  it('spends no conversation turn, because leaving a message is not a turn', async () => {
+    // One turn a minute, and three transcriptions. A voice comment must not spend
+    // somebody's assistant quota on a message they left for their flatmate.
+    const provider = new FakeModelProvider().willHear('one', 'two', 'three');
+    const service = build(provider, new RecordingApi(), { turnsPerMinute: 1 });
+
+    for (let i = 0; i < 3; i += 1) {
+      await service.transcribe({
+        audio: AUDIO,
+        mimeType: 'audio/webm',
+        locale: 'en',
+      });
+    }
+
+    expect(provider.transcriptions).toHaveLength(3);
+  });
+
+  it('answers an empty string when the provider heard nothing', async () => {
+    const provider = new FakeModelProvider().willHear('   ');
+    const service = build(provider, new RecordingApi());
+
+    // Not an error: a recording of silence is a real thing somebody uploads, and
+    // the caller records that no transcript exists rather than retrying forever.
+    await expect(
+      service.transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+    ).resolves.toEqual({ text: '' });
+  });
+
+  it('answers not_configured where the deployment has no provider', async () => {
+    const provider = new FakeModelProvider();
+    provider.configured = false;
+    const service = build(provider, new RecordingApi());
+
+    // A statement about the server: nothing the caller changes makes it work, so
+    // the voice comment settles as UNAVAILABLE rather than waiting for a
+    // transcript that is never coming.
+    const error = await service
+      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .catch((thrown: unknown) => thrown);
+
+    expect(isDomainException(error)).toBe(true);
+    expect((error as { code: string }).code).toBe('not_configured');
+  });
+
+  it('answers not_configured where the provider cannot take audio', async () => {
+    const provider = new FakeModelProvider();
+    provider.transcriptionSupported = false;
+    const service = build(provider, new RecordingApi());
+
+    // The distinction the field exists for: a provider that will never transcribe
+    // says so in a field rather than by throwing, so the two are told apart at the
+    // call site rather than guessed at from an error.
+    const error = await service
+      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .catch((thrown: unknown) => thrown);
+
+    expect((error as { code: string }).code).toBe('not_configured');
+  });
+
+  it('carries the retry hint through, so rule A5 needs no second implementation', async () => {
+    const provider = new FakeModelProvider().willHear(
+      new ProviderRateLimitedError('slow down', 27)
+    );
+    const service = build(provider, new RecordingApi());
+
+    const error = await service
+      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .catch((thrown: unknown) => thrown);
+
+    expect(isDomainException(error)).toBe(true);
+    expect(retryAfterSecondsOf(error as never)).toBe(27);
+  });
+
+  it('supplies a number when the provider gave none', async () => {
+    const provider = new FakeModelProvider().willHear(
+      new ProviderRateLimitedError('slow down')
+    );
+    const service = build(provider, new RecordingApi());
+
+    const error = await service
+      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .catch((thrown: unknown) => thrown);
+
+    // Mandatory by the time it reaches the client, whatever the provider said.
+    expect(retryAfterSecondsOf(error as never)).toBe(
+      CONFIG.retryAfterFallbackSeconds
+    );
   });
 });
 

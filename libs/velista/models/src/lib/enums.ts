@@ -88,6 +88,28 @@ export type ListPermission = (typeof LIST_PERMISSIONS)[number];
 /** Where a line has got to on the shopping trip. Unknown reads as not yet done. */
 export const LINE_STATUSES = ['PENDING', 'READY', 'NOT_AVAILABLE'] as const;
 export type LineStatus = (typeof LINE_STATUSES)[number];
+
+/**
+ * How far a voice comment's transcript got (backend plan 0045, section 4.2).
+ *
+ * Four states rather than an empty body, because "nobody has transcribed this yet" and
+ * "nothing could be transcribed from it" look identical on screen for about three
+ * seconds and completely different after a minute, and there is nothing to poll that
+ * would tell them apart.
+ *
+ * `FAILED` is the fallback for a state this build has never heard of, and it is the
+ * safe direction: the row draws the neutral phrase and the player, and the recording
+ * is the message either way. Reading an unknown state as `PENDING` would leave
+ * somebody watching a spinner that resolves on no event.
+ */
+export const COMMENT_TRANSCRIPTIONS = [
+  'PENDING',
+  'READY',
+  'FAILED',
+  'UNAVAILABLE',
+] as const;
+export type CommentTranscription = (typeof COMMENT_TRANSCRIPTIONS)[number];
+export const COMMENT_TRANSCRIPTION_FALLBACK: CommentTranscription = 'FAILED';
 export const LINE_STATUS_FALLBACK: LineStatus = 'PENDING';
 
 /** Whether a suggested line has been accepted. Unknown reads as still awaiting. */

@@ -81,4 +81,12 @@
       <p class="note">{{ 'install.note' | rokuT }}</p>
     }
   }
+
+  <!--
+    Outside both branches on purpose. The `elsewhere` screen is the portfolio's mounted
+    copy and the other is the app on its own origin, and telling the two apart by build
+    is exactly the question somebody has when an install did not take: they are two
+    different bundles, and both of them have to say which one they are.
+  -->
+  <lib-app-version />
 </main>

@@ -7,6 +7,7 @@ interface Options {
   readonly signedIn?: boolean;
   readonly locale?: string;
   readonly locales?: readonly string[];
+  readonly connected?: boolean;
 }
 
 async function render(
@@ -21,6 +22,7 @@ async function render(
   fixture.componentRef.setInput('signedIn', options.signedIn ?? false);
   fixture.componentRef.setInput('locale', options.locale ?? 'EN');
   fixture.componentRef.setInput('locales', options.locales ?? ['en', 'es']);
+  fixture.componentRef.setInput('connected', options.connected ?? true);
   fixture.detectChanges();
 
   return fixture;
@@ -86,6 +88,42 @@ describe('AppBar', () => {
       const fixture = await render({ signedIn: true });
 
       expect(host(fixture).querySelectorAll('.icon-button')).toHaveLength(2);
+    });
+  });
+
+  describe('the offline mark', () => {
+    it('is absent while the connection is up', async () => {
+      const fixture = await render({ signedIn: true, connected: true });
+
+      expect(host(fixture).querySelector('.offline-mark')).toBeNull();
+    });
+
+    it('is drawn, and named, when the connection is down', async () => {
+      // Plan 0035, section 5.3. Until this, a dead socket had one symptom in the whole
+      // app and it was on one screen, so somebody on the dashboard had no way to know
+      // that nothing in front of them would ever change again.
+      const fixture = await render({ signedIn: true, connected: false });
+
+      const mark = host(fixture).querySelector('.offline-mark');
+      expect(mark).not.toBeNull();
+      expect(mark?.getAttribute('aria-label')).toBe('connection.notLive');
+    });
+
+    it('is not a control', async () => {
+      // It reports a state and there is nowhere for it to lead, and a button that
+      // leads nowhere is worse than no button.
+      const fixture = await render({ signedIn: true, connected: false });
+
+      expect(host(fixture).querySelector('.offline-mark button')).toBeNull();
+      expect(host(fixture).querySelectorAll('.icon-button')).toHaveLength(2);
+    });
+
+    it('stays off the anonymous header', async () => {
+      // R1 opens no socket at all while anonymous, so a mark there would be
+      // permanently on and would mean nothing.
+      const fixture = await render({ signedIn: false, connected: false });
+
+      expect(host(fixture).querySelector('.offline-mark')).toBeNull();
     });
   });
 

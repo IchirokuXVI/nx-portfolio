@@ -1,4 +1,5 @@
 import type {
+  CommentTranscription,
   LineApprovalStatus,
   LineStatus,
   ListPermission,
@@ -21,7 +22,9 @@ export const LIST_PATTERNS = {
 
 export const LINE_PATTERNS = {
   add: 'line.add',
+  addMany: 'line.addMany',
   update: 'line.update',
+  addQuantity: 'line.addQuantity',
   setApproval: 'line.setApproval',
   setStatus: 'line.setStatus',
   reorder: 'line.reorder',
@@ -29,9 +32,47 @@ export const LINE_PATTERNS = {
   list: 'line.list',
 } as const;
 
+/**
+ * The bounds a line's quantity has to satisfy, stated once (plan 0040, section
+ * 3.5).
+ *
+ * The ceiling used to live only in the gateway DTO, which was survivable while
+ * every write carried an absolute value the gateway had already checked. A delta
+ * is computed **inside core**, so core is now the only place that can check the
+ * result, and a bound written in two files is a bound that disagrees with itself
+ * the first time one of them moves.
+ */
+export const LINE_QUANTITY_MIN = 1;
+export const LINE_QUANTITY_MAX = 100000;
+
+/**
+ * How many lines one `line.addMany` may carry (plan 0040, section 6.1).
+ *
+ * A bound rather than a budget: fifty is well past any spoken sentence and past
+ * any plausible paste, and its job is to stop one request writing an unbounded
+ * number of rows.
+ */
+export const LINE_BATCH_MAX_ITEMS = 50;
+
 export const COMMENT_PATTERNS = {
   add: 'comment.add',
   list: 'comment.list',
+  /**
+   * A comment that is a recording (plan 0045). Its own subject rather than a
+   * second shape on `comment.add`, for the reason section 3 gives about the
+   * route: the typed path is the busiest write in the product and it is left
+   * untouched.
+   */
+  addVoice: 'comment.addVoice',
+  /** The bytes back, gated on `READ` of the comment's list (plan 0045, section 5). */
+  getAudio: 'comment.getAudio',
+  /**
+   * The transcript, once the assistant has produced one (plan 0045, section 4.1).
+   *
+   * Called by the gateway after it has already answered the caller, which is what
+   * makes a provider outage cost a transcript and never a message.
+   */
+  setTranscription: 'comment.setTranscription',
 } as const;
 
 /** The counts shown alongside a full list (plan 0017, section 3.4). */
@@ -58,6 +99,17 @@ export interface ListView {
    * `MANAGE`, and it governs only what a **new** line starts as.
    */
   autoApproveLines: boolean;
+  /**
+   * Whether every approved member of the zone may use this list, including
+   * people who join later (plan 0042, section 2.1).
+   *
+   * State on the list rather than the one time action `shareWithZone` used to
+   * be. `create` stores it, `update` may change it with `MANAGE`, and it is what
+   * the approval path reads to decide what a new member is granted. Turning it
+   * off revokes nobody: it governs who arrives next, and removing one person is
+   * a row in the share sheet (section 2.2).
+   */
+  sharedWithZone: boolean;
   /**
    * What the **caller** may do on this list (plan 0036, section 7), including the
    * derived grant a zone OWNER or ADMIN holds on every list in the zone.
@@ -111,12 +163,52 @@ export interface LineView {
   updatedAt: string;
 }
 
+/**
+ * What a recording on a comment weighs and how long it runs (plan 0045).
+ *
+ * It lives on the comment and not on the audio row, so a comment listing can draw
+ * a player without the bytes ever entering the query: the whole point of keeping
+ * `comment_audio` in its own table (section 2).
+ */
+export interface CommentRecording {
+  /** What the browser recorded in, from the accepted list. */
+  contentType: string;
+  /** The stored size. The only number anything enforces on. */
+  byteLength: number;
+  /**
+   * What the client said it lasts, or null when it said nothing.
+   *
+   * **Never trusted** (section 6). It is metadata for drawing a row before the
+   * file is fetched; nothing authorizes on it and nothing rejects on it.
+   */
+  durationSeconds: number | null;
+}
+
 export interface CommentView {
   id: string;
   lineId: string;
   authorUserId: string;
+  /**
+   * The comment's text, which for a voice comment is its transcript.
+   *
+   * **It can be empty**, which every reader has to hold (plan 0045, section 4.2):
+   * a comment whose transcription failed is a valid comment, and the client draws
+   * a neutral phrase in its place rather than an empty bubble.
+   */
   body: string;
+  /** The recording, when this comment is one. Null for a typed comment. */
+  recording: CommentRecording | null;
+  /** How far the transcript got. Null for a typed comment, which has no transcript. */
+  transcription: CommentTranscription | null;
   createdAt: string;
+}
+
+/** The bytes, base64 encoded for the broker (plan 0045, section 3). */
+export interface CommentAudioView {
+  commentId: string;
+  contentType: string;
+  /** Base64. It is decoded once, at the gateway, on the way to the caller. */
+  audio: string;
 }
 
 export interface CreateListRequest {
@@ -147,6 +239,15 @@ export interface UpdateListRequest {
   name?: string;
   /** Turn approval on a new line on or off (plan 0037, section 3). `MANAGE`. */
   autoApproveLines?: boolean;
+  /**
+   * Open the list to its zone, or stop opening it (plan 0042, section 2.1).
+   * `MANAGE`.
+   *
+   * Turning it **on** grants `{READ, WRITE, DECIDE}` to every currently approved
+   * non staff member, exactly as creation does, widening rather than replacing
+   * what anybody already holds. Turning it **off** revokes nobody.
+   */
+  sharedWithZone?: boolean;
 }
 
 /** Read a list's stored access table (plan 0036, section 6). `MANAGE` only. */
@@ -194,6 +295,37 @@ export interface AddLineRequest {
   itemId?: string | null;
 }
 
+/** One line of a {@link AddLinesRequest} batch (plan 0040, section 6.5). */
+export interface AddLinesItem {
+  content: string;
+  quantity?: number;
+  /** The same optional catalog Item reference {@link AddLineRequest} carries. */
+  itemId?: string | null;
+}
+
+/**
+ * Add up to {@link LINE_BATCH_MAX_ITEMS} lines in one transaction (plan 0040,
+ * section 6).
+ *
+ * **All or nothing**, and the response is the created lines in request order.
+ * Nothing that can fail for one item can succeed for its neighbour: access is a
+ * property of the list and the caller, the approval rules are a property of their
+ * permissions and the list's `autoApproveLines`, and the per item bounds have
+ * already produced a 400 for the whole request at the gateway. So a per item
+ * result envelope would be a new response idiom describing a partial failure the
+ * design cannot produce.
+ *
+ * **It adds, and it does not merge** (section 6.3). Two items naming the same
+ * thing produce two lines: merging is a decision about a person's intention, and
+ * the caller pasting a list may well have meant two entries. The upsert rule
+ * belongs to the assistant, which is where it lives.
+ */
+export interface AddLinesRequest {
+  userId: string;
+  listId: string;
+  items: AddLinesItem[];
+}
+
 export interface UpdateLineRequest {
   userId: string;
   lineId: string;
@@ -201,6 +333,28 @@ export interface UpdateLineRequest {
   quantity?: number;
   /** Set/clear the optional catalog Item reference (plan 0012). `null` clears it. */
   itemId?: string | null;
+}
+
+/**
+ * Add units to a line, or take them off, without reading it first (plan 0040,
+ * section 3).
+ *
+ * `delta` is a non zero integer and the **resulting** quantity is what
+ * {@link LINE_QUANTITY_MIN} and {@link LINE_QUANTITY_MAX} apply to. It is
+ * arithmetic in front of the edit that already exists, so it introduces no new
+ * permission, no new transition and no new event: an approved line's quantity
+ * still moves only for a caller holding `DECIDE`, adding to a rejected line still
+ * returns it to `PENDING`, and a negative delta on an approved line still splits
+ * the remainder exactly as an absolute lowering does.
+ *
+ * A negative delta is allowed on purpose (section 3.3). Refusing one would leave
+ * "one less" as the single thing a caller still has to do with a read and a
+ * write, which is precisely the lost update this message exists to remove.
+ */
+export interface AddLineQuantityRequest {
+  userId: string;
+  lineId: string;
+  delta: number;
 }
 
 export interface SetLineApprovalRequest {
@@ -240,6 +394,90 @@ export interface AddCommentRequest {
 export interface ListCommentsRequest extends PageQuery {
   userId: string;
   lineId: string;
+}
+
+/**
+ * Leave a comment that is a recording (plan 0045, section 4).
+ *
+ * There is no `body`: the transcript arrives later through
+ * {@link COMMENT_PATTERNS.setTranscription}, and a comment with no body is a
+ * valid comment in the meantime. Sending a guess at the words here would be the
+ * one thing section 4 forbids.
+ */
+export interface AddVoiceCommentRequest {
+  userId: string;
+  lineId: string;
+  /** Base64, because this crosses the broker (plan 0041, section 4.2). */
+  audio: string;
+  contentType: string;
+  /** What the client claims it lasts, or null. Metadata only (section 6). */
+  durationSeconds: number | null;
+}
+
+export interface GetCommentAudioRequest {
+  userId: string;
+  commentId: string;
+}
+
+/**
+ * Fill in a voice comment's transcript, or record that it has none.
+ *
+ * `userId` is the comment's author and core checks it, so this cannot be used to
+ * write words into somebody else's message even from inside the cluster. It only
+ * ever moves a comment out of {@link CommentTranscription.PENDING}: a second call
+ * on a settled comment changes nothing, which makes the gateway's retry safe.
+ */
+export interface SetCommentTranscriptionRequest {
+  userId: string;
+  commentId: string;
+  /** Empty for every state but {@link CommentTranscription.READY}. */
+  body: string;
+  transcription: CommentTranscription;
+}
+
+/**
+ * What a deployment accepts for a voice comment, unless its configuration says
+ * otherwise (plan 0045, section 6; plan 0041, section 3.3).
+ *
+ * These are the defaults and the single place the numbers are written down; the
+ * gateway and core both read their own configuration and fall back to here, so a
+ * deployment can tighten them and neither service can hold a different idea of
+ * what the other enforces.
+ *
+ * The list is what browsers actually produce through `MediaRecorder` (Chrome
+ * gives WebM/Opus and will not negotiate Ogg, Firefox gives Ogg/Opus, Safari
+ * gives MP4/AAC) plus the plain containers a provider documents. Anything else is
+ * refused with a sentence rather than a stack trace, because "your browser
+ * recorded in a format we cannot read" is a real thing that happens on some
+ * device nobody tested.
+ *
+ * Parameters are stripped before the check, so `audio/webm;codecs=opus` is
+ * `audio/webm`. The codec inside the container is not something this layer can
+ * verify from a header anyway, so matching on it would be theatre.
+ */
+export const VOICE_COMMENT_CONTENT_TYPES: readonly string[] = [
+  'audio/webm',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/aac',
+  'audio/flac',
+] as const;
+
+/**
+ * The byte cap, matching plan 0041's ceiling so one number governs both voice
+ * features. Speech grade Opus is roughly two kilobytes a second, so this is a
+ * long way past the sixty seconds velista 0039 lets somebody record.
+ *
+ * Enforced twice, at the multipart interceptor and again in core, for plan 0041
+ * section 5's reason: a cap that is not on the interceptor is not a cap.
+ */
+export const VOICE_COMMENT_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Normalises a content type for the allowlist check: lowercase, no parameters. */
+export function baseContentType(value: string): string {
+  return (value.split(';')[0] ?? '').trim().toLowerCase();
 }
 
 export type ListPage = Paginated<ListView>;

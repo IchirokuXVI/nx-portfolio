@@ -562,6 +562,17 @@ export class ListPage {
   }
 
   /**
+   * Whether the live connection is up, for the app bar's offline mark (plan 0035,
+   * section 5.3).
+   *
+   * The header's own `live` is **not** this: that one is about this list, and it is
+   * false when the zone room was refused while the socket is perfectly fine. The mark
+   * is about the connection and the notice is about the screen, so both are drawn and
+   * neither is a duplicate of the other.
+   */
+  readonly connected = this._realtime.connected;
+
+  /**
    * The letter in the app bar's account button.
    *
    * Unbound on this screen until plan 0015, so the button drew its neutral glyph on the

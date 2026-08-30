@@ -14,11 +14,13 @@ import {
 import {
   AUTH_SERVICE,
   ProfileStore,
+  REALTIME_CLIENT,
   SessionStore,
   TokenStore,
   VERIFY_RESEND_AVAILABLE,
   ZoneStore,
   type AuthServiceI,
+  type RealtimeClientI,
   type ResendOutcome,
 } from '@portfolio/velista/data-access';
 import {
@@ -35,6 +37,7 @@ import {
 import {
   AccountRow,
   AppBar,
+  AppVersion,
   ChevronLeftIcon,
   ResendSentence,
   SectionHeading,
@@ -94,6 +97,7 @@ import { RenameAnnouncement } from '../rename-announcement';
     RouterOutlet,
     AccountRow,
     AppBar,
+    AppVersion,
     ChevronLeftIcon,
     ResendSentence,
     SectionHeading,
@@ -106,6 +110,12 @@ export class AccountPage {
   private readonly _session = inject(SessionStore);
   private readonly _profile = inject(ProfileStore);
   private readonly _zones = inject(ZoneStore);
+  /**
+   * For the app bar's offline mark and nothing else (plan 0035, section 5.3). This
+   * screen subscribes to no room and applies no event; it draws the bar, so it answers
+   * the one question the bar asks.
+   */
+  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _tokens = inject(TokenStore);
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
   private readonly _router = inject(Router);
@@ -201,6 +211,9 @@ export class AccountPage {
   readonly appRow = computed<'elsewhere' | 'ready' | 'manual' | 'installed'>(
     () => (this._basePath === '' ? this._install.state() : 'elsewhere')
   );
+
+  /** Whether the live connection is up, for the app bar's offline mark. */
+  readonly connected = this._realtime.connected;
 
   /** The letter in the app bar, which changes the moment a rename lands (rule A2). */
   readonly accountInitial = computed(() => {

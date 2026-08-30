@@ -1,4 +1,7 @@
 import {
+  LINE_BATCH_MAX_ITEMS,
+  LINE_QUANTITY_MAX,
+  LINE_QUANTITY_MIN,
   LineApprovalStatus,
   LineStatus,
   ListResolutionBranch,
@@ -57,32 +60,66 @@ export interface AssistantTool {
 }
 
 // ---------------------------------------------------------------------------
-// 6.1 upsert_line
+// 6.1 upsert_lines (plan 0040, section 7)
 // ---------------------------------------------------------------------------
 
-const upsertLine: AssistantTool = {
+/** How an item's quantity is meant (plan 0040, section 7.2). */
+type UpsertMode = 'set' | 'add';
+
+/** One item of an `upsert_lines` call, after its arguments have been read. */
+interface UpsertItem {
+  product: string;
+  mode: UpsertMode;
+  /**
+   * Absent only for `set`, and it means the caller named no number. That is not
+   * the same as one: on a line that already exists it is what makes the call
+   * write nothing at all (section 7.2).
+   */
+  quantity: number | undefined;
+}
+
+const upsertLines: AssistantTool = {
   declaration: {
-    name: 'upsert_line',
+    name: 'upsert_lines',
     description:
-      "Add something to one of this person's shopping lists, or change the quantity of something already on it. Use it whenever they ask for something to be put on a list. Give the product exactly as they said it. Only name a list or a zone that appears in the context you were given; if they did not say which list and the context does not make it obvious, call this anyway with no list and you will be told to ask.",
+      "Put things on one of this person's shopping lists, or change how many of something is on it. Use it whenever they ask for something to be added. Pass every product they named in one call: ten things is one call with ten items, never ten calls. Give each product exactly as they said it, without the quantity. Only name a list or a zone that appears in the context you were given; if they did not say which list and the context does not make it obvious, call this anyway with no list and you will be told to ask.",
     parameters: {
       type: 'object',
       properties: {
-        product: {
-          type: 'string',
-          description:
-            "The thing to buy, in this person's own words, without the quantity.",
-        },
-        quantity: {
-          type: 'integer',
-          minimum: 1,
-          maximum: 100000,
-          description: 'How many. Omit when they did not say.',
+        items: {
+          type: 'array',
+          minItems: 1,
+          maxItems: LINE_BATCH_MAX_ITEMS,
+          description: 'Everything they asked for, in the order they said it.',
+          items: {
+            type: 'object',
+            properties: {
+              product: {
+                type: 'string',
+                description:
+                  "The thing to buy, in this person's own words, without the quantity.",
+              },
+              quantity: {
+                type: 'integer',
+                minimum: LINE_QUANTITY_MIN,
+                maximum: LINE_QUANTITY_MAX,
+                description:
+                  'How many. Omit when they did not say. With mode "add" it is how many to add, and omitting it means one more.',
+              },
+              mode: {
+                type: 'string',
+                enum: ['set', 'add'],
+                description:
+                  '"set" is the default and means the list should end up with this many. Send "add" when they asked for more of something on top of what is already there: "two more", "another", "a couple extra". Never work out the new total yourself.',
+              },
+            },
+            required: ['product'],
+          },
         },
         list: {
           type: 'string',
           description:
-            'The name of the list, exactly as it appears in the context. Omit when they did not name one.',
+            'The name of the list, exactly as it appears in the context. Omit when they did not name one. Everything in one call goes on the same list; two lists is two calls.',
         },
         zone: {
           type: 'string',
@@ -90,16 +127,21 @@ const upsertLine: AssistantTool = {
             'The name of the zone, when they named one and it narrows which list is meant.',
         },
       },
-      required: ['product'],
+      required: ['items'],
     },
   },
 
   async execute(args, runtime) {
-    const product = readString(args['product']);
-    if (!product) {
-      return { ok: false, problem: 'no product was given' };
+    const items = foldDuplicates(readItems(args['items']));
+    if (items.length === 0) {
+      return { ok: false, problem: 'no products were given' };
     }
 
+    // One list per call, still (section 7.1). List resolution runs once, so the
+    // branch recorded for the turn stays one branch per call and keeps meaning
+    // what it meant. "Milk on the flat list and bread on the office list" is two
+    // calls, which is correct: they are two decisions about which list, and each
+    // deserves its own record and its own chance to ask.
     const resolution = resolveList({
       named: readString(args['list']),
       zone: readString(args['zone']),
@@ -126,44 +168,122 @@ const upsertLine: AssistantTool = {
     }
 
     const list = resolution.list;
-    const quantity = readQuantity(args['quantity']);
 
+    let lines: LineView[];
     try {
-      // Edit before add, which is what makes this an upsert: asking for milk
-      // twice should change a number, not leave two milks on the list.
-      const existing = findSameProduct(
-        await runtime.context.lines(list.listId),
-        product
-      );
-
-      const line = existing
-        ? await runtime.api.updateLine(runtime.context.caller, existing.id, {
-            content: product,
-            ...(quantity !== undefined ? { quantity } : {}),
-          })
-        : await runtime.api.addLine(runtime.context.caller, list.listId, {
-            content: product,
-            ...(quantity !== undefined ? { quantity } : {}),
-          });
-
-      runtime.context.invalidate(list.listId);
-      runtime.references.line(list, line.id, line.content);
-
-      return {
-        ok: true,
-        action: existing ? 'updated' : 'added',
-        product: line.content,
-        quantity: line.quantity,
-        list: list.listName,
-        zone: list.zoneName,
-        // Plan 0037: a list may hold new lines pending somebody's approval, and
-        // the person who asked deserves to be told their milk is waiting rather
-        // than to find out in the shop.
-        awaitingApproval: line.approvalStatus === LineApprovalStatus.PENDING,
-      };
+      // One read for the whole call, which is the other half of what folding the
+      // duplicates buys: a second write computed against a cache that predates
+      // the first is the lost update of section 2, reappearing inside one call.
+      lines = await runtime.context.lines(list.listId);
     } catch (error) {
-      return refused(error, 'add that to the list');
+      return refused(error, 'read that list');
     }
+
+    const planned = items.map((item, index) => ({
+      item,
+      index,
+      existing: findSameProduct(lines, item.product),
+    }));
+
+    // One slot per item, filled by index rather than appended, so the report
+    // comes back in the order the person said things even though the writes are
+    // grouped: the new ones go in one request and the rest one at a time.
+    const results: (ItemResult | undefined)[] = new Array(planned.length);
+    let firstFailure: unknown;
+    let wrote = false;
+
+    const fresh = planned.filter((entry) => !entry.existing);
+    if (fresh.length > 0) {
+      try {
+        const added = await runtime.api.addLines(
+          runtime.context.caller,
+          list.listId,
+          fresh.map((entry) => ({
+            content: entry.item.product,
+            ...(entry.item.quantity !== undefined
+              ? { quantity: entry.item.quantity }
+              : {}),
+          }))
+        );
+        wrote = true;
+        // The batch answers in request order, which is what lets a line be put
+        // back against the item that asked for it.
+        added.forEach((line, position) => {
+          runtime.references.line(list, line.id, line.content);
+          results[fresh[position].index] = describeLine('added', line);
+        });
+      } catch (error) {
+        firstFailure = error;
+        for (const entry of fresh) {
+          results[entry.index] = itemRefused(entry.item.product, error);
+        }
+      }
+    }
+
+    for (const entry of planned) {
+      const existing = entry.existing;
+      if (!existing) {
+        continue;
+      }
+      const { product, mode, quantity } = entry.item;
+
+      // Naming something already on the list with no number asks for nothing, so
+      // nothing is written (section 7.2). The edit this used to send was not
+      // harmless: it bumped the version, sent a `LineUpdated`, quietly returned a
+      // **rejected** line to `PENDING`, and on an **approved** line refused a
+      // caller without `DECIDE` outright. Somebody mentioning milk a second time
+      // was told they were not allowed to do something they never meant to do.
+      if (mode === 'set' && quantity === undefined) {
+        runtime.references.line(list, existing.id, existing.content);
+        results[entry.index] = describeLine('unchanged', existing);
+        continue;
+      }
+
+      try {
+        const line =
+          mode === 'add'
+            ? await runtime.api.addLineQuantity(
+                runtime.context.caller,
+                existing.id,
+                quantity ?? 1
+              )
+            : await runtime.api.updateLine(
+                runtime.context.caller,
+                existing.id,
+                { content: product, quantity }
+              );
+        wrote = true;
+        runtime.references.line(list, line.id, line.content);
+        results[entry.index] = describeLine(
+          mode === 'add' ? 'increased' : 'updated',
+          line
+        );
+      } catch (error) {
+        firstFailure ??= error;
+        results[entry.index] = itemRefused(product, error);
+      }
+    }
+
+    // One invalidation for the call rather than one per write, so a later read in
+    // the same turn is true and the list was not re-fetched between two writes
+    // that were decided together.
+    if (wrote) {
+      runtime.context.invalidate(list.listId);
+    } else if (firstFailure !== undefined) {
+      // Nothing was written and something was refused, so the call refused: the
+      // API's own localized sentence is the answer, not a per item envelope
+      // describing a partial success that did not happen.
+      return refused(firstFailure, 'add that to the list');
+    }
+
+    return {
+      ok: true,
+      list: list.listName,
+      zone: list.zoneName,
+      items: results.filter(
+        (result): result is ItemResult => result !== undefined
+      ),
+    };
   },
 };
 
@@ -354,7 +474,7 @@ const renameMe: AssistantTool = {
 };
 
 export const ASSISTANT_TOOLS: AssistantTool[] = [
-  upsertLine,
+  upsertLines,
   queryLists,
   renameMe,
 ];
@@ -370,6 +490,115 @@ export function findTool(name: string): AssistantTool | undefined {
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
+
+/** What one item of an `upsert_lines` call ended up doing. */
+interface ItemResult {
+  product: string;
+  action?: 'added' | 'updated' | 'increased' | 'unchanged';
+  quantity?: number;
+  awaitingApproval?: boolean;
+  refused?: true;
+  reason?: string;
+}
+
+/**
+ * What a line says after the write, reported rather than computed.
+ *
+ * `quantity` is the server's number in every case, including `added_to`, which is
+ * the point of the quantity route: the bot says five because the server said
+ * five, not because it decided five (plan 0040, section 2).
+ */
+function describeLine(
+  action: NonNullable<ItemResult['action']>,
+  line: LineView
+): ItemResult {
+  return {
+    product: line.content,
+    action,
+    quantity: line.quantity,
+    // Plan 0037: a list may hold new lines pending somebody's approval, and the
+    // person who asked deserves to be told their milk is waiting rather than to
+    // find out in the shop.
+    awaitingApproval: line.approvalStatus === LineApprovalStatus.PENDING,
+  };
+}
+
+function itemRefused(product: string, error: unknown): ItemResult {
+  const { reason } = refused(error, 'that');
+  return { product, refused: true, reason };
+}
+
+/** The items of a call, dropping anything that does not name a product. */
+function readItems(value: unknown): UpsertItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const items: UpsertItem[] = [];
+  for (const entry of value) {
+    const bag = (entry ?? {}) as Record<string, unknown>;
+    const product = readString(bag['product']);
+    if (!product) {
+      continue;
+    }
+    const mode: UpsertMode = bag['mode'] === 'add' ? 'add' : 'set';
+    const quantity = readQuantity(bag['quantity']);
+    // "Another" carries no number, and for an addition that means one more. For
+    // `set` the absence is meaningful and is kept.
+    items.push({
+      product,
+      mode,
+      quantity: mode === 'add' ? (quantity ?? 1) : quantity,
+    });
+  }
+  return items;
+}
+
+/**
+ * Two items naming the same product become one (plan 0040, section 7.3).
+ *
+ * The lines are read once for the whole call, so a second write would otherwise
+ * be computed against a cache that predates the first, which is the lost update
+ * of section 2 reappearing inside a single tool call.
+ *
+ * Folded in the order they were said, so a later instruction refines an earlier
+ * one: a `set` with a number supersedes everything before it, an `add` sums onto
+ * whatever the fold is holding, and a `set` with no number asks for nothing
+ * beyond what its neighbours already ask for and drops out.
+ */
+function foldDuplicates(items: UpsertItem[]): UpsertItem[] {
+  const folded: UpsertItem[] = [];
+  const at = new Map<string, number>();
+
+  for (const item of items) {
+    const key = normalize(item.product);
+    const index = at.get(key);
+    if (index === undefined) {
+      at.set(key, folded.length);
+      folded.push({ ...item });
+      continue;
+    }
+
+    const held = folded[index];
+    if (item.mode === 'set') {
+      if (item.quantity !== undefined) {
+        folded[index] = { ...item };
+      }
+      continue;
+    }
+    if (held.mode === 'set' && held.quantity !== undefined) {
+      held.quantity += item.quantity ?? 1;
+      continue;
+    }
+    folded[index] = {
+      product: held.product,
+      mode: 'add',
+      quantity:
+        (held.mode === 'add' ? (held.quantity ?? 1) : 0) + (item.quantity ?? 1),
+    };
+  }
+
+  return folded;
+}
 
 function describeList(list: ContextList): { list: string; zone: string } {
   return { list: list.listName, zone: list.zoneName };

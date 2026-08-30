@@ -80,6 +80,20 @@ export const THROTTLE_LIMITS = {
    * hour leaves ordinary editing untouched and makes that loop impractical.
    */
   usernameChange: { [DEFAULT_BUCKET]: { ttl: hours(1), limit: 5 } },
+  /**
+   * Uploading a voice comment (plan 0045, section 6).
+   *
+   * Stricter than the default bucket because an upload is orders of magnitude
+   * more expensive than a sentence: it is up to two megabytes on the wire, a
+   * write of those bytes to the database, and a provider round trip behind it.
+   * The default bucket's 120 a minute was sized for sentences and would be a
+   * quarter of a gigabyte a minute here.
+   *
+   * Ten a minute leaves a real conversation untouched. Somebody leaving ten voice
+   * messages on one shopping list inside a minute is not a use this product has,
+   * and the eleventh is refused with a wait rather than lost.
+   */
+  voiceComment: { [DEFAULT_BUCKET]: { ttl: minutes(1), limit: 10 } },
 } as const;
 
 /** One per route override, as {@link THROTTLE_LIMITS} publishes them. */

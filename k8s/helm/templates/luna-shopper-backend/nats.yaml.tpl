@@ -3,6 +3,34 @@
 {{- $ls := .Values.lunaShopperBackend }}
 {{- $nats := $ls.nats }}
 ---
+# The broker's configuration file, which exists for exactly one setting.
+#
+# `max_payload` is raised above the 1 MB default so a voice recording can reach
+# the assistant at all (luna plan 0041 section 4.2, luna plan 0045 section 3),
+# and it is **config file only**: nats-server has no `--max_payload` flag, and
+# passing one makes it print its usage and exit — the pod then crashloops and
+# takes every service behind it with it. Both plans assumed a command line
+# argument; it is not one.
+#
+# `int64` before the value, and it is load bearing: Sprig carries a YAML integer
+# as a float64, so rendering 8388608 unaided writes "8.388608e+06", which the
+# broker will not parse.
+#
+# **This and `k8s/e2e/luna-shopper-backend/nats.conf` are one decision and change
+# together.** A raise in one and not the other is a feature that works on the
+# development machine and fails in the cluster with a broker level rejection.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: luna-shopper-backend-nats-config
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    app: luna-shopper-backend-nats
+    app.kubernetes.io/part-of: luna-shopper-backend
+data:
+  nats.conf: |
+    max_payload: {{ $nats.maxPayload | default 8388608 | int64 }}
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -53,7 +81,12 @@ spec:
           image: {{ $nats.image }}
           # JetStream enabled with a persistent store so durable streams survive a
           # restart; monitoring on 8222 backs the readiness/liveness probes.
-          args: ['-js', '-sd', '/data', '-m', '8222']
+          #
+          # `-c` for the ConfigMap above, which carries `max_payload` and nothing
+          # else. The rest stays here rather than moving into the file, because
+          # CLI flags win over it and this way the container still says what it is
+          # at a glance. See that comment for why the ceiling cannot be a flag.
+          args: ['-c', '/etc/nats/nats.conf', '-js', '-sd', '/data', '-m', '8222']
           ports:
             - name: client
               containerPort: 4222
@@ -80,6 +113,13 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: config
+              mountPath: /etc/nats
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: luna-shopper-backend-nats-config
   volumeClaimTemplates:
     - metadata:
         name: data

@@ -115,6 +115,7 @@ export class ListMemory implements ListServiceI {
       lineCount: 0,
       readyCount: 0,
       autoApproveLines: false,
+      sharedWithZone: shareWithZone,
       myPermissions: [],
     };
 
@@ -126,10 +127,13 @@ export class ListMemory implements ListServiceI {
 
     // The creator's power is an ordinary row rather than a property of having created
     // the list, which is what lets a group admin change it later (backend plan 0036,
-    // section 2.5).
+    // section 2.5) - unless the creator is group staff, in which case there is nothing
+    // to write: they hold all four by derivation, and the row would only be one the
+    // share sheet is then refused permission to send back (backend plan 0042, 1.2).
     const granted: ListAccessEntry[] = [];
     const mine = this._myMembershipId(zoneId);
-    if (mine !== null) {
+    const callerIsStaff = isStaff(this._myZone(zoneId)?.myRole);
+    if (mine !== null && !callerIsStaff) {
       granted.push({ membershipId: mine, permissions: [...LIST_PERMISSIONS] });
     }
 
@@ -158,18 +162,64 @@ export class ListMemory implements ListServiceI {
     return this._served(list);
   }
 
-  /** Rename or reconfigure. `MANAGE`, and nothing less. */
+  /**
+   * Rename or reconfigure. `MANAGE`, and nothing less.
+   *
+   * Opening a list to its group grants exactly what creation grants, and closing it
+   * revokes nobody (backend plan 0042, section 2.2). The fake performs the grant rather
+   * than only recording the flag, because the sheet's copy promises somebody that
+   * flipping the switch reaches people, and a fake that quietly reached nobody would
+   * let that promise be broken in development and only fail against the real server.
+   */
   async updateList(
     listId: string,
     changes: UpdateListRequest
   ): Promise<ShoppingListSummary> {
     this._require(listId, 'MANAGE');
+    const before = this.listById(listId);
+    if (changes.sharedWithZone === true && before?.sharedWithZone !== true) {
+      this._grantZone(listId);
+    }
 
     return this._patch(listId, (list) => ({
       ...list,
       name: changes.name ?? list.name,
       autoApproveLines: changes.autoApproveLines ?? list.autoApproveLines,
+      sharedWithZone: changes.sharedWithZone ?? list.sharedWithZone,
     }));
+  }
+
+  /**
+   * Give every approved non staff member of the list's zone the shared set, widening
+   * whatever they already hold rather than replacing it.
+   *
+   * A union, so somebody who already holds `MANAGE` keeps it: opening a list to the
+   * group is not somebody deciding what one person may do, which is what the share
+   * sheet is for.
+   */
+  private _grantZone(listId: string): void {
+    const zoneId = this._zoneOf(listId);
+    if (zoneId === null) {
+      return;
+    }
+    const rows = [...(this._access.get(listId) ?? [])];
+    for (const member of this._membersOf(zoneId)) {
+      if (member.status !== 'APPROVED' || isStaff(member.role)) {
+        continue;
+      }
+      const at = rows.findIndex((row) => row.membershipId === member.id);
+      const held = new Set<ListPermission>(at < 0 ? [] : rows[at].permissions);
+      for (const permission of ['READ', 'WRITE', 'DECIDE'] as const) {
+        held.add(permission);
+      }
+      const permissions = LIST_PERMISSIONS.filter((p) => held.has(p));
+      if (at < 0) {
+        rows.push({ membershipId: member.id, permissions });
+      } else {
+        rows[at] = { membershipId: member.id, permissions };
+      }
+    }
+    this._access.set(listId, rows);
   }
 
   /** Delete a list and everything on it, for everybody. `MANAGE`. */
@@ -281,9 +331,26 @@ export class ListMemory implements ListServiceI {
    *
    * Stored rows only: group staff hold everything by derivation and have no row.
    */
+  /**
+   * The stored rows, minus any belonging to a membership that is **currently** group
+   * staff (backend plan 0042, section 1.2).
+   *
+   * Staff hold all four by derivation, so their row says nothing and `setListAccess`
+   * refuses any entry naming one. Returning it is what made the sheet unsavable, so the
+   * fake filters exactly where the server does, or a spec against the fake would go on
+   * passing for a sheet that fails against the real thing.
+   */
   async getListAccess(listId: string): Promise<readonly ListAccessEntry[]> {
     this._require(listId, 'MANAGE');
-    return this._access.get(listId) ?? [];
+    const zoneId = this._zoneOf(listId);
+    const staff = new Set(
+      (zoneId === null ? [] : this._membersOf(zoneId))
+        .filter((member) => isStaff(member.role))
+        .map((member) => member.id)
+    );
+    return (this._access.get(listId) ?? []).filter(
+      (row) => !staff.has(row.membershipId)
+    );
   }
 
   /**

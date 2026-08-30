@@ -24,9 +24,12 @@ export interface AssistantMessageVm {
   readonly kind:
     | 'said'
     | 'pending'
+    | 'spoken'
     | 'failed'
     | 'throttled'
     | 'unconfigured'
+    | 'tooLong'
+    | 'badFormat'
     | 'dropped';
   readonly links: readonly AssistantLinkVm[];
   /** Seconds still to wait, already counted down by the container. */

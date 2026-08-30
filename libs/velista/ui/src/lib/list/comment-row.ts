@@ -10,6 +10,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import type { CommentRowVm } from '@portfolio/velista/models';
+import { AudioPlayer } from './audio-player';
 
 /**
  * One thing somebody said about a line.
@@ -29,7 +30,7 @@ import type { CommentRowVm } from '@portfolio/velista/models';
  */
 @Component({
   selector: 'lib-comment-row',
-  imports: [RokuTranslatorPipe],
+  imports: [RokuTranslatorPipe, AudioPlayer],
   template: `
     <article [class.mine]="comment().mine" class="comment">
       <header class="head">
@@ -46,7 +47,31 @@ import type { CommentRowVm } from '@portfolio/velista/models';
         </time>
       </header>
 
-      <p class="body">{{ comment().body }}</p>
+      @if (comment().pending) {
+        <!--
+          A voice send takes seconds, so this stands in the caller's own position
+          until the real comment lands (plan 0039, section 5). It never shows a
+          guess at the words: the client has nothing to guess from, and a bubble
+          with invented text is worse than one that says it is waiting.
+        -->
+        <p class="body waiting">{{ 'list.comments.sending' | rokuT }}</p>
+      } @else if (comment().body !== '') {
+        <p class="body">{{ comment().body }}</p>
+      } @else {
+        <!--
+          A recording nobody could transcribe is still a message somebody left, so
+          the row says which of the two happened rather than drawing an empty
+          bubble (plan 0039, section 3).
+        -->
+        <p class="body waiting">{{ bodyPlaceholder() | rokuT }}</p>
+      }
+
+      @if (recording(); as audio) {
+        <lib-audio-player
+          [durationSeconds]="audio.durationSeconds"
+          [load]="loaderFor(audio.src)"
+        />
+      }
     </article>
   `,
   styleUrl: './comment-row.scss',
@@ -55,7 +80,66 @@ import type { CommentRowVm } from '@portfolio/velista/models';
 export class CommentRow {
   readonly comment = input.required<CommentRowVm>();
 
+  /**
+   * How the recording is fetched, supplied by whoever draws this row.
+   *
+   * The row does not know what a URL is for or who is allowed to fetch one; it
+   * hands the player a function and the player calls it when play is pressed
+   * (rule D1). Absent means a row that never draws a player, which is what a
+   * comment with no recording gets anyway.
+   */
+  readonly loadAudio = input<((src: string) => Promise<string>) | null>(null);
+
   private readonly _locale = inject(RokuLocaleStore).locale;
+
+  /**
+   * The recording to draw a player for, if there is one and it can be fetched.
+   *
+   * A pending bubble draws no player: there is nothing on the server to fetch
+   * yet, and offering a play button for it would be a control that cannot work.
+   */
+  readonly recording = computed(() => {
+    const row = this.comment();
+    return row.pending || this.loadAudio() === null ? null : row.recording;
+  });
+
+  /**
+   * Which neutral phrase stands in for an empty body.
+   *
+   * The two states look identical on screen for about three seconds and
+   * completely different after a minute, which is the whole reason the server
+   * sends a transcription state rather than letting the client infer one from an
+   * empty body (backend plan 0045, section 4.2).
+   */
+  readonly bodyPlaceholder = computed(() =>
+    this.comment().transcription === 'PENDING'
+      ? 'list.comments.transcribing'
+      : 'list.comments.noTranscript'
+  );
+
+  /**
+   * A zero argument loader for one source, which is what the player's input is.
+   *
+   * Built here rather than in the template so the identity is stable per source:
+   * a new function every change detection would be a new input value every cycle.
+   */
+  loaderFor(src: string): () => Promise<string> {
+    const cached = this._loaders.get(src);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const loader = () => {
+      const load = this.loadAudio();
+      return load === null
+        ? Promise.reject(new Error('no loader supplied'))
+        : load(src);
+    };
+    this._loaders.set(src, loader);
+    return loader;
+  }
+
+  private readonly _loaders = new Map<string, () => Promise<string>>();
 
   /**
    * The timestamp, in the reader's language.

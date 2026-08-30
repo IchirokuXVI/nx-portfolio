@@ -20,6 +20,8 @@ function member(overrides: Partial<ShareRowVm> = {}): ShareRowVm {
     lockedPermissions: [],
     fixed: false,
     fixedReasonKey: null,
+    summary: ['READ'],
+    edited: false,
     ...overrides,
   };
 }
@@ -51,6 +53,20 @@ function boxes(fixture: ComponentFixture<ShareRow>): HTMLInputElement[] {
   );
 }
 
+/** The disclosure header, which is the whole row when the row is closed. */
+function header(fixture: ComponentFixture<ShareRow>): HTMLButtonElement {
+  return (fixture.nativeElement as HTMLElement).querySelector(
+    '.header'
+  ) as HTMLButtonElement;
+}
+
+/** The region the header controls. Always in the DOM; `hidden` is what closes it. */
+function region(fixture: ComponentFixture<ShareRow>): HTMLElement {
+  return (fixture.nativeElement as HTMLElement).querySelector(
+    '.boxes'
+  ) as HTMLElement;
+}
+
 /** The last set the row emitted, or null when it emitted nothing. */
 function emitted(fixture: ComponentFixture<ShareRow>): {
   sets: readonly (readonly ListPermission[])[];
@@ -61,6 +77,82 @@ function emitted(fixture: ComponentFixture<ShareRow>): {
   );
   return { sets };
 }
+
+describe('ShareRow as a disclosure (plan 0036, section 6)', () => {
+  it('is closed on first render', async () => {
+    // Twelve members is forty eight checkboxes and no summary, and the question people
+    // open this sheet with has to be answerable without reading all of them.
+    const fixture = await render(member());
+
+    expect(header(fixture).getAttribute('aria-expanded')).toBe('false');
+    expect(region(fixture).hidden).toBe(true);
+  });
+
+  it('opens and closes from the header, which names the region it controls', async () => {
+    const fixture = await render(member());
+
+    expect(header(fixture).getAttribute('aria-controls')).toBe(
+      region(fixture).id
+    );
+
+    header(fixture).click();
+    fixture.detectChanges();
+    expect(header(fixture).getAttribute('aria-expanded')).toBe('true');
+    expect(region(fixture).hidden).toBe(false);
+
+    header(fixture).click();
+    fixture.detectChanges();
+    expect(header(fixture).getAttribute('aria-expanded')).toBe('false');
+    expect(region(fixture).hidden).toBe(true);
+  });
+
+  it('keeps an edit across a collapse and reopen', async () => {
+    // The edit lives in the sheet, not in the row: the row holds only whether it is
+    // open, so closing it can never discard anything.
+    const fixture = await render(member({ permissions: ['READ'] }));
+    const { sets } = emitted(fixture);
+
+    header(fixture).click();
+    fixture.detectChanges();
+    boxes(fixture)[1].click();
+    expect(sets.at(-1)).toEqual(['READ', 'WRITE']);
+
+    // The sheet is what would feed the new set back in; here the input is unchanged,
+    // and what is asserted is that closing and reopening emitted nothing of its own.
+    header(fixture).click();
+    fixture.detectChanges();
+    header(fixture).click();
+    fixture.detectChanges();
+
+    expect(sets).toHaveLength(1);
+    expect(boxes(fixture)).toHaveLength(4);
+  });
+
+  it('draws the summary, and no access as words rather than as a badge', async () => {
+    const held = await render(member({ summary: ['WRITE', 'DECIDE'] }));
+    expect(
+      Array.from(
+        (held.nativeElement as HTMLElement).querySelectorAll('.badge')
+      ).map((badge) => badge.textContent?.trim())
+    ).toEqual([
+      'list.settings.access.summary.write',
+      'list.settings.access.summary.decide',
+    ]);
+
+    const none = await render(member({ permissions: [], summary: [] }));
+    expect(
+      (none.nativeElement as HTMLElement).querySelector('.badge.none')
+    ).not.toBeNull();
+  });
+
+  it('marks an edited row in the header', async () => {
+    const fixture = await render(member({ edited: true }));
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.edited')
+    ).not.toBeNull();
+  });
+});
 
 describe('ShareRow', () => {
   it('draws all four permissions, always', async () => {

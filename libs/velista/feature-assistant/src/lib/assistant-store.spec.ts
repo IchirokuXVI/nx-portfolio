@@ -13,15 +13,22 @@ import {
 } from '@portfolio/velista/models';
 import { AssistantStore, capTranscript } from './assistant-store';
 
-/** One call, as the gateway receives it: the history, and the thing being answered. */
+/**
+ * One call, as the gateway receives it: the history, and the thing being answered.
+ *
+ * `message` is empty for a spoken turn, because there is nothing on this side to put
+ * there — which is the whole difference between the two.
+ */
 interface Sent {
   readonly transcript: readonly AssistantTurn[];
   readonly message: string;
+  readonly recording?: Blob;
 }
 
 /** A service double that records what it was sent and answers what it was told to. */
 function fakeAssistant(
-  answer: (message: string) => Promise<AssistantReply>
+  answer: (message: string) => Promise<AssistantReply>,
+  spoken: () => Promise<AssistantReply> = () => reply('Vale.')
 ): AssistantServiceI & { sent: Sent[] } {
   const sent: Sent[] = [];
 
@@ -31,11 +38,20 @@ function fakeAssistant(
       sent.push({ transcript, message });
       return answer(message);
     },
+    askAloud: (transcript, recording) => {
+      sent.push({ transcript, message: '', recording });
+      return spoken();
+    },
   };
 }
 
 function reply(text: string): Promise<AssistantReply> {
   return Promise.resolve({ text, references: [] });
+}
+
+/** A recording the store will accept: inside the cap, in a container it knows. */
+function recording(bytes = 64, type = 'audio/webm;codecs=opus'): Blob {
+  return new Blob([new Uint8Array(bytes)], { type });
 }
 
 function store(service: AssistantServiceI): AssistantStore {
@@ -117,18 +133,141 @@ describe('AssistantStore', () => {
     });
   });
 
+  /**
+   * A spoken turn (backend `0041`, section 8.4).
+   *
+   * The one behaviour a typed turn does not have: **the client does not know the
+   * words.** Everything here is about what the caller's own bubble says while it does
+   * not know them, and about the fact that it never guesses.
+   */
   describe('a spoken turn', () => {
-    it('is the same call as a typed one, because it arrives as words', async () => {
-      // Backend 0039 shipped no audio route, so the browser transcribes and there is
-      // one endpoint and one method. The caller's bubble is what was actually heard,
-      // which under an audio upload would have needed the service to send it back.
-      const service = fakeAssistant(() => reply('Added.'));
+    it('uploads the recording and sends no message with it', async () => {
+      const service = fakeAssistant(
+        () => reply('never'),
+        () =>
+          Promise.resolve({
+            text: 'Added.',
+            references: [],
+            heard: 'add bread',
+          })
+      );
       const subject = store(service);
 
-      await subject.say('add bread to the weekly shop');
+      const audio = recording();
+      await subject.speak(audio);
 
-      expect(service.sent[0].message).toBe('add bread to the weekly shop');
-      expect(subject.entries()[0].text).toBe('add bread to the weekly shop');
+      expect(service.sent[0].recording).toBe(audio);
+      expect(service.sent[0].message).toBe('');
+    });
+
+    it('shows a placeholder while it is out, then what the service heard', async () => {
+      let settle: ((value: AssistantReply) => void) | undefined;
+      const service = fakeAssistant(
+        () => reply('never'),
+        () => new Promise<AssistantReply>((resolve) => (settle = resolve))
+      );
+      const subject = store(service);
+
+      const turn = subject.speak(recording());
+
+      // In flight: something was said and is being listened to, and the bubble
+      // carries no text because nothing on this side knows any.
+      expect(subject.entries()[0]).toMatchObject({
+        speaker: 'caller',
+        kind: 'spoken',
+        text: '',
+      });
+
+      settle?.({ text: 'Added.', references: [], heard: 'add bread' });
+      await turn;
+
+      expect(subject.entries()[0]).toMatchObject({
+        kind: 'said',
+        text: 'add bread',
+      });
+    });
+
+    it('keeps the placeholder when the reply carries no heard', async () => {
+      // A service that sends none is not broken, and the panel has nothing to invent
+      // the words from. A bubble showing a guess at what somebody said is worse than
+      // one showing that the words are not known.
+      const service = fakeAssistant(
+        () => reply('never'),
+        () => reply('Added.')
+      );
+      const subject = store(service);
+
+      await subject.speak(recording());
+
+      expect(subject.entries()[0]).toMatchObject({ kind: 'spoken', text: '' });
+    });
+
+    it('keeps the placeholder when the turn fails', async () => {
+      const service = fakeAssistant(
+        () => reply('never'),
+        () => Promise.reject(new NetworkError('c-1', 'assistant.askAloud'))
+      );
+      const subject = store(service);
+
+      await subject.speak(recording());
+
+      // The caller's bubble stays in the column whatever went wrong: they did speak,
+      // and it is still true that they did. It just never learned the words.
+      expect(subject.entries()[0]).toMatchObject({ kind: 'spoken' });
+      expect(subject.entries()[1]).toMatchObject({ kind: 'failed' });
+    });
+
+    it('leaves a turn whose words never arrived out of the next transcript', async () => {
+      // Rule A2: the transcript is what somebody actually said. A placeholder in the
+      // conversation the model reads would be the client putting words in a person's
+      // mouth, which is exactly what a client held transcript must not do.
+      const service = fakeAssistant(
+        () => reply('Sure.'),
+        () => reply('Added.')
+      );
+      const subject = store(service);
+
+      await subject.speak(recording());
+      await subject.say('and eggs');
+
+      expect(service.sent[1].transcript.map((turn) => turn.text)).toEqual([
+        'Added.',
+      ]);
+    });
+
+    it('refuses a recording over the cap, in words, without uploading it', async () => {
+      const service = fakeAssistant(() => reply('never'));
+      const subject = store(service);
+
+      await subject.speak(recording(3 * 1024 * 1024));
+
+      expect(service.sent).toHaveLength(0);
+      expect(subject.entries()).toHaveLength(1);
+      expect(subject.entries()[0].kind).toBe('tooLong');
+    });
+
+    it('refuses a container the service cannot read, without uploading it', async () => {
+      const service = fakeAssistant(() => reply('never'));
+      const subject = store(service);
+
+      await subject.speak(recording(64, 'audio/x-caf'));
+
+      expect(service.sent).toHaveLength(0);
+      expect(subject.entries()[0].kind).toBe('badFormat');
+    });
+
+    it('accepts the codec parameters a browser tacks on', async () => {
+      // Chrome says `audio/webm;codecs=opus`. Matching the whole string rather than
+      // the container would refuse the commonest browser's own output.
+      const service = fakeAssistant(
+        () => reply('never'),
+        () => reply('Added.')
+      );
+      const subject = store(service);
+
+      await subject.speak(recording(64, 'audio/webm;codecs=opus'));
+
+      expect(service.sent).toHaveLength(1);
     });
   });
 

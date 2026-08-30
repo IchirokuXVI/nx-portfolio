@@ -148,6 +148,18 @@ export type RealtimeEvent =
       readonly listId: string;
     }
   | { readonly type: 'comment.added'; readonly comment: Comment }
+  /**
+   * A comment changed after it was created (backend plan 0045, section 4).
+   *
+   * Exactly one thing can change one: a voice comment's transcript arriving, or
+   * failing to. A comment is not editable and neither is its recording, so this is
+   * not a general "somebody edited a comment" event and should not become one.
+   *
+   * It carries the whole comment and is upserted, which is the same shape
+   * `comment.added` already has and the reason nothing new was needed to receive
+   * it. It must **not** move a comment count: the comment already exists.
+   */
+  | { readonly type: 'comment.updated'; readonly comment: Comment }
   | {
       readonly type: 'merge.requested' | 'merge.approved' | 'merge.rejected';
       readonly mergeId: string;
@@ -182,6 +194,7 @@ export const REALTIME_EVENT_NAMES = [
   'line.reordered',
   'line.deleted',
   'comment.added',
+  'comment.updated',
   'merge.requested',
   'merge.approved',
   'merge.rejected',
