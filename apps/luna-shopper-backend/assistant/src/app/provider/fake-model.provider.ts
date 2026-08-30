@@ -1,4 +1,9 @@
-import type { ModelProvider, ModelReply, ModelRequest } from './model-provider';
+import type {
+  ModelProvider,
+  ModelReply,
+  ModelRequest,
+  TranscriptionRequest,
+} from './model-provider';
 
 /**
  * The provider the suite runs against (rule A4).
@@ -15,12 +20,28 @@ import type { ModelProvider, ModelReply, ModelRequest } from './model-provider';
  */
 export class FakeModelProvider implements ModelProvider {
   readonly requests: ModelRequest[] = [];
+  /**
+   * The transcriptions asked for, in order (plan 0041).
+   *
+   * Kept in its own list rather than mixed into {@link requests}, so a test can
+   * say "the second provider call is byte for byte what a typed turn sends"
+   * without first having to skip past the transcription. That assertion is the
+   * one that holds the plan's central claim: from the message onward there is no
+   * such thing as a spoken turn.
+   */
+  readonly transcriptions: TranscriptionRequest[] = [];
   configured = true;
+  transcriptionSupported = true;
 
   private readonly replies: (ModelReply | Error)[];
+  private readonly heard: (string | Error)[];
 
-  constructor(replies: (ModelReply | Error)[] = []) {
+  constructor(
+    replies: (ModelReply | Error)[] = [],
+    heard: (string | Error)[] = []
+  ) {
     this.replies = [...replies];
+    this.heard = [...heard];
   }
 
   /** A reply that is only text: what an off topic redirect or an answer looks like. */
@@ -51,6 +72,27 @@ export class FakeModelProvider implements ModelProvider {
     if (next === undefined) {
       throw new Error(
         `FakeModelProvider ran out of scripted replies (call ${this.requests.length})`
+      );
+    }
+    if (next instanceof Error) {
+      throw next;
+    }
+    return next;
+  }
+
+  /**
+   * Scripted the same way, and for the same reason (plan 0041).
+   *
+   * **No audio is ever inspected here and none is ever sent anywhere.** Rule A4
+   * covers a recording exactly as it covers a prompt, and this class is what
+   * makes the whole voice path testable without a byte leaving the process.
+   */
+  async transcribe(request: TranscriptionRequest): Promise<string> {
+    this.transcriptions.push(request);
+    const next = this.heard.shift();
+    if (next === undefined) {
+      throw new Error(
+        `FakeModelProvider ran out of scripted transcriptions (call ${this.transcriptions.length})`
       );
     }
     if (next instanceof Error) {

@@ -90,7 +90,12 @@ The oldest velista build this deployment serves (velista plan 0034). Gateway onl
 because it is the only public HTTP surface: the realtime service carries no request
 bodies and reads no floor, and a stale client is caught on its next REST call.
 */}}
-{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION") }}
+{{- /*
+The byte cap the voice route's multipart interceptor enforces (plan 0041). Gateway
+only: it is the one thing standing between a phone and this pod's memory, and the
+assistant applies the same number again to what actually crossed the broker.
+*/}}
+{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
@@ -165,7 +170,7 @@ bodies and reads no floor, and a stale client is caught on its next REST call.
     secretKeyRef:
       name: {{ $sec }}
       key: GEMINI_API_KEY
-{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_MODEL" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK") }}
+{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_MODEL" "ASSISTANT_TRANSCRIPTION_MODEL" "ASSISTANT_AUDIO_MAX_BYTES" "ASSISTANT_AUDIO_MIME_TYPES" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

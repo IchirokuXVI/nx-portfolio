@@ -91,6 +91,23 @@ data:
   # disappoints, and the version numbers do not order those two the way they look.
   GATEWAY_INTERNAL_URL: {{ $assistant.gatewayInternalUrl | default (printf "http://luna-shopper-backend-gateway.%s.svc.cluster.local" .Values.namespace) | quote }}
   ASSISTANT_MODEL: {{ $assistant.model | default "gemini-3.5-flash-lite" | quote }}
+  # Voice input (plan 0041). The transcription model is its own key so a different
+  # model can do that job than answers the turn without a code change; empty means
+  # the same one, which is the default and the only setting anybody has evidence
+  # for yet.
+  ASSISTANT_TRANSCRIPTION_MODEL: {{ $assistant.transcriptionModel | default "" | quote }}
+  # The byte cap on a recording, before base64. The gateway's multipart
+  # interceptor enforces the same number on the upload; this one is applied to
+  # what actually crossed the broker, because a cap the client could have chosen
+  # is not a cap.
+  # `int64` before `quote`, for the same reason the NATS template needs it: Sprig
+  # carries a YAML integer as a float64, so `quote` alone writes 2097152 as
+  # "2.097152e+06" into the ConfigMap.
+  ASSISTANT_AUDIO_MAX_BYTES: {{ $assistant.audioMaxBytes | default 2097152 | int64 | quote }}
+  # Containers this deployment will forward to the provider. A recording in
+  # anything else is refused with a sentence, and the type is named in the log so
+  # somebody can add it here rather than in a stack trace.
+  ASSISTANT_AUDIO_MIME_TYPES: {{ $assistant.audioMimeTypes | default "audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac" | quote }}
   # Caps on the client supplied transcript. The service stores nothing between
   # turns (rule A2), so the whole conversation arrives on every request and is
   # untrusted input: these are applied on arrival, not trusted from the client.

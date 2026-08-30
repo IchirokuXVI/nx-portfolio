@@ -37,6 +37,17 @@ export const LOG_LEVELS = [
 export const APP_BASE_URL_LOCALE_PLACEHOLDER = '{locale}';
 
 /**
+ * 2 MB, the default cap on an uploaded recording (plan 0041, section 4.2).
+ *
+ * The same number the assistant service defaults to, written out in both places
+ * rather than imported across an app boundary — these are two deployables and a
+ * shared constant between them would be a library nobody else wants. The
+ * arithmetic it belongs to: base64 takes 2 MB to about 2.7 MB on the broker leg,
+ * the transcript and envelope take it under 3 MB, and NATS `max_payload` is 8 MB.
+ */
+export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
  * An absolute http(s) URL that may carry {@link APP_BASE_URL_LOCALE_PLACEHOLDER}.
  *
  * `Joi.string().uri()` cannot be used directly: braces are not valid URI
@@ -119,6 +130,22 @@ export const gatewayValidationSchema = Joi.object({
       'semantic version'
     ),
 
+  /**
+   * The byte cap on a voice recording (plan 0041, sections 4.1 and 5).
+   *
+   * Stated here as well as in the assistant service, and the two are not
+   * redundant: this one is enforced by the multipart interceptor, which is the
+   * only thing standing between a phone and the gateway's memory, and the
+   * service's is enforced on a payload that has already crossed the broker. A
+   * cap that is not on the interceptor is a cap that is not enforced — the global
+   * `ValidationPipe` never sees a file, and Express's own body limits do not
+   * apply to a multipart stream.
+   */
+  ASSISTANT_AUDIO_MAX_BYTES: Joi.number()
+    .integer()
+    .min(1024)
+    .default(DEFAULT_AUDIO_MAX_BYTES),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -155,6 +182,8 @@ export interface GatewayConfig {
    * serves every one of them. Read by `MinClientVersionGuard` and by nothing else.
    */
   minClientVersion: string;
+  /** The byte cap the voice route's multipart interceptor enforces (plan 0041). */
+  assistantAudioMaxBytes: number;
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -188,6 +217,9 @@ export const gatewayConfiguration = registerAs(
       ),
     },
     minClientVersion: process.env.MIN_CLIENT_VERSION ?? '',
+    assistantAudioMaxBytes: Number(
+      process.env.ASSISTANT_AUDIO_MAX_BYTES ?? DEFAULT_AUDIO_MAX_BYTES
+    ),
     logLevel: process.env.LOG_LEVEL as GatewayConfig['logLevel'],
   })
 );

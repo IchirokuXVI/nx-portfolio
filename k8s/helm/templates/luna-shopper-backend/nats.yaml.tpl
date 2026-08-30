@@ -53,7 +53,27 @@ spec:
           image: {{ $nats.image }}
           # JetStream enabled with a persistent store so durable streams survive a
           # restart; monitoring on 8222 backs the readiness/liveness probes.
-          args: ['-js', '-sd', '/data', '-m', '8222']
+          #
+          # `--max_payload` is raised above the broker's 1 MB default so a voice
+          # recording can reach the assistant at all (luna plan 0041, section 4.2).
+          # The number comes from values.yaml, which is also where the compose
+          # stack's copy is explained: the two have to move together, and a raise
+          # applied here and not there fails only in the cluster.
+          args:
+            [
+              '-js',
+              '-sd',
+              '/data',
+              '-m',
+              '8222',
+              '--max_payload',
+              # `int64` before `quote`, and it is load bearing: Sprig carries a YAML
+              # integer as a float64, so `quote` alone renders 8388608 as
+              # "8.388608e+06" and nats-server refuses to parse it. The pod then
+              # crashloops in the cluster and nowhere else, which is the slowest
+              # possible way to find out.
+              {{ $nats.maxPayload | default 8388608 | int64 | quote }},
+            ]
           ports:
             - name: client
               containerPort: 4222

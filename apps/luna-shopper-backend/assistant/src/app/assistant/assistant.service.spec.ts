@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AssistantReferenceKind,
@@ -7,6 +8,7 @@ import {
   ListResolutionBranch,
   UsernamePropagation,
   type AssistantTurnRequest,
+  type AssistantVoiceRequest,
   type LineView,
   type ListView,
   type MyZoneView,
@@ -23,10 +25,15 @@ import {
 } from '../config/app-config';
 import { FakeModelProvider } from '../provider/fake-model.provider';
 import {
+  ModelTurnRole,
   ProviderRateLimitedError,
   type ModelProvider,
 } from '../provider/model-provider';
-import { AssistantService, capTranscript } from './assistant.service';
+import {
+  AssistantService,
+  capTranscript,
+  NOTHING_HEARD,
+} from './assistant.service';
 import {
   GatewayApiClient,
   GatewayApiError,
@@ -156,6 +163,9 @@ const CONFIG: AssistantConfig = {
   geminiApiKey: 'not-used-by-the-fake',
   geminiBaseUrl: 'http://provider.invalid',
   model: DEFAULT_ASSISTANT_MODEL,
+  transcriptionModel: DEFAULT_ASSISTANT_MODEL,
+  audioMaxBytes: 2 * 1024 * 1024,
+  audioMimeTypes: ['audio/webm', 'audio/ogg', 'audio/mp4'],
   maxTurns: 20,
   maxChars: 8000,
   maxToolCalls: 6,
@@ -192,6 +202,29 @@ function turnRequest(
     authorization: TOKEN,
     transcript,
     message,
+  };
+}
+
+/**
+ * A spoken turn, with a recording that is bytes and nothing more (plan 0041).
+ *
+ * **There is no audio fixture in this repository and there does not need to be
+ * one.** Rule A4 forbids reaching a provider, so nothing here ever decodes,
+ * plays or inspects a recording: what the service does with these bytes is count
+ * them, check the container it was told about, and hand them to
+ * {@link FakeModelProvider}. A buffer of zeros exercises every one of those.
+ */
+function voiceRequest(
+  bytes: number,
+  mimeType = 'audio/webm;codecs=opus',
+  transcript: AssistantTurnRequest['transcript'] = []
+): AssistantVoiceRequest {
+  return {
+    userId: 'user-1',
+    authorization: TOKEN,
+    transcript,
+    audio: Buffer.alloc(bytes, 7).toString('base64'),
+    mimeType,
   };
 }
 
@@ -662,6 +695,296 @@ describe('AssistantService', () => {
       await service.turn(turnRequest('hay leche o pan?'));
 
       expect(api.of('listLines')).toHaveLength(1);
+    });
+  });
+
+  /**
+   * Plan 0041. The claim under test is one sentence: **a spoken turn becomes a
+   * typed turn as early as possible and is indistinguishable after that.**
+   *
+   * Every case below runs against {@link FakeModelProvider}, and no test in this
+   * file sends a byte of audio anywhere (rule A4, which covers a recording
+   * exactly as it covers a prompt).
+   */
+  describe('plan 0041: a spoken turn', () => {
+    it('transcribes, then runs the ordinary turn with what it heard', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider(
+        [FakeModelProvider.says('Añadida.')],
+        ['añade leche']
+      );
+      const service = build(provider, api);
+
+      const answer = await service.voice(voiceRequest(2048));
+
+      expect(provider.transcriptions).toHaveLength(1);
+      expect(provider.requests).toHaveLength(1);
+      // The transcription became the message, and nothing else came with it.
+      const spoken = provider.requests[0];
+      expect(spoken.turns).toEqual([
+        { role: ModelTurnRole.USER, text: 'añade leche' },
+      ]);
+      expect(answer.reply).toBe('Añadida.');
+    });
+
+    it('sends the provider byte for byte what a typed turn sends', async () => {
+      // The central claim, asserted rather than described: the request the loop
+      // makes on a spoken turn is deep equal to the one it makes on the typed
+      // turn with the same words. Any divergence — a marker on the prompt, an
+      // extra turn, a different catalog — fails here.
+      const spokenApi = new RecordingApi();
+      const spokenProvider = new FakeModelProvider(
+        [FakeModelProvider.says('Vale.')],
+        ['añade leche']
+      );
+      await build(spokenProvider, spokenApi).voice(voiceRequest(1024));
+
+      const typedApi = new RecordingApi();
+      const typedProvider = new FakeModelProvider([
+        FakeModelProvider.says('Vale.'),
+      ]);
+      await build(typedProvider, typedApi).turn(turnRequest('añade leche'));
+
+      expect(spokenProvider.requests[0]).toEqual(typedProvider.requests[0]);
+    });
+
+    it('carries the transcription as `heard`, not anything the model replied', async () => {
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider(
+          [FakeModelProvider.says('He añadido leche a la lista.')],
+          ['añade leche']
+        ),
+        api
+      );
+
+      const answer = await service.voice(voiceRequest(1024));
+
+      expect(answer.heard).toBe('añade leche');
+      expect(answer.reply).toBe('He añadido leche a la lista.');
+    });
+
+    it('answers a recording it could not make out without running a turn', async () => {
+      const api = new RecordingApi();
+      // No scripted reply at all: if the loop ran, the fake would throw for
+      // having run out, which is exactly the failure this asserts cannot happen.
+      const provider = new FakeModelProvider([], ['']);
+      const service = build(provider, api);
+
+      const answer = await service.voice(voiceRequest(1024));
+
+      expect(answer.reply).toBe(NOTHING_HEARD);
+      expect(answer.heard).toBe('');
+      expect(provider.requests).toHaveLength(0);
+      // And it cost the gateway nothing either: no context was fetched for a
+      // turn that was never going to run.
+      expect(api.calls).toHaveLength(0);
+    });
+
+    it('answers a rate limit during transcription the way rule A5 says', async () => {
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider([], [new ProviderRateLimitedError('429', 27)]),
+        api
+      );
+
+      const error = await service.voice(voiceRequest(1024)).catch((e) => e);
+
+      // The same problem body, with the same number in it, that a rate limited
+      // typed turn produces. There is one implementation of this and both paths
+      // reach it.
+      expect(isDomainException(error)).toBe(true);
+      expect(error.code).toBe('rate_limited');
+      expect(retryAfterSecondsOf(error)).toBe(27);
+    });
+
+    it('counts a spoken turn as one turn against the local limit', async () => {
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider(
+          [FakeModelProvider.says('uno')],
+          ['hola', 'otra vez']
+        ),
+        api,
+        { turnsPerMinute: 1 }
+      );
+
+      await service.voice(voiceRequest(1024));
+      const error = await service.voice(voiceRequest(1024)).catch((e) => e);
+
+      // Two provider requests, one turn: the budget is the caller's patience and
+      // the deployment's quota, and somebody who spoke asked one question.
+      expect(isDomainException(error)).toBe(true);
+      expect(error.code).toBe('rate_limited');
+    });
+
+    it('refuses a caller who is over the limit before spending a transcription', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider(
+        [FakeModelProvider.says('uno')],
+        ['hola']
+      );
+      const service = build(provider, api, { turnsPerMinute: 1 });
+
+      await service.voice(voiceRequest(1024));
+      await service.voice(voiceRequest(1024)).catch(() => undefined);
+
+      // One transcription, not two. The limiter is taken before the provider is
+      // called, so a refused turn costs the deployment nothing.
+      expect(provider.transcriptions).toHaveLength(1);
+    });
+
+    it('answers not_configured on voice while text keeps working', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider(
+        [FakeModelProvider.says('¡Hola!')],
+        ['hola']
+      );
+      provider.transcriptionSupported = false;
+      const service = build(provider, api);
+
+      const error = await service.voice(voiceRequest(1024)).catch((e) => e);
+
+      expect(isDomainException(error)).toBe(true);
+      expect(error.code).toBe('not_configured');
+      expect(provider.transcriptions).toHaveLength(0);
+
+      // The whole point of the field: this deployment loses the microphone and
+      // keeps the assistant.
+      await expect(service.turn(turnRequest('hola'))).resolves.toMatchObject({
+        reply: '¡Hola!',
+      });
+    });
+
+    it('refuses a recording over the byte cap before calling the provider', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider([], ['never reached']);
+      const service = build(provider, api, { audioMaxBytes: 4096 });
+
+      const error = await service.voice(voiceRequest(8192)).catch((e) => e);
+
+      expect(isDomainException(error)).toBe(true);
+      expect(error.code).toBe('validation_failed');
+      expect(provider.transcriptions).toHaveLength(0);
+    });
+
+    it('says the limit in words, with the number in it', async () => {
+      const api = new RecordingApi();
+      const service = build(new FakeModelProvider([], []), api, {
+        audioMaxBytes: 2 * 1024 * 1024,
+      });
+
+      const error = await service
+        .voice(voiceRequest(3 * 1024 * 1024))
+        .catch((e) => e);
+
+      // The number rides in `messageArgs`, so the localized message the caller
+      // reads carries the limit whatever language they read it in — the same
+      // reason rule A5 puts the seconds in a field rather than in prose.
+      expect(error.messageArgs).toEqual({ limit: '2 MB' });
+      expect(error.message).toContain('2 MB');
+    });
+
+    it('refuses a container it cannot read, and does not name it to the caller', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider([], ['never reached']);
+      const service = build(provider, api);
+
+      const error = await service
+        .voice(voiceRequest(1024, 'audio/x-caf'))
+        .catch((e) => e);
+
+      expect(isDomainException(error)).toBe(true);
+      expect(error.code).toBe('validation_failed');
+      expect(provider.transcriptions).toHaveLength(0);
+      // The type is a fact for whoever has to add that browser's format to the
+      // whitelist. It is nothing at all to the person holding the phone.
+      expect(error.message).not.toContain('audio/x-caf');
+    });
+
+    it('accepts a container whose codec parameters the browser tacked on', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider(
+        [FakeModelProvider.says('Vale.')],
+        ['hola']
+      );
+      const service = build(provider, api);
+
+      // Chrome says `audio/webm;codecs=opus` and Firefox says
+      // `audio/ogg;codecs=opus`. Both are the container the whitelist names.
+      await service.voice(voiceRequest(1024, 'audio/webm;codecs=opus'));
+      expect(provider.transcriptions).toHaveLength(1);
+      // Forwarded as it arrived, parameters and all: the provider is entitled to
+      // the codec hint even though the whitelist ignored it.
+      expect(provider.transcriptions[0].mimeType).toBe(
+        'audio/webm;codecs=opus'
+      );
+    });
+
+    it("transcribes in the caller's own language", async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider(
+        [FakeModelProvider.says('Vale.')],
+        ['añade leche']
+      );
+      const service = build(provider, api);
+
+      await runWithRequestContext({ correlationId: 'c-1', locale: 'es' }, () =>
+        service.voice(voiceRequest(1024))
+      );
+
+      // Ours rather than the browser's, which is one of section 2's reasons for
+      // moving this back to the server at all.
+      expect(provider.transcriptions[0].locale).toBe('es');
+    });
+
+    it('never writes the recording to a log line, at any level', async () => {
+      const api = new RecordingApi();
+      const request = voiceRequest(1024);
+      const service = build(
+        new FakeModelProvider(
+          [FakeModelProvider.says('Vale.')],
+          ['añade leche']
+        ),
+        api
+      );
+
+      const written: string[] = [];
+      const levels = ['log', 'warn', 'error', 'debug', 'verbose'] as const;
+      const spies = levels.map((level) =>
+        jest
+          .spyOn(Logger.prototype, level)
+          .mockImplementation((...args: unknown[]) => {
+            written.push(args.map((arg) => String(arg)).join(' '));
+          })
+      );
+
+      try {
+        await service.voice(request);
+      } finally {
+        spies.forEach((spy) => spy.mockRestore());
+      }
+
+      const everything = written.join('\n');
+      // Not the audio, not a slice of it, and not a hash of it (section 6). The
+      // transcription is what the record carries, on exactly the terms a typed
+      // message already lives in the logs on.
+      expect(everything).not.toContain(request.audio);
+      expect(everything).not.toContain(request.audio.slice(0, 64));
+      expect(everything).toContain('añade leche');
+    });
+
+    it('answers not_configured with no key, before anything else', async () => {
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider([], ['never reached']);
+      provider.configured = false;
+
+      const error = await build(provider, api)
+        .voice(voiceRequest(1024))
+        .catch((e) => e);
+
+      expect(error.code).toBe('not_configured');
+      expect(provider.transcriptions).toHaveLength(0);
     });
   });
 

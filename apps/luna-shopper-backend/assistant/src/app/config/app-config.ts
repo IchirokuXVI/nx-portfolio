@@ -41,6 +41,41 @@ export const DEFAULT_ASSISTANT_MODEL = 'gemini-3.5-flash-lite';
 export const DEFAULT_GEMINI_BASE_URL =
   'https://generativelanguage.googleapis.com/v1beta';
 
+/**
+ * What a recording may weigh, in bytes (plan 0041, sections 4.2 and 5).
+ *
+ * 2 MB, and the number is one decision rather than three guesses: base64 inflates
+ * it to about 2.7 MB on the broker leg, the transcript and envelope take it under
+ * 3 MB, and `max_payload` is 8 MB. The headroom is deliberate — setting the
+ * broker just above the cap would mean the next change to either number has to
+ * move both.
+ *
+ * The client records at a speech grade bitrate so five minutes fits inside this
+ * with room to spare. That is the client's job; this is the server's, because a
+ * duration cannot be trusted and a byte count can be counted.
+ */
+export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * The containers this service will forward to the provider.
+ *
+ * Every one of these is on Gemini's own accepted list, checked against the
+ * current documentation rather than quoted from the plan (section 3.3, which
+ * expected `audio/webm` to be missing and it is not — so there is no container
+ * rewrite in this codebase and there does not need to be one).
+ *
+ * The first three are what browsers actually produce: Chrome gives
+ * `audio/webm;codecs=opus`, Firefox `audio/ogg;codecs=opus`, Safari
+ * `audio/mp4`. The rest are here so a fixture or a hand made request is not
+ * refused for being a wav.
+ *
+ * Parameters are stripped before the check, because `audio/webm;codecs=opus` and
+ * `audio/webm` are the same container and only one of them is a browser's idea
+ * of how to say so.
+ */
+export const DEFAULT_AUDIO_MIME_TYPES =
+  'audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac';
+
 export const assistantValidationSchema = Joi.object({
   PORT: Joi.number().port().default(3006),
   NATS_URL: Joi.string().required(),
@@ -63,6 +98,23 @@ export const assistantValidationSchema = Joi.object({
   GEMINI_API_KEY: Joi.string().allow('').default(''),
   GEMINI_BASE_URL: Joi.string().allow('').default(''),
   ASSISTANT_MODEL: Joi.string().default(DEFAULT_ASSISTANT_MODEL),
+
+  /**
+   * The model that transcribes (plan 0041, section 10).
+   *
+   * Its own key so a different model can do this job than answers the turn,
+   * without a code change. Whether they *should* differ is a quality question
+   * with no answer before there is usage, so the default is the turn's model and
+   * the key exists to make changing that an env edit.
+   */
+  ASSISTANT_TRANSCRIPTION_MODEL: Joi.string().default(''),
+  /** Section 5's byte cap, applied on arrival and again by the gateway. */
+  ASSISTANT_AUDIO_MAX_BYTES: Joi.number()
+    .integer()
+    .min(1024)
+    .default(DEFAULT_AUDIO_MAX_BYTES),
+  /** Comma separated. A container outside this list is refused with a sentence. */
+  ASSISTANT_AUDIO_MIME_TYPES: Joi.string().default(DEFAULT_AUDIO_MIME_TYPES),
 
   /**
    * The caps the service applies to the client supplied transcript (rule A2).
@@ -106,6 +158,12 @@ export interface AssistantConfig {
   geminiApiKey: string;
   geminiBaseUrl: string;
   model: string;
+  /** The model that transcribes. Defaults to {@link AssistantConfig.model}. */
+  transcriptionModel: string;
+  /** The byte cap on a recording, before base64 (plan 0041). */
+  audioMaxBytes: number;
+  /** The containers this service accepts, already split and lowercased. */
+  audioMimeTypes: readonly string[];
   maxTurns: number;
   maxChars: number;
   maxToolCalls: number;
@@ -118,6 +176,31 @@ export interface AssistantConfig {
 function trimmed(raw: string | undefined, fallback: string): string {
   const value = (raw ?? '').trim();
   return value.length > 0 ? value : fallback;
+}
+
+/**
+ * The whitelist, split once here rather than at every check.
+ *
+ * Lowercased and stripped of empties, so a list written with a trailing comma or
+ * a stray space is the list the author meant. {@link normalizeMimeType} does the
+ * matching half of this job on the value that arrives from the browser.
+ */
+function parseMimeTypes(raw: string): readonly string[] {
+  return raw
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+}
+
+/**
+ * A browser's content type, as the container it names.
+ *
+ * `audio/webm;codecs=opus` and `audio/webm` are the same container, and only one
+ * of them is a browser's idea of how to say so. Everything after the first
+ * semicolon is a parameter and none of them changes what the file is.
+ */
+export function normalizeMimeType(raw: string): string {
+  return raw.split(';')[0].trim().toLowerCase();
 }
 
 export const assistantConfiguration = registerAs(
@@ -139,6 +222,18 @@ export const assistantConfiguration = registerAs(
       DEFAULT_GEMINI_BASE_URL
     ).replace(/\/+$/, ''),
     model: trimmed(process.env.ASSISTANT_MODEL, DEFAULT_ASSISTANT_MODEL),
+    // Falls back to the turn's model rather than to a literal, so the two stay
+    // together by default and an operator who changes one has changed one.
+    transcriptionModel: trimmed(
+      process.env.ASSISTANT_TRANSCRIPTION_MODEL,
+      trimmed(process.env.ASSISTANT_MODEL, DEFAULT_ASSISTANT_MODEL)
+    ),
+    audioMaxBytes: Number(
+      process.env.ASSISTANT_AUDIO_MAX_BYTES ?? DEFAULT_AUDIO_MAX_BYTES
+    ),
+    audioMimeTypes: parseMimeTypes(
+      trimmed(process.env.ASSISTANT_AUDIO_MIME_TYPES, DEFAULT_AUDIO_MIME_TYPES)
+    ),
     maxTurns: Number(process.env.ASSISTANT_MAX_TURNS ?? 20),
     maxChars: Number(process.env.ASSISTANT_MAX_CHARS ?? 8000),
     maxToolCalls: Number(process.env.ASSISTANT_MAX_TOOL_CALLS ?? 6),

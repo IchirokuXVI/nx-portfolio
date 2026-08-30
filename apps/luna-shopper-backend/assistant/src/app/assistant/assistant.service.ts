@@ -6,6 +6,7 @@ import {
   type AssistantMessage,
   type AssistantTurnRequest,
   type AssistantTurnResponse,
+  type AssistantVoiceRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   DEFAULT_LOCALE,
@@ -13,9 +14,10 @@ import {
   NotConfiguredException,
   RateLimitedException,
   RETRY_AFTER_SECONDS_DETAIL,
+  ValidationException,
   type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
-import type { AssistantConfig } from '../config/app-config';
+import { normalizeMimeType, type AssistantConfig } from '../config/app-config';
 import {
   MODEL_PROVIDER,
   ModelTurnRole,
@@ -47,6 +49,17 @@ import { TurnContextFactory } from './turn-context';
  * the limiter's decision. What outlives the request is one structured log record,
  * which is the whole point of the test (section 10).
  */
+/**
+ * What a recording with nothing in it is answered with (plan 0041, section 9).
+ *
+ * A sentence rather than an error, because nothing went wrong: the microphone was
+ * open and heard nothing it could make words out of, which for this audience is
+ * an ordinary event and not a failure to report. In English like the loop's own
+ * "I got stuck" fallback beside it — both are the service speaking rather than
+ * the model, and the service has no translator (section 9 of plan 0039).
+ */
+export const NOTHING_HEARD = 'I did not catch that. Could you say it again?';
+
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
@@ -66,27 +79,115 @@ export class AssistantService {
   }
 
   async turn(request: AssistantTurnRequest): Promise<AssistantTurnResponse> {
+    const startedAtMs = Date.now();
+
     // Plan 0026's rule, applied in section 11: a deployment with no key is a
     // supported deployment, not a broken one. The pod boots, the health probes
     // pass, and this one route says plainly that it is not implemented here.
-    if (!this.provider.configured) {
+    this.requireConfigured();
+
+    const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+    this.takeTurn(request.userId);
+
+    return this.answer(request, locale, startedAtMs);
+  }
+
+  /**
+   * A spoken turn (plan 0041).
+   *
+   * Transcribe, then answer, and **the second half is the typed path byte for
+   * byte**: `answer` below is the same method a typed turn runs, called with the
+   * transcription as the message. That is the design rather than an
+   * implementation detail — the tools, the loop, the references, the context
+   * fetch and rule A1 are all untouched, and every existing test on that path
+   * goes on testing the thing it tested.
+   *
+   * The order here is load bearing. The caps and the whitelist are checked before
+   * anything is decoded or sent, the limiter is taken **before** the
+   * transcription rather than inside `answer`, so a caller who is over their
+   * limit is told so without a provider call being spent on them, and the
+   * transcription and the turn together count as **one** turn because a turn is a
+   * turn from the caller's point of view.
+   */
+  async voice(request: AssistantVoiceRequest): Promise<AssistantTurnResponse> {
+    const startedAtMs = Date.now();
+
+    this.requireConfigured();
+
+    // A field rather than a thrown error, so a deployment pointed at a provider
+    // with no audio support loses the microphone and keeps the assistant: this
+    // answers 501 while `turn` above goes on working (section 9).
+    if (!this.provider.transcriptionSupported) {
       throw new NotConfiguredException(
-        'the assistant has no model provider configured on this deployment'
+        'the model provider on this deployment cannot transcribe audio'
       );
     }
 
     const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
-    const startedAtMs = Date.now();
+    const audio = this.readRecording(request);
 
-    const allowed = this.limiter.take(request.userId);
-    if (!allowed.allowed) {
-      throw this.rateLimited(
-        allowed.retryAfterSeconds,
-        request.userId,
-        'local'
-      );
+    this.takeTurn(request.userId);
+
+    const heardAtMs = Date.now();
+    const heard = await this.viaProvider(
+      () =>
+        this.provider.transcribe({ audio, mimeType: request.mimeType, locale }),
+      request.userId
+    );
+    const transcriptionMs = Date.now() - heardAtMs;
+
+    // Nothing recognisable in the recording. Saying so is the whole answer, and
+    // running a turn against an empty message would spend a provider call to be
+    // told the same thing less clearly.
+    if (heard.length === 0) {
+      this.record({
+        userId: request.userId,
+        locale,
+        said: '',
+        replied: NOTHING_HEARD,
+        calledTools: [],
+        listResolution: undefined,
+        usage: null,
+        providerMs: transcriptionMs,
+        gatewayMs: 0,
+        totalMs: Date.now() - startedAtMs,
+        outcome: 'unheard',
+      });
+
+      return { reply: NOTHING_HEARD, references: [], heard };
     }
 
+    const answer = await this.answer(
+      {
+        userId: request.userId,
+        authorization: request.authorization,
+        transcript: request.transcript,
+        message: heard,
+      },
+      locale,
+      startedAtMs,
+      transcriptionMs
+    );
+
+    // The words the caller can check the answer against (section 3.1). It is the
+    // transcription, never anything the model wrote in its reply.
+    return { ...answer, heard };
+  }
+
+  /**
+   * Everything a turn does once there is a message: the shared half.
+   *
+   * A typed turn reaches this straight from `turn`; a spoken one reaches it with
+   * the transcription in `message` and nothing else different. **From here down
+   * there is no such thing as a spoken turn**, which is the property the plan
+   * rests on and the one the spec asserts by comparing the two provider requests.
+   */
+  private async answer(
+    request: AssistantTurnRequest,
+    locale: SupportedLocale,
+    startedAtMs: number,
+    providerMsBefore = 0
+  ): Promise<AssistantTurnResponse> {
     // The transcript is client supplied and therefore untrusted (rule A2). It is
     // capped here, on arrival, rather than trusted to have been capped, and every
     // entry is treated as what a person typed whatever it claims to be.
@@ -126,7 +227,10 @@ export class AssistantService {
     const system = buildSystemPrompt({ context, locale });
     const calledTools: { name: string; args: unknown; ok: boolean }[] = [];
     let usage: ModelUsage | null = null;
-    let providerMs = 0;
+    // Seeded with the transcription's own time on a spoken turn, so the record's
+    // `provider` latency is what was actually spent at the provider rather than
+    // the loop's share of it.
+    let providerMs = providerMsBefore;
 
     for (let round = 0; ; round += 1) {
       const askedAtMs = Date.now();
@@ -243,15 +347,120 @@ export class AssistantService {
     return results;
   }
 
+  /** Plan 0026's rule, in one place because two entry points now apply it. */
+  private requireConfigured(): void {
+    if (!this.provider.configured) {
+      throw new NotConfiguredException(
+        'the assistant has no model provider configured on this deployment'
+      );
+    }
+  }
+
+  /**
+   * The local limiter, taken once per turn.
+   *
+   * Once, including for a spoken turn, which spends two provider requests and is
+   * still one turn: the budget this protects is the caller's patience and the
+   * deployment's quota, and a person who speaks has asked one question (plan
+   * 0041, section 7).
+   */
+  private takeTurn(userId: string): void {
+    const allowed = this.limiter.take(userId);
+    if (!allowed.allowed) {
+      throw this.rateLimited(allowed.retryAfterSeconds, userId, 'local');
+    }
+  }
+
+  /**
+   * The recording, checked and decoded (plan 0041, sections 5 and 9).
+   *
+   * Both refusals happen **before the provider is called**, which is the point of
+   * doing them here rather than letting Gemini answer 400: a recording this
+   * service will not forward costs nothing, and the caller gets a sentence
+   * instead of a stack trace.
+   *
+   * The unsupported container is named **in the log and not in the reply**. It is
+   * a fact for whoever has to add that browser's format to the whitelist, and it
+   * is nothing at all to the person holding the phone, who needs to know that
+   * their recording could not be read and not what MIME type their browser
+   * chose.
+   */
+  private readRecording(request: AssistantVoiceRequest): Uint8Array {
+    const mimeType = normalizeMimeType(request.mimeType);
+
+    if (!this.config.audioMimeTypes.includes(mimeType)) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'assistant.voice.unsupportedType',
+          userId: request.userId,
+          mimeType,
+        })
+      );
+      throw new ValidationException(
+        'that recording is in a format this service cannot read'
+      );
+    }
+
+    // Base64 is four characters per three bytes, so the encoded length bounds the
+    // decoded one. Checked first so an oversized payload is refused without
+    // allocating a buffer the size of it.
+    const maxEncoded = Math.ceil(this.config.audioMaxBytes / 3) * 4 + 4;
+    if (request.audio.length > maxEncoded) {
+      throw this.tooLarge();
+    }
+
+    const audio = Buffer.from(request.audio, 'base64');
+
+    if (audio.byteLength === 0) {
+      throw new ValidationException('that recording arrived empty');
+    }
+    if (audio.byteLength > this.config.audioMaxBytes) {
+      throw this.tooLarge();
+    }
+
+    return audio;
+  }
+
+  /**
+   * The cap, said in words with the number in it (section 5).
+   *
+   * The number is in `messageArgs` rather than only in the sentence, so the
+   * localized message the caller reads carries the limit in whatever language
+   * they are reading — the same reason rule A5 puts the seconds in a field.
+   */
+  private tooLarge(): ValidationException {
+    const megabytes = Math.round(this.config.audioMaxBytes / (1024 * 1024));
+    return new ValidationException(
+      `that recording is larger than the ${megabytes} MB this service accepts`,
+      { messageArgs: { limit: `${megabytes} MB` } }
+    );
+  }
+
   /** The provider call, behind the concurrency gate, with 429 mapped to rule A5. */
   private async ask(
     request: Parameters<ModelProvider['generate']>[0],
     userId: string
   ) {
+    return this.viaProvider(() => this.provider.generate(request), userId);
+  }
+
+  /**
+   * Whatever the provider was asked for, behind the gate, with 429 mapped once.
+   *
+   * Generic over the call rather than duplicated per method, because rule A5's
+   * answer must be identical whether the 429 arrived during a transcription or
+   * during the turn: the caller gets one problem body with one number in it, and
+   * which of the two provider requests hit the wall is not something they can act
+   * on (plan 0041, section 7).
+   */
+  private async viaProvider<T>(
+    call: () => Promise<T>,
+    userId: string
+  ): Promise<T> {
     try {
       // Queuing is preferable to failing: waiting two seconds is invisible,
       // being told to come back is not (section 9).
-      return await this.gate.run(() => this.provider.generate(request));
+      return await this.gate.run(call);
     } catch (error) {
       if (error instanceof ProviderRateLimitedError) {
         throw this.rateLimited(
@@ -324,7 +533,7 @@ export class AssistantService {
     providerMs: number;
     gatewayMs: number;
     totalMs: number;
-    outcome: 'talked' | 'acted';
+    outcome: 'talked' | 'acted' | 'unheard';
   }): void {
     this.logger.log(
       JSON.stringify({

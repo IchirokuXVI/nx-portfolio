@@ -1,12 +1,12 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
-  DICTATION_LIMITS,
-  Dictation,
-  SPEECH_CAPTURE,
+  AUDIO_CAPTURE,
+  AudioRecorder,
+  RECORDING_LIMITS,
   provideVelistaTesting,
-  type SpeechCaptureI,
-  type SpeechCaptureSession,
+  type AudioCaptureI,
+  type AudioCaptureSession,
 } from '@portfolio/velista/platform';
 import { AssistantComposer } from './assistant-composer';
 
@@ -20,14 +20,14 @@ import { AssistantComposer } from './assistant-composer';
 const WARN_AT = 6;
 const MAX = 10;
 
-/** A microphone that is always there and always hears the same thing. */
-const HEARD = 'add bread to the weekly shop';
+/** A microphone that is always there and always hands back the same recording. */
+const RECORDING = new Blob(['audio'], { type: 'audio/webm' });
 
-function fakeCapture(overrides: Partial<SpeechCaptureI> = {}): SpeechCaptureI {
-  const session: SpeechCaptureSession = {
+function fakeCapture(overrides: Partial<AudioCaptureI> = {}): AudioCaptureI {
+  const session: AudioCaptureSession = {
     pause: jest.fn(),
     resume: jest.fn(),
-    stop: jest.fn().mockResolvedValue(HEARD),
+    stop: jest.fn().mockResolvedValue(RECORDING),
     close: jest.fn(),
   };
 
@@ -39,7 +39,7 @@ function fakeCapture(overrides: Partial<SpeechCaptureI> = {}): SpeechCaptureI {
 }
 
 async function render(
-  capture: SpeechCaptureI = fakeCapture()
+  capture: AudioCaptureI = fakeCapture()
 ): Promise<ComponentFixture<AssistantComposer>> {
   TestBed.resetTestingModule();
 
@@ -47,10 +47,10 @@ async function render(
     imports: [AssistantComposer, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting(),
-      Dictation,
-      { provide: SPEECH_CAPTURE, useValue: capture },
+      AudioRecorder,
+      { provide: AUDIO_CAPTURE, useValue: capture },
       {
-        provide: DICTATION_LIMITS,
+        provide: RECORDING_LIMITS,
         useValue: { warnAtSeconds: WARN_AT, maxSeconds: MAX },
       },
     ],
@@ -185,16 +185,16 @@ describe('AssistantComposer', () => {
       // sustained, steady pressure for the length of the message, which is precisely
       // what a tremor removes (section 4.2).
       const fixture = await render();
-      const spoken: string[] = [];
-      fixture.componentInstance.spoke.subscribe((said) => spoken.push(said));
+      const spoken: Blob[] = [];
+      fixture.componentInstance.spoke.subscribe((audio) => spoken.push(audio));
 
       await press(fixture);
       expect(glyph(fixture)).toBe('lib-stop-icon');
 
       await press(fixture);
       expect(glyph(fixture)).toBe('lib-mic-icon');
-      // The words, not a recording: the service takes text and has no audio route.
-      expect(spoken).toEqual([HEARD]);
+      // The recording, not the words: the service transcribes (backend `0041`).
+      expect(spoken).toEqual([RECORDING]);
     });
 
     it('survives the pointer leaving the button mid recording', async () => {
@@ -277,8 +277,8 @@ describe('AssistantComposer', () => {
       // is held, pause is disabled, and stop is the only way out (section 4.4).
       jest.useFakeTimers();
       const fixture = await render();
-      const spoken: string[] = [];
-      fixture.componentInstance.spoke.subscribe((said) => spoken.push(said));
+      const spoken: Blob[] = [];
+      fixture.componentInstance.spoke.subscribe((audio) => spoken.push(audio));
 
       await press(fixture);
       jest.advanceTimersByTime(MAX * 1000);

@@ -34,6 +34,15 @@ function codeForStatus(status: number): ErrorCode {
       return ERROR_CODES.CONFLICT;
     case HttpStatus.TOO_MANY_REQUESTS:
       return ERROR_CODES.RATE_LIMITED;
+    // A 413 is a statement about the request, not about the server, so it lands
+    // on the code that already means "what you sent is not acceptable" rather
+    // than on `internal` (luna plan 0041, section 4.1). It arrives from exactly
+    // one place: multer refusing an upload over the interceptor's `limits`,
+    // which `@nestjs/platform-express` turns into a `PayloadTooLargeException`.
+    // Reported as `internal` it would read to the client as the assistant having
+    // broken, which is the one thing that failure is not.
+    case HttpStatus.PAYLOAD_TOO_LARGE:
+      return ERROR_CODES.VALIDATION_FAILED;
     default:
       return ERROR_CODES.INTERNAL;
   }

@@ -10,6 +10,21 @@
     <p [attr.aria-busy]="true" class="bubble">{{ entry.text }}</p>
   }
 
+  @case ('spoken') {
+    <!--
+      A turn the caller spoke, before the words come back (backend `0041`, section
+      8.4). The same bubble as a pending typed one, and the difference is what is in
+      it: nothing on this side knows what was said, so it says that something was
+      said and is being listened to.
+
+      It is deliberately **not** a guess at the words. The client has nothing to
+      guess from, and a bubble showing the wrong sentence is worse than one showing
+      that it is waiting. It is replaced by what the service heard when the reply
+      lands, and stays exactly as it is when the reply carries none.
+    -->
+    <p [attr.aria-busy]="true" class="bubble placeholder">{{ entry.text }}</p>
+  }
+
   @case ('throttled') {
     <!--
       Not "try again later" (plan 0032, section 3.1). The free tier's limits are
@@ -54,7 +69,20 @@
   }
 
   @default {
-    <p [class.failed]="entry.kind === 'failed'" class="bubble">
+    <!--
+      `tooLong` and `badFormat` take the failed treatment alongside `failed` itself
+      (backend `0041`, section 9): in all three something the caller sent did not go,
+      and in all three there is a next thing to do about it. That is what separates
+      them from `unconfigured` above, where trying again cannot help.
+    -->
+    <p
+      [class.failed]="
+        entry.kind === 'failed' ||
+        entry.kind === 'tooLong' ||
+        entry.kind === 'badFormat'
+      "
+      class="bubble"
+    >
       {{ entry.text }}
     </p>
 

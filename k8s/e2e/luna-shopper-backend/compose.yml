@@ -199,7 +199,12 @@ services:
   nats:
     image: nats:2.10-alpine
     restart: unless-stopped
-    command: ['-js', '-sd', '/data', '-m', '8222']
+    # `--max_payload` is raised above the broker's 1 MB default so a voice
+    # recording can reach the assistant at all (plan 0041, section 4.2): the
+    # gateway sends it base64 over this broker, and 2 MB of audio is about 2.7 MB
+    # encoded. 8 MB, matching `lunaShopperBackend.nats.maxPayload` in
+    # `k8s/helm/values.yaml`, which carries the reasoning. **Both, together.**
+    command: ['-js', '-sd', '/data', '-m', '8222', '--max_payload', '8388608']
     ports:
       - '${LUNA_NATS_PORT:-4222}:4222'
       - '${LUNA_NATS_MONITOR_PORT:-8222}:8222'

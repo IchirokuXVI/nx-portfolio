@@ -138,11 +138,50 @@ export class ProviderUnavailableError extends Error {
   }
 }
 
+/**
+ * A recording, on its way to being words (plan 0041, section 3.2).
+ *
+ * Separate from {@link ModelRequest} rather than an audio part on a
+ * {@link ModelTurn}, because it is a different job: no tools, no history, and no
+ * reply to parse. What comes back is the sentence and nothing else.
+ */
+export interface TranscriptionRequest {
+  audio: Uint8Array;
+  /** What the browser recorded, checked against the service's whitelist first. */
+  mimeType: string;
+  /** BCP 47, the same locale the reply will be written in (section 2). */
+  locale: string;
+}
+
 export interface ModelProvider {
   /**
    * False when the deployment has no key. The service answers 501 rather than
    * pretending, and the pod still boots (plan 0026, applied in section 11).
    */
   readonly configured: boolean;
+  /**
+   * False when this provider cannot take audio at all (plan 0041, section 3.2).
+   *
+   * A field rather than an exception, because the two outcomes are different
+   * things: a deployment pointed at a provider that does not do audio should
+   * lose the microphone and **keep the assistant**, which means the voice route
+   * answers 501 while the typed route goes on working. That is a fact about the
+   * deployment, knowable before a request arrives, and a throw would only ever
+   * tell somebody after they had spoken.
+   */
+  readonly transcriptionSupported: boolean;
   generate(request: ModelRequest): Promise<ModelReply>;
+  /**
+   * The recording, as the words in it.
+   *
+   * Throws {@link ProviderRateLimitedError} and {@link ProviderUnavailableError}
+   * exactly as {@link generate} does, so rule A5's answer needs no second
+   * implementation: a spoken turn that is rate limited during transcription
+   * produces the same problem body, with the same number in it, that a rate
+   * limited typed turn produces.
+   *
+   * An empty string is a real answer and means the recording had nothing
+   * recognisable in it. The caller says so and runs no turn.
+   */
+  transcribe(request: TranscriptionRequest): Promise<string>;
 }

@@ -347,11 +347,30 @@ and the transcript text is what a person typed about groceries, which is ordinar
 data: the retention on these logs is short and stated, and this is the one place in the
 service where anything a user wrote outlives the request.
 
-> **Plan `0041` rewrites this paragraph.** Once a spoken turn uploads a recording, a voice
-> reaches this service and reaches the provider, which is personal data of a different
-> character from a typed sentence. `0041` section 6 says what is true afterwards: the audio
-> is held in memory for the turn, written nowhere, and never logged at any level, while the
-> **transcription** is recorded here on exactly the terms a typed message already is.
+**A spoken turn, since plan `0041`.** A recording now reaches this service and reaches the
+provider, and it is personal data of a different character from a typed sentence, because a
+voice identifies a person and a sentence does not. What is true of it here:
+
+- **It is held in memory for the length of the turn and written nowhere.** No disk, no
+  database, no object store, no cache. Rule A2 already says the service stores nothing
+  between turns, and the recording is the strongest case for that rule rather than an
+  exception to it. The gateway's multipart interceptor is configured with `memoryStorage`
+  explicitly for the same reason, rather than relying on multer's default.
+- **It is never logged, at any level, not even a hash of it.** The record above carries the
+  **transcription** instead, which lives in these logs on exactly the terms the words a
+  person typed already do, and no longer. The provider's error bodies were already logged
+  rather than surfaced because they can echo the prompt; the same care applies here and
+  matters more.
+- **The free tier's data terms cover it**, on the reading in section 9: Google's terms carve
+  out EEA, Switzerland and UK users, for whom the paid data terms apply to unpaid quota,
+  and that carve out is what makes real shopping data defensible on a free tier. Audio
+  raises the stakes of that reading rather than changing it.
+
+What that trade bought is in `0041` section 2, and it is not obviously a loss: the browser's
+own `SpeechRecognition`, which this service used before `0041`, is implemented by Chrome and
+Safari by **sending the audio to the browser vendor**. The choice was never between sending a
+recording and not sending one. It was between sending it as this app's request, under the
+terms section 9 examined, and sending it as the browser's, under terms nobody here can read.
 
 What comes out of it is the input to the next plan: whether one list is inferable in
 practice, which of the three tools anybody actually uses, how much of the traffic is
@@ -435,20 +454,32 @@ discouraged.
 
 ## 14. Open decisions
 
-> **Reopened by plan `0041`, in the other direction.** The first decision below was
-> settled by the absence of an audio endpoint rather than by an argument, and `0041`
-> builds the endpoint. Read that plan's section 2 before treating the paragraph below as
-> current; its section 6 replaces section 10's privacy line, which the paragraph below
-> promises stays as written.
+- ~~**Where a spoken turn is transcribed.**~~ **Settled by plan `0041`: this service
+  transcribes.** `POST /v1/assistant/voice` takes a recording, Gemini's own audio input
+  turns it into a sentence, and the existing turn loop answers that sentence — so a
+  spoken turn becomes a typed turn as early as possible and is indistinguishable after
+  that.
 
-- ~~**Where a spoken turn is transcribed.**~~ **Settled by what this service shipped:
-  the client transcribes.** There is no multipart route here, no size cap and no speech
-  provider, so `POST /v1/assistant` takes text and the browser produces it with
-  `SpeechRecognition`. Velista `0032` section 10 carries the consequences; the one that
-  matters on this side is that **section 10's privacy line stays as written**, because
-  no voice recording ever reaches this service. The paragraph below is kept for the
-  argument it makes, and its prediction that this would cost the pause button turned out
-  not to hold: a session can be paused even though a stream has no file.
+  It was settled the other way for a while, and the difference between the two answers is
+  worth keeping straight, because neither was wrong when it was made. The first answer was
+  settled **by the absence of an endpoint** rather than by an argument: this service
+  shipped with no multipart route, no size cap and no speech provider, so the browser's
+  `SpeechRecognition` was the only place left. `0041` section 2 is the argument, made once
+  the endpoint was on the table, and it comes down to four things — Firefox has no
+  `SpeechRecognition` at all and lost its microphone for that period; a dictation engine
+  that ends itself on silence has seams a file does not; a multimodal model reads a
+  bilingual shopping list better than a general dictation engine; and the privacy gain was
+  smaller than it looked, because Chrome and Safari implement that API by sending audio to
+  the browser vendor anyway.
+
+  **Section 10's privacy line did not stay as written**, contrary to what this entry used
+  to promise, and `0041` section 6 is why. It now says what a recording crosses.
+
+  One prediction from the original text is worth recording as wrong in both directions: it
+  expected `SpeechRecognition` to cost the pause button, and it did not — a session can be
+  paused even though a stream has no file. Every control velista `0032` section 4 draws
+  survived both reversals unchanged, because they were drawn about the person rather than
+  about the capture.
 - **The original text, for the reasoning:** That plan's section 4 records up to five minutes of audio with a pause button,
   which is a `MediaRecorder` feature: the browser's own `SpeechRecognition` returns text and
   no file, so there would be nothing to pause and nothing to hold at the limit. Backlog `0005`

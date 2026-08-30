@@ -406,6 +406,10 @@ GOOGLE_CALLBACK_URL=http://localhost:$gateway/v1/auth/google/callback
 # Where the callback sends the browser. {locale} is substituted with the locale
 # the flow started in; the app sits under a path that follows the locale segment.
 APP_BASE_URL=http://localhost:$shellPort/{locale}/velista
+# The byte cap the voice route's multipart interceptor enforces (plan 0041). The
+# gateway is where an upload is actually refused, so the number lives here as
+# well as in the assistant's env.
+ASSISTANT_AUDIO_MAX_BYTES=2097152
 $(Get-TelemetryEnv 'gateway' $otlpHttp)
 "@
 
@@ -465,6 +469,11 @@ $(Get-TelemetryEnv 'catalog' $otlpHttp)
 GATEWAY_INTERNAL_URL=http://localhost:$gateway
 GEMINI_API_KEY=
 ASSISTANT_MODEL=gemini-3.5-flash-lite
+# Voice input (plan 0041). An empty transcription model means the model that
+# answers the turn also transcribes it, which is the default everywhere.
+ASSISTANT_TRANSCRIPTION_MODEL=
+ASSISTANT_AUDIO_MAX_BYTES=2097152
+ASSISTANT_AUDIO_MIME_TYPES=audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac
 ASSISTANT_MAX_TURNS=20
 ASSISTANT_MAX_CHARS=8000
 ASSISTANT_MAX_TOOL_CALLS=6
