@@ -66,7 +66,9 @@ test.describe('Luna Shopper list access', () => {
     expect(listRes.ok()).toBeTruthy();
     const list = await listRes.json();
     expectDocumentedShape('post', '/v1/zones/{zoneId}/lists', 201, list);
-    const listId: string = list.data.id;
+    // A list is returned unwrapped. Only the zone handshake routes carry the
+    // `{ tokens, data }` envelope, because only they mint a token beside the body.
+    const listId: string = list.id;
 
     // 3. The read returns no entry naming the owner, so a client that echoes it
     //    back has nothing rule 2 can refuse.
@@ -76,7 +78,7 @@ test.describe('Luna Shopper list access', () => {
     expect(readRes.ok()).toBeTruthy();
     const view = await readRes.json();
     expectDocumentedShape('get', '/v1/lists/{id}/access', 200, view);
-    const entries: AccessEntry[] = view.data.entries;
+    const entries: AccessEntry[] = view.entries;
     expect(entries.map((e) => e.membershipId)).toEqual([membershipId]);
 
     // 4. The save itself, sending back everything the sheet was given. It is a
@@ -93,7 +95,7 @@ test.describe('Luna Shopper list access', () => {
     const reread = await (
       await ctx.get(`/v1/lists/${listId}/access`, { headers: auth(ownerToken) })
     ).json();
-    const saved: AccessEntry[] = reread.data.entries;
+    const saved: AccessEntry[] = reread.entries;
     expect(saved).toHaveLength(1);
     expect(saved[0].membershipId).toBe(membershipId);
     expect([...saved[0].permissions].sort()).toEqual(['READ', 'WRITE']);
@@ -122,7 +124,7 @@ test.describe('Luna Shopper list access', () => {
         data: { name: 'Groceries', shareWithZone: true },
       })
     ).json();
-    expect(shared.data.sharedWithZone).toBe(true);
+    expect(shared.sharedWithZone).toBe(true);
 
     const priv = await (
       await ctx.post(`/v1/zones/${zoneId}/lists`, {
@@ -130,7 +132,7 @@ test.describe('Luna Shopper list access', () => {
         data: { name: 'Gift ideas', shareWithZone: false },
       })
     ).json();
-    expect(priv.data.sharedWithZone).toBe(false);
+    expect(priv.sharedWithZone).toBe(false);
 
     const joined = await (
       await ctx.post('/v1/zones/join', { data: { joinCode, username: 'mate' } })
@@ -146,28 +148,29 @@ test.describe('Luna Shopper list access', () => {
     });
     expect(mineRes.ok()).toBeTruthy();
     const mine = await mineRes.json();
-    expect(mine.data.items.map((l: { name: string }) => l.name)).toEqual([
+    expect(mine.items.map((l: { name: string }) => l.name)).toEqual([
       'Groceries',
     ]);
 
     // And flipping the private one open reaches them too, without anybody
     // ticking four boxes per person.
-    const openRes = await ctx.patch(`/v1/lists/${priv.data.id}`, {
+    const openRes = await ctx.patch(`/v1/lists/${priv.id}`, {
       headers: auth(ownerToken),
       data: { sharedWithZone: true },
     });
     expect(openRes.ok()).toBeTruthy();
-    expect((await openRes.json()).data.sharedWithZone).toBe(true);
+    expect((await openRes.json()).sharedWithZone).toBe(true);
 
     const after = await (
       await ctx.get(`/v1/zones/${zoneId}/lists`, { headers: auth(mateToken) })
     ).json();
-    expect(
-      after.data.items.map((l: { name: string }) => l.name).sort()
-    ).toEqual(['Gift ideas', 'Groceries']);
+    expect(after.items.map((l: { name: string }) => l.name).sort()).toEqual([
+      'Gift ideas',
+      'Groceries',
+    ]);
 
     // Turning it off revokes nobody: the switch is about who arrives next.
-    await ctx.patch(`/v1/lists/${priv.data.id}`, {
+    await ctx.patch(`/v1/lists/${priv.id}`, {
       headers: auth(ownerToken),
       data: { sharedWithZone: false },
     });
@@ -175,7 +178,7 @@ test.describe('Luna Shopper list access', () => {
       await ctx.get(`/v1/zones/${zoneId}/lists`, { headers: auth(mateToken) })
     ).json();
     expect(
-      stillThere.data.items.map((l: { name: string }) => l.name).sort()
+      stillThere.items.map((l: { name: string }) => l.name).sort()
     ).toEqual(['Gift ideas', 'Groceries']);
 
     await ctx.dispose();
