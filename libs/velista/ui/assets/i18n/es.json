@@ -582,6 +582,7 @@
       "noNumber": "Mucha gente está preguntando a la vez. Vuelve a intentarlo en un momento, y tu mensaje sigue aquí."
     },
     "failed": "Eso no me llegó. Tu mensaje sigue aquí, inténtalo otra vez.",
+    "unconfigured": "El asistente no está activado aquí. Es cosa nuestra, no tuya, y volver a intentarlo no lo cambiará.",
     "dropped": "El principio de esta conversación es demasiado largo para guardarlo, así que lo he soltado."
   }
 }

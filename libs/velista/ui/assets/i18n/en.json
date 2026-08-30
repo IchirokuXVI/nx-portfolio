@@ -582,6 +582,7 @@
       "noNumber": "A lot of people are asking at once. Try me again in a moment, and your message is still here."
     },
     "failed": "That did not reach me. Your message is still here, so try again.",
+    "unconfigured": "The assistant is not switched on here. That is on us, not on you, and trying again will not change it.",
     "dropped": "The start of this conversation is too long to keep, so I let it go."
   }
 }

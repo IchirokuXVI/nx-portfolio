@@ -202,6 +202,38 @@ describe('gatewayInterceptor', () => {
       expect(error.correlationId).toBeTruthy();
     });
 
+    it('reads a 501 as not_configured rather than as something to retry', async () => {
+      // Backend plan 0026: an install without the credential a feature needs boots,
+      // keeps the route in the published document, and answers 501 forever. Google
+      // sign in has done this since 0026 and the assistant does it since 0039.
+      //
+      // `not_configured` was missing from this app's hand synced `ERROR_CODES`, so it
+      // used to fall back to `internal` and every screen said "try again" about the
+      // one failure retrying cannot fix.
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/assistant`));
+      httpMock
+        .expectOne(`${GATEWAY}/v1/assistant`)
+        .flush(
+          { code: 'not_configured', correlationId: 'server-id' },
+          { status: 501, statusText: 'Not Implemented' }
+        );
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).toBe('not_configured');
+    });
+
+    it('derives not_configured from a bare 501 as well', async () => {
+      // A proxy's own 501, or a body this build could not read.
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/assistant`));
+      httpMock.expectOne(`${GATEWAY}/v1/assistant`).flush('<html>501</html>', {
+        status: 501,
+        statusText: 'Not Implemented',
+      });
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).toBe('not_configured');
+    });
+
     it('turns a no-response failure into a NetworkError and reports it', async () => {
       const connection = TestBed.inject(ConnectionState);
 

@@ -223,6 +223,32 @@ describe('AssistantStore', () => {
     });
   });
 
+  describe('when this deployment has no model provider', () => {
+    it('says so, and does not tell anybody to try again', async () => {
+      // A 501, which backend plan 0026 documents as an expected state: an install
+      // with no GEMINI_API_KEY boots, stays in the published document, and answers
+      // this forever. Retrying is the one thing that cannot help.
+      const subject = store(
+        fakeAssistant(() =>
+          Promise.reject(
+            new GatewayError({
+              code: 'not_configured',
+              status: 501,
+              correlationId: 'ref-501',
+            })
+          )
+        )
+      );
+
+      await subject.say('Add milk');
+
+      expect(last(subject).kind).toBe('unconfigured');
+      // The composer comes back: nothing is counting down, and holding it would be
+      // pretending a wait would fix it.
+      expect(subject.composerDisabled()).toBe(false);
+    });
+  });
+
   describe('the cap', () => {
     it('drops the oldest turns and says so', async () => {
       const subject = store(fakeAssistant(() => reply('ok')));

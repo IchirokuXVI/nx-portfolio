@@ -211,6 +211,8 @@ export class AssistantPage {
             ? 'assistant.busy.noNumber'
             : 'assistant.busy.body'
         );
+      case 'unconfigured':
+        return this._translator.t('assistant.unconfigured');
       case 'dropped':
         return this._translator.t('assistant.dropped');
       default:

@@ -34,6 +34,16 @@
     </div>
   }
 
+  @case ('unconfigured') {
+    <!--
+      This deployment has no model provider, so the route answers 501 and always
+      will (backend plan 0026). Deliberately **not** the failed treatment: nothing
+      broke, nobody did anything wrong, and a red bubble would ask somebody to try
+      again at something that cannot work. The attention colours and no clock.
+    -->
+    <p class="bubble waiting">{{ entry.text }}</p>
+  }
+
   @case ('dropped') {
     <!--
       The cap bit and the oldest turns went. On a line of its own rather than folded

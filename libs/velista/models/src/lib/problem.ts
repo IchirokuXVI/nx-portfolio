@@ -11,7 +11,7 @@
  * `libs/luna-shopper/platform/src/lib/errors/error-codes.ts`.
  */
 
-/** Every error code the gateway can return. Seven, and they map one to one onto status. */
+/** Every error code the gateway can return. Eight, and they map one to one onto status. */
 export const ERROR_CODES = [
   'validation_failed',
   'unauthorized',
@@ -19,6 +19,21 @@ export const ERROR_CODES = [
   'not_found',
   'conflict',
   'rate_limited',
+  /**
+   * The deployment does not have this feature configured (backend plan 0026), as a
+   * 501.
+   *
+   * **A statement about the server, not about the caller.** Nobody did anything wrong
+   * and retrying will not help, which is the whole reason it is not `internal`: an
+   * install with no `GEMINI_API_KEY` answers this on `/v1/assistant`, and one with no
+   * OAuth credentials answers it on Google sign in.
+   *
+   * It was missing from this list, which is the cost of the hand sync this file admits
+   * to at the top: it has existed on the backend since `0026` and every client that
+   * met it read it as `internal` and said "try again". Backend `0039` is what made it
+   * reachable often enough to notice.
+   */
+  'not_configured',
   'internal',
 ] as const;
 

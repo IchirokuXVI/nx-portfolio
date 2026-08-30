@@ -98,6 +98,10 @@ export interface AssistantReply {
  * means the service did not say, which the panel renders as busy with no clock
  * (section 3.1).
  *
+ * `unconfigured` is the one failure that must not say "try again": this deployment has
+ * no model provider (a 501, backend plan 0026), so nobody did anything wrong and no
+ * amount of retrying will help. It is separate from `failed` for that reason alone.
+ *
  * `dropped` is not a speaker's turn at all: it is the line the panel writes on its own
  * when the cap bites, so that losing the oldest turns is something a person sees
  * happen rather than something that happened somewhere they cannot look (section 5).
@@ -107,6 +111,12 @@ export interface AssistantEntry {
   readonly speaker: AssistantSpeaker;
   readonly text: string;
   readonly references: readonly AssistantReference[];
-  readonly kind: 'said' | 'pending' | 'failed' | 'throttled' | 'dropped';
+  readonly kind:
+    | 'said'
+    | 'pending'
+    | 'failed'
+    | 'throttled'
+    | 'unconfigured'
+    | 'dropped';
   readonly retryAfterSeconds?: number;
 }

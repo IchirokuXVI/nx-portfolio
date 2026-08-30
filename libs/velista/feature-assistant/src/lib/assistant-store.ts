@@ -195,6 +195,19 @@ export class AssistantStore {
       return;
     }
 
+    // The one failure that must not say "try again". This deployment has no model
+    // provider, so the route answers 501 and will keep answering 501 (backend plan
+    // 0026): nobody did anything wrong and no amount of pressing send will help.
+    if (failure instanceof GatewayError && failure.code === 'not_configured') {
+      this._append({
+        speaker: 'bot',
+        text: '',
+        kind: 'unconfigured',
+        references: [],
+      });
+      return;
+    }
+
     // Everything else is one message. A `NetworkError`, a 500, a 403 the gateway
     // raised on a write the caller could not have made by hand: the panel has one
     // treatment because the person has one thing to do about it, which is try again.

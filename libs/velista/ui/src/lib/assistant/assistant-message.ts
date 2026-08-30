@@ -21,7 +21,13 @@ export interface AssistantLinkVm {
 export interface AssistantMessageVm {
   readonly speaker: 'caller' | 'bot';
   readonly text: string;
-  readonly kind: 'said' | 'pending' | 'failed' | 'throttled' | 'dropped';
+  readonly kind:
+    | 'said'
+    | 'pending'
+    | 'failed'
+    | 'throttled'
+    | 'unconfigured'
+    | 'dropped';
   readonly links: readonly AssistantLinkVm[];
   /** Seconds still to wait, already counted down by the container. */
   readonly waitSeconds?: number;
