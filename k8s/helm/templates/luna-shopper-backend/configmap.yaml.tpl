@@ -1,6 +1,7 @@
 {{- if .Values.lunaShopperBackend.enabled }}
 {{- $cfg := .Values.lunaShopperBackend.config }}
 {{- $harvest := .Values.lunaShopperBackend.harvester | default dict }}
+{{- $assistant := .Values.lunaShopperBackend.assistant | default dict }}
 ---
 # One ConfigMap, because this release is one environment (plan 0002). The
 # `range $env, $cfg :=` loop that rendered a production and a staging copy side
@@ -74,4 +75,31 @@ data:
   HARVEST_FAILURE_RATIO: {{ $harvest.failureRatio | default "0.25" | quote }}
   OVERPASS_URL: {{ $harvest.overpassUrl | default "" | quote }}
   NOMINATIM_URL: {{ $harvest.nominatimUrl | default "" | quote }}
+  # --- The assistant (plan 0039) ---------------------------------------------
+  #
+  # GATEWAY_INTERNAL_URL is where the assistant calls the app's own API on the
+  # caller's behalf (rule A1). The cluster's internal service name, never the
+  # public `api.` host: going out and back in would pay for TLS and the ingress
+  # for a call that never leaves the cluster, and would put a user's turn through
+  # the edge twice.
+  #
+  # The model is a value rather than a literal, so changing it is an env edit and
+  # a restart. `gemini-3.1-flash-lite` is the first thing to try if quality
+  # disappoints, and the version numbers do not order those two the way they look.
+  GATEWAY_INTERNAL_URL: {{ $assistant.gatewayInternalUrl | default (printf "http://luna-shopper-backend-gateway.%s.svc.cluster.local:3000" .Values.namespace) | quote }}
+  ASSISTANT_MODEL: {{ $assistant.model | default "gemini-3.5-flash-lite" | quote }}
+  # Caps on the client supplied transcript. The service stores nothing between
+  # turns (rule A2), so the whole conversation arrives on every request and is
+  # untrusted input: these are applied on arrival, not trusted from the client.
+  ASSISTANT_MAX_TURNS: {{ $assistant.maxTurns | default 20 | quote }}
+  ASSISTANT_MAX_CHARS: {{ $assistant.maxChars | default 8000 | quote }}
+  ASSISTANT_MAX_TOOL_CALLS: {{ $assistant.maxToolCalls | default 6 | quote }}
+  # Both per instance and in memory: neither survives a restart and neither is
+  # shared across replicas (section 9). A known weakness, written down rather than
+  # discovered later; fixing it properly needs storage this plan declines.
+  ASSISTANT_TURNS_PER_MINUTE: {{ $assistant.turnsPerMinute | default 8 | quote }}
+  ASSISTANT_CONCURRENCY: {{ $assistant.concurrency | default 2 | quote }}
+  # The floor for `retryAfterSeconds` when neither the provider's own RetryInfo
+  # nor the local window can supply one, so the field is never absent (rule A5).
+  ASSISTANT_RETRY_AFTER_FALLBACK: {{ $assistant.retryAfterFallbackSeconds | default 30 | quote }}
 {{- end }}
