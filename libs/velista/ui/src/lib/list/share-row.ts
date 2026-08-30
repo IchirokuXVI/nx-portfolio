@@ -4,9 +4,11 @@ import {
   computed,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ListPermission, ShareRowVm } from '@portfolio/velista/models';
+import { ChevronDownIcon } from '../icons/icons';
 
 /** One checkbox: the permission it stands for, and the label it wears. */
 interface Box {
@@ -14,8 +16,41 @@ interface Box {
   readonly key: string;
 }
 
+/** The one word each permission goes by when the row is closed (plan 0036, section 5). */
+const SUMMARY_KEYS: Record<ListPermission, string> = {
+  READ: 'list.settings.access.summary.read',
+  WRITE: 'list.settings.access.summary.write',
+  DECIDE: 'list.settings.access.summary.decide',
+  MANAGE: 'list.settings.access.summary.manage',
+};
+
+/** Nothing left to number rows by, so the region ids only have to be unique. */
+let nextRowId = 0;
+
 /**
  * One member, and what they may do with this list.
+ *
+ * ## Closed, and saying what it is
+ *
+ * Every row starts collapsed (velista plan 0036, section 6). Four checkboxes say what a
+ * row *can be changed to*, and twelve members is forty eight of them with no summary,
+ * so the question people actually open this sheet with, who can do what here, had to be
+ * answered by reading all of them. The header now answers it in one word from
+ * `summary`, and the boxes are what opening the row reveals.
+ *
+ * **The whole header is the control**, not a chevron beside it, so the target is the
+ * full width of the row, which is what a thumb needs, and the chevron becomes what it
+ * should be: a state indicator rather than a hit area. It is a `button` with
+ * `aria-expanded` naming the region it controls, because this is a disclosure and the
+ * platform has a shape for a disclosure.
+ *
+ * The region stays in the DOM under `hidden` rather than being removed, so
+ * `aria-controls` always names something real. `hidden` takes it out of the
+ * accessibility tree and the tab order on its own, which is the whole of what closing
+ * it has to mean.
+ *
+ * Collapsing never discards an edit: the edit lives in the sheet, which holds the set
+ * this row emits, and the row holds only whether it is open.
  *
  * ## Four checkboxes, because this is a set
  *
@@ -39,6 +74,10 @@ interface Box {
  * every box says the same thing to a reader and to a screen reader. Keeping the
  * mechanism would have been keeping a workaround after its constraint expired.
  *
+ * The summary badges are the one place a short word survives, and they are not that
+ * mechanism returning: a badge is not a control, nothing is named by it, and the whole
+ * sentence is a tap away inside the row it heads.
+ *
  * ## A locked box is drawn, and a fixed row is explained
  *
  * Deliberately the opposite of what `LineRowVm.actions` does for a row menu, and section
@@ -56,25 +95,56 @@ interface Box {
  */
 @Component({
   selector: 'lib-share-row',
-  imports: [RokuTranslatorPipe],
+  imports: [ChevronDownIcon, RokuTranslatorPipe],
   template: `
     <div class="row">
-      <span class="who">
-        <span class="name">{{ member().username }}</span>
+      <button
+        (click)="toggleOpen()"
+        [attr.aria-controls]="regionId"
+        [attr.aria-expanded]="expanded()"
+        [class.open]="expanded()"
+        class="header"
+        type="button"
+      >
+        <span class="who">
+          <span class="name">{{ member().username }}</span>
 
-        <!--
-          The creator's row is an ordinary row now: their power became a stored access
-          row that a group admin can rewrite (backend plan 0036, section 2.5). What they
-          keep is this label, so the row still reads as theirs (section 6.3).
-        -->
-        @if (creator()) {
-          <span class="creator">{{
-            'list.settings.access.creator' | rokuT
-          }}</span>
-        }
-      </span>
+          <!--
+            The creator's row is an ordinary row now: their power became a stored access
+            row that a group admin can rewrite (backend plan 0036, section 2.5). What they
+            keep is this label, so the row still reads as theirs (plan 0030, section 6.3).
+          -->
+          @if (creator()) {
+            <span class="creator">{{
+              'list.settings.access.creator' | rokuT
+            }}</span>
+          }
+        </span>
 
-      <fieldset class="boxes">
+        <span class="summary">
+          @for (permission of member().summary; track permission) {
+            <span class="badge">{{ summaryKey(permission) | rokuT }}</span>
+          } @empty {
+            <span class="badge none">{{
+              'list.settings.access.summary.none' | rokuT
+            }}</span>
+          }
+
+          <!--
+            An edited row is marked rather than left open (section 6), so working down
+            eight members does not grow the sheet under the thumb about to press Save.
+          -->
+          @if (member().edited) {
+            <span class="edited">{{
+              'list.settings.access.edited' | rokuT
+            }}</span>
+          }
+        </span>
+
+        <lib-chevron-down-icon aria-hidden="true" class="chevron" />
+      </button>
+
+      <fieldset [hidden]="!expanded()" [id]="regionId" class="boxes">
         <legend class="legend">
           {{ 'list.settings.accessFor' | rokuT: { name: member().username } }}
         </legend>
@@ -121,6 +191,17 @@ export class ShareRow {
   }>();
 
   /**
+   * Whether the checkboxes are showing. Closed on first render, always.
+   *
+   * Local to the row, and the only thing that is: an edit belongs to the sheet, so
+   * closing a row and reopening it shows the edit exactly as it was left.
+   */
+  readonly expanded = signal(false);
+
+  /** What `aria-controls` points at. Unique per instance, and nothing more. */
+  readonly regionId = `share-row-boxes-${nextRowId++}`;
+
+  /**
    * Least access first, so the row reads as a ladder even though it is not one.
    *
    * `READ` leads because it is the one every other box implies, which makes the
@@ -137,6 +218,15 @@ export class ShareRow {
   private readonly _locked = computed(
     () => new Set(this.member().lockedPermissions)
   );
+
+  toggleOpen(): void {
+    this.expanded.update((open) => !open);
+  }
+
+  /** The one word this permission goes by in the collapsed row. */
+  summaryKey(permission: ListPermission): string {
+    return SUMMARY_KEYS[permission];
+  }
 
   /** A fixed row draws every box ticked, whatever the payload says. */
   holds(permission: ListPermission): boolean {

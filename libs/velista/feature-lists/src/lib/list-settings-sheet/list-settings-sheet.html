@@ -22,19 +22,6 @@
       type="text"
     />
 
-    <button
-      (click)="rename()"
-      [attr.aria-busy]="submitting()"
-      [disabled]="!canSave()"
-      class="primary"
-      type="button"
-    >
-      @if (submitting()) {
-        <lib-spinner-icon class="spinning" />
-      }
-      <span>{{ 'list.settings.save' | rokuT }}</span>
-    </button>
-
     <!--
       Above the share section, because it decides what happens to lines rather than to
       people, and somebody reading downwards should settle how the list behaves before
@@ -72,6 +59,38 @@
     @if (shareAvailable) {
       <h3 class="section">{{ 'list.settings.share' | rokuT }}</h3>
 
+      <!--
+        Above the rows, because it decides what happens to the next person who joins and
+        the rows below decide what happens to the people already here (plan 0036,
+        section 7). Saved on the flip for the same reason the switch above it is.
+
+        The hint says what turning it off does *not* do, because the natural reading is
+        the opposite one and that reading is the one that loses somebody their access.
+      -->
+      <div class="choice">
+        <label class="choice-label" for="list-settings-shared">
+          <input
+            (change)="setSharedWithZone($event)"
+            [checked]="sharedWithZone()"
+            [disabled]="submitting()"
+            aria-describedby="list-settings-shared-hint"
+            class="checkbox"
+            id="list-settings-shared"
+            type="checkbox"
+          />
+          <span>{{ 'list.settings.sharedWithZone.label' | rokuT }}</span>
+        </label>
+        <p class="choice-hint" id="list-settings-shared-hint">
+          {{ 'list.settings.sharedWithZone.hint' | rokuT }}
+        </p>
+      </div>
+
+      <!--
+        No inner scroll. The list grows to whatever height it needs and the panel scrolls
+        past it (plan 0036, section 4): a nested scroll inside a sheet that also scrolls
+        has no good gesture on a phone, because the thumb lands in one of them and the
+        other is unreachable without knowing which.
+      -->
       <ul class="share">
         @for (member of shareRows(); track member.membershipId) {
           <li class="share-item">
@@ -83,17 +102,13 @@
           </li>
         }
       </ul>
-
-      <button
-        (click)="saveAccess()"
-        [disabled]="submitting()"
-        class="secondary"
-        type="button"
-      >
-        {{ 'list.settings.save' | rokuT }}
-      </button>
     }
 
+    <!--
+      Deleting stays in the body, at the end, as a danger action with its own
+      confirmation. It is not a save, and putting a destructive action into a footer
+      beside Cancel is how somebody deletes a list they meant to close.
+    -->
     <button (click)="startDelete()" class="danger" type="button">
       {{ 'list.settings.delete' | rokuT }}
     </button>
@@ -136,9 +151,36 @@
     <p class="error" role="alert">{{ key | rokuT }}</p>
   }
 
-  @if (!submitting()) {
-    <button (click)="shell.requestDismiss()" class="cancel" type="button">
-      {{ 'entry.cancel' | rokuT }}
-    </button>
-  }
+  <!--
+    The footer, stuck to the bottom of the panel while the body scrolls past it (plan
+    0036, section 4). Save and Cancel were ordinary elements at the end of a scrolling
+    panel, so with more than about four members the primary action of the sheet was off
+    screen and had to be hunted for through a nested scroll.
+
+    One Save, which commits whatever the sheet is holding, and Cancel beside it. The
+    delete confirmation borrows the same footer for its Cancel: its own action is in the
+    body, where a destructive action belongs.
+  -->
+  <div class="footer">
+    @if (!confirmingDelete()) {
+      <button
+        (click)="save()"
+        [attr.aria-busy]="submitting()"
+        [disabled]="!canSave()"
+        class="primary"
+        type="button"
+      >
+        @if (submitting()) {
+          <lib-spinner-icon class="spinning" />
+        }
+        <span>{{ 'list.settings.save' | rokuT }}</span>
+      </button>
+    }
+
+    @if (!submitting()) {
+      <button (click)="shell.requestDismiss()" class="cancel" type="button">
+        {{ 'entry.cancel' | rokuT }}
+      </button>
+    }
+  </div>
 </lib-sheet-shell>
