@@ -90,6 +90,41 @@
   color: var(--app-text-primary);
 }
 
+// The full alternative under Install and join (plan 0033 D6). A real button with a
+// border rather than a quiet word, because it is not a lesser choice: somebody on a
+// shared or a work phone should not have to decline something in order to accept the
+// thing they came for.
+.alternative {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  margin-block-start: var(--app-space-3);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 620;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include sheet.focus-ring;
+}
+
+// Plain copy under the pair, deliberately not the `.notice` box: nothing here needs
+// attention, it is one sentence saying the two buttons do the same thing to the group.
+.install-note {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-align: center;
+}
+
 // The same 44px row the sheets' Cancel is, and a button rather than a link: it goes
 // somewhere in this app, and nothing here is a document to be opened in a new tab.
 .decline {

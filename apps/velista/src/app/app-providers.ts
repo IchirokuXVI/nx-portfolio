@@ -36,9 +36,13 @@ import {
   APP_API_CONFIG,
   APP_BASE_PATH,
   APP_BRAND,
+  APP_STANDALONE_ORIGIN,
   AppBrand,
 } from '@portfolio/velista/models';
-import { VELISTA_PLATFORM_PROVIDERS } from '@portfolio/velista/platform';
+import {
+  InstallStore,
+  VELISTA_PLATFORM_PROVIDERS,
+} from '@portfolio/velista/platform';
 import { environment } from '../environments/environment';
 import { VELISTA_TRANSLATION_PROVIDERS } from './translation-providers';
 
@@ -92,6 +96,15 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   { provide: APP_MOUNT_PATH, useExisting: APP_BASE_PATH },
   // The app's own backend configuration, not the portfolio's (item 6).
   { provide: APP_API_CONFIG, useValue: environment.api },
+
+  // Where this app answers on its own origin (plan 0033 D10). Read by the three
+  // surfaces that have to point at it when they are running as the portfolio's
+  // mounted copy, where an install would install the portfolio.
+  //
+  // On this list rather than beside the mount in `appRootRoute`, because unlike the
+  // mount it is the **same value in both run modes**: it is velista's address, not a
+  // statement about where this particular copy is.
+  { provide: APP_STANDALONE_ORIGIN, useValue: environment.appUrl },
 
   // The app's translations, on **this** injector rather than on the route table that
   // owns every page, which is where plan 0006 section 3 put them and where they lived
@@ -183,4 +196,15 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // was simply never constructed. `ENVIRONMENT_INITIALIZER` runs when the injector it
   // is declared on is created, which is true in both the mounted and standalone cases.
   provideEnvironmentInitializer(() => void inject(ConnectionRecovery)),
+
+  // Start listening for `beforeinstallprompt` (plan 0033 D1). Nothing injects this
+  // until somebody opens the install page or the account screen, and by then the
+  // event has already fired and been dropped: Chromium fires it once, early, at its
+  // own discretion, and a page cannot ask for another. Constructed here, the listener
+  // is running on whatever route the visitor actually arrived on.
+  //
+  // An **environment** initializer for the same reason `ConnectionRecovery` is one:
+  // `APP_INITIALIZER` is read once from the root injector at bootstrap, and nothing
+  // asks a route injector for it, so under the shell it would never run at all.
+  provideEnvironmentInitializer(() => void inject(InstallStore)),
 ];

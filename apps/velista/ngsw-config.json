@@ -20,7 +20,7 @@
       "installMode": "lazy",
       "updateMode": "prefetch",
       "resources": {
-        "files": ["/icons/**", "/*.ico", "/*.png", "/*.svg"]
+        "files": ["/icons/**", "/screenshots/**", "/*.ico", "/*.png", "/*.svg"]
       }
     }
   ],

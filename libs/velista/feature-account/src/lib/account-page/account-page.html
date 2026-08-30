@@ -56,6 +56,88 @@
     <p class="hint">{{ 'account.name.hint' | rokuT }}</p>
   </section>
 
+  <!--
+    The app (plan 0033, section 4.2). One row, in four forms, and the label is the
+    answer rather than an invitation.
+
+    Rendered for everybody, in both run modes and for a guest as readily as for a
+    registered account: a portfolio visitor reading this page is precisely somebody who
+    might want the real thing, and installing has nothing to do with who you are.
+  -->
+  <section aria-labelledby="account-app" class="group">
+    <lib-section-heading headingId="account-app" key="account.app.section" />
+
+    @switch (appRow()) {
+      @case ('installed') {
+        <!--
+          A **statement, not a disabled button** (D7). The same shape `0015` already
+          uses for a confirmed email: a disabled control invites a reader to work out
+          why, and a statement does not. Nothing here says "you already have this"; it
+          says Installed, which is a report of what this browser believes.
+
+          It is a belief, and there is no uninstall event anywhere (section 2.4), so
+          the way to act on a wrong one is the install page, which the row above the
+          fold on that screen keeps offering. That is why this row not being a dead end
+          costs nothing: the page it would lead to still exists.
+        -->
+        <lib-account-row
+          [chipTone]="'ok'"
+          [chip]="'account.app.installed' | rokuT"
+          [divided]="false"
+          [label]="'account.app.onThisPhone' | rokuT"
+          [value]="productName"
+        />
+      }
+
+      @case ('ready') {
+        <!--
+          The one row in this app that performs a browser action rather than
+          navigating. A captured prompt's whole value is that it removes the trip, and
+          a dismissal leaves the row exactly as it was.
+        -->
+        <lib-account-row
+          (activate)="openApp()"
+          [chevron]="true"
+          [detail]="'account.app.installDetail' | rokuT"
+          [divided]="false"
+          [hasAction]="true"
+          [value]="'account.app.install' | rokuT"
+        />
+      }
+
+      @case ('elsewhere') {
+        <!--
+          Mounted under the portfolio's shell, where installing would install the
+          portfolio (D5). The row points at velista's own origin and nothing here
+          prompts. Without a configured origin there is no address to offer, so the row
+          is a statement rather than a link to nowhere.
+        -->
+        <lib-account-row
+          (activate)="openApp()"
+          [chevron]="originLabel !== ''"
+          [detail]="
+            'account.app.elsewhereDetail' | rokuT: { origin: originLabel }
+          "
+          [divided]="false"
+          [hasAction]="originLabel !== ''"
+          [value]="'account.app.elsewhere' | rokuT"
+        />
+      }
+
+      @default {
+        <!-- No prompt in hand, so the row goes to the page that has the steps. -->
+        <lib-account-row
+          (activate)="openApp()"
+          [chevron]="true"
+          [detail]="'account.app.addDetail' | rokuT"
+          [divided]="false"
+          [hasAction]="true"
+          [value]="'account.app.add' | rokuT"
+        />
+      }
+    }
+  </section>
+
   @if (current.kind === 'guest') {
     <!--
       The way out of this phone. Not a row: it is the primary of the guest's screen and
