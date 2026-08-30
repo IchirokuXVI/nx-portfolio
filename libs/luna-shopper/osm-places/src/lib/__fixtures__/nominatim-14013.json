@@ -1,0 +1,18 @@
+[
+  {
+    "place_id": 296413118,
+    "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+    "osm_type": "relation",
+    "osm_id": 341744,
+    "lat": "37.8587",
+    "lon": "-4.7863",
+    "category": "boundary",
+    "type": "postal_code",
+    "place_rank": 21,
+    "importance": 0.12,
+    "addresstype": "postcode",
+    "name": "14013",
+    "display_name": "14013, Córdoba, Andalucía, España",
+    "boundingbox": ["37.8200000", "37.9100000", "-4.8400000", "-4.7100000"]
+  }
+]

@@ -1,5 +1,6 @@
 import { registerAs } from '@nestjs/config';
 import {
+  isComparableVersion,
   redisValidationSchema,
   telemetryValidationSchema,
 } from '@portfolio/luna-shopper/platform';
@@ -100,6 +101,24 @@ export const gatewayValidationSchema = Joi.object({
       then: appBaseUrl.required().invalid(''),
     }),
 
+  // The oldest client build this deployment will serve (velista plan 0034, D5).
+  //
+  // Empty, the default, switches the whole mechanism off: no header is advertised
+  // and no request is refused, which is how both clusters run until somebody decides
+  // there is a version worth retiring. When it is set it must be a semantic version,
+  // validated with the same function the guard compares with, so a typo fails the
+  // process at boot rather than silently retiring nobody. Failing loud matters more
+  // here than usual: the quiet failure of this variable is a safety net that is not
+  // there, which nothing observes until the day it was needed.
+  MIN_CLIENT_VERSION: Joi.string()
+    .allow('')
+    .default('')
+    .custom(
+      (value: string, helpers) =>
+        isComparableVersion(value) ? value : helpers.error('any.invalid'),
+      'semantic version'
+    ),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -131,6 +150,11 @@ export interface GatewayConfig {
     /** True only when the id, secret and callback are all present. */
     enabled: boolean;
   };
+  /**
+   * The oldest client build this deployment serves, or an empty string when it
+   * serves every one of them. Read by `MinClientVersionGuard` and by nothing else.
+   */
+  minClientVersion: string;
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -163,6 +187,7 @@ export const gatewayConfiguration = registerAs(
         process.env.GOOGLE_CALLBACK_URL
       ),
     },
+    minClientVersion: process.env.MIN_CLIENT_VERSION ?? '',
     logLevel: process.env.LOG_LEVEL as GatewayConfig['logLevel'],
   })
 );

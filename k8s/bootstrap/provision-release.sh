@@ -81,6 +81,13 @@ APP_SECRET=luna-shopper-backend-secrets
 AUTH_DB_SECRET=luna-shopper-backend-auth-db-secret
 CORE_DB_SECRET=luna-shopper-backend-core-db-secret
 CATALOG_DB_SECRET=luna-shopper-backend-catalog-db-secret
+# The harvester's database (plan 0038). Provisioned unconditionally even though
+# `harvester.enabled` is false in both clusters: a Secret that exists and is
+# unused costs nothing, and the alternative is that turning the harvester on is
+# two operations with a CreateContainerConfigError in between. --check only
+# asserts the keys the RENDERED chart references, so this stays quiet until the
+# harvester is actually deployed.
+HARVESTER_DB_SECRET=luna-shopper-backend-harvester-db-secret
 BACKUP_SECRET=luna-shopper-backend-backup-secret
 
 # ---------------------------------------------------------------------------
@@ -126,7 +133,12 @@ BACKUP_SECRET=luna-shopper-backend-backup-secret
 # ---------------------------------------------------------------------------
 
 # The only keys allowed to exist with no value. See the note above.
-OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS"
+#
+# GEMINI_API_KEY joins them for the same reason and by the same rule (plan 0039,
+# section 11): with it empty the assistant boots, its health probes pass, and
+# /v1/assistant answers 501 not_configured. An operator who never wanted an
+# assistant should not be told their deploy will fail when it will not.
+OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS GEMINI_API_KEY"
 
 is_optional_empty() {
   case " $OPTIONAL_EMPTY_KEYS " in
@@ -431,6 +443,7 @@ echo "Resolving credentials (existing values are kept; --rotate to regenerate)..
 AUTH_DB_PASSWORD="$(keep_or_generate "$AUTH_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
 CORE_DB_PASSWORD="$(keep_or_generate "$CORE_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
 CATALOG_DB_PASSWORD="$(keep_or_generate "$CATALOG_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
+HARVESTER_DB_PASSWORD="$(keep_or_generate "$HARVESTER_DB_SECRET" POSTGRES_PASSWORD generate_db_password)"
 
 # The JWT keypair. Losing it does not lose data, but every issued access and
 # refresh token becomes unverifiable at once, which logs out every user
@@ -449,11 +462,13 @@ if [ -z "$JWT_PRIVATE_KEY" ] || [ "$ROTATE" = true ]; then
   rm -f "$tmp_key" "$tmp_pub"
 fi
 
-# What cannot be generated. Both may be empty: since plan 0026 that is a
-# supported configuration rather than a broken one — the Google routes answer 501
-# and registration answers 501, instead of the service failing to boot.
+# What cannot be generated. All three may be empty: since plan 0026 that is a
+# supported configuration rather than a broken one — the Google routes answer 501,
+# registration answers 501, and (plan 0039) the assistant answers 501, instead of
+# the service failing to boot.
 GOOGLE_CLIENT_SECRET="$(existing "$APP_SECRET" GOOGLE_CLIENT_SECRET)"
 SMTP_PASS="$(existing "$APP_SECRET" SMTP_PASS)"
+GEMINI_API_KEY="$(existing "$APP_SECRET" GEMINI_API_KEY)"
 if [ -t 0 ]; then
   if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
     read -rsp "  Google client secret (blank to leave Google unconfigured): " GOOGLE_CLIENT_SECRET
@@ -463,8 +478,12 @@ if [ -t 0 ]; then
     read -rsp "  SMTP password (blank to leave email unconfigured): " SMTP_PASS
     echo
   fi
+  if [ -z "$GEMINI_API_KEY" ]; then
+    read -rsp "  Gemini API key (blank to leave the assistant unconfigured): " GEMINI_API_KEY
+    echo
+  fi
 else
-  echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET and SMTP_PASS as they are"
+  echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET, SMTP_PASS and GEMINI_API_KEY as they are"
 fi
 
 # ---------------------------------------------------------------------------
@@ -480,6 +499,7 @@ fi
 AUTH_DB_URL="postgres://luna_auth:${AUTH_DB_PASSWORD}@luna-shopper-backend-auth-db:5432/luna_auth"
 CORE_DB_URL="postgres://luna_core:${CORE_DB_PASSWORD}@luna-shopper-backend-core-db:5432/luna_core"
 CATALOG_DB_URL="postgres://luna_catalog:${CATALOG_DB_PASSWORD}@luna-shopper-backend-catalog-db:5432/luna_catalog"
+HARVESTER_DB_URL="postgres://luna_harvester:${HARVESTER_DB_PASSWORD}@luna-shopper-backend-harvester-db:5432/luna_harvester"
 
 apply_secret() {
   # `create --dry-run=client -o yaml | apply -f -` is the idempotent form:
@@ -495,15 +515,18 @@ echo "Applying Secrets..."
 apply_secret "$AUTH_DB_SECRET"    --from-literal=POSTGRES_PASSWORD="$AUTH_DB_PASSWORD"
 apply_secret "$CORE_DB_SECRET"    --from-literal=POSTGRES_PASSWORD="$CORE_DB_PASSWORD"
 apply_secret "$CATALOG_DB_SECRET" --from-literal=POSTGRES_PASSWORD="$CATALOG_DB_PASSWORD"
+apply_secret "$HARVESTER_DB_SECRET" --from-literal=POSTGRES_PASSWORD="$HARVESTER_DB_PASSWORD"
 
 apply_secret "$APP_SECRET" \
   --from-literal=AUTH_DB_URL="$AUTH_DB_URL" \
   --from-literal=CORE_DB_URL="$CORE_DB_URL" \
   --from-literal=CATALOG_DB_URL="$CATALOG_DB_URL" \
+  --from-literal=HARVESTER_DB_URL="$HARVESTER_DB_URL" \
   --from-literal=AUTH_JWT_PRIVATE_KEY="$JWT_PRIVATE_KEY" \
   --from-literal=AUTH_JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
   --from-literal=GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
-  --from-literal=SMTP_PASS="$SMTP_PASS"
+  --from-literal=SMTP_PASS="$SMTP_PASS" \
+  --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY"
 
 # The backup credentials (plan 0005). Only production renders the CronJobs, but
 # creating an empty placeholder in staging would be worse than nothing: --check
@@ -547,12 +570,14 @@ namespace: ${NAMESPACE}
 ${AUTH_DB_SECRET}/POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
 ${CORE_DB_SECRET}/POSTGRES_PASSWORD: ${CORE_DB_PASSWORD}
 ${CATALOG_DB_SECRET}/POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD}
+${HARVESTER_DB_SECRET}/POSTGRES_PASSWORD: ${HARVESTER_DB_PASSWORD}
 
 ${APP_SECRET}/AUTH_DB_URL: ${AUTH_DB_URL}
 ${APP_SECRET}/CORE_DB_URL: ${CORE_DB_URL}
 ${APP_SECRET}/CATALOG_DB_URL: ${CATALOG_DB_URL}
 ${APP_SECRET}/GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
 ${APP_SECRET}/SMTP_PASS: ${SMTP_PASS}
+${APP_SECRET}/GEMINI_API_KEY: ${GEMINI_API_KEY}
 
 ${APP_SECRET}/AUTH_JWT_PRIVATE_KEY:
 ${JWT_PRIVATE_KEY}

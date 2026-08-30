@@ -291,12 +291,14 @@ describe('AppShellRoutes', () => {
       it('offers the four sheets over it, as routes rather than flags', () => {
         // Rule E1: each covers the page without losing it, and Android's back button
         // has to dismiss it. Ticking a line off is deliberately not among them.
-        expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual([
-          'lines/:lineId/edit',
-          'lines/:lineId/comments',
-          'lines/:lineId/confirm/delete',
-          'settings',
-        ]);
+        expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual(
+          [
+            'lines/:lineId/edit',
+            'lines/:lineId/comments',
+            'lines/:lineId/confirm/delete',
+            'settings',
+          ]
+        );
       });
 
       it('guards none of the sheets, because write access is not knowable', () => {
@@ -357,6 +359,34 @@ describe('AppShellRoutes', () => {
   });
 
   /**
+   * Installing the app (plan 0033). The three assertions its section 8 asks for, and
+   * the middle one is the deliberate part: this page carries no guard on purpose.
+   */
+  describe('the install page', () => {
+    const install = pages.find((route) => route.path === 'install');
+
+    it('is declared, before the empty front door', () => {
+      const paths = pages.map((route) => route.path);
+
+      expect(install).toBeDefined();
+      expect(paths.indexOf('install')).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('is public, which is the whole point of a link', () => {
+      // It can be sent to somebody who has never signed in, and it makes no request.
+      // An absent guard reads as an oversight, so it is asserted rather than left to
+      // the route table to imply.
+      expect(install?.canActivate).toBeUndefined();
+      expect(install?.canMatch).toBeUndefined();
+    });
+
+    it('is a destination and not a sheet, so it has no children and stays lazy', () => {
+      expect(install?.children).toBeUndefined();
+      expect(install?.loadComponent).toBeDefined();
+    });
+  });
+
+  /**
    * The account (plan 0015). A route rather than a sheet, by the same test `0009`
    * section 4.1 used: it is deep linkable, it has its own scroll, and it is where
    * somebody goes deliberately.
@@ -404,5 +434,111 @@ describe('AppShellRoutes', () => {
         true
       );
     });
+  });
+
+  describe('the assistant', () => {
+    const assistant = pages.find((route) => route.path === 'assistant');
+
+    it('is declared, before the empty front door', () => {
+      // Plan 0032, section 2. The `''` ordering assertion at the top covers the table
+      // as a whole; this one names the route, so removing it is a failure rather than
+      // a shorter list that still happens to be ordered.
+      const paths = pages.map((route) => route.path);
+
+      expect(assistant).toBeDefined();
+      expect(paths.indexOf('assistant')).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('is authenticated, and guarded by nothing else', () => {
+      // The bot acts as the caller through the gateway with the caller's own token
+      // (backend 0039, rule A1), so there is nothing here to authorize that the API
+      // does not already.
+      expect(assistant?.canActivate).toHaveLength(1);
+      expect(assistant?.canMatch).toBeUndefined();
+    });
+
+    it('is a destination and not a sheet, so it has no children', () => {
+      // A sheet reachable from every page would be a child of every page: rule E1
+      // would put one identical entry under each, and they must not drift.
+      expect(assistant?.children).toBeUndefined();
+      expect(assistant?.canDeactivate).toBeUndefined();
+    });
+
+    it('is lazy, and names no provider here', () => {
+      // Both providers live on the page component. Naming either in `routes.ts` is an
+      // eager import of the `feature-assistant` barrel, which would land the panel in
+      // the shell's initial payload; the "keeps every page lazy" assertion above is
+      // the one that would catch it, and this states the reason next to the route.
+      expect(assistant?.loadComponent).toBeDefined();
+      expect(assistant?.providers).toBeUndefined();
+    });
+  });
+});
+
+/**
+ * Plan 0011 section 5 gave the panel an exit animation. This is what makes it play on
+ * every way out of a sheet rather than only on the three that start inside
+ * `SheetShell`, and it is asserted over the whole table rather than route by route
+ * because the defect it guards against is a sheet added later that nobody remembers to
+ * stamp. Such a sheet looks fine in development, where back is a key and the exit that
+ * skipped the animation is the gesture, and is exactly the one somebody reports as
+ * "this one does not animate".
+ */
+describe('the sheets and their exit animation', () => {
+  /** Every route in the table, flattened, each with the path it is reached by. */
+  function everyRoute(
+    routes: readonly Route[],
+    prefix = ''
+  ): { path: string; route: Route }[] {
+    return routes.flatMap((route) => {
+      const path = `${prefix}/${route.path ?? ''}`;
+      return [{ path, route }, ...everyRoute(route.children ?? [], path)];
+    });
+  }
+
+  /**
+   * A sheet is a route whose component draws itself in a `SheetShell`, which the table
+   * cannot be asked directly without loading every lazy chunk. So the paths are named,
+   * and `puts the guard on nothing else` is what keeps this list honest in the other
+   * direction.
+   */
+  const SHEET_PATHS = [
+    'zones/new',
+    'zones/join',
+    'lists/new',
+    'settings',
+    'lines/:lineId/edit',
+    'lines/:lineId/comments',
+    'lines/:lineId/confirm/delete',
+    'name',
+    'confirm/delete',
+    ':membershipId/confirm/remove',
+    ':membershipId/confirm/ban',
+    ':membershipId/confirm/transfer',
+    ':membershipId/confirm/rename',
+  ];
+
+  const all = everyRoute(AppShellRoutes);
+  const sheets = all.filter(({ route }) =>
+    SHEET_PATHS.includes(route.path ?? '')
+  );
+
+  it('holds the navigation off every sheet until the panel has fallen', () => {
+    const missing = sheets
+      .filter(({ route }) => (route.canDeactivate ?? []).length === 0)
+      .map(({ path }) => path);
+
+    expect(missing).toEqual([]);
+  });
+
+  it('puts the guard on nothing else', () => {
+    // A page is not a panel, and delaying a navigation off one would be a stall with
+    // nothing on screen to explain it.
+    const overreach = all
+      .filter(({ route }) => (route.canDeactivate ?? []).length > 0)
+      .filter(({ route }) => !SHEET_PATHS.includes(route.path ?? ''))
+      .map(({ path }) => path);
+
+    expect(overreach).toEqual([]);
   });
 });

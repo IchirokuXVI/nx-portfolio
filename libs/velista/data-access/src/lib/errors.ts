@@ -171,6 +171,11 @@ function codeForStatus(status: number): ErrorCode {
       return 'conflict';
     case 429:
       return 'rate_limited';
+    case 501:
+      // A proxy's own 501, or a body this build could not read on a route the
+      // deployment does not have configured. Distinct from `internal` because
+      // retrying will not help and the copy has to say a different thing.
+      return 'not_configured';
     default:
       return ERROR_CODE_FALLBACK;
   }

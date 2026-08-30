@@ -288,8 +288,31 @@
   color: var(--app-text-muted);
 }
 
+// What a finger takes hold of, as opposed to what it looks for. The glyph grew to
+// `--app-icon-lg`, which is still smaller than the target around it: at `--app-icon-md`
+// it read as a decoration between the two arrows rather than as the thing to drag, and
+// it was too small to aim at with a thumb even once it answered a pointer.
+//
+// `touch-action: none` is load bearing. Without it the browser claims the downward
+// movement as a scroll before the list ever sees a `pointermove`, which is why the grip
+// could not be dragged at all.
+.grip-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--app-touch-target);
+  padding-block: var(--app-space-2);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
 .grip {
-  font-size: var(--app-icon-md);
+  font-size: var(--app-icon-lg);
 }
 
 // Small on screen and 44 wide in the hit area, which is what `min-width` plus the

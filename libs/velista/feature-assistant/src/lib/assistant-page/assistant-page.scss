@@ -1,0 +1,67 @@
+// The panel fills its host and is laid out in three bands: a header that does not
+// move, a column that scrolls, and a composer pinned under it.
+//
+// `min-block-size: 0` on the column is what makes the middle band the one that
+// scrolls. Without it a flex child refuses to shrink below its content, the whole
+// host grows instead, and the composer leaves the bottom of the screen the moment the
+// conversation is longer than the viewport.
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-block-size: 0;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: var(--app-space-4) var(--app-space-4) var(--app-space-4)
+    var(--app-space-3);
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--app-touch-target);
+  min-block-size: var(--app-touch-target);
+  border: none;
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+    border-radius: var(--app-radius-md);
+  }
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.title {
+  margin: 0;
+  color: var(--app-text-primary);
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-xl);
+  font-weight: 400;
+  line-height: var(--app-leading-heading);
+}
+
+.column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-5);
+  min-block-size: 0;
+  padding: var(--app-space-6) var(--app-space-5);
+  overflow-y: auto;
+
+  // The scroll stays where the person left it when a bubble is added above the fold,
+  // rather than jumping, which matters most on the phone this is built for.
+  overscroll-behavior: contain;
+}

@@ -154,6 +154,20 @@ export class BrowserFacade {
   }
 
   /**
+   * Open an address outside this app, in a new tab, with the opener severed.
+   *
+   * Two screens need it and neither may reach for `window.open` itself (plan 0033, and
+   * rule D2 above): the mounted mode's pointer at velista's own origin, and the
+   * Firefox frame's bookmark hint. `noopener` because the destination is another
+   * origin and there is no reason to hand it a handle back to this document.
+   *
+   * A no-op on the server, like everything else here.
+   */
+  openExternal(url: string): void {
+    this.window?.open(url, '_blank', 'noopener');
+  }
+
+  /**
    * Reload the page. This is how D6's connection-loss screen recovers while the
    * app has no offline queue: when the connection returns, the app reloads itself.
    * Deliberately a facade method so the standalone SSR build keeps compiling.

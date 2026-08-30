@@ -221,7 +221,10 @@
       "body": "Pide entrar y quien lleva el grupo te dejará pasar. Verás el grupo y sus listas en cuanto lo haga",
       "codeLabel": "El código de tu enlace",
       "decline": "Ahora no",
-      "guestNotice": "Al pedir entrar se crea una cuenta en este teléfono. Añádele un correo después para no perderla"
+      "guestNotice": "Al pedir entrar se crea una cuenta en este teléfono. Añádele un correo después para no perderla",
+      "installAndJoin": "Instalar y pedir entrar",
+      "joinOnly": "Pedir entrar en el navegador",
+      "installNote": "Al instalarla, Velista se queda en tu pantalla de inicio. En los dos casos estás pidiendo entrar al mismo grupo"
     },
     "invite": {
       "title": "{{name}} es tuyo",
@@ -286,9 +289,9 @@
       "newZone": "Nuevo grupo",
       "generateList": "Obtener lista de la compra",
       "generateListSoon": "Próximamente",
-      "search": "Buscar",
       "account": "Tu cuenta",
-      "changeLocale": "Cambiar idioma"
+      "changeLocale": "Cambiar idioma",
+      "assistant": "Asistente"
     },
     "zoneExplainer": "Un grupo es la casa o los compañeros de piso con quienes compartes listas. Puedes empezar sin cuenta.",
     "section": {
@@ -533,6 +536,137 @@
       "badName": "Los nombres tienen de 2 a 40 caracteres y admiten letras, números, espacios y . _ ' -",
       "gone": "Esa cuenta ya no existe",
       "failed": "No se pudo completar. Inténtalo de nuevo"
+    },
+    "app": {
+      "section": "La app",
+      "install": "Instalar la app",
+      "installDetail": "Ten Velista en tu pantalla de inicio. Se abre sola y funciona sin señal",
+      "add": "Añádela a tu pantalla de inicio",
+      "addDetail": "Tres pasos, y de lo demás se encarga tu navegador",
+      "onThisPhone": "En este teléfono",
+      "installed": "Instalada",
+      "elsewhere": "Consigue la app",
+      "elsewhereDetail": "Velista tiene su propia dirección, {{origin}}. Ahí es donde se instala"
     }
+  },
+  "install": {
+    "back": "Volver",
+    "title": "Ten Velista en tu teléfono",
+    "body": "Se queda en tu pantalla de inicio como cualquier otra app, se abre sola y tus listas están ahí aunque no haya señal",
+    "action": "Instalar Velista",
+    "note": "No se descarga nada de ninguna tienda. Puedes quitarla igual que quitas cualquier otra app",
+    "manual": {
+      "reveal": "¿Prefieres hacerlo a mano?"
+    },
+    "installed": {
+      "title": "Velista está instalada",
+      "body": "Estás leyendo esto dentro de la app. Está en tu pantalla de inicio y se abre sin el navegador",
+      "done": "No queda nada por hacer",
+      "reveal": "¿No la ves en tu pantalla de inicio? Mira los pasos",
+      "home": "Volver a tus grupos"
+    },
+    "elsewhere": {
+      "title": "Velista tiene su propia dirección",
+      "body": "Estás leyendo la copia del portfolio. Velista se instala en {{origin}}, donde tiene su propio icono y su propio nombre",
+      "action": "Abrir {{origin}}"
+    },
+    "guide": {
+      "iosSafari": {
+        "heading": "Añádela desde Safari",
+        "step1": "Toca Compartir, en la barra de abajo",
+        "step2": "Baja y elige Añadir a pantalla de inicio",
+        "step3": "Toca Añadir, arriba a la derecha"
+      },
+      "androidMenu": {
+        "heading": "Añádela desde el menú del navegador",
+        "step1": "Abre el menú del navegador, normalmente tres puntos",
+        "step2": "Elige Instalar aplicación, o Añadir a pantalla de inicio",
+        "step3": "Confirma y aparecerá en tu pantalla de inicio"
+      },
+      "desktopChromium": {
+        "heading": "Añádela desde la barra de direcciones",
+        "step1": "Mira al final de la barra de direcciones, a la derecha, el icono de instalar",
+        "step2": "Púlsalo y luego Instalar",
+        "step3": "Si no está, abre el menú del navegador y busca Instalar Velista"
+      },
+      "desktopSafari": {
+        "heading": "Añádela desde Safari",
+        "step1": "Abre el menú Archivo",
+        "step2": "Elige Añadir al Dock",
+        "step3": "Ponle nombre y pulsa Añadir"
+      },
+      "desktopFirefox": {
+        "title": "Firefox no puede guardarla como app",
+        "body": "En el escritorio no. Velista funciona perfectamente en esta pestaña, y si quieres la ventana, abre Velista en Chrome, Edge o Safari en este ordenador e instálala desde ahí",
+        "bookmark": "O pulsa Ctrl D para guardarla en marcadores y fija la pestaña. Velista recuerda dónde estabas de todos modos"
+      }
+    },
+    "benefit": {
+      "fullscreen": {
+        "title": "Toda la pantalla",
+        "body": "Sin barra de direcciones ni pestañas. Solo las listas"
+      },
+      "oneTap": {
+        "title": "A un toque desde la pantalla de inicio",
+        "body": "Junto a todo lo que abres sin pensar"
+      },
+      "offline": {
+        "title": "Se abre sin señal",
+        "body": "La última lista que miraste se sigue leyendo en el súper"
+      }
+    },
+    "announce": {
+      "ready": "Tu navegador puede instalar Velista. El botón está arriba en la página"
+    }
+  },
+  "assistant": {
+    "title": "Asistente",
+    "back": "Atrás",
+    "intro": {
+      "lead": "Dime qué necesitas. Por ejemplo:",
+      "add": {
+        "label": "Añadir a una lista",
+        "said": "«Añade leche a la lista del piso»"
+      },
+      "ask": {
+        "label": "Preguntar por una lista",
+        "said": "«¿Hay leche en la compra semanal?»"
+      },
+      "rename": {
+        "label": "Cambiar tu nombre",
+        "said": "«Llámame Marta»"
+      }
+    },
+    "composer": {
+      "label": "Escribe un mensaje al asistente",
+      "placeholder": "Escribe un mensaje",
+      "record": "Grabar un mensaje",
+      "send": "Enviar",
+      "stop": "Parar y enviar",
+      "spoken": "Un mensaje hablado"
+    },
+    "recorder": {
+      "pause": "Pausar",
+      "resume": "Seguir grabando",
+      "refused": "No te oigo. El micrófono está desactivado para esta aplicación",
+      "unavailable": "Este navegador no puede grabar. Puedes escribir igualmente",
+      "dismiss": "Cerrar",
+      "limit": {
+        "longest": "Cinco minutos es lo máximo que puedo escuchar.",
+        "left_one": "Queda 1 segundo.",
+        "left_other": "Quedan {{count}} segundos.",
+        "reached": "Han pasado cinco minutos, así que he dejado de escuchar.",
+        "pressStop": "Pulsa parar para enviarlo."
+      }
+    },
+    "busy": {
+      "seconds_one": "segundo",
+      "seconds_other": "segundos",
+      "body": "Mucha gente está preguntando a la vez. Estaré listo en un momento, y tu mensaje sigue aquí.",
+      "noNumber": "Mucha gente está preguntando a la vez. Vuelve a intentarlo en un momento, y tu mensaje sigue aquí."
+    },
+    "failed": "Eso no me llegó. Tu mensaje sigue aquí, inténtalo otra vez.",
+    "unconfigured": "El asistente no está activado aquí. Es cosa nuestra, no tuya, y volver a intentarlo no lo cambiará.",
+    "dropped": "El principio de esta conversación es demasiado largo para guardarlo, así que lo he soltado."
   }
 }

@@ -1,0 +1,35 @@
+{
+  "id": "8271",
+  "ean": "8480000203441",
+  "slug": "jamon-serrano-lonchas-hacendado",
+  "brand": "Hacendado",
+  "packaging": "Sobre",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/8271/jamon-serrano-lonchas-hacendado",
+  "display_name": "Jamón serrano en lonchas Hacendado",
+  "price_instructions": {
+    "iva": 10,
+    "is_pack": false,
+    "size_format": "kg",
+    "total_units": null,
+    "unit_price": "2.45",
+    "bulk_price": "16.75",
+    "unit_size": 0.15,
+    "drained_weight": null,
+    "reference_price": "16.75",
+    "reference_format": "kg",
+    "price_decreased": false,
+    "previous_unit_price": null
+  },
+  "categories": [
+    {
+      "id": 51,
+      "name": "Charcutería y quesos",
+      "level": 0,
+      "order": 5,
+      "categories": [
+        { "id": 55, "name": "Jamón serrano", "level": 1, "order": 3 }
+      ]
+    }
+  ]
+}

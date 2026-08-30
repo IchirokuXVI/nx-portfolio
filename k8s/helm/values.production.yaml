@@ -59,6 +59,7 @@ lunaShopperBackend:
     # redirect lands the portfolio entry can go.
     corsOrigins: https://ichirokuxvi.com,https://velista.app
     authJwtKid: prod-1
+    googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # The path the gateway actually serves: its controllers are versioned, so the
     # callback lives under /v1. It must match a URI pre-registered with Google
     # exactly, which is why it is spelled out rather than derived from a domain.
@@ -83,6 +84,23 @@ lunaShopperBackend:
     # app is on velista.app now.
     mailVerifyBaseUrl: https://velista.app/verify-email
     mailResetBaseUrl: https://velista.app/reset-password
+
+  # The harvester (plan 0038) is NOT deployed to production, and this line is here
+  # to say so out loud rather than to change anything: `harvester.enabled` is
+  # already false in values.yaml.
+  #
+  # The reason is capacity, not caution. A catalog discovery run is 4,383 HTTP
+  # requests over eighteen minutes at the default rate, and running it costs a
+  # third Postgres with its own 2Gi volume plus a sixth Node process on a VPS
+  # whose Postgres instances are capped at 256Mi each. The development machine has
+  # room for that and this node does not, so the harvester runs locally against
+  # the compose stack and writes its results to the local catalog.
+  #
+  # Nothing about that is provisional: the chart describes the harvester fully, so
+  # the files do not drift, and turning it on here later is this flag plus the two
+  # Secret keys provision-release.sh already knows how to write.
+  harvester:
+    enabled: false
 
   # Nightly pg_dump off the node (plan 0005). Production only: staging holds
   # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.

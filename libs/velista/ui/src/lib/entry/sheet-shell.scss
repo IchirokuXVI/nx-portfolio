@@ -44,6 +44,13 @@
   border-start-end-radius: var(--app-sheet-radius);
   box-shadow: var(--app-sheet-shadow);
 
+  // A scroll that reaches either end of this panel stops here rather than continuing
+  // into the document behind it. Without it the browser chains the leftover distance to
+  // the page, and at the top of the page a downward chain is pull to refresh: dragging
+  // the sheet down reloaded the app. `touch-action: none` on the grabber covers the
+  // gesture that starts on the handle; this covers the one that starts on the content.
+  overscroll-behavior: contain;
+
   // The rise. A transform, so it is composited, and so it is one declaration to
   // skip: under `prefers-reduced-motion` the motion token is zero and the panel is
   // simply there (plan 0002, section 4.5). No fade on the scrim, which would dim
@@ -53,8 +60,24 @@
   // The fall, played while the shell holds the navigation back. `forwards`, so the
   // panel stays down for the frames between the animation ending and the route
   // change landing.
+  //
+  // When the fall follows a drag the panel still carries the inline `translateY` the
+  // finger left it at. An animation outranks an inline declaration, so `sheet-fall`'s
+  // implicit first frame is that offset and the drag continues into the fall as one
+  // movement, which is the whole reason the offset is not cleared first.
   &.closing {
     animation: sheet-fall var(--app-motion-base) var(--app-motion-ease) forwards;
+  }
+
+  // The spring back, for a drag that did not go far enough to mean it. Only in this
+  // state: a transition left on permanently would fight the drag itself, which has to
+  // track the finger exactly and not lag a fraction behind it.
+  //
+  // `--app-motion-fast` and not `-base`, because putting back a sheet that was never
+  // going anywhere is a correction, and a correction as slow as a dismissal reads as
+  // the app thinking about it.
+  &.settling {
+    transition: transform var(--app-motion-fast) var(--app-motion-ease);
   }
 }
 
@@ -70,11 +93,40 @@
   }
 }
 
+// The drag surface. The bar inside it is the hint; this is the target.
+//
+// It spans the panel and stands about a finger tall, because the gesture it catches is
+// made with a thumb on a phone held in one hand, and because it has to be caught before
+// the browser decides the movement was a scroll. The panel's own top padding is pulled
+// back into it rather than added to it, so a strip this size costs no extra space above
+// the title.
+.grabber {
+  display: block;
+  // The panel's own padding is pulled back into the strip on all three sides rather
+  // than added to it, so a target 37px tall and the full width of the sheet leaves the
+  // bar and the title exactly where they were.
+  margin-block: calc(var(--app-space-4) * -1) 0;
+  margin-inline: calc(var(--app-space-6) * -1);
+  padding-block: var(--app-space-5);
+  padding-inline: var(--app-space-6);
+  cursor: grab;
+  // The gesture belongs to the sheet. Without this the browser takes a downward drag
+  // for a scroll of the page behind, and at the top of that page for a pull to refresh,
+  // which is why dragging the handle used to reload the app instead of closing it.
+  touch-action: none;
+  // A drag across a panel of text otherwise selects the text as it goes.
+  user-select: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
 .handle {
   display: block;
   inline-size: var(--app-sheet-handle-width);
   block-size: var(--app-sheet-handle-height);
-  margin: 0 auto var(--app-space-6);
+  margin-inline: auto;
   border-radius: var(--app-radius-full);
   background: var(--app-border-strong);
 }

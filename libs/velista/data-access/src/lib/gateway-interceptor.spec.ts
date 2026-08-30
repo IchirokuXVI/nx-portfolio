@@ -9,8 +9,13 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
-import { APP_API_CONFIG, type SessionTokens } from '@portfolio/velista/models';
 import {
+  APP_API_CONFIG,
+  APP_VERSION,
+  type SessionTokens,
+} from '@portfolio/velista/models';
+import {
+  AppUpdates,
   ConnectionState,
   provideFakeBrowserFacade,
   StorageKeys,
@@ -63,9 +68,11 @@ describe('gatewayInterceptor', () => {
   let httpMock: HttpTestingController;
   let tokens: TokenStore;
   let storage: Map<string, string>;
+  let checkNow: jest.Mock;
 
   beforeEach(() => {
     storage = new Map();
+    checkNow = jest.fn();
 
     TestBed.configureTestingModule({
       providers: [
@@ -83,6 +90,11 @@ describe('gatewayInterceptor', () => {
           useValue: { getLocale: () => 'es' },
         },
         provideFakeBrowserFacade(storage),
+        // A real release version, so the floor comparisons below are the ones a
+        // deployed client would make rather than the "no opinion" path a
+        // development build takes (plan 0034 D6).
+        { provide: APP_VERSION, useValue: '1.4.0' },
+        { provide: AppUpdates, useValue: { checkNow } },
         // Rule D5: these read `APP_API_CONFIG`, so the app injector owns them and a
         // spec has to install them the same way the app does.
         ...VELISTA_DATA_ACCESS_PROVIDERS,
@@ -200,6 +212,38 @@ describe('gatewayInterceptor', () => {
       const error = (await failure) as GatewayError;
       expect(error.code).toBe('internal');
       expect(error.correlationId).toBeTruthy();
+    });
+
+    it('reads a 501 as not_configured rather than as something to retry', async () => {
+      // Backend plan 0026: an install without the credential a feature needs boots,
+      // keeps the route in the published document, and answers 501 forever. Google
+      // sign in has done this since 0026 and the assistant does it since 0039.
+      //
+      // `not_configured` was missing from this app's hand synced `ERROR_CODES`, so it
+      // used to fall back to `internal` and every screen said "try again" about the
+      // one failure retrying cannot fix.
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/assistant`));
+      httpMock
+        .expectOne(`${GATEWAY}/v1/assistant`)
+        .flush(
+          { code: 'not_configured', correlationId: 'server-id' },
+          { status: 501, statusText: 'Not Implemented' }
+        );
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).toBe('not_configured');
+    });
+
+    it('derives not_configured from a bare 501 as well', async () => {
+      // A proxy's own 501, or a body this build could not read.
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/assistant`));
+      httpMock.expectOne(`${GATEWAY}/v1/assistant`).flush('<html>501</html>', {
+        status: 501,
+        statusText: 'Not Implemented',
+      });
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).toBe('not_configured');
     });
 
     it('turns a no-response failure into a NetworkError and reports it', async () => {
@@ -383,6 +427,163 @@ describe('gatewayInterceptor', () => {
       // without another HTTP call, so the original 401 surfaces.
       await failure;
       expect(tokens.tokens()).toBeNull();
+    });
+  });
+
+  /**
+   * The client end of velista plan 0034: state which build this is, and react when
+   * the deployment says it is too old. Every reaction is a call to `checkNow` and
+   * nothing else, per D7, because a reload taken on the server's word alone would
+   * repeat forever in the window between a floor moving and the new bundle being
+   * reachable.
+   */
+  describe('the client version', () => {
+    it('states the build version on a gateway request', async () => {
+      const done = firstValue(http.get(`${GATEWAY}/v1/zones`));
+      const req = httpMock.expectOne(`${GATEWAY}/v1/zones`);
+
+      expect(req.request.headers.get('x-client-version')).toBe('1.4.0');
+      req.flush({});
+      await done;
+    });
+
+    it('never states it to a non gateway origin', async () => {
+      // Same reasoning as the bearer token: nothing about this app goes anywhere
+      // that is not its own backend.
+      const done = firstValue(http.get('https://evil.test/collect'));
+      const req = httpMock.expectOne('https://evil.test/collect');
+
+      expect(req.request.headers.has('x-client-version')).toBe(false);
+      req.flush({});
+      await done;
+    });
+
+    it('asks for an update when the advertised floor is above this build', async () => {
+      const done = firstValue(http.get(`${GATEWAY}/v1/zones`));
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush({}, { headers: { 'x-min-client-version': '1.5.0' } });
+      await done;
+
+      expect(checkNow).toHaveBeenCalled();
+    });
+
+    it('does nothing when the advertised floor is this build', async () => {
+      const done = firstValue(http.get(`${GATEWAY}/v1/zones`));
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush({}, { headers: { 'x-min-client-version': '1.4.0' } });
+      await done;
+
+      expect(checkNow).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when no floor is advertised', async () => {
+      // Both clusters, until somebody sets MIN_CLIENT_VERSION.
+      const done = firstValue(http.get(`${GATEWAY}/v1/zones`));
+
+      httpMock.expectOne(`${GATEWAY}/v1/zones`).flush({});
+      await done;
+
+      expect(checkNow).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the advertised floor is not a version', async () => {
+      const done = firstValue(http.get(`${GATEWAY}/v1/zones`));
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush({}, { headers: { 'x-min-client-version': 'newest' } });
+      await done;
+
+      expect(checkNow).not.toHaveBeenCalled();
+    });
+
+    it('asks for an update when the gateway refuses the build outright', async () => {
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/zones`));
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush(
+          { code: 'client_too_old', correlationId: 'c1' },
+          { status: 426, statusText: 'Upgrade Required' }
+        );
+
+      // The error still reaches the caller: `checkNow` may find nothing, and the
+      // page has to be able to say so.
+      const error = (await failure) as GatewayError;
+      expect(error).toBeInstanceOf(GatewayError);
+      expect(error.code).toBe('client_too_old');
+      expect(error.status).toBe(426);
+      expect(checkNow).toHaveBeenCalled();
+    });
+
+    it('does not ask for an update on an ordinary failure', async () => {
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/zones`));
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush(
+          { code: 'not_found', correlationId: 'c1' },
+          { status: 404, statusText: 'Not Found' }
+        );
+      await failure;
+
+      expect(checkNow).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a build with no comparable version', () => {
+    beforeEach(() => {
+      // Every development build, and the staging fleet, which identifies itself
+      // with an image tag rather than a release (plan 0034 D6).
+      TestBed.resetTestingModule();
+      checkNow = jest.fn();
+      TestBed.configureTestingModule({
+        providers: [
+          provideHttpClient(withInterceptors([gatewayInterceptor])),
+          provideHttpClientTesting(),
+          {
+            provide: APP_API_CONFIG,
+            useValue: {
+              gatewayBaseUrl: GATEWAY,
+              realtimeBaseUrl: 'https://realtime.example',
+            },
+          },
+          {
+            provide: RokuTranslatorService,
+            useValue: { getLocale: () => 'es' },
+          },
+          provideFakeBrowserFacade(new Map()),
+          { provide: APP_VERSION, useValue: 'staging' },
+          { provide: AppUpdates, useValue: { checkNow } },
+          ...VELISTA_DATA_ACCESS_PROVIDERS,
+        ],
+      });
+      http = TestBed.inject(HttpClient);
+      httpMock = TestBed.inject(HttpTestingController);
+    });
+
+    it('states its version anyway, so the gateway can log it', async () => {
+      const done = firstValue(http.get(`${GATEWAY}/v1/zones`));
+      const req = httpMock.expectOne(`${GATEWAY}/v1/zones`);
+
+      expect(req.request.headers.get('x-client-version')).toBe('staging');
+      req.flush({});
+      await done;
+    });
+
+    it('never considers itself stale, whatever floor is advertised', async () => {
+      const done = firstValue(http.get(`${GATEWAY}/v1/zones`));
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/zones`)
+        .flush({}, { headers: { 'x-min-client-version': '99.0.0' } });
+      await done;
+
+      expect(checkNow).not.toHaveBeenCalled();
     });
   });
 });

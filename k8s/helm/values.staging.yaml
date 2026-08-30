@@ -55,6 +55,7 @@ lunaShopperBackend:
     # Both origins while both are live, exactly as production.
     corsOrigins: https://staging.ichirokuxvi.com,https://staging.velista.app
     authJwtKid: staging-1
+    googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
     # Register this URI in the Google console beside the production one. Google
     # matches redirect_uri exactly, so the two are two entries, not a pattern.
     googleCallbackUrl: https://api.staging.velista.app/v1/auth/google/callback
@@ -66,6 +67,21 @@ lunaShopperBackend:
     mailResetBaseUrl: https://staging.velista.app/reset-password
     # Staging is the natural place to switch tracing on first, once a collector
     # lands in the cluster. Off until then, same as production.
+
+  # The harvester (plan 0038) is NOT deployed to staging either, and staging has a
+  # second reason on top of production's capacity one.
+  #
+  # Section 8.1: staging and production must never hit the same third party twice
+  # for the same data. Two clusters both walking Mercadona's assortment is double
+  # the requests for one copy of the answer, and it is exactly the behaviour the
+  # politeness argument in that section rests on not doing. Since the runs happen
+  # locally, neither cluster fetches anything at all, which settles it.
+  #
+  # If the harvester is ever turned on in a cluster, staging is where it goes
+  # first and MERCADONA_ENABLED stays false there: the run machinery can be
+  # exercised against a stub without touching the chain.
+  harvester:
+    enabled: false
 
   # No backups in staging. It is disposable by design, and a restore drill is
   # rehearsed here by restoring a PRODUCTION dump into it (plan 0005, section 6),

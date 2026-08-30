@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ INSTALL AND JOIN ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ready &middot; one press does both</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <header style="padding: 22px 24px 0;">
+        <span style="font-family: 'Marcellus', Georgia, serif; font-size: 21px; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+      </header>
+
+      <main style="flex: 1; padding: 34px 24px 26px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+
+        <span aria-hidden="true" style="width: 62px; height: 62px; border-radius: 999px; background: rgba(255,180,84,0.12); border: 1px solid rgba(255,180,84,0.24); display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+          <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9.5" cy="8" r="3.4"/><path d="M3.5 19.5c0-3.2 2.7-5.2 6-5.2s6 2 6 5.2"/><path d="M18.5 8v6"/><path d="M15.5 11h6"/>
+          </svg>
+        </span>
+
+        <h1 style="margin: 0 0 10px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 29px; line-height: 1.2; color: #f7f8fc;">You have been invited to a group</h1>
+        <p style="margin: 0 0 22px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Ask to join, and whoever runs the group lets you in.</p>
+
+        <section style="width: 100%; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; background: #11141f; padding: 16px; margin-bottom: 22px;">
+          <h2 style="margin: 0 0 8px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899;">Your code</h2>
+          <p style="margin: 0; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 25px; letter-spacing: 0.16em; color: #f7f8fc;">7QX4 2KMD</p>
+        </section>
+
+        <!-- THE PAIR. Primary does both, in that order (D6). -->
+        <button type="button" style="width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/>
+          </svg>
+          Install and join
+        </button>
+
+        <!-- A full button, not a quiet link. It is not the lesser choice. -->
+        <button type="button" style="width: 100%; min-height: 50px; margin-top: 12px; border: 1px solid rgba(255,255,255,0.16); border-radius: 12px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 15.5px; font-weight: 620; cursor: pointer;">Join in the browser</button>
+
+        <p style="margin: 14px 0 0; font-size: 12.5px; line-height: 1.5; color: #525a78;">Installing keeps Velista on your home screen. Either way you are asking to join the same group.</p>
+
+        <div style="flex: 1;"></div>
+
+        <button type="button" style="background: transparent; border: 0; min-height: 44px; font-family: inherit; font-size: 14.5px; color: #98a0bb; cursor: pointer;">Not now</button>
+
+        <p style="margin: 12px 0 0; font-size: 12.5px; line-height: 1.5; color: #6f7899; display: flex; gap: 8px; text-align: left;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px;" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.6h.01"/></svg>
+          <span>Joining makes you an account on this phone. You can add an email to it later.</span>
+        </p>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ============ NO PROMPT: unchanged from what ships ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">manual or installed &middot; exactly what ships today</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+      <header style="padding: 22px 24px 0;">
+        <span style="font-family: 'Marcellus', Georgia, serif; font-size: 21px; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+      </header>
+
+      <main style="flex: 1; padding: 34px 24px 26px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+
+        <span aria-hidden="true" style="width: 62px; height: 62px; border-radius: 999px; background: rgba(255,180,84,0.12); border: 1px solid rgba(255,180,84,0.24); display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+          <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9.5" cy="8" r="3.4"/><path d="M3.5 19.5c0-3.2 2.7-5.2 6-5.2s6 2 6 5.2"/><path d="M18.5 8v6"/><path d="M15.5 11h6"/>
+          </svg>
+        </span>
+
+        <h1 style="margin: 0 0 10px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 29px; line-height: 1.2; color: #f7f8fc;">You have been invited to a group</h1>
+        <p style="margin: 0 0 22px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Ask to join, and whoever runs the group lets you in.</p>
+
+        <section style="width: 100%; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; background: #11141f; padding: 16px; margin-bottom: 22px;">
+          <h2 style="margin: 0 0 8px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899;">Your code</h2>
+          <p style="margin: 0; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 25px; letter-spacing: 0.16em; color: #f7f8fc;">7QX4 2KMD</p>
+        </section>
+
+        <button type="button" style="width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 700; cursor: pointer;">Ask to join</button>
+
+        <div style="flex: 1;"></div>
+
+        <button type="button" style="background: transparent; border: 0; min-height: 44px; font-family: inherit; font-size: 14.5px; color: #98a0bb; cursor: pointer;">Not now</button>
+
+        <p style="margin: 12px 0 0; font-size: 12.5px; line-height: 1.5; color: #6f7899; display: flex; gap: 8px; text-align: left;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px;" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.6h.01"/></svg>
+          <span>Joining makes you an account on this phone. You can add an email to it later.</span>
+        </p>
+
+        <p style="margin: 18px 0 0; font-size: 12px; line-height: 1.5; color: #343a54;">No install tutorial here. Somebody who wants the app finds it on the account page a minute later.</p>
+
+      </main>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

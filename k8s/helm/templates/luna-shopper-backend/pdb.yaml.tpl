@@ -19,6 +19,11 @@
 */}}
 {{- if gt (int $ls.replicaCount) 1 }}
 {{- range $ls.services }}
+{{- if not (include "lunaShopperBackend.entryEnabled" (dict "entry" . "ls" $ls)) }}{{- continue }}{{- end }}
+{{/* The same reasoning applies per entry: a service that pins itself to one
+     replica gets no budget either, for exactly the reason above. The harvester
+     is one, because a run is a singleton. */}}
+{{- if eq (int (.replicas | default $ls.replicaCount)) 1 }}{{- continue }}{{- end }}
 ---
 # PodDisruptionBudget (plan 0002, section 6): a voluntary disruption (node drain
 # during maintenance) may never take this service below minAvailable, so a

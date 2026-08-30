@@ -1,0 +1,52 @@
+{
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 12,
+      "name": "Aceite, especias y salsas",
+      "order": 1,
+      "layout": 1,
+      "published": true,
+      "categories": [
+        {
+          "id": 112,
+          "name": "Aceite, vinagre y sal",
+          "order": 1,
+          "layout": 1,
+          "published": true
+        },
+        {
+          "id": 113,
+          "name": "Especias",
+          "order": 2,
+          "layout": 1,
+          "published": true
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "name": "Charcutería y quesos",
+      "order": 5,
+      "layout": 1,
+      "published": true,
+      "categories": [
+        {
+          "id": 53,
+          "name": "Queso curado, semicurado y tierno",
+          "order": 1,
+          "layout": 1,
+          "published": true
+        },
+        {
+          "id": 55,
+          "name": "Jamón serrano",
+          "order": 3,
+          "layout": 1,
+          "published": true
+        }
+      ]
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 #
 # luna-slot.sh — configure this checkout (a git worktree, usually) to run the
 # Luna Shopper backend on an isolated "slot" so several worktrees can bring up
-# the compose stack and `nx serve` the five services at the same time without
+# the compose stack and `nx serve` the backend services at the same time without
 # fighting over ports, container names, or databases.
 #
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh <slot>   configure for that slot
@@ -61,7 +61,7 @@
 # This script (re)writes, all git ignored, so it is safe per worktree:
 #   - k8s/e2e/luna-shopper-backend/.env.slot   (compose: project name + host ports)
 #   - apps/luna-shopper-backend/.env.luna-shopper-backend       (shared service vars)
-#   - apps/luna-shopper-backend/{gateway,realtime,auth,core,catalog}/.env
+#   - apps/luna-shopper-backend/{gateway,realtime,auth,core,catalog,harvester,assistant}/.env
 #   - apps/luna-shopper-backend/secrets/jwt.{key,pub}   (generated once if absent)
 #   - k8s/e2e/luna-shopper-backend/.run/       (logs and pids of what --up started)
 #
@@ -81,7 +81,7 @@ PROBE="$root/tools/dev/probe-ports.mjs"
 # The five Nest services, in the order --up starts them. Their ports are not passed
 # on the command line: each service reads PORT out of its own .env, which this
 # script wrote for this slot, so there is one place a port can be wrong.
-SERVICES=(gateway realtime auth core catalog)
+SERVICES=(gateway realtime auth core catalog harvester assistant)
 
 # How high --auto and --list will look. See the same constant in ng-slot.sh.
 MAX_SLOT=9
@@ -116,7 +116,7 @@ stack and its volumes alone so a restart never costs you the data.
 
 options:
   -p, --profile <name>   compose profile for --up / --down (e.g. observability)
-  --services a,b         limit --restart to these (default: all five)
+  --services a,b         limit --restart to these (default: all of them)
   --app-slot <n>         which Angular slot the Google callback and the mail
                          links send a browser to (default 0). Only those; CORS
                          allows every Angular slot no matter what this says.
@@ -129,7 +129,7 @@ and several can at the same time. Backend slot 3 does not imply front end slot 3
 
 --up is the whole thing: it writes the .env files if they are missing, brings the
 compose stack up and waits on its healthchecks, runs the migrations, then serves
-all five services. --down is its inverse, and by default it removes this slot's
+all six services. --down is its inverse, and by default it removes this slot's
 volumes, which is what `stack.sh down` has always meant here.
 EOF
 }
@@ -159,7 +159,8 @@ EOF
 # at +10, messaging at +20, cache at +30, mail at +40, observability at +50.
 declare -A DEFAULT_PORT=(
   [gateway]=3000  [realtime]=3001  [auth]=3002  [core]=3003  [catalog]=3004
-  [auth_db]=5432  [core_db]=5433   [catalog_db]=5434
+  [harvester]=3005 [assistant]=3006
+  [auth_db]=5432  [core_db]=5433   [catalog_db]=5434 [harvester_db]=5435
   [nats]=4222     [nats_mon]=8222
   [redis]=6379
   [smtp]=1025     [mailpit]=8025
@@ -168,7 +169,8 @@ declare -A DEFAULT_PORT=(
 LUNA_SLOT_BAND=43000
 declare -A SLOT_OFFSET=(
   [gateway]=0   [realtime]=1   [auth]=2   [core]=3   [catalog]=4
-  [auth_db]=10  [core_db]=11   [catalog_db]=12
+  [harvester]=5 [assistant]=6
+  [auth_db]=10  [core_db]=11   [catalog_db]=12 [harvester_db]=13
   [nats]=20     [nats_mon]=21
   [redis]=30
   [smtp]=40     [mailpit]=41
@@ -194,7 +196,7 @@ luna_port() {
 # some of these open and some closed is genuinely half started.
 infra_ports() {
   local name
-  for name in auth_db core_db catalog_db nats nats_mon redis smtp mailpit; do
+  for name in auth_db core_db catalog_db harvester_db nats nats_mon redis smtp mailpit; do
     luna_port "$name" "$1"
   done
 }
@@ -313,11 +315,13 @@ write_config() {
 
   # Host ports (compose). Every one of them comes from luna_port, so this function
   # cannot drift from what --list probes and --down frees.
-  local AUTH_DB_PORT CORE_DB_PORT CATALOG_DB_PORT NATS_PORT NATS_MON_PORT
+  local AUTH_DB_PORT CORE_DB_PORT CATALOG_DB_PORT HARVESTER_DB_PORT
+  local NATS_PORT NATS_MON_PORT
   local REDIS_PORT SMTP_PORT MAILPIT_UI_PORT
   AUTH_DB_PORT="$(luna_port auth_db "$slot")"
   CORE_DB_PORT="$(luna_port core_db "$slot")"
   CATALOG_DB_PORT="$(luna_port catalog_db "$slot")"
+  HARVESTER_DB_PORT="$(luna_port harvester_db "$slot")"
   NATS_PORT="$(luna_port nats "$slot")"
   NATS_MON_PORT="$(luna_port nats_mon "$slot")"
   REDIS_PORT="$(luna_port redis "$slot")"
@@ -335,12 +339,14 @@ write_config() {
   GRAFANA_PORT="$(luna_port grafana "$slot")"
 
   # Service listen ports.
-  local GATEWAY_PORT REALTIME_PORT AUTH_PORT CORE_PORT CATALOG_PORT
+  local GATEWAY_PORT REALTIME_PORT AUTH_PORT CORE_PORT CATALOG_PORT HARVESTER_PORT ASSISTANT_PORT
   GATEWAY_PORT="$(luna_port gateway "$slot")"
   REALTIME_PORT="$(luna_port realtime "$slot")"
   AUTH_PORT="$(luna_port auth "$slot")"
   CORE_PORT="$(luna_port core "$slot")"
   CATALOG_PORT="$(luna_port catalog "$slot")"
+  HARVESTER_PORT="$(luna_port harvester "$slot")"
+  ASSISTANT_PORT="$(luna_port assistant "$slot")"
 
   # The one front end the singular URLs point at. See the note at the top: this is
   # a choice, not an inference, because a redirect target cannot be a list.
@@ -390,6 +396,7 @@ COMPOSE_PROJECT_NAME=${project}
 LUNA_AUTH_DB_PORT=${AUTH_DB_PORT}
 LUNA_CORE_DB_PORT=${CORE_DB_PORT}
 LUNA_CATALOG_DB_PORT=${CATALOG_DB_PORT}
+LUNA_HARVESTER_DB_PORT=${HARVESTER_DB_PORT}
 LUNA_NATS_PORT=${NATS_PORT}
 LUNA_NATS_MONITOR_PORT=${NATS_MON_PORT}
 LUNA_REDIS_PORT=${REDIS_PORT}
@@ -406,6 +413,8 @@ LUNA_REALTIME_PORT=${REALTIME_PORT}
 LUNA_AUTH_PORT=${AUTH_PORT}
 LUNA_CORE_PORT=${CORE_PORT}
 LUNA_CATALOG_PORT=${CATALOG_PORT}
+LUNA_HARVESTER_PORT=${HARVESTER_PORT}
+LUNA_ASSISTANT_PORT=${ASSISTANT_PORT}
 EOF
 
   # --- shared service env ----------------------------------------------------
@@ -504,14 +513,65 @@ PORT=${CORE_PORT}
 EOF
   telemetry_env core >> "$root/apps/luna-shopper-backend/core/.env"
 
+  # The uuid the harvester writes to catalog as (plan 0038, section 4.1). It has
+  # to appear in BOTH files: catalog gates every write on its allowlist, and the
+  # harvester sends this id on every call it makes. A fixed dev constant rather
+  # than a generated one, so the two files cannot drift apart and a developer can
+  # recognise it in a log.
+  local HARVESTER_ACTOR_ID='ac700000-0000-4000-a000-000000000001'
+
   cat > "$root/apps/luna-shopper-backend/catalog/.env" <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored.
 CATALOG_DB_URL=postgres://luna_catalog:luna_catalog@localhost:${CATALOG_DB_PORT}/luna_catalog
 AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
-PLATFORM_ADMIN_USER_IDS=
+# Your own user id goes here to write the catalog by hand. The harvester's actor
+# id is listed so its imports pass the same gate as the owner's own writes.
+PLATFORM_ADMIN_USER_IDS=${HARVESTER_ACTOR_ID}
 PORT=${CATALOG_PORT}
 EOF
   telemetry_env catalog >> "$root/apps/luna-shopper-backend/catalog/.env"
+
+  # The harvester (plan 0038). Both switches are FALSE here, exactly as they are
+  # in every cluster: bringing the service up is not the same decision as letting
+  # it fetch from a third party. Flip HARVEST_ENABLED and MERCADONA_ENABLED by
+  # hand when you actually want a run, and read section 8.1 first.
+  cat > "$root/apps/luna-shopper-backend/harvester/.env" <<EOF
+# Generated by luna-slot.sh (slot ${slot}). Git ignored.
+HARVESTER_DB_URL=postgres://luna_harvester:luna_harvester@localhost:${HARVESTER_DB_PORT}/luna_harvester
+AUTH_JWT_PUBLIC_KEY_FILE=./apps/luna-shopper-backend/secrets/jwt.pub
+PLATFORM_ADMIN_USER_IDS=
+HARVESTER_ACTOR_ID=${HARVESTER_ACTOR_ID}
+HARVEST_ENABLED=false
+MERCADONA_ENABLED=false
+PORT=${HARVESTER_PORT}
+EOF
+  telemetry_env harvester >> "$root/apps/luna-shopper-backend/harvester/.env"
+
+  # The assistant (plan 0039). No database url, because it has no database: rule
+  # A1 says it reaches application data only through the API with the caller's
+  # own token, and the absence of a connection string here is the cheapest place
+  # for that to be visible.
+  #
+  # GEMINI_API_KEY is EMPTY, and leaving it that way is a supported setup: the
+  # service boots and /v1/assistant answers 501 not_configured (plan 0026). The
+  # suite never needs a key either, because rule A4 forbids any test here from
+  # reaching a model provider. Paste your own key in by hand when you want to
+  # talk to it, and remember the free tier's limits are per Google Cloud project
+  # rather than per user.
+  cat > "$root/apps/luna-shopper-backend/assistant/.env" <<EOF
+# Generated by luna-slot.sh (slot ${slot}). Git ignored.
+GATEWAY_INTERNAL_URL=http://localhost:${GATEWAY_PORT}
+GEMINI_API_KEY=
+ASSISTANT_MODEL=gemini-3.5-flash-lite
+ASSISTANT_MAX_TURNS=20
+ASSISTANT_MAX_CHARS=8000
+ASSISTANT_MAX_TOOL_CALLS=6
+ASSISTANT_TURNS_PER_MINUTE=8
+ASSISTANT_CONCURRENCY=2
+ASSISTANT_RETRY_AFTER_FALLBACK=30
+PORT=${ASSISTANT_PORT}
+EOF
+  telemetry_env assistant >> "$root/apps/luna-shopper-backend/assistant/.env"
 
   cat <<EOF
 
@@ -519,10 +579,11 @@ Configured this worktree for Luna Shopper slot ${slot}.
   compose project : ${project}
   auth-db         : localhost:${AUTH_DB_PORT}      core-db  : localhost:${CORE_DB_PORT}
   catalog-db      : localhost:${CATALOG_DB_PORT}
+  harvester-db    : localhost:${HARVESTER_DB_PORT}
   nats            : localhost:${NATS_PORT} (mon ${NATS_MON_PORT})
   redis           : localhost:${REDIS_PORT}
   smtp / mailpit  : localhost:${SMTP_PORT} / http://localhost:${MAILPIT_UI_PORT}
-  gateway ${GATEWAY_PORT}   realtime ${REALTIME_PORT}   auth ${AUTH_PORT}   core ${CORE_PORT}   catalog ${CATALOG_PORT}
+  gateway ${GATEWAY_PORT}   realtime ${REALTIME_PORT}   auth ${AUTH_PORT}   core ${CORE_PORT}   catalog ${CATALOG_PORT}   harvester ${HARVESTER_PORT}   assistant ${ASSISTANT_PORT}
   otlp http/grpc  : localhost:${OTLP_HTTP_PORT} / ${OTLP_GRPC_PORT}
   jaeger / graf   : http://localhost:${JAEGER_UI_PORT} / http://localhost:${GRAFANA_PORT}
   prometheus      : http://localhost:${PROMETHEUS_PORT}
@@ -532,7 +593,7 @@ Configured this worktree for Luna Shopper slot ${slot}.
                     callback and the mail links only, which can name just one.
                     Change it with --app-slot <n>.
 
-Start the whole thing (compose, migrations, all five services):
+Start the whole thing (compose, migrations, all six services):
   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up
 
 Or just the infrastructure, the way it has always worked:
@@ -676,7 +737,7 @@ up() {
   local -a ports=()
   serve_services SERVICES ports || return 1
 
-  echo "==> waiting up to ${timeout}s for the five services to listen"
+  echo "==> waiting up to ${timeout}s for the services to listen"
   if wait_for_ports "$timeout" "${ports[@]}"; then
     echo
     echo "Luna Shopper slot $LUNA_SLOT is up."
@@ -859,7 +920,7 @@ down() {
   echo "==> stopping the services of Luna Shopper slot $LUNA_SLOT"
   local -a ports=()
   mapfile -t ports < <(service_ports "$LUNA_SLOT")
-  stop_services SERVICES ports || echo "  none of the five were running"
+  stop_services SERVICES ports || echo "  none of them were running"
 
   # Containers only ever hold the infra ports, so they are taken down by compose
   # rather than by killing a pid.
@@ -953,11 +1014,11 @@ list() {
   done
 
   echo
-  echo "  INFRA     the three databases, NATS and its monitor, Redis, SMTP, Mailpit"
-  echo "  SERVICES  gateway, realtime, auth, core, catalog"
+  echo "  INFRA     the four databases, NATS and its monitor, Redis, SMTP, Mailpit"
+  echo "  SERVICES  gateway, realtime, auth, core, catalog, harvester, assistant"
   echo "  OBSERV    collector, Jaeger, Prometheus, Grafana: opt in, so 0/5 is normal"
   echo
-  echo "A slot claimed with 0/8 infra is configured but not started: --up will take it."
+  echo "A slot claimed with 0/9 infra is configured but not started: --up will take it."
   echo "Slots 0..${MAX_SLOT} with neither a claim nor a listener are omitted."
 }
 

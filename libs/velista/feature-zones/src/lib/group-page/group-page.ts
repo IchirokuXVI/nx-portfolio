@@ -391,6 +391,13 @@ export class GroupPage {
     );
   }
 
+  /** The assistant (plan 0032), where the app bar's search button used to do nothing. */
+  async openAssistant(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'assistant')
+    );
+  }
+
   openMembers(): void {
     void this._router.navigate(['members'], { relativeTo: this._route });
   }

@@ -63,6 +63,13 @@
   font-size: var(--app-icon-md);
 }
 
+// The one control in the header that is coloured rather than grey, because it is the
+// only one that leads somewhere new. The account button beside it is a face somebody
+// already knows to look for.
+.assistant {
+  color: var(--app-action-quiet-fg);
+}
+
 .avatar {
   display: flex;
   align-items: center;

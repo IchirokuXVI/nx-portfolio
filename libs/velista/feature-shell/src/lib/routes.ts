@@ -6,6 +6,7 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
+import { sheetFallGuard } from '@portfolio/velista/platform';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import {
   anonymousOnlyGuard,
@@ -41,6 +42,28 @@ import {
  * edit (rule N1); the `@portfolio/velista/feature-shell` path already scopes it.
  */
 /**
+ * Mark a route as drawn in a `SheetShell`, which is a fact about the route and not
+ * only about the component.
+ *
+ * Rule E1 makes a sheet a child route, so every way out of one is a navigation and the
+ * router destroys the panel on the frame it decides. `SheetShell` can hold that back
+ * for the exits that start inside it (Cancel, the scrim, Escape), and for nothing else:
+ * the back button, the back gesture and a submit that leaves for another page all
+ * changed the route first, so the panel vanished instead of falling. On a phone the
+ * back gesture *is* how a bottom sheet is closed, which is what made the two entry
+ * sheets read as having no close animation at all.
+ *
+ * `sheetFallGuard` is what holds the navigation open long enough to draw the fall, and
+ * it belongs on the route because that is the only hook that runs before the component
+ * is destroyed. Stamped by this helper rather than written out twelve times, so a sheet
+ * added later cannot quietly be the one that skips it; `routes.spec.ts` asserts that
+ * every route with a panel carries it.
+ */
+function sheet(route: Route): Route {
+  return { ...route, canDeactivate: [sheetFallGuard] };
+}
+
+/**
  * The two sheets, as children of whichever page they cover (plan 0008, rule E1).
  *
  * They are routes rather than a signal toggling a template branch, and the reason
@@ -57,20 +80,20 @@ import {
  */
 function entrySheetRoutes(returnTo: 'landing' | 'home'): Route[] {
   return [
-    {
+    sheet({
       path: 'zones/new',
       data: { returnTo },
       loadComponent: () =>
         import('@portfolio/velista/feature-entry').then(
           (m) => m.CreateGroupSheet
         ),
-    },
-    {
+    }),
+    sheet({
       path: 'zones/join',
       data: { returnTo },
       loadComponent: () =>
         import('@portfolio/velista/feature-entry').then((m) => m.JoinCodeSheet),
-    },
+    }),
   ];
 }
 
@@ -86,18 +109,20 @@ function entrySheetRoutes(returnTo: 'landing' | 'home'): Route[] {
  * and the back button dismisses it (rule E1, plan 0008).
  */
 function memberActionRoutes(): Route[] {
-  return (['remove', 'ban', 'transfer', 'rename'] as const).map((action) => ({
-    path: `:membershipId/confirm/${action}`,
-    data: { action },
-    // Renaming is the one an ordinary member may reach, on their own row, so it is
-    // guarded as a member rather than as staff (section 5.4). The other three are
-    // staff only, and core refuses everybody else regardless of what is drawn.
-    canActivate: [action === 'rename' ? zoneMemberGuard : zoneStaffGuard],
-    loadComponent: () =>
-      import('@portfolio/velista/feature-zones').then(
-        (m) => m.MemberActionSheet
-      ),
-  }));
+  return (['remove', 'ban', 'transfer', 'rename'] as const).map((action) =>
+    sheet({
+      path: `:membershipId/confirm/${action}`,
+      data: { action },
+      // Renaming is the one an ordinary member may reach, on their own row, so it is
+      // guarded as a member rather than as staff (section 5.4). The other three are
+      // staff only, and core refuses everybody else regardless of what is drawn.
+      canActivate: [action === 'rename' ? zoneMemberGuard : zoneStaffGuard],
+      loadComponent: () =>
+        import('@portfolio/velista/feature-zones').then(
+          (m) => m.MemberActionSheet
+        ),
+    })
+  );
 }
 
 /**
@@ -119,26 +144,26 @@ function memberActionRoutes(): Route[] {
  */
 function listSheetRoutes(): Route[] {
   return [
-    {
+    sheet({
       path: 'lines/:lineId/edit',
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then((m) => m.EditLineSheet),
-    },
-    {
+    }),
+    sheet({
       // Approved member, readers included: `comment.add` requires only
       // `requireApproved` on the zone, not write access on the list.
       path: 'lines/:lineId/comments',
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then((m) => m.CommentsSheet),
-    },
-    {
+    }),
+    sheet({
       path: 'lines/:lineId/confirm/delete',
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then(
           (m) => m.DeleteLineSheet
         ),
-    },
-    {
+    }),
+    sheet({
       // Rename, share and delete. All three are `requireManage`, which is a different
       // rule from the write access that gates lines: the list's creator, a zone admin,
       // or the owner. The sheet itself decides what to draw from `myRole`.
@@ -147,7 +172,7 @@ function listSheetRoutes(): Route[] {
         import('@portfolio/velista/feature-lists').then(
           (m) => m.ListSettingsSheet
         ),
-    },
+    }),
   ];
 }
 
@@ -339,7 +364,7 @@ export const AppShellRoutes: Route[] = [
                 (m) => m.GroupPage
               ),
             children: [
-              {
+              sheet({
                 // Any approved member may start a list, which is why this is the member
                 // guard and not the staff one (section 5.5).
                 path: 'lists/new',
@@ -348,8 +373,8 @@ export const AppShellRoutes: Route[] = [
                   import('@portfolio/velista/feature-zones').then(
                     (m) => m.CreateListSheet
                   ),
-              },
-              {
+              }),
+              sheet({
                 // Rename, regenerate the code, delete. Staff, and delete is owner only,
                 // which the sheet itself decides from `myRole` (rule G2).
                 path: 'settings',
@@ -358,7 +383,7 @@ export const AppShellRoutes: Route[] = [
                   import('@portfolio/velista/feature-zones').then(
                     (m) => m.GroupSettingsSheet
                   ),
-              },
+              }),
             ],
           },
           {
@@ -383,7 +408,7 @@ export const AppShellRoutes: Route[] = [
                 (m) => m.AccountPage
               ),
             children: [
-              {
+              sheet({
                 // Renaming needs a field, so it is a small form in a `SheetShell`
                 // rather than a confirm. A child route under rule E1, so the account
                 // screen keeps its scroll underneath and Android's back button
@@ -393,8 +418,8 @@ export const AppShellRoutes: Route[] = [
                   import('@portfolio/velista/feature-account').then(
                     (m) => m.RenameSheet
                   ),
-              },
-              {
+              }),
+              sheet({
                 // `confirm/delete`, matching the shape `0010` gave a member action, so
                 // the two typed confirmations in this app are addressed the same way.
                 path: 'confirm/delete',
@@ -402,8 +427,61 @@ export const AppShellRoutes: Route[] = [
                   import('@portfolio/velista/feature-account').then(
                     (m) => m.DeleteAccountSheet
                   ),
-              },
+              }),
             ],
+          },
+          {
+            // The assistant (plan 0032). A **route** and not a sheet, and here the
+            // argument is stronger than it was for the account screen: the app bar is
+            // drawn on every signed in page, so its button is everywhere. Rule E1
+            // (`0008`) makes a sheet a child of the page it covers, so a sheet
+            // reachable from everywhere would be a child of everywhere — one identical
+            // entry per page, which must not drift, for a panel that covers a page it
+            // has nothing to do with.
+            //
+            // A floating panel toggled by a signal was the other option and is worse:
+            // nothing is pushed onto the history stack, so Android's back button closes
+            // the **app** rather than the panel. That is the defect rule E1 exists to
+            // prevent, and `0031` spent a whole plan repairing the last version of it.
+            //
+            // `authenticatedGuard` and nothing more. The bot acts as the caller through
+            // the gateway with the caller's own token (backend `0039` rule A1), so
+            // there is nothing here to authorize that the API does not already.
+            //
+            // `AssistantStore` and `Dictation` are provided by the **page**, not
+            // here. That is the one place this departs from the plan's wording, and it
+            // is forced: naming either class in this file is an eager import of the
+            // `feature-assistant` barrel, which would pull the panel into the shell's
+            // initial payload and break the "keeps every page lazy" assertion that
+            // `routes.spec.ts` already makes. Component providers give the identical
+            // lifetime — created with the page, destroyed with it — which is what the
+            // plan is actually asking for: the conversation survives leaving and
+            // coming back within a session and does not survive a reload, and
+            // destroying the recorder releases the microphone, so a recording does not
+            // survive leaving mid capture.
+            path: 'assistant',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-assistant').then(
+                (m) => m.AssistantPage
+              ),
+          },
+          {
+            // Installing the app (plan 0033). A route rather than a sheet, by the same
+            // test `0009` section 4.1 used and `0015` applied: it is deep linkable, it
+            // is somewhere a person goes deliberately, and it is the URL you would put
+            // in a message.
+            //
+            // **Public, and deliberately so.** The whole point of a link is that it can
+            // be sent to somebody who has never signed in, and the page makes no
+            // request of any kind. `routes.spec.ts` asserts the absent guard, because
+            // an absent guard is easy to read as an oversight and this one is a
+            // decision.
+            path: 'install',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-install').then(
+                (m) => m.InstallPage
+              ),
           },
           {
             // A cold arrival on somebody else's invite link, and the one way in that is

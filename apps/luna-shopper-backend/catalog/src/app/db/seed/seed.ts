@@ -7,9 +7,11 @@ import type {
 } from 'typeorm';
 import {
   Item,
+  PriceScope,
   Supermarket,
   SupermarketItem,
   SupermarketLocation,
+  SupermarketLocationItem,
 } from '../../entities';
 
 /**
@@ -36,6 +38,9 @@ export const CATALOG_INSERT_ORDER: {
   rows: { id: string }[];
 }[] = [
   { name: 'Supermarket', entity: Supermarket, rows: catalog.supermarkets },
+  // Scopes come before locations: a location cannot exist without one to price
+  // against (plan 0038, section 5.1).
+  { name: 'PriceScope', entity: PriceScope, rows: catalog.priceScopes },
   {
     name: 'SupermarketLocation',
     entity: SupermarketLocation,
@@ -46,6 +51,11 @@ export const CATALOG_INSERT_ORDER: {
     name: 'SupermarketItem',
     entity: SupermarketItem,
     rows: catalog.supermarketItems,
+  },
+  {
+    name: 'SupermarketLocationItem',
+    entity: SupermarketLocationItem,
+    rows: catalog.locationItems,
   },
 ];
 
@@ -73,6 +83,6 @@ export async function main(dataSource: DataSource): Promise<void> {
   await seedCatalog(dataSource);
   await dataSource.destroy();
   console.log(
-    `[seed] catalog: ${catalog.supermarkets.length} supermarket(s), ${catalog.locations.length} location(s), ${catalog.items.length} items, ${catalog.supermarketItems.length} per-store rows`
+    `[seed] catalog: ${catalog.supermarkets.length} supermarket(s), ${catalog.priceScopes.length} price scope(s), ${catalog.locations.length} location(s), ${catalog.items.length} items, ${catalog.supermarketItems.length} per-scope price(s), ${catalog.locationItems.length} per-store row(s)`
   );
 }

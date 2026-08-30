@@ -1,6 +1,10 @@
-<!-- `(account)` was unbound here until plan 0015. See the note on the group page. -->
+<!--
+  `(account)` was unbound here until plan 0015 and the second button until plan 0032.
+  See the note on the group page.
+-->
 <lib-app-bar
   (account)="openAccount()"
+  (openAssistant)="openAssistant()"
   [accountInitial]="accountInitial()"
   [signedIn]="true"
 />

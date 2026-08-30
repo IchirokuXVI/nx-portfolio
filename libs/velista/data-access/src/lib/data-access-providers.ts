@@ -2,6 +2,7 @@ import type { Provider } from '@angular/core';
 import { AccountMemory } from './account/account-memory';
 import { ProfileStore } from './account/profile-store';
 import { ApiUrl } from './api-url';
+import { AssistantMemory } from './assistant/assistant-memory';
 import { AccountNotice } from './auth/account-notice';
 import { AuthMemory } from './auth/auth-memory';
 import { SessionStore } from './auth/session-store';
@@ -90,6 +91,13 @@ import { ZoneStore } from './zones/zone-store';
  * injects it, and DI does not care about the order of an array. `AccountMemory` joins
  * for `ZoneMemory`'s reason exactly, and `AccountApi` stays out like every other real
  * transport.
+ *
+ * `AssistantMemory` (plan 0032) joins for `CommentMemory`'s reason and no stronger one:
+ * it injects nothing, so root scope would work for it, and it is listed here anyway so
+ * that every fake in this library is installed in one place rather than two. It is no
+ * token's default, so it is constructed only by a spec or a backend-less run that asks
+ * for it by name, which is the whole of its use today, backend `0039` being unbuilt.
+ * `AssistantApi` stays out, like every other real transport.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
@@ -98,6 +106,7 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   SessionStore,
   AccountMemory,
   AccountNotice,
+  AssistantMemory,
   ConnectionRecovery,
   AuthMemory,
   ZoneMemory,

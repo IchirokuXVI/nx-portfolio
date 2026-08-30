@@ -551,7 +551,19 @@ export class SlashCircleIcon {
   );
 }
 
-/** A speech bubble, for the comment count and the sheet it opens. */
+/**
+ * A speech bubble: the comment count and the sheet it opens, and **the app bar's way
+ * into the assistant** (plan 0032, section 1).
+ *
+ * Two uses and one glyph, which is what that plan's instruction to check whether an
+ * icon already fits before adding another comes out at here: the design's assistant
+ * mark is this bubble, redrawn. A second component with the same artwork would be two
+ * files that have to keep matching for no gain.
+ *
+ * They do not read as the same control despite that. On a row the bubble carries a
+ * count and sits among the line's own affordances; in the app bar it is alone in a slot
+ * that has never held anything else, and both carry their own `aria-label`.
+ */
 @Component({
   selector: 'lib-comment-icon',
   template: TEMPLATE,
@@ -606,5 +618,174 @@ export class SendIcon {
     () =>
       // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
       import('./send-icon.svg?raw')
+  );
+}
+
+/**
+ * The dictation's four glyphs (plan 0032, section 4).
+ *
+ * They are shapes before they are colours, and that is the requirement rather than the
+ * styling: **colour is never the only signal** here. Stop is a square, pause is two
+ * bars, carry on is a triangle, and the microphone is the microphone. Somebody who
+ * cannot tell the amber from the coral still has four distinguishable controls, and
+ * confusing pause with stop costs a whole spoken message.
+ *
+ * Filled rather than stroked, apart from the microphone, because each is read at a
+ * glance in a moving hand at 52px: weight survives being seen badly, and an outline of
+ * a square is a rectangle with a hole in it.
+ */
+@Component({
+  selector: 'lib-mic-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class MicIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./mic-icon.svg?raw')
+  );
+}
+
+@Component({
+  selector: 'lib-stop-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class StopIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./stop-icon.svg?raw')
+  );
+}
+
+@Component({
+  selector: 'lib-pause-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PauseIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./pause-icon.svg?raw')
+  );
+}
+
+/** Carry on after a pause. A triangle, so it is not the pause with a colour swapped. */
+@Component({
+  selector: 'lib-play-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PlayIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./play-icon.svg?raw')
+  );
+}
+
+/**
+ * The five glyphs the install screens draw (plan 0033).
+ *
+ * `libs/shared/ui` already has a `download-icon`, and CLAUDE.md says to look there
+ * first, which is what happened: it is a filled glyph in the older four file pattern,
+ * with an `@Input` for its colour and no `:host` sizing, so putting it beside these
+ * would leave two icon languages on one card. The note at the top of this file already
+ * records that split, and moving the whole set is still its own change.
+ *
+ * Every one of them is decorative. Each step names the control in words, because the
+ * person the steps are written for is exactly the person who cannot see the glyph
+ * (section 7).
+ */
+@Component({
+  selector: 'lib-install-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class InstallIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./install-icon.svg?raw')
+  );
+}
+
+/**
+ * Apple's Share glyph, the box with the arrow leaving it.
+ *
+ * Distinct from `ShareIcon`, which is three linked nodes and means sharing an invite.
+ * This one is not a metaphor: it is a picture of the button somebody has to find in
+ * Safari's toolbar, and the iOS steps are much harder to follow without it.
+ */
+@Component({
+  selector: 'lib-share-ios-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class ShareIosIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./share-ios-icon.svg?raw')
+  );
+}
+
+/** Four corners pushing outwards: the whole screen, with no browser around it. */
+@Component({
+  selector: 'lib-fullscreen-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class FullscreenIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./fullscreen-icon.svg?raw')
+  );
+}
+
+/** A handset: one tap from the home screen. */
+@Component({
+  selector: 'lib-phone-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PhoneIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./phone-icon.svg?raw')
+  );
+}
+
+/**
+ * The signal arcs, drawn whole.
+ *
+ * Deliberately not `OfflineIcon`, which is the same arcs struck through and means
+ * something is wrong. This sits beside a benefit, and a warning glyph on a benefit
+ * reads as the opposite of what the line says.
+ */
+@Component({
+  selector: 'lib-signal-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class SignalIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./signal-icon.svg?raw')
   );
 }

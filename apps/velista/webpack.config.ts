@@ -2,6 +2,7 @@ import { withModuleFederation } from '@nx/module-federation/angular';
 import { composePlugins } from '@nx/webpack';
 import { DefinePlugin } from 'webpack';
 import merge from 'webpack-merge';
+import { DEFAULT_APP_VERSION } from './app-version';
 import mfeConfig from './module-federation.config';
 
 /**
@@ -12,6 +13,13 @@ import mfeConfig from './module-federation.config';
  */
 export const DEV_LUNA_GATEWAY_URL = 'http://localhost:3000';
 export const DEV_LUNA_REALTIME_URL = 'http://localhost:3001';
+
+/**
+ * Where this app answers on its own origin in development: the port `project.json`
+ * serves velista on (plan 0033 D10). A worktree on a dev slot overrides it through
+ * `apps/velista/.env`, like the two backend URLs above.
+ */
+export const DEV_VELISTA_APP_URL = 'http://localhost:4205';
 
 /**
  * DTS Plugin is disabled in Nx Workspaces as Nx already provides Typing support for Module
@@ -55,6 +63,16 @@ export default composePlugins(async (config) => {
         ),
         'process.env.LUNA_REALTIME_URL': JSON.stringify(
           process.env.LUNA_REALTIME_URL || DEV_LUNA_REALTIME_URL
+        ),
+        'process.env.VELISTA_APP_URL': JSON.stringify(
+          process.env.VELISTA_APP_URL || DEV_VELISTA_APP_URL
+        ),
+        // Which build this is (plan 0034 D4). Substituted in development as well
+        // as production for the same reason as the URLs above: `environment.ts`
+        // reads it, and an unsubstituted `process.env` throws at startup in a
+        // browser. Nothing sets it locally, so a served app is always the default.
+        'process.env.VELISTA_APP_VERSION': JSON.stringify(
+          process.env.VELISTA_APP_VERSION || DEFAULT_APP_VERSION
         ),
       }),
     ],

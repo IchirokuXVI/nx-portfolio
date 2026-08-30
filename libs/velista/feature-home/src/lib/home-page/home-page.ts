@@ -561,10 +561,12 @@ export class HomePage {
   /**
    * Everything else this page can start, and where each of them currently stops.
    *
-   * What is left is search, and starting a list from the dashboard. The two entry
-   * actions have gone because `0008` built them, securing an account because `0009`
-   * did, opening a group and reviewing its requests because `0010` did, and **the
-   * account screen because `0015` did**.
+   * What is left is starting a list from the dashboard. The two entry actions have gone
+   * because `0008` built them, securing an account because `0009` did, opening a group
+   * and reviewing its requests because `0010` did, **the account screen because `0015`
+   * did**, and **search because `0032` spent it**: the app bar's second button is the
+   * assistant now, and search will come back with a plan of its own when there is
+   * something to search.
    *
    * They are recorded rather than left unbound so the controls are real, focusable and
    * testable now, and so that connecting each one later is a single line here instead
@@ -585,8 +587,17 @@ export class HomePage {
     );
   }
 
-  search(): void {
-    this._notYetRouted('search');
+  /**
+   * The assistant (plan 0032), in the slot that used to call `_notYetRouted('search')`.
+   *
+   * `['..', 'assistant']` because this page's own path is `home`, so the panel is its
+   * **sibling**, exactly as the account screen and the credential screens are. Neither
+   * the locale nor the mount is written down (extraction contract, item 5).
+   */
+  openAssistant(): void {
+    void this._router.navigate(['..', 'assistant'], {
+      relativeTo: this._route,
+    });
   }
 
   /**

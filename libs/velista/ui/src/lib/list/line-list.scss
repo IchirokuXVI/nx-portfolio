@@ -32,3 +32,37 @@
 .line {
   display: block;
 }
+
+// The row a link came here for (plan 0032, section 8). A ring and a tint rather than a
+// flash: the page has just scrolled, so something moving as well would be two changes
+// competing for the same glance, and somebody with a tremor may take several seconds to
+// look. It fades out on its own when the container drops the mark.
+//
+// It is not a state of the line and must not read as one. Nothing about the item
+// changed; a link simply pointed at it.
+.line.marked {
+  border-radius: var(--app-card-radius);
+  box-shadow: 0 0 0 var(--app-mark-ring-width)
+    var(--app-status-attention-border);
+  background: var(--app-status-attention-bg);
+  transition:
+    box-shadow var(--app-motion-slow) var(--app-motion-ease),
+    background var(--app-motion-slow) var(--app-motion-ease);
+}
+
+// A row getting out of the way. It animates, because the point of the movement is to
+// be read: a gap that opens instantly is a list that jumped rather than one that made
+// room.
+.line.shifting {
+  transition: transform var(--app-motion-fast) var(--app-motion-ease);
+}
+
+// The row under the finger. Above its neighbours so it passes over them rather than
+// between them, and deliberately without a transition: it has to sit exactly where the
+// finger is, and anything easing it there would lag behind by a visible fraction.
+.line.lifted {
+  position: relative;
+  z-index: 2;
+  box-shadow: var(--app-elevation-2);
+  border-radius: var(--app-card-radius);
+}

@@ -1,0 +1,93 @@
+@let entry = message();
+
+@switch (entry.kind) {
+  @case ('pending') {
+    <!--
+      The caller's own message, still out. It keeps the caller's bubble rather than
+      becoming a spinner, because it is the sentence they typed and it has not gone
+      anywhere; `aria-busy` is what says an answer is coming.
+    -->
+    <p [attr.aria-busy]="true" class="bubble">{{ entry.text }}</p>
+  }
+
+  @case ('throttled') {
+    <!--
+      Not "try again later" (plan 0032, section 3.1). The free tier's limits are
+      shared across every user of this app, so being asked to wait is an ordinary
+      event here, and the honest answer to it is a number that visibly shrinks.
+      Somebody who cannot easily type is otherwise left guessing, and guessing means
+      pressing send again, which spends the next slot and lengthens the wait.
+
+      When the server named no number the sentence stands on its own. The panel
+      never invents one.
+    -->
+    <div aria-live="polite" class="bubble waiting">
+      @if (entry.waitSeconds !== undefined) {
+        <p class="clock">
+          <span class="count">{{ entry.waitSeconds }}</span>
+          <span class="unit">{{
+            'assistant.busy.seconds' | rokuT: { count: entry.waitSeconds }
+          }}</span>
+        </p>
+      }
+      <p class="text">{{ entry.text }}</p>
+    </div>
+  }
+
+  @case ('unconfigured') {
+    <!--
+      This deployment has no model provider, so the route answers 501 and always
+      will (backend plan 0026). Deliberately **not** the failed treatment: nothing
+      broke, nobody did anything wrong, and a red bubble would ask somebody to try
+      again at something that cannot work. The attention colours and no clock.
+    -->
+    <p class="bubble waiting">{{ entry.text }}</p>
+  }
+
+  @case ('dropped') {
+    <!--
+      The cap bit and the oldest turns went. On a line of its own rather than folded
+      into a reply, because it is the panel talking about itself: nobody said it and
+      it is not part of the conversation being sent (section 5).
+    -->
+    <p class="dropped">{{ entry.text }}</p>
+  }
+
+  @default {
+    <p [class.failed]="entry.kind === 'failed'" class="bubble">
+      {{ entry.text }}
+    </p>
+
+    @if (entry.links.length > 0) {
+      <!--
+        Rule A3. Every one of these came out of a tool result in the same turn, so
+        it exists and the caller can see it. Nothing here was parsed out of the
+        sentence above it.
+      -->
+      <ul class="links">
+        @for (link of entry.links; track link.path + link.label) {
+          <li>
+            <a
+              [queryParams]="link.queryParams ?? null"
+              [routerLink]="link.path"
+              class="link"
+            >
+              @switch (link.kind) {
+                @case ('zone') {
+                  <lib-person-icon class="link-glyph" />
+                }
+                @case ('list') {
+                  <lib-list-lines-icon class="link-glyph" />
+                }
+                @default {
+                  <lib-check-outline-icon class="link-glyph" />
+                }
+              }
+              {{ link.label }}
+            </a>
+          </li>
+        }
+      </ul>
+    }
+  }
+}

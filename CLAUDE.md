@@ -73,7 +73,7 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
 tools/dev/ng-slot.sh --up                       # all five Angular apps
 tools/dev/ng-slot.sh --up --apps shell,velista  # ...or just some
 tools/dev/ng-slot.sh --up 5 --backend-slot 1    # ...pointed at a named backend
-bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up   # compose + migrations + five services
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up   # compose + migrations + six services
 
 # bounce processes without losing the slot (or, for luna, the databases)
 tools/dev/ng-slot.sh --restart --apps velista
@@ -85,7 +85,7 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down
 
 **Check first, then claim, and bring instances up only through these scripts.** `--list` reads every worktree's claim and probes the ports, so it is the one accurate answer to what is already running; run it before taking a slot, and let `--up` with no number take the lowest free one. A hand rolled `nx serve` or `docker compose up` writes no claim and no per slot `.env`, so it collides with slot 0, which is the developer's own.
 
-**A slot is cheap to ask for and expensive to run**, so take the least that does the job. An Angular dev server is 700 MB to 1 GB of RAM each (a full front end slot, shell plus four remotes, is 3 GB to 4 GB) and a Luna slot is five Nest services at roughly 230 MB each plus eight containers and its own Postgres volumes, so a few unshared slots exhaust a 32 GB machine and Luna is the half that adds up fastest. Serve only the apps you are touching (`--apps shell,velista`); point at a backend that is already listening rather than starting one (a Luna slot of your own is for changing backend code, running disruptive migrations, or needing an isolated database); and `--down` when you are finished, including on an abandoned task.
+**A slot is cheap to ask for and expensive to run**, so take the least that does the job. An Angular dev server is 700 MB to 1 GB of RAM each (a full front end slot, shell plus four remotes, is 3 GB to 4 GB) and a Luna slot is six Nest services at roughly 230 MB each plus nine containers and its own Postgres volumes, so a few unshared slots exhaust a 32 GB machine and Luna is the half that adds up fastest. Serve only the apps you are touching (`--apps shell,velista`); point at a backend that is already listening rather than starting one (a Luna slot of your own is for changing backend code, running disruptive migrations, or needing an isolated database); and `--down` when you are finished, including on an abandoned task.
 
 **Editing code needs none of those.** Everything is served with watch on, and each app or service watches its own sources _and_ the libraries it consumes, so a change recompiles and reloads by itself; only the app you edited rebuilds. The one thing a running process cannot pick up is a rewritten `.env` (a slot move, `--backend-slot`, `--app-slot`), because Nx loads `{projectRoot}/.env` when it starts the task and webpack reads its values once — and the rewrite _does_ trigger a rebuild that silently keeps the old values, so nothing looks wrong. That case is `--restart`. Use `--down` when you are finished with a slot, not to check your work.
 
@@ -177,6 +177,48 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
   so on its own and not only by where it sits.
 
 ## Luna Shopper backend
+
+### The harvester runs locally and nowhere else
+
+`luna-shopper-backend-harvester` (plan 0038) fetches prices from supermarket
+storefronts and store locations from OpenStreetMap, and writes what it finds into
+catalog over NATS. It is the sixth backend service and it owns the third Postgres.
+
+**It is switched off in production and in staging, on purpose, and the chart says
+so in both values files.** A catalog discovery run is 4,383 HTTP requests over
+about eighteen minutes, and running it costs a third Postgres with its own volume
+plus another Node process; the development machine has room for that and the two
+VPSs do not. So `lunaShopperBackend.harvester.enabled` is false everywhere,
+nothing renders in either cluster (no Deployment, Service, PDB, migration Job,
+StatefulSet, PVC or backup CronJob), and runs happen here against the compose
+stack. The chart still describes it fully, so the files do not drift.
+
+There are **three** switches, and they are three because they are three different
+decisions:
+
+| Switch | Decides |
+| --- | --- |
+| `lunaShopperBackend.harvester.enabled` (Helm) | whether the service exists in a cluster at all |
+| `HARVEST_ENABLED` | whether a pod that exists may start any run |
+| `MERCADONA_ENABLED` | whether that one storefront specifically may be fetched |
+
+All three default to false, including in the `.env` that `luna-slot.sh` writes.
+Bringing the service up and letting it fetch from a third party are not the same
+thing, and section 8.1 of the plan is why the second and third exist separately.
+
+Two rules that are easy to break by accident:
+
+- **`bulk_price` is stored verbatim and never recomputed.** The obvious
+  derivation disagrees with the chain on 110 of 4,232 products, in the field
+  whose only purpose is comparison.
+- **An automated fetch never overwrites a price a person typed in** (plan 0038,
+  section 6.5). It reports the disagreement instead. When `ItemPrice` and
+  `PricePolicy` arrive that rule is *deleted*, not extended.
+
+`@portfolio/luna-shopper/mercadona` and `@portfolio/luna-shopper/osm-places` are
+framework free by hard constraint: no TypeORM, no Nest, no database, and every
+test runs against checked in fixtures with no network. Refresh those fixtures
+with each library's `capture-fixtures` target, never by hand.
 
 - **The committed OpenAPI document must always be current.** Any change to a gateway route, a
   request or response DTO, an error code, or a contract schema in `libs/luna-shopper/contracts`

@@ -12,12 +12,15 @@ import {
   ZONE_ROLES,
   ZONE_STATUS_FALLBACK,
   ZONE_STATUSES,
+  type AssistantReference,
+  type AssistantReply,
   type Comment,
   type Line,
   type ListAccessEntry,
   type ListPermission,
   type ListPresence,
   type ListPreview,
+  type ListResolution,
   type Membership,
   type MyZone,
   type Page,
@@ -522,4 +525,101 @@ function toListAccessEntry(raw: unknown): ListAccessEntry | null {
     membershipId,
     permissions: toListPermissions(raw['permissions']),
   };
+}
+
+/**
+ * `POST /v1/assistant` (backend `0039`, rule A3).
+ *
+ * The text is what the model wrote, and it is rendered as **text**: nothing here
+ * parses it, and nothing downstream renders it as markdown. A reply with no readable
+ * text is unrenderable, so this returns `null` and the panel says the turn failed,
+ * which is honest — an empty bubble is not.
+ *
+ * `references` is the half rule A3 exists for. Every entry the panel draws a link from
+ * came out of a tool result in the same turn, so the target exists and the caller can
+ * see it. That guarantee is only worth anything if a malformed entry is **dropped**
+ * rather than defaulted: a reference missing its `listId` cannot address a list, and
+ * inventing one would produce exactly the 404 the rule is written to prevent. So each
+ * kind requires its own ids and nothing is filled in.
+ */
+export function toAssistantReply(raw: unknown): AssistantReply | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  // `reply` on the wire, `text` in this app. The rename is here and nowhere else.
+  const text = str(raw['reply']);
+  if (text === null) {
+    return null;
+  }
+
+  const resolution = LIST_RESOLUTIONS[strOr(raw['listResolution'], '')];
+
+  return {
+    text,
+    references: mapArray(raw['references'], toAssistantReference),
+    ...(resolution === undefined ? {} : { listResolution: resolution }),
+  };
+}
+
+/**
+ * `ListResolutionBranch` on the wire, this app's own words here.
+ *
+ * A lookup rather than `oneOf`, because the two vocabularies genuinely differ and the
+ * map is the translation. An unrecognised branch, or an absent one, comes out
+ * `undefined`: the field is optional by contract and nothing here behaves differently
+ * for a value it does not know.
+ */
+const LIST_RESOLUTIONS: Readonly<Record<string, ListResolution | undefined>> = {
+  NAMED: 'named',
+  CONVERSATION: 'conversation',
+  ONLY_LIST: 'onlyList',
+  ASKED: 'asked',
+};
+
+/** `AssistantReferenceKind` on the wire, this app's own words here. */
+const REFERENCE_KINDS: Readonly<
+  Record<string, AssistantReference['kind'] | undefined>
+> = {
+  ZONE: 'zone',
+  LIST: 'list',
+  LINE: 'line',
+};
+
+function toAssistantReference(raw: unknown): AssistantReference | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  // Unlike every other narrowing in this file, an unrecognised kind has no fallback to
+  // land on. There is no generic reference the panel could link somewhere sensible, so
+  // a kind from a newer backend is dropped and the reply renders with one link fewer.
+  const kind = REFERENCE_KINDS[strOr(raw['kind'], '')];
+  const label = strOr(raw['label'], '');
+  const zoneId = str(raw['zoneId']);
+  if (kind === undefined || zoneId === null) {
+    return null;
+  }
+
+  if (kind === 'zone') {
+    return { kind, zoneId, label };
+  }
+
+  // `listId` and `lineId` are **nullable** on the wire: the contract sets them per
+  // kind and sends null for the ones that do not apply. `str` already collapses a null
+  // to null, so this is the same check it always was, and it is what makes rule A3
+  // hold: a reference this app cannot address is dropped rather than half built, and a
+  // link that would 404 is never drawn.
+  const listId = str(raw['listId']);
+  if (listId === null) {
+    return null;
+  }
+
+  if (kind === 'list') {
+    return { kind, zoneId, listId, label };
+  }
+
+  const lineId = str(raw['lineId']);
+
+  return lineId === null ? null : { kind, zoneId, listId, lineId, label };
 }

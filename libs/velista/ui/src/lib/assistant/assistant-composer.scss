@@ -1,0 +1,175 @@
+:host {
+  display: block;
+}
+
+.composer {
+  padding: var(--app-space-4) var(--app-space-5) var(--app-space-6);
+  padding-block-end: calc(var(--app-space-6) + var(--app-safe-bottom));
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-ground);
+}
+
+// The container grows to fit a warning and nothing is overlaid, so neither button
+// moves when one appears (plan 0032, section 4.4).
+.notice {
+  margin: 0 0 var(--app-space-4);
+  padding: 0 var(--app-space-2);
+  color: var(--app-status-attention-fg);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+
+  strong {
+    color: var(--app-text-primary);
+    font-weight: 600;
+  }
+}
+
+.trouble {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-3);
+  color: var(--app-status-danger-fg);
+}
+
+.dismiss {
+  min-block-size: var(--app-control-height);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+}
+
+.field-form {
+  display: flex;
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.field {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  padding: var(--app-space-4) var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  // Rule T3: never smaller than the base size on an input, or the phone zooms the
+  // whole page on focus.
+  font-size: var(--app-field-font-size);
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  // The wait keeps the text. It is dimmed to say the field is not taking anything
+  // right now, and legible so that whoever wrote it can still read it back.
+  &:disabled {
+    border-color: var(--app-border-subtle);
+    background: var(--app-surface-sunken);
+    color: var(--app-text-secondary);
+  }
+}
+
+// Pause on the left, stop on the right, and the length between them doing the work of
+// the gap. `flex: 1` on the length is what pushes them to opposite ends.
+.control,
+.action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-button-height);
+  block-size: var(--app-button-height);
+  border-radius: var(--app-radius-lg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.control {
+  border: 1px solid var(--app-border-strong);
+  background: transparent;
+  color: var(--app-text-secondary);
+
+  // At 5:00 pause is disabled and stop becomes the only way out. Dimmed and not
+  // hidden, so the control somebody was using is still where it was.
+  &:disabled {
+    border-color: var(--app-border-subtle);
+    color: var(--app-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+.action {
+  border: none;
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+
+  &:disabled {
+    background: var(--app-surface-overlay);
+    color: var(--app-text-muted);
+    cursor: not-allowed;
+  }
+}
+
+// Stop is the one control in the app that ends something in progress, so it is the
+// one that is not amber. Never colour alone: it is also the only square.
+.action.stop {
+  background: var(--app-status-danger-fg);
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+}
+
+.dot {
+  flex: none;
+  inline-size: var(--app-recording-dot-size);
+  block-size: var(--app-recording-dot-size);
+  border: 1px solid var(--app-text-muted);
+  border-radius: var(--app-radius-full);
+}
+
+.dot.listening {
+  border-color: var(--app-status-danger-fg);
+  background: var(--app-status-danger-fg);
+}
+
+.elapsed {
+  flex: 1;
+  margin: 0;
+  color: var(--app-text-primary);
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+  // The digits must not jog sideways once a second while somebody is watching them.
+  font-variant-numeric: tabular-nums;
+}
+
+.elapsed.held {
+  color: var(--app-text-secondary);
+}

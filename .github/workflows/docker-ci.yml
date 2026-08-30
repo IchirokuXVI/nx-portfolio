@@ -289,6 +289,13 @@ jobs:
       # One invocation, one container, one Nx cache. `prune` is a no-op for projects
       # that do not have it and writes the pruned manifest and lockfile beside the
       # bundle for the five Luna services, which is what their runtime install needs.
+      #
+      # `VELISTA_APP_VERSION` is the tag this build is pushed under, which on this
+      # workflow is the literal `staging` (velista plan 0034 D4). That does not parse
+      # as a semantic version, and by D6 that is the intended outcome rather than an
+      # oversight: staging is a moving target with no ordering, so a staging client is
+      # never compared against a minimum version and is never refused for being old.
+      # Only a release carries a version a deployment can hold it to.
       - name: Build the bundles in the pinned image
         if: needs.setup.outputs.apps_tobuild != ''
         run: |
@@ -300,6 +307,7 @@ jobs:
             -e MFE_REMOTE_URLS="$STAGING_MFE_REMOTE_URLS" \
             -e LUNA_GATEWAY_URL="$STAGING_LUNA_GATEWAY_URL" \
             -e LUNA_REALTIME_URL="$STAGING_LUNA_REALTIME_URL" \
+            -e VELISTA_APP_VERSION="staging" \
             "$BUILD_IMAGE" \
             npx nx run-many -t build prune --configuration production \
               --projects "${{ needs.setup.outputs.apps_tobuild }}"
@@ -665,12 +673,32 @@ jobs:
               --values $HOME/k8s/helm/values.staging.yaml \
               --atomic --timeout 10m
 
+            # An affected app whose image CI built is not necessarily deployed in
+            # this cluster. The harvester (plan 0038) is the first of those: the
+            # chart describes it, `harvester.enabled` is false in both clusters,
+            # and CI still builds its image because it is an affected project.
+            # Restarting a Deployment that was never rendered fails the step and
+            # takes an otherwise good deploy down with it.
+            #
+            # So the list is narrowed to what actually exists, and what was
+            # dropped is PRINTED rather than silently skipped: a deployment
+            # missing because it is switched off and one missing because the chart
+            # is broken look identical here, and only the log can tell them apart.
+            DEPLOYED=""
+            for dep in $AFFECTED; do
+              if kubectl get "deployment/$dep" -n nx-portfolio >/dev/null 2>&1; then
+                DEPLOYED="$DEPLOYED $dep"
+              else
+                echo "Skipping deployment/$dep: not present in this cluster (is it disabled in values?)"
+              fi
+            done
+
             # The staging tag is mutable, so a plain upgrade will not restart the
             # pods; roll the affected ones so they re-pull the new image.
             #
             # Two loops, not one: all restarts are requested before any is
             # awaited, so the rollouts overlap instead of serialising.
-            for dep in $AFFECTED; do
+            for dep in $DEPLOYED; do
               echo "Restarting deployment/$dep ..."
               kubectl rollout restart "deployment/$dep" -n nx-portfolio
             done
@@ -681,7 +709,7 @@ jobs:
             # --wait cannot cover, because the restarts happen after Helm has
             # finished. `rollout status` exits non zero on timeout, which fails
             # the step, which is the entire point.
-            for dep in $AFFECTED; do
+            for dep in $DEPLOYED; do
               kubectl rollout status "deployment/$dep" -n nx-portfolio --timeout=5m
             done
 

@@ -1,0 +1,84 @@
+<main class="page">
+  <button
+    (click)="back()"
+    [attr.aria-label]="'install.back' | rokuT"
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
+  </button>
+
+  @if (mounted) {
+    <!--
+      D5. Under the portfolio's shell the document, the manifest and the service worker
+      all belong to the portfolio, so installing from here would install the portfolio,
+      under its name and its icon. There is nothing to prompt with and nothing to
+      explain: there is an address where this works, and this is it.
+    -->
+    <lib-brand-mark class="mark" />
+
+    <h1 class="title">{{ 'install.elsewhere.title' | rokuT }}</h1>
+    <p class="lede">
+      {{ 'install.elsewhere.body' | rokuT: { origin: originLabel() } }}
+    </p>
+
+    @if (originLabel() !== '') {
+      <button (click)="openStandalone()" class="primary" type="button">
+        {{ 'install.elsewhere.action' | rokuT: { origin: originLabel() } }}
+      </button>
+    }
+  } @else {
+    @let installed = state() === 'installed';
+
+    <lib-brand-mark class="mark" />
+
+    <h1 class="title">
+      {{ (installed ? 'install.installed.title' : 'install.title') | rokuT }}
+    </h1>
+    <p class="lede">
+      {{ (installed ? 'install.installed.body' : 'install.body') | rokuT }}
+    </p>
+
+    <!--
+      One polite live region, outside every branch so it is never torn down and
+      recreated: a region that appears at the same moment as its text is often not
+      announced at all (section 7). It says the button has arrived, and only when that
+      is a change rather than what the page opened with.
+    -->
+    <p aria-live="polite" class="live" role="status">
+      @if (announced(); as key) {
+        {{ key | rokuT }}
+      }
+    </p>
+
+    <!--
+      The primary slot. Occupied from the first frame, whatever the browser has said so
+      far, so nothing moves under a reader when the state improves (D4). No spinner and
+      no skeleton anywhere on this page: there is nothing loading.
+    -->
+    <lib-install-panel
+      (install)="install()"
+      [guide]="guide()"
+      [state]="state()"
+      class="slot"
+    />
+
+    <hr class="rule" />
+
+    <!--
+      Three claims about the build that ships, and every one has to stay true of it.
+      Drawn quietly once they are all already happening.
+    -->
+    <lib-install-benefits [quiet]="installed" />
+
+    <div class="spacer"></div>
+
+    @if (installed) {
+      <button (click)="done()" class="secondary" type="button">
+        {{ 'install.installed.home' | rokuT }}
+      </button>
+    } @else {
+      <p class="note">{{ 'install.note' | rokuT }}</p>
+    }
+  }
+</main>

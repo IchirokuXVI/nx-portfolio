@@ -1,0 +1,61 @@
+@switch (state()) {
+  @case ('ready') {
+    <!--
+      The one press that does the whole thing. It exists only because the browser
+      handed us an event to press it with; everything below it is what somebody gets
+      when it did not.
+    -->
+    <button (click)="install.emit()" class="primary" type="button">
+      <lib-install-icon aria-hidden="true" class="glyph" />
+      {{ 'install.action' | rokuT }}
+    </button>
+  }
+
+  @case ('installed') {
+    <!--
+      A statement, not a celebration, and not a dead end: the disclosure below unfolds
+      the same steps the `manual` state renders. Nothing tells a browser tab that the
+      app was uninstalled (section 2.4), so this is what this browser believes and the
+      way to act on a wrong belief is on the same screen (rule I4).
+    -->
+    <p class="confirmed">
+      <lib-check-circle-icon aria-hidden="true" class="confirmed-glyph" />
+      <span>{{ 'install.installed.done' | rokuT }}</span>
+    </p>
+  }
+
+  @default {
+    <!--
+      The floor. Rendered from the first frame, before the browser has said anything,
+      and the whole slot on every browser that never says anything (D3).
+    -->
+    <lib-install-steps [guide]="guide()" />
+  }
+}
+
+@if (folded()) {
+  <!--
+    A disclosure and never a navigation: it unfolds the steps on this page, under the
+    thing that is already here. The caret points down, and `aria-expanded` says the
+    same thing to somebody who cannot see it.
+  -->
+  <button
+    (click)="toggle()"
+    [attr.aria-expanded]="revealed()"
+    class="reveal"
+    type="button"
+  >
+    {{ revealKey() | rokuT }}
+    <lib-chevron-down-icon
+      [class.open]="revealed()"
+      aria-hidden="true"
+      class="caret"
+    />
+  </button>
+
+  @if (revealed()) {
+    <div class="folded">
+      <lib-install-steps [guide]="guide()" />
+    </div>
+  }
+}

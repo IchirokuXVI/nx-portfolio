@@ -13,11 +13,19 @@ import {
   accountMessageContracts,
   accountSchemas,
 } from './messages/account.schemas';
+import {
+  assistantMessageContracts,
+  assistantSchemas,
+} from './messages/assistant.schemas';
 import { authMessageContracts, authSchemas } from './messages/auth.schemas';
 import {
   catalogMessageContracts,
   catalogSchemas,
 } from './messages/catalog.schemas';
+import {
+  harvestMessageContracts,
+  harvestSchemas,
+} from './messages/harvest.schemas';
 import { listMessageContracts, listSchemas } from './messages/list.schemas';
 import { mergeMessageContracts, mergeSchemas } from './messages/merge.schemas';
 import {
@@ -41,7 +49,9 @@ export const messageContracts: Record<string, MessageContract> = {
   ...mergeMessageContracts,
   ...realtimeMessageContracts,
   ...catalogMessageContracts,
+  ...harvestMessageContracts,
   ...statsMessageContracts,
+  ...assistantMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -61,7 +71,9 @@ export const allSchemas: JsonSchema[] = [
   ...mergeSchemas,
   ...realtimeSchemas,
   ...catalogSchemas,
+  ...harvestSchemas,
   ...statsSchemas,
+  ...assistantSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
 ];

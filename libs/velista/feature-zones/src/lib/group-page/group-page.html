@@ -1,11 +1,12 @@
 <!--
   `(account)` was unbound here until plan 0015, which is a defect rather than a design:
-  the button was drawn, focusable and named, and did nothing. `(openSearch)` stays
-  unbound and stays a defect, because search is not built and recording it in three more
-  places is not progress (section 4.4).
+  the button was drawn, focusable and named, and did nothing. The second button was the
+  same defect for longer, and plan 0032 ends it by spending the slot on the assistant
+  rather than by finally building the search that was never behind it.
 -->
 <lib-app-bar
   (account)="openAccount()"
+  (openAssistant)="openAssistant()"
   [accountInitial]="accountInitial()"
   [signedIn]="true"
 />

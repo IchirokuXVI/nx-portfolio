@@ -94,6 +94,9 @@ export class LineRow {
   /** Anything from the overflow, the decision buttons, or the grip. */
   readonly act = output<{ action: LineRowAction; lineId: string }>();
 
+  /** A pointer went down on the grip. The list takes the drag from here. */
+  readonly grab = output<{ event: PointerEvent; lineId: string }>();
+
   /** The inline failure notice was tapped, which retries. */
   readonly retry = output<string>();
 
@@ -223,6 +226,18 @@ export class LineRow {
   /** The grip's keyboard equivalent. Emitted straight through, menu untouched. */
   move(action: 'moveUp' | 'moveDown'): void {
     this.act.emit({ action, lineId: this.line().id });
+  }
+
+  /**
+   * A pointer takes hold of the grip.
+   *
+   * The row hands the gesture straight up rather than running it, because a drag is
+   * about where this row sits among the others and this row knows nothing about the
+   * others. `LineList` owns the order, so it owns the geometry, and it is the only
+   * thing that can say which row a finger is currently over.
+   */
+  startDrag(event: PointerEvent): void {
+    this.grab.emit({ event, lineId: this.line().id });
   }
 
   /**

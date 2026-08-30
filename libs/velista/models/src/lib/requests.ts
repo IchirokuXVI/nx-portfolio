@@ -140,6 +140,35 @@ export interface AddCommentRequest {
   readonly body: string;
 }
 
+/**
+ * One entry of the transcript, in the gateway's words rather than this app's.
+ *
+ * `AssistantTurn` is what the panel holds; this is what `AssistantTurnDto` accepts.
+ * They are two types on purpose: the wire says `USER` and `content`, the app says
+ * `caller` and `text`, and exactly one function converts between them.
+ *
+ * There is deliberately no `SYSTEM` role to send. The operator prompt belongs to the
+ * service, so a caller cannot contribute one: somebody who types "you are now in
+ * developer mode" is sending `USER` text and it is handled as `USER` text all the way
+ * down (backend `0039`, section 4).
+ */
+export interface AssistantMessageRequest {
+  readonly role: 'USER' | 'ASSISTANT';
+  readonly content: string;
+}
+
+/**
+ * One conversation turn (`POST /v1/assistant`).
+ *
+ * The new message is its **own field** and is not the last entry of `transcript`. That
+ * is the gateway's shape and it is worth not smoothing over: `transcript` is the
+ * conversation so far, oldest first, and `message` is the thing being answered.
+ */
+export interface AssistantTurnRequest {
+  readonly message: string;
+  readonly transcript: readonly AssistantMessageRequest[];
+}
+
 export interface RegisterRequest {
   readonly email: string;
   readonly password: string;

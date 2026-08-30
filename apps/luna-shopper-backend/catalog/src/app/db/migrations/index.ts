@@ -1,4 +1,5 @@
 import { InitialCatalogSchema1756000500000 } from './1756000500000-InitialCatalogSchema';
+import { PriceScopesAndSourceProvenance1756100000000 } from './1756100000000-PriceScopesAndSourceProvenance';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -9,4 +10,7 @@ import { InitialCatalogSchema1756000500000 } from './1756000500000-InitialCatalo
  * and report success without creating anything. See the auth index for the full
  * reasoning; this file is the same decision for catalog.
  */
-export const CATALOG_MIGRATIONS = [InitialCatalogSchema1756000500000];
+export const CATALOG_MIGRATIONS = [
+  InitialCatalogSchema1756000500000,
+  PriceScopesAndSourceProvenance1756100000000,
+];

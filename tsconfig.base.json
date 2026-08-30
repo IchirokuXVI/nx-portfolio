@@ -92,6 +92,12 @@
       "@portfolio/luna-shopper/contracts": [
         "./libs/luna-shopper/contracts/src/index.ts"
       ],
+      "@portfolio/luna-shopper/mercadona": [
+        "./libs/luna-shopper/mercadona/src/index.ts"
+      ],
+      "@portfolio/luna-shopper/osm-places": [
+        "./libs/luna-shopper/osm-places/src/index.ts"
+      ],
       "@portfolio/luna-shopper/platform": [
         "./libs/luna-shopper/platform/src/index.ts"
       ],
@@ -108,11 +114,17 @@
       "@portfolio/velista/feature-account": [
         "./libs/velista/feature-account/src/index.ts"
       ],
+      "@portfolio/velista/feature-assistant": [
+        "./libs/velista/feature-assistant/src/index.ts"
+      ],
       "@portfolio/velista/feature-auth": [
         "./libs/velista/feature-auth/src/index.ts"
       ],
       "@portfolio/velista/feature-entry": [
         "./libs/velista/feature-entry/src/index.ts"
+      ],
+      "@portfolio/velista/feature-install": [
+        "./libs/velista/feature-install/src/index.ts"
       ],
       "@portfolio/velista/feature-home": [
         "./libs/velista/feature-home/src/index.ts"

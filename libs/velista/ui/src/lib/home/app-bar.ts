@@ -11,15 +11,23 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { BrandWordmark } from '../brand/brand-wordmark';
-import { ChevronDownIcon, SearchIcon } from '../icons/icons';
+import { ChevronDownIcon, CommentIcon } from '../icons/icons';
 
 /**
  * The app's header.
  *
  * Two variants, chosen by `signedIn` rather than by the caller picking a component:
  * anonymous shows the locale switch, because someone who has not signed in may well
- * be on the wrong language and has nothing else to do up here; signed in shows search
- * and the account button.
+ * be on the wrong language and has nothing else to do up here; signed in shows the
+ * assistant and the account button.
+ *
+ * ## The second slot was search, and search never existed
+ *
+ * It called `_notYetRouted('search')` from the day it was drawn (plan 0003) and there
+ * was never a search page, a search service or a search route behind it. So spending
+ * the slot on the assistant removes no feature (plan 0032, section 1): same 44 by 44
+ * target, same position, and `SearchIcon` stays exported so putting search back later
+ * is one line here.
  *
  * Rule D1: no service, no data. The initial and the locale label arrive as inputs and
  * every action leaves as an output. The **menu**, though, is this component's own:
@@ -29,7 +37,7 @@ import { ChevronDownIcon, SearchIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-app-bar',
-  imports: [RokuTranslatorPipe, BrandWordmark, SearchIcon, ChevronDownIcon],
+  imports: [RokuTranslatorPipe, BrandWordmark, CommentIcon, ChevronDownIcon],
   templateUrl: './app-bar.html',
   styleUrl: './app-bar.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -83,7 +91,7 @@ export class AppBar {
   /** Whether the header sits on a divider. False on the anonymous screen, which is airy. */
   readonly bordered = input(true);
 
-  readonly openSearch = output<void>();
+  readonly openAssistant = output<void>();
   readonly account = output<void>();
 
   /**

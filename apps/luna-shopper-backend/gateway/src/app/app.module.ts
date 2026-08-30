@@ -18,13 +18,16 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
 import { GatewayAccountModule } from './account/account.module';
+import { GatewayAssistantModule } from './assistant/assistant.module';
 import { GatewayAuthModule } from './auth/auth.module';
 import { GatewayCatalogModule } from './catalog/catalog.module';
+import { MinClientVersionGuard } from './client-version/min-client-version.guard';
 import type { GatewayConfig } from './config/app-config';
 import {
   gatewayConfiguration,
   gatewayValidationSchema,
 } from './config/app-config';
+import { GatewayHarvestModule } from './harvest/harvest.module';
 import { GatewayListsModule } from './lists/lists.module';
 import { GatewayMergeModule } from './merge/merge.module';
 import { GatewayStatsModule } from './stats/stats.module';
@@ -103,16 +106,34 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayMergeModule,
     // Account deletion endpoint (plan 0011).
     GatewayAccountModule,
-    // Catalog endpoints — items, supermarkets, per location prices (plan 0012).
+    // Catalog endpoints — items, supermarkets, per scope prices (plan 0012, and
+    // plan 0038 for the scopes).
     GatewayCatalogModule,
+    // The harvester's admin surface (plan 0038). Every route is platform admin
+    // gated inside the harvester service; nothing here is open to users.
+    GatewayHarvestModule,
     // Public platform totals (plan 0017).
     GatewayStatsModule,
+    // The assistant (plan 0039). One route, proxied straight through to the
+    // assistant service; no logic here, and no new hostname in either
+    // environment.
+    GatewayAssistantModule,
   ],
   providers: [
     // The throttler guard runs globally; open endpoints override the bucket's
     // limit for themselves. The platform subclass is used rather than the
     // library's own so a 429 carries the wait in the body (plan 0021, section 2).
     { provide: APP_GUARD, useClass: ProblemThrottlerGuard },
+    // Advertises the oldest supported client on every response and refuses the ones
+    // below it (velista plan 0034). Inert until `MIN_CLIENT_VERSION` is set, which
+    // it is in neither cluster by default.
+    //
+    // Deliberately after the throttler. Nest runs global guards in the order they
+    // are declared, and a client hammering the gateway should be told it is being
+    // rate limited before it is told it is out of date: the first is the reason the
+    // requests are being refused, and answering the second would let an old client
+    // burn its bucket learning the same thing once per request.
+    { provide: APP_GUARD, useClass: MinClientVersionGuard },
   ],
 })
 export class AppModule {}

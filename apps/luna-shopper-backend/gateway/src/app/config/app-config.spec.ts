@@ -46,6 +46,36 @@ describe('gateway configuration', () => {
     expect(error?.message).toContain('REDIS_URL');
   });
 
+  /**
+   * The minimum client version (velista plan 0034, D5). Empty is the resting value
+   * and switches the whole mechanism off, so the assertion that matters is that a
+   * deployment which sets nothing keeps behaving exactly as it did.
+   */
+  it('serves every client version when no floor is set', () => {
+    const { error, value } = validate({});
+
+    expect(error).toBeUndefined();
+    expect(value.MIN_CLIENT_VERSION).toBe('');
+  });
+
+  it('accepts a semantic version as the floor', () => {
+    expect(validate({ MIN_CLIENT_VERSION: '1.4.0' }).error).toBeUndefined();
+    expect(
+      validate({ MIN_CLIENT_VERSION: 'v2.0.0-rc.1' }).error
+    ).toBeUndefined();
+  });
+
+  it.each(['staging', 'latest', '1.4', 'newest'])(
+    'refuses to boot with a floor that is not a version: %s',
+    (floor) => {
+      // The quiet failure of this variable is a safety net that is not there, and
+      // nothing observes that until the day it was needed. A typo has to be loud.
+      const { error } = validate({ MIN_CLIENT_VERSION: floor });
+
+      expect(error?.message).toContain('MIN_CLIENT_VERSION');
+    }
+  );
+
   it('boots with Google unset and nothing else to supply', () => {
     const { error, value } = validate({});
 

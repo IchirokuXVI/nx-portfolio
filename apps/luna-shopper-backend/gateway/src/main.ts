@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import {
   bootstrapPlatform,
+  MIN_CLIENT_VERSION_HEADER,
   setupSwagger,
 } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
@@ -30,7 +31,17 @@ async function bootstrap() {
   const config = app.get(ConfigService).getOrThrow<GatewayConfig>('gateway');
 
   if (config.corsOrigins.length > 0) {
-    app.enableCors({ origin: config.corsOrigins, credentials: true });
+    app.enableCors({
+      origin: config.corsOrigins,
+      credentials: true,
+      // Without this the browser hides the header and the client never learns the
+      // floor (velista plan 0034, D8). A cross origin response exposes only the CORS
+      // safelisted headers by default, which is the same trap that put
+      // `retryAfterSeconds` in the problem document body rather than in
+      // `Retry-After`. Here the body is the wrong place, because the advisory
+      // belongs on every response and not on every DTO.
+      exposedHeaders: [MIN_CLIENT_VERSION_HEADER],
+    });
   }
 
   // pino logging, correlation middleware, URI versioning and shutdown hooks.

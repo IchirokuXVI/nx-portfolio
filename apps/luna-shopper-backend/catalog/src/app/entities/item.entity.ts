@@ -25,6 +25,20 @@ export class Item extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   sku!: string | null;
 
+  /**
+   * The only identifier that joins a product across chains (plan 0038, section
+   * 2.5), and the reason catalog discovery pays one detail request per product
+   * instead of walking the tree and stopping. Unique when present, null when the
+   * source has none: coverage was 40 of 40 on a random sample, but a novelty
+   * product genuinely has no barcode.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  ean!: string | null;
+
+  /** Without it `defaultUnit` says nothing: "LITER" is not a size. */
+  @Column({ type: 'numeric', precision: 12, scale: 4, nullable: true })
+  unitSize!: number | null;
+
   @Column({ type: 'enum', enum: ItemCategory, default: ItemCategory.OTHER })
   category!: ItemCategory;
 
