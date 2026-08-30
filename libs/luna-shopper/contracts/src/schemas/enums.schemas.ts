@@ -1,4 +1,9 @@
 import {
+  AssistantReferenceKind,
+  AssistantRole,
+  ListResolutionBranch,
+} from '../lib/enums/assistant.enums';
+import {
   AuthProvider,
   UserKind,
   UsernamePropagation,
@@ -33,6 +38,9 @@ export const ENUM_IDS = {
   lineApprovalStatus: schemaId('enums/LineApprovalStatus'),
   lineStatus: schemaId('enums/LineStatus'),
   mergeRequestStatus: schemaId('enums/MergeRequestStatus'),
+  assistantRole: schemaId('enums/AssistantRole'),
+  assistantReferenceKind: schemaId('enums/AssistantReferenceKind'),
+  listResolutionBranch: schemaId('enums/ListResolutionBranch'),
 } as const;
 
 export const enumSchemas: JsonSchema[] = [
@@ -46,4 +54,10 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.lineApprovalStatus, Object.values(LineApprovalStatus)),
   enumOf(ENUM_IDS.lineStatus, Object.values(LineStatus)),
   enumOf(ENUM_IDS.mergeRequestStatus, Object.values(MergeRequestStatus)),
+  enumOf(ENUM_IDS.assistantRole, Object.values(AssistantRole)),
+  enumOf(
+    ENUM_IDS.assistantReferenceKind,
+    Object.values(AssistantReferenceKind)
+  ),
+  enumOf(ENUM_IDS.listResolutionBranch, Object.values(ListResolutionBranch)),
 ];

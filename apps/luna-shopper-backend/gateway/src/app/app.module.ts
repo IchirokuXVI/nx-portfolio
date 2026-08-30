@@ -18,14 +18,15 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
 import { GatewayAccountModule } from './account/account.module';
+import { GatewayAssistantModule } from './assistant/assistant.module';
 import { GatewayAuthModule } from './auth/auth.module';
 import { GatewayCatalogModule } from './catalog/catalog.module';
-import { GatewayHarvestModule } from './harvest/harvest.module';
 import type { GatewayConfig } from './config/app-config';
 import {
   gatewayConfiguration,
   gatewayValidationSchema,
 } from './config/app-config';
+import { GatewayHarvestModule } from './harvest/harvest.module';
 import { GatewayListsModule } from './lists/lists.module';
 import { GatewayMergeModule } from './merge/merge.module';
 import { GatewayStatsModule } from './stats/stats.module';
@@ -112,6 +113,10 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayHarvestModule,
     // Public platform totals (plan 0017).
     GatewayStatsModule,
+    // The assistant (plan 0039). One route, proxied straight through to the
+    // assistant service; no logic here, and no new hostname in either
+    // environment.
+    GatewayAssistantModule,
   ],
   providers: [
     // The throttler guard runs globally; open endpoints override the bucket's

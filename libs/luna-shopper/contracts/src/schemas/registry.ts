@@ -13,6 +13,10 @@ import {
   accountMessageContracts,
   accountSchemas,
 } from './messages/account.schemas';
+import {
+  assistantMessageContracts,
+  assistantSchemas,
+} from './messages/assistant.schemas';
 import { authMessageContracts, authSchemas } from './messages/auth.schemas';
 import {
   catalogMessageContracts,
@@ -47,6 +51,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...catalogMessageContracts,
   ...harvestMessageContracts,
   ...statsMessageContracts,
+  ...assistantMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -68,6 +73,7 @@ export const allSchemas: JsonSchema[] = [
   ...catalogSchemas,
   ...harvestSchemas,
   ...statsSchemas,
+  ...assistantSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
 ];

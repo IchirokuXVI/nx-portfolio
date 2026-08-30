@@ -369,6 +369,61 @@ lunaShopperBackend:
     overpassUrl: ''
     nominatimUrl: ''
 
+  # -------------------------------------------------------------------------
+  # The assistant (plan 0039).
+  #
+  # **No `enabled` switch, unlike the harvester above, and that difference is the
+  # design rather than an omission.** The harvester is gated because running it
+  # costs a third Postgres and eighteen minutes of continuous fetching that the
+  # two VPSs are not sized for. This service is one small stateless Node process
+  # with no database at all, so there is nothing to gate: it deploys everywhere.
+  #
+  # What decides whether it can actually answer is `GEMINI_API_KEY` in the Secret,
+  # and an absent key is a supported deployment rather than a broken one. The pod
+  # boots, its health probes pass, and `/v1/assistant` answers 501 not_configured
+  # (plan 0026). That is also why the key is in `OPTIONAL_EMPTY_KEYS` in
+  # provision-release.sh, so `--check` keeps passing on a cluster where the
+  # assistant is simply unconfigured. Nothing here may be made required without
+  # breaking that property.
+  #
+  # There are **no environment values file changes for this service at all**,
+  # because it is not routed: no host, no DNS record, no certificate and no CORS
+  # origin in either environment. That is the whole saving from section 3's
+  # decision to reach it through the gateway rather than on a `bot.` host.
+  # -------------------------------------------------------------------------
+  assistant:
+    # Where the assistant calls the app's own API on the caller's behalf (rule
+    # A1). Empty means the in cluster gateway service, which is what it should
+    # always be: this must never be the public `api.` host, or every turn pays for
+    # TLS and the ingress twice for a call that never leaves the cluster.
+    gatewayInternalUrl: ''
+
+    # A config value and not a literal, so changing it is an env edit and a
+    # restart. `gemini-3.1-flash-lite` is the first thing to try if quality
+    # disappoints, and the version numbers do not order those two the way they
+    # look.
+    model: 'gemini-3.5-flash-lite'
+
+    # Caps on the client supplied transcript. The service stores nothing between
+    # turns (rule A2), so the whole conversation arrives on every request and is
+    # untrusted input.
+    maxTurns: 20
+    maxChars: 8000
+    maxToolCalls: 6
+
+    # Living inside a free tier (section 9). Google's limits are per Google Cloud
+    # project rather than per user, so at two replicas this WILL return 429 in
+    # ordinary use; that is accepted, and the requirement is only that it be
+    # legible, which is rule A5. Both numbers below are per instance and in
+    # memory: neither survives a restart and neither is shared across replicas.
+    turnsPerMinute: 8
+    # A small gate in front of the provider call, so a burst queues briefly
+    # instead of becoming a burst of 429s. Waiting two seconds is invisible,
+    # being told to come back is not.
+    concurrency: 2
+    # The floor for `retryAfterSeconds`, so the field is never absent.
+    retryAfterFallbackSeconds: 30
+
   # Each backend service: one Deployment + Service (+ PDB). `routed` services get
   # an HTTPRoute on `hostPrefix`.`baseDomain` — or on the host the environment
   # overrides for them, which is where both clusters put `api.` and `rt.` now that
@@ -431,6 +486,28 @@ lunaShopperBackend:
       optional: harvester
       replicas: 1
       strategy: Recreate
+    # The assistant (plan 0039). Internal, with no route of its own: the client
+    # reaches it through the gateway at `/v1/assistant`.
+    #
+    # `routed: false` with no `hostPrefix` is the whole saving from section 3's
+    # decision to go through the gateway rather than give it a `bot.` host: no new
+    # DNS record, no certificate, no `hostOverrides` entry and no CORS origin, in
+    # either environment. **There are no environment values file changes at all
+    # for this service**, which is what that buys.
+    #
+    # Port 3006 rather than the 3005 the plan names: 3005 belongs to the
+    # harvester, which landed first (plan 0038). Nothing else about the plan
+    # depended on the number.
+    #
+    # No `optional:` gate, unlike the harvester. This one is meant to run, and the
+    # thing that decides whether it can answer is GEMINI_API_KEY: with the key
+    # empty the pod boots healthy and answers 501 on its one route (plan 0026),
+    # so an unconfigured cluster needs no chart change to stay up.
+    - name: luna-shopper-backend-assistant
+      role: assistant
+      image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-assistant
+      port: 3006
+      routed: false
 
   # Stateful dependencies. Three Postgres instances (auth, core and catalog each
   # own one, so the no shared database rule holds) and one NATS server with

@@ -37,9 +37,16 @@ cd "$root"
 # The harvester (plan 0038) is deliberately NOT here. This script is what CI's
 # e2e job starts, and the e2e suite exercises the app: the harvester answers no
 # subject the app calls, refuses to spawn with HARVEST_ENABLED false, and would
-# only add a sixth process and a sixth boot to wait for. Start it by hand with
+# only add a process and a boot to wait for. Start it by hand with
 # `npx nx serve luna-shopper-backend-harvester` when working on it.
-SERVICES=(gateway realtime auth core catalog)
+#
+# The assistant (plan 0039) IS here, and the difference is exactly the test
+# above: it answers a subject the app calls, on a route the client reaches at
+# /v1/assistant. With GEMINI_API_KEY empty, which is what luna-slot.sh writes, it
+# boots healthy and answers 501 not_configured — so it costs one boot and gives
+# the suite a real route to assert against, and it can never reach a provider
+# from CI (rule A4).
+SERVICES=(gateway realtime auth core catalog assistant)
 
 # Slot 0 defaults, used when a service has no .env yet.
 declare -A DEFAULT_PORT=(
@@ -48,6 +55,7 @@ declare -A DEFAULT_PORT=(
   [auth]=3002
   [core]=3003
   [catalog]=3004
+  [assistant]=3006
 )
 
 run_dir="$root/test-output/luna-shopper-backend/services"
