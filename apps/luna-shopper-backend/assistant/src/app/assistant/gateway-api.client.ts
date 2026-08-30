@@ -14,6 +14,7 @@ import {
   CORRELATION_ID_HEADER,
   DEFAULT_LOCALE,
   getRequestContext,
+  MAX_PAGE_SIZE,
   type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
 import type { AssistantConfig } from '../config/app-config';
@@ -64,6 +65,14 @@ export class GatewayApiError extends Error {
   }
 }
 
+/**
+ * How many pages of lines one turn will walk before it stops asking.
+ *
+ * Five is well past any real shopping list and is here as a bound rather than a
+ * budget: a cursor that never runs out would otherwise hold a turn open.
+ */
+const MAX_LINE_PAGES = 5;
+
 @Injectable()
 export class GatewayApiClient {
   private readonly config: AssistantConfig;
@@ -95,14 +104,43 @@ export class GatewayApiClient {
   /**
    * One list's lines. Fetched only when a tool asks for them (section 5): a turn
    * that turns out to be "hello" should not have cost four gateway calls.
+   *
+   * **Paged, and at `MAX_PAGE_SIZE` rather than a number written here.** This
+   * asked for 200 in one go, which is over the cap every collection route shares,
+   * so the gateway answered 400 and both tools that read lines failed: the reply
+   * said it could not do it, and `upsert_line` never got as far as writing
+   * because it reads the list first to decide between an edit and an add.
+   *
+   * Following the cursor rather than settling for one page, because this is what
+   * the tools answer "is there milk on the list" from, and a page boundary is not
+   * a reason to say no. Bounded all the same: a turn is a conversation, not a
+   * report, and something has gone wrong if this is still going after five pages.
    */
   async listLines(caller: ApiCaller, listId: string): Promise<LineView[]> {
-    const page = await this.request<LinePage>(
-      caller,
-      'GET',
-      `/v1/lists/${encodeURIComponent(listId)}/lines?limit=200`
-    );
-    return page.items;
+    const path = `/v1/lists/${encodeURIComponent(listId)}/lines`;
+    const lines: LineView[] = [];
+    let cursor: string | undefined;
+
+    for (let page = 0; page < MAX_LINE_PAGES; page += 1) {
+      const query = new URLSearchParams({ limit: String(MAX_PAGE_SIZE) });
+      if (cursor !== undefined) {
+        query.set('cursor', cursor);
+      }
+
+      const answer = await this.request<LinePage>(
+        caller,
+        'GET',
+        `${path}?${query.toString()}`
+      );
+      lines.push(...answer.items);
+
+      if (!answer.nextCursor) {
+        break;
+      }
+      cursor = answer.nextCursor;
+    }
+
+    return lines;
   }
 
   addLine(
