@@ -1,5 +1,6 @@
 {
   "app-title": "Velista",
+  "app-version": "Versión {{version}}",
   "vocabulary": {
     "zone": "Grupo",
     "zones": "Grupos"

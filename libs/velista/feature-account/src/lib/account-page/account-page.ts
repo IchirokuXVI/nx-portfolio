@@ -37,6 +37,7 @@ import {
 import {
   AccountRow,
   AppBar,
+  AppVersion,
   ChevronLeftIcon,
   ResendSentence,
   SectionHeading,
@@ -96,6 +97,7 @@ import { RenameAnnouncement } from '../rename-announcement';
     RouterOutlet,
     AccountRow,
     AppBar,
+    AppVersion,
     ChevronLeftIcon,
     ResendSentence,
     SectionHeading,

@@ -88,8 +88,8 @@
           costs nothing: the page it would lead to still exists.
         -->
         <lib-account-row
-          [chipTone]="'ok'"
           [chip]="'account.app.installed' | rokuT"
+          [chipTone]="'ok'"
           [divided]="false"
           [label]="'account.app.onThisPhone' | rokuT"
           [value]="productName"
@@ -317,6 +317,14 @@
       [value]="'account.delete.action' | rokuT"
     />
   </section>
+
+  <!--
+    Which build is running, under everything else. This is the screen somebody is
+    already on when they are reading facts about their account, so it is the one place
+    a version can sit without competing with anything, and it is where support will
+    send them to read it out.
+  -->
+  <lib-app-version />
 </main>
 
 <!-- The two sheets, as children of the row each is about (rule E1). -->
