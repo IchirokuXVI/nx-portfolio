@@ -126,6 +126,7 @@
     }
   },
   "connection": {
+    "notLive": "Live updates are off",
     "lost": {
       "title": "You have lost connection",
       "body": "Check your wifi or mobile data. This page reloads on its own as soon as you are back.",

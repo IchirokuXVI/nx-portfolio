@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { BrandWordmark } from '../brand/brand-wordmark';
-import { ChevronDownIcon, CommentIcon } from '../icons/icons';
+import { ChevronDownIcon, CommentIcon, OfflineIcon } from '../icons/icons';
 
 /**
  * The app's header.
@@ -37,7 +37,13 @@ import { ChevronDownIcon, CommentIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-app-bar',
-  imports: [RokuTranslatorPipe, BrandWordmark, CommentIcon, ChevronDownIcon],
+  imports: [
+    RokuTranslatorPipe,
+    BrandWordmark,
+    CommentIcon,
+    ChevronDownIcon,
+    OfflineIcon,
+  ],
   templateUrl: './app-bar.html',
   styleUrl: './app-bar.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -90,6 +96,26 @@ export class AppBar {
 
   /** Whether the header sits on a divider. False on the anonymous screen, which is airy. */
   readonly bordered = input(true);
+
+  /**
+   * Whether the live connection is up. False draws the offline mark (plan 0035,
+   * section 5.3).
+   *
+   * Before it, a dead socket had exactly one symptom in the whole app: one grey line on
+   * a list page. Every other screen, the dashboard and a group page included, looked
+   * identical live and stale. The mark is not a button, deliberately: a control here
+   * would have to lead somewhere and there is nowhere to go.
+   *
+   * **Not the blocking screen's business.** `ConnectionState.offline` covers the page
+   * with `ConnectionLost` and this header is behind it. This is for the case where HTTP
+   * works and the socket does not, which is precisely the one with no symptom today.
+   *
+   * Rule D1: an input, like `signedIn` and `accountInitial`. This component knows
+   * nothing about `RealtimeClient` and the pages that draw it pass this in.
+   *
+   * True by default, so a screen that has no socket to speak of draws nothing.
+   */
+  readonly connected = input(true);
 
   readonly openAssistant = output<void>();
   readonly account = output<void>();

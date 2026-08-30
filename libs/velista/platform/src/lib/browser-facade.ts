@@ -40,6 +40,20 @@ export class BrowserFacade {
    */
   readonly onLine = signal(true);
 
+  /**
+   * Whether the document is the one the user is looking at.
+   *
+   * Fed by `visibilitychange`, which is what a tab switch, an app switch and a screen
+   * lock all raise. It is the input {@link AppResumed} turns into a resume, and it
+   * lives here for `onLine`'s reason: it is a fact about the browser that both
+   * `data-access` and `ui` may need, and `ui` may not import `data-access`
+   * (plan 0004, section 3.2).
+   *
+   * Always true on the server and in any environment with no document, so nothing
+   * ever waits for a resume that cannot arrive.
+   */
+  readonly visible = signal(true);
+
   private readonly _platformId = inject(PLATFORM_ID);
   private readonly _document = inject(DOCUMENT);
   private readonly _destroyRef = inject(DestroyRef);
@@ -62,9 +76,17 @@ export class BrowserFacade {
     const goOffline = () => this.onLine.set(false);
     win.addEventListener('online', goOnline);
     win.addEventListener('offline', goOffline);
+
+    const document = this._document;
+    this.visible.set(document.visibilityState !== 'hidden');
+    const onVisibility = () =>
+      this.visible.set(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', onVisibility);
+
     this._destroyRef.onDestroy(() => {
       win.removeEventListener('online', goOnline);
       win.removeEventListener('offline', goOffline);
+      document.removeEventListener('visibilitychange', onVisibility);
     });
   }
 

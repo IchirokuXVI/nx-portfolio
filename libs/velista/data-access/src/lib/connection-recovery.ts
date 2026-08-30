@@ -1,12 +1,20 @@
 import { HttpClient } from '@angular/common/http';
-import { DestroyRef, effect, inject, Injectable } from '@angular/core';
 import {
+  DestroyRef,
+  effect,
+  inject,
+  Injectable,
+  untracked,
+} from '@angular/core';
+import {
+  AppResumed,
   BrowserFacade,
   ConnectionState,
   ReloadBlocker,
 } from '@portfolio/velista/platform';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from './api-url';
+import { hasResponse } from './errors';
 
 /**
  * Gets the app back on its feet once the connection returns.
@@ -29,18 +37,43 @@ export class ConnectionRecovery {
   private readonly _connection = inject(ConnectionState);
   private readonly _reload = inject(ReloadBlocker);
   private readonly _browser = inject(BrowserFacade);
+  private readonly _resumed = inject(AppResumed);
   private readonly _destroyRef = inject(DestroyRef);
 
   private _probing = false;
   private _timer: ReturnType<typeof setInterval> | null = null;
 
+  /**
+   * The resume count the effect below has already reacted to. It starts level with
+   * the counter, so the effect's own first run is never read as a resume.
+   */
+  private _seenResumes = 0;
+
   constructor() {
     effect(() => {
-      if (this._connection.offline()) {
+      const offline = this._connection.offline();
+      const resumes = this._resumed.resumes();
+
+      untracked(() => {
+        const resumed = resumes !== this._seenResumes;
+        this._seenResumes = resumes;
+
+        if (!offline) {
+          this._stopProbing();
+          return;
+        }
+
         this._startProbing();
-      } else {
-        this._stopProbing();
-      }
+
+        // Plan 0035, section 4.2. An app put down inside a lift and picked up outside
+        // one should not be reading the blocking screen for another ten seconds while
+        // the interval comes round. **One** probe, and only while offline: probing on
+        // a resume that was never offline would find the backend, report reachable
+        // and queue a reload of a page nobody had a problem with.
+        if (resumed) {
+          void this._tick();
+        }
+      });
     });
 
     this._destroyRef.onDestroy(() => this._stopProbing());
@@ -107,18 +140,4 @@ export class ConnectionRecovery {
       this._timer = null;
     }
   }
-}
-
-/**
- * Whether the failure carried an HTTP response at all. Angular reports a request that
- * never reached a server as status 0.
- */
-function hasResponse(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'status' in error &&
-    typeof (error as { status: unknown }).status === 'number' &&
-    (error as { status: number }).status !== 0
-  );
 }
