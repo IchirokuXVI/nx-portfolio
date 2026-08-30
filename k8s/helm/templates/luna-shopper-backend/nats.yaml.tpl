@@ -3,6 +3,29 @@
 {{- $ls := .Values.lunaShopperBackend }}
 {{- $nats := $ls.nats }}
 ---
+# The broker's configuration file, which exists for exactly one setting.
+#
+# `max_payload` is raised above the 1 MB default so a voice recording can reach
+# the assistant at all (luna plan 0041, section 4.2), and it is **config file
+# only**: nats-server has no `--max_payload` flag, and passing one makes it print
+# its usage and exit — the pod then crashloops and takes every service behind it
+# with it. The plan assumed a command line argument; it is not one.
+#
+# `int64` before the value, and it is load bearing: Sprig carries a YAML integer
+# as a float64, so rendering 8388608 unaided writes "8.388608e+06", which the
+# broker will not parse.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: luna-shopper-backend-nats-config
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    app: luna-shopper-backend-nats
+    app.kubernetes.io/part-of: luna-shopper-backend
+data:
+  nats.conf: |
+    max_payload: {{ $nats.maxPayload | default 8388608 | int64 }}
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -54,26 +77,11 @@ spec:
           # JetStream enabled with a persistent store so durable streams survive a
           # restart; monitoring on 8222 backs the readiness/liveness probes.
           #
-          # `--max_payload` is raised above the broker's 1 MB default so a voice
-          # recording can reach the assistant at all (luna plan 0041, section 4.2).
-          # The number comes from values.yaml, which is also where the compose
-          # stack's copy is explained: the two have to move together, and a raise
-          # applied here and not there fails only in the cluster.
-          args:
-            [
-              '-js',
-              '-sd',
-              '/data',
-              '-m',
-              '8222',
-              '--max_payload',
-              # `int64` before `quote`, and it is load bearing: Sprig carries a YAML
-              # integer as a float64, so `quote` alone renders 8388608 as
-              # "8.388608e+06" and nats-server refuses to parse it. The pod then
-              # crashloops in the cluster and nowhere else, which is the slowest
-              # possible way to find out.
-              {{ $nats.maxPayload | default 8388608 | int64 | quote }},
-            ]
+          # `-c` for the ConfigMap above, which carries `max_payload` and nothing
+          # else (luna plan 0041, section 4.2). The rest stays here rather than
+          # moving into the file, because CLI flags win over it and this way the
+          # container still says what it is at a glance.
+          args: ['-c', '/etc/nats/nats.conf', '-js', '-sd', '/data', '-m', '8222']
           ports:
             - name: client
               containerPort: 4222
@@ -100,6 +108,13 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: config
+              mountPath: /etc/nats
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: luna-shopper-backend-nats-config
   volumeClaimTemplates:
     - metadata:
         name: data

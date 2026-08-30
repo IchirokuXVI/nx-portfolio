@@ -26,25 +26,38 @@ function recording(bytes = 512): Buffer {
   return Buffer.alloc(bytes);
 }
 
-async function anonymousToken(
-  ctx: Awaited<ReturnType<typeof request.newContext>>
-): Promise<string> {
-  const created = await ctx.post('/v1/zones', {
-    data: { name: 'E2E Voice Zone', username: 'owner' },
-  });
-  expect(created.ok()).toBeTruthy();
-  return (await created.json()).tokens.accessToken;
-}
+/**
+ * One identity for the whole file, minted once.
+ *
+ * **Not one per test, and the reason is a limit rather than tidiness.** Anonymous
+ * zone creation is throttled to ten a minute per IP, and this suite shares that
+ * budget with `core-flow`, `ownership-transfer` and `google-sign-in`. A zone per
+ * test here spends half of it on identities none of these tests care about, and
+ * the whole suite then fails on a 429 that says nothing about the backend.
+ *
+ * Nothing below writes anything, so there is nothing for the tests to share badly:
+ * every one of them is refused before it could.
+ */
+let ctx: Awaited<ReturnType<typeof request.newContext>>;
+let token: string;
 
 test.describe('POST /v1/assistant/voice', () => {
   test.beforeAll(async () => {
     await gateOnStack();
+
+    ctx = await request.newContext({ baseURL: GATEWAY_URL });
+    const created = await ctx.post('/v1/zones', {
+      data: { name: 'E2E Voice Zone', username: 'owner' },
+    });
+    expect(created.ok()).toBeTruthy();
+    token = (await created.json()).tokens.accessToken;
+  });
+
+  test.afterAll(async () => {
+    await ctx?.dispose();
   });
 
   test('a real multipart upload reaches the service and is refused for the right reason', async () => {
-    const ctx = await request.newContext({ baseURL: GATEWAY_URL });
-    const token = await anonymousToken(ctx);
-
     const res = await ctx.post('/v1/assistant/voice', {
       headers: { Authorization: `Bearer ${token}` },
       multipart: {
@@ -65,9 +78,6 @@ test.describe('POST /v1/assistant/voice', () => {
   });
 
   test('the typed route answers the same way, so the two have not drifted', async () => {
-    const ctx = await request.newContext({ baseURL: GATEWAY_URL });
-    const token = await anonymousToken(ctx);
-
     const res = await ctx.post('/v1/assistant', {
       headers: { Authorization: `Bearer ${token}` },
       data: { message: 'add milk', transcript: [] },
@@ -78,9 +88,6 @@ test.describe('POST /v1/assistant/voice', () => {
   });
 
   test('a request with no recording is refused before the broker', async () => {
-    const ctx = await request.newContext({ baseURL: GATEWAY_URL });
-    const token = await anonymousToken(ctx);
-
     const res = await ctx.post('/v1/assistant/voice', {
       headers: { Authorization: `Bearer ${token}` },
       multipart: { transcript: '[]' },
@@ -92,9 +99,6 @@ test.describe('POST /v1/assistant/voice', () => {
   });
 
   test('a transcript the typed route would refuse is refused here too', async () => {
-    const ctx = await request.newContext({ baseURL: GATEWAY_URL });
-    const token = await anonymousToken(ctx);
-
     const res = await ctx.post('/v1/assistant/voice', {
       headers: { Authorization: `Bearer ${token}` },
       multipart: {
@@ -115,9 +119,6 @@ test.describe('POST /v1/assistant/voice', () => {
   });
 
   test('an upload over the cap is refused by the interceptor', async () => {
-    const ctx = await request.newContext({ baseURL: GATEWAY_URL });
-    const token = await anonymousToken(ctx);
-
     const res = await ctx.post('/v1/assistant/voice', {
       headers: { Authorization: `Bearer ${token}` },
       multipart: {

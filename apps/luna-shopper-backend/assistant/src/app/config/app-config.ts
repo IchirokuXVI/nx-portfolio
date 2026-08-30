@@ -106,8 +106,15 @@ export const assistantValidationSchema = Joi.object({
    * without a code change. Whether they *should* differ is a quality question
    * with no answer before there is usage, so the default is the turn's model and
    * the key exists to make changing that an env edit.
+   *
+   * **`allow('')` is load bearing**, for the same reason `GEMINI_API_KEY` has it:
+   * empty is the documented value meaning "whatever answers the turn", and it is
+   * what the chart, both compose files and both slot scripts all write. Without
+   * this the service dies at boot on a perfectly ordinary configuration, and it
+   * dies alone — the gateway stays up and answers 500s, which is a slow thing to
+   * diagnose from outside.
    */
-  ASSISTANT_TRANSCRIPTION_MODEL: Joi.string().default(''),
+  ASSISTANT_TRANSCRIPTION_MODEL: Joi.string().allow('').default(''),
   /** Section 5's byte cap, applied on arrival and again by the gateway. */
   ASSISTANT_AUDIO_MAX_BYTES: Joi.number()
     .integer()

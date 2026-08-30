@@ -239,6 +239,23 @@ So `max_payload` is raised, deliberately and in both places at once:
 - `k8s/helm/templates/luna-shopper-backend/nats.yaml.tpl`, on its `args`, from a value in
   `values.yaml` beside the image and the storage size, so the number is stated once.
 
+> **As built, and the two lines above are wrong about how.** `max_payload` is
+> **config file only**: `nats-server` has no `--max_payload` flag, and passing one makes
+> it print its usage and exit — the container comes up unhealthy and every service behind
+> it fails to connect. That is not a thing a chart render or a unit test can catch, and it
+> was found by standing the stack up.
+>
+> So the number lives in a file in both places instead, and the broker is pointed at it
+> with `-c`: `k8s/e2e/luna-shopper-backend/nats.conf`, mounted read only, and a ConfigMap
+> in the chart rendered from the same `values.yaml` entry. Everything else stays on the
+> command line, because CLI flags win over the file and the container still says what it
+> is at a glance.
+>
+> One more trap in the chart, for the same reason the same value nearly broke twice: Helm
+> carries a YAML integer as a float64, so rendering 8388608 unaided writes
+> `8.388608e+06`, which the broker will not parse. `int64` before it, in the ConfigMap and
+> in `ASSISTANT_AUDIO_MAX_BYTES` alike.
+
 **Both, in the same commit.** A raise applied in one and not the other is a feature that
 works on the development machine and fails in the cluster with a broker error, which is
 the slowest possible way to find out.
