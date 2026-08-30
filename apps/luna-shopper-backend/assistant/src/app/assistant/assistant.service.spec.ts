@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AssistantReferenceKind,
@@ -92,6 +93,39 @@ class RecordingApi {
     this.record('addLine', caller, { listId, ...body });
     this.throwIfArmed();
     return line('line-new', listId, body.content, body.quantity ?? 1);
+  }
+
+  async addLines(
+    caller: ApiCaller,
+    listId: string,
+    items: { content: string; quantity?: number }[]
+  ): Promise<LineView[]> {
+    this.record('addLines', caller, { listId, items });
+    this.throwIfArmed();
+    return items.map((item, index) =>
+      line(`line-new-${index}`, listId, item.content, item.quantity ?? 1)
+    );
+  }
+
+  async addLineQuantity(
+    caller: ApiCaller,
+    lineId: string,
+    delta: number
+  ): Promise<LineView> {
+    this.record('addLineQuantity', caller, { lineId, delta });
+    this.throwIfArmed();
+    // The server's answer, which is the whole point of the route: the count the
+    // bot reports is the one the row holds, not one it worked out (plan 0040,
+    // section 2). This stand in adds the delta to whatever it was told is there.
+    const existing = [...this.linesByList.values()]
+      .flat()
+      .find((row) => row.id === lineId);
+    return line(
+      lineId,
+      existing?.listId ?? 'list-flat',
+      existing?.content ?? 'leche',
+      (existing?.quantity ?? 1) + delta
+    );
   }
 
   async updateLine(
@@ -203,7 +237,9 @@ describe('AssistantService', () => {
       const api = new RecordingApi();
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', { product: 'leche' }),
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+          }),
           FakeModelProvider.says('Hecho, la leche está en Piso.'),
         ]),
         api
@@ -228,7 +264,9 @@ describe('AssistantService', () => {
       );
 
       const provider = new FakeModelProvider([
-        FakeModelProvider.calls('upsert_line', { product: 'leche' }),
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'leche' }],
+        }),
         FakeModelProvider.says('No puedes escribir en esa lista.'),
       ]);
       const service = build(provider, api);
@@ -251,9 +289,8 @@ describe('AssistantService', () => {
       const api = new RecordingApi();
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', {
-            product: 'leche',
-            quantity: 2,
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche', quantity: 2 }],
           }),
           FakeModelProvider.says('Añadida.'),
         ]),
@@ -274,7 +311,7 @@ describe('AssistantService', () => {
           kind: AssistantReferenceKind.LINE,
           zoneId: 'zone-home',
           listId: 'list-flat',
-          lineId: 'line-new',
+          lineId: 'line-new-0',
           label: 'leche',
         },
       ]);
@@ -309,8 +346,8 @@ describe('AssistantService', () => {
 
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', {
-            product: 'leche',
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
             list: 'Lista inventada',
           }),
           FakeModelProvider.says('¿A cuál de las dos?'),
@@ -325,7 +362,7 @@ describe('AssistantService', () => {
           (reference) => reference.kind !== AssistantReferenceKind.LINE
         )
       ).toBe(true);
-      expect(api.of('addLine')).toHaveLength(0);
+      expect(api.of('addLines')).toHaveLength(0);
     });
   });
 
@@ -339,7 +376,9 @@ describe('AssistantService', () => {
 
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', { product: 'leche' }),
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+          }),
           FakeModelProvider.says('¿En Piso o en Playa?'),
         ]),
         api
@@ -348,7 +387,7 @@ describe('AssistantService', () => {
       const response = await service.turn(turnRequest('añade leche'));
 
       expect(response.listResolution).toBe(ListResolutionBranch.ASKED);
-      expect(api.of('addLine')).toHaveLength(0);
+      expect(api.of('addLines')).toHaveLength(0);
       expect(api.of('updateLine')).toHaveLength(0);
     });
 
@@ -356,7 +395,9 @@ describe('AssistantService', () => {
       const api = new RecordingApi();
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', { product: 'leche' }),
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+          }),
           FakeModelProvider.says('Añadida.'),
         ]),
         api
@@ -365,7 +406,7 @@ describe('AssistantService', () => {
       const response = await service.turn(turnRequest('añade leche'));
 
       expect(response.listResolution).toBe(ListResolutionBranch.ONLY_LIST);
-      expect(api.of('addLine')).toHaveLength(1);
+      expect(api.of('addLines')).toHaveLength(1);
     });
 
     it('edits the line already there rather than adding a second one', async () => {
@@ -376,9 +417,8 @@ describe('AssistantService', () => {
 
       const service = build(
         new FakeModelProvider([
-          FakeModelProvider.calls('upsert_line', {
-            product: 'leche',
-            quantity: 3,
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche', quantity: 3 }],
           }),
           FakeModelProvider.says('Ahora son tres.'),
         ]),
@@ -387,11 +427,244 @@ describe('AssistantService', () => {
 
       await service.turn(turnRequest('que sean tres leches'));
 
-      expect(api.of('addLine')).toHaveLength(0);
+      expect(api.of('addLines')).toHaveLength(0);
       expect(api.of('updateLine')[0].detail).toMatchObject({
         lineId: 'line-existing',
         quantity: 3,
       });
+    });
+  });
+
+  describe('plan 0040, section 7: a basket in one call', () => {
+    it('writes ten new items with one batch request, not ten', async () => {
+      const api = new RecordingApi();
+      const products = [
+        'leche',
+        'pan',
+        'huevos',
+        'arroz',
+        'aceite',
+        'café',
+        'azúcar',
+        'sal',
+        'té',
+        'harina',
+      ];
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: products.map((product) => ({ product })),
+          }),
+          FakeModelProvider.says('Añadidos los diez.'),
+        ]),
+        api
+      );
+
+      await service.turn(turnRequest('añade ' + products.join(', ')));
+
+      // Two gateway calls for the whole basket: one read of the list, one write.
+      // The read is what decides between an edit and an add and there is no way
+      // around it; the ten writes are the part this plan removes.
+      expect(api.of('addLines')).toHaveLength(1);
+      expect(api.of('addLine')).toHaveLength(0);
+      expect(api.of('listLines')).toHaveLength(1);
+      expect(api.of('addLines')[0].detail['items']).toHaveLength(10);
+    });
+
+    it('completes inside the round cap however the model shaped its reply', async () => {
+      // The wall, not the cost. `maxToolCalls` bounds rounds rather than calls,
+      // so a model emitting ten writes a few at a time used to run out of rounds
+      // and answer "I got stuck" with an unknown number of them written. One call
+      // per list is one round whatever the model does with it.
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }, { product: 'pan' }],
+          }),
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'huevos' }, { product: 'arroz' }],
+          }),
+          FakeModelProvider.says('Listo.'),
+        ]),
+        api,
+        { maxToolCalls: 3 }
+      );
+
+      const response = await service.turn(turnRequest('añade cuatro cosas'));
+
+      expect(response.reply).toBe('Listo.');
+      expect(api.of('addLines')).toHaveLength(2);
+    });
+
+    it("mode 'add' calls the quantity route and never reads then writes", async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-existing', 'list-flat', 'leche', 3),
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'leche', quantity: 2, mode: 'add' }],
+        }),
+        FakeModelProvider.says('Ahora hay cinco.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade dos leches más'));
+
+      expect(api.of('addLineQuantity')[0].detail).toEqual({
+        lineId: 'line-existing',
+        delta: 2,
+      });
+      // Never the read-compute-write it replaces: no absolute quantity is sent,
+      // so there is nothing between a read and a write for a second writer to
+      // land in.
+      expect(api.of('updateLine')).toHaveLength(0);
+      // And the count it reports is the server's, not one it worked out.
+      expect(
+        JSON.stringify(provider.requests[1].turns.at(-1)?.toolResults)
+      ).toContain('5');
+    });
+
+    it('folds the same product named twice into one write', async () => {
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [
+              { product: 'leche', quantity: 2 },
+              { product: 'leche', quantity: 1, mode: 'add' },
+            ],
+          }),
+          FakeModelProvider.says('Tres leches.'),
+        ]),
+        api
+      );
+
+      await service.turn(turnRequest('dos leches, y otra más'));
+
+      // One line, and the quantities folded before anything was written: a second
+      // write would have been computed against a read that predates the first.
+      expect(api.of('addLines')).toHaveLength(1);
+      expect(api.of('addLines')[0].detail['items']).toEqual([
+        { content: 'leche', quantity: 3 },
+      ]);
+    });
+
+    it('writes nothing for a bare mention of something already on the list', async () => {
+      // Section 7.2's defect: the edit this used to send bumped the version, sent
+      // a LineUpdated, quietly reopened a rejected line, and on an approved one
+      // refused a caller without DECIDE for what was in substance a question.
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-existing', 'list-flat', 'leche', 4),
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'leche' }],
+        }),
+        FakeModelProvider.says('Ya hay cuatro.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('pon leche'));
+
+      expect(api.of('updateLine')).toHaveLength(0);
+      expect(api.of('addLineQuantity')).toHaveLength(0);
+      expect(api.of('addLines')).toHaveLength(0);
+      // It reports the count that is there, which is the honest answer and the
+      // one thing the caller actually wanted to know.
+      const result = JSON.stringify(
+        provider.requests[1].turns.at(-1)?.toolResults
+      );
+      expect(result).toContain('unchanged');
+      expect(result).toContain('4');
+    });
+
+    it('reports the items in the order they were said, however they were written', async () => {
+      // The writes are grouped, because the new ones go in one request and the
+      // rest one at a time. The report is not: the model is composing a sentence
+      // about what somebody just said, in the order they said it.
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-existing', 'list-flat', 'pan', 1),
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [
+            { product: 'leche' },
+            { product: 'pan', quantity: 2 },
+            { product: 'huevos' },
+          ],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('leche, dos panes y huevos'));
+
+      const result = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+        .result as { items: { product: string }[] };
+      expect(result.items.map((item) => item.product)).toEqual([
+        'leche',
+        'pan',
+        'huevos',
+      ]);
+    });
+
+    it('records the item count as a field of the turn record', async () => {
+      // Section 7.4: the arguments are an array now, and the question the record
+      // has to answer is whether people ask for one thing or for a basket.
+      const api = new RecordingApi();
+      const logged: string[] = [];
+      jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation((message: unknown) => {
+          logged.push(String(message));
+        });
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }, { product: 'pan' }],
+          }),
+          FakeModelProvider.says('Añadidos.'),
+        ]),
+        api
+      );
+
+      await service.turn(turnRequest('añade leche y pan'));
+
+      const record = logged
+        .map((entry) => JSON.parse(entry) as Record<string, unknown>)
+        .find((entry) => entry['event'] === 'assistant.turn');
+      expect((record?.['tools'] as { items?: number }[])[0].items).toBe(2);
+
+      jest.restoreAllMocks();
+    });
+
+    it('emits a reference for every line it wrote, each from a response', async () => {
+      const api = new RecordingApi();
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }, { product: 'pan' }],
+          }),
+          FakeModelProvider.says('Añadidos.'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('añade leche y pan'));
+
+      const lineIds = response.references
+        .filter((reference) => reference.kind === AssistantReferenceKind.LINE)
+        .map((reference) => reference.lineId);
+      expect(lineIds).toEqual(['line-new-0', 'line-new-1']);
     });
   });
 
@@ -551,8 +824,12 @@ describe('AssistantService', () => {
 
       await build(provider, api).turn(turnRequest('hola'));
 
+      // Plan 0040 renamed the write and gave it an array; it did not add a tool.
+      // Adding units is not a new capability, it is the write that already
+      // existed reached by different arithmetic, so section 7 of plan 0039 and
+      // its list of what is absent are untouched.
       expect(provider.requests[0].tools.map((tool) => tool.name)).toEqual([
-        'upsert_line',
+        'upsert_lines',
         'query_lists',
         'rename_me',
       ]);

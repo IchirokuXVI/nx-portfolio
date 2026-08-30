@@ -37,8 +37,9 @@ export interface ModelToolCall {
    *
    * Carried so that the result of a call can be returned against the call it
    * answers rather than against a name. One turn can ask for the same tool twice
-   * ("add milk and bread" is two `upsert_line` calls), and matching those by name
-   * is a coin toss the moment their results differ.
+   * ("is there milk, and is there bread on the office list" is two `query_lists`
+   * calls), and matching those by name is a coin toss the moment their results
+   * differ.
    */
   id?: string;
   /**

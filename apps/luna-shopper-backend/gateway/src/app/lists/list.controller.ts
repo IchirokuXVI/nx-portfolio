@@ -32,6 +32,8 @@ import { NatsClient } from '../messaging/nats-client';
 import {
   AddCommentDto,
   AddLineDto,
+  AddLineQuantityDto,
+  AddLinesDto,
   CreateListDto,
   LineQueryDto,
   ListQueryDto,
@@ -190,6 +192,34 @@ export class ListsController {
     });
   }
 
+  /**
+   * Add several lines at once (plan 0040, section 6).
+   *
+   * Not restricted to the assistant, and not called from velista today, which is
+   * stated because it is the one thing here that reads as an oversight. "Paste a
+   * shopping list", "add the usual" and importing last week's list are all this
+   * route, and it is a genuine gap in the API that the assistant happened to be
+   * the first caller to hit.
+   *
+   * It stays on the default throttle bucket (section 6.4). A named limit would be
+   * a number chosen with no evidence behind it, and the write is cheap and
+   * already capped by the array's `maxItems`.
+   */
+  @Post(':id/lines/batch')
+  @ApiContractResponse(LINE_PATTERNS.addMany, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
+  addLines(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: AddLinesDto
+  ): Promise<LineView[]> {
+    return this.nats.send<LineView[]>(LINE_PATTERNS.addMany, {
+      userId: user.userId,
+      listId: id,
+      items: dto.items,
+    });
+  }
+
   @Post(':id/lines/reorder')
   @ApiContractResponse(LINE_PATTERNS.reorder, { status: HttpStatus.CREATED })
   @ApiProblemResponses({ body: true })
@@ -229,6 +259,40 @@ export class LinesController {
       content: dto.content,
       quantity: dto.quantity,
       itemId: dto.itemId,
+    });
+  }
+
+  /**
+   * Add units to a line, or take them off (plan 0040, section 3).
+   *
+   * A sub resource rather than a `quantityDelta` field on the `PATCH`, for the
+   * reason `:id/approval` and `:id/status` are also sub resources: `PATCH` means
+   * "here is the new value", and a body where one field is absolute and another
+   * is relative needs a mutual exclusion rule that every existing client then has
+   * to be told never to trip. {@link UpdateLineDto} is what velista already sends
+   * from three places, and giving it a field it must never populate is a trap
+   * with no upside.
+   *
+   * It answers with the line as it now stands, like every other line route. The
+   * caller knows the delta it sent and `quantity` is the new count, so "two more,
+   * five now" is available from the response plus what the caller already had; a
+   * bespoke envelope on one route out of ten would be a cost paid by every reader
+   * of the API for a subtraction.
+   */
+  @Post(':id/quantity')
+  @ApiContractResponse(LINE_PATTERNS.addQuantity, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  addQuantity(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: AddLineQuantityDto
+  ): Promise<LineView> {
+    return this.nats.send<LineView>(LINE_PATTERNS.addQuantity, {
+      userId: user.userId,
+      lineId: id,
+      delta: dto.delta,
     });
   }
 
