@@ -493,6 +493,41 @@ describe('AssistantService', () => {
     });
   });
 
+  describe('the loop replays a call the way the provider handed it over', () => {
+    it('carries the id and the continuity token of a call back into the next round', async () => {
+      // The turn loop is what sits between a reply and the request that follows
+      // it, so this is where a provider's own handles are kept or lost. Losing
+      // the token is not a degradation: Gemini 3 rejects the second round with a
+      // 400 and the caller sees a bare 500 on every turn that did anything, which
+      // is the defect this test exists to keep out.
+      const api = new RecordingApi();
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls(
+          'query_lists',
+          { item: 'leche' },
+          { id: 'call_1', signature: 'opaque-token' }
+        ),
+        FakeModelProvider.says('Sí, hay leche.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('hay leche?'));
+
+      const replayed = provider.requests[1].turns;
+      expect(replayed.at(-2)?.toolCalls).toEqual([
+        {
+          name: 'query_lists',
+          args: { item: 'leche' },
+          id: 'call_1',
+          signature: 'opaque-token',
+        },
+      ]);
+      // And the result goes back against the call it answers, so a turn that
+      // asked for the same tool twice can still be told apart.
+      expect(replayed.at(-1)?.toolResults?.[0].id).toBe('call_1');
+    });
+  });
+
   describe('section 7: the constraint is in the actions', () => {
     it('answers a call to a tool that does not exist instead of throwing', async () => {
       const api = new RecordingApi();
