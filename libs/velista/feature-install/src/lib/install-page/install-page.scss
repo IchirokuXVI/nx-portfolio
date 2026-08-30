@@ -1,0 +1,125 @@
+@use '../install-page' as page;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.page {
+  @include page.page;
+}
+
+.back {
+  @include page.back;
+}
+
+.back-glyph {
+  @include page.back-glyph;
+}
+
+// The mark, in a tile of its own, which is what makes this read as a page about the
+// app rather than as another screen inside it.
+.mark {
+  inline-size: var(--app-tile-size);
+  block-size: var(--app-tile-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  // The same tile `JoinLinkPage` draws its mark in, which is the shape a stranger has
+  // already seen if they arrived here from an invite.
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-radius-xl);
+  background: var(--app-status-attention-bg);
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-icon-lg);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.lede {
+  margin: 0;
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+// Visually hidden, and never `display: none`: a region that is not rendered is not
+// announced. It exists from the first frame and stays empty until there is news.
+.live {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.slot {
+  margin-block-start: var(--app-space-2);
+}
+
+.rule {
+  inline-size: 100%;
+  margin: var(--app-space-2) 0;
+  border: none;
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+// Pushes the closing line to the bottom of a tall screen without pinning it there on
+// a short one, which is what a fixed footer would do to the steps.
+.spacer {
+  flex: 1;
+  min-block-size: var(--app-space-6);
+}
+
+.primary {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-action-bg-hover);
+  }
+
+  @include page.focus-ring;
+}
+
+.secondary {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 620;
+  cursor: pointer;
+
+  @include page.focus-ring;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-align: center;
+}

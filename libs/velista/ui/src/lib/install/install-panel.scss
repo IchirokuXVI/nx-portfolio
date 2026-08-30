@@ -1,0 +1,90 @@
+@use '../styles/tokens' as tokens;
+
+:host {
+  display: block;
+}
+
+.primary {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-3);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:active {
+    background: var(--app-action-bg-pressed);
+  }
+
+  @include tokens.app-focus-ring;
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+}
+
+.confirmed {
+  margin: 0;
+  padding: var(--app-space-5) var(--app-space-6);
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  border: 1px solid var(--app-status-success-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-status-success-bg);
+  font-size: var(--app-text-sm);
+  font-weight: 620;
+  color: var(--app-text-primary);
+}
+
+.confirmed-glyph {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-status-success-fg);
+}
+
+// Quiet, and full width, so it reads as the second thing on the card rather than as
+// a competing action. Still at the touch target floor (`0002` section 8).
+.reveal {
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin-block-start: var(--app-space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  cursor: pointer;
+
+  @include tokens.app-focus-ring;
+}
+
+.caret {
+  font-size: var(--app-icon-sm);
+  transition: transform var(--app-motion-fast) var(--app-motion-ease);
+
+  &.open {
+    transform: rotate(180deg);
+  }
+}
+
+.folded {
+  margin-block-start: var(--app-space-4);
+}

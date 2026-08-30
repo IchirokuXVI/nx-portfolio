@@ -1,4 +1,5 @@
 import type { Provider } from '@angular/core';
+import { InstallStore } from './install-store';
 import { ThemeStore } from './theme-store';
 
 /**
@@ -15,5 +16,11 @@ import { ThemeStore } from './theme-store';
  * The rest of this library stays `providedIn: 'root'` on purpose: `BrowserFacade`,
  * `ConnectionState` and `ReloadBlocker` depend on nothing the app supplies, so they
  * lose nothing by being shared and gain zero setup in tests.
+ *
+ * `InstallStore` is here for a second reason on top of that one, and it is the reason
+ * it may not be lazy either: `beforeinstallprompt` fires once, early, and a store
+ * created by the install page has already missed it everywhere else (plan 0033 D1).
+ * Being on this list makes it *available*; `app-providers.ts` also constructs it, which
+ * is what makes it *listening*.
  */
-export const VELISTA_PLATFORM_PROVIDERS: Provider[] = [ThemeStore];
+export const VELISTA_PLATFORM_PROVIDERS: Provider[] = [ThemeStore, InstallStore];

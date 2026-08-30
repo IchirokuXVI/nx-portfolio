@@ -26,6 +26,22 @@ export const DEFAULT_LUNA_GATEWAY_URL = 'https://api.velista.app';
 export const DEFAULT_LUNA_REALTIME_URL = 'https://rt.velista.app';
 
 /**
+ * The app's own origin (plan 0033 D10).
+ *
+ * The mounted copy under the portfolio's shell cannot install anything, because the
+ * document, the manifest and the worker there all belong to the portfolio, so it points
+ * at this address instead. It is environment specific for the same reason the two above
+ * are, and it arrives the same way: a build argument, not a third Angular
+ * configuration.
+ *
+ * Deliberately **not** in the manifest. Writing an absolute URL in there is what D8
+ * rejects, since `manifest.webmanifest` is a static file identical in the staging and
+ * production images and every velista image except the shell's is environment agnostic
+ * on purpose.
+ */
+export const DEFAULT_VELISTA_APP_URL = 'https://velista.app';
+
+/**
  * The production build. It differs from `webpack.config.ts` in one thing: the two
  * backend URLs baked into the bundle.
  *
@@ -64,6 +80,9 @@ export default composePlugins(async (config) => {
         ),
         'process.env.LUNA_REALTIME_URL': JSON.stringify(
           process.env.LUNA_REALTIME_URL || DEFAULT_LUNA_REALTIME_URL
+        ),
+        'process.env.VELISTA_APP_URL': JSON.stringify(
+          process.env.VELISTA_APP_URL || DEFAULT_VELISTA_APP_URL
         ),
       }),
     ],

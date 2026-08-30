@@ -14,6 +14,13 @@ export const DEV_LUNA_GATEWAY_URL = 'http://localhost:3000';
 export const DEV_LUNA_REALTIME_URL = 'http://localhost:3001';
 
 /**
+ * Where this app answers on its own origin in development: the port `project.json`
+ * serves velista on (plan 0033 D10). A worktree on a dev slot overrides it through
+ * `apps/velista/.env`, like the two backend URLs above.
+ */
+export const DEV_VELISTA_APP_URL = 'http://localhost:4205';
+
+/**
  * DTS Plugin is disabled in Nx Workspaces as Nx already provides Typing support for Module
  * Federation. The DTS Plugin can be enabled by setting dts: true.
  * Learn more about the DTS Plugin here: https://module-federation.io/configure/dts.html
@@ -55,6 +62,9 @@ export default composePlugins(async (config) => {
         ),
         'process.env.LUNA_REALTIME_URL': JSON.stringify(
           process.env.LUNA_REALTIME_URL || DEV_LUNA_REALTIME_URL
+        ),
+        'process.env.VELISTA_APP_URL': JSON.stringify(
+          process.env.VELISTA_APP_URL || DEV_VELISTA_APP_URL
         ),
       }),
     ],

@@ -30,8 +30,15 @@ import { AppApiConfig } from '@portfolio/velista/models';
  */
 declare const process: { env: Record<string, string | undefined> };
 
-export const environment: { production: boolean; api: AppApiConfig } = {
+export const environment: {
+  production: boolean;
+  api: AppApiConfig;
+  appUrl: string;
+} = {
   production: true,
+  // The app's own origin (plan 0033 D10), which differs between staging and
+  // production exactly as the two backend URLs do, and arrives the same way.
+  appUrl: process.env['VELISTA_APP_URL'] as string,
   api: {
     gatewayBaseUrl: process.env['LUNA_GATEWAY_URL'] as string,
     realtimeBaseUrl: process.env['LUNA_REALTIME_URL'] as string,

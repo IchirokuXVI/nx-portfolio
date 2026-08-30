@@ -64,12 +64,18 @@ describe('velista environment substitution', () => {
     expect(envReads(environment)).toEqual(definedNames(webpack));
   });
 
-  it('reads the two backend URLs and nothing else', () => {
+  it('reads the two backend URLs and the app’s own, and nothing else', () => {
     // If this list grows, the DefinePlugin has to grow with it, which is what
     // the assertion above enforces. This one is here so the intent is legible.
+    //
+    // The third is the app's own origin (plan 0033 D10), which the mounted copy under
+    // the portfolio's shell points at because it cannot install anything itself. It is
+    // a separate variable rather than a field on the api config, which describes where
+    // the backend is and would be a lie about this value.
     expect(envReads(environment)).toEqual([
       'LUNA_GATEWAY_URL',
       'LUNA_REALTIME_URL',
+      'VELISTA_APP_URL',
     ]);
   });
 
@@ -90,10 +96,11 @@ describe('velista environment substitution', () => {
     expect(envReads(devEnvironment)).toEqual(definedNames(devWebpack));
   });
 
-  it('reads the same two variables in development', () => {
+  it('reads the same three variables in development', () => {
     expect(envReads(devEnvironment)).toEqual([
       'LUNA_GATEWAY_URL',
       'LUNA_REALTIME_URL',
+      'VELISTA_APP_URL',
     ]);
   });
 });

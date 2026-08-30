@@ -33,8 +33,16 @@ import { AppApiConfig } from '@portfolio/velista/models';
  */
 declare const process: { env: Record<string, string | undefined> };
 
-export const environment: { production: boolean; api: AppApiConfig } = {
+export const environment: {
+  production: boolean;
+  api: AppApiConfig;
+  appUrl: string;
+} = {
   production: false,
+  // Where this app answers on its own origin (plan 0033 D10). Not part of `api`,
+  // which describes where the **backend** is: this is the address somebody reading
+  // the portfolio's mounted copy has to go to in order to install anything.
+  appUrl: process.env['VELISTA_APP_URL'] as string,
   api: {
     // The luna-shopper gateway (PORT defaults to 3000 in its config schema).
     gatewayBaseUrl: process.env['LUNA_GATEWAY_URL'] as string,

@@ -1,0 +1,46 @@
+<section class="card">
+  @if (impossible()) {
+    <!--
+      One sentence of no, then something to do. Desktop Firefox keeps no site as an
+      app, and pretending otherwise would leave somebody looking for a menu item that
+      is not there (D9).
+    -->
+    <h2 class="heading">{{ prefix() + '.title' | rokuT }}</h2>
+    <p class="body">{{ prefix() + '.body' | rokuT }}</p>
+    <p class="body last">{{ prefix() + '.bookmark' | rokuT }}</p>
+  } @else {
+    <h2 class="heading">{{ prefix() + '.heading' | rokuT }}</h2>
+
+    <!--
+      An `<ol>`, so a screen reader announces the count and the position and the copy
+      never has to say "step 2 of 3" (section 7).
+    -->
+    <ol class="steps">
+      @for (step of steps(); track step.key) {
+        <li class="step">
+          <span aria-hidden="true" class="number">{{ $index + 1 }}</span>
+          <span class="words">
+            {{ step.key | rokuT }}
+            @switch (step.glyph) {
+              @case ('share') {
+                <span aria-hidden="true" class="inline-glyph ios">
+                  <lib-share-ios-icon class="glyph" />
+                </span>
+              }
+              @case ('menu') {
+                <span aria-hidden="true" class="inline-glyph">
+                  <lib-ellipsis-icon class="glyph" />
+                </span>
+              }
+              @case ('install') {
+                <span aria-hidden="true" class="inline-glyph">
+                  <lib-install-icon class="glyph" />
+                </span>
+              }
+            }
+          </span>
+        </li>
+      }
+    </ol>
+  }
+</section>

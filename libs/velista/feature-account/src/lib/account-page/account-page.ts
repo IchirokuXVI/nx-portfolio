@@ -21,8 +21,17 @@ import {
   type AuthServiceI,
   type ResendOutcome,
 } from '@portfolio/velista/data-access';
-import { APP_BASE_PATH, type AccountVm } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import {
+  APP_BASE_PATH,
+  APP_BRAND,
+  APP_STANDALONE_ORIGIN,
+  type AccountVm,
+} from '@portfolio/velista/models';
+import {
+  appPath,
+  BrowserFacade,
+  InstallStore,
+} from '@portfolio/velista/platform';
 import {
   AccountRow,
   AppBar,
@@ -104,6 +113,10 @@ export class AccountPage {
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _announcement = inject(RenameAnnouncement);
+  private readonly _install = inject(InstallStore);
+  private readonly _browser = inject(BrowserFacade);
+  private readonly _brand = inject(APP_BRAND);
+  private readonly _standaloneOrigin = inject(APP_STANDALONE_ORIGIN);
 
   /** Whether the resend sentence may be drawn at all. See `VERIFY_RESEND_AVAILABLE`. */
   readonly resendAvailable = VERIFY_RESEND_AVAILABLE;
@@ -170,6 +183,25 @@ export class AccountPage {
     };
   });
 
+  /** The product's own name, for the row that reports it is installed (rule N1). */
+  readonly productName = this._brand.name;
+
+  /** The app's own address without its scheme, which is how a person says it. */
+  readonly originLabel = this._standaloneOrigin.replace(/^https?:\/\//, '');
+
+  /**
+   * Which of the four forms the app row takes (plan 0033, section 4.2).
+   *
+   * `elsewhere` is the mounted mode and beats everything, because under the portfolio's
+   * shell installing installs the **portfolio** (D5, rule I5). The other three are the
+   * store's own state, and the row is drawn for everybody in every mode: a portfolio
+   * visitor reading velista's account page is precisely somebody who might want the
+   * real thing.
+   */
+  readonly appRow = computed<'elsewhere' | 'ready' | 'manual' | 'installed'>(
+    () => (this._basePath === '' ? this._install.state() : 'elsewhere')
+  );
+
   /** The letter in the app bar, which changes the moment a rename lands (rule A2). */
   readonly accountInitial = computed(() => {
     const username = this._session.username();
@@ -209,6 +241,38 @@ export class AccountPage {
   async back(): Promise<void> {
     await this._router.navigateByUrl(
       appPath(this._locale(), this._basePath, 'home')
+    );
+  }
+
+  /**
+   * The app row's action, which is one of three things depending on the form.
+   *
+   * `ready` is the one row in this app that performs a **browser action** instead of
+   * navigating, and it is worth the exception: the whole value of a captured prompt is
+   * that it removes the trip. Pressing it and dismissing the dialog leaves the row
+   * exactly as it was, and the state falls back to `manual` if the event is not
+   * re-fired, which changes the label to the one that navigates. Nothing is stuck.
+   *
+   * `prompt()` is called with nothing awaited before it, because it needs the transient
+   * user activation this press just granted (D6).
+   */
+  async openApp(): Promise<void> {
+    const form = this.appRow();
+
+    if (form === 'ready') {
+      await this._install.prompt();
+      return;
+    }
+
+    if (form === 'elsewhere') {
+      if (this._standaloneOrigin !== '') {
+        this._browser.openExternal(this._standaloneOrigin);
+      }
+      return;
+    }
+
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'install')
     );
   }
 
