@@ -33,6 +33,14 @@
     (joinZone)="joinZone()"
     (signInWithEmail)="signInWithEmail()"
   />
+
+  <!--
+    Last on the page, under the ways in, and the only thing here that may be clipped.
+    This screen deliberately does not scroll, so everything above competes for the
+    spacer's room; the version is the one line whose loss on a very short phone costs
+    nothing, which is precisely why it goes at the end rather than in the header.
+  -->
+  <lib-app-version />
 </div>
 
 <!--

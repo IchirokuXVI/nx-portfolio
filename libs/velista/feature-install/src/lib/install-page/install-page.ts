@@ -22,6 +22,7 @@ import {
   InstallStore,
 } from '@portfolio/velista/platform';
 import {
+  AppVersion,
   BrandMark,
   ChevronLeftIcon,
   InstallBenefits,
@@ -63,6 +64,7 @@ import {
   selector: 'lib-install-page',
   imports: [
     RokuTranslatorPipe,
+    AppVersion,
     BrandMark,
     ChevronLeftIcon,
     InstallBenefits,

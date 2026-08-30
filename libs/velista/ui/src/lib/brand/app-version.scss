@@ -1,0 +1,14 @@
+// Dense metadata, which is exactly what `--app-text-2xs` is reserved for. It sits at
+// the foot of a page as a fact to be looked up, never as something to be read on the
+// way past, so it takes the quietest text colour the theme has.
+:host {
+  display: block;
+  padding-block: var(--app-space-3);
+  font-size: var(--app-text-2xs);
+  line-height: var(--app-leading-body);
+  text-align: center;
+  color: var(--app-text-muted);
+  // A version is read a character at a time when somebody is comparing it against a
+  // release tag, so the digits line up rather than being spaced for prose.
+  font-variant-numeric: tabular-nums;
+}
