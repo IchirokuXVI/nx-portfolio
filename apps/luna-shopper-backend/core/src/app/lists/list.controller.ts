@@ -5,7 +5,9 @@ import {
   LINE_PATTERNS,
   LIST_PATTERNS,
   type AddCommentRequest,
+  type AddLineQuantityRequest,
   type AddLineRequest,
+  type AddLinesRequest,
   type CommentPage,
   type CommentView,
   type CreateListRequest,
@@ -78,9 +80,19 @@ export class ListController {
     return this.lines.add(req);
   }
 
+  @MessagePattern(LINE_PATTERNS.addMany)
+  addLines(@Payload() req: AddLinesRequest): Promise<LineView[]> {
+    return this.lines.addMany(req);
+  }
+
   @MessagePattern(LINE_PATTERNS.update)
   updateLine(@Payload() req: UpdateLineRequest): Promise<LineView> {
     return this.lines.update(req);
+  }
+
+  @MessagePattern(LINE_PATTERNS.addQuantity)
+  addLineQuantity(@Payload() req: AddLineQuantityRequest): Promise<LineView> {
+    return this.lines.addQuantity(req);
   }
 
   @MessagePattern(LINE_PATTERNS.setApproval)

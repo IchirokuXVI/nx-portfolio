@@ -39,7 +39,7 @@ describe('toGeminiRequest', () => {
       turns: [],
       tools: [
         {
-          name: 'upsert_line',
+          name: 'upsert_lines',
           description: 'add something',
           parameters: { type: 'object', properties: {} },
         },
@@ -51,7 +51,7 @@ describe('toGeminiRequest', () => {
       {
         functionDeclarations: [
           {
-            name: 'upsert_line',
+            name: 'upsert_lines',
             description: 'add something',
             parameters: { type: 'object', properties: {} },
           },
@@ -114,7 +114,7 @@ describe('toGeminiRequest', () => {
           role: ModelTurnRole.MODEL,
           toolCalls: [
             {
-              name: 'upsert_line',
+              name: 'upsert_lines',
               args: { product: 'leche' },
               id: 'call_1',
               signature: 'opaque-token',
@@ -133,7 +133,7 @@ describe('toGeminiRequest', () => {
           {
             functionCall: {
               id: 'call_1',
-              name: 'upsert_line',
+              name: 'upsert_lines',
               args: { product: 'leche' },
             },
             thoughtSignature: 'opaque-token',
@@ -153,8 +153,8 @@ describe('toGeminiRequest', () => {
         {
           role: ModelTurnRole.MODEL,
           toolCalls: [
-            { name: 'upsert_line', args: {}, id: 'a', signature: 'signed' },
-            { name: 'upsert_line', args: {}, id: 'b' },
+            { name: 'upsert_lines', args: {}, id: 'a', signature: 'signed' },
+            { name: 'upsert_lines', args: {}, id: 'b' },
           ],
         },
       ],
@@ -179,7 +179,7 @@ describe('toGeminiRequest', () => {
         {
           role: ModelTurnRole.TOOL,
           toolResults: [
-            { id: 'call_2', name: 'upsert_line', result: { ok: true } },
+            { id: 'call_2', name: 'upsert_lines', result: { ok: true } },
           ],
         },
       ],
@@ -194,7 +194,7 @@ describe('toGeminiRequest', () => {
           {
             functionResponse: {
               id: 'call_2',
-              name: 'upsert_line',
+              name: 'upsert_lines',
               response: { result: { ok: true } },
             },
           },
@@ -259,7 +259,7 @@ describe('readReply', () => {
               {
                 functionCall: {
                   id: 'call_9',
-                  name: 'upsert_line',
+                  name: 'upsert_lines',
                   args: { product: 'pan' },
                 },
                 thoughtSignature: 'opaque-token',
@@ -272,7 +272,7 @@ describe('readReply', () => {
 
     expect(reply.toolCalls).toEqual([
       {
-        name: 'upsert_line',
+        name: 'upsert_lines',
         args: { product: 'pan' },
         id: 'call_9',
         signature: 'opaque-token',

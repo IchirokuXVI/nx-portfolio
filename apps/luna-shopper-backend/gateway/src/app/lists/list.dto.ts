@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  LINE_BATCH_MAX_ITEMS,
+  LINE_QUANTITY_MAX,
+  LINE_QUANTITY_MIN,
   LineApprovalStatus,
   LineStatus,
   ListPermission,
@@ -7,6 +10,8 @@ import {
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   ArrayNotEmpty,
   ArrayUnique,
   IsArray,
@@ -21,6 +26,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  NotEquals,
   ValidateNested,
 } from 'class-validator';
 
@@ -108,11 +114,14 @@ export class AddLineDto {
   @MaxLength(400)
   content!: string;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 100000 })
+  @ApiPropertyOptional({
+    minimum: LINE_QUANTITY_MIN,
+    maximum: LINE_QUANTITY_MAX,
+  })
   @IsOptional()
   @IsInt()
-  @Min(1)
-  @Max(100000)
+  @Min(LINE_QUANTITY_MIN)
+  @Max(LINE_QUANTITY_MAX)
   quantity?: number;
 
   @ApiPropertyOptional({
@@ -125,6 +134,52 @@ export class AddLineDto {
   itemId?: string | null;
 }
 
+/**
+ * Add several lines to one list in one request (plan 0040, section 6).
+ *
+ * The item type is {@link AddLineDto} itself rather than a copy of it, so the
+ * bounds on a batched line are the bounds on a single one by construction and
+ * cannot drift apart. Every item is validated at the edge, which is what lets
+ * core answer all or nothing: by the time it sees the batch, a bad item has
+ * already produced a 400 for the whole request.
+ */
+export class AddLinesDto {
+  @ApiProperty({
+    type: [AddLineDto],
+    minItems: 1,
+    maxItems: LINE_BATCH_MAX_ITEMS,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(LINE_BATCH_MAX_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => AddLineDto)
+  items!: AddLineDto[];
+}
+
+/**
+ * A signed change to a line's quantity (plan 0040, section 3.7).
+ *
+ * Zero is refused because a delta of zero is a request that means nothing and is
+ * more likely a client bug than an intention. The bound is the quantity ceiling,
+ * so neither direction can be used to write a number nobody meant; the
+ * **resulting** quantity is what the floor and ceiling then apply to, in core,
+ * because core is the only layer that can see it.
+ */
+export class AddLineQuantityDto {
+  @ApiProperty({
+    minimum: -LINE_QUANTITY_MAX,
+    maximum: LINE_QUANTITY_MAX,
+    description:
+      'How many to add, or a negative number to take off. Never zero. The resulting quantity has to stay within the line quantity bounds.',
+  })
+  @IsInt()
+  @NotEquals(0)
+  @Min(-LINE_QUANTITY_MAX)
+  @Max(LINE_QUANTITY_MAX)
+  delta!: number;
+}
+
 export class UpdateLineDto {
   @ApiPropertyOptional({ maxLength: 400 })
   @IsOptional()
@@ -133,11 +188,14 @@ export class UpdateLineDto {
   @MaxLength(400)
   content?: string;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 100000 })
+  @ApiPropertyOptional({
+    minimum: LINE_QUANTITY_MIN,
+    maximum: LINE_QUANTITY_MAX,
+  })
   @IsOptional()
   @IsInt()
-  @Min(1)
-  @Max(100000)
+  @Min(LINE_QUANTITY_MIN)
+  @Max(LINE_QUANTITY_MAX)
   quantity?: number;
 
   @ApiPropertyOptional({

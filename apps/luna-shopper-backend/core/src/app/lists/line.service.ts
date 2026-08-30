@@ -1,11 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  LINE_BATCH_MAX_ITEMS,
+  LINE_QUANTITY_MAX,
+  LINE_QUANTITY_MIN,
   LineApprovalStatus,
   LineStatus,
   ListPermission,
   RealtimeEvent,
+  type AddLineQuantityRequest,
   type AddLineRequest,
+  type AddLinesItem,
+  type AddLinesRequest,
   type DeleteLineRequest,
   type LineOrder,
   type LinePage,
@@ -21,11 +27,13 @@ import {
   decodeCursor,
   encodeCursor,
   ForbiddenException,
+  NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import {
   DataSource,
   Repository,
+  type DeepPartial,
   type EntityManager,
   type SelectQueryBuilder,
 } from 'typeorm';
@@ -38,6 +46,19 @@ interface LineCursor {
   order: LineOrder;
   value: string;
   id: string;
+}
+
+/**
+ * A write that has happened but has not been announced.
+ *
+ * Every path that writes a line inside a transaction hands one of these back so
+ * the enclosing method can emit **after the commit**, as everywhere else in this
+ * service. The order of `events` is load bearing wherever there is more than one
+ * (plan 0037, section 5), so it is a list rather than a set of flags.
+ */
+interface WrittenLines {
+  view: LineView;
+  events: { event: RealtimeEvent; line: ListLine }[];
 }
 
 /** Canonical UUID shape, for validating the cross-service catalog `itemId`. */
@@ -110,50 +131,175 @@ export class LineService {
       req.userId,
       ListPermission.WRITE
     );
-    const max = await this.lines
-      .createQueryBuilder('l')
-      .select('COALESCE(MAX(l.position), 0)', 'max')
-      .where('l."listId" = :listId', { listId: req.listId })
-      .getRawOne<{ max: number }>();
-
-    const decides = permissions.has(ListPermission.DECIDE);
-    const approved = decides || list.autoApproveLines;
+    const max = await this.maxPosition(this.lines, req.listId);
 
     const saved = await this.lines.save(
-      this.lines.create({
-        listId: req.listId,
-        content: req.content,
-        quantity: this.validateQuantity(req.quantity ?? 1),
-        itemId: this.validateItemId(req.itemId ?? null),
-        position: Number(max?.max ?? 0) + 1,
-        approvalStatus: approved
-          ? LineApprovalStatus.APPROVED
-          : LineApprovalStatus.PENDING,
-        status: LineStatus.PENDING,
-        createdByUserId: req.userId,
-        approvedByUserId: decides ? req.userId : null,
-        version: 1,
-      })
+      this.lines.create(
+        this.newLine(req, req.listId, req.userId, max + 1, {
+          decides: permissions.has(ListPermission.DECIDE),
+          autoApproves: list.autoApproveLines,
+        })
+      )
     );
     this.emit(RealtimeEvent.LineAdded, list.zoneId, saved);
     return toLineView(saved);
   }
 
   /**
-   * A quantity of at least one (plan 0037, section 4.4).
+   * Add up to {@link LINE_BATCH_MAX_ITEMS} lines in one transaction (plan 0040,
+   * section 6). `WRITE`.
    *
-   * The gateway DTO already says `@Min(1)`, and core says it again rather than
+   * ## All or nothing, and not a per item result array
+   *
+   * The instinct is to report per item, so that nine good items are not refused
+   * because of one bad one. Worked through, it guards against something that
+   * cannot happen: access is a property of the list and the caller, the approval
+   * rules are a property of their permissions and the list's `autoApproveLines`,
+   * and the per item bounds have already produced a 400 for the whole request at
+   * the gateway. What is left is a database failure, which is not per item
+   * either. So one transaction, and `LineView[]` in request order, which is the
+   * shape `reorder` already established for a batch write on this resource.
+   *
+   * **It adds, and it does not merge** (section 6.3). Two items naming the same
+   * thing produce two lines: merging would put "asking for milk twice should
+   * change a number" into core, where it does not belong, and where it would then
+   * apply to somebody pasting a list who may well have meant two entries.
+   *
+   * **The permission set is resolved once** and applies to every item, which is
+   * right because it is one adder and one list, and it is most of the point:
+   * fifty adds is otherwise fifty resolutions of one unchanging answer.
+   */
+  async addMany(req: AddLinesRequest): Promise<LineView[]> {
+    const items = req.items ?? [];
+    if (items.length === 0) {
+      throw new ValidationException('at least one line is required', {
+        messageArgs: { field: 'items' },
+      });
+    }
+    if (items.length > LINE_BATCH_MAX_ITEMS) {
+      throw new ValidationException(
+        `at most ${LINE_BATCH_MAX_ITEMS} lines can be added at once`,
+        { messageArgs: { field: 'items' } }
+      );
+    }
+
+    const { list, permissions } = await this.listAccess.requireAccess(
+      req.listId,
+      req.userId,
+      ListPermission.WRITE
+    );
+    const approval = {
+      decides: permissions.has(ListPermission.DECIDE),
+      autoApproves: list.autoApproveLines,
+    };
+
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ListLine);
+      // One MAX(position) for the whole batch, then an increment per item, so the
+      // lines land in the order they were given (section 6.2).
+      let position = await this.maxPosition(repo, req.listId);
+      const rows: ListLine[] = [];
+      for (const item of items) {
+        position += 1;
+        rows.push(
+          await repo.save(
+            repo.create(
+              this.newLine(item, req.listId, req.userId, position, approval)
+            )
+          )
+        );
+      }
+      return rows;
+    });
+
+    // N `LineAdded` events in request order, after the commit, and deliberately
+    // not one batch event: a new event type is a type every client has to learn,
+    // and velista, the realtime service and the list rooms all already handle
+    // `line.added` correctly, so a client that has never heard of this plan gets
+    // a correct list. The burst is exactly the fan out the N separate requests it
+    // replaces would have produced anyway.
+    for (const row of saved) {
+      this.emit(RealtimeEvent.LineAdded, list.zoneId, row);
+    }
+    return saved.map(toLineView);
+  }
+
+  /**
+   * The row a new line starts as, with plan 0037 section 2's three approval rules
+   * applied to it.
+   *
+   * Shared by {@link add} and {@link addMany} so a batch cannot answer the
+   * approval question differently from a single add. The two flags are resolved
+   * once per request by the caller, because they are properties of the adder and
+   * of the list rather than of the item.
+   */
+  private newLine(
+    item: AddLinesItem,
+    listId: string,
+    userId: string,
+    position: number,
+    approval: { decides: boolean; autoApproves: boolean }
+  ): DeepPartial<ListLine> {
+    return {
+      listId,
+      content: item.content,
+      quantity: this.validateQuantity(item.quantity ?? 1),
+      itemId: this.validateItemId(item.itemId ?? null),
+      position,
+      approvalStatus:
+        approval.decides || approval.autoApproves
+          ? LineApprovalStatus.APPROVED
+          : LineApprovalStatus.PENDING,
+      status: LineStatus.PENDING,
+      createdByUserId: userId,
+      approvedByUserId: approval.decides ? userId : null,
+      version: 1,
+    };
+  }
+
+  /** The highest position on a list, or zero when it holds no lines. */
+  private async maxPosition(
+    repo: Repository<ListLine>,
+    listId: string
+  ): Promise<number> {
+    const max = await repo
+      .createQueryBuilder('l')
+      .select('COALESCE(MAX(l.position), 0)', 'max')
+      .where('l."listId" = :listId', { listId })
+      .getRawOne<{ max: number }>();
+    return Number(max?.max ?? 0);
+  }
+
+  /**
+   * A quantity between one and {@link LINE_QUANTITY_MAX} (plan 0037, section 4.4;
+   * plan 0040, section 3.5).
+   *
+   * The gateway DTO says both bounds, and core says them again rather than
    * trusting the caller: core's callers are NATS messages, the gateway is one of
-   * them rather than a wall, and a floor that only one of two layers enforces is
-   * a floor that a second client, a replayed message or a future service can walk
+   * them rather than a wall, and a bound that only one of two layers enforces is
+   * a bound that a second client, a replayed message or a future service can walk
    * straight through. "None of it was there" is `NOT_AVAILABLE` on the whole
    * line, which is a control the same caller already has.
+   *
+   * The **ceiling** arrived with the delta and is the reason this comment now
+   * says "bound" where it used to say "floor". It was survivable at one layer
+   * while every write carried an absolute value the gateway had already checked;
+   * {@link addQuantity} computes its value here, so here is the only place that
+   * can check the result. The numbers themselves come from the contract, so the
+   * DTOs and this method cannot state different ones.
    */
   private validateQuantity(quantity: number): number {
-    if (!Number.isInteger(quantity) || quantity < 1) {
-      throw new ValidationException('quantity must be at least 1', {
-        messageArgs: { field: 'quantity' },
-      });
+    if (!Number.isInteger(quantity) || quantity < LINE_QUANTITY_MIN) {
+      throw new ValidationException(
+        `quantity must be at least ${LINE_QUANTITY_MIN}`,
+        { messageArgs: { field: 'quantity' } }
+      );
+    }
+    if (quantity > LINE_QUANTITY_MAX) {
+      throw new ValidationException(
+        `quantity must be at most ${LINE_QUANTITY_MAX}`,
+        { messageArgs: { field: 'quantity' } }
+      );
     }
     return quantity;
   }
@@ -214,24 +360,210 @@ export class LineService {
     if (req.itemId !== undefined) {
       line.itemId = this.validateItemId(req.itemId);
     }
-    if (line.approvalStatus === LineApprovalStatus.REJECTED) {
-      line.approvalStatus = LineApprovalStatus.PENDING;
-      line.approvedByUserId = null;
-    }
+    this.reopenIfRejected(line);
     line.version += 1;
 
-    const shortfall =
-      line.approvalStatus === LineApprovalStatus.APPROVED &&
-      !list.autoApproveLines
-        ? previousQuantity - line.quantity
-        : 0;
-
+    const shortfall = this.shortfall(line, previousQuantity, list);
     if (shortfall <= 0) {
+      // No second row, so no transaction. That is correct here and stays correct
+      // now that a delta exists beside it (plan 0040, section 3.4): an absolute
+      // write is a last-writer-wins race over a value somebody deliberately
+      // chose, and there is nothing to lock it against.
       const saved = await this.lines.save(line);
       this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved);
       return toLineView(saved);
     }
-    return this.splitRemainder(line, shortfall, list);
+
+    return this.announce(
+      list,
+      await this.dataSource.transaction((manager) =>
+        this.writeEdit(manager, line, shortfall)
+      )
+    );
+  }
+
+  /**
+   * Add units to a line, or take them off, without reading it first (plan 0040,
+   * section 3).
+   *
+   * ## It introduces no new permission, no new transition and no new event
+   *
+   * That is the claim the whole thing rests on. The delta is **arithmetic in
+   * front of the edit that already exists**: it reaches the same
+   * {@link authorizeEdit}, the same rejected-to-pending reset, the same
+   * {@link splitRemainder}, and it emits the same events. So an approved line's
+   * quantity still moves only for a caller holding `DECIDE`, adding to a rejected
+   * line still returns it to `PENDING` and clears its approver, and a negative
+   * delta on an approved line still leaves the remainder behind. Adding units is
+   * an edit, and this does not get to be a softer edit.
+   *
+   * ## The read is inside the write
+   *
+   * `update` needs no lock because the value it writes is one the caller chose. A
+   * delta is computed from what the row says, so a concurrent write between the
+   * read and the write is an update that vanishes with nothing logged and nothing
+   * errored, which is what the API forced on every caller that wanted "two more"
+   * and had to fetch, compute and `PATCH` to get it (section 2).
+   *
+   * ## A negative delta is allowed
+   *
+   * Refusing one would leave "one less" as the single thing a caller still has to
+   * do with a read and a write, which is precisely the failure this exists to
+   * remove. Routing it through the same code costs nothing, because that code
+   * already knows what a reduction means.
+   */
+  async addQuantity(req: AddLineQuantityRequest): Promise<LineView> {
+    this.validateDelta(req.delta);
+
+    // Resolved **before** the transaction, and not because it is cheaper there.
+    // Every repository the access service holds draws its own connection from the
+    // pool, so asking it a question from inside a transaction means one request
+    // holding two connections at once; enough concurrent deltas and every
+    // connection in the pool is a transaction waiting for a connection that will
+    // never come free. What is resolved out here is a property of the caller and
+    // the list rather than of the row, so reading it outside the lock changes no
+    // answer. The row state the authorization actually branches on, its approval,
+    // is read under the lock below.
+    const found = await this.listAccess.getLine(req.lineId);
+    const { list, permissions } = await this.listAccess.resolve(
+      found.listId,
+      req.userId
+    );
+
+    const written = await this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ListLine);
+      const line = await repo.findOne({
+        where: { id: req.lineId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!line) {
+        throw new NotFoundException('Line not found');
+      }
+
+      const previousQuantity = line.quantity;
+      const quantity = this.validateQuantity(previousQuantity + req.delta);
+      // The request an absolute edit of the same field would have been, so the
+      // refusal a caller gets is word for word the one the PATCH gives them.
+      this.authorizeEdit(
+        { userId: req.userId, lineId: req.lineId, quantity },
+        line,
+        permissions
+      );
+
+      line.quantity = quantity;
+      this.reopenIfRejected(line);
+      line.version += 1;
+
+      return this.writeEdit(
+        manager,
+        line,
+        this.shortfall(line, previousQuantity, list)
+      );
+    });
+
+    return this.announce(list, written);
+  }
+
+  /**
+   * A non zero integer, bounded in both directions (plan 0040, section 3.3).
+   *
+   * Zero is refused because a delta of zero is a request that means nothing and
+   * is more likely a client bug than an intention. The bound is the quantity
+   * ceiling rather than a number of its own, so no single call can move a line
+   * further than the largest quantity a line may hold; the **resulting** quantity
+   * is what {@link validateQuantity} then applies the real floor and ceiling to.
+   */
+  private validateDelta(delta: number): number {
+    if (!Number.isInteger(delta) || delta === 0) {
+      throw new ValidationException('delta must be a non zero whole number', {
+        messageArgs: { field: 'delta' },
+      });
+    }
+    if (Math.abs(delta) > LINE_QUANTITY_MAX) {
+      throw new ValidationException(
+        `delta must be between -${LINE_QUANTITY_MAX} and ${LINE_QUANTITY_MAX}`,
+        { messageArgs: { field: 'delta' } }
+      );
+    }
+    return delta;
+  }
+
+  /**
+   * Editing a rejected line puts it back to `PENDING` (plan 0036, section 4.2).
+   *
+   * ...and clears its approver, which is what makes a rejection a conversation
+   * rather than a dead end. On **any** edit, including a quantity-only one, a
+   * delta, and one on a list that auto approves: that option decides what a
+   * **new** line starts as, and a rejection somebody made on purpose is not
+   * undone by an edit. A `PENDING` line stays `PENDING`.
+   */
+  private reopenIfRejected(line: ListLine): void {
+    if (line.approvalStatus === LineApprovalStatus.REJECTED) {
+      line.approvalStatus = LineApprovalStatus.PENDING;
+      line.approvedByUserId = null;
+    }
+  }
+
+  /**
+   * How much of an approved request this edit just dropped, or zero.
+   *
+   * A list with `autoApproveLines` set always answers zero (plan 0037, section
+   * 4.5): it has decided that approval carries no information on it, so there is
+   * nothing for a remainder to preserve, and splitting would leave a trail of
+   * unavailable rows on precisely the lists whose owners chose the setting to
+   * reduce ceremony.
+   */
+  private shortfall(
+    line: ListLine,
+    previousQuantity: number,
+    list: ShoppingList
+  ): number {
+    return line.approvalStatus === LineApprovalStatus.APPROVED &&
+      !list.autoApproveLines
+      ? previousQuantity - line.quantity
+      : 0;
+  }
+
+  /**
+   * The write half of an edit, in whatever transaction its caller opened.
+   *
+   * It never opens one of its own, because the two callers need different ones:
+   * {@link update} opens one only when a split makes two rows depend on each
+   * other, and {@link addQuantity} is already inside one because a delta has to
+   * read under the lock it writes with. Events are returned rather than emitted,
+   * so the caller announces them after its commit, as everywhere else here.
+   */
+  private async writeEdit(
+    manager: EntityManager,
+    line: ListLine,
+    shortfall: number
+  ): Promise<WrittenLines> {
+    const repo = manager.getRepository(ListLine);
+    if (shortfall <= 0) {
+      const saved = await repo.save(line);
+      return {
+        view: toLineView(saved),
+        events: [{ event: RealtimeEvent.LineUpdated, line: saved }],
+      };
+    }
+    return this.splitRemainder(repo, line, shortfall);
+  }
+
+  /**
+   * Emits what a committed write produced, and answers with its view.
+   *
+   * The order of the events is load bearing (plan 0037, section 5). A client
+   * rendering optimistically that saw the add first would draw a list momentarily
+   * summing to more than was ever asked for; updating first means every frame it
+   * can paint is arithmetically true. Both are existing event types going to the
+   * existing list room, so a client that knows nothing about either plan still
+   * gets a correct list.
+   */
+  private announce(list: ShoppingList, written: WrittenLines): LineView {
+    for (const { event, line } of written.events) {
+      this.emit(event, list.zoneId, line);
+    }
+    return written.view;
   }
 
   /**
@@ -278,7 +610,11 @@ export class LineService {
    * somebody asked for one tin, and the two they did not get would have vanished
    * with no record that they were ever wanted. So the original keeps the new lower
    * quantity and a second line records the shortfall, `APPROVED` and
-   * `NOT_AVAILABLE`, in one transaction so neither can exist without the other.
+   * `NOT_AVAILABLE`, in the caller's transaction so neither can exist without the
+   * other. The transaction belongs to the caller because {@link addQuantity} is
+   * already inside one when it gets here (plan 0040, section 3.4) and a second,
+   * nested one would be a lock released halfway through the thing it was taken
+   * for.
    *
    * **The server and not the client**, because the caller who performs this edit
    * holds `DECIDE` and, in the ordinary case, nothing else, and `DECIDE` cannot
@@ -311,43 +647,35 @@ export class LineService {
    * one the remainder is left over from.
    */
   private async splitRemainder(
+    repo: Repository<ListLine>,
     line: ListLine,
-    shortfall: number,
-    list: ShoppingList
-  ): Promise<LineView> {
-    const position = await this.positionBelow(line);
+    shortfall: number
+  ): Promise<WrittenLines> {
+    const position = await this.positionBelow(repo, line);
 
-    const { saved, remainder } = await this.dataSource.transaction(
-      async (manager: EntityManager) => {
-        const repo = manager.getRepository(ListLine);
-        const saved = await repo.save(line);
-        const remainder = await repo.save(
-          repo.create({
-            listId: line.listId,
-            content: line.content,
-            quantity: shortfall,
-            itemId: line.itemId,
-            position,
-            approvalStatus: LineApprovalStatus.APPROVED,
-            status: LineStatus.NOT_AVAILABLE,
-            createdByUserId: line.createdByUserId,
-            approvedByUserId: line.approvedByUserId,
-            version: 1,
-          })
-        );
-        return { saved, remainder };
-      }
+    const saved = await repo.save(line);
+    const remainder = await repo.save(
+      repo.create({
+        listId: line.listId,
+        content: line.content,
+        quantity: shortfall,
+        itemId: line.itemId,
+        position,
+        approvalStatus: LineApprovalStatus.APPROVED,
+        status: LineStatus.NOT_AVAILABLE,
+        createdByUserId: line.createdByUserId,
+        approvedByUserId: line.approvedByUserId,
+        version: 1,
+      })
     );
 
-    // The order is load bearing (plan 0037, section 5). A client rendering
-    // optimistically that saw the add first would draw a list momentarily summing
-    // to more than was ever asked for; updating first means every frame it can
-    // paint is arithmetically true. Both are existing event types going to the
-    // existing list room, so a client that knows nothing about this plan still
-    // gets a correct list.
-    this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved);
-    this.emit(RealtimeEvent.LineAdded, list.zoneId, remainder);
-    return toLineView(saved);
+    return {
+      view: toLineView(saved),
+      events: [
+        { event: RealtimeEvent.LineUpdated, line: saved },
+        { event: RealtimeEvent.LineAdded, line: remainder },
+      ],
+    };
   }
 
   /**
@@ -360,8 +688,11 @@ export class LineService {
    * the shortfall a screen away from the request it belongs to, which is the part
    * a naive implementation gets wrong.
    */
-  private async positionBelow(line: ListLine): Promise<number> {
-    const next = await this.lines
+  private async positionBelow(
+    repo: Repository<ListLine>,
+    line: ListLine
+  ): Promise<number> {
+    const next = await repo
       .createQueryBuilder('l')
       .select('MIN(l.position)', 'next')
       .where('l."listId" = :listId', { listId: line.listId })

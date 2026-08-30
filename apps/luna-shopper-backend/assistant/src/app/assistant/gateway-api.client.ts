@@ -156,6 +156,31 @@ export class GatewayApiClient {
     );
   }
 
+  /**
+   * Several lines in one request (plan 0040, section 6).
+   *
+   * The reason is not round trips. The assistant reaches the gateway over the
+   * cluster's internal service name with no TLS and no ingress, so ten sequential
+   * calls cost single digit milliseconds each against a model call measured in
+   * seconds, and nobody would ever perceive the difference. The reason is the
+   * **throttle**: one bucket of 120 requests a minute, counted in Redis and
+   * therefore shared across replicas, and every call made on somebody's behalf
+   * spends from **their** bucket. A chatty bot makes the app the person is
+   * holding answer 429 for reasons they cannot see and did not cause.
+   */
+  addLines(
+    caller: ApiCaller,
+    listId: string,
+    items: { content: string; quantity?: number }[]
+  ): Promise<LineView[]> {
+    return this.request<LineView[]>(
+      caller,
+      'POST',
+      `/v1/lists/${encodeURIComponent(listId)}/lines/batch`,
+      { items }
+    );
+  }
+
   updateLine(
     caller: ApiCaller,
     lineId: string,
@@ -166,6 +191,28 @@ export class GatewayApiClient {
       'PATCH',
       `/v1/lines/${encodeURIComponent(lineId)}`,
       body
+    );
+  }
+
+  /**
+   * "Two more bottles of milk", in one request (plan 0040, section 3).
+   *
+   * The alternative is what this replaces: read the list, find the line, add, and
+   * `PATCH` the sum. That is a lost update between the read and the write with no
+   * detector, and it means the count the bot reports is the one it decided rather
+   * than the one the server holds. The response is the line as it now stands, so
+   * the sentence is true rather than computed.
+   */
+  addLineQuantity(
+    caller: ApiCaller,
+    lineId: string,
+    delta: number
+  ): Promise<LineView> {
+    return this.request<LineView>(
+      caller,
+      'POST',
+      `/v1/lines/${encodeURIComponent(lineId)}/quantity`,
+      { delta }
     );
   }
 
