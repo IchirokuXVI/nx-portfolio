@@ -9,6 +9,7 @@ import {
   type ModelReply,
   type ModelRequest,
   type ModelToolCall,
+  type ModelTurn,
   type ModelUsage,
 } from './model-provider';
 
@@ -140,12 +141,11 @@ export function toGeminiRequest(
   };
 }
 
-function toGeminiContent(turn: {
-  role: ModelTurnRole;
-  text?: string;
-  toolCalls?: ModelToolCall[];
-  toolResults?: { name: string; result: unknown }[];
-}): Record<string, unknown> {
+// `ModelTurn` itself rather than the same shape written out again. It was written
+// out again once, and the copy went stale the moment a field was added to the
+// real one: the build broke and the suite did not, because the mapping is
+// exercised through this function and never through its parameter list.
+function toGeminiContent(turn: ModelTurn): Record<string, unknown> {
   if (turn.role === ModelTurnRole.TOOL) {
     return {
       // Gemini calls the side that carries a function result `user`; there is no
