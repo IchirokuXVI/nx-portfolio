@@ -89,7 +89,7 @@ data:
   # The model is a value rather than a literal, so changing it is an env edit and
   # a restart. `gemini-3.1-flash-lite` is the first thing to try if quality
   # disappoints, and the version numbers do not order those two the way they look.
-  GATEWAY_INTERNAL_URL: {{ $assistant.gatewayInternalUrl | default (printf "http://luna-shopper-backend-gateway.%s.svc.cluster.local:3000" .Values.namespace) | quote }}
+  GATEWAY_INTERNAL_URL: {{ $assistant.gatewayInternalUrl | default (printf "http://luna-shopper-backend-gateway.%s.svc.cluster.local" .Values.namespace) | quote }}
   ASSISTANT_MODEL: {{ $assistant.model | default "gemini-3.5-flash-lite" | quote }}
   # Caps on the client supplied transcript. The service stores nothing between
   # turns (rule A2), so the whole conversation arrives on every request and is
