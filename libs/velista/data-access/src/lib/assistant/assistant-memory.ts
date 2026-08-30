@@ -6,11 +6,11 @@ import type { AssistantServiceI } from './assistant-service';
 /**
  * The assistant, in memory. Asked for by name, never a default.
  *
- * Backend `0039` is not built yet, so this is what the panel runs against until it is,
- * and what every spec that is about the panel rather than about the transport uses. It
- * does **not** pretend to be a model: it matches a handful of words and answers a
+ * It does **not** pretend to be a model: it matches a handful of words and answers a
  * canned sentence, because the thing worth exercising here is the shape of a turn and
- * the references that come back with it, not language.
+ * the references that come back with it, not language. The real service is built now
+ * (backend `0039`), so this is for specs and for a run with no backend, which is what
+ * every other `*Memory` in this library is for.
  *
  * The three canned answers are the three tools (backend `0039` section 6), so the
  * empty state's three example sentences each reach a reply with the references that
@@ -25,30 +25,9 @@ export class AssistantMemory implements AssistantServiceI {
   private _nextTurnFails: { code: GatewayError['code']; wait?: number } | null =
     null;
 
-  async ask(transcript: readonly AssistantTurn[]): Promise<AssistantReply> {
-    const failure = this._nextTurnFails;
-    if (failure !== null) {
-      this._nextTurnFails = null;
-      throw memoryFailure(failure.code, failure.wait);
-    }
-
-    const said = [...transcript]
-      .reverse()
-      .find((turn) => turn.speaker === 'caller');
-
-    return answerFor(said?.text ?? '');
-  }
-
-  /**
-   * A spoken turn. The recording is **not** examined: nothing here transcribes, and
-   * pretending to would be inventing the one thing this fake cannot know.
-   *
-   * It answers as though the person had said the same three example sentences, so the
-   * recorder can be driven end to end with no network and no provider.
-   */
-  async askAloud(
-    transcript: readonly AssistantTurn[],
-    recording: Blob
+  async ask(
+    _transcript: readonly AssistantTurn[],
+    message: string
   ): Promise<AssistantReply> {
     const failure = this._nextTurnFails;
     if (failure !== null) {
@@ -56,9 +35,7 @@ export class AssistantMemory implements AssistantServiceI {
       throw memoryFailure(failure.code, failure.wait);
     }
 
-    return recording.size === 0
-      ? { text: 'I did not catch that. Try again?', references: [] }
-      : answerFor('add milk to the weekly shop');
+    return answerFor(message);
   }
 
   /** Make the next turn fail. One turn, then it forgets, so a retry succeeds. */
@@ -80,6 +57,7 @@ function answerFor(said: string): AssistantReply {
   if (text.includes('add')) {
     return {
       text: 'Added. Milk on the weekly shop.',
+      listResolution: 'named',
       references: [
         {
           kind: 'line',

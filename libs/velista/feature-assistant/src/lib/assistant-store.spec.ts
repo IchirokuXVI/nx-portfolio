@@ -13,21 +13,23 @@ import {
 } from '@portfolio/velista/models';
 import { AssistantStore, capTranscript } from './assistant-store';
 
+/** One call, as the gateway receives it: the history, and the thing being answered. */
+interface Sent {
+  readonly transcript: readonly AssistantTurn[];
+  readonly message: string;
+}
+
 /** A service double that records what it was sent and answers what it was told to. */
 function fakeAssistant(
-  answer: (transcript: readonly AssistantTurn[]) => Promise<AssistantReply>
-): AssistantServiceI & { sent: (readonly AssistantTurn[])[] } {
-  const sent: (readonly AssistantTurn[])[] = [];
+  answer: (message: string) => Promise<AssistantReply>
+): AssistantServiceI & { sent: Sent[] } {
+  const sent: Sent[] = [];
 
   return {
     sent,
-    ask: (transcript) => {
-      sent.push(transcript);
-      return answer(transcript);
-    },
-    askAloud: (transcript) => {
-      sent.push(transcript);
-      return answer(transcript);
+    ask: (transcript, message) => {
+      sent.push({ transcript, message });
+      return answer(message);
     },
   };
 }
@@ -76,11 +78,25 @@ describe('AssistantStore', () => {
       await subject.say('Add milk');
       await subject.say('And eggs?');
 
-      expect(service.sent[1]).toEqual([
-        { speaker: 'caller', text: 'Add milk' },
-        { speaker: 'bot', text: 'Yes.' },
-        { speaker: 'caller', text: 'And eggs?' },
-      ]);
+      expect(service.sent[1]).toEqual({
+        transcript: [
+          { speaker: 'caller', text: 'Add milk' },
+          { speaker: 'bot', text: 'Yes.' },
+        ],
+        message: 'And eggs?',
+      });
+    });
+
+    it('keeps the new message out of the history of the question', async () => {
+      // The gateway takes `message` as its own field and `transcript` as what came
+      // before, so the thing being answered must not also appear in the conversation
+      // it is being answered against. The first turn therefore sends an empty history.
+      const service = fakeAssistant(() => reply('Added.'));
+      const subject = store(service);
+
+      await subject.say('Add milk');
+
+      expect(service.sent[0]).toEqual({ transcript: [], message: 'Add milk' });
     });
 
     it('holds the composer while a turn is out and releases it after', async () => {
@@ -102,39 +118,17 @@ describe('AssistantStore', () => {
   });
 
   describe('a spoken turn', () => {
-    it('does not put the placeholder into the transcript it sends', async () => {
-      // Nothing on this side knows what was said, so a placeholder in the conversation
-      // the model reads would be the client putting words in somebody's mouth.
+    it('is the same call as a typed one, because it arrives as words', async () => {
+      // Backend 0039 shipped no audio route, so the browser transcribes and there is
+      // one endpoint and one method. The caller's bubble is what was actually heard,
+      // which under an audio upload would have needed the service to send it back.
       const service = fakeAssistant(() => reply('Added.'));
       const subject = store(service);
 
-      await subject.speak(new Blob(['x']), 'A spoken message');
+      await subject.say('add bread to the weekly shop');
 
-      expect(service.sent[0]).toEqual([]);
-    });
-
-    it('rewrites the caller bubble to what the service heard', async () => {
-      const subject = store(
-        fakeAssistant(() =>
-          Promise.resolve({
-            text: 'Added.',
-            references: [],
-            heard: 'Add bread to the weekly shop',
-          })
-        )
-      );
-
-      await subject.speak(new Blob(['x']), 'A spoken message');
-
-      expect(subject.entries()[0].text).toBe('Add bread to the weekly shop');
-    });
-
-    it('keeps the placeholder when the service sent no transcription', async () => {
-      const subject = store(fakeAssistant(() => reply('Added.')));
-
-      await subject.speak(new Blob(['x']), 'A spoken message');
-
-      expect(subject.entries()[0].text).toBe('A spoken message');
+      expect(service.sent[0].message).toBe('add bread to the weekly shop');
+      expect(subject.entries()[0].text).toBe('add bread to the weekly shop');
     });
   });
 
@@ -182,10 +176,10 @@ describe('AssistantStore', () => {
       fail = false;
       await subject.say('Again');
 
-      expect(service.sent[1]).toEqual([
-        { speaker: 'caller', text: 'Add milk' },
-        { speaker: 'caller', text: 'Again' },
-      ]);
+      expect(service.sent[1]).toEqual({
+        transcript: [{ speaker: 'caller', text: 'Add milk' }],
+        message: 'Again',
+      });
     });
   });
 
@@ -255,7 +249,7 @@ describe('AssistantStore', () => {
       }
 
       const sent = service.sent[service.sent.length - 1];
-      expect(sent.length).toBeLessThanOrEqual(ASSISTANT_MAX_TURNS);
+      expect(sent.transcript.length).toBeLessThanOrEqual(ASSISTANT_MAX_TURNS);
     });
   });
 

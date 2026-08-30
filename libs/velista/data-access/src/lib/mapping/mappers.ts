@@ -20,6 +20,7 @@ import {
   type ListPermission,
   type ListPresence,
   type ListPreview,
+  type ListResolution,
   type Membership,
   type MyZone,
   type Page,
@@ -546,21 +547,44 @@ export function toAssistantReply(raw: unknown): AssistantReply | null {
     return null;
   }
 
-  const text = str(raw['text']);
+  // `reply` on the wire, `text` in this app. The rename is here and nowhere else.
+  const text = str(raw['reply']);
   if (text === null) {
     return null;
   }
 
-  // `heard` is only ever present on a spoken turn, and an empty one is the same as
-  // none: a bubble reading "" is worse than the placeholder it would replace.
-  const heard = strOr(raw['heard'], '');
+  const resolution = LIST_RESOLUTIONS[strOr(raw['listResolution'], '')];
 
   return {
     text,
     references: mapArray(raw['references'], toAssistantReference),
-    ...(heard === '' ? {} : { heard }),
+    ...(resolution === undefined ? {} : { listResolution: resolution }),
   };
 }
+
+/**
+ * `ListResolutionBranch` on the wire, this app's own words here.
+ *
+ * A lookup rather than `oneOf`, because the two vocabularies genuinely differ and the
+ * map is the translation. An unrecognised branch, or an absent one, comes out
+ * `undefined`: the field is optional by contract and nothing here behaves differently
+ * for a value it does not know.
+ */
+const LIST_RESOLUTIONS: Readonly<Record<string, ListResolution | undefined>> = {
+  NAMED: 'named',
+  CONVERSATION: 'conversation',
+  ONLY_LIST: 'onlyList',
+  ASKED: 'asked',
+};
+
+/** `AssistantReferenceKind` on the wire, this app's own words here. */
+const REFERENCE_KINDS: Readonly<
+  Record<string, AssistantReference['kind'] | undefined>
+> = {
+  ZONE: 'zone',
+  LIST: 'list',
+  LINE: 'line',
+};
 
 function toAssistantReference(raw: unknown): AssistantReference | null {
   if (!isRecord(raw)) {
@@ -570,10 +594,10 @@ function toAssistantReference(raw: unknown): AssistantReference | null {
   // Unlike every other narrowing in this file, an unrecognised kind has no fallback to
   // land on. There is no generic reference the panel could link somewhere sensible, so
   // a kind from a newer backend is dropped and the reply renders with one link fewer.
-  const kind = raw['kind'];
+  const kind = REFERENCE_KINDS[strOr(raw['kind'], '')];
   const label = strOr(raw['label'], '');
   const zoneId = str(raw['zoneId']);
-  if (zoneId === null) {
+  if (kind === undefined || zoneId === null) {
     return null;
   }
 
@@ -581,6 +605,11 @@ function toAssistantReference(raw: unknown): AssistantReference | null {
     return { kind, zoneId, label };
   }
 
+  // `listId` and `lineId` are **nullable** on the wire: the contract sets them per
+  // kind and sends null for the ones that do not apply. `str` already collapses a null
+  // to null, so this is the same check it always was, and it is what makes rule A3
+  // hold: a reference this app cannot address is dropped rather than half built, and a
+  // link that would 404 is never drawn.
   const listId = str(raw['listId']);
   if (listId === null) {
     return null;
@@ -591,9 +620,6 @@ function toAssistantReference(raw: unknown): AssistantReference | null {
   }
 
   const lineId = str(raw['lineId']);
-  if (kind === 'line' && lineId !== null) {
-    return { kind, zoneId, listId, lineId, label };
-  }
 
-  return null;
+  return lineId === null ? null : { kind, zoneId, listId, lineId, label };
 }

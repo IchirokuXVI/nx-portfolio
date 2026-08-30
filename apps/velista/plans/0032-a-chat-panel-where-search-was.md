@@ -93,11 +93,11 @@ it ships with it.
 The right hand button is 52px in the same corner throughout, and what it is depends only on
 the state:
 
-| State | Button |
-|---|---|
+| State              | Button                |
+| ------------------ | --------------------- |
 | the field is empty | **microphone**, amber |
-| anything is typed | **send**, amber |
-| recording | **stop**, coral |
+| anything is typed  | **send**, amber       |
+| recording          | **stop**, coral       |
 
 Never two buttons competing for one intention, and nothing moves under the thumb. Stop
 inherits the microphone's exact position, so the finger that started a recording ends it
@@ -141,11 +141,15 @@ person. The message at 5:00 is required rather than decorative: silence at the l
 the app having broken, and whoever is recording for five minutes is the person least able to
 work out what happened.
 
-### 4.5 What the recording is, and what this plan does not settle
+### 4.5 What the recording is
 
-The audio is captured client side, in the browser, through `MediaRecorder`. What this plan
-does **not** decide is where it is turned into text, and section 10 says why that has to be
-settled in `0039` before this is built.
+> **As built:** the browser's own `SpeechRecognition`, not `MediaRecorder`, because
+> `0039` shipped no audio endpoint. Section 10's blockquote is the account. Nothing in
+> 4.1 to 4.4 changes: the clock, both thresholds and the pause are this app's, not the
+> capture's.
+
+The speech is captured client side, in the browser. What this plan originally left open was
+where it is turned into text, and section 10 records how `0039` answered it.
 
 ## 5. The client holds the transcript
 
@@ -186,10 +190,10 @@ link correct at `/velista/en/...` when mounted in the portfolio shell and at `/e
 velista's own origin. A hardcoded path is wrong in exactly one of the two run modes, and it
 is the mode nobody looks at.
 
-| kind | goes to |
-|---|---|
-| `zone` | `zones/:zoneId` |
-| `list` | `zones/:zoneId/lists/:listId` |
+| kind   | goes to                                             |
+| ------ | --------------------------------------------------- |
+| `zone` | `zones/:zoneId`                                     |
+| `list` | `zones/:zoneId/lists/:listId`                       |
 | `line` | `zones/:zoneId/lists/:listId`, with `?line=:lineId` |
 
 ## 8. A line has no route, so it gets a query parameter
@@ -221,7 +225,31 @@ reply and nothing should try.
 
 ## 10. Audio is not text, and 0039 has to say where it becomes text
 
-**This is the one open dependency in this plan, and it is a real one.** Section 4 produces an
+> **Settled, by what `0039` shipped: the second option.** That service went in with a
+> text only `POST /v1/assistant` taking `{ message, transcript }`, no multipart route,
+> no size cap and no speech provider anywhere in it. So there is nothing for a recording
+> to be uploaded to, and the browser transcribes.
+>
+> The paragraph below predicted that would cost the pause button. It does not. There is
+> nothing to pause in a _file_, but there is something to pause in a **session**:
+> stopping recognition and starting it again with the words so far kept is a pause in
+> every sense the person cares about, and the clock and the two thresholds were never
+> properties of the audio — they live in `Dictation`. **Every control section 4 draws
+> survives unchanged.**
+>
+> What is genuinely different: no recording leaves the device, so the privacy note in
+> `0039` section 10 stays accurate as written; Firefox has no `SpeechRecognition` and
+> gets a field that still works and no microphone button; and Chrome and Safari do this
+> server side, so speech reaches the browser vendor rather than this app's backend,
+> which is a different destination from the one the first option would have used and is
+> worth saying out loud. The five minute cap is now about the turn rather than a codec,
+> and it protects the gateway's 2000 character `message` field.
+>
+> One gain that was not available under the first option: the client knows the words, so
+> the caller's own bubble shows what was understood immediately, with no round trip and
+> nothing added to the contract.
+
+**This was the one open dependency in this plan, and it was a real one.** Section 4 produces an
 audio file. Backend `0039` describes a service that takes text and returns text. Something
 between the two has to transcribe, and nothing currently says what.
 
@@ -287,8 +315,10 @@ not have to learn this one.
   For this audience an accidental stop is a sent message with no way back, and a confirm step
   would tax every recording to protect the rare one. Worth settling before build; a middle
   option is a brief undo on the sent message rather than a confirm before it.
-- **Where a recording is transcribed**, which section 10 states in full. It is the only thing
-  here that cannot be deferred: section 4 cannot be built until `0039` answers it.
+- ~~**Where a recording is transcribed**, which section 10 states in full.~~ **Settled.**
+  `0039` shipped a text only endpoint, so the browser transcribes and only text leaves the
+  device. Section 10's blockquote says what that changed and, more to the point, what it
+  did not.
 - Whether a recording survives leaving the panel mid capture. Drawn as though it does not.
 
 ## 13. Exit criteria

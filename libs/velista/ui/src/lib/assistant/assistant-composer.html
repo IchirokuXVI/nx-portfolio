@@ -1,5 +1,5 @@
-@let state = recorder.state();
-@let recording = recorder.active();
+@let state = dictation.state();
+@let listening = dictation.active();
 
 <div class="composer">
   <!--
@@ -16,12 +16,12 @@
       {{ 'assistant.recorder.limit.reached' | rokuT }}
       <strong>{{ 'assistant.recorder.limit.pressStop' | rokuT }}</strong>
     </p>
-  } @else if (recorder.warning()) {
+  } @else if (dictation.warning()) {
     <p aria-live="polite" class="notice">
       {{ 'assistant.recorder.limit.longest' | rokuT }}
       <strong>{{
         'assistant.recorder.limit.left'
-          | rokuT: { count: recorder.remainingSeconds() }
+          | rokuT: { count: dictation.remainingSeconds() }
       }}</strong>
     </p>
   }
@@ -39,14 +39,14 @@
       } @else {
         {{ 'assistant.recorder.unavailable' | rokuT }}
       }
-      <button (click)="dismissRecorderState()" class="dismiss" type="button">
+      <button (click)="dismissDictationState()" class="dismiss" type="button">
         {{ 'assistant.recorder.dismiss' | rokuT }}
       </button>
     </p>
   }
 
   <div class="row">
-    @if (recording) {
+    @if (listening) {
       <!--
         Pause at the far left and stop at the far right, as far apart as the container
         allows. They are the only two controls on screen and confusing them costs the

@@ -12,14 +12,14 @@ import {
 } from '@portfolio/velista/data-access';
 import type { AssistantReference } from '@portfolio/velista/models';
 import {
-  AUDIO_CAPTURE,
+  SPEECH_CAPTURE,
   provideVelistaTesting,
-  type AudioCaptureI,
+  type SpeechCaptureI,
 } from '@portfolio/velista/platform';
 import { AssistantPage } from './assistant-page';
 
 /** A microphone that is simply not there. These tests are about the transcript. */
-const NO_MICROPHONE: AudioCaptureI = {
+const NO_MICROPHONE: SpeechCaptureI = {
   supported: () => false,
   open: () => Promise.reject(new Error('no microphone in this test')),
 };
@@ -41,7 +41,6 @@ async function render(
 
   const service: AssistantServiceI = {
     ask: () => (options.answer ?? emptyAnswer)(),
-    askAloud: () => (options.answer ?? emptyAnswer)(),
   };
 
   await TestBed.configureTestingModule({
@@ -50,7 +49,7 @@ async function render(
       provideVelistaTesting({ basePath: options.basePath ?? '/velista' }),
       provideRouter([]),
       { provide: ASSISTANT_SERVICE, useValue: service },
-      { provide: AUDIO_CAPTURE, useValue: NO_MICROPHONE },
+      { provide: SPEECH_CAPTURE, useValue: NO_MICROPHONE },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
     ],
   }).compileComponents();

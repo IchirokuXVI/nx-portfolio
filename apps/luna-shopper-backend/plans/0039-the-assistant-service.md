@@ -429,8 +429,15 @@ discouraged.
 
 ## 14. Open decisions
 
-- **Where a spoken turn is transcribed. This one blocks velista `0032` and cannot be
-  deferred.** That plan's section 4 records up to five minutes of audio with a pause button,
+- ~~**Where a spoken turn is transcribed.**~~ **Settled by what this service shipped:
+  the client transcribes.** There is no multipart route here, no size cap and no speech
+  provider, so `POST /v1/assistant` takes text and the browser produces it with
+  `SpeechRecognition`. Velista `0032` section 10 carries the consequences; the one that
+  matters on this side is that **section 10's privacy line stays as written**, because
+  no voice recording ever reaches this service. The paragraph below is kept for the
+  argument it makes, and its prediction that this would cost the pause button turned out
+  not to hold: a session can be paused even though a stream has no file.
+- **The original text, for the reasoning:** That plan's section 4 records up to five minutes of audio with a pause button,
   which is a `MediaRecorder` feature: the browser's own `SpeechRecognition` returns text and
   no file, so there would be nothing to pause and nothing to hold at the limit. Backlog `0005`
   section 6 assumed the browser, and that assumption does not survive the design. Either this

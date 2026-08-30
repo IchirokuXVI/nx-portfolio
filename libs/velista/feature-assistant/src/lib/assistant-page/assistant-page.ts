@@ -18,11 +18,7 @@ import {
   type AssistantEntry,
   type AssistantReference,
 } from '@portfolio/velista/models';
-import {
-  appPath,
-  AudioRecorder,
-  BrowserFacade,
-} from '@portfolio/velista/platform';
+import { appPath, BrowserFacade, Dictation } from '@portfolio/velista/platform';
 import {
   AssistantComposer,
   AssistantIntro,
@@ -87,7 +83,7 @@ import { AssistantStore } from '../assistant-store';
   // Both are scoped to this page and destroyed with it, which is what decides two
   // things the plan states as behaviour: the conversation survives leaving the panel
   // and coming back within a session and does not survive a reload (section 5), and a
-  // recording does not survive leaving mid capture, because destroying the recorder
+  // message does not survive leaving mid dictation, because destroying `Dictation`
   // releases the microphone (section 12).
   //
   // Here rather than in the route's `providers`, which is where the plan puts the
@@ -95,7 +91,7 @@ import { AssistantStore } from '../assistant-store';
   // barrel, and that file is loaded before any page: the panel would land in the
   // shell's initial payload and `routes.spec.ts` would rightly fail its assertion that
   // every page is lazy. The lifetime is identical either way.
-  providers: [AssistantStore, AudioRecorder],
+  providers: [AssistantStore, Dictation],
 })
 export class AssistantPage {
   private readonly _store = inject(AssistantStore);
@@ -170,11 +166,16 @@ export class AssistantPage {
     await this._store.say(text);
   }
 
-  async spoke(recording: Blob): Promise<void> {
-    await this._store.speak(
-      recording,
-      this._translator.t('assistant.composer.spoken')
-    );
+  /**
+   * A message spoken into the app's own microphone.
+   *
+   * The same call as a typed one, because the words arrive as words: the browser
+   * transcribes and the service takes text (plan 0032, section 10, settled by what
+   * backend `0039` shipped). It is bound separately from `(send)` only because the
+   * composer distinguishes the two gestures, not because anything below does.
+   */
+  async spoke(said: string): Promise<void> {
+    await this._store.say(said);
   }
 
   private _toMessage(

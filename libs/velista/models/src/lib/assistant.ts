@@ -39,37 +39,51 @@ export type AssistantReference =
       readonly label: string;
     };
 
-/** One entry in the transcript, as it goes over the wire. */
+/**
+ * One entry in the transcript.
+ *
+ * This app's own shape, not the wire's. The gateway takes
+ * `{ role: 'USER' | 'ASSISTANT', content }` and the mapper in `data-access` is the only
+ * place that knows it, which is rule D4: the client owns its models and its words, and
+ * a backend rename is a mapper edit rather than a rename through every template.
+ */
 export interface AssistantTurn {
   readonly speaker: AssistantSpeaker;
   readonly text: string;
 }
 
 /**
+ * Which of the four branches decided the list a write went to (backend `0039`,
+ * section 6.1).
+ *
+ * `asked` is the one worth knowing about: none of the other three answered, so the
+ * turn ended with a question and **wrote nothing**. The other three all wrote.
+ */
+export type ListResolution = 'named' | 'conversation' | 'onlyList' | 'asked';
+
+/**
  * What the service answered.
  *
- * `references` is always an array, empty when the turn read nothing. An absent field
- * and an empty one mean the same thing to the panel, so the mapper collapses them
- * rather than making every reader ask.
+ * `references` is always an array, empty when the turn read nothing — which is exactly
+ * right for a redirect, a refusal, or a turn that called no tool. An absent field and
+ * an empty one mean the same thing to the panel, so the mapper collapses them rather
+ * than making every reader ask.
  */
 export interface AssistantReply {
   readonly text: string;
   readonly references: readonly AssistantReference[];
 
   /**
-   * What the service transcribed, on a spoken turn only.
+   * Present when the turn resolved a list for a write, absent otherwise.
    *
-   * The client records audio and knows nothing about the words in it (plan 0032,
-   * section 10), so without this the caller's own bubble can say only that they spoke.
-   * For the people this feature is for, a reply that answers a question they cannot
-   * see is a reply they cannot check, and mishearing is the failure that matters most
-   * with a voice interface.
-   *
-   * Optional, and the panel falls back to a neutral placeholder when it is absent, so
-   * a service that never sends it is not broken. It is **never invented**: the client
-   * has nothing to invent it from.
+   * **Nothing in this app's behaviour turns on it yet**, and it is carried rather than
+   * dropped on purpose: the backend put it on the response instead of leaving it in a
+   * log line because the client is expected to distinguish a write from a question
+   * eventually, and a field the mapper silently discards is a field the next plan has
+   * to rediscover. Plan 0032 section 3 is explicit that the panel draws a transcript, a
+   * composer and one button and nothing else, so acting on it is not this plan's work.
    */
-  readonly heard?: string;
+  readonly listResolution?: ListResolution;
 }
 
 /**

@@ -448,7 +448,7 @@ export const AppShellRoutes: Route[] = [
             // the gateway with the caller's own token (backend `0039` rule A1), so
             // there is nothing here to authorize that the API does not already.
             //
-            // `AssistantStore` and `AudioRecorder` are provided by the **page**, not
+            // `AssistantStore` and `Dictation` are provided by the **page**, not
             // here. That is the one place this departs from the plan's wording, and it
             // is forced: naming either class in this file is an eager import of the
             // `feature-assistant` barrel, which would pull the panel into the shell's

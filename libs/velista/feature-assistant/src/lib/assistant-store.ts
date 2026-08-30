@@ -14,7 +14,6 @@ import {
   ASSISTANT_MAX_CHARS,
   ASSISTANT_MAX_TURNS,
   type AssistantEntry,
-  type AssistantReply,
   type AssistantTurn,
 } from '@portfolio/velista/models';
 
@@ -79,43 +78,28 @@ export class AssistantStore {
     inject(DestroyRef).onDestroy(() => this._stopCountdown());
   }
 
-  /** A typed turn, or one the platform keyboard dictated into the field. */
-  async say(text: string): Promise<void> {
-    await this._turn(text, true, (transcript) =>
-      this._assistant.ask(transcript)
-    );
-  }
-
   /**
-   * A spoken turn.
+   * One turn: a typed message, one the platform keyboard dictated into the field, or
+   * one spoken into the app's own microphone.
    *
-   * The caller's bubble starts as `placeholder`, because nothing on this side knows
-   * what was said: transcription happens in the service (section 10). It is **not**
-   * sent as part of the transcript for the same reason — a placeholder in the
-   * conversation the model reads would be the client putting words in somebody's
-   * mouth, which is exactly what rule A2's client held transcript must not do.
-   *
-   * When the reply carries `heard`, the bubble is rewritten to it, so the person can
-   * see what they were understood to have said and check the answer against it.
+   * **One method, because there is one endpoint.** There used to be a second for a
+   * spoken turn, which uploaded a recording and let the service transcribe it. Backend
+   * `0039` shipped without an audio route, so the browser transcribes and every turn
+   * arrives here as text, whoever produced it (plan 0032, section 10).
    */
-  async speak(recording: Blob, placeholder: string): Promise<void> {
-    await this._turn(placeholder, false, (transcript) =>
-      this._assistant.askAloud(transcript, recording)
-    );
-  }
-
-  private async _turn(
-    said: string,
-    sendSaid: boolean,
-    ask: (transcript: readonly AssistantTurn[]) => Promise<AssistantReply>
-  ): Promise<void> {
+  async say(text: string): Promise<void> {
     if (this.composerDisabled()) {
       return;
     }
 
+    // The conversation **so far**, read before the new message joins it: the gateway
+    // takes `message` as its own field and `transcript` as what came before, so the
+    // thing being answered must not also appear in the history of the question.
+    const transcript = this._transcript();
+
     const pendingId = this._append({
       speaker: 'caller',
-      text: said,
+      text,
       kind: 'pending',
       references: [],
     });
@@ -123,8 +107,8 @@ export class AssistantStore {
     this._busy.set(true);
 
     try {
-      const reply = await ask(this._transcript(sendSaid));
-      this._settle(pendingId, 'said', reply.heard);
+      const reply = await this._assistant.ask(transcript, text);
+      this._settle(pendingId, 'said');
       this._append({
         speaker: 'bot',
         text: reply.text,
@@ -143,18 +127,15 @@ export class AssistantStore {
   }
 
   /**
-   * What goes over the wire: the conversation, capped, with the pending turn last.
+   * The conversation so far, capped.
    *
-   * A turn that failed carries no meaning for the model and a countdown certainly
-   * does not, so only the entries somebody actually said are sent. The pending entry
-   * **is** included when it holds the caller's words, because it is the message being
-   * answered.
+   * Only entries somebody actually said. A turn that failed carries no meaning for the
+   * model and a countdown certainly does not, so `failed`, `throttled` and the panel's
+   * own `dropped` notice are all left out — the model is answering a conversation, not
+   * reading this app's diary.
    */
-  private _transcript(includePending: boolean): readonly AssistantTurn[] {
-    const said = this._entries().filter(
-      (entry) =>
-        entry.kind === 'said' || (includePending && entry.kind === 'pending')
-    );
+  private _transcript(): readonly AssistantTurn[] {
+    const said = this._entries().filter((entry) => entry.kind === 'said');
 
     return capTranscript(
       said.map((entry) => ({ speaker: entry.speaker, text: entry.text }))
@@ -286,15 +267,9 @@ export class AssistantStore {
     return id;
   }
 
-  private _settle(
-    id: string,
-    kind: AssistantEntry['kind'],
-    heard?: string
-  ): void {
+  private _settle(id: string, kind: AssistantEntry['kind']): void {
     this._entries.update((entries) =>
-      entries.map((entry) =>
-        entry.id === id ? { ...entry, kind, text: heard ?? entry.text } : entry
-      )
+      entries.map((entry) => (entry.id === id ? { ...entry, kind } : entry))
     );
   }
 }
