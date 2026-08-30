@@ -75,6 +75,26 @@ export class NetworkError extends Error {
 }
 
 /**
+ * Whether a failure carried an HTTP response at all.
+ *
+ * Angular reports a request that never reached a server as status 0, and that one
+ * number is the whole difference between "the server said no" and "nothing was said".
+ * Two places in this library turn on it, and they are two decisions rather than one
+ * repeated: `ConnectionRecovery` treats any answer, a 503 included, as proof the
+ * network works, and `TokenStore` treats any answer as proof the refresh token was
+ * spent (plan 0035, section 2). They must never disagree, so there is one of these.
+ */
+export function hasResponse(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    typeof (error as { status: unknown }).status === 'number' &&
+    (error as { status: number }).status !== 0
+  );
+}
+
+/**
  * Maps whatever came back into a `GatewayError`.
  *
  * Rule D4 applies to the error path too, and an error body is the response **most**

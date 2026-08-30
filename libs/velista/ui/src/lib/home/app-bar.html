@@ -5,6 +5,26 @@
 
   @if (signedIn()) {
     <div class="actions">
+      <!--
+        The socket is down, said from every screen rather than only from a list
+        (plan 0035, section 5.3). Only in this branch, because R1 opens no socket at all
+        while anonymous, so a mark on the landing page would be permanently on and would
+        mean nothing.
+
+        A `span` and not a `button`: it reports a state and leads nowhere, and a control
+        that leads nowhere is worse than no control. Its accessible name sits on the
+        element rather than on the glyph, which is hidden like every other icon here.
+      -->
+      @if (!connected()) {
+        <span
+          [attr.aria-label]="'connection.notLive' | rokuT"
+          class="offline-mark"
+          role="img"
+        >
+          <lib-offline-icon aria-hidden="true" class="offline-glyph" />
+        </span>
+      }
+
       <button
         (click)="openAssistant.emit()"
         [attr.aria-label]="'home.action.assistant' | rokuT"

@@ -60,13 +60,20 @@
   color: var(--app-text-muted);
 }
 
+// The same band, for the same situation, in the same colour. `ListHeader` says so in
+// its own template: this notice and that one are one decision drawn twice, so restyling
+// only the list's would leave two screens disagreeing about how serious the same state
+// is (plan 0035, section 5.2).
 .stale {
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
   margin: 0;
+  padding: var(--app-space-2) var(--app-space-3);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-status-attention-bg);
   font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
+  color: var(--app-status-attention-fg);
 }
 
 .stale-glyph {

@@ -2,6 +2,7 @@ import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { APP_API_CONFIG } from '@portfolio/velista/models';
 import {
+  AppResumed,
   ConnectionState,
   provideFakeBrowserFacade,
 } from '@portfolio/velista/platform';
@@ -135,6 +136,8 @@ describe('RealtimeSocket', () => {
   let options: SocketConnectOptions[];
   /** A real signal, not a getter: the transport drives its lifecycle off an effect. */
   let authenticated: WritableSignal<boolean>;
+  /** The resume counter `AppResumed` publishes. Bumped by hand, never by a browser. */
+  let resumes: WritableSignal<number>;
   let token: string | null;
   let tokenCalls: number;
 
@@ -175,6 +178,7 @@ describe('RealtimeSocket', () => {
     sockets = [];
     options = [];
     authenticated = signal(true);
+    resumes = signal(0);
     token = 'fresh-token';
     tokenCalls = 0;
     holdToken = false;
@@ -183,6 +187,10 @@ describe('RealtimeSocket', () => {
     TestBed.configureTestingModule({
       providers: [
         provideFakeBrowserFacade(),
+        // The resume edge, faked rather than driven through a document: what this
+        // transport reacts to is the count moving, and how the browser said so is
+        // `app-resumed.spec.ts`'s business.
+        { provide: AppResumed, useValue: { resumes } },
         ConnectionState,
         ApiUrl,
         RealtimeSocket,
@@ -355,6 +363,49 @@ describe('RealtimeSocket', () => {
       } finally {
         jest.useRealTimers();
       }
+    });
+
+    it('re-arms when the app comes back from the background', async () => {
+      // Plan 0035, section 3. Regaining the network used to be the only re-arm, and a
+      // backgrounded app never lost it: the browser froze the page, closed the socket
+      // and stopped the timers, so the app came back latched `degraded` waiting for an
+      // `online` event that will never fire. `onLine` is deliberately untouched here,
+      // because that is the whole of the bug.
+      jest.useFakeTimers();
+      try {
+        const client = build();
+        await settle();
+        socket().driveConnectError();
+        jest.runOnlyPendingTimers();
+        await settle();
+        socket().driveConnectError();
+        expect(client.degraded()).toBe(true);
+
+        resumes.set(1);
+        TestBed.tick();
+        await settle();
+
+        expect(client.degraded()).toBe(false);
+        expect(sockets.length).toBe(3);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('opens no second socket when a resume finds a healthy one', async () => {
+      // Unconditional and close to free: `_start` returns immediately when a socket is
+      // already open, so a person glancing at their phone costs nothing.
+      const client = build();
+      await settle();
+      socket().driveConnect();
+      await settle();
+
+      resumes.set(1);
+      TestBed.tick();
+      await settle();
+
+      expect(sockets.length).toBe(1);
+      expect(client.connected()).toBe(true);
     });
   });
 

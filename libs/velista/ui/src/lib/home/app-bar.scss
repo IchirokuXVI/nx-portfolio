@@ -70,6 +70,27 @@
   color: var(--app-action-quiet-fg);
 }
 
+// The disconnected mark. `attention` rather than a warning colour, because this design
+// system has no yellow role and `0002` section 4.4 is a page of argument about why:
+// amber is the brand action colour and an amber warning beside an amber action is the
+// ambiguity that decision exists to prevent. Being disconnected is a state waiting on
+// something, which is the sentence `attention` was defined for.
+//
+// Sized like the buttons beside it so the row keeps one baseline, but with no touch
+// target of its own: it is not a control.
+.offline-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--app-touch-target);
+  padding: 0 var(--app-space-2);
+  color: var(--app-status-attention-fg);
+}
+
+.offline-glyph {
+  font-size: var(--app-icon-md);
+}
+
 .avatar {
   display: flex;
   align-items: center;

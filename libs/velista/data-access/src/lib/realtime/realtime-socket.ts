@@ -7,7 +7,7 @@ import {
   untracked,
   type Signal,
 } from '@angular/core';
-import { BrowserFacade } from '@portfolio/velista/platform';
+import { AppResumed, BrowserFacade } from '@portfolio/velista/platform';
 import { Subject, type Observable } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { TokenStore } from '../auth/token-store';
@@ -109,6 +109,7 @@ export class RealtimeSocket implements RealtimeClientI {
    */
   private readonly _tokens = inject(TokenStore);
   private readonly _browser = inject(BrowserFacade);
+  private readonly _resumed = inject(AppResumed);
   private readonly _factory = inject(SOCKET_FACTORY);
   private readonly _destroyRef = inject(DestroyRef);
 
@@ -167,6 +168,25 @@ export class RealtimeSocket implements RealtimeClientI {
       const online = this._browser.onLine();
       untracked(() => {
         if (online) {
+          this.retry();
+        }
+      });
+    });
+
+    // The other re-arm, and the one the `online` event cannot cover (plan 0035,
+    // section 3). A backgrounded app never lost the network: the browser froze the
+    // page, closed the socket and let the retry timers stop, so the page comes back
+    // holding a latched `degraded` and an `online` event that already happened or will
+    // never come. Before this, that ended only in a reload.
+    //
+    // Unconditional, and against a healthy socket close to free: `retry()` resets the
+    // failure count and `_start` returns immediately when a socket is already open. The
+    // rooms need no help either, because `RoomRegistry.onConnected` rejoins everything
+    // the screens still hold (R6), so nothing here has to know which page is open.
+    effect(() => {
+      const resumes = this._resumed.resumes();
+      untracked(() => {
+        if (resumes > 0) {
           this.retry();
         }
       });

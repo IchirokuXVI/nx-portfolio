@@ -114,6 +114,9 @@ export function fakeBrowserFacade(
   return {
     isBrowser: true,
     onLine: () => true,
+    // Visible, like every other default here: a spec that wants a resume drives it
+    // with a writable signal of its own rather than starting the app hidden.
+    visible: () => true,
     window: null,
     location: null,
     document: globalThis.document,
