@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository overview
 
-An Nx monorepo hosting a personal portfolio built as an Angular **module-federation** micro-frontend system, plus a custom Nx docker build/deploy toolchain and Kubernetes/Helm deployment config.
+An Nx monorepo hosting a personal portfolio built as an Angular **module-federation** micro-frontend system, a NestJS backend for velista (Luna Shopper), a custom Nx docker build/deploy toolchain and Kubernetes/Helm deployment config.
 
 - `shell` — the host application. Owns the router and mounts remotes at runtime.
 - `odontogram`, `damoclesSword`, `landingV2`, `velista` — remote micro-frontend apps, each exposing routes via `./Routes` (module federation).
+- `apps/luna-shopper-backend/*` — velista's backend, seven NestJS services (`gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`, `assistant`) over NATS, with four Postgres instances and Redis. See the section at the bottom of this file.
 - `apps/docker/*` — non-Angular Nx "app" projects (builder, local-http-server) that just wrap a Dockerfile; tagged `type:static-docker` or `type:dynamic-docker` and driven by CI (see below).
 - `tools/docker` — a custom Nx plugin (`@portfolio/docker`) providing the `build` and `push` executors used by every app's `build:docker` target, plus an `application` generator for scaffolding a Dockerfile into a new app.
-- `libs/<scope>/*` — Nx libraries grouped by micro-frontend scope (`damoclesSword`, `odontogram`, `landing-v2`, `velista`) plus `shared`, following the `data-access` / `feature-*` / `ui` / `models` naming convention.
+- `libs/<scope>/*` — Nx libraries grouped by scope (`damoclesSword`, `odontogram`, `landing-v2`, `velista`, `luna-shopper`) plus `shared`, following the `data-access` / `feature-*` / `ui` / `models` naming convention.
 - `k8s/helm` — Helm chart deployed via CI to a k3s cluster. Routing is the Gateway API (`Gateway` + one `HTTPRoute` per app); the data plane is provisioned by Envoy Gateway in its own namespace, not declared by the chart.
 - `k8s/bootstrap` — one-off per-cluster install of the Gateway API CRDs, Envoy Gateway, cert-manager and a ClusterIssuer (`install.sh` / `install.ps1`). Deliberately outside the chart, so the chart names the implementation only through `gateway.className`.
 
@@ -19,10 +20,13 @@ An Nx monorepo hosting a personal portfolio built as an Angular **module-federat
 Run everything through Nx (`npx nx ...`); there are no top-level `package.json` scripts.
 
 ```sh
-# Serve the shell with its dev remotes — damoclesSword is served separately
+# Serve the shell. `devRemotes` is empty, so every remote is served from its
+# last build rather than watched; serve a remote itself to get watch on it.
 npx nx serve shell
 
-# Serve a single remote directly (each depends on shell:serve via `dependsOn`)
+# Serve a single remote in watch mode. damoclesSword, landingV2 and velista
+# carry `dependsOn: ['shell:serve']`, so each boots the shell too. odontogram
+# does not, so start `nx serve shell` beside it.
 npx nx serve damoclesSword
 npx nx serve odontogram
 npx nx serve landingV2
@@ -73,7 +77,7 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
 tools/dev/ng-slot.sh --up                       # all five Angular apps
 tools/dev/ng-slot.sh --up --apps shell,velista  # ...or just some
 tools/dev/ng-slot.sh --up 5 --backend-slot 1    # ...pointed at a named backend
-bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up   # compose + migrations + six services
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up   # compose + migrations + seven services
 
 # bounce processes without losing the slot (or, for luna, the databases)
 tools/dev/ng-slot.sh --restart --apps velista
@@ -85,7 +89,7 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --down
 
 **Check first, then claim, and bring instances up only through these scripts.** `--list` reads every worktree's claim and probes the ports, so it is the one accurate answer to what is already running; run it before taking a slot, and let `--up` with no number take the lowest free one. A hand rolled `nx serve` or `docker compose up` writes no claim and no per slot `.env`, so it collides with slot 0, which is the developer's own.
 
-**A slot is cheap to ask for and expensive to run**, so take the least that does the job. An Angular dev server is 700 MB to 1 GB of RAM each (a full front end slot, shell plus four remotes, is 3 GB to 4 GB) and a Luna slot is six Nest services at roughly 230 MB each plus nine containers and its own Postgres volumes, so a few unshared slots exhaust a 32 GB machine and Luna is the half that adds up fastest. Serve only the apps you are touching (`--apps shell,velista`); point at a backend that is already listening rather than starting one (a Luna slot of your own is for changing backend code, running disruptive migrations, or needing an isolated database); and `--down` when you are finished, including on an abandoned task.
+**A slot is cheap to ask for and expensive to run**, so take the least that does the job. An Angular dev server is 700 MB to 1 GB of RAM each (a full front end slot, shell plus four remotes, is 3 GB to 4 GB) and a Luna slot is seven Nest services at roughly 230 MB each plus seven containers on the default compose profile (four Postgres, NATS, Redis, Mailpit, and more again under the `test` or `observability` profiles) with its own Postgres volumes, so a few unshared slots exhaust a 32 GB machine and Luna is the half that adds up fastest. Serve only the apps you are touching (`--apps shell,velista`); point at a backend that is already listening rather than starting one (a Luna slot of your own is for changing backend code, running disruptive migrations, or needing an isolated database); and `--down` when you are finished, including on an abandoned task.
 
 **Editing code needs none of those.** Everything is served with watch on, and each app or service watches its own sources _and_ the libraries it consumes, so a change recompiles and reloads by itself; only the app you edited rebuilds. The one thing a running process cannot pick up is a rewritten `.env` (a slot move, `--backend-slot`, `--app-slot`), because Nx loads `{projectRoot}/.env` when it starts the task and webpack reads its values once — and the rewrite _does_ trigger a rebuild that silently keeps the old values, so nothing looks wrong. That case is `--restart`. Use `--down` when you are finished with a slot, not to check your work.
 
@@ -135,7 +139,9 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
 
 `@nx/enforce-module-boundaries` is configured permissively (`onlyDependOnLibsWithTags: ['*']`) — there's no hard tag-based dependency firewall today, so don't rely on lint to catch cross-scope layering mistakes.
 
-**Icons live in `libs/shared/ui` as standalone components** (`home-icon`, `save-icon`, `trash-icon`, `upload-icon`, …), each following the same pattern: an `*-icon.svg` inlined via `import('./*.svg?raw')` + `DomSanitizer`, exposed through `@portfolio/shared/ui`. Before adding a new icon, check whether one already exists there and reuse it; if it doesn't, add the new icon component to `libs/shared/ui` (never inline raw `<svg>` markup in a feature/ui component) and export it from that lib's `index.ts`.
+**Icons live in `libs/shared/ui` as standalone components** (`home-icon`, `trash-icon`, `upload-icon`, `arrow-icon`, …), each following the same pattern: an `*-icon.svg` inlined via `import('./*.svg?raw')` + `DomSanitizer`, exposed through `@portfolio/shared/ui`. Before adding a new icon, check whether one already exists there and reuse it; if it doesn't, add the new icon component to `libs/shared/ui` (never inline raw `<svg>` markup in a feature/ui component) and export it from that lib's `index.ts`.
+
+**Check the directory listing, not just `index.ts`.** `save-icon`, `close-icon` and `edit-icon` exist under `libs/shared/ui/src/lib` but are deliberately **not** exported: they are internals of `in-place-crud`, which is the thing the barrel exposes. Reuse one by exporting it, rather than adding a second copy of the same glyph.
 
 ### Environments & API access
 
@@ -145,19 +151,20 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
 
 - `tools/docker`'s `build` executor (`tools/docker/src/executors/build/build.ts`) shells out to `docker buildx build`. **It is project-agnostic**: it knows nothing about micro-frontends or this repo. The only build args it injects itself are `NX_APP` (the project name) and `TARGET_REGISTRY` (the resolved registry). `push` runs after `build` when `pushToRegistry: true`.
 - Its own operational config comes from options and generic `DOCKER_*` env fallbacks: `DOCKER_REGISTRY`, `DOCKER_USERNAME`/`DOCKER_PASSWORD`/`DOCKER_SKIP_LOGIN`, `DOCKER_IMAGE_TAG` (overrides `versionTags`, comma-separated), and the cache options `cache`/`cacheMode`/`cacheScope` (env `DOCKER_BUILD_CACHE`/`_MODE`/`_SCOPE`; backends `local`/`gha`/`registry`).
-- Project-specific values reach the Dockerfile as ordinary build args: a target's `buildArgs` (e.g. `NODE_ENV`, `BUILDER_TAG` per configuration) plus a **`forwardEnv`** option that lists env var names to forward as build args when set (this is how `MFE_BASE_URL` / `MFE_REMOTE_URLS` / `BUILDER_TAG` reach the shell build from CI). The executor never references those names itself.
+- Project-specific values reach the Dockerfile as ordinary build args: a target's `buildArgs` (`BUILDER_TAG` per configuration, which selects the base image tag) plus a **`forwardEnv`** option that lists env var names to forward as build args when set. Today every app forwards exactly `BUILDER_TAG`. The executor never references those names itself.
+- **`MFE_BASE_URL` and `MFE_REMOTE_URLS` are not build args and have not been since k8s plan 0007.** There is no build stage in an app's Dockerfile: `nx build` runs once for the whole workspace outside Docker, `build:docker` sets `"context": "dist"`, and the finished bundle is copied in. So `webpack.prod.config.ts` reads those two from the environment of that `nx build`, and both workflows set them with `docker run -e` on the builder container instead. Adding them to `forwardEnv` would do nothing.
 - **Two environments on two separate k3s clusters, one VPS each** (k8s plan 0002): production (`ichirokuxvi.com`, `mfe.`, plus `velista.app`, `api.velista.app`, `rt.velista.app`) and staging (the same five names one label down: `staging.ichirokuxvi.com`, `mfe.staging.`, `staging.velista.app`, `api.staging.velista.app`, `rt.staging.velista.app`). The chart describes **one** environment; which one is decided by the cluster you point it at and the values file you pass beside `values.yaml` — `values.production.yaml` or `values.staging.yaml`. There is no `env` field, no `-staging` resource name and no `staging.enabled` switch; resource names are identical in both clusters. Hosts are derived from `baseDomain` + a per-entry `hostPrefix`, unless the environment file overrides that entry's host by name in `hostOverrides` — which is what puts velista and its two backend services on velista's own domain (an explicit `host` on an entry still wins over both, which is what the local values files use). `ichirokuxvi.com/velista` keeps working: the shell mounts the remote at that path and loads it from the new origin.
 - The **shell embeds its micro-frontend base URL at build time** (`apps/shell/webpack.prod.config.ts` reads `MFE_BASE_URL`, default the production host), so the shell image is environment-specific. Every other app image is environment-agnostic. Remote URLs are static module federation, not runtime — do not assume the shell can switch environments at runtime.
-- `.github/workflows/docker-ci.yml` (**staging, on push to `main`**) computes affected projects against the last successful run, builds/tests them, builds affected micro-frontends with `DOCKER_IMAGE_TAG=staging` and the staging URLs, then deploys over SSH to **`SSH_DEPLOY_HOST_STAGING`**: `provision-release.sh --check --env staging` first (a deploy that cannot work is rejected in seconds), then `helm upgrade --install --atomic --timeout 10m` with `values.staging.yaml`, then `kubectl rollout restart` for the changed deployments followed by a separate `rollout status` loop that actually observes them. A failure runs a diagnosis step dumping pods, events and logs.
+- `.github/workflows/docker-ci.yml` (**staging, on push to `main`**) computes affected projects against the last successful run, builds/tests them, builds affected micro-frontends with `DOCKER_IMAGE_TAG=staging` and the staging URLs, runs **two e2e gates against the images it just pushed** (`e2e-frontend` over `k8s/e2e/portfolio-frontend/compose.yml`, `e2e-luna` over the Luna compose pair), then deploys over SSH to **`SSH_DEPLOY_HOST_STAGING`**: `provision-release.sh --check --env staging` first (a deploy that cannot work is rejected in seconds), then `helm upgrade --install --atomic --timeout 10m` with `values.staging.yaml`, then `kubectl rollout restart` for the changed deployments followed by a separate `rollout status` loop that actually observes them. A failure runs a diagnosis step dumping pods, events and logs.
 - `.github/workflows/release.yml` (**production, on GitHub Release published**) builds _all_ micro-frontends at the release commit with `DOCKER_IMAGE_TAG=<version>,latest` and the production URLs, then deploys to `SSH_DEPLOY_HOST` (preflight, then `k8s/helm/deploy-release.sh <version>`, which passes `--set imageTag=<version>` with `values.production.yaml` and `--wait`, and verifies with `rollout status` before claiming success). Production is pinned to immutable version tags; rollback is `deploy-release.sh <older-version>` (or `helm rollback`). Deliberately not `--atomic` — see the reasoning in the script.
 - **Deploys wait and are verified** (k8s plan 0003). Neither path used to: `helm upgrade` without `--wait` returns as soon as the manifests are accepted, and `kubectl rollout restart` is asynchronous, so both reported success while pods crashlooped or a rollout hung at zero available replicas.
 - **The cluster is provisioned by script, not by prose**: `k8s/bootstrap/provision-host.sh` (bare VPS → machine, run as root over a root login: the `ichiroku` and `deploy` accounts, their keys, optionally `--k3s` and `--lock-root`), then `k8s/bootstrap/install.sh` (machine → cluster), then `k8s/bootstrap/provision-release.sh --env <env>` (cluster → ready for the chart: namespace + six Secrets, DB URLs derived from the same generated passwords so they cannot disagree). `--check` renders the chart and asserts every `secretKeyRef`/`configMapKeyRef` it references exists. Staging and production run the same three scripts with different arguments; there is no per environment host script. `k8s/README-new-cluster.md` is the runbook for a fresh machine, in order, including the DNS and root lockout steps that have to happen at a particular moment.
 - **CI deploys as `deploy`, an unprivileged account.** Both workflows rsync the chart into that user's home and run helm and kubectl there, which works without sudo because `install.sh` writes the k3s kubeconfig world readable. Nothing in the deploy path may assume root or a home directory of `/root`.
-- Adding a new deployable app should get a `build:docker` target (development/production configurations, `imageName` option, `NODE_ENV` in `buildArgs`) mirroring the existing apps' `project.json`; a matching `src/Dockerfile`; one entry in `values.yaml` under `apps` (`name`, `image`, `hostPrefix`, `path` — no environment, and no second staging entry); and — if it's a plain static/dynamic docker wrapper rather than an Angular app — the `type:static-docker`/`type:dynamic-docker` tag so CI picks it up correctly.
+- Adding a new deployable app should get a `build:docker` target (development/production configurations, `imageName` option, `"context": "dist"`, `forwardEnv: ["BUILDER_TAG"]`) mirroring the existing apps' `project.json`; a matching `src/Dockerfile`; one entry in `values.yaml` under `apps` (`name`, `image`, `hostPrefix`, `path` — no environment, and no second staging entry); and — if it's a plain static/dynamic docker wrapper rather than an Angular app — the `type:static-docker`/`type:dynamic-docker` tag so CI picks it up correctly.
 
 ## Code style
 
-- Prettier is the source of truth (`.prettierrc`): single quotes, 2-space indent, trailing commas (es5), `arrowParens: always`, plus `prettier-plugin-organize-imports` and `prettier-plugin-organize-attributes` (Angular template attributes are auto-sorted into groups: outputs, two-way bindings, inputs, structural directives, then everything else, then `data-*`).
+- Prettier is the source of truth (`.prettierrc`): single quotes, 2-space indent, trailing commas (es5), `arrowParens: always`, plus `prettier-plugin-organize-imports`, `prettier-plugin-organize-attributes` and `prettier-plugin-go-template` (which parses `*.yaml.tpl`; Angular template attributes are auto-sorted into groups: outputs, two-way bindings, inputs, structural directives, then everything else, then `data-*`).
 - `*.html` files are linted with `@angular-eslint/template/recommended` + `prettier/prettier` using the `angular` parser.
 
 ## Plan files
@@ -182,11 +189,13 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
 
 `luna-shopper-backend-harvester` (plan 0038) fetches prices from supermarket
 storefronts and store locations from OpenStreetMap, and writes what it finds into
-catalog over NATS. It is the sixth backend service and it owns the third Postgres.
+catalog over NATS. It was the sixth backend service to land (`assistant`, plan
+0039, is the seventh) and it owns the fourth Postgres, after auth, core and
+catalog.
 
 **It is switched off in production and in staging, on purpose, and the chart says
 so in both values files.** A catalog discovery run is 4,383 HTTP requests over
-about eighteen minutes, and running it costs a third Postgres with its own volume
+about eighteen minutes, and running it costs a fourth Postgres with its own volume
 plus another Node process; the development machine has room for that and the two
 VPSs do not. So `lunaShopperBackend.harvester.enabled` is false everywhere,
 nothing renders in either cluster (no Deployment, Service, PDB, migration Job,
