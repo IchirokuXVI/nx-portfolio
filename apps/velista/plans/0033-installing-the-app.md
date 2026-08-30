@@ -1,4 +1,4 @@
-# 0032. Installing the app
+# 0033. Installing the app
 
 > Prerequisite reading: `0013` (the own origin move, which is what made an install
 > possible at all), `0002` sections 4 and 6 (the token ramps and the type scale this

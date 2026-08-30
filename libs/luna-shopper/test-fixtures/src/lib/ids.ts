@@ -71,9 +71,22 @@ export const SUPERMARKET_MERCADONA_ID = '5efa0000-0000-4000-a000-000000000001';
 export const LOCATION_MERCADONA_VALENCIA_ID =
   '10ca0000-0000-4000-a000-000000000001';
 
-// --- Catalog: items + per store rows -----------------------------------------
+/**
+ * The scope the demo store prices against (plan 0038, section 5.1). A STORE
+ * scope, because that is the shape catalog had before scopes existed and what a
+ * hand entered supermarket still gets, so the demo world exercises the ordinary
+ * path rather than the Mercadona one.
+ */
+export const PRICE_SCOPE_MERCADONA_VALENCIA_ID =
+  '5c0e0000-0000-4000-a000-000000000001';
+
+// --- Catalog: items + per scope prices ---------------------------------------
 export const ITEM_MILK_ID = '17e00000-0000-4000-b000-000000000001';
 export const ITEM_BREAD_ID = '17e00000-0000-4000-b000-000000000002';
 
 export const SUPERMARKET_ITEM_MILK_ID = '51e00000-0000-4000-a000-000000000001';
 export const SUPERMARKET_ITEM_BREAD_ID = '51e00000-0000-4000-a000-000000000002';
+
+// --- Catalog: the per store half (plan 0038, section 5.2) --------------------
+export const LOCATION_ITEM_MILK_ID = '10c1e000-0000-4000-a000-000000000001';
+export const LOCATION_ITEM_BREAD_ID = '10c1e000-0000-4000-a000-000000000002';

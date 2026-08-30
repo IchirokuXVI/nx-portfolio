@@ -1,5 +1,6 @@
 {{- if .Values.lunaShopperBackend.enabled }}
 {{- $cfg := .Values.lunaShopperBackend.config }}
+{{- $harvest := .Values.lunaShopperBackend.harvester | default dict }}
 ---
 # One ConfigMap, because this release is one environment (plan 0002). The
 # `range $env, $cfg :=` loop that rendered a production and a staging copy side
@@ -47,4 +48,30 @@ data:
   # `default` cannot express that, because it would turn an intentional `false`
   # back into `true`.
   METRICS_ENABLED: {{ if hasKey $cfg "metricsEnabled" }}{{ $cfg.metricsEnabled | quote }}{{ else }}"true"{{ end }}
+  # --- The harvester (plan 0038) --------------------------------------------
+  #
+  # Rendered unconditionally, even with `harvester.enabled` false and no harvester
+  # pod in the cluster. That is deliberate: a ConfigMap key costs nothing, and the
+  # alternative is a chart where turning the harvester on is two changes in two
+  # places with a CreateContainerConfigError in between if you forget one.
+  #
+  # HARVEST_ENABLED is a SECOND switch, separate from `harvester.enabled`: that one
+  # decides whether the pod exists, this one whether it may fetch. Both default
+  # false. MERCADONA_ENABLED narrows it again to the one storefront (section 8.1),
+  # so the chain can be dropped without dropping the service.
+  HARVESTER_ACTOR_ID: {{ $harvest.actorId | default "" | quote }}
+  HARVEST_ENABLED: {{ $harvest.harvestEnabled | default false | quote }}
+  MERCADONA_ENABLED: {{ $harvest.mercadonaEnabled | default false | quote }}
+  # An honest User-Agent naming the app and a contact address, never a browser
+  # impersonation.
+  HARVEST_USER_AGENT: {{ $harvest.userAgent | default "" | quote }}
+  # Two knobs, two jobs: workers bound concurrency, the rate bounds our impact on
+  # the source, and one shared token bucket is what keeps them independent.
+  HARVEST_DEFAULT_WORKERS: {{ $harvest.defaultWorkers | default 4 | quote }}
+  HARVEST_DEFAULT_MAX_RPS: {{ $harvest.defaultMaxRps | default 4 | quote }}
+  HARVEST_BATCH_SIZE: {{ $harvest.batchSize | default 200 | quote }}
+  HARVEST_STALE_AFTER: {{ $harvest.staleAfterSeconds | default 900 | quote }}
+  HARVEST_FAILURE_RATIO: {{ $harvest.failureRatio | default "0.25" | quote }}
+  OVERPASS_URL: {{ $harvest.overpassUrl | default "" | quote }}
+  NOMINATIM_URL: {{ $harvest.nominatimUrl | default "" | quote }}
 {{- end }}

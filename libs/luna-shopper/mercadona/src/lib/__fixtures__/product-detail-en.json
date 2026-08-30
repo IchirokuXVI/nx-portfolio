@@ -1,0 +1,31 @@
+{
+  "id": "4241",
+  "ean": "8480000135636",
+  "slug": "aceite-de-oliva-04-hacendado-botella",
+  "brand": "Hacendado",
+  "packaging": "Bottle",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/4241/aceite-de-oliva-04-hacendado-botella",
+  "thumbnail": "https://prod-mercadona.imgix.net/images/4241.jpg",
+  "display_name": "Light olive oil Hacendado",
+  "price_instructions": {
+    "iva": 5,
+    "size_format": "l",
+    "unit_name": "Bottle",
+    "unit_price": "8.75",
+    "bulk_price": "8.75",
+    "unit_size": 1.0,
+    "reference_format": "L"
+  },
+  "categories": [
+    {
+      "id": 112,
+      "name": "Oil, spices and sauces",
+      "level": 0,
+      "order": 1,
+      "categories": [
+        { "id": 12, "name": "Oil, vinegar and salt", "level": 1, "order": 1 }
+      ]
+    }
+  ]
+}

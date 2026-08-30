@@ -26,6 +26,7 @@
   healthy, and cannot be broken by a bug in a shell script.
 */}}
 {{- range $pg := $ls.postgres.instances }}
+{{- if not (include "lunaShopperBackend.entryEnabled" (dict "entry" $pg "ls" $ls)) }}{{- continue }}{{- end }}
 ---
 apiVersion: batch/v1
 kind: CronJob

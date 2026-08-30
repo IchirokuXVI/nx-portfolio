@@ -1,0 +1,82 @@
+{
+  "id": 51,
+  "name": "Charcutería y quesos",
+  "order": 5,
+  "published": true,
+  "categories": [
+    {
+      "id": 53,
+      "name": "Queso curado, semicurado y tierno",
+      "order": 1,
+      "published": true,
+      "products": [
+        {
+          "id": "7012",
+          "slug": "queso-curado-mezcla-hacendado-cuna",
+          "display_name": "Queso curado mezcla Hacendado",
+          "packaging": "Cuña",
+          "published": true,
+          "thumbnail": "https://prod-mercadona.imgix.net/images/7012.jpg",
+          "share_url": "https://tienda.mercadona.es/product/7012/queso-curado-mezcla-hacendado-cuna",
+          "price_instructions": {
+            "iva": 10,
+            "is_pack": false,
+            "size_format": "kg",
+            "total_units": null,
+            "unit_price": "3.95",
+            "bulk_price": "11.29",
+            "unit_size": 0.35,
+            "reference_format": "kg",
+            "price_decreased": false,
+            "previous_unit_price": null
+          }
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "name": "Jamón serrano",
+      "order": 3,
+      "published": true,
+      "products": [
+        {
+          "id": "8271",
+          "slug": "jamon-serrano-lonchas-hacendado",
+          "display_name": "Jamón serrano en lonchas Hacendado",
+          "packaging": "Sobre",
+          "published": true,
+          "thumbnail": "https://prod-mercadona.imgix.net/images/8271.jpg",
+          "share_url": "https://tienda.mercadona.es/product/8271/jamon-serrano-lonchas-hacendado",
+          "price_instructions": {
+            "iva": 10,
+            "is_pack": false,
+            "size_format": "kg",
+            "total_units": null,
+            "unit_price": "2.45",
+            "bulk_price": "16.75",
+            "unit_size": 0.15,
+            "reference_format": "kg",
+            "price_decreased": false,
+            "previous_unit_price": null
+          }
+        },
+        {
+          "id": "7012",
+          "slug": "queso-curado-mezcla-hacendado-cuna",
+          "display_name": "Queso curado mezcla Hacendado",
+          "packaging": "Cuña",
+          "published": true,
+          "share_url": "https://tienda.mercadona.es/product/7012/queso-curado-mezcla-hacendado-cuna",
+          "price_instructions": {
+            "iva": 10,
+            "size_format": "kg",
+            "unit_price": "3.95",
+            "bulk_price": "11.29",
+            "unit_size": 0.35,
+            "reference_format": "kg"
+          }
+        }
+      ]
+    }
+  ]
+}

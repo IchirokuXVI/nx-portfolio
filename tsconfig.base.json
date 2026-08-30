@@ -92,6 +92,12 @@
       "@portfolio/luna-shopper/contracts": [
         "./libs/luna-shopper/contracts/src/index.ts"
       ],
+      "@portfolio/luna-shopper/mercadona": [
+        "./libs/luna-shopper/mercadona/src/index.ts"
+      ],
+      "@portfolio/luna-shopper/osm-places": [
+        "./libs/luna-shopper/osm-places/src/index.ts"
+      ],
       "@portfolio/luna-shopper/platform": [
         "./libs/luna-shopper/platform/src/index.ts"
       ],

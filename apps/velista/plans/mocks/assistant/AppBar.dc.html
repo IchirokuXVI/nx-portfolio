@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 470px; height: 600px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; flex-direction: column; gap: 30px; align-items: flex-start;">
+
+  <!-- BEFORE: the button that never did anything -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">BEFORE &middot; search, unrouted since 0003</span>
+    <div style="width: 390px; background: #0a0c14; border-radius: 4px; padding: 0 0 14px;">
+      <header style="display: flex; align-items: center; gap: 8px; padding: 14px 12px 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+        <span style="flex: 1; font-family: 'Marcellus', Georgia, serif; font-size: 21px; letter-spacing: 0.05em; color: #f7f8fc;">velista</span>
+        <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0.45;" aria-label="Search">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>
+          </svg>
+        </button>
+        <span style="width: 34px; height: 34px; border-radius: 50%; background: #262b40; color: #c2c8db; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650;">M</span>
+      </header>
+      <p style="margin: 12px 20px 0; font-size: 12.5px; line-height: 1.5; color: #6f7899;">Tapping it calls <span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #98a0bb;">_notYetRouted('search')</span> and nothing happens. There is no search page behind it.</p>
+    </div>
+  </div>
+
+  <!-- AFTER: the same slot, spent -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #ffd39a;">AFTER &middot; the same slot, now the way in</span>
+    <div style="width: 390px; background: #0a0c14; border-radius: 4px; padding: 0 0 14px;">
+      <header style="display: flex; align-items: center; gap: 8px; padding: 14px 12px 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.07);">
+        <span style="flex: 1; font-family: 'Marcellus', Georgia, serif; font-size: 21px; letter-spacing: 0.05em; color: #f7f8fc;">velista</span>
+        <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Assistant">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 12.5c0 3.8-3.6 6.9-8 6.9a9 9 0 0 1-2.3-.3L5 20.5l1.2-3.4A6.6 6.6 0 0 1 4 12.5C4 8.7 7.6 5.6 12 5.6s8 3.1 8 6.9Z"/>
+          </svg>
+        </button>
+        <span style="width: 34px; height: 34px; border-radius: 50%; background: #262b40; color: #c2c8db; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 650;">M</span>
+      </header>
+      <p style="margin: 12px 20px 0; font-size: 12.5px; line-height: 1.5; color: #6f7899;">Same 44&times;44 target, same position. <span style="color: #c2c8db;">SearchIcon stays exported</span>, so putting search back later is one line here.</p>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

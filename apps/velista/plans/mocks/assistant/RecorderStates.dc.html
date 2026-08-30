@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 470px; height: 980px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; flex-direction: column; gap: 22px;">
+
+  <!-- 1. IDLE: empty field, so the button is the microphone -->
+  <div>
+    <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6f7899; margin-bottom: 9px;">1 &middot; Nothing typed</div>
+    <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px; display: flex; gap: 10px; align-items: flex-end;">
+      <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #6f7899;">Write a message</div>
+      <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Record a message">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9.2" y="3" width="5.6" height="11" rx="2.8"/><path d="M6.4 11.4a5.6 5.6 0 0 0 11.2 0"/><path d="M12 17v4"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 2. TYPED: the same slot becomes send -->
+  <div>
+    <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6f7899; margin-bottom: 9px;">2 &middot; Something typed &middot; same slot, send</div>
+    <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px; display: flex; gap: 10px; align-items: flex-end;">
+      <div style="flex: 1; min-height: 52px; border: 1px solid #343a54; border-radius: 16px; background: #161a28; padding: 15px 16px; font-size: 16.5px; color: #f7f8fc;">Add milk<span style="color: #ffb454;">|</span></div>
+      <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #ffb454; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Send">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4.5 12h14M13 6.5l5.5 5.5L13 17.5"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 3. RECORDING: pause far left, length, stop far right -->
+  <div>
+    <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd39a; margin-bottom: 9px;">3 &middot; Recording</div>
+    <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px; display: flex; gap: 12px; align-items: center;">
+      <button type="button" style="width: 52px; height: 52px; flex: none; border: 1px solid #343a54; border-radius: 16px; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Pause">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#c2c8db" aria-hidden="true"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg>
+      </button>
+      <span style="width: 9px; height: 9px; flex: none; border-radius: 50%; background: #fb7185;"></span>
+      <span style="flex: 1; font-size: 19px; font-weight: 600; color: #f7f8fc; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;">0:12</span>
+      <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #fb7185; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Stop and send">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="#0a0c14" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2.4"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 4. THREE MINUTES: container grows, message on top -->
+  <div>
+    <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd39a; margin-bottom: 9px;">4 &middot; Past 3:00 &middot; container grows</div>
+    <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px;">
+      <p style="margin: 0 0 12px; padding: 0 2px; font-size: 15px; line-height: 1.4; color: #ffd39a;">5 minutes is the longest I can listen. <span style="color: #f7f8fc; font-weight: 600;">2 minutes left.</span></p>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <button type="button" style="width: 52px; height: 52px; flex: none; border: 1px solid #343a54; border-radius: 16px; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Pause">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#c2c8db" aria-hidden="true"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg>
+        </button>
+        <span style="width: 9px; height: 9px; flex: none; border-radius: 50%; background: #fb7185;"></span>
+        <span style="flex: 1; font-size: 19px; font-weight: 600; color: #f7f8fc; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;">3:04</span>
+        <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #fb7185; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Stop and send">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="#0a0c14" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2.4"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. PAUSED BY THE PERSON: dot hollows, pause becomes resume -->
+  <div>
+    <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6f7899;">5 &middot; Paused by the person</div>
+    <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px; margin-top: 9px; display: flex; gap: 12px; align-items: center;">
+      <button type="button" style="width: 52px; height: 52px; flex: none; border: 1px solid #ffb454; border-radius: 16px; background: rgba(255,180,84,0.10); display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Carry on recording">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffb454" aria-hidden="true"><path d="M8 5.4v13.2L18.5 12z"/></svg>
+      </button>
+      <span style="width: 9px; height: 9px; flex: none; border-radius: 50%; border: 1.6px solid #6f7899; background: transparent;"></span>
+      <span style="flex: 1; font-size: 19px; font-weight: 600; color: #98a0bb; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;">1:47</span>
+      <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #fb7185; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Stop and send">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="#0a0c14" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2.4"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 6. FIVE MINUTES: paused by the app, pause disabled, stop is the only way out -->
+  <div>
+    <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd39a; margin-bottom: 9px;">6 &middot; 5:00 &middot; paused, not sent</div>
+    <div style="width: 390px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.07); border-radius: 0 0 4px 4px; padding: 12px 16px 20px;">
+      <p style="margin: 0 0 12px; padding: 0 2px; font-size: 15px; line-height: 1.4; color: #ffd39a;">That is 5 minutes, so I stopped listening. <span style="color: #f7f8fc; font-weight: 600;">Press stop to send it.</span></p>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <button type="button" disabled style="width: 52px; height: 52px; flex: none; border: 1px solid #262b40; border-radius: 16px; background: transparent; display: flex; align-items: center; justify-content: center; cursor: not-allowed;" aria-label="Carry on recording">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#3a4160" aria-hidden="true"><path d="M8 5.4v13.2L18.5 12z"/></svg>
+        </button>
+        <span style="width: 9px; height: 9px; flex: none; border-radius: 50%; border: 1.6px solid #525a78; background: transparent;"></span>
+        <span style="flex: 1; font-size: 19px; font-weight: 600; color: #f7f8fc; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;">5:00</span>
+        <button type="button" style="width: 52px; height: 52px; flex: none; border: 0; border-radius: 16px; background: #fb7185; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Stop and send">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="#0a0c14" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="2.4"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

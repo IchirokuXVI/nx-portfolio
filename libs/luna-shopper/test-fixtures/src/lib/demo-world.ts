@@ -30,6 +30,7 @@ import {
   ListPermission,
   MembershipStatus,
   MergeRequestStatus,
+  PriceScopeKind,
   UnitOfMeasure,
   UserKind,
   ZoneRole,
@@ -45,9 +46,11 @@ import {
   makeMembership,
   makeMergeRequest,
   makeOAuthIdentity,
+  makePriceScope,
   makeSupermarket,
   makeSupermarketItem,
   makeSupermarketLocation,
+  makeSupermarketLocationItem,
   makeUser,
   makeZone,
 } from './factories';
@@ -75,12 +78,15 @@ import {
   LINE_NAILS_ID,
   LIST_GROCERIES_ID,
   LIST_HARDWARE_ID,
+  LOCATION_ITEM_BREAD_ID,
+  LOCATION_ITEM_MILK_ID,
   LOCATION_MERCADONA_VALENCIA_ID,
   MEMBERSHIP_ALICE_ID,
   MEMBERSHIP_BOB_ID,
   MEMBERSHIP_CAROL_ID,
   MEMBERSHIP_TEMP_ID,
   MERGE_TEMP_INTO_BOB_ID,
+  PRICE_SCOPE_MERCADONA_VALENCIA_ID,
   SUPERMARKET_ITEM_BREAD_ID,
   SUPERMARKET_ITEM_MILK_ID,
   SUPERMARKET_MERCADONA_ID,
@@ -351,16 +357,31 @@ const catalog: CatalogSeed = {
       id: SUPERMARKET_MERCADONA_ID,
       name: { en: 'Mercadona', es: 'Mercadona' },
       websiteUrl: 'https://www.mercadona.es',
+      // The chain's Wikidata QID (plan 0038, section 5.4). Matching on the brand
+      // NAME would split `Dia` from `Maxi Dia`; this is what a discovery run
+      // recognises the chain by.
+      externalBrandKey: 'Q377705',
+    }),
+  ],
+  priceScopes: [
+    makePriceScope({
+      id: PRICE_SCOPE_MERCADONA_VALENCIA_ID,
+      supermarketId: SUPERMARKET_MERCADONA_ID,
+      kind: PriceScopeKind.STORE,
+      externalKey: LOCATION_MERCADONA_VALENCIA_ID,
+      label: { en: 'Valencia — Colón', es: 'Valencia — Colón' },
     }),
   ],
   locations: [
     makeSupermarketLocation({
       id: LOCATION_MERCADONA_VALENCIA_ID,
       supermarketId: SUPERMARKET_MERCADONA_ID,
+      priceScopeId: PRICE_SCOPE_MERCADONA_VALENCIA_ID,
       label: { en: 'Valencia — Colón', es: 'Valencia — Colón' },
       address: 'Carrer de Colón, 1',
       city: 'Valencia',
       country: 'ES',
+      postalCode: '46004',
     }),
   ],
   items: [
@@ -381,17 +402,35 @@ const catalog: CatalogSeed = {
     makeSupermarketItem({
       id: SUPERMARKET_ITEM_MILK_ID,
       itemId: ITEM_MILK_ID,
-      supermarketLocationId: LOCATION_MERCADONA_VALENCIA_ID,
+      priceScopeId: PRICE_SCOPE_MERCADONA_VALENCIA_ID,
       price: 1.15,
       currency: 'EUR',
-      positionInStore: 'Aisle 3',
+      unitPrice: 1.15,
+      unitPriceLabel: 'L',
     }),
     makeSupermarketItem({
       id: SUPERMARKET_ITEM_BREAD_ID,
       itemId: ITEM_BREAD_ID,
-      supermarketLocationId: LOCATION_MERCADONA_VALENCIA_ID,
+      priceScopeId: PRICE_SCOPE_MERCADONA_VALENCIA_ID,
       price: 0.95,
       currency: 'EUR',
+      unitPrice: 0.95,
+      unitPriceLabel: 'ud',
+    }),
+  ],
+  // The aisle is per store even when the price is not, which is why it lives
+  // here now (plan 0038, section 5.2).
+  locationItems: [
+    makeSupermarketLocationItem({
+      id: LOCATION_ITEM_MILK_ID,
+      itemId: ITEM_MILK_ID,
+      supermarketLocationId: LOCATION_MERCADONA_VALENCIA_ID,
+      positionInStore: 'Aisle 3',
+    }),
+    makeSupermarketLocationItem({
+      id: LOCATION_ITEM_BREAD_ID,
+      itemId: ITEM_BREAD_ID,
+      supermarketLocationId: LOCATION_MERCADONA_VALENCIA_ID,
       positionInStore: 'Aisle 1',
     }),
   ],

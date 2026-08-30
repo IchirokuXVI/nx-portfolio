@@ -68,6 +68,21 @@ lunaShopperBackend:
     # Staging is the natural place to switch tracing on first, once a collector
     # lands in the cluster. Off until then, same as production.
 
+  # The harvester (plan 0038) is NOT deployed to staging either, and staging has a
+  # second reason on top of production's capacity one.
+  #
+  # Section 8.1: staging and production must never hit the same third party twice
+  # for the same data. Two clusters both walking Mercadona's assortment is double
+  # the requests for one copy of the answer, and it is exactly the behaviour the
+  # politeness argument in that section rests on not doing. Since the runs happen
+  # locally, neither cluster fetches anything at all, which settles it.
+  #
+  # If the harvester is ever turned on in a cluster, staging is where it goes
+  # first and MERCADONA_ENABLED stays false there: the run machinery can be
+  # exercised against a stub without touching the chain.
+  harvester:
+    enabled: false
+
   # No backups in staging. It is disposable by design, and a restore drill is
   # rehearsed here by restoring a PRODUCTION dump into it (plan 0005, section 6),
   # which needs no CronJob of its own.

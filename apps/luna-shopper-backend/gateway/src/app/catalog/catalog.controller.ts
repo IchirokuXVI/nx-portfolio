@@ -14,13 +14,18 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   ITEM_PATTERNS,
+  PRICE_SCOPE_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
+  SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type ItemPage,
   type ItemView,
+  type PriceScopePage,
+  type PriceScopeView,
   type SupermarketItemPage,
   type SupermarketItemView,
+  type SupermarketLocationItemView,
   type SupermarketLocationPage,
   type SupermarketLocationView,
   type SupermarketPage,
@@ -34,13 +39,16 @@ import { NatsClient } from '../messaging/nats-client';
 import {
   CatalogListQueryDto,
   CreateItemDto,
+  CreatePriceScopeDto,
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
   SearchItemsQueryDto,
   UpdateItemDto,
+  UpdatePriceScopeDto,
   UpdateSupermarketDto,
   UpdateSupermarketLocationDto,
   UpsertSupermarketItemDto,
+  UpsertSupermarketLocationItemDto,
 } from './catalog.dto';
 
 /**
@@ -320,17 +328,29 @@ export class CatalogItemsController {
   }
 }
 
+/**
+ * Prices, keyed on a **price scope** since plan 0038 (section 5.2).
+ *
+ * **This controller is `v2`, and that is required rather than tidy.**
+ * `SupermarketItemView` lost `supermarketLocationId` and `positionInStore`, which
+ * is a breaking wire change, so it takes a version bump under plan 0004's per
+ * controller versioning. Controllers version independently, so nothing else in
+ * the catalog surface moved.
+ *
+ * Where the two fields went: the price now belongs to a scope, and what is
+ * genuinely per store lives on {@link CatalogLocationItemsController}.
+ */
 @ApiTags('catalog')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @ApiProblemResponses({ auth: true, membership: true })
-@Controller({ path: 'catalog/supermarket-items', version: '1' })
+@Controller({ path: 'catalog/supermarket-items', version: '2' })
 export class CatalogSupermarketItemsController {
   constructor(private readonly nats: NatsClient) {}
 
   @Put()
   @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.upsert)
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, conflict: true })
   upsert(
     @AuthUser() user: CurrentUser,
     @Body() dto: UpsertSupermarketItemDto
@@ -346,12 +366,12 @@ export class CatalogSupermarketItemsController {
   get(
     @AuthUser() user: CurrentUser,
     @Query('itemId') itemId: string,
-    @Query('supermarketLocationId') supermarketLocationId: string
+    @Query('priceScopeId') priceScopeId: string
   ): Promise<SupermarketItemView> {
     return this.nats.send<SupermarketItemView>(SUPERMARKET_ITEM_PATTERNS.get, {
       userId: user.userId,
       itemId,
-      supermarketLocationId,
+      priceScopeId,
     });
   }
 
@@ -365,5 +385,137 @@ export class CatalogSupermarketItemsController {
       userId: user.userId,
       supermarketItemId: id,
     });
+  }
+}
+
+/**
+ * Price scopes (plan 0038, section 5.1). Platform admin gated inside catalog,
+ * like every other catalog write.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/price-scopes', version: '1' })
+export class CatalogPriceScopesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Post()
+  @ApiContractResponse(PRICE_SCOPE_PATTERNS.create, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
+  create(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: CreatePriceScopeDto
+  ): Promise<PriceScopeView> {
+    return this.nats.send<PriceScopeView>(PRICE_SCOPE_PATTERNS.create, {
+      userId: user.userId,
+      ...dto,
+    });
+  }
+
+  @Get()
+  @ApiContractResponse(PRICE_SCOPE_PATTERNS.list)
+  list(
+    @AuthUser() user: CurrentUser,
+    @Query() query: CatalogListQueryDto,
+    @Query('supermarketId') supermarketId?: string
+  ): Promise<PriceScopePage> {
+    return this.nats.send<PriceScopePage>(PRICE_SCOPE_PATTERNS.list, {
+      userId: user.userId,
+      supermarketId,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  @Patch(':id')
+  @ApiContractResponse(PRICE_SCOPE_PATTERNS.update)
+  @ApiProblemResponses({ body: true })
+  update(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: UpdatePriceScopeDto
+  ): Promise<PriceScopeView> {
+    return this.nats.send<PriceScopeView>(PRICE_SCOPE_PATTERNS.update, {
+      userId: user.userId,
+      priceScopeId: id,
+      ...dto,
+    });
+  }
+
+  @Delete(':id')
+  @ApiContractResponse(PRICE_SCOPE_PATTERNS.delete)
+  @ApiProblemResponses({ conflict: true })
+  remove(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string
+  ): Promise<{ id: string }> {
+    return this.nats.send(PRICE_SCOPE_PATTERNS.delete, {
+      userId: user.userId,
+      priceScopeId: id,
+    });
+  }
+
+  @Get(':id/offers')
+  @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.listByScope)
+  offers(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Query() query: CatalogListQueryDto
+  ): Promise<SupermarketItemPage> {
+    return this.nats.send<SupermarketItemPage>(
+      SUPERMARKET_ITEM_PATTERNS.listByScope,
+      {
+        userId: user.userId,
+        priceScopeId: id,
+        cursor: query.cursor,
+        limit: query.limit,
+      }
+    );
+  }
+}
+
+/**
+ * Where a product sits in one particular shop (plan 0038, section 5.2).
+ *
+ * It has its own surface because the price moving to the scope would otherwise
+ * have left `positionInStore` unreachable: it left `SupermarketItem` and nothing
+ * else could set it. A warehouse cannot answer which aisle a product is in, so
+ * the question needed somewhere to live rather than nowhere.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/location-items', version: '1' })
+export class CatalogLocationItemsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Put()
+  @ApiContractResponse(SUPERMARKET_LOCATION_ITEM_PATTERNS.upsert)
+  @ApiProblemResponses({ body: true })
+  upsert(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: UpsertSupermarketLocationItemDto
+  ): Promise<SupermarketLocationItemView> {
+    return this.nats.send<SupermarketLocationItemView>(
+      SUPERMARKET_LOCATION_ITEM_PATTERNS.upsert,
+      { userId: user.userId, ...dto }
+    );
+  }
+
+  @Get()
+  @ApiContractResponse(SUPERMARKET_LOCATION_ITEM_PATTERNS.get)
+  get(
+    @AuthUser() user: CurrentUser,
+    @Query('itemId') itemId: string,
+    @Query('supermarketLocationId') supermarketLocationId: string
+  ): Promise<SupermarketLocationItemView> {
+    return this.nats.send<SupermarketLocationItemView>(
+      SUPERMARKET_LOCATION_ITEM_PATTERNS.get,
+      { userId: user.userId, itemId, supermarketLocationId }
+    );
   }
 }

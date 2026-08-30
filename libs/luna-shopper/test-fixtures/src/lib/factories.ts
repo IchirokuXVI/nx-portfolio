@@ -16,6 +16,8 @@ import {
   ListPermission,
   MembershipStatus,
   MergeRequestStatus,
+  PriceScopeKind,
+  PriceSourceKind,
   UnitOfMeasure,
   UserKind,
   ZoneRole,
@@ -33,9 +35,11 @@ import type {
   SeedMembership,
   SeedMergeRequest,
   SeedOAuthIdentity,
+  SeedPriceScope,
   SeedSupermarket,
   SeedSupermarketItem,
   SeedSupermarketLocation,
+  SeedSupermarketLocationItem,
   SeedUser,
   SeedZone,
 } from './types';
@@ -194,6 +198,25 @@ export function makeSupermarket(
     name: { en: 'A Supermarket', es: 'Un supermercado' },
     logoUrl: null,
     websiteUrl: null,
+    externalBrandKey: null,
+    ...overrides,
+  };
+}
+
+/**
+ * A price scope (plan 0038, section 5.1). Defaults to a `STORE` scope, which is
+ * the shape catalog had before scopes existed and the one a hand entered
+ * supermarket still gets.
+ */
+export function makePriceScope(
+  overrides: Partial<SeedPriceScope> = {}
+): SeedPriceScope {
+  return {
+    id: uuid(),
+    supermarketId: uuid(),
+    kind: PriceScopeKind.STORE,
+    externalKey: null,
+    label: null,
     ...overrides,
   };
 }
@@ -204,12 +227,16 @@ export function makeSupermarketLocation(
   return {
     id: uuid(),
     supermarketId: uuid(),
+    priceScopeId: uuid(),
     label: null,
     address: null,
     city: null,
     country: null,
+    postalCode: null,
     latitude: null,
     longitude: null,
+    externalRef: null,
+    externalProvider: null,
     ...overrides,
   };
 }
@@ -221,6 +248,8 @@ export function makeItem(overrides: Partial<SeedItem> = {}): SeedItem {
     brand: null,
     imageUrl: null,
     sku: null,
+    ean: null,
+    unitSize: null,
     category: ItemCategory.OTHER,
     defaultUnit: UnitOfMeasure.UNIT,
     ...overrides,
@@ -233,11 +262,30 @@ export function makeSupermarketItem(
   return {
     id: uuid(),
     itemId: uuid(),
-    supermarketLocationId: uuid(),
+    priceScopeId: uuid(),
     price: null,
     currency: null,
-    positionInStore: null,
+    unitPrice: null,
+    unitPriceLabel: null,
+    priceObservedAt: null,
+    // A seeded price was put there by a person, so ADMIN is the honest default
+    // and section 6.5 will protect it from an import exactly as intended.
+    priceSourceKind: PriceSourceKind.ADMIN,
     available: true,
+    ...overrides,
+  };
+}
+
+export function makeSupermarketLocationItem(
+  overrides: Partial<SeedSupermarketLocationItem> = {}
+): SeedSupermarketLocationItem {
+  return {
+    id: uuid(),
+    itemId: uuid(),
+    supermarketLocationId: uuid(),
+    positionInStore: null,
+    // Null means "no store specific information, use the scope's".
+    available: null,
     ...overrides,
   };
 }

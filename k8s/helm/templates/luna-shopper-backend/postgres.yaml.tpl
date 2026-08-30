@@ -3,6 +3,7 @@
 {{- $ls := .Values.lunaShopperBackend }}
 {{- $pg := $ls.postgres }}
 {{- range $pg.instances }}
+{{- if not (include "lunaShopperBackend.entryEnabled" (dict "entry" . "ls" $ls)) }}{{- continue }}{{- end }}
 ---
 # Headless Service for the StatefulSet's stable network identity, and the name
 # services connect to (e.g. AUTH_DB_URL host = {{ .name }}).

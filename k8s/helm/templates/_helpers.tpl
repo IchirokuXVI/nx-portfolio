@@ -139,3 +139,37 @@ imagePullSecrets:
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+Whether one optional entry of `lunaShopperBackend.services` or
+`lunaShopperBackend.postgres.instances` should be rendered (plan 0038).
+
+An entry with no `optional` key is unconditional, which is every entry that
+existed before the harvester. An entry carrying `optional: <feature>` renders
+only when `lunaShopperBackend.<feature>.enabled` is true.
+
+It answers with a string, because a string is all a template can return: "1" for
+yes and the empty string for no, which Go templates treat as true and false. Use
+it as the condition of an `if`; never compare it to anything.
+
+Why this shape rather than a second list an environment file appends to: Helm
+merges a list by REPLACING it, not by appending, so an environment values file
+wanting one extra service would have to restate every entry, and the two would
+drift the first time one of them changed. Describing each entry once and gating
+the optional ones is what keeps the two clusters, a local deploy and this file in
+step.
+
+Call with a dict: (dict "entry" <entry> "ls" .Values.lunaShopperBackend)
+*/}}
+{{- define "lunaShopperBackend.entryEnabled" -}}
+{{- $entry := .entry -}}
+{{- $ls := .ls -}}
+{{- if not $entry.optional -}}
+1
+{{- else -}}
+{{- $feature := index $ls $entry.optional -}}
+{{- if and $feature $feature.enabled -}}
+1
+{{- end -}}
+{{- end -}}
+{{- end }}

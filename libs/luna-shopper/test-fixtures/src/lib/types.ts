@@ -22,6 +22,8 @@ import type {
   LocalizedText,
   MembershipStatus,
   MergeRequestStatus,
+  PriceScopeKind,
+  PriceSourceKind,
   UnitOfMeasure,
   UserKind,
   ZoneRole,
@@ -161,17 +163,31 @@ export interface SeedSupermarket {
   name: LocalizedText;
   logoUrl: string | null;
   websiteUrl: string | null;
+  externalBrandKey: string | null;
+}
+
+/** A price scope (plan 0038, section 5.1): the set of stores charging alike. */
+export interface SeedPriceScope {
+  id: string;
+  supermarketId: string;
+  kind: PriceScopeKind;
+  externalKey: string | null;
+  label: LocalizedText | null;
 }
 
 export interface SeedSupermarketLocation {
   id: string;
   supermarketId: string;
+  priceScopeId: string;
   label: LocalizedText | null;
   address: string | null;
   city: string | null;
   country: string | null;
+  postalCode: string | null;
   latitude: number | null;
   longitude: number | null;
+  externalRef: string | null;
+  externalProvider: string | null;
 }
 
 export interface SeedItem {
@@ -180,25 +196,42 @@ export interface SeedItem {
   brand: string | null;
   imageUrl: string | null;
   sku: string | null;
+  ean: string | null;
+  unitSize: number | null;
   category: ItemCategory;
   defaultUnit: UnitOfMeasure;
 }
 
+/** A price, keyed on a scope since plan 0038 rather than on a store. */
 export interface SeedSupermarketItem {
   id: string;
   itemId: string;
-  supermarketLocationId: string;
+  priceScopeId: string;
   price: number | null;
   currency: string | null;
-  positionInStore: string | null;
+  unitPrice: number | null;
+  unitPriceLabel: string | null;
+  priceObservedAt: Date | null;
+  priceSourceKind: PriceSourceKind;
   available: boolean;
+}
+
+/** The genuinely per store half: an aisle, and an availability override. */
+export interface SeedSupermarketLocationItem {
+  id: string;
+  itemId: string;
+  supermarketLocationId: string;
+  positionInStore: string | null;
+  available: boolean | null;
 }
 
 export interface CatalogSeed {
   supermarkets: SeedSupermarket[];
+  priceScopes: SeedPriceScope[];
   locations: SeedSupermarketLocation[];
   items: SeedItem[];
   supermarketItems: SeedSupermarketItem[];
+  locationItems: SeedSupermarketLocationItem[];
 }
 
 /** The whole demo world, pre partitioned by owning database. */

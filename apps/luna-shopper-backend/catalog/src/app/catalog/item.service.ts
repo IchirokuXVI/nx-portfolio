@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   type CreateItemRequest,
+  type FindItemByEanRequest,
+  type FindItemByEanResult,
   type ItemIdRequest,
   type ItemOrder,
   type ItemPage,
@@ -45,6 +47,8 @@ export class ItemService {
         brand: req.brand ?? null,
         imageUrl: req.imageUrl ?? null,
         sku: req.sku ?? null,
+        ean: req.ean ?? null,
+        unitSize: req.unitSize ?? null,
         category: req.category,
         defaultUnit: req.defaultUnit,
       })
@@ -67,6 +71,12 @@ export class ItemService {
     if (req.sku !== undefined) {
       row.sku = req.sku;
     }
+    if (req.ean !== undefined) {
+      row.ean = req.ean;
+    }
+    if (req.unitSize !== undefined) {
+      row.unitSize = req.unitSize;
+    }
     if (req.category !== undefined) {
       row.category = req.category;
     }
@@ -87,6 +97,18 @@ export class ItemService {
 
   async get(req: ItemIdRequest): Promise<ItemView> {
     return toItemView(await this.load(req.itemId));
+  }
+
+  /**
+   * Look an item up by its barcode (plan 0038, section 6.2). A **lookup**, not a
+   * search: EAN is unique when present, so this either finds the one item or
+   * finds nothing, and finding nothing is a normal answer rather than a 404. It
+   * is step 2 of the matching ladder, and it is what stops a promoted discovery
+   * entry creating a duplicate of a product catalog already holds.
+   */
+  async findByEan(req: FindItemByEanRequest): Promise<FindItemByEanResult> {
+    const row = await this.items.findOne({ where: { ean: req.ean } });
+    return { item: row ? toItemView(row) : null };
   }
 
   /**

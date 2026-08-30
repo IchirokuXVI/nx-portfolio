@@ -32,5 +32,7 @@ export { LIST_SCHEMA_IDS } from './messages/list.schemas';
 export { MERGE_SCHEMA_IDS } from './messages/merge.schemas';
 export { REALTIME_SCHEMA_IDS } from './messages/realtime.schemas';
 export { STATS_SCHEMA_IDS } from './messages/stats.schemas';
+export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';
+export { HARVEST_SCHEMA_IDS } from './messages/harvest.schemas';
 export { IDENTITY_EVENT_SCHEMA_IDS } from './events/identity.schemas';
 export { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';

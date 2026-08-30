@@ -8,6 +8,7 @@ export * from './lib/pagination';
 // Enums
 export * from './lib/enums/auth.enums';
 export * from './lib/enums/catalog.enums';
+export * from './lib/enums/harvest.enums';
 export * from './lib/enums/list.enums';
 export * from './lib/enums/merge.enums';
 export * from './lib/enums/realtime.enums';
@@ -16,6 +17,7 @@ export * from './lib/enums/zone.enums';
 // Messages
 export * from './lib/messages/auth.messages';
 export * from './lib/messages/catalog.messages';
+export * from './lib/messages/harvest.messages';
 export * from './lib/messages/list.messages';
 export * from './lib/messages/merge.messages';
 export * from './lib/messages/realtime.messages';

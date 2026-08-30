@@ -17,4 +17,17 @@ export class Supermarket extends BaseEntity {
 
   @Column({ type: 'varchar', nullable: true })
   websiteUrl!: string | null;
+
+  /**
+   * The chain's stable identity across discovery runs and providers (plan 0038,
+   * section 5.4), here the Wikidata QID (`Q377705`).
+   *
+   * Matching on the brand NAME splits one chain into several: `Dia` and `Maxi
+   * Dia` are one chain sharing `Q925132`. It cuts the other way too, which is why
+   * this is owner editable rather than authoritative: `Carrefour` and `Carrefour
+   * Express` carry different QIDs, arguably correctly since their prices differ.
+   * Nullable because an independent shop has none.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  externalBrandKey!: string | null;
 }

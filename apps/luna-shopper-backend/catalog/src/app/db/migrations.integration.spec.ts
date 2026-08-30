@@ -44,6 +44,9 @@ describeIntegration('catalog schema (real Postgres)', () => {
       'supermarket_locations',
       'items',
       'supermarket_items',
+      // Plan 0038.
+      'price_scopes',
+      'supermarket_location_items',
     ]) {
       expect(names.has(table)).toBe(true);
     }
@@ -56,6 +59,26 @@ describeIntegration('catalog schema (real Postgres)', () => {
     const names = new Set(rows.map((r: { typname: string }) => r.typname));
     expect(names.has('item_category')).toBe(true);
     expect(names.has('unit_of_measure')).toBe(true);
+    expect(names.has('price_scope_kind')).toBe(true);
+    expect(names.has('price_source_kind')).toBe(true);
+  });
+
+  it('keys prices on the scope and not on the store any more (plan 0038, section 5.2)', async () => {
+    const columns = await dataSource.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_name = 'supermarket_items'`
+    );
+    const names = new Set(
+      columns.map((c: { column_name: string }) => c.column_name)
+    );
+    expect(names.has('priceScopeId')).toBe(true);
+    expect(names.has('unitPrice')).toBe(true);
+    expect(names.has('unitPriceLabel')).toBe(true);
+    expect(names.has('priceObservedAt')).toBe(true);
+    expect(names.has('priceSourceKind')).toBe(true);
+    // Both moved to supermarket_location_items.
+    expect(names.has('supermarketLocationId')).toBe(false);
+    expect(names.has('positionInStore')).toBe(false);
   });
 
   it('round-trips a Supermarket through the jsonb localized name column', async () => {
