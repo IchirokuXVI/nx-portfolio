@@ -21,7 +21,7 @@
     {
       "file": "Account.dc.html",
       "x": 0,
-      "y": 1620,
+      "y": 1520,
       "w": 1330,
       "h": 970,
       "title": "The account row, in its three forms"
@@ -29,7 +29,7 @@
     {
       "file": "Invite.dc.html",
       "x": 1390,
-      "y": 1620,
+      "y": 1520,
       "w": 900,
       "h": 970,
       "title": "The invite, with and without a prompt"
@@ -39,79 +39,79 @@
     {
       "id": "brief",
       "x": 0,
-      "y": -480,
+      "y": -307,
       "w": 450,
       "text": "THE APP HAS BEEN INSTALLABLE SINCE 0013 AND HAS NEVER SAID SO. A search across libs/velista and apps/velista for beforeinstallprompt returns nothing, and so does one for display-mode. The manifest, the worker and the origin are all in place, and the only way to find out is a browser menu nobody opens.\nThree surfaces, one state machine behind all of them: a page at /{locale}/install, a row on the account screen, and the invite link, where somebody is meeting the product for the first time.\nPhone only, 390x844, Night only. No colour role here that 0003 and 0015 have not already proved, so a Day artboard would only restate them."
     },
     {
       "id": "three-states",
       "x": 490,
-      "y": -480,
+      "y": -362,
       "w": 450,
       "text": "THREE STATES, AND DELIBERATELY NO FOURTH. installed, ready, manual.\nunknown is rejected because it would have to be rendered, and the only honest way to render it is a spinner over a question the browser may never answer. beforeinstallprompt fires at the browser's discretion, once, and there is no API that asks whether installing is possible.\nunsupported is rejected because it is not a state of the app, it is a property of one browser on one platform, and what somebody needs there is not the word no, it is the steps.\nBoth collapse into manual, which is the state that always has something to show. That is why the middle frame is labelled the default: manual is what renders first, everywhere, and ready is an improvement on it."
     },
     {
       "id": "steps-are-the-floor",
       "x": 980,
-      "y": -480,
+      "y": -454,
       "w": 450,
-      "text": "THE STEPS ARE THE FLOOR. THE BUTTON IS THE IMPROVEMENT. The page renders the guide for the browser it is being read in from the first frame; if a prompt arrives, the button takes the top of that card and the steps fold behind \"Prefer to do it by hand?\".\nThe inverse cannot be built. A button that falls back to instructions would have to decide which to draw before the browser has said anything, and it would be wrong on Safari every time.\nAND THE SLOT NEVER MOVES. The primary slot is occupied from the first frame, so the state improving does not reflow anything the reader is part way through. No spinner, no skeleton, no aria-busy anywhere on this page. There is nothing loading.\nAND IT EXPANDS IN PLACE. \"Prefer to do it by hand?\" is a disclosure, not a link: it unfolds the steps on this page, which is the whole point of the steps being the floor. That is why it is drawn as a bordered summary row with the caret at the far end rather than as a line of text with a caret beside it, which reads as a navigation."
+      "text": "THE STEPS ARE THE FLOOR. THE BUTTON IS THE IMPROVEMENT. The page renders the guide for the browser it is being read in from the first frame; if a prompt arrives, the button takes the top of that card and the steps fold behind \"Prefer to do it by hand?\".\nThe inverse cannot be built. A button that falls back to instructions would have to decide which to draw before the browser has said anything, and it would be wrong on Safari every time.\nAND THE SLOT NEVER MOVES. The primary slot is occupied from the first frame, so the state improving does not reflow anything the reader is part way through. No spinner, no skeleton, no aria-busy anywhere on this page. There is nothing loading.\nAND IT EXPANDS IN PLACE. \"Prefer to do it by hand?\" is a disclosure and not a link: the downward caret is what says so, and it unfolds the steps on this page. A second screen for them would put a navigation between somebody and the only method that works on their browser, which is the whole point of the steps being the floor."
     },
     {
       "id": "guides-ua",
       "x": 1470,
-      "y": -480,
+      "y": -339,
       "w": 450,
       "text": "A USER AGENT READ CHOOSES THE GUIDE AND DECIDES NOTHING ELSE. It is confined to one pure function, installGuideFor(userAgent, standalone), and whether a button exists is InstallState, which never consults it.\nThis is the one place the read is legitimate: the steps differ by browser and there is no capability that feature detects how a menu is laid out.\nAnything unrecognised falls to android-menu, whose wording is the most generic of the four and is true of nearly every browser menu.\nTHE IPAD REPORTS ITSELF AS A MAC and lands on desktop-safari, whose steps are wrong for it. Section 8 asks for that case to be decided rather than left to fall out."
     },
     {
       "id": "firefox",
       "x": 1960,
-      "y": -480,
+      "y": -293,
       "w": 450,
       "text": "THE ONLY NO IN THE WHOLE DESIGN, and it gets one sentence.\nFirefox on the desktop genuinely cannot keep a site as an app. Saying so is better than an install button that does nothing, and better than a guide whose steps are not there.\nWhat makes it acceptable is that the frame does not end on the refusal: it names the browsers on the same machine that can, offers to copy the address, and mentions the bookmark. One sentence of no, then something to do.\nEverywhere else the answer is how, never whether."
     },
     {
       "id": "belief",
       "x": 2450,
-      "y": -480,
+      "y": -353,
       "w": 450,
       "text": "INSTALLED IS A BELIEF, NOT A FACT, and no event fires when somebody uninstalls.\nWhat can honestly be known: display-mode standalone proves the page is being viewed INSIDE the app; the appinstalled event proves it was installed from this tab just now; getInstalledRelatedApps would prove it is on the device, and is not being used (see the note under the account row). Nothing on that list tells a browser tab that the app was installed last week.\nSO NO STATE MAY BE A DEAD END. The installed page keeps \"Not on your home screen? Show the steps\" underneath the confirmation, which unfolds the same guide the manual state renders, on this page. If the belief is wrong, the reader is one tap from the truth."
     },
     {
       "id": "row-shape",
       "x": 0,
-      "y": 1120,
+      "y": 1189,
       "w": 450,
       "text": "THE INSTALLED ROW IS A STATEMENT, NOT A DISABLED BUTTON. It borrows the exact shape 0015 gave the confirmed email: a value row with an ok chip and no chevron. A disabled control invites a reader to work out why; a statement does not.\nThe ready row is the one row in this app that performs a browser action instead of navigating, and it earns it: the whole value of a captured prompt is that it removes the trip to another screen. Dismissing the dialog leaves the row exactly as it was, and if the event is not re-fired the state falls back to manual, whose label navigates to the page. Nothing is stuck.\nNo copy anywhere says \"you already have this\". It says Installed, which is a report of what this browser believes and reads as one."
     },
     {
       "id": "no-related-apps",
       "x": 490,
-      "y": 1120,
+      "y": 1135,
       "w": 450,
       "text": "getInstalledRelatedApps IS DELIBERATELY NOT USED, and this is the trade it costs.\nIt is the one API that could tell a browser tab the app is installed on this device, and it needs a related_applications entry naming the manifest's own ABSOLUTE url. manifest.webmanifest is a static file, identical in the staging and production images, and every velista image except the shell's is environment agnostic on purpose. Putting https://velista.app in it makes staging claim production's install.\nSo: somebody who installed last week and returns in a browser tab sees manual rather than installed. That is exactly the case the no-dead-ends rule was written for, and it is why that rule exists.\nOpen question worth ten minutes: whether Chrome accepts a RELATIVE url there. If it does, this reverses."
     },
     {
       "id": "mounted",
       "x": 980,
-      "y": 1120,
+      "y": 1143,
       "w": 450,
       "text": "UNDER THE SHELL, NOTHING INSTALLS. Mounted at ichirokuxvi.com/velista the document is the PORTFOLIO'S, on the portfolio's origin, with the portfolio's manifest and worker. An install triggered there installs the portfolio, under the portfolio's name and icon.\nSo all three surfaces become one link to velista.app. The row reads Get the app, the install page draws a single card naming the address, and the invite offers nothing extra at all, because somebody mid join should not be sent to another origin.\nThe mount is already known: APP_BASE_PATH is '' standalone and /velista mounted, and a component may inject it safely. The origin on the other end is not known, and follows 0014 exactly: a token, from environment.ts, substituted by the DefinePlugin, never a literal in a template."
     },
     {
       "id": "install-and-join",
       "x": 1470,
-      "y": 1120,
+      "y": 1065,
       "w": 450,
       "text": "ONE PRESS, TWO THINGS, AND THE ORDER IS FORCED BY THE PLATFORM. prompt() requires transient user activation, and awaiting a network round trip first spends it. So prompt() is the first statement of the handler with no await before it, the join is started in the same tick, and the two run together:\n  const prompting = install.prompt();\n  const joining = zones.joinZone(code);\n  await prompting;   // let the dialog close\n  const outcome = await joining;\nWaiting on the dialog before navigating is the part worth keeping: navigating out from under an open install dialog is at best untidy and at worst dismisses it, and the join is in flight throughout, so the wait costs nothing.\nA dismissed install is not a failed join, and a failed join is not a failed install."
     },
     {
       "id": "second-button",
       "x": 1960,
-      "y": 1120,
+      "y": 1167,
       "w": 450,
-      "text": "\"JUST JOIN IN THE BROWSER\" IS A FULL BUTTON, NOT A QUIET LINK. It is not the lesser choice. Somebody on a shared phone, a work phone, or a phone with no room left should not have to decline something in order to accept the thing they actually came for.\nAND THE INVITE DOES NOT GROW A TUTORIAL. Without a prompt in hand the screen is byte for byte what ships today: one primary, Ask to join. There is no steps card here and no link to the install page, because the code is in this URL and sending somebody away loses it.\nAN INSTALL CARRIES NO ROUTE, BUT IT CARRIES THE ORIGIN. The installed window opens at start_url with none of this navigation, and finds the token pair in the same origin's localStorage. So the join lands in the tab, and the app opens signed in and already a member."
+      "text": "\"JOIN IN THE BROWSER\" IS A FULL BUTTON, NOT A QUIET LINK. It is not the lesser choice. Somebody on a shared phone, a work phone, or a phone with no room left should not have to decline something in order to accept the thing they actually came for.\nAND THE INVITE DOES NOT GROW A TUTORIAL. Without a prompt in hand the screen is byte for byte what ships today: one primary, Ask to join. There is no steps card here and no link to the install page, because the code is in this URL and sending somebody away loses it.\nAN INSTALL CARRIES NO ROUTE, BUT IT CARRIES THE ORIGIN. The installed window opens at start_url with none of this navigation, and finds the token pair in the same origin's localStorage. So the join lands in the tab, and the app opens signed in and already a member."
     }
   ]
 }

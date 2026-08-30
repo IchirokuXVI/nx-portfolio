@@ -138,12 +138,11 @@ The install page renders, from the first frame, the instructions for the browser
 being read in. If a prompt arrives, a primary button appears **above** them and the
 steps stay where they are, folded behind *Prefer to do it by hand?*.
 
-That control is a **disclosure and never a navigation**. It unfolds the steps on this
-page, because the steps being the floor is the entire decision and a second screen would
-put a navigation between somebody and the only thing that works on their browser. So it
-is drawn as a bordered summary row with the caret at the far end, carrying
-`aria-expanded`, rather than as a line of text with a caret beside it, which reads as a
-link to somewhere else. Same control, same shape, in the `installed` state (D7).
+That control is a **disclosure and never a navigation**, which is what its downward
+caret and its `aria-expanded` say. It unfolds the steps on this page, because the steps
+being the floor is the entire decision and a second screen would put a navigation
+between somebody and the only method that works on their browser. Same control in the
+`installed` state (D7).
 
 The inverse design, a button that falls back to instructions, cannot be built: it would
 have to decide which one to draw before the browser has told it anything, and it would
@@ -184,7 +183,7 @@ The origin on the other end is **not** known and has to be configured, which is 
 ### D6. Install and join is one gesture, in that order, without waiting
 
 The invite screen's primary becomes **Install and join** when a prompt is in hand, with
-*Just join in the browser* below it as a full alternative rather than a link.
+*Join in the browser* below it as a full alternative rather than a link.
 
 The order inside the handler is forced by the platform. `prompt()` requires transient
 user activation, and awaiting a network round trip first spends it, so the call has to
@@ -356,7 +355,7 @@ standalone mode (D5).
 
 ```
 [ Install and join ]           primary
-[ Just join in the browser ]   secondary, full width, not a link
+[ Join in the browser ]   secondary, full width, not a link
 ```
 
 The secondary is a real button and not a quiet link because it is not a lesser choice:
@@ -455,7 +454,7 @@ account.app.add            Add it to your home screen
 account.app.installed      Installed
 account.app.elsewhere      Get the app
 entry.joinLink.installAndJoin   Install and join
-entry.joinLink.justJoin         Just join in the browser
+entry.joinLink.joinOnly         Join in the browser
 ```
 
 Spanish is written at the same time, not after. The interface word is **group** and
