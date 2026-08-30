@@ -14,6 +14,8 @@ import { provideService } from '@portfolio/shared/data-access';
 import {
   ACCOUNT_SERVICE,
   AccountApi,
+  ASSISTANT_SERVICE,
+  AssistantApi,
   AUTH_SERVICE,
   AuthApi,
   COMMENT_SERVICE,
@@ -156,6 +158,14 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // reaches this injector's `HttpClient`, so the token's default resolving at the root
   // would not work.
   provideService(ACCOUNT_SERVICE, AccountApi),
+
+  // The assistant (plan 0032). An eighth time, and it is the plainest of the lot:
+  // `AssistantApi` is one endpoint on the gateway base URL the app already has, so it
+  // reaches this injector's `HttpClient` and nothing else new. That is the whole point
+  // of backend `0039` section 3 proxying the service through the gateway — no second
+  // origin, no second base URL, and `gatewayInterceptor` already attaching the token
+  // and the `Accept-Language` the bot answers in.
+  provideService(ASSISTANT_SERVICE, AssistantApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches

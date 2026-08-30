@@ -114,6 +114,9 @@
       "@portfolio/velista/feature-account": [
         "./libs/velista/feature-account/src/index.ts"
       ],
+      "@portfolio/velista/feature-assistant": [
+        "./libs/velista/feature-assistant/src/index.ts"
+      ],
       "@portfolio/velista/feature-auth": [
         "./libs/velista/feature-auth/src/index.ts"
       ],

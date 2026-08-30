@@ -1,0 +1,142 @@
+// Which side a message sits on, and which corner keeps its tail. Colour is the last
+// signal rather than the only one: the side and the tail both say who spoke.
+:host {
+  display: flex;
+  flex-direction: column;
+  max-inline-size: var(--app-bubble-max-width);
+}
+
+:host(.caller) {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+:host(.bot) {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+// The panel talking about itself. Full width and centred, so it is plainly not a
+// turn in the conversation.
+:host(.notice) {
+  align-self: stretch;
+  align-items: center;
+  max-inline-size: 100%;
+}
+
+.bubble {
+  margin: 0;
+  padding: var(--app-space-4) var(--app-space-5);
+  border-radius: var(--app-bubble-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-lg);
+  line-height: var(--app-leading-body);
+
+  // Selectable, because a shopping answer is a thing people copy out. It is also the
+  // only way to get at the text at all for somebody who cannot use the links.
+  user-select: text;
+
+  // A long unbroken product name has to wrap rather than push the column wider.
+  overflow-wrap: anywhere;
+}
+
+:host(.caller) .bubble {
+  background: var(--app-surface-overlay);
+  border-end-end-radius: var(--app-bubble-tail-radius);
+}
+
+:host(.bot) .bubble {
+  border-end-start-radius: var(--app-bubble-tail-radius);
+}
+
+// A message that is still out. Dimmed rather than replaced, so the sentence somebody
+// just wrote stays legible while they wait for the answer to it.
+.bubble[aria-busy='true'] {
+  opacity: 0.62;
+}
+
+// A turn that produced no reply. It is a message like every other one; the border is
+// what marks it, because a red bubble in a column of grey ones reads as an alarm and
+// nothing alarming has happened.
+.failed {
+  border: 1px solid var(--app-status-danger-border);
+  background: var(--app-status-danger-bg);
+  color: var(--app-status-danger-fg);
+}
+
+.waiting {
+  border: 1px solid var(--app-status-attention-border);
+  background: var(--app-status-attention-bg);
+}
+
+.clock {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-3);
+  margin: 0 0 var(--app-space-3);
+}
+
+// Large, because it is the thing being watched, and tabular so the digits do not
+// jog sideways as the number shrinks.
+.count {
+  color: var(--app-status-attention-fg);
+  font-size: var(--app-text-2xl);
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--app-leading-heading);
+}
+
+.unit {
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-base);
+}
+
+.text {
+  margin: 0;
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+}
+
+.dropped {
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-4);
+  color: var(--app-text-muted);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  text-align: center;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  margin: var(--app-space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  // A chip is small, so its own height is what has to reach the touch target: these
+  // sit in a wrapping row where a parent cannot make them tall (plan 0003, section 7).
+  min-block-size: var(--app-control-height);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-status-attention-bg);
+  color: var(--app-status-attention-fg);
+  font-size: var(--app-text-sm);
+  text-decoration: none;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.link-glyph {
+  font-size: var(--app-icon-sm);
+}

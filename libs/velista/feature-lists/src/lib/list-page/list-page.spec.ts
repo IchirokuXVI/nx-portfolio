@@ -149,6 +149,8 @@ interface Options {
    * where a name has resolved and a role has not.
    */
   readonly members?: readonly Membership[];
+  /** `?line=`, which a link in an assistant reply carries (plan 0032, section 8). */
+  readonly line?: string;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -203,7 +205,7 @@ async function render(options: Options = {}): Promise<{
       { provide: REALTIME_CLIENT, useValue: realtime },
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
-      { provide: ActivatedRoute, useValue: route() },
+      { provide: ActivatedRoute, useValue: route(options.line) },
     ],
   }).compileComponents();
 
@@ -215,13 +217,22 @@ async function render(options: Options = {}): Promise<{
   return { fixture, lines, lists, realtime, storage, router };
 }
 
-/** The shape `route-params.ts` reads: a real `paramMap` observable plus a snapshot. */
-function route() {
+/**
+ * The shape `route-params.ts` reads: real `paramMap` and `queryParamMap` observables
+ * plus a snapshot of each.
+ *
+ * The query half arrived with plan 0032: a chat reply links to a line as `?line=`,
+ * because none of this page's three line sheets simply shows a line and all three do
+ * something to one.
+ */
+function route(line?: string) {
   const map = convertToParamMap({ zoneId: ZONE_ID, listId: LIST_ID });
+  const queryMap = convertToParamMap(line === undefined ? {} : { line });
 
   return {
     paramMap: of(map),
-    snapshot: { paramMap: map, parent: null },
+    queryParamMap: of(queryMap),
+    snapshot: { paramMap: map, queryParamMap: queryMap, parent: null },
     parent: null,
   };
 }
@@ -685,6 +696,68 @@ describe('ListPage', () => {
 
       expect(fixture.nativeElement.textContent).toContain('list.empty.title');
       expect(query(fixture, 'lib-line-composer')).not.toBeNull();
+    });
+  });
+
+  describe('a line a chat reply linked to (plan 0032, section 8)', () => {
+    it('scrolls the row into view and marks it', async () => {
+      const scrollIntoView = jest.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+
+      const { fixture } = await render({
+        line: 'ln-2',
+        lines: [line('ln-1'), line('ln-2')],
+      });
+
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(fixture.componentInstance.markedLine()).toBe('ln-2');
+      expect(query(fixture, '.line.marked')?.getAttribute('data-line-id')).toBe(
+        'ln-2'
+      );
+    });
+
+    it('opens no sheet, which is the whole reason it is a query parameter', async () => {
+      // All three of this page's line sheets **do** something to a line. A link in a
+      // chat message that opened an edit form would have changed what the app is doing
+      // because somebody wanted to look at something.
+      const scrollIntoView = jest.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+
+      const { fixture, router } = await render({
+        line: 'ln-1',
+        lines: [line('ln-1')],
+      });
+
+      expect(router.navigate).not.toHaveBeenCalled();
+      expect(query(fixture, 'router-outlet')).not.toBeNull();
+    });
+
+    it('ignores an id that names no row it can see, and renders normally', async () => {
+      // Deleted, or on a list this caller no longer sees: both look the same from
+      // here, and a stale link should be inert rather than an error.
+      const scrollIntoView = jest.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+
+      const { fixture } = await render({
+        line: 'ln-not-here',
+        lines: [line('ln-1')],
+      });
+
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      expect(fixture.componentInstance.markedLine()).toBeNull();
+      expect(query(fixture, '.line.marked')).toBeNull();
+      // The page is otherwise exactly the page.
+      expect(rows(fixture)).toHaveLength(1);
+    });
+
+    it('marks nothing at all on an ordinary arrival', async () => {
+      const scrollIntoView = jest.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+
+      const { fixture } = await render({ lines: [line('ln-1')] });
+
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      expect(fixture.componentInstance.markedLine()).toBeNull();
     });
   });
 });

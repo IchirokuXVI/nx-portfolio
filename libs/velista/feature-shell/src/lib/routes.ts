@@ -431,6 +431,42 @@ export const AppShellRoutes: Route[] = [
             ],
           },
           {
+            // The assistant (plan 0032). A **route** and not a sheet, and here the
+            // argument is stronger than it was for the account screen: the app bar is
+            // drawn on every signed in page, so its button is everywhere. Rule E1
+            // (`0008`) makes a sheet a child of the page it covers, so a sheet
+            // reachable from everywhere would be a child of everywhere — one identical
+            // entry per page, which must not drift, for a panel that covers a page it
+            // has nothing to do with.
+            //
+            // A floating panel toggled by a signal was the other option and is worse:
+            // nothing is pushed onto the history stack, so Android's back button closes
+            // the **app** rather than the panel. That is the defect rule E1 exists to
+            // prevent, and `0031` spent a whole plan repairing the last version of it.
+            //
+            // `authenticatedGuard` and nothing more. The bot acts as the caller through
+            // the gateway with the caller's own token (backend `0039` rule A1), so
+            // there is nothing here to authorize that the API does not already.
+            //
+            // `AssistantStore` and `AudioRecorder` are provided by the **page**, not
+            // here. That is the one place this departs from the plan's wording, and it
+            // is forced: naming either class in this file is an eager import of the
+            // `feature-assistant` barrel, which would pull the panel into the shell's
+            // initial payload and break the "keeps every page lazy" assertion that
+            // `routes.spec.ts` already makes. Component providers give the identical
+            // lifetime — created with the page, destroyed with it — which is what the
+            // plan is actually asking for: the conversation survives leaving and
+            // coming back within a session and does not survive a reload, and
+            // destroying the recorder releases the microphone, so a recording does not
+            // survive leaving mid capture.
+            path: 'assistant',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-assistant').then(
+                (m) => m.AssistantPage
+              ),
+          },
+          {
             // A cold arrival on somebody else's invite link, and the one way in that is
             // not a sheet: there is no page underneath to cover (plan 0008, section 4.1).
             // Public, because the whole point is that the recipient has no account.

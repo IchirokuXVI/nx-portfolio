@@ -6,12 +6,12 @@
   @if (signedIn()) {
     <div class="actions">
       <button
-        (click)="openSearch.emit()"
-        [attr.aria-label]="'home.action.search' | rokuT"
-        class="icon-button"
+        (click)="openAssistant.emit()"
+        [attr.aria-label]="'home.action.assistant' | rokuT"
+        class="icon-button assistant"
         type="button"
       >
-        <lib-search-icon class="glyph" />
+        <lib-comment-icon class="glyph" />
       </button>
 
       <button

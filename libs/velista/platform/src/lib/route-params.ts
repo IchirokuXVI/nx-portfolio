@@ -81,3 +81,27 @@ export function listIdOf(route: ActivatedRoute): Signal<string> {
 export function lineIdOf(route: ActivatedRoute): Signal<string> {
   return paramSignal(route, 'lineId');
 }
+
+/**
+ * The line a link asked the list page to show, from `?line=` (plan 0032, section 8).
+ *
+ * A **query parameter** and not a route segment, and that is the whole design rather
+ * than a shortcut. The list page has three sheets that address a line and all three
+ * *do something* to it — edit, comment, delete. None of them simply shows one. A link
+ * in a chat message that opened an edit form would have changed what the app is doing
+ * because somebody wanted to look at something, and for the people that panel exists
+ * for an unasked-for form over the screen is the failure mode, not a convenience.
+ *
+ * So this addresses a line without routing to one: the page scrolls to it, marks it,
+ * and opens nothing. Empty when absent, which is the ordinary case for every arrival
+ * that did not come from a reply.
+ */
+export function lineQueryOf(route: ActivatedRoute): Signal<string> {
+  const query = toSignal(route.queryParamMap, {
+    initialValue: route.snapshot.queryParamMap,
+  });
+
+  // Query parameters belong to the whole URL rather than to one route, so unlike the
+  // parameters above there is no tree to walk: the leaf's map already has them.
+  return computed(() => query().get('line') ?? '');
+}

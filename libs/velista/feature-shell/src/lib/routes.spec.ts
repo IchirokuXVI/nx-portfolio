@@ -407,6 +407,44 @@ describe('AppShellRoutes', () => {
       );
     });
   });
+
+  describe('the assistant', () => {
+    const assistant = pages.find((route) => route.path === 'assistant');
+
+    it('is declared, before the empty front door', () => {
+      // Plan 0032, section 2. The `''` ordering assertion at the top covers the table
+      // as a whole; this one names the route, so removing it is a failure rather than
+      // a shorter list that still happens to be ordered.
+      const paths = pages.map((route) => route.path);
+
+      expect(assistant).toBeDefined();
+      expect(paths.indexOf('assistant')).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('is authenticated, and guarded by nothing else', () => {
+      // The bot acts as the caller through the gateway with the caller's own token
+      // (backend 0039, rule A1), so there is nothing here to authorize that the API
+      // does not already.
+      expect(assistant?.canActivate).toHaveLength(1);
+      expect(assistant?.canMatch).toBeUndefined();
+    });
+
+    it('is a destination and not a sheet, so it has no children', () => {
+      // A sheet reachable from every page would be a child of every page: rule E1
+      // would put one identical entry under each, and they must not drift.
+      expect(assistant?.children).toBeUndefined();
+      expect(assistant?.canDeactivate).toBeUndefined();
+    });
+
+    it('is lazy, and names no provider here', () => {
+      // Both providers live on the page component. Naming either in `routes.ts` is an
+      // eager import of the `feature-assistant` barrel, which would land the panel in
+      // the shell's initial payload; the "keeps every page lazy" assertion above is
+      // the one that would catch it, and this states the reason next to the route.
+      expect(assistant?.loadComponent).toBeDefined();
+      expect(assistant?.providers).toBeUndefined();
+    });
+  });
 });
 
 /**

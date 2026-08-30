@@ -299,6 +299,13 @@ export class MembersPage {
     );
   }
 
+  /** The assistant (plan 0032). See the note on the group page. */
+  async openAssistant(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'assistant')
+    );
+  }
+
   /**
    * Let somebody in.
    *

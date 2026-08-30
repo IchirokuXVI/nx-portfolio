@@ -286,9 +286,9 @@
       "newZone": "Nuevo grupo",
       "generateList": "Obtener lista de la compra",
       "generateListSoon": "Próximamente",
-      "search": "Buscar",
       "account": "Tu cuenta",
-      "changeLocale": "Cambiar idioma"
+      "changeLocale": "Cambiar idioma",
+      "assistant": "Asistente"
     },
     "zoneExplainer": "Un grupo es la casa o los compañeros de piso con quienes compartes listas. Puedes empezar sin cuenta.",
     "section": {
@@ -534,5 +534,54 @@
       "gone": "Esa cuenta ya no existe",
       "failed": "No se pudo completar. Inténtalo de nuevo"
     }
+  },
+  "assistant": {
+    "title": "Asistente",
+    "back": "Atrás",
+    "intro": {
+      "lead": "Dime qué necesitas. Por ejemplo:",
+      "add": {
+        "label": "Añadir a una lista",
+        "said": "«Añade leche a la lista del piso»"
+      },
+      "ask": {
+        "label": "Preguntar por una lista",
+        "said": "«¿Hay leche en la compra semanal?»"
+      },
+      "rename": {
+        "label": "Cambiar tu nombre",
+        "said": "«Llámame Marta»"
+      }
+    },
+    "composer": {
+      "label": "Escribe un mensaje al asistente",
+      "placeholder": "Escribe un mensaje",
+      "record": "Grabar un mensaje",
+      "send": "Enviar",
+      "stop": "Parar y enviar",
+      "spoken": "Un mensaje hablado"
+    },
+    "recorder": {
+      "pause": "Pausar",
+      "resume": "Seguir grabando",
+      "refused": "No te oigo. El micrófono está desactivado para esta aplicación",
+      "unavailable": "Este navegador no puede grabar. Puedes escribir igualmente",
+      "dismiss": "Cerrar",
+      "limit": {
+        "longest": "Cinco minutos es lo máximo que puedo escuchar.",
+        "left_one": "Queda 1 segundo.",
+        "left_other": "Quedan {{count}} segundos.",
+        "reached": "Han pasado cinco minutos, así que he dejado de escuchar.",
+        "pressStop": "Pulsa parar para enviarlo."
+      }
+    },
+    "busy": {
+      "seconds_one": "segundo",
+      "seconds_other": "segundos",
+      "body": "Mucha gente está preguntando a la vez. Estaré listo en un momento, y tu mensaje sigue aquí.",
+      "noNumber": "Mucha gente está preguntando a la vez. Vuelve a intentarlo en un momento, y tu mensaje sigue aquí."
+    },
+    "failed": "Eso no me llegó. Tu mensaje sigue aquí, inténtalo otra vez.",
+    "dropped": "El principio de esta conversación es demasiado largo para guardarlo, así que lo he soltado."
   }
 }

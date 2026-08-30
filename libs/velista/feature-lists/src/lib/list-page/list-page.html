@@ -1,10 +1,13 @@
 <!--
   `(account)` was unbound here until plan 0015, and so was `accountInitial`, so the
-  button drew a neutral glyph on the one screen somebody spends the longest on. Both are
-  bound now; `(openSearch)` stays unbound, because search is not built (section 4.4).
+  button drew a neutral glyph on the one screen somebody spends the longest on. The
+  second button was `(openSearch)` and stayed unbound because search was never built;
+  plan 0032 spends that slot on the assistant, so both are bound now and the bar has no
+  dead controls left on any screen.
 -->
 <lib-app-bar
   (account)="openAccount()"
+  (openAssistant)="openAssistant()"
   [accountInitial]="accountInitial()"
   [signedIn]="true"
 />
@@ -112,6 +115,7 @@
         (ticked)="toggle($event)"
         [announcement]="announcement()"
         [lines]="current.lines"
+        [markedId]="markedLine()"
         [reordering]="reordering()"
       />
     }

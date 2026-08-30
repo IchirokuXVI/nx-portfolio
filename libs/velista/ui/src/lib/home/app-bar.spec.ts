@@ -60,6 +60,35 @@ describe('AppBar', () => {
     });
   });
 
+  describe('the second button', () => {
+    it('opens the assistant, and no longer offers search', async () => {
+      // Plan 0032, section 1. `openSearch` called `_notYetRouted('search')` on every
+      // page that bound it and there was never a search page behind it, so the slot is
+      // spent rather than a feature removed. The assertion is on the **output**, not
+      // on the glyph: the icon may be reconsidered and the contract may not.
+      const fixture = await render({ signedIn: true });
+      const opened: number[] = [];
+      fixture.componentInstance.openAssistant.subscribe(() =>
+        opened.push(opened.length)
+      );
+
+      const button =
+        host(fixture).querySelector<HTMLButtonElement>('.assistant');
+      button?.click();
+
+      expect(button).not.toBeNull();
+      expect(opened).toHaveLength(1);
+      expect('openSearch' in fixture.componentInstance).toBe(false);
+    });
+
+    it('keeps both header buttons at the minimum touch target', async () => {
+      // The slot did not change shape, which is half of why spending it is cheap.
+      const fixture = await render({ signedIn: true });
+
+      expect(host(fixture).querySelectorAll('.icon-button')).toHaveLength(2);
+    });
+  });
+
   describe('the locale menu', () => {
     it('stays out of the DOM until the control is used', async () => {
       const fixture = await render();

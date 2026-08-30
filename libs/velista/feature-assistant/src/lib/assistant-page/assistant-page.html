@@ -1,0 +1,39 @@
+<!--
+  No `lib-app-bar` here, and that is deliberate: the bar's second button is what opens
+  this panel, so drawing it would put a control on screen that leads to the screen it
+  is on. A destination's own header instead, the shape `0009` gave the credential
+  screens and `0015` gave the account page.
+-->
+<header class="bar">
+  <button
+    (click)="back()"
+    [attr.aria-label]="'assistant.back' | rokuT"
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
+  </button>
+
+  <h1 class="title">{{ 'assistant.title' | rokuT }}</h1>
+</header>
+
+<main #column class="column">
+  @if (messages().length === 0) {
+    <lib-assistant-intro />
+  } @else {
+    @for (message of messages(); track $index) {
+      <lib-assistant-message [message]="message" />
+    }
+  }
+</main>
+
+<!--
+  The composer holds the recorder as well as the field, so this is one element and not
+  two branches of a template: the button that records and the button that sends are the
+  same button, and splitting them here is what would let them move (section 4.1).
+-->
+<lib-assistant-composer
+  (send)="send($event)"
+  (spoke)="spoke($event)"
+  [disabled]="composerDisabled()"
+/>

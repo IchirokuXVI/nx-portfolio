@@ -184,6 +184,23 @@ $app-content-max: 480px;
   // The presence dot. No artwork, so it is a token and a CSS circle rather than an
   // icon component and an SVG file.
   --app-dot-size: 6px;
+  // The recording dot beside the elapsed length (plan 0032, section 4.3). Larger than
+  // the presence dot and a token of its own rather than a reuse of it: presence is
+  // ambient information glanced at, and this one says whether the microphone is open,
+  // which somebody has to be able to read while speaking. It is also the only signal
+  // that is not a shape, which is why it is filled while listening and hollow while
+  // paused rather than only a colour.
+  --app-recording-dot-size: 9px;
+  // The ring around the row a chat link came here for (plan 0032, section 8). Not a
+  // hairline: it has to be findable at a glance after the page has just scrolled, which
+  // is a different job from separating two surfaces.
+  --app-mark-ring-width: 2px;
+
+  // The transcript's bubbles. The tail corner is small rather than square, so the
+  // speaker is read from which side the corner is on and not from colour alone.
+  --app-bubble-radius: 18px;
+  --app-bubble-tail-radius: 5px;
+  --app-bubble-max-width: 88%;
 
   // Rows. A list row inside a card is shorter than a standalone line row, because
   // it is a preview of a list rather than a thing being worked on.

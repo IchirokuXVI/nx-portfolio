@@ -39,6 +39,7 @@ import {
 import {
   appPath,
   BrowserFacade,
+  lineQueryOf,
   listIdOf,
   StorageKeys,
   zoneIdOf,
@@ -172,6 +173,25 @@ export class ListPage {
    * true does not change, so the effect would run for the first item and never again.
    */
   private readonly _added = signal(0);
+
+  /**
+   * The line a chat reply linked to, if the URL carried one (plan 0032, section 8).
+   *
+   * Empty on every ordinary arrival, which is almost all of them.
+   */
+  private readonly _requestedLine = lineQueryOf(this._route);
+
+  /** Whichever `?line=` this visit has already dealt with. Not rendered. */
+  private readonly _handledLine = signal<string | null>(null);
+
+  /**
+   * The row drawn with a ring on it, or null.
+   *
+   * Separate from `_handledLine` because the two have different lifetimes: the mark
+   * fades after a few seconds and the URL does not change, so one signal would either
+   * re-mark forever or never mark twice.
+   */
+  readonly markedLine = signal<string | null>(null);
 
   readonly state = computed<ListPageState>(() => {
     const listId = this.listId();
@@ -411,8 +431,65 @@ export class ListPage {
       this._scrollToNewest(column);
     });
 
-    inject(DestroyRef).onDestroy(() => this.announcement.set(''));
+    // A line a chat reply linked to (plan 0032, section 8). It scrolls that row into
+    // view and marks it, and **opens nothing**.
+    //
+    // `afterRenderEffect` because the row has to exist before it can be found, and it
+    // re-runs as the lines land: on a cold arrival the query parameter is known several
+    // hundred milliseconds before there is anything to scroll to.
+    //
+    // An id that matches no row is simply not found, and that one branch covers both
+    // cases the plan asks for: a line that was deleted, and one on a list this caller
+    // can no longer see. A stale link is inert rather than an error, so the page renders
+    // normally and nobody is told off for following a link somebody else sent them.
+    afterRenderEffect(() => {
+      const wanted = this._requestedLine();
+      const column = this._column()?.nativeElement;
+      // Read so this runs again when the rows arrive; the value itself is not used.
+      this.loaded();
+
+      if (wanted === '' || column === undefined) {
+        return;
+      }
+
+      untracked(() => {
+        if (this._handledLine() === wanted) {
+          return;
+        }
+
+        const row = Array.from(
+          column.querySelectorAll<HTMLElement>('[data-line-id]')
+        ).find((candidate) => candidate.dataset['lineId'] === wanted);
+
+        if (row === undefined) {
+          return;
+        }
+
+        this._handledLine.set(wanted);
+        // Centred rather than at the top, because the sticky composer covers the
+        // bottom of the column and a row revealed against the top edge of a list this
+        // long is a row somebody then has to look for anyway.
+        // Optional call: `scrollIntoView` is absent in jsdom and in a server render,
+        // and the mark is worth setting either way. Nothing here is load bearing
+        // enough to fail a navigation over.
+        row.scrollIntoView?.({ block: 'center', behavior: 'auto' });
+        this.markedLine.set(wanted);
+        this._markTimer = setTimeout(
+          () => this.markedLine.set(null),
+          MARK_DURATION_MS
+        );
+      });
+    });
+
+    inject(DestroyRef).onDestroy(() => {
+      this.announcement.set('');
+      if (this._markTimer !== null) {
+        clearTimeout(this._markTimer);
+      }
+    });
   }
+
+  private _markTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Put the end of the list on screen.
@@ -467,6 +544,20 @@ export class ListPage {
   async openAccount(): Promise<void> {
     await this._router.navigateByUrl(
       appPath(this._locale(), this._basePath, 'account')
+    );
+  }
+
+  /**
+   * The assistant (plan 0032), which is what the app bar's second button now does.
+   *
+   * It was `(openSearch)`, unbound here and on two other pages, because there was
+   * never a search page behind it. `appPath` and not a relative navigation for the
+   * reason `openAccount` uses it: this page sits four segments below the mount, and a
+   * sibling of the mount is not a relative distance worth writing down.
+   */
+  async openAssistant(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'assistant')
     );
   }
 
@@ -811,3 +902,12 @@ export class ListPage {
     return this._router.navigate([...path], { relativeTo: this._route });
   }
 }
+
+/**
+ * How long the row a chat link pointed at stays marked.
+ *
+ * Long enough to be found by somebody who looks up slowly, and short enough that it
+ * does not read as a state of the line: the mark says "this is the one you asked
+ * about", and a ring that stayed would start saying something about the item itself.
+ */
+const MARK_DURATION_MS = 4000;

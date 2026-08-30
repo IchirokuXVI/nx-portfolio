@@ -1,0 +1,49 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
+  padding: var(--app-space-8) var(--app-space-6);
+}
+
+.lead {
+  margin: 0 0 var(--app-space-7);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-lg);
+  line-height: var(--app-leading-body);
+}
+
+.examples {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// A card and not a button. Nothing here is pressable, and it must not look pressable:
+// tapping an example would put words in somebody's mouth.
+.example {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding: var(--app-space-5) var(--app-space-6);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+.label {
+  color: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+}
+
+.said {
+  color: var(--app-text-primary);
+  font-size: var(--app-text-lg);
+  line-height: var(--app-leading-body);
+}

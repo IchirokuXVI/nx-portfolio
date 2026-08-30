@@ -74,7 +74,9 @@ interface RowBand {
     <ul class="lines">
       @for (line of lines(); track line.id; let first = $first, last = $last) {
         <li
+          [attr.data-line-id]="line.id"
           [class.lifted]="draggingId() === line.id"
+          [class.marked]="markedId() === line.id"
           [class.shifting]="draggingId() !== null && draggingId() !== line.id"
           [style.transform]="transformOf($index)"
           class="line"
@@ -112,6 +114,16 @@ export class LineList {
 
   /** What the live region currently says. Empty announces nothing. */
   readonly announcement = input('');
+
+  /**
+   * The line a link asked for, marked while somebody finds it (plan 0032, section 8).
+   *
+   * Presentation only, and briefly: it says "this is the one", not "this one is
+   * different". The container decides which and for how long, because it is the thing
+   * that read the URL; `data-line-id` on the row is how it then finds the element to
+   * scroll to, which is a fact about the DOM that only this template can state.
+   */
+  readonly markedId = input<string | null>(null);
 
   readonly ticked = output<string>();
   readonly act = output<{ action: LineRowAction; lineId: string }>();

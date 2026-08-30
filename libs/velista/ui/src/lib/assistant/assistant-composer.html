@@ -1,0 +1,139 @@
+@let state = recorder.state();
+@let recording = recorder.active();
+
+<div class="composer">
+  <!--
+    Both warnings **grow this container and sit at the top of it** (section 4.4).
+    Growing rather than overlaying means nothing is covered and both buttons stay
+    where the hand left them.
+
+    The 5:00 message is required rather than decorative: silence at the limit reads as
+    the app having broken, and whoever has been recording for five minutes is the
+    person least able to work out what happened.
+  -->
+  @if (state === 'stopped') {
+    <p aria-live="polite" class="notice">
+      {{ 'assistant.recorder.limit.reached' | rokuT }}
+      <strong>{{ 'assistant.recorder.limit.pressStop' | rokuT }}</strong>
+    </p>
+  } @else if (recorder.warning()) {
+    <p aria-live="polite" class="notice">
+      {{ 'assistant.recorder.limit.longest' | rokuT }}
+      <strong>{{
+        'assistant.recorder.limit.left'
+          | rokuT: { count: recorder.remainingSeconds() }
+      }}</strong>
+    </p>
+  }
+
+  <!--
+    It did not start. A state and not an alert, and never an unhandled rejection: the
+    microphone was refused, or there is none, or this browser cannot record. All three
+    leave the typed field working, which is the point of saying so here rather than
+    over the whole panel.
+  -->
+  @if (state === 'refused' || state === 'unavailable') {
+    <p class="notice trouble">
+      @if (state === 'refused') {
+        {{ 'assistant.recorder.refused' | rokuT }}
+      } @else {
+        {{ 'assistant.recorder.unavailable' | rokuT }}
+      }
+      <button (click)="dismissRecorderState()" class="dismiss" type="button">
+        {{ 'assistant.recorder.dismiss' | rokuT }}
+      </button>
+    </p>
+  }
+
+  <div class="row">
+    @if (recording) {
+      <!--
+        Pause at the far left and stop at the far right, as far apart as the container
+        allows. They are the only two controls on screen and confusing them costs the
+        whole message, so the distance is the safeguard. The length sits between them
+        and doubles as the separator (section 4.3).
+
+        At 5:00 pause is **disabled** and stop is the only way out, which is what makes
+        the recording held rather than taken.
+      -->
+      <button
+        (click)="pauseOrResume()"
+        [attr.aria-label]="
+          (state === 'paused'
+            ? 'assistant.recorder.resume'
+            : 'assistant.recorder.pause'
+          ) | rokuT
+        "
+        [disabled]="state === 'stopped'"
+        class="control"
+        type="button"
+      >
+        @if (state === 'recording') {
+          <lib-pause-icon class="glyph" />
+        } @else {
+          <lib-play-icon class="glyph" />
+        }
+      </button>
+
+      <!--
+        Filled while listening, hollow while paused. The one signal here that is not a
+        shape, which is why it is never the only one: the button beside it changes
+        between two bars and a triangle at the same moment.
+      -->
+      <span
+        [class.listening]="state === 'recording'"
+        aria-hidden="true"
+        class="dot"
+      ></span>
+
+      <p [class.held]="state !== 'recording'" class="elapsed">
+        {{ elapsed() }}
+      </p>
+    } @else {
+      <!--
+        An ordinary text input with an ordinary submit and no key handling of its own,
+        so the platform keyboard's dictation button writes into it beside the app's
+        microphone rather than instead of it (section 10).
+      -->
+      <form (submit)="onSubmit($event)" class="field-form">
+        <input
+          (input)="onInput($event)"
+          [attr.aria-label]="'assistant.composer.label' | rokuT"
+          [attr.maxlength]="maxLength"
+          [disabled]="disabled()"
+          [placeholder]="'assistant.composer.placeholder' | rokuT"
+          [value]="text()"
+          autocomplete="off"
+          class="field"
+          name="message"
+          type="text"
+        />
+      </form>
+    }
+
+    <!--
+      One slot, three jobs (section 4.1). Same size, same corner, whatever it is: the
+      finger that started a recording ends it without travelling.
+    -->
+    <button
+      (click)="press()"
+      [attr.aria-label]="'assistant.composer.' + button() | rokuT"
+      [class.stop]="button() === 'stop'"
+      [disabled]="disabled() && button() !== 'stop'"
+      class="action"
+      type="button"
+    >
+      @switch (button()) {
+        @case ('send') {
+          <lib-send-icon class="glyph" />
+        }
+        @case ('stop') {
+          <lib-stop-icon class="glyph" />
+        }
+        @default {
+          <lib-mic-icon class="glyph" />
+        }
+      }
+    </button>
+  </div>
+</div>

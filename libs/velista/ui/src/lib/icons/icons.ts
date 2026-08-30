@@ -551,7 +551,19 @@ export class SlashCircleIcon {
   );
 }
 
-/** A speech bubble, for the comment count and the sheet it opens. */
+/**
+ * A speech bubble: the comment count and the sheet it opens, and **the app bar's way
+ * into the assistant** (plan 0032, section 1).
+ *
+ * Two uses and one glyph, which is what that plan's instruction to check whether an
+ * icon already fits before adding another comes out at here: the design's assistant
+ * mark is this bubble, redrawn. A second component with the same artwork would be two
+ * files that have to keep matching for no gain.
+ *
+ * They do not read as the same control despite that. On a row the bubble carries a
+ * count and sits among the line's own affordances; in the app bar it is alone in a slot
+ * that has never held anything else, and both carry their own `aria-label`.
+ */
 @Component({
   selector: 'lib-comment-icon',
   template: TEMPLATE,
@@ -606,5 +618,75 @@ export class SendIcon {
     () =>
       // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
       import('./send-icon.svg?raw')
+  );
+}
+
+/**
+ * The recorder's four glyphs (plan 0032, section 4).
+ *
+ * They are shapes before they are colours, and that is the requirement rather than the
+ * styling: **colour is never the only signal** here. Stop is a square, pause is two
+ * bars, carry on is a triangle, and the microphone is the microphone. Somebody who
+ * cannot tell the amber from the coral still has four distinguishable controls, and
+ * confusing pause with stop costs a whole spoken message.
+ *
+ * Filled rather than stroked, apart from the microphone, because each is read at a
+ * glance in a moving hand at 52px: weight survives being seen badly, and an outline of
+ * a square is a rectangle with a hole in it.
+ */
+@Component({
+  selector: 'lib-mic-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class MicIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./mic-icon.svg?raw')
+  );
+}
+
+@Component({
+  selector: 'lib-stop-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class StopIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./stop-icon.svg?raw')
+  );
+}
+
+@Component({
+  selector: 'lib-pause-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PauseIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./pause-icon.svg?raw')
+  );
+}
+
+/** Carry on after a pause. A triangle, so it is not the pause with a colour swapped. */
+@Component({
+  selector: 'lib-play-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PlayIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./play-icon.svg?raw')
   );
 }

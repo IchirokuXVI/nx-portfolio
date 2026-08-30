@@ -12,6 +12,8 @@ import {
   ZONE_ROLES,
   ZONE_STATUS_FALLBACK,
   ZONE_STATUSES,
+  type AssistantReference,
+  type AssistantReply,
   type Comment,
   type Line,
   type ListAccessEntry,
@@ -522,4 +524,76 @@ function toListAccessEntry(raw: unknown): ListAccessEntry | null {
     membershipId,
     permissions: toListPermissions(raw['permissions']),
   };
+}
+
+/**
+ * `POST /v1/assistant` (backend `0039`, rule A3).
+ *
+ * The text is what the model wrote, and it is rendered as **text**: nothing here
+ * parses it, and nothing downstream renders it as markdown. A reply with no readable
+ * text is unrenderable, so this returns `null` and the panel says the turn failed,
+ * which is honest — an empty bubble is not.
+ *
+ * `references` is the half rule A3 exists for. Every entry the panel draws a link from
+ * came out of a tool result in the same turn, so the target exists and the caller can
+ * see it. That guarantee is only worth anything if a malformed entry is **dropped**
+ * rather than defaulted: a reference missing its `listId` cannot address a list, and
+ * inventing one would produce exactly the 404 the rule is written to prevent. So each
+ * kind requires its own ids and nothing is filled in.
+ */
+export function toAssistantReply(raw: unknown): AssistantReply | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const text = str(raw['text']);
+  if (text === null) {
+    return null;
+  }
+
+  // `heard` is only ever present on a spoken turn, and an empty one is the same as
+  // none: a bubble reading "" is worse than the placeholder it would replace.
+  const heard = strOr(raw['heard'], '');
+
+  return {
+    text,
+    references: mapArray(raw['references'], toAssistantReference),
+    ...(heard === '' ? {} : { heard }),
+  };
+}
+
+function toAssistantReference(raw: unknown): AssistantReference | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  // Unlike every other narrowing in this file, an unrecognised kind has no fallback to
+  // land on. There is no generic reference the panel could link somewhere sensible, so
+  // a kind from a newer backend is dropped and the reply renders with one link fewer.
+  const kind = raw['kind'];
+  const label = strOr(raw['label'], '');
+  const zoneId = str(raw['zoneId']);
+  if (zoneId === null) {
+    return null;
+  }
+
+  if (kind === 'zone') {
+    return { kind, zoneId, label };
+  }
+
+  const listId = str(raw['listId']);
+  if (listId === null) {
+    return null;
+  }
+
+  if (kind === 'list') {
+    return { kind, zoneId, listId, label };
+  }
+
+  const lineId = str(raw['lineId']);
+  if (kind === 'line' && lineId !== null) {
+    return { kind, zoneId, listId, lineId, label };
+  }
+
+  return null;
 }

@@ -2,8 +2,14 @@
   `(account)` is deliberately unbound on this one bar, and it is the only screen where
   that is right: pressing it would navigate to the page it is already on. The button
   stays drawn so the header does not change shape between screens.
+
+  `(openAssistant)` is bound, because that one does go somewhere from here (plan 0032).
 -->
-<lib-app-bar [accountInitial]="accountInitial()" [signedIn]="true" />
+<lib-app-bar
+  (openAssistant)="openAssistant()"
+  [accountInitial]="accountInitial()"
+  [signedIn]="true"
+/>
 
 <!--
   `aria-busy` on the whole page while the delete is out, because there is no partial
@@ -121,13 +127,13 @@
               anywhere in this product (section 9).
             -->
             <lib-account-row
-              [chipTone]="current.emailVerified ? 'ok' : 'pending'"
               [chip]="
                 (current.emailVerified
                   ? 'account.email.confirmed'
                   : 'account.email.unconfirmed'
                 ) | rokuT
               "
+              [chipTone]="current.emailVerified ? 'ok' : 'pending'"
               [divided]="!(!current.emailVerified && resendAvailable)"
               [label]="'account.email.label' | rokuT"
               [value]="email"

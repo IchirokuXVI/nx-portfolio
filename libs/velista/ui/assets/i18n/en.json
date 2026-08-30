@@ -286,9 +286,9 @@
       "newZone": "New group",
       "generateList": "Get shopping list",
       "generateListSoon": "Coming soon",
-      "search": "Search",
       "account": "Your account",
-      "changeLocale": "Change language"
+      "changeLocale": "Change language",
+      "assistant": "Assistant"
     },
     "zoneExplainer": "A group is the household or flatmates you share lists with. You can start without an account.",
     "section": {
@@ -534,5 +534,54 @@
       "gone": "That account no longer exists",
       "failed": "That did not go through. Try again"
     }
+  },
+  "assistant": {
+    "title": "Assistant",
+    "back": "Back",
+    "intro": {
+      "lead": "Tell me what you need. For example:",
+      "add": {
+        "label": "Add to a list",
+        "said": "“Add milk to the flat list”"
+      },
+      "ask": {
+        "label": "Ask about a list",
+        "said": "“Is there milk on the weekly shop?”"
+      },
+      "rename": {
+        "label": "Change your name",
+        "said": "“Call me Marta”"
+      }
+    },
+    "composer": {
+      "label": "Write a message to the assistant",
+      "placeholder": "Write a message",
+      "record": "Record a message",
+      "send": "Send",
+      "stop": "Stop and send",
+      "spoken": "A spoken message"
+    },
+    "recorder": {
+      "pause": "Pause",
+      "resume": "Carry on recording",
+      "refused": "I cannot hear you. The microphone is switched off for this app",
+      "unavailable": "This browser cannot record. You can still type",
+      "dismiss": "Close",
+      "limit": {
+        "longest": "Five minutes is the longest I can listen.",
+        "left_one": "1 second left.",
+        "left_other": "{{count}} seconds left.",
+        "reached": "That is five minutes, so I stopped listening.",
+        "pressStop": "Press stop to send it."
+      }
+    },
+    "busy": {
+      "seconds_one": "second",
+      "seconds_other": "seconds",
+      "body": "A lot of people are asking at once. I will be ready in a moment, and your message is still here.",
+      "noNumber": "A lot of people are asking at once. Try me again in a moment, and your message is still here."
+    },
+    "failed": "That did not reach me. Your message is still here, so try again.",
+    "dropped": "The start of this conversation is too long to keep, so I let it go."
   }
 }

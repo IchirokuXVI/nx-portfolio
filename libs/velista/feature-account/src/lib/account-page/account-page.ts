@@ -212,6 +212,13 @@ export class AccountPage {
     );
   }
 
+  /** The assistant (plan 0032), which is the one app bar button that works from here. */
+  async openAssistant(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'assistant')
+    );
+  }
+
   /** The two sheets, as children of this route (rule E1). */
   openRename(): void {
     void this._router.navigate(['name'], { relativeTo: this._route });
@@ -317,7 +324,10 @@ export class AccountPage {
    * themselves is gone, so a retry would retry forever and the session is over
    * (section 5.9).
    */
-  private _reportFailure(error: unknown, operation: 'auth.forgotPassword'): void {
+  private _reportFailure(
+    error: unknown,
+    operation: 'auth.forgotPassword'
+  ): void {
     const failure = accountFailure(error, operation);
     this.correlationId.set(accountCorrelationId(error));
     this.failure.set({
