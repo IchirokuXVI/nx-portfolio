@@ -1,0 +1,60 @@
+:host {
+  display: block;
+}
+
+.benefits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-6);
+}
+
+.benefit {
+  display: flex;
+  gap: var(--app-space-4);
+  align-items: flex-start;
+}
+
+.glyph {
+  flex: none;
+  margin-block-start: 0.1em;
+  font-size: var(--app-icon-md);
+  // The app's own accent, not the violet status hue. See `install-steps.scss`.
+  color: var(--app-action-quiet-fg);
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+}
+
+.title {
+  font-size: var(--app-text-sm);
+  font-weight: 620;
+  color: var(--app-text-primary);
+}
+
+.body {
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+// The installed screen, where these describe what is already happening rather than
+// arguing for it. Emphasis only: the words do not change (see the `quiet` input).
+.quiet {
+  .glyph {
+    color: var(--app-text-secondary);
+  }
+
+  .title {
+    color: var(--app-text-secondary);
+  }
+
+  .body {
+    color: var(--app-text-muted);
+  }
+}

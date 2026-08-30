@@ -11,7 +11,7 @@
  * `libs/luna-shopper/platform/src/lib/errors/error-codes.ts`.
  */
 
-/** Every error code the gateway can return. Eight, and they map one to one onto status. */
+/** Every error code the gateway can return, mapping one to one onto a status. */
 export const ERROR_CODES = [
   'validation_failed',
   'unauthorized',
@@ -34,6 +34,15 @@ export const ERROR_CODES = [
    * reachable often enough to notice.
    */
   'not_configured',
+  /**
+   * This build predates the oldest one the deployment serves (plan 0034 D9).
+   *
+   * The only code here that is about the app rather than about the request, and the
+   * only one the app answers by acting on its own: `gatewayInterceptor` asks
+   * `AppUpdates` for a new version, and in the normal case the page has reloaded
+   * into it before the user finishes reading whatever was shown.
+   */
+  'client_too_old',
   'internal',
 ] as const;
 

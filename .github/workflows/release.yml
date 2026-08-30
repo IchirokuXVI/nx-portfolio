@@ -217,6 +217,13 @@ jobs:
 
       # One invocation, one container, one Nx cache, so the shared libraries are
       # compiled once for the whole workspace rather than once per image.
+      #
+      # `VELISTA_APP_VERSION` is the release version, with its leading `v` already
+      # stripped by the setup job, and it is the same string the images are tagged
+      # with (velista plan 0034 D4). That identity is the point: a client states this
+      # version on every gateway request, so the version a running client reports is
+      # the version of the image serving it, and `MIN_CLIENT_VERSION` on the gateway
+      # is a floor expressed in the same numbers a rollback is expressed in.
       - name: Build the bundles in the pinned image
         run: |
           docker run --rm \
@@ -227,6 +234,7 @@ jobs:
             -e MFE_REMOTE_URLS="$PROD_MFE_REMOTE_URLS" \
             -e LUNA_GATEWAY_URL="$PROD_LUNA_GATEWAY_URL" \
             -e LUNA_REALTIME_URL="$PROD_LUNA_REALTIME_URL" \
+            -e VELISTA_APP_VERSION="${{ needs.setup.outputs.version }}" \
             "$BUILD_IMAGE" \
             npx nx run-many -t build prune --configuration production \
               --projects "${{ needs.setup.outputs.apps_tobuild }}"

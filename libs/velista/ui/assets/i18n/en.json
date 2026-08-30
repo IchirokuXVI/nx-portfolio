@@ -221,7 +221,10 @@
       "body": "Ask to join, and whoever runs the group lets you in. You will see the group and its lists once they do",
       "codeLabel": "The code in your link",
       "decline": "Not now",
-      "guestNotice": "Asking makes an account on this phone. Add an email to it later so you do not lose it"
+      "guestNotice": "Asking makes an account on this phone. Add an email to it later so you do not lose it",
+      "installAndJoin": "Install and join",
+      "joinOnly": "Join in the browser",
+      "installNote": "Installing keeps Velista on your home screen. Either way you are asking to join the same group"
     },
     "invite": {
       "title": "{{name}} is yours",
@@ -533,6 +536,87 @@
       "badName": "Names are 2 to 40 characters, and can use letters, numbers, spaces and . _ ' -",
       "gone": "That account no longer exists",
       "failed": "That did not go through. Try again"
+    },
+    "app": {
+      "section": "The app",
+      "install": "Install the app",
+      "installDetail": "Keep Velista on your home screen. It opens on its own and works without a signal",
+      "add": "Add it to your home screen",
+      "addDetail": "Three steps, and your browser does the rest",
+      "onThisPhone": "On this phone",
+      "installed": "Installed",
+      "elsewhere": "Get the app",
+      "elsewhereDetail": "Velista has its own address, {{origin}}. That is where it can be installed"
+    }
+  },
+  "install": {
+    "back": "Back",
+    "title": "Keep Velista on your phone",
+    "body": "It sits on your home screen like any other app, opens on its own, and your lists are there when the signal is not",
+    "action": "Install Velista",
+    "note": "Nothing is downloaded from a store. You can remove it the same way you remove any app",
+    "manual": {
+      "reveal": "Prefer to do it by hand?"
+    },
+    "installed": {
+      "title": "Velista is installed",
+      "body": "You are reading this inside the app. It is on your home screen, and it opens without the browser",
+      "done": "Nothing left to do",
+      "reveal": "Not on your home screen? Show the steps",
+      "home": "Back to your groups"
+    },
+    "elsewhere": {
+      "title": "Velista has its own address",
+      "body": "You are reading the portfolio’s copy. Velista is installed at {{origin}}, where it has its own icon and its own name",
+      "action": "Open {{origin}}"
+    },
+    "guide": {
+      "iosSafari": {
+        "heading": "Add it from Safari",
+        "step1": "Tap Share, in the bar at the bottom",
+        "step2": "Scroll down and choose Add to Home Screen",
+        "step3": "Tap Add, at the top right"
+      },
+      "androidMenu": {
+        "heading": "Add it from your browser menu",
+        "step1": "Open the browser menu, usually three dots",
+        "step2": "Choose Install app, or Add to Home screen",
+        "step3": "Confirm, and it lands on your home screen"
+      },
+      "desktopChromium": {
+        "heading": "Add it from the address bar",
+        "step1": "Look at the right hand end of the address bar for the install icon",
+        "step2": "Click it, then Install",
+        "step3": "If it is not there, open the browser menu and look for Install Velista"
+      },
+      "desktopSafari": {
+        "heading": "Add it from Safari",
+        "step1": "Open the File menu",
+        "step2": "Choose Add to Dock",
+        "step3": "Name it, then Add"
+      },
+      "desktopFirefox": {
+        "title": "Firefox cannot keep this as an app",
+        "body": "Not on the desktop. Velista works perfectly in this tab, and if you want the window, open Velista in Chrome, Edge or Safari on this machine and install it there",
+        "bookmark": "Or press Ctrl D to bookmark it and pin the tab. Velista remembers where you were either way"
+      }
+    },
+    "benefit": {
+      "fullscreen": {
+        "title": "The whole screen",
+        "body": "No address bar, no tabs. Just the lists"
+      },
+      "oneTap": {
+        "title": "One tap from the home screen",
+        "body": "Beside everything else you open without thinking"
+      },
+      "offline": {
+        "title": "Opens without a signal",
+        "body": "The last list you looked at is still readable in the shop"
+      }
+    },
+    "announce": {
+      "ready": "Your browser can install Velista. The button is at the top of the page"
     }
   },
   "assistant": {

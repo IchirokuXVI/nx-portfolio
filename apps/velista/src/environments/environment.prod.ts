@@ -30,8 +30,26 @@ import { AppApiConfig } from '@portfolio/velista/models';
  */
 declare const process: { env: Record<string, string | undefined> };
 
-export const environment: { production: boolean; api: AppApiConfig } = {
+export const environment: {
+  production: boolean;
+  version: string;
+  api: AppApiConfig;
+  appUrl: string;
+} = {
   production: true,
+  /**
+   * The build's identity, sent as `x-client-version` on every gateway request so a
+   * deployment can retire clients that are too old to serve (plan 0034 D4).
+   *
+   * CI sets it to the same string it passes as `DOCKER_IMAGE_TAG`, which for a
+   * release is the version and for staging is `staging`. Unset it defaults to
+   * `0.0.0-dev`, so a production build made on a developer machine identifies
+   * itself as what it is rather than impersonating a release.
+   */
+  version: process.env['VELISTA_APP_VERSION'] as string,
+  // The app's own origin (plan 0033 D10), which differs between staging and
+  // production exactly as the two backend URLs do, and arrives the same way.
+  appUrl: process.env['VELISTA_APP_URL'] as string,
   api: {
     gatewayBaseUrl: process.env['LUNA_GATEWAY_URL'] as string,
     realtimeBaseUrl: process.env['LUNA_REALTIME_URL'] as string,

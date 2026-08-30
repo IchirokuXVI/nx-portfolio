@@ -8,8 +8,14 @@ import {
 } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
-import { CORRELATION_ID_HEADER } from '@portfolio/velista/models';
-import { ConnectionState } from '@portfolio/velista/platform';
+import {
+  APP_VERSION,
+  CLIENT_VERSION_HEADER,
+  CORRELATION_ID_HEADER,
+  isOlderThan,
+  MIN_CLIENT_VERSION_HEADER,
+} from '@portfolio/velista/models';
+import { AppUpdates, ConnectionState } from '@portfolio/velista/platform';
 import {
   catchError,
   from,
@@ -23,7 +29,7 @@ import { ApiUrl } from './api-url';
 import { OPERATION, SKIP_AUTH } from './auth/http-context';
 import { TokenStore } from './auth/token-store';
 import { newCorrelationId } from './correlation-id';
-import { NetworkError, toGatewayError } from './errors';
+import { GatewayError, NetworkError, toGatewayError } from './errors';
 
 /**
  * Every outgoing header is decided here. Nothing is set at a call site.
@@ -34,8 +40,16 @@ import { NetworkError, toGatewayError } from './errors';
  * 2. `Authorization`, from a token that has been refreshed if it needed it.
  * 3. `Accept-Language`, which is what makes the backend's error catalog translate.
  * 4. `x-correlation-id`, minted client side.
- * 5. `traceparent`, when backend plan `0016` lands. Not built yet.
- * 6. On failure, a typed error, a single 401 retry, and a report to `ConnectionState`.
+ * 5. `x-client-version`, so the deployment can tell how old this build is.
+ * 6. `traceparent`, when backend plan `0016` lands. Not built yet.
+ * 7. On failure, a typed error, a single 401 retry, and a report to `ConnectionState`.
+ *
+ * It is also where the gateway's answer about *this build* is read (velista plan
+ * 0034, section 5): an advertised floor above this version, or a `client_too_old`
+ * refusal, asks `AppUpdates` for a new version. Both reactions are that call and
+ * nothing more. The interceptor never reloads, per D7, because a reload taken on the
+ * server's word alone would repeat forever in the window between a deployment moving
+ * its floor and the new bundle being reachable.
  */
 export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
   const urls = inject(ApiUrl);
@@ -50,6 +64,17 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
   const tokens = inject(TokenStore);
   const i18n = inject(RokuTranslatorService);
   const connection = inject(ConnectionState);
+  const updates = inject(AppUpdates);
+  const version = inject(APP_VERSION);
+
+  // Stamped here rather than in `decorate`, and that is the one header that is.
+  // `retryAfterRefresh` builds the second attempt from this request, so a header put
+  // on it survives into the retry without threading the value through a function that
+  // already takes seven arguments. Everything `decorate` sets is per attempt; this is
+  // a property of the build and is the same on both.
+  const stamped = req.clone({
+    setHeaders: { [CLIENT_VERSION_HEADER]: version },
+  });
 
   const correlationId = newCorrelationId();
   const operation = req.context.get(OPERATION);
@@ -70,7 +95,7 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
 
   return accessToken$.pipe(
     switchMap((token) =>
-      send(next, decorate(req, token, i18n.getLocale(), correlationId))
+      send(next, decorate(stamped, token, i18n.getLocale(), correlationId))
     ),
     // Any response at all, including a 500 or a 503, proves the network works.
     tap({ next: (event) => reportIfResponse(event, connection) }),
@@ -91,7 +116,7 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
 
       if (error.status === 401 && !skipAuth) {
         return retryAfterRefresh(
-          req,
+          stamped,
           next,
           tokens,
           i18n.getLocale(),
@@ -104,9 +129,57 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
       return throwError(() =>
         toGatewayError(error.error, error.status, correlationId)
       );
+    }),
+    // **After** the `catchError`, so both the first attempt and the refreshed retry
+    // pass through it and neither `retryAfterRefresh` nor `decorate` grows an
+    // argument for it. `tap` re-throws, so the error a caller sees is unchanged.
+    tap({
+      next: (event) => noticeAdvertisedFloor(event, updates, version),
+      error: (error: unknown) => noticeRefusal(error, updates),
     })
   );
 };
+
+/**
+ * The deployment advertises the oldest build it serves on every response
+ * (plan 0034 D8). When this one is older, ask for a new version.
+ *
+ * This is the reaction that does the work in practice: a client learns it is behind
+ * from whatever it happened to request, within one round trip of the deploy, rather
+ * than waiting for the next resume or the next half hour.
+ *
+ * Readable at all only because the gateway names the header in `exposedHeaders`. A
+ * cross origin response exposes nothing else, so before that it was there and
+ * invisible, which is the failure this would have had with no symptom.
+ */
+function noticeAdvertisedFloor(
+  event: HttpEvent<unknown>,
+  updates: AppUpdates,
+  version: string
+): void {
+  if (!(event instanceof HttpResponse)) {
+    return;
+  }
+
+  // False whenever either side fails to parse, so a development build and a staging
+  // one never act on this (plan 0034 D6).
+  if (isOlderThan(version, event.headers.get(MIN_CLIENT_VERSION_HEADER))) {
+    updates.checkNow();
+  }
+}
+
+/**
+ * A refusal aimed at the build rather than at the request or the user.
+ *
+ * The same reaction as an advertised floor, and no more than that: `checkNow` may
+ * find nothing, in which case the app keeps running on what it has and the error
+ * travels on to the caller to be rendered like any other.
+ */
+function noticeRefusal(error: unknown, updates: AppUpdates): void {
+  if (error instanceof GatewayError && error.code === 'client_too_old') {
+    updates.checkNow();
+  }
+}
 
 /**
  * One retry, and only one.

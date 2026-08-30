@@ -36,6 +36,9 @@ data:
   # Comma-separated platform-admin (app owner) user ids allowed to write the
   # catalog (plan 0012). Empty by default so no one can write until it is set.
   PLATFORM_ADMIN_USER_IDS: {{ $cfg.platformAdminUserIds | default "" | quote }}
+  # The oldest velista build the gateway serves (velista plan 0034). Empty is the
+  # resting value and switches it off entirely: no floor advertised, nobody refused.
+  MIN_CLIENT_VERSION: {{ $cfg.minClientVersion | default "" | quote }}
   # Telemetry (plan 0016, section 7). Tracing is off by default because there is
   # no collector in this cluster yet (section 8); with no endpoint a service
   # constructs no exporter and attempts no network call, so it runs exactly as it

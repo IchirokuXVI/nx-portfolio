@@ -87,6 +87,18 @@ export class NotConfiguredException extends DomainException {
 }
 
 /**
+ * The caller's build is older than the oldest this deployment serves (velista plan
+ * 0034, D9).
+ *
+ * Renders as 426. Thrown only by `MinClientVersionGuard`, and only when the caller
+ * identified itself with a version that parses *and* sorts below the configured
+ * floor: an unrecognisable version, or no version at all, is never refused.
+ */
+export class ClientTooOldException extends DomainException {
+  readonly code = ERROR_CODES.CLIENT_TOO_OLD;
+}
+
+/**
  * Too many attempts. Carries the wait so the client can count it down (plan 0021,
  * section 2.2). The seconds travel in {@link DomainException.details} under
  * {@link RETRY_AFTER_SECONDS_DETAIL}, and the exception filter lifts them onto the

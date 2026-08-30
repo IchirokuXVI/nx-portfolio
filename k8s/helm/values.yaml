@@ -278,6 +278,20 @@ lunaShopperBackend:
     # Comma-separated user ids allowed to write the catalog (plan 0012). Set to
     # the app owner's registered user id; empty means no one can write.
     platformAdminUserIds: ''
+    # The oldest velista build this deployment will serve (velista plan 0034).
+    #
+    # Empty switches the mechanism off, which is how both clusters run: the gateway
+    # advertises no floor and refuses nobody. Set it to a released version, and the
+    # same numbers a rollback is expressed in, when a client old enough to send
+    # requests that mean the wrong thing is worth retiring. Clients then read the
+    # floor off any response, fetch the new bundle and reload themselves, and one
+    # that is still below it is answered `client_too_old` (426).
+    #
+    # Two things to know before setting it. A non semver value fails the gateway at
+    # boot on purpose, so this cannot be quietly wrong. And staging builds identify
+    # themselves as `staging`, which is not a version, so a floor set on the staging
+    # cluster retires nothing there.
+    minClientVersion: ''
     # Telemetry (plan 0016). Tracing stays off until a collector exists in the
     # cluster (section 8): with no endpoint no exporter is constructed and no
     # network call is attempted, so the services run exactly as they do today.

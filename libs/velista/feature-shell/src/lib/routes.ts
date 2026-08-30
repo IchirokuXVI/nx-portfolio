@@ -467,6 +467,23 @@ export const AppShellRoutes: Route[] = [
               ),
           },
           {
+            // Installing the app (plan 0033). A route rather than a sheet, by the same
+            // test `0009` section 4.1 used and `0015` applied: it is deep linkable, it
+            // is somewhere a person goes deliberately, and it is the URL you would put
+            // in a message.
+            //
+            // **Public, and deliberately so.** The whole point of a link is that it can
+            // be sent to somebody who has never signed in, and the page makes no
+            // request of any kind. `routes.spec.ts` asserts the absent guard, because
+            // an absent guard is easy to read as an oversight and this one is a
+            // decision.
+            path: 'install',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-install').then(
+                (m) => m.InstallPage
+              ),
+          },
+          {
             // A cold arrival on somebody else's invite link, and the one way in that is
             // not a sheet: there is no page underneath to cover (plan 0008, section 4.1).
             // Public, because the whole point is that the recipient has no account.

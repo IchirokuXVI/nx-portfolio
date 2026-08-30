@@ -22,7 +22,14 @@ import {
   type FakeZoneStore,
 } from '@portfolio/velista/data-access';
 import type { MyZone, ProfileLoad, ZoneRole } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  InstallStore,
+  provideFakeBrowserFacade,
+  provideVelistaTesting,
+  TEST_BRAND,
+  type InstallState,
+} from '@portfolio/velista/platform';
+import { APP_STANDALONE_ORIGIN } from '@portfolio/velista/models';
 import { of } from 'rxjs';
 import { AccountPage } from './account-page';
 
@@ -49,6 +56,12 @@ function zone(id: string, myRole: ZoneRole): MyZone {
 
 interface Options {
   readonly guest?: boolean;
+  /** Which mount this copy is running under. `''` is velista's own origin. */
+  readonly basePath?: string;
+  /** What the browser has said about installing (plan 0033). */
+  readonly install?: InstallState;
+  /** The address of the standalone origin, or empty for none configured. */
+  readonly standaloneOrigin?: string;
   readonly username?: string;
   readonly email?: string | null;
   readonly emailVerified?: boolean;
@@ -68,6 +81,8 @@ async function render(options: Options = {}): Promise<{
   zones: FakeZoneStore;
   tokens: TokenStore;
   router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
+  install: { prompt: jest.Mock };
+  opened: string[];
 }> {
   TestBed.resetTestingModule();
 
@@ -93,10 +108,34 @@ async function render(options: Options = {}): Promise<{
 
   const map = convertToParamMap({});
 
+  // The install store is faked rather than driven through window events, because what
+  // this screen is about is the **row each state draws**, not how the state was
+  // reached. `install-store.spec.ts` owns the second question (plan 0033, section 8).
+  const install = {
+    prompt: jest.fn().mockResolvedValue('accepted'),
+  };
+  const opened: string[] = [];
+
   await TestBed.configureTestingModule({
     imports: [AccountPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
-      provideVelistaTesting({ basePath: '/velista' }),
+      provideVelistaTesting({ basePath: options.basePath ?? '/velista' }),
+      provideFakeBrowserFacade(undefined, {
+        openExternal: (url: string) => void opened.push(url),
+      }),
+      {
+        provide: APP_STANDALONE_ORIGIN,
+        useValue: options.standaloneOrigin ?? 'https://velista.app',
+      },
+      {
+        provide: InstallStore,
+        useValue: {
+          ...install,
+          state: signal<InstallState>(options.install ?? 'manual'),
+          guide: signal('android-menu'),
+          canPrompt: signal(options.install === 'ready'),
+        },
+      },
       // The **real** `TokenStore`, because sign out is a fact about it: this screen
       // clears the pair itself, there being no logout endpoint (section 5.5), and a
       // double would let that assertion pass against a method name. It needs an
@@ -139,6 +178,8 @@ async function render(options: Options = {}): Promise<{
     zones,
     tokens: TestBed.inject(TokenStore),
     router,
+    install,
+    opened,
   };
 }
 
@@ -451,6 +492,128 @@ describe('AccountPage', () => {
       expect(
         fixture.nativeElement.querySelector('lib-app-bar .avatar')?.textContent
       ).toContain('I');
+    });
+  });
+
+  /**
+   * The app row, in its four forms (plan 0033, section 4.2 and section 8).
+   *
+   * The label is the **answer** rather than an invitation, so each form is asserted by
+   * the words it puts on the row, which is the whole of what differs between them.
+   */
+  describe('the app row', () => {
+    const STANDALONE = { basePath: '' } as const;
+
+    it('is drawn for everybody, in both modes and for a guest', async () => {
+      // A portfolio visitor reading this page is precisely somebody who might want the
+      // real thing, and installing has nothing to do with who you are.
+      for (const options of [
+        {},
+        { guest: true },
+        { ...STANDALONE },
+        { ...STANDALONE, guest: true },
+      ]) {
+        const { fixture } = await render(options);
+        expect(text(fixture)).toContain('account.app.section');
+      }
+    });
+
+    it('offers the install directly when a prompt is in hand', async () => {
+      const { fixture } = await render({ ...STANDALONE, install: 'ready' });
+
+      expect(rowWith(fixture, 'account.app.install')).toBeDefined();
+      expect(text(fixture)).not.toContain('account.app.add');
+    });
+
+    it('installs from the row itself rather than navigating', async () => {
+      // The one row in this app that performs a browser action. A captured prompt's
+      // whole value is that it removes the trip.
+      const { fixture, install, router } = await render({
+        ...STANDALONE,
+        install: 'ready',
+      });
+
+      (rowWith(fixture, 'account.app.install') as HTMLElement)
+        .querySelector('button')
+        ?.click();
+      await fixture.whenStable();
+
+      expect(install.prompt).toHaveBeenCalled();
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('sends somebody with no prompt to the page that has the steps', async () => {
+      const { fixture, install, router } = await render({
+        ...STANDALONE,
+        install: 'manual',
+      });
+
+      expect(rowWith(fixture, 'account.app.add')).toBeDefined();
+
+      (rowWith(fixture, 'account.app.add') as HTMLElement)
+        .querySelector('button')
+        ?.click();
+      await fixture.whenStable();
+
+      expect(install.prompt).not.toHaveBeenCalled();
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/en/install');
+    });
+
+    it('states that it is installed, and does not draw a control (D7)', async () => {
+      // A statement, not a disabled button: a disabled control invites a reader to
+      // work out why, and a statement does not.
+      const { fixture } = await render({ ...STANDALONE, install: 'installed' });
+
+      const row = rowWith(fixture, 'account.app.installed');
+      expect(row).toBeDefined();
+      expect(row?.querySelector('button')).toBeNull();
+      // The product's own name, from the brand provider, never a literal (rule N1).
+      expect(row?.textContent).toContain(TEST_BRAND.name);
+    });
+
+    it('says it with a word rather than a colour', async () => {
+      // The chip's text is what carries the message; the tone only agrees with it.
+      // Same shape `0015` gave the confirmed email (section 7).
+      const { fixture } = await render({ ...STANDALONE, install: 'installed' });
+
+      const chip = rowWith(fixture, 'account.app.installed')?.querySelector(
+        '.chip'
+      );
+      expect(chip?.textContent).toContain('account.app.installed');
+      expect(chip?.classList).toContain('ok');
+    });
+
+    it('points at the app’s own origin when mounted, and never prompts', async () => {
+      // Rule I5. Under the portfolio's shell an install installs the portfolio.
+      const { fixture, install, opened } = await render({
+        basePath: '/velista',
+        install: 'ready',
+      });
+
+      expect(rowWith(fixture, 'account.app.elsewhere')).toBeDefined();
+      expect(text(fixture)).not.toContain('account.app.install');
+
+      (rowWith(fixture, 'account.app.elsewhere') as HTMLElement)
+        .querySelector('button')
+        ?.click();
+      await fixture.whenStable();
+
+      expect(install.prompt).not.toHaveBeenCalled();
+      expect(opened).toEqual(['https://velista.app']);
+    });
+
+    it('does not offer a link to nowhere when no origin is configured', async () => {
+      // The token's default is the empty string, meaning unknown, which is what a
+      // server render and a spec get.
+      const { fixture, opened } = await render({
+        basePath: '/velista',
+        standaloneOrigin: '',
+      });
+
+      const row = rowWith(fixture, 'account.app.elsewhere');
+      expect(row).toBeDefined();
+      expect(row?.querySelector('button')).toBeNull();
+      expect(opened).toEqual([]);
     });
   });
 });

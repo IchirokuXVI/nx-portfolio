@@ -30,6 +30,7 @@ export * from './lib/localization/locale';
 
 // Versioning & docs
 export * from './lib/swagger/swagger';
+export * from './lib/versioning/client-version';
 export * from './lib/versioning/versioning';
 
 // Validation

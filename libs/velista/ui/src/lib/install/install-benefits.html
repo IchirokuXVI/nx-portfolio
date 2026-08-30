@@ -1,0 +1,27 @@
+<ul [class.quiet]="quiet()" class="benefits">
+  <li class="benefit">
+    <lib-fullscreen-icon aria-hidden="true" class="glyph" />
+    <span class="lines">
+      <span class="title">{{
+        'install.benefit.fullscreen.title' | rokuT
+      }}</span>
+      <span class="body">{{ 'install.benefit.fullscreen.body' | rokuT }}</span>
+    </span>
+  </li>
+
+  <li class="benefit">
+    <lib-phone-icon aria-hidden="true" class="glyph" />
+    <span class="lines">
+      <span class="title">{{ 'install.benefit.oneTap.title' | rokuT }}</span>
+      <span class="body">{{ 'install.benefit.oneTap.body' | rokuT }}</span>
+    </span>
+  </li>
+
+  <li class="benefit">
+    <lib-signal-icon aria-hidden="true" class="glyph" />
+    <span class="lines">
+      <span class="title">{{ 'install.benefit.offline.title' | rokuT }}</span>
+      <span class="body">{{ 'install.benefit.offline.body' | rokuT }}</span>
+    </span>
+  </li>
+</ul>

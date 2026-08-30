@@ -1,0 +1,95 @@
+:host {
+  display: block;
+}
+
+.card {
+  padding: var(--app-space-6);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+.heading {
+  margin: 0 0 var(--app-space-5);
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+
+  &.last {
+    margin-block-end: 0;
+  }
+}
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.step {
+  display: flex;
+  gap: var(--app-space-4);
+  align-items: flex-start;
+}
+
+// The number is drawn rather than left to the list marker, so it keeps its own
+// counter ring in both themes. The list is still an `<ol>`, so the position a screen
+// reader announces comes from the element and not from this.
+.number {
+  flex: none;
+  inline-size: var(--app-space-7);
+  block-size: var(--app-space-7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--app-radius-full);
+  // The tint and the ink `InviteCard` already pairs: the attention fill is violet and
+  // the ink on it is the amber action colour. Taking the attention *foreground* here
+  // would make the whole screen violet, which is the status hue and not the app's.
+  background: var(--app-status-attention-bg);
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-xs);
+  font-weight: 700;
+}
+
+.words {
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+}
+
+// A picture of the control the words just named, sitting with the line rather than
+// replacing any of it. Never the only description of a step (section 7).
+.inline-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-space-7);
+  block-size: var(--app-space-7);
+  margin-inline-start: var(--app-space-2);
+  vertical-align: -0.35em;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-status-neutral-bg);
+  color: var(--app-text-secondary);
+
+  // Safari's Share button is blue on the device, and the whole value of this glyph is
+  // that it looks like the thing somebody is hunting for in a toolbar.
+  &.ios {
+    background: var(--app-status-info-bg);
+    color: var(--app-status-info-fg);
+  }
+}
+
+.glyph {
+  font-size: var(--app-icon-sm);
+}

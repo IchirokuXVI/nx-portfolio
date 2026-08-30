@@ -47,6 +47,13 @@ export const ERROR_CATALOG: Record<
     en: 'That sign in method is not available on this server.',
     es: 'Ese método de inicio de sesión no está disponible en este servidor.',
   },
+  // Phrased as something that is being fixed rather than something to go and do,
+  // because in the normal case the client has already started updating itself by
+  // the time this is on screen (velista plan 0034, D9).
+  [ERROR_CODES.CLIENT_TOO_OLD]: {
+    en: 'This version of the app is out of date. It is updating itself now.',
+    es: 'Esta versión de la aplicación está obsoleta. Se está actualizando ahora.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

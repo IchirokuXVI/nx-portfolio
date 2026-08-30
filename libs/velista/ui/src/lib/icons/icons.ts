@@ -622,7 +622,7 @@ export class SendIcon {
 }
 
 /**
- * The recorder's four glyphs (plan 0032, section 4).
+ * The dictation's four glyphs (plan 0032, section 4).
  *
  * They are shapes before they are colours, and that is the requirement rather than the
  * styling: **colour is never the only signal** here. Stop is a square, pause is two
@@ -688,5 +688,104 @@ export class PlayIcon {
     () =>
       // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
       import('./play-icon.svg?raw')
+  );
+}
+
+/**
+ * The five glyphs the install screens draw (plan 0033).
+ *
+ * `libs/shared/ui` already has a `download-icon`, and CLAUDE.md says to look there
+ * first, which is what happened: it is a filled glyph in the older four file pattern,
+ * with an `@Input` for its colour and no `:host` sizing, so putting it beside these
+ * would leave two icon languages on one card. The note at the top of this file already
+ * records that split, and moving the whole set is still its own change.
+ *
+ * Every one of them is decorative. Each step names the control in words, because the
+ * person the steps are written for is exactly the person who cannot see the glyph
+ * (section 7).
+ */
+@Component({
+  selector: 'lib-install-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class InstallIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./install-icon.svg?raw')
+  );
+}
+
+/**
+ * Apple's Share glyph, the box with the arrow leaving it.
+ *
+ * Distinct from `ShareIcon`, which is three linked nodes and means sharing an invite.
+ * This one is not a metaphor: it is a picture of the button somebody has to find in
+ * Safari's toolbar, and the iOS steps are much harder to follow without it.
+ */
+@Component({
+  selector: 'lib-share-ios-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class ShareIosIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./share-ios-icon.svg?raw')
+  );
+}
+
+/** Four corners pushing outwards: the whole screen, with no browser around it. */
+@Component({
+  selector: 'lib-fullscreen-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class FullscreenIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./fullscreen-icon.svg?raw')
+  );
+}
+
+/** A handset: one tap from the home screen. */
+@Component({
+  selector: 'lib-phone-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PhoneIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./phone-icon.svg?raw')
+  );
+}
+
+/**
+ * The signal arcs, drawn whole.
+ *
+ * Deliberately not `OfflineIcon`, which is the same arcs struck through and means
+ * something is wrong. This sits beside a benefit, and a warning glyph on a benefit
+ * reads as the opposite of what the line says.
+ */
+@Component({
+  selector: 'lib-signal-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class SignalIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./signal-icon.svg?raw')
   );
 }

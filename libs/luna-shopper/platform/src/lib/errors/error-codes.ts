@@ -24,6 +24,17 @@ export const ERROR_CODES = {
    * others because the caller did nothing wrong and retrying will not help.
    */
   NOT_CONFIGURED: 'not_configured',
+  /**
+   * The caller's build predates the oldest one this deployment serves (velista
+   * plan 0034, D9).
+   *
+   * Like {@link NOT_CONFIGURED} this is not the caller's fault, but unlike it the
+   * caller can fix it, and in the normal case already has: the client reacts by
+   * asking its service worker for a new version and reloading into it. Distinct
+   * from every other code because it says nothing about *this* request, which may
+   * have been perfectly well formed. It says the client that sent it is retired.
+   */
+  CLIENT_TOO_OLD: 'client_too_old',
   INTERNAL: 'internal',
 } as const;
 
@@ -46,5 +57,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // which contradicts keeping it in the published document. 501 is exactly "this
   // server does not implement that", which is the truth.
   [ERROR_CODES.NOT_CONFIGURED]: HttpStatus.NOT_IMPLEMENTED,
+  // 426 rather than 400 or 403. The request may have been valid and the caller may
+  // be perfectly authorised; what is wrong is the software that sent it, and
+  // "Upgrade Required" is the one status that says exactly that.
+  [ERROR_CODES.CLIENT_TOO_OLD]: HttpStatus.UPGRADE_REQUIRED,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };
