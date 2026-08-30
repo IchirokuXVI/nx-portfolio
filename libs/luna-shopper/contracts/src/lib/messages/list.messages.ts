@@ -1,4 +1,5 @@
 import type {
+  CommentTranscription,
   LineApprovalStatus,
   LineStatus,
   ListPermission,
@@ -32,6 +33,22 @@ export const LINE_PATTERNS = {
 export const COMMENT_PATTERNS = {
   add: 'comment.add',
   list: 'comment.list',
+  /**
+   * A comment that is a recording (plan 0045). Its own subject rather than a
+   * second shape on `comment.add`, for the reason section 3 gives about the
+   * route: the typed path is the busiest write in the product and it is left
+   * untouched.
+   */
+  addVoice: 'comment.addVoice',
+  /** The bytes back, gated on `READ` of the comment's list (plan 0045, section 5). */
+  getAudio: 'comment.getAudio',
+  /**
+   * The transcript, once the assistant has produced one (plan 0045, section 4.1).
+   *
+   * Called by the gateway after it has already answered the caller, which is what
+   * makes a provider outage cost a transcript and never a message.
+   */
+  setTranscription: 'comment.setTranscription',
 } as const;
 
 /** The counts shown alongside a full list (plan 0017, section 3.4). */
@@ -111,12 +128,52 @@ export interface LineView {
   updatedAt: string;
 }
 
+/**
+ * What a recording on a comment weighs and how long it runs (plan 0045).
+ *
+ * It lives on the comment and not on the audio row, so a comment listing can draw
+ * a player without the bytes ever entering the query: the whole point of keeping
+ * `comment_audio` in its own table (section 2).
+ */
+export interface CommentRecording {
+  /** What the browser recorded in, from the accepted list. */
+  contentType: string;
+  /** The stored size. The only number anything enforces on. */
+  byteLength: number;
+  /**
+   * What the client said it lasts, or null when it said nothing.
+   *
+   * **Never trusted** (section 6). It is metadata for drawing a row before the
+   * file is fetched; nothing authorizes on it and nothing rejects on it.
+   */
+  durationSeconds: number | null;
+}
+
 export interface CommentView {
   id: string;
   lineId: string;
   authorUserId: string;
+  /**
+   * The comment's text, which for a voice comment is its transcript.
+   *
+   * **It can be empty**, which every reader has to hold (plan 0045, section 4.2):
+   * a comment whose transcription failed is a valid comment, and the client draws
+   * a neutral phrase in its place rather than an empty bubble.
+   */
   body: string;
+  /** The recording, when this comment is one. Null for a typed comment. */
+  recording: CommentRecording | null;
+  /** How far the transcript got. Null for a typed comment, which has no transcript. */
+  transcription: CommentTranscription | null;
   createdAt: string;
+}
+
+/** The bytes, base64 encoded for the broker (plan 0045, section 3). */
+export interface CommentAudioView {
+  commentId: string;
+  contentType: string;
+  /** Base64. It is decoded once, at the gateway, on the way to the caller. */
+  audio: string;
 }
 
 export interface CreateListRequest {
@@ -240,6 +297,90 @@ export interface AddCommentRequest {
 export interface ListCommentsRequest extends PageQuery {
   userId: string;
   lineId: string;
+}
+
+/**
+ * Leave a comment that is a recording (plan 0045, section 4).
+ *
+ * There is no `body`: the transcript arrives later through
+ * {@link COMMENT_PATTERNS.setTranscription}, and a comment with no body is a
+ * valid comment in the meantime. Sending a guess at the words here would be the
+ * one thing section 4 forbids.
+ */
+export interface AddVoiceCommentRequest {
+  userId: string;
+  lineId: string;
+  /** Base64, because this crosses the broker (plan 0041, section 4.2). */
+  audio: string;
+  contentType: string;
+  /** What the client claims it lasts, or null. Metadata only (section 6). */
+  durationSeconds: number | null;
+}
+
+export interface GetCommentAudioRequest {
+  userId: string;
+  commentId: string;
+}
+
+/**
+ * Fill in a voice comment's transcript, or record that it has none.
+ *
+ * `userId` is the comment's author and core checks it, so this cannot be used to
+ * write words into somebody else's message even from inside the cluster. It only
+ * ever moves a comment out of {@link CommentTranscription.PENDING}: a second call
+ * on a settled comment changes nothing, which makes the gateway's retry safe.
+ */
+export interface SetCommentTranscriptionRequest {
+  userId: string;
+  commentId: string;
+  /** Empty for every state but {@link CommentTranscription.READY}. */
+  body: string;
+  transcription: CommentTranscription;
+}
+
+/**
+ * What a deployment accepts for a voice comment, unless its configuration says
+ * otherwise (plan 0045, section 6; plan 0041, section 3.3).
+ *
+ * These are the defaults and the single place the numbers are written down; the
+ * gateway and core both read their own configuration and fall back to here, so a
+ * deployment can tighten them and neither service can hold a different idea of
+ * what the other enforces.
+ *
+ * The list is what browsers actually produce through `MediaRecorder` (Chrome
+ * gives WebM/Opus and will not negotiate Ogg, Firefox gives Ogg/Opus, Safari
+ * gives MP4/AAC) plus the plain containers a provider documents. Anything else is
+ * refused with a sentence rather than a stack trace, because "your browser
+ * recorded in a format we cannot read" is a real thing that happens on some
+ * device nobody tested.
+ *
+ * Parameters are stripped before the check, so `audio/webm;codecs=opus` is
+ * `audio/webm`. The codec inside the container is not something this layer can
+ * verify from a header anyway, so matching on it would be theatre.
+ */
+export const VOICE_COMMENT_CONTENT_TYPES: readonly string[] = [
+  'audio/webm',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/aac',
+  'audio/flac',
+] as const;
+
+/**
+ * The byte cap, matching plan 0041's ceiling so one number governs both voice
+ * features. Speech grade Opus is roughly two kilobytes a second, so this is a
+ * long way past the sixty seconds velista 0039 lets somebody record.
+ *
+ * Enforced twice, at the multipart interceptor and again in core, for plan 0041
+ * section 5's reason: a cap that is not on the interceptor is not a cap.
+ */
+export const VOICE_COMMENT_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Normalises a content type for the allowlist check: lowercase, no parameters. */
+export function baseContentType(value: string): string {
+  return (value.split(';')[0] ?? '').trim().toLowerCase();
 }
 
 export type ListPage = Paginated<ListView>;

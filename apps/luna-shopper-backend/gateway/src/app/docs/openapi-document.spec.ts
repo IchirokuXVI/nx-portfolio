@@ -87,6 +87,26 @@ function operationsOf(document: OpenAPIObject): Operation[] {
 const isSuccess = (status: string) => status.startsWith('2');
 const isRedirect = (status: string) => status.startsWith('3');
 
+/**
+ * The routes whose success body is bytes rather than a contract shape.
+ *
+ * There is one (plan 0045, section 5), and it is listed by name for the same
+ * reason the two Google redirects are: a rule that let *any* route opt out of
+ * documenting its response would be a rule that stops catching the mistake it
+ * exists for, which is a controller added without `@ApiContractResponse`.
+ *
+ * A comment's recording has no JSON to describe. It is documented with an
+ * `audio/*` content entry instead, which the assertion below checks is really
+ * there rather than taking the exemption on trust.
+ */
+const BYTE_BODY_ROUTES = ['GET /v1/comments/{id}/audio'];
+
+const routeOf = (operation: Operation) =>
+  `${operation.method.toUpperCase()} ${operation.path}`;
+
+const answersBytes = (operation: Operation) =>
+  BYTE_BODY_ROUTES.includes(routeOf(operation));
+
 /** The schema a response body is documented with, if it has one. */
 function schemaOf(response: Operation['responses'][string]): unknown {
   const content = response.content ?? {};
@@ -184,6 +204,7 @@ describe('gateway OpenAPI document', () => {
         .filter(
           (operation) => !Object.keys(operation.responses).some(isRedirect)
         )
+        .filter((operation) => !answersBytes(operation))
         .map((operation) => {
           const status = Object.keys(operation.responses).find(isSuccess);
           const schema = status
@@ -199,6 +220,24 @@ describe('gateway OpenAPI document', () => {
         })
         .filter((entry) => !entry.resolved);
       expect(undocumented).toEqual([]);
+    });
+
+    it('and the one route answering bytes says so, and is the only one', () => {
+      // The exemption above is only honest if the route it exempts documents
+      // *something*. This asserts the audio route really carries an `audio/*`
+      // content entry with a binary schema, and that nothing else has quietly
+      // grown a non JSON body without being named in `BYTE_BODY_ROUTES`.
+      const byteRoutes = operations.filter(answersBytes).map((operation) => {
+        const status = Object.keys(operation.responses).find(isSuccess);
+        const content = status
+          ? (operation.responses[status].content ?? {})
+          : {};
+        return { route: routeOf(operation), types: Object.keys(content) };
+      });
+
+      expect(byteRoutes).toEqual([
+        { route: 'GET /v1/comments/{id}/audio', types: ['audio/*'] },
+      ]);
     });
 
     it('and the only routes without a body are the two Google redirects', () => {

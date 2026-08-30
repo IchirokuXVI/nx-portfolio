@@ -1,11 +1,22 @@
-import { ZoneStatus } from '@portfolio/luna-shopper/contracts';
+import {
+  CommentTranscription,
+  ZoneStatus,
+} from '@portfolio/luna-shopper/contracts';
 import {
   describeIntegration,
   requiredEnv,
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
-import { CORE_ENTITIES, Zone, ZoneMembership } from '../entities';
+import {
+  CommentAudio,
+  CORE_ENTITIES,
+  LineComment,
+  ListLine,
+  ShoppingList,
+  Zone,
+  ZoneMembership,
+} from '../entities';
 
 /**
  * Real-Postgres integration test (plan 0010, section 1). Runs only with
@@ -45,6 +56,7 @@ describeIntegration('core schema (real Postgres)', () => {
       'shopping_lists',
       'list_lines',
       'line_comments',
+      'comment_audio',
       'merge_requests',
     ]) {
       expect(names.has(table)).toBe(true);
@@ -108,6 +120,93 @@ describeIntegration('core schema (real Postgres)', () => {
       expect(rows).toHaveLength(2);
     } finally {
       // The membership rows cascade with the zone.
+      await zones.delete({ id: zone.id });
+    }
+  });
+
+  /**
+   * A recording lives exactly as long as its comment (plan 0045, section 7).
+   *
+   * This is an integration test rather than a unit one because the whole claim is
+   * about foreign keys: `comment_audio` cascades from the comment, which cascades
+   * from the line, which cascades from the list, which cascades from the zone. A
+   * mocked repository cannot tell you whether Postgres agrees, and the cost of it
+   * not agreeing is a table of orphaned megabytes nothing ever deletes.
+   *
+   * It also covers account deletion (plan 0011) without naming it: that path
+   * reaches these rows by this same chain.
+   */
+  it('takes a recording with the line its comment is on', async () => {
+    const zones = dataSource.getRepository(Zone);
+    const lists = dataSource.getRepository(ShoppingList);
+    const lines = dataSource.getRepository(ListLine);
+    const comments = dataSource.getRepository(LineComment);
+    const audio = dataSource.getRepository(CommentAudio);
+
+    const zone = await zones.save(
+      zones.create({
+        name: 'Cascade',
+        joinCode: `IT${Date.now()}`,
+        status: ZoneStatus.ACTIVE,
+        ownerUserId: null,
+        config: {},
+      })
+    );
+
+    try {
+      const list = await lists.save(
+        lists.create({
+          zoneId: zone.id,
+          name: 'Weekly',
+          createdByUserId: randomUUID(),
+          autoApproveLines: false,
+        })
+      );
+      const line = await lines.save(
+        lines.create({
+          listId: list.id,
+          content: 'Olive oil',
+          quantity: 1,
+          itemId: null,
+          position: 1,
+          createdByUserId: randomUUID(),
+        })
+      );
+      const comment = await comments.save(
+        comments.create({
+          lineId: line.id,
+          authorUserId: randomUUID(),
+          body: '',
+          audioContentType: 'audio/webm',
+          audioByteLength: 5,
+          audioDurationSeconds: 1.5,
+          transcription: CommentTranscription.PENDING,
+        })
+      );
+      await audio.save(
+        audio.create({
+          commentId: comment.id,
+          contentType: 'audio/webm',
+          audio: Buffer.from('bytes'),
+        })
+      );
+
+      // The bytes round-trip as bytes, which is the other half of this test: a
+      // `bytea` column that came back as a hex string would be a player fed
+      // nonsense, and nothing above the repository would notice.
+      const stored = await audio.findOneOrFail({
+        where: { commentId: comment.id },
+      });
+      expect(Buffer.isBuffer(stored.audio)).toBe(true);
+      expect(stored.audio.toString()).toBe('bytes');
+
+      await lines.delete({ id: line.id });
+
+      expect(await comments.findOne({ where: { id: comment.id } })).toBeNull();
+      expect(
+        await audio.findOne({ where: { commentId: comment.id } })
+      ).toBeNull();
+    } finally {
       await zones.delete({ id: zone.id });
     }
   });

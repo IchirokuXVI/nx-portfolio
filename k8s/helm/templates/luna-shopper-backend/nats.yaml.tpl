@@ -53,7 +53,28 @@ spec:
           image: {{ $nats.image }}
           # JetStream enabled with a persistent store so durable streams survive a
           # restart; monitoring on 8222 backs the readiness/liveness probes.
-          args: ['-js', '-sd', '/data', '-m', '8222']
+          #
+          # `--max_payload` is raised from the one megabyte default because a voice
+          # comment travels gateway to core, and a recording to the assistant, as
+          # base64 over this broker (plan 0041, section 4.2; plan 0045, section 3).
+          # A two megabyte upload is about 2.7 MB encoded and under 3 MB with its
+          # envelope, so the ceiling has deliberate headroom: setting it just above
+          # the cap would mean the next change to either number has to move both.
+          #
+          # **This and `compose.yml` are one decision and change together.** A raise
+          # applied here and not there, or there and not here, is a feature that
+          # works on the development machine and fails in the cluster with a broker
+          # level rejection, which is the slowest possible way to find out.
+          args:
+            [
+              '-js',
+              '-sd',
+              '/data',
+              '-m',
+              '8222',
+              '--max_payload',
+              '{{ $nats.maxPayload | default "8MB" }}',
+            ]
           ports:
             - name: client
               containerPort: 4222

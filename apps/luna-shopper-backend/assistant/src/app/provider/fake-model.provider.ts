@@ -1,4 +1,9 @@
-import type { ModelProvider, ModelReply, ModelRequest } from './model-provider';
+import type {
+  ModelProvider,
+  ModelReply,
+  ModelRequest,
+  TranscriptionRequest,
+} from './model-provider';
 
 /**
  * The provider the suite runs against (rule A4).
@@ -16,11 +21,48 @@ import type { ModelProvider, ModelReply, ModelRequest } from './model-provider';
 export class FakeModelProvider implements ModelProvider {
   readonly requests: ModelRequest[] = [];
   configured = true;
+  transcriptionSupported = true;
+
+  /**
+   * What {@link transcribe} was asked, so a test can assert the mime type and
+   * locale reached the provider without ever producing a byte of real audio
+   * (rule A4).
+   */
+  readonly transcriptions: TranscriptionRequest[] = [];
 
   private readonly replies: (ModelReply | Error)[];
+  private readonly heard: (string | Error)[] = [];
 
   constructor(replies: (ModelReply | Error)[] = []) {
     this.replies = [...replies];
+  }
+
+  /**
+   * Script what the next transcription answers, or throws.
+   *
+   * A separate queue from the reply script rather than sharing one, because the
+   * two calls happen at different moments for different reasons and a test that
+   * had to interleave them would be asserting the order of the implementation
+   * rather than of the feature.
+   */
+  willHear(...results: (string | Error)[]): this {
+    this.heard.push(...results);
+    return this;
+  }
+
+  async transcribe(request: TranscriptionRequest): Promise<string> {
+    this.transcriptions.push(request);
+    const next = this.heard.shift();
+    if (next === undefined) {
+      // Silence rather than a throw, unlike `generate` below. A provider that
+      // heard nothing is a real answer this feature has to handle, and it is the
+      // one a test that scripted nothing most likely means.
+      return '';
+    }
+    if (next instanceof Error) {
+      throw next;
+    }
+    return next;
   }
 
   /** A reply that is only text: what an off topic redirect or an answer looks like. */

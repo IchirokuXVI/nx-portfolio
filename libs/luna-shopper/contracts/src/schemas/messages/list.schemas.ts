@@ -26,6 +26,8 @@ export const LIST_SCHEMA_IDS = {
   listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
   commentView: schemaId('list/CommentView'),
+  commentRecording: schemaId('list/CommentRecording'),
+  commentAudioView: schemaId('list/CommentAudioView'),
   listPage: schemaId('list/ListPage'),
   linePage: schemaId('list/LinePage'),
   commentPage: schemaId('list/CommentPage'),
@@ -44,6 +46,11 @@ export const LIST_SCHEMA_IDS = {
   listLinesRequest: schemaId('msg/line.list/request'),
   addCommentRequest: schemaId('msg/comment.add/request'),
   listCommentsRequest: schemaId('msg/comment.list/request'),
+  addVoiceCommentRequest: schemaId('msg/comment.addVoice/request'),
+  getCommentAudioRequest: schemaId('msg/comment.getAudio/request'),
+  setCommentTranscriptionRequest: schemaId(
+    'msg/comment.setTranscription/request'
+  ),
 } as const;
 
 /** Timestamps on every read model (plan 0017, section 7). */
@@ -139,6 +146,23 @@ const lineView = object(
   ]
 );
 
+const commentRecording = object(
+  LIST_SCHEMA_IDS.commentRecording,
+  {
+    contentType: nonEmptyString(),
+    byteLength: integer({ minimum: 1 }),
+    // Nullable rather than absent: the client may genuinely not know, and a
+    // number here is metadata the server never trusts (plan 0045, section 6).
+    durationSeconds: { type: ['number', 'null'] },
+  },
+  ['contentType', 'byteLength', 'durationSeconds']
+);
+
+// `body` is `string` and not `nonEmptyString`, which is the schema change plan
+// 0045 section 8 asks for: a comment whose transcription failed carries no body
+// and is still a valid comment. `recording` and `transcription` are both null for
+// a typed comment, so the two are either both set or both absent in practice
+// without the schema having to say so.
 const commentView = object(
   LIST_SCHEMA_IDS.commentView,
   {
@@ -146,9 +170,33 @@ const commentView = object(
     lineId: nonEmptyString(),
     authorUserId: nonEmptyString(),
     body: string(),
+    recording: {
+      oneOf: [ref(LIST_SCHEMA_IDS.commentRecording), { type: 'null' }],
+    },
+    transcription: {
+      oneOf: [ref(ENUM_IDS.commentTranscription), { type: 'null' }],
+    },
     createdAt: string({ format: 'date-time' }),
   },
-  ['id', 'lineId', 'authorUserId', 'body', 'createdAt']
+  [
+    'id',
+    'lineId',
+    'authorUserId',
+    'body',
+    'recording',
+    'transcription',
+    'createdAt',
+  ]
+);
+
+const commentAudioView = object(
+  LIST_SCHEMA_IDS.commentAudioView,
+  {
+    commentId: nonEmptyString(),
+    contentType: nonEmptyString(),
+    audio: nonEmptyString(),
+  },
+  ['commentId', 'contentType', 'audio']
 );
 
 const listPage = paginated(LIST_SCHEMA_IDS.listPage, LIST_SCHEMA_IDS.listView);
@@ -160,7 +208,11 @@ const commentPage = paginated(
 
 const createListRequest = object(
   LIST_SCHEMA_IDS.createListRequest,
-  { userId: nonEmptyString(), zoneId: nonEmptyString(), name: nonEmptyString() },
+  {
+    userId: nonEmptyString(),
+    zoneId: nonEmptyString(),
+    name: nonEmptyString(),
+  },
   ['userId', 'zoneId', 'name']
 );
 const setAccessRequest = object(
@@ -272,7 +324,11 @@ const listLinesRequest = object(
 );
 const addCommentRequest = object(
   LIST_SCHEMA_IDS.addCommentRequest,
-  { userId: nonEmptyString(), lineId: nonEmptyString(), body: nonEmptyString() },
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    body: nonEmptyString(),
+  },
   ['userId', 'lineId', 'body']
 );
 const listCommentsRequest = object(
@@ -287,13 +343,45 @@ const listCommentsRequest = object(
   ['userId', 'lineId']
 );
 
+// No `body`: the transcript arrives later, through `comment.setTranscription`,
+// and a comment with no body is a valid comment in the meantime (plan 0045,
+// section 4).
+const addVoiceCommentRequest = object(
+  LIST_SCHEMA_IDS.addVoiceCommentRequest,
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    audio: nonEmptyString(),
+    contentType: nonEmptyString(),
+    durationSeconds: { type: ['number', 'null'] },
+  },
+  ['userId', 'lineId', 'audio', 'contentType']
+);
+const getCommentAudioRequest = object(
+  LIST_SCHEMA_IDS.getCommentAudioRequest,
+  { userId: nonEmptyString(), commentId: nonEmptyString() },
+  ['userId', 'commentId']
+);
+const setCommentTranscriptionRequest = object(
+  LIST_SCHEMA_IDS.setCommentTranscriptionRequest,
+  {
+    userId: nonEmptyString(),
+    commentId: nonEmptyString(),
+    body: string(),
+    transcription: ref(ENUM_IDS.commentTranscription),
+  },
+  ['userId', 'commentId', 'body', 'transcription']
+);
+
 export const listSchemas: JsonSchema[] = [
   listCounts,
   listView,
   listAccessEntry,
   listAccessView,
   lineView,
+  commentRecording,
   commentView,
+  commentAudioView,
   listPage,
   linePage,
   commentPage,
@@ -312,6 +400,9 @@ export const listSchemas: JsonSchema[] = [
   listLinesRequest,
   addCommentRequest,
   listCommentsRequest,
+  addVoiceCommentRequest,
+  getCommentAudioRequest,
+  setCommentTranscriptionRequest,
 ];
 
 export const listMessageContracts: Record<
@@ -377,5 +468,17 @@ export const listMessageContracts: Record<
   [COMMENT_PATTERNS.list]: {
     request: LIST_SCHEMA_IDS.listCommentsRequest,
     response: LIST_SCHEMA_IDS.commentPage,
+  },
+  [COMMENT_PATTERNS.addVoice]: {
+    request: LIST_SCHEMA_IDS.addVoiceCommentRequest,
+    response: LIST_SCHEMA_IDS.commentView,
+  },
+  [COMMENT_PATTERNS.getAudio]: {
+    request: LIST_SCHEMA_IDS.getCommentAudioRequest,
+    response: LIST_SCHEMA_IDS.commentAudioView,
+  },
+  [COMMENT_PATTERNS.setTranscription]: {
+    request: LIST_SCHEMA_IDS.setCommentTranscriptionRequest,
+    response: LIST_SCHEMA_IDS.commentView,
   },
 };

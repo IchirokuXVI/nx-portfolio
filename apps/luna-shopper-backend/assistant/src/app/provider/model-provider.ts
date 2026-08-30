@@ -138,11 +138,48 @@ export class ProviderUnavailableError extends Error {
   }
 }
 
+/**
+ * A recording to write down (plan 0041, section 3.2).
+ *
+ * Separate from {@link ModelRequest} rather than an audio part on a
+ * {@link ModelTurn}, because it is a different job: no tools, no history, and no
+ * reply to parse. There is nothing to carry about who spoke or what list they
+ * were looking at, and that absence is the contract rather than an omission.
+ */
+export interface TranscriptionRequest {
+  audio: Uint8Array;
+  mimeType: string;
+  /** BCP 47, the same locale a reply would be written in. */
+  locale: string;
+}
+
 export interface ModelProvider {
   /**
    * False when the deployment has no key. The service answers 501 rather than
    * pretending, and the pod still boots (plan 0026, applied in section 11).
    */
   readonly configured: boolean;
+
+  /**
+   * False when this provider cannot take audio at all.
+   *
+   * A **field rather than a thrown error**, because "this deployment will never
+   * transcribe anything" and "this transcription failed" are different facts with
+   * different answers: the first settles a voice comment to `UNAVAILABLE` at once
+   * and the second is worth one bounded retry. A provider that could only say so
+   * by throwing would make the two indistinguishable at the call site.
+   */
+  readonly transcriptionSupported: boolean;
+
   generate(request: ModelRequest): Promise<ModelReply>;
+
+  /**
+   * The words, or an empty string when the provider heard nothing.
+   *
+   * Empty is an answer and not an error: a recording of silence is a real thing
+   * somebody uploads. {@link ProviderRateLimitedError} and
+   * {@link ProviderUnavailableError} are thrown from here exactly as from
+   * {@link generate}, so rule A5's answer needs no second implementation.
+   */
+  transcribe(request: TranscriptionRequest): Promise<string>;
 }

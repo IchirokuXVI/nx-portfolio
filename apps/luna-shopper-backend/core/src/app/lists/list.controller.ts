@@ -6,10 +6,13 @@ import {
   LIST_PATTERNS,
   type AddCommentRequest,
   type AddLineRequest,
+  type AddVoiceCommentRequest,
+  type CommentAudioView,
   type CommentPage,
   type CommentView,
   type CreateListRequest,
   type DeleteLineRequest,
+  type GetCommentAudioRequest,
   type GetListAccessRequest,
   type LinePage,
   type LineView,
@@ -21,6 +24,7 @@ import {
   type ListPage,
   type ListView,
   type ReorderLinesRequest,
+  type SetCommentTranscriptionRequest,
   type SetLineApprovalRequest,
   type SetLineStatusRequest,
   type SetListAccessRequest,
@@ -116,5 +120,26 @@ export class ListController {
   @MessagePattern(COMMENT_PATTERNS.list)
   listComments(@Payload() req: ListCommentsRequest): Promise<CommentPage> {
     return this.comments.list(req);
+  }
+
+  @MessagePattern(COMMENT_PATTERNS.addVoice)
+  addVoiceComment(
+    @Payload() req: AddVoiceCommentRequest
+  ): Promise<CommentView> {
+    return this.comments.addVoice(req);
+  }
+
+  @MessagePattern(COMMENT_PATTERNS.getAudio)
+  getCommentAudio(
+    @Payload() req: GetCommentAudioRequest
+  ): Promise<CommentAudioView> {
+    return this.comments.getAudio(req);
+  }
+
+  @MessagePattern(COMMENT_PATTERNS.setTranscription)
+  setCommentTranscription(
+    @Payload() req: SetCommentTranscriptionRequest
+  ): Promise<CommentView> {
+    return this.comments.setTranscription(req);
   }
 }

@@ -14,6 +14,7 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -177,6 +178,28 @@ export class AddCommentDto {
   @MinLength(1)
   @MaxLength(2000)
   body!: string;
+}
+
+/**
+ * The rest of a voice comment's form (plan 0045, section 3).
+ *
+ * The recording itself is not here: it is a file part, handled by
+ * {@link VoiceRecordingInterceptor}, which is why this DTO has one optional field
+ * and no `body`. A voice comment has no text until the transcript arrives.
+ *
+ * `durationSeconds` arrives as a string, like every multipart field, so it is
+ * coerced here. It is **metadata and never trusted** (section 6): nothing
+ * authorizes on it and nothing rejects on it, and the upper bound below exists
+ * only so an absurd value is not stored and drawn on a row.
+ */
+export class AddVoiceCommentDto {
+  @ApiPropertyOptional({ minimum: 0, maximum: 3600 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(3600)
+  durationSeconds?: number;
 }
 
 export class ListQueryDto extends PageQueryDto {

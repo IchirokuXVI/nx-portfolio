@@ -4,6 +4,8 @@ import {
   AssistantRole,
   ListResolutionBranch,
   type AssistantMessage,
+  type AssistantTranscribeRequest,
+  type AssistantTranscribeResponse,
   type AssistantTurnRequest,
   type AssistantTurnResponse,
 } from '@portfolio/luna-shopper/contracts';
@@ -63,6 +65,61 @@ export class AssistantService {
     this.config = configService.getOrThrow<AssistantConfig>('assistant');
     this.limiter = new TurnLimiter(this.config.turnsPerMinute);
     this.gate = new ConcurrencyGate(this.config.concurrency);
+  }
+
+  /**
+   * Words out of a recording, and nothing else (plan 0041, section 3).
+   *
+   * It shares the concurrency gate with {@link turn} and shares nothing else. In
+   * particular it does **not** take a turn from {@link TurnLimiter}: the two
+   * callers of this are a spoken assistant turn, which takes its own turn from
+   * that bucket a moment later, and a voice comment, which is not a turn at all
+   * and would otherwise spend somebody's conversation quota on leaving a message.
+   * The upload has its own rate limit at the gateway, which is where a limit on
+   * uploading belongs.
+   *
+   * Nothing about the recording is logged, at any level, not even its length
+   * (plan 0041, section 6). The transcription is what the structured turn record
+   * carries when a turn follows; the audio is held for the length of this call and
+   * dropped.
+   */
+  async transcribe(
+    request: AssistantTranscribeRequest
+  ): Promise<AssistantTranscribeResponse> {
+    if (!this.provider.configured || !this.provider.transcriptionSupported) {
+      throw new NotConfiguredException(
+        'this deployment cannot turn a recording into words'
+      );
+    }
+
+    const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+
+    try {
+      const text = await this.gate.run(() =>
+        this.provider.transcribe({
+          audio: Buffer.from(request.audio, 'base64'),
+          mimeType: request.mimeType,
+          locale: request.locale || locale,
+        })
+      );
+      return { text: text.trim() };
+    } catch (error) {
+      if (error instanceof ProviderRateLimitedError) {
+        // Rule A5's answer, unchanged: a number of seconds in the problem body.
+        // The caller of a voice comment does not count it down (the comment is
+        // already saved and playable), but a spoken assistant turn does, and the
+        // two must not get different shapes from the same failure.
+        throw this.rateLimited(
+          error.retryAfterSeconds ?? this.config.retryAfterFallbackSeconds,
+          'transcription',
+          'provider'
+        );
+      }
+      if (error instanceof ProviderUnavailableError) {
+        this.logger.warn(`assistant provider unavailable: ${error.message}`);
+      }
+      throw error;
+    }
   }
 
   async turn(request: AssistantTurnRequest): Promise<AssistantTurnResponse> {

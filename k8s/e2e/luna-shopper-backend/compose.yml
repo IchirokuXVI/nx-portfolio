@@ -199,7 +199,15 @@ services:
   nats:
     image: nats:2.10-alpine
     restart: unless-stopped
-    command: ['-js', '-sd', '/data', '-m', '8222']
+    # `--max_payload` raised from the one megabyte default, because a voice
+    # comment travels gateway to core, and a recording to the assistant, as base64
+    # over this broker (plan 0041, section 4.2; plan 0045, section 3). A two
+    # megabyte upload is about 2.7 MB encoded and under 3 MB with its envelope.
+    #
+    # **This and `k8s/helm/templates/luna-shopper-backend/nats.yaml.tpl` are one
+    # decision and change together.** A raise here and not there is a feature that
+    # works on this machine and fails in the cluster with a broker level rejection.
+    command: ['-js', '-sd', '/data', '-m', '8222', '--max_payload', '8MB']
     ports:
       - '${LUNA_NATS_PORT:-4222}:4222'
       - '${LUNA_NATS_MONITOR_PORT:-8222}:8222'

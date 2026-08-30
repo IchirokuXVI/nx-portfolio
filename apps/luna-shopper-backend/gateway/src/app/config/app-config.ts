@@ -1,5 +1,9 @@
 import { registerAs } from '@nestjs/config';
 import {
+  VOICE_COMMENT_CONTENT_TYPES,
+  VOICE_COMMENT_MAX_BYTES,
+} from '@portfolio/luna-shopper/contracts';
+import {
   isComparableVersion,
   redisValidationSchema,
   telemetryValidationSchema,
@@ -119,6 +123,35 @@ export const gatewayValidationSchema = Joi.object({
       'semantic version'
     ),
 
+  /**
+   * The voice comment caps (plan 0045, section 6).
+   *
+   * The byte cap is set on the **multipart interceptor** and not only checked
+   * afterwards, which is the whole of plan 0041 section 5's point: the global
+   * `ValidationPipe` never sees a file and Express's own body limits do not apply
+   * to a multipart stream, so a cap that is not on the interceptor is a cap that
+   * is not enforced. Core checks the same number again on the far side of the
+   * broker; the two are not a duplication to be tidied away.
+   */
+  VOICE_COMMENT_MAX_BYTES: Joi.number()
+    .integer()
+    .min(1024)
+    .default(VOICE_COMMENT_MAX_BYTES),
+  /** Comma separated. Empty falls back to the contract's own list. */
+  VOICE_COMMENT_CONTENT_TYPES: Joi.string().allow('').default(''),
+  /**
+   * How long the gateway waits for a transcript before giving up on it.
+   *
+   * Nobody is waiting on this: the caller already has their comment back and the
+   * transcript arrives over the socket. The deadline exists so a hung provider
+   * does not hold a gateway task open indefinitely behind a request that has
+   * already been answered.
+   */
+  VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: Joi.number()
+    .integer()
+    .min(1000)
+    .default(45000),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -155,7 +188,29 @@ export interface GatewayConfig {
    * serves every one of them. Read by `MinClientVersionGuard` and by nothing else.
    */
   minClientVersion: string;
+  voiceComment: {
+    maxBytes: number;
+    /** Base types, lowercased, with no parameters. */
+    contentTypes: string[];
+    transcribeTimeoutMs: number;
+  };
   logLevel: (typeof LOG_LEVELS)[number];
+}
+
+/**
+ * A comma separated allowlist, or the contract's own list when the variable is
+ * empty.
+ *
+ * Falling back rather than defaulting to nothing, because an empty allowlist is a
+ * feature that refuses every recording and looks like a browser problem from the
+ * outside.
+ */
+export function parseContentTypes(raw: string | undefined): string[] {
+  const listed = (raw ?? '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  return listed.length > 0 ? listed : [...VOICE_COMMENT_CONTENT_TYPES];
 }
 
 /**
@@ -188,6 +243,15 @@ export const gatewayConfiguration = registerAs(
       ),
     },
     minClientVersion: process.env.MIN_CLIENT_VERSION ?? '',
+    voiceComment: {
+      maxBytes: Number(
+        process.env.VOICE_COMMENT_MAX_BYTES ?? VOICE_COMMENT_MAX_BYTES
+      ),
+      contentTypes: parseContentTypes(process.env.VOICE_COMMENT_CONTENT_TYPES),
+      transcribeTimeoutMs: Number(
+        process.env.VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS ?? 45000
+      ),
+    },
     logLevel: process.env.LOG_LEVEL as GatewayConfig['logLevel'],
   })
 );

@@ -600,6 +600,11 @@ lunaShopperBackend:
     image: nats:2.10-alpine
     storageClassName: local-path
     storageSize: 1Gi
+    # The broker wide message ceiling, raised from the one megabyte default so a
+    # voice recording can cross it as base64 (plan 0041, section 4.2). Stated once
+    # here and read by the template, so the number is not written into an argument
+    # list; `compose.yml` carries the same raise and the two move together.
+    maxPayload: 8MB
     # Guaranteed QoS, for the same reason as Postgres above.
     resources:
       requests:
