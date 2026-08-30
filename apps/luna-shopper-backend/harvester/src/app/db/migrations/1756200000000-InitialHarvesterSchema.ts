@@ -112,11 +112,17 @@ export class InitialHarvesterSchema1756200000000 implements MigrationInterface {
           AND status IN ('PENDING', 'RUNNING')
     `);
     // Store discovery runs are excluded from that lock by the null
-    // `supermarketId`, so they get their own single row guard. The expression is
-    // a constant, which is what makes the index allow exactly one such row.
+    // `supermarketId`, so they get their own single row guard. The WHERE clause
+    // already pins `mode` to one value, so indexing the column itself is what
+    // makes the index allow exactly one such row.
+    //
+    // The column, not `mode::text`: a cast out of an enum is STABLE rather than
+    // IMMUTABLE, because enum labels can be renamed, and Postgres rejects a non
+    // immutable function in an index expression (42P17). A bare column reference
+    // is not an expression at all, so no such check applies.
     await queryRunner.query(`
       CREATE UNIQUE INDEX "uq_harvest_run_active_store_discovery"
-        ON "harvest_runs" ((mode::text))
+        ON "harvest_runs" ("mode")
         WHERE mode = 'STORE_DISCOVERY'
           AND status IN ('PENDING', 'RUNNING')
     `);
