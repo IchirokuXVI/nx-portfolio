@@ -3,6 +3,7 @@ import {
   PRIMARY_OUTLET,
   Router,
   UrlSegment,
+  type ActivatedRouteSnapshot,
   type CanActivateFn,
   type UrlTree,
 } from '@angular/router';
@@ -86,18 +87,43 @@ export const anonymousOnlyGuard: CanActivateFn = (_route, state) => {
  * signed in. It does it better, because it runs before the page's constructor and so
  * also stops a request being fired on behalf of a user who is not there.
  */
-export const authenticatedGuard: CanActivateFn = (_route, state) => {
+export const authenticatedGuard: CanActivateFn = (route, state) => {
   if (inject(SessionStore).isAuthenticated()) {
     return true;
   }
 
-  return retarget(state.url, (segments) => {
-    const last = segments[segments.length - 1];
-    return last !== undefined && last.path === HOME_PATH
-      ? segments.slice(0, -1)
-      : segments;
-  });
+  // Keep the mount and the locale, drop the page. Written as "how much of the URL is
+  // above this page" rather than as a suffix to remove, because the pages this guards
+  // are one, two and four segments long and their sheets add more on top.
+  const frontDoor = segmentsAbove(route);
+  return retarget(state.url, (segments) => segments.slice(0, frontDoor));
 };
+
+/**
+ * How many segments of the URL belong to whatever is **above** the guarded page.
+ *
+ * That is the app's front door: this app's mount, whatever it is called, plus the one
+ * locale segment `localeGuard` settled. Everything after it is the page being refused.
+ *
+ * Counted off the route tree rather than matched in the URL, because neither half may
+ * be written down here. The mount is `''` in the standalone build and `velista` under
+ * the shell (extraction contract item 5, plan 0001), and the locale is whichever of
+ * the supported ones this navigation carries.
+ *
+ * **A count, and not a suffix to strip, because this is what made the app hang.** The
+ * earlier version dropped a trailing `home` and returned the URL unchanged for
+ * anything else, so an anonymous visitor deep linking to a group, a members screen, a
+ * list or the account page was redirected to the URL they were already on. The router
+ * cancels the navigation, starts the redirect, runs this guard again, and gets the
+ * same answer forever: the tab spins on a white page instead of landing on the front
+ * door. `home` was the only page this guarded when it was written, and the bug arrived
+ * with the second one rather than with a change here.
+ */
+function segmentsAbove(route: ActivatedRouteSnapshot): number {
+  return route.pathFromRoot
+    .slice(0, -1)
+    .reduce((count, ancestor) => count + ancestor.url.length, 0);
+}
 
 /**
  * The upgrade screen, for the one person it is for and nobody else.
