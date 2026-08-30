@@ -6,6 +6,7 @@ export * from './lib/platform-providers';
 export * from './lib/reload-blocker';
 export * from './lib/retry-clock';
 export * from './lib/route-params';
+export * from './lib/sheet-fall';
 export * from './lib/sheet-navigation';
 export * from './lib/storage-keys';
 export * from './lib/testing/velista-testing';

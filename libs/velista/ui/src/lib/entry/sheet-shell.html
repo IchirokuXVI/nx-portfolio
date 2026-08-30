@@ -19,13 +19,41 @@
 <div
   [attr.aria-labelledby]="labelledBy()"
   [class.closing]="closing()"
+  [class.dragging]="dragging()"
+  [class.settling]="settling()"
+  [style.transform]="
+    dragOffset() === null ? null : 'translateY(' + dragOffset() + 'px)'
+  "
   aria-modal="true"
   class="panel"
   role="dialog"
 >
-  <!-- Decorative. The gesture it advertises is the back button, which is a system
-       control and not something this element can offer. -->
-  <span aria-hidden="true" class="handle"></span>
+  <!--
+    The handle, and the strip of panel it is centred in.
+
+    Two elements because the bar is a hint and the target is not: the bar stays small
+    enough to read as a hint and the strip around it is the full width of the panel and
+    tall enough to catch a thumb. `touch-action: none` on the strip is what makes the
+    drag possible at all, and it is the fix for the worse half of the old behaviour:
+    without it the browser claimed the downward gesture, and at the top of the document
+    that gesture is pull to refresh, so trying to drag the sheet closed reloaded the
+    page instead.
+
+    Still hidden from assistive technology and still not focusable. Dragging is a
+    convenience on top of Escape, Cancel and the back button, all of which already close
+    the sheet and are all already announced; a fourth control in the trap, first in
+    document order, would take the focus that belongs to the field.
+  -->
+  <div
+    (pointercancel)="endDrag($event)"
+    (pointerdown)="startDrag($event)"
+    (pointermove)="onDrag($event)"
+    (pointerup)="endDrag($event)"
+    aria-hidden="true"
+    class="grabber"
+  >
+    <span class="handle"></span>
+  </div>
 
   <ng-content />
 </div>

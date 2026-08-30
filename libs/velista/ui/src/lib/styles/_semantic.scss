@@ -223,8 +223,12 @@ $app-content-max: 480px;
   // corners are the largest curve in the app, and matching a card here would make
   // the panel read as a card that happened to be at the bottom of the screen.
   --app-sheet-radius: 22px;
-  --app-sheet-handle-width: 38px;
-  --app-sheet-handle-height: 4px;
+  // The handle is a real affordance now that the sheet answers a drag on it, so it is
+  // drawn as one: at 38 by 4 it read as a rule under the top edge rather than as
+  // something to take hold of. The target it sits in is far larger again and is the
+  // `.grabber` strip around it, which is where the size that matters lives.
+  --app-sheet-handle-width: 48px;
+  --app-sheet-handle-height: 5px;
   // How far a sheet is allowed to grow before it scrolls inside itself. Anything
   // taller than this stops being a sheet over a page and becomes a page.
   --app-sheet-max-height: 86svh;
