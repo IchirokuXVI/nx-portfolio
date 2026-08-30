@@ -1,10 +1,13 @@
 // Stretch, so the button is exactly as tall as the textarea beside it however many
 // rows that is. `flex-end` made it a short control resting on the box's bottom edge,
 // which read as two things rather than one composer.
+// The gap is the one between things that belong together but are separate, the same one
+// the line composer puts between its field and its stepper. At 4px, and at 8px, two
+// adjacent filled shapes read as a single control.
 .composer {
   display: flex;
   align-items: stretch;
-  gap: var(--app-space-2);
+  gap: var(--app-space-4);
 }
 
 .field {
