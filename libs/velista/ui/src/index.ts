@@ -51,6 +51,8 @@ export * from './lib/list/quantity-stepper';
 export * from './lib/list/share-row';
 export * from './lib/presence/list-viewers';
 export * from './lib/presence/presence-row';
+export * from './lib/recording/recording-elapsed';
+export * from './lib/recording/recording-row';
 export * from './lib/translations';
 export * from './lib/zone/confirm-sheet';
 export * from './lib/zone/group-header';

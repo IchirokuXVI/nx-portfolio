@@ -66,14 +66,32 @@ function host(fixture: ComponentFixture<AssistantComposer>): HTMLElement {
   return fixture.nativeElement as HTMLElement;
 }
 
+/**
+ * The button in the bottom right corner, whatever is drawing it.
+ *
+ * `.action` on an idle composer and the recording row's `.stop` while one is
+ * running. Two selectors because plan 0041 moved the recording controls into a
+ * shared component, and one helper because the property being asserted is that
+ * the corner keeps working: the finger that started a recording ends it without
+ * travelling.
+ */
 function action(
   fixture: ComponentFixture<AssistantComposer>
 ): HTMLButtonElement {
-  const button = host(fixture).querySelector<HTMLButtonElement>('.action');
+  const button = host(fixture).querySelector<HTMLButtonElement>(
+    '.action, .stop'
+  );
   if (button === null) {
     throw new Error('the one action button is not rendered');
   }
   return button;
+}
+
+/** The trash at the far left of the recording row, when one is drawn. */
+function discard(
+  fixture: ComponentFixture<AssistantComposer>
+): HTMLButtonElement | null {
+  return host(fixture).querySelector<HTMLButtonElement>('.discard');
 }
 
 function field(
@@ -151,19 +169,30 @@ describe('AssistantComposer', () => {
       expect(glyph(fixture)).toBe('lib-stop-icon');
     });
 
-    it('never moves: it is the same element in the same place throughout', async () => {
+    it('never moves: it is the last control in the row throughout', async () => {
       // Nothing may move under the thumb. Stop inherits the microphone's exact
       // position, so the finger that started a recording ends it without travelling
       // (section 4.1).
+      //
+      // The same **place**, not the same node: since plan 0041 the recording state is
+      // drawn by `RecordingRow`, so stop is a different element in the same corner.
+      // What is asserted is what the person experiences, which is that the button in
+      // the bottom right is the last thing in its row in every state. jsdom computes
+      // no layout, so document order in a flex row is the closest honest proxy.
       const fixture = await render();
-      const before = action(fixture);
+      const lastInRow = (): Element | null => {
+        const button = action(fixture);
+        return button.parentElement?.lastElementChild ?? null;
+      };
+
+      expect(lastInRow()).toBe(action(fixture));
 
       type(fixture, 'Add milk');
-      expect(action(fixture)).toBe(before);
+      expect(lastInRow()).toBe(action(fixture));
 
       type(fixture, '');
       await press(fixture);
-      expect(action(fixture)).toBe(before);
+      expect(lastInRow()).toBe(action(fixture));
     });
 
     it('sends what was typed and clears the field', async () => {
@@ -216,40 +245,53 @@ describe('AssistantComposer', () => {
     });
   });
 
-  describe('the control row', () => {
-    it('renders pause, the length, then stop, in that order', async () => {
-      // Pause at the far left and stop at the far right, as far apart as the container
+  describe('the recording row', () => {
+    it('renders the trash, the length, then stop, in that order', async () => {
+      // Trash at the far left and stop at the far right, as far apart as the container
       // allows: they are the only two controls on screen and confusing them costs the
-      // whole message, so the distance is the safeguard (section 4.3).
+      // whole message, so the distance is the safeguard (section 4.3, kept through
+      // plan 0041 section 4).
       const fixture = await render();
 
       await press(fixture);
 
-      const row = host(fixture).querySelector('.row');
+      const row = host(fixture).querySelector('lib-recording-row .row');
       const order = Array.from(row?.children ?? []).map(
         (child) => child.className.split(' ')[0]
       );
-      expect(order).toEqual(['control', 'dot', 'elapsed', 'action']);
+      expect(order).toEqual(['discard', 'middle', 'stop']);
+      expect(
+        host(fixture).querySelector('lib-recording-elapsed')
+      ).not.toBeNull();
     });
 
-    it('marks listening and paused by shape as well as colour', async () => {
-      // Pause is two bars, carry on is a triangle, and the dot is filled or hollow.
-      // Somebody who cannot tell the amber from the coral still has two controls.
+    it('throws the recording away without emitting it', async () => {
+      // The exit pause never gave anybody: every recording that started used to have
+      // exactly one way out, which was to be sent (plan 0041, section 4).
+      const fixture = await render();
+      const spoken: Blob[] = [];
+      fixture.componentInstance.spoke.subscribe((audio) => spoken.push(audio));
+
+      await press(fixture);
+      discard(fixture)?.click();
+      fixture.detectChanges();
+
+      expect(spoken).toHaveLength(0);
+      expect(glyph(fixture)).toBe('lib-mic-icon');
+    });
+
+    it('says which of the two controls is which by shape', async () => {
+      // Somebody who cannot tell the coral from the amber still has a bin and a
+      // square, which is why colour is never the only signal.
       const fixture = await render();
 
       await press(fixture);
-      expect(
-        host(fixture).querySelector('.control lib-pause-icon')
-      ).not.toBeNull();
-      expect(host(fixture).querySelector('.dot.listening')).not.toBeNull();
-
-      host(fixture).querySelector<HTMLButtonElement>('.control')?.click();
-      fixture.detectChanges();
 
       expect(
-        host(fixture).querySelector('.control lib-play-icon')
+        host(fixture).querySelector('.discard lib-trash-icon')
       ).not.toBeNull();
-      expect(host(fixture).querySelector('.dot.listening')).toBeNull();
+      expect(host(fixture).querySelector('.stop lib-stop-icon')).not.toBeNull();
+      expect(host(fixture).querySelector('.dot.live')).not.toBeNull();
     });
   });
 
@@ -265,16 +307,15 @@ describe('AssistantComposer', () => {
       const notice = host(fixture).querySelector('.notice');
       expect(notice?.textContent).toContain('longest');
       // Still listening: the warning grows the container, it does not stop anything.
-      expect(host(fixture).querySelector('.dot.listening')).not.toBeNull();
-      expect(
-        host(fixture).querySelector<HTMLButtonElement>('.control')?.disabled
-      ).toBe(false);
+      expect(host(fixture).querySelector('.dot.live')).not.toBeNull();
     });
 
     it('pauses at the second one, sends nothing, and says so', async () => {
       // Sending on a timer takes the choice away from somebody who was mid sentence,
-      // and a message that leaves on its own is a message nobody agreed to send. So it
-      // is held, pause is disabled, and stop is the only way out (section 4.4).
+      // and a message that leaves on its own is a message nobody agreed to send, so it
+      // is held (section 4.4). Both ways out stay live: the trash is enabled here
+      // where pause was disabled, because the longest recording is the one somebody
+      // most wants to be rid of (plan 0041, section 4).
       jest.useFakeTimers();
       const fixture = await render();
       const spoken: Blob[] = [];
@@ -285,10 +326,8 @@ describe('AssistantComposer', () => {
       fixture.detectChanges();
 
       expect(spoken).toHaveLength(0);
-      expect(host(fixture).querySelector('.dot.listening')).toBeNull();
-      expect(
-        host(fixture).querySelector<HTMLButtonElement>('.control')?.disabled
-      ).toBe(true);
+      expect(host(fixture).querySelector('.dot.live')).toBeNull();
+      expect(discard(fixture)?.disabled).toBe(false);
       expect(host(fixture).querySelector('.notice')?.textContent).toContain(
         'pressStop'
       );

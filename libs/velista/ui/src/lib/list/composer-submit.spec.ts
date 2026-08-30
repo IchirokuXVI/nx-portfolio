@@ -1,5 +1,10 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import {
+  AUDIO_CAPTURE,
+  AudioRecorder,
+  type AudioCaptureI,
+} from '@portfolio/velista/platform';
 import { CommentComposer } from './comment-composer';
 import { LineComposer } from './line-composer';
 
@@ -20,11 +25,33 @@ import { LineComposer } from './line-composer';
  * wired to the wrong event name silently fails.
  */
 
+/**
+ * A microphone that is there but is never opened by anything in this file.
+ *
+ * `CommentComposer` injects `AudioRecorder` since plan 0041, and the recorder
+ * injects the capture, so both have to be provided even though every test here
+ * is about the typed path and the native submit.
+ */
+const fakeCapture: AudioCaptureI = {
+  supported: () => true,
+  open: () =>
+    Promise.resolve({
+      pause: jest.fn(),
+      resume: jest.fn(),
+      stop: jest.fn().mockResolvedValue(new Blob(['audio'])),
+      close: jest.fn(),
+    }),
+};
+
 async function render<T>(component: new (...args: never[]) => T) {
   TestBed.resetTestingModule();
 
   await TestBed.configureTestingModule({
     imports: [component, RokuTranslatorTestingModule.forTesting()],
+    providers: [
+      AudioRecorder,
+      { provide: AUDIO_CAPTURE, useValue: fakeCapture },
+    ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(component);
@@ -145,7 +172,18 @@ describe('the list composers submit the line, not the page', () => {
     it('sends with a glyph, and is still named by the word (plan 0025)', async () => {
       // The button carries no text now, so the accessible name is the only name it
       // has: dropping the label would leave a screen reader with an unnamed submit.
+      //
+      // It is a microphone until something is typed (plan 0041, section 2), so the
+      // field is filled first: the send glyph and the send label arrive together,
+      // which is the pair being asserted.
       const fixture = await render(CommentComposer);
+
+      const field = fixture.nativeElement.querySelector(
+        'textarea.field'
+      ) as HTMLTextAreaElement;
+      field.value = 'Get the big one';
+      field.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
 
       const send = fixture.nativeElement.querySelector(
         'button.send'
@@ -154,6 +192,21 @@ describe('the list composers submit the line, not the page', () => {
       expect(send.textContent?.trim()).toBe('');
       expect(send.getAttribute('aria-label')).toBe('list.comments.send');
       expect(send.querySelector('lib-send-icon')).not.toBeNull();
+    });
+
+    it('is a microphone on an empty field, and says so', async () => {
+      // One button, two jobs, adopted whole from the assistant: never two controls
+      // competing for one intention (plan 0041, section 2).
+      const fixture = await render(CommentComposer);
+
+      const button = fixture.nativeElement.querySelector(
+        'button.send'
+      ) as HTMLButtonElement;
+
+      expect(button.querySelector('lib-mic-icon')).not.toBeNull();
+      expect(button.getAttribute('aria-label')).toBe(
+        'list.comments.startRecording'
+      );
     });
   });
 });

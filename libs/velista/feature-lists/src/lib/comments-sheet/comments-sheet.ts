@@ -23,16 +23,21 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  VOICE_COMMENT_MAX_SECONDS,
+  VOICE_COMMENT_WARN_SECONDS,
   type Comment,
   type CommentRowVm,
   type RecordedAudio,
 } from '@portfolio/velista/models';
 import {
   appPath,
+  AudioRecorder,
   lineIdOf,
   listIdOf,
+  RECORDING_LIMITS,
   SheetNavigation,
   zoneIdOf,
+  type RecordingLimits,
 } from '@portfolio/velista/platform';
 import { CommentComposer, CommentRow, SheetShell } from '@portfolio/velista/ui';
 import { listErrorKey } from '../list-error-copy';
@@ -118,6 +123,28 @@ const PENDING_ROW: CommentRowVm = {
   templateUrl: './comments-sheet.html',
   styleUrl: './comments-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // The composer's recorder, with the comment cap on it (plan 0041, section 6.2).
+  //
+  // Here rather than in `root` for the reason `AudioRecorder`'s own doc gives:
+  // destroying it releases the microphone, so closing this sheet mid recording
+  // cannot leave the browser's indicator on behind a component nobody holds. It
+  // also keeps a recording started in a comment from colliding with one open in
+  // the assistant panel, since each has its own instance.
+  //
+  // A minute, where the assistant runs to five. `VOICE_COMMENT_MAX_SECONDS` stays
+  // the single source of the number; what changes is that the composer now reads
+  // it through the token instead of importing the constant, which is what makes
+  // both interesting states reachable in a spec without waiting.
+  providers: [
+    AudioRecorder,
+    {
+      provide: RECORDING_LIMITS,
+      useValue: {
+        warnAtSeconds: VOICE_COMMENT_WARN_SECONDS,
+        maxSeconds: VOICE_COMMENT_MAX_SECONDS,
+      } satisfies RecordingLimits,
+    },
+  ],
 })
 export class CommentsSheet {
   private readonly _comments = inject<CommentServiceI>(COMMENT_SERVICE);

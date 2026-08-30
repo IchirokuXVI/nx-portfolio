@@ -62,10 +62,19 @@ export const COMMENT_BODY_MAX_LENGTH = 2000;
  *
  * **The cap stops rather than sends**, which is plan 0032 section 4.4's rule and
  * holds for the same reason: a message that leaves on its own is a message nobody
- * agreed to send. The recording stays in the composer and the send button is
- * there to press.
+ * agreed to send. The recording is held and the stop is still there to press,
+ * which since plan 0041 is also the press that sends it.
  */
 export const VOICE_COMMENT_MAX_SECONDS = 60;
+
+/**
+ * When a voice comment starts saying how long is left (plan 0041, section 6.2).
+ *
+ * Fifteen seconds of notice, which is the same proportion the assistant gives at
+ * five minutes, rounded to something somebody mid sentence can actually act on.
+ * The warning grows the composer and nothing moves under the thumb.
+ */
+export const VOICE_COMMENT_WARN_SECONDS = 45;
 
 /**
  * The byte cap the gateway enforces (backend `VOICE_COMMENT_MAX_BYTES`).

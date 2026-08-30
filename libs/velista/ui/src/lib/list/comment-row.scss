@@ -51,3 +51,15 @@
   color: var(--app-text-muted);
   font-style: italic;
 }
+
+// Where the words came from. The same quiet treatment as the neutral phrases,
+// because it is the app talking rather than a person, and deliberately not a
+// warning: nothing has gone wrong, the reader just needs to know a machine wrote
+// the sentence above it.
+.source {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-2xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  font-style: italic;
+}

@@ -45,51 +45,30 @@
     </p>
   }
 
-  <div class="row">
-    @if (recording) {
-      <!--
-        Pause at the far left and stop at the far right, as far apart as the container
-        allows. They are the only two controls on screen and confusing them costs the
-        whole message, so the distance is the safeguard. The length sits between them
-        and doubles as the separator (section 4.3).
+  @if (recording) {
+    <!--
+      The shared row (plan 0041, section 6): trash at the far left, stop at the far
+      right, the length between them doubling as the separator. It replaced a row
+      written here, and the one control that changed is the left hand one, which was
+      a pause.
 
-        At 5:00 pause is **disabled** and stop is the only way out, which is what makes
-        the recording held rather than taken.
-      -->
-      <button
-        (click)="pauseOrResume()"
-        [attr.aria-label]="
-          (state === 'paused'
-            ? 'assistant.recorder.resume'
-            : 'assistant.recorder.pause'
-          ) | rokuT
-        "
-        [disabled]="state === 'stopped'"
-        class="control"
-        type="button"
-      >
-        @if (state === 'recording') {
-          <lib-pause-icon class="glyph" />
-        } @else {
-          <lib-play-icon class="glyph" />
-        }
-      </button>
-
-      <!--
-        Filled while listening, hollow while paused. The one signal here that is not a
-        shape, which is why it is never the only one: the button beside it changes
-        between two bars and a triangle at the same moment.
-      -->
-      <span
-        [class.listening]="state === 'recording'"
-        aria-hidden="true"
-        class="dot"
-      ></span>
-
-      <p [class.held]="state !== 'recording'" class="elapsed">
-        {{ elapsed() }}
-      </p>
-    } @else {
+      Stop is the same press from every phase, including at the cap, so the finger
+      that started a recording ends it without travelling.
+    -->
+    <lib-recording-row
+      (discard)="discard()"
+      (stop)="stopAndSend()"
+      [discardLabel]="'assistant.recorder.discard'"
+      [phase]="state === 'stopped' ? 'capped' : 'recording'"
+      [stopLabel]="'assistant.composer.stop'"
+    >
+      <lib-recording-elapsed
+        [elapsed]="elapsed()"
+        [live]="state === 'recording'"
+      />
+    </lib-recording-row>
+  } @else {
+    <div class="row">
       <!--
         An ordinary text input with an ordinary submit and no key handling of its own,
         so the platform keyboard's dictation button writes into it beside the app's
@@ -109,31 +88,24 @@
           type="text"
         />
       </form>
-    }
 
-    <!--
-      One slot, three jobs (section 4.1). Same size, same corner, whatever it is: the
-      finger that started a recording ends it without travelling.
-    -->
-    <button
-      (click)="press()"
-      [attr.aria-label]="'assistant.composer.' + button() | rokuT"
-      [class.stop]="button() === 'stop'"
-      [disabled]="disabled() && button() !== 'stop'"
-      class="action"
-      type="button"
-    >
-      @switch (button()) {
-        @case ('send') {
+      <!--
+        One slot, two jobs now that stop lives in the row above (section 4.1). Same
+        size, same corner: a microphone on an empty field, a send on a typed one.
+      -->
+      <button
+        (click)="press()"
+        [attr.aria-label]="'assistant.composer.' + button() | rokuT"
+        [disabled]="disabled()"
+        class="action"
+        type="button"
+      >
+        @if (button() === 'send') {
           <lib-send-icon class="glyph" />
-        }
-        @case ('stop') {
-          <lib-stop-icon class="glyph" />
-        }
-        @default {
+        } @else {
           <lib-mic-icon class="glyph" />
         }
-      }
-    </button>
-  </div>
+      </button>
+    </div>
+  }
 </div>

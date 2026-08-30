@@ -66,6 +66,23 @@ import { AudioPlayer } from './audio-player';
         <p class="body waiting">{{ bodyPlaceholder() | rokuT }}</p>
       }
 
+      <!--
+        Where the words came from (plan 0041, section 9.2).
+
+        Plan 0039 made the transcript **be** the comment, in the same bubble, in
+        the same type, under the same person's name. Read cold, a transcription
+        error is then indistinguishable from somebody in the group having written
+        something odd, and it is attributed to them. That plan's answer was that
+        the audio is the record and the transcript is the reading of it, which
+        only works if the reader knows which of the two they are looking at.
+
+        Not a warning: no icon, no colour, no alert. A fact about where the
+        sentence came from, and it reads as one.
+      -->
+      @if (autoTranscribed()) {
+        <p class="source">{{ 'list.comments.autoTranscript' | rokuT }}</p>
+      }
+
       @if (recording(); as audio) {
         <lib-audio-player
           [durationSeconds]="audio.durationSeconds"
@@ -101,6 +118,22 @@ export class CommentRow {
   readonly recording = computed(() => {
     const row = this.comment();
     return row.pending || this.loadAudio() === null ? null : row.recording;
+  });
+
+  /**
+   * Whether to say the words were written by a machine.
+   *
+   * `transcription` is null exactly when the comment was typed, which is what
+   * `CommentRowVm` documents, so no new field and no inferring it from the
+   * presence of a recording.
+   *
+   * Not drawn on a pending bubble, which has no words yet, and not on either
+   * neutral phrase: saying a machine wrote the sentence that says no machine
+   * could write it would be nonsense.
+   */
+  readonly autoTranscribed = computed(() => {
+    const row = this.comment();
+    return !row.pending && row.body !== '' && row.transcription !== null;
   });
 
   /**

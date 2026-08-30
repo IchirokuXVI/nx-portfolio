@@ -92,9 +92,10 @@
   }
 }
 
-// Pause on the left, stop on the right, and the length between them doing the work of
-// the gap. `flex: 1` on the length is what pushes them to opposite ends.
-.control,
+// The one button on the right, in the corner it keeps whatever it is showing.
+// The recording row that replaces this whole line while a recording runs draws its
+// own controls, so the pause, the stop and the dot that used to be styled here are
+// in `recording-row.scss` and `recording-elapsed.scss` now (plan 0041, section 6).
 .action {
   display: flex;
   flex: none;
@@ -102,33 +103,16 @@
   justify-content: center;
   inline-size: var(--app-button-height);
   block-size: var(--app-button-height);
+  border: none;
   border-radius: var(--app-radius-lg);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
   cursor: pointer;
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }
-}
-
-.control {
-  border: 1px solid var(--app-border-strong);
-  background: transparent;
-  color: var(--app-text-secondary);
-
-  // At 5:00 pause is disabled and stop becomes the only way out. Dimmed and not
-  // hidden, so the control somebody was using is still where it was.
-  &:disabled {
-    border-color: var(--app-border-subtle);
-    color: var(--app-text-muted);
-    cursor: not-allowed;
-  }
-}
-
-.action {
-  border: none;
-  background: var(--app-action-bg);
-  color: var(--app-action-fg);
 
   &:disabled {
     background: var(--app-surface-overlay);
@@ -137,39 +121,6 @@
   }
 }
 
-// Stop is the one control in the app that ends something in progress, so it is the
-// one that is not amber. Never colour alone: it is also the only square.
-.action.stop {
-  background: var(--app-status-danger-fg);
-}
-
 .glyph {
   font-size: var(--app-icon-md);
-}
-
-.dot {
-  flex: none;
-  inline-size: var(--app-recording-dot-size);
-  block-size: var(--app-recording-dot-size);
-  border: 1px solid var(--app-text-muted);
-  border-radius: var(--app-radius-full);
-}
-
-.dot.listening {
-  border-color: var(--app-status-danger-fg);
-  background: var(--app-status-danger-fg);
-}
-
-.elapsed {
-  flex: 1;
-  margin: 0;
-  color: var(--app-text-primary);
-  font-size: var(--app-text-lg);
-  font-weight: 600;
-  // The digits must not jog sideways once a second while somebody is watching them.
-  font-variant-numeric: tabular-nums;
-}
-
-.elapsed.held {
-  color: var(--app-text-secondary);
 }

@@ -62,22 +62,44 @@
   }
 }
 
-// The microphone sits between the field and the send button, so all three read as
-// one composer. Quiet rather than filled: speaking is an alternative to typing, not
-// the primary action, and two filled buttons side by side would say otherwise.
-.mic {
+// The warning and the cap message. They grow the composer rather than overlaying
+// it, so neither control moves under the thumb about to press one.
+.notice {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-attention-fg);
+
+  strong {
+    color: var(--app-text-primary);
+    font-weight: 600;
+  }
+}
+
+.error {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  inline-size: var(--app-touch-target);
-  min-block-size: var(--app-touch-target);
-  padding: 0;
-  background: var(--app-surface-sunken);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-button-radius);
+  gap: var(--app-space-3);
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
+// Sending the same bytes again after a failure, which is the whole of why the
+// recording is still here. Quiet: it sits inside an error line and is the way out
+// of it, not a second thing to read.
+.retry {
+  min-block-size: var(--app-control-height);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-status-danger-border);
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-status-danger-fg);
   font: inherit;
-  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
   cursor: pointer;
 
   &:disabled {
@@ -89,32 +111,6 @@
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }
-}
-
-// While recording, the control is a stop and says so by colour as well as by glyph.
-.mic.recording {
-  background: var(--app-status-danger-bg);
-  border-color: var(--app-status-danger-fg);
-  color: var(--app-status-danger-fg);
-}
-
-// The field is dimmed rather than removed while recording, because removing it
-// would move the send button under the thumb that is about to press stop.
-.field:disabled {
-  opacity: 0.5;
-}
-
-.status {
-  margin: var(--app-space-2) 0 0;
-  font-size: var(--app-text-2xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--app-text-muted);
-}
-
-.error {
-  margin: var(--app-space-2) 0 0;
-  font-size: var(--app-text-2xs);
-  color: var(--app-status-danger-fg);
 }
 
 .glyph {
