@@ -5,6 +5,15 @@
 > nothing in them has been built. They carry their own numbering starting at `0001`, separate
 > from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
 > free number there, so parking a design never burns a number in the build sequence.
+>
+> **Revised by backlog `0009`, and not current on its own.** This plan was written before a
+> basket could be shared with people who have no account, and before backlog `0008` took the
+> trip status off a zone line. Four things here are superseded: who may generate (readers, now
+> `WRITE`), the rule that only the owner may ever read a generated list (now participants, on
+> terms), the rule that generated lists emit no zone event (now exactly one), and most of
+> section 6's write back and conflict machinery, which existed only to reconcile a status that
+> no longer exists. Backlog `0009` section 1 is the table of what survives. Everything else
+> here, including the entity split and the argument for it, still stands.
 
 The feature that makes the zone lists worth keeping: a user presses a button and gets the list
 they will actually carry around the shop, assembled from everything still pending across the
