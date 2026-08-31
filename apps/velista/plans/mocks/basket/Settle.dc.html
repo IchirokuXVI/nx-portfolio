@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ THE SETTLE SHEET ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">TAPPING THE CIRCLE &middot; whole amount is one tap, a number is two, no zone anywhere</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+      <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+        <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+        <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 2px;">Milk</div>
+        <div style="font-size: 13.5px; color: #98a0bb; margin-bottom: 18px;">3 outstanding</div>
+
+        <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Got all 3</button>
+
+        <div style="margin-top: 14px; display: flex; align-items: center; gap: 10px;">
+          <div style="flex: 0 0 auto; height: 52px; width: 120px; border-radius: 14px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums;">2</div>
+          <button type="button" style="flex: 1; height: 52px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 550;">Got some</button>
+        </div>
+
+        <button type="button" style="width: 100%; height: 48px; margin-top: 14px; border: 1px solid rgb(251 113 133 / 40%); border-radius: 14px; background: transparent; color: #fb7185; font-family: inherit; font-size: 15px; font-weight: 550;">They had none</button>
+
+        <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px;">
+          <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Cancel</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ SUBMITTED AGAINST OUTSTANDING ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">CUMULATIVE &middot; a line worked through two shops in one afternoon</span>
+    <div style="width: 390px; display: flex; flex-direction: column; gap: 14px;">
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">NOTHING SUBMITTED YET</span>
+        <div style="background: #161a28; border-radius: 12px; height: 60px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px;">
+          <span style="flex: 1 1 auto; font-size: 16px; color: #f7f8fc;">Milk <span style="color: #98a0bb; font-size: 14px;">&times;3</span></span>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+            <span style="width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span>
+          </span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">PARTIALLY SETTLED &middot; what was submitted and what is outstanding, both visible</span>
+        <div style="background: #161a28; border-radius: 12px; min-height: 66px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 12px;">
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; color: #f7f8fc;">Milk <span style="color: #98a0bb; font-size: 14px;">2 of 3 got</span></div>
+            <div style="margin-top: 5px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; max-width: 160px;">
+              <div style="width: 66%; height: 100%; border-radius: 999px; background: #34d399;"></div>
+            </div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+            <span style="width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span>
+          </span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">FINISHED &middot; a second settle took it the rest of the way</span>
+        <div style="background: #161a28; border-radius: 12px; min-height: 64px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 12px;">
+          <div style="flex: 1 1 auto;">
+            <div style="font-size: 16px; color: #98a0bb;">Milk</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">you got 2, then Ana got 1</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+            <span style="width: 30px; height: 30px; border-radius: 999px; background: #34d399; display: flex; align-items: center; justify-content: center;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">NOT AVAILABLE &middot; closes the outstanding amount, claims nothing was bought</span>
+        <div style="background: #161a28; border-radius: 12px; min-height: 64px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 12px;">
+          <div style="flex: 1 1 auto;">
+            <div style="font-size: 16px; color: #98a0bb;">Sourdough loaf</div>
+            <div style="margin-top: 3px; font-size: 12px; color: #fb7185;">Guest 2 says they had none</div>
+          </div>
+          <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+            <span style="width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid #fb7185; display: flex; align-items: center; justify-content: center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17L17 7" stroke="#fb7185" stroke-width="2.2" stroke-linecap="round"/></svg>
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div style="padding: 13px 14px; border: 1px dashed rgba(255,255,255,0.12); border-radius: 14px;">
+        <span style="font-size: 12.5px; line-height: 1.5; color: #525a78;">Every settle allocates oldest origin first (backend 0051 section 6.2) and the actor is never asked which list anything belongs to. Readers who pass the all-or-nothing rule get the Allocate sheet to do it precisely.</span>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

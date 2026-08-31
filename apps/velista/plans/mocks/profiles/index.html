@@ -1,0 +1,514 @@
+<title>Velista: shopping profiles</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Account * { box-sizing: border-box; }
+#ab-Account a { color: #ffb454; text-decoration: none; }
+#ab-Account a:hover { color: #ffc271; }
+#ab-Profile * { box-sizing: border-box; }
+#ab-Profile a { color: #ffb454; text-decoration: none; }
+#ab-Profile a:hover { color: #ffc271; }
+#ab-SwitchAndAdd * { box-sizing: border-box; }
+#ab-SwitchAndAdd a { color: #ffb454; text-decoration: none; }
+#ab-SwitchAndAdd a:hover { color: #ffc271; }
+#ab-Delete * { box-sizing: border-box; }
+#ab-Delete a { color: #ffb454; text-decoration: none; }
+#ab-Delete a:hover { color: #ffc271; }
+</style>
+
+<header>
+  <h1>Velista: shopping profiles</h1>
+  <p class="lede">The design for plan <code>0046</code>: the profiles page behind the account screen, with the selector, add and delete, and the single-line name rule. Server half: backend <code>0049</code>. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 1860px; height: 2600px;">
+      <figure class="board" style="left: 0px; top: 430px; width: 470px;">
+        <figcaption>The account row</figcaption>
+        <div class="frame" id="ab-Account" style="width: 470px; height: 1010px;">
+          <div style="width: 470px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; flex-direction: column; gap: 12px;">
+
+            <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE WAY IN &middot; 0015&rsquo;s account page gains one row</span>
+            <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; padding: 12px 24px 0;">
+
+              <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+              </div>
+              <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Your account</h1>
+
+              <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
+              <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 10px;">
+                <div style="flex: 1;">
+                  <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</span>
+                  <span style="display: block; font-size: 17px; color: #f7f8fc;">Marta</span>
+                </div>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+              </div>
+              <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07);">
+                <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Email</span>
+                <span style="display: block; font-size: 17px; color: #f7f8fc;">marta@example.com</span>
+              </div>
+
+              <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">Shopping</div>
+              <!-- the new row -->
+              <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 12px;">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-5.1-7-11a7 7 0 0 1 14 0c0 5.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+                <div style="flex: 1; min-width: 0;">
+                  <span style="display: block; font-size: 17px; color: #f7f8fc;">Shopping profiles</span>
+                  <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Home &middot; 14013 &middot; 2 supermarkets</span>
+                </div>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+              </div>
+              <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 12px;">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+                <span style="flex: 1; font-size: 17px; color: #f7f8fc;">Install the app</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+              </div>
+
+              <div style="flex: 1;"></div>
+
+              <div style="padding-bottom: 26px;">
+                <button type="button" style="width: 100%; height: 48px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 550;">Sign out</button>
+                <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 6px;">
+                  <span style="font-size: 14px; font-weight: 500; color: #fb7185;">Delete my account</span>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 530px; top: 430px; width: 900px;">
+        <figcaption>The page, and rule R1</figcaption>
+        <div class="frame" id="ab-Profile" style="width: 900px; height: 1010px;">
+          <div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ THE PAGE ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE PAGE &middot; one profile selected, everything below belongs to it</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; padding: 12px 24px 0;">
+
+                <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+                </div>
+                <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Shopping profiles</h1>
+
+                <!-- the selector row -->
+                <div style="margin-top: 20px; display: flex; align-items: center; gap: 8px;">
+                  <button type="button" style="flex: 1 1 auto; min-width: 0; height: 52px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 15px; color: inherit; font-family: inherit; text-align: left;">
+                    <span style="flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 600; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Home</span>
+                    <span style="flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #ffc271; background: rgba(255,180,84,0.09); border: 1px solid rgba(255,180,84,0.28); border-radius: 999px; padding: 2px 7px;">DEFAULT</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
+                  <button type="button" aria-label="New profile" style="flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: transparent; display: flex; align-items: center; justify-content: center;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                  <button type="button" aria-label="Delete Home" style="flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: transparent; display: flex; align-items: center; justify-content: center;">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+                  </button>
+                </div>
+
+                <!-- name and address -->
+                <div style="margin-top: 18px;">
+                  <label style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</label>
+                  <div style="height: 46px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 13px;">
+                    <span style="font-size: 15px; color: #f7f8fc;">Home</span>
+                  </div>
+                </div>
+                <div style="margin-top: 12px;">
+                  <label style="display: flex; justify-content: space-between; align-items: baseline; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;"><span>Address</span><span style="text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px;">Optional</span></label>
+                  <div style="height: 46px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 13px;">
+                    <span style="font-size: 15px; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Calle Mayor 12, 3&ordm;B</span>
+                  </div>
+                </div>
+
+                <!-- postal codes -->
+                <div style="margin-top: 16px;">
+                  <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 8px;">Postal codes</span>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <span style="height: 36px; padding: 0 6px 0 12px; border-radius: 999px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 6px;">
+                      <span style="font-size: 13.5px; color: #f7f8fc; font-variant-numeric: tabular-nums;">14013</span>
+                      <span style="font-size: 12px; color: #6f7899;">home</span>
+                      <span style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;" aria-label="Remove 14013">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 17L17 7M7 7l10 10"/></svg>
+                      </span>
+                    </span>
+                    <span style="height: 36px; padding: 0 12px; border-radius: 999px; border: 1px dashed rgba(255,255,255,0.2); display: flex; align-items: center; gap: 6px; color: #98a0bb;">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                      <span style="font-size: 13px;">Add</span>
+                    </span>
+                  </div>
+                </div>
+
+                <!-- supermarkets -->
+                <div style="margin-top: 16px;">
+                  <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 8px;">Supermarkets</span>
+                  <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 2px 13px;">
+                    <div style="display: flex; align-items: center; gap: 10px; height: 46px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                      <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Mercadona</span>
+                      <span style="width: 20px; height: 20px; border-radius: 6px; background: #ffb454; display: flex; align-items: center; justify-content: center;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; height: 46px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                      <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Deza</span>
+                      <span style="width: 20px; height: 20px; border-radius: 6px; background: #ffb454; display: flex; align-items: center; justify-content: center;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; height: 46px;">
+                      <span style="flex: 1; font-size: 14.5px; color: #6f7899; text-decoration: line-through;">DIA</span>
+                      <span style="flex: none; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: #6f7899;">EXCLUDED</span>
+                      <span style="width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid #4d5470;"></span>
+                    </div>
+                  </div>
+                  <div style="margin-top: 7px; font-size: 11.5px; color: #6f7899;">The whole franchise, never one shop. Excluded chains stay visible so they can come back.</div>
+                </div>
+
+                <!-- threshold -->
+                <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+                  <span style="flex: 1; font-size: 14px; color: #98a0bb;">A second stop must save at least</span>
+                  <div style="flex: none; width: 96px; height: 44px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; gap: 4px;">
+                    <span style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">2</span>
+                    <span style="font-size: 14px; color: #98a0bb;">&euro;</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ LONG NAME ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">RULE R1 &middot; a 64 character name is one line everywhere, and the buttons never move</span>
+              <div style="width: 390px; display: flex; flex-direction: column; gap: 14px;">
+
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">THE SELECTOR ROW &middot; ellipsis, plus and trash unmoved</span>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="flex: 1 1 auto; min-width: 0; height: 52px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 15px;">
+                      <span style="flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 600; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">The flat in Valencia where we spend every single Augus&hellip;</span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </span>
+                    <span style="flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    </span>
+                    <span style="flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+                    </span>
+                  </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">IN THE OPEN LIST &middot; same rule</span>
+                  <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 4px 8px;">
+                    <div style="display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 8px;">
+                      <span style="flex: 1 1 auto; min-width: 0; font-size: 14.5px; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Home</span>
+                      <span style="flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #ffc271; background: rgba(255,180,84,0.09); border: 1px solid rgba(255,180,84,0.28); border-radius: 999px; padding: 2px 7px;">DEFAULT</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 8px; border-top: 1px solid rgba(255,255,255,0.06);">
+                      <span style="flex: 1 1 auto; min-width: 0; font-size: 14.5px; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">The flat in Valencia where we spend every single August together</span>
+                    </div>
+                  </div>
+                  <span style="font-size: 11.5px; color: #525a78;">The full name stays the control&rsquo;s accessible name; only the drawing truncates. The server caps names at 64 characters so this is cosmetic, not load bearing.</span>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">IN 0045&rsquo;S GENERATION SHEET &middot; same rule, third place it shows</span>
+                  <div style="display: flex; align-items: center; justify-content: space-between; height: 44px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 0 13px;">
+                    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb;">Shopping profile</span>
+                    <span style="display: flex; align-items: center; gap: 6px; max-width: 170px;">
+                      <span style="font-size: 14px; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">The flat in Valencia where&hellip;</span>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </span>
+                  </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">AN UNCOVERED POSTAL CODE &middot; kept, flagged, explained in words</span>
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <span style="height: 36px; padding: 0 6px 0 12px; border-radius: 999px; background: #161a28; border: 1px solid rgba(255,180,84,0.35); display: flex; align-items: center; gap: 6px; width: fit-content;">
+                      <span style="font-size: 13.5px; color: #f7f8fc; font-variant-numeric: tabular-nums;">05631</span>
+                      <span style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 17L17 7M7 7l10 10"/></svg>
+                      </span>
+                    </span>
+                    <span style="font-size: 12px; color: #ffc271;">No supermarket we know reaches this code yet</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 1590px; width: 900px;">
+        <figcaption>Switching and adding</figcaption>
+        <div class="frame" id="ab-SwitchAndAdd" style="width: 900px; height: 1010px;">
+          <div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ SELECTOR OPEN ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SWITCHING &middot; the listbox, default marked, choosing swaps everything below</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column; padding: 12px 24px 0;">
+
+                <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+                </div>
+                <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Shopping profiles</h1>
+
+                <div style="margin-top: 20px; display: flex; align-items: center; gap: 8px;">
+                  <span style="flex: 1 1 auto; min-width: 0; height: 52px; border-radius: 14px; background: #161a28; border: 1px solid #ffb454; display: flex; align-items: center; gap: 10px; padding: 0 15px;">
+                    <span style="flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 600; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Home</span>
+                    <span style="flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #ffc271; background: rgba(255,180,84,0.09); border: 1px solid rgba(255,180,84,0.28); border-radius: 999px; padding: 2px 7px;">DEFAULT</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+                  </span>
+                  <span style="flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                  </span>
+                  <span style="flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+                  </span>
+                </div>
+
+                <!-- the open listbox -->
+                <div style="margin-top: 6px; background: #1a1e2e; border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,0.5); overflow: hidden;">
+                  <div style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 15px; background: rgba(255,180,84,0.07);">
+                    <span style="flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 600; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Home</span>
+                    <span style="flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #ffc271; background: rgba(255,180,84,0.09); border: 1px solid rgba(255,180,84,0.28); border-radius: 999px; padding: 2px 7px;">DEFAULT</span>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#ffc271" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 15px; border-top: 1px solid rgba(255,255,255,0.06);">
+                    <span style="flex: 1 1 auto; min-width: 0; font-size: 15px; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">The office</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 15px; border-top: 1px solid rgba(255,255,255,0.06);">
+                    <span style="flex: 1 1 auto; min-width: 0; font-size: 15px; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">The flat in Valencia where we spend every single Aug&hellip;</span>
+                  </div>
+                </div>
+
+                <div style="margin-top: 18px; opacity: 0.35;">
+                  <label style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</label>
+                  <div style="height: 46px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 13px;">
+                    <span style="font-size: 15px; color: #f7f8fc;">Home</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ JUST ADDED ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">AFTER PLUS &middot; created at once, selected, the name focused. No modal asked first</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; padding: 12px 24px 0;">
+
+                <div style="height: 44px; display: flex; align-items: center; margin-left: -12px;">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+                </div>
+                <h1 style="margin: 6px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; color: #f7f8fc;">Shopping profiles</h1>
+
+                <div style="margin-top: 20px; display: flex; align-items: center; gap: 8px;">
+                  <span style="flex: 1 1 auto; min-width: 0; height: 52px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 15px;">
+                    <span style="flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 600; color: #98a0bb; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">My profile</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                  </span>
+                  <span style="flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                  </span>
+                  <span style="flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
+                  </span>
+                </div>
+
+                <div style="margin-top: 18px;">
+                  <label style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;">Name</label>
+                  <div style="height: 46px; border-radius: 12px; background: #161a28; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 13px;">
+                    <span style="display: inline-block; width: 2px; height: 18px; background: #ffb454;"></span>
+                  </div>
+                  <div style="margin-top: 6px; font-size: 12px; color: #6f7899;">Until it has a name it shows as the localized default, &ldquo;My profile&rdquo;</div>
+                </div>
+
+                <div style="margin-top: 12px;">
+                  <label style="display: flex; justify-content: space-between; align-items: baseline; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 6px;"><span>Address</span><span style="text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px;">Optional</span></label>
+                  <div style="height: 46px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 13px;">
+                    <span style="font-size: 15px; color: #525a78;">Street and number</span>
+                  </div>
+                </div>
+
+                <div style="margin-top: 16px;">
+                  <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 8px;">Postal codes</span>
+                  <span style="height: 36px; padding: 0 12px; border-radius: 999px; border: 1px dashed rgba(255,255,255,0.2); display: inline-flex; align-items: center; gap: 6px; color: #98a0bb;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    <span style="font-size: 13px;">Add</span>
+                  </span>
+                </div>
+
+                <div style="margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: rgba(255,180,84,0.06); border: 1px solid rgba(255,180,84,0.25); display: flex; align-items: center; gap: 10px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#ffc271" stroke-width="1.9"/><path d="M12 11v5.5M12 7.6v.1" stroke="#ffc271" stroke-width="2" stroke-linecap="round"/></svg>
+                  <span style="font-size: 13px; line-height: 1.45; color: #c2c8db;">Add a postal code or choose a supermarket to see prices</span>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 960px; top: 1590px; width: 900px;">
+        <figcaption>Deleting</figcaption>
+        <div class="frame" id="ab-Delete" style="width: 900px; height: 1010px;">
+          <div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ ORDINARY PROFILE ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">AN ORDINARY PROFILE &middot; one confirm, plain consequences</span>
+              <div style="width: 390px; height: 620px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 26px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Delete &ldquo;The office&rdquo;?</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb;">Its postal codes and supermarket choices go with it. Your lists are not touched.</div>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: #fb7185; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Delete the profile</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Keep it</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ THE DEFAULT ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE DEFAULT &middot; the copy names its successor. The last profile shows no trash at all</span>
+              <div style="width: 390px; height: 620px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 26px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Delete &ldquo;Home&rdquo;?</div>
+                  <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb;">This is your default profile. <span style="color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 190px; vertical-align: bottom;">The office</span> will become your default, and prices will be shown for it from now on.</div>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: #fb7185; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Delete the profile</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Keep it</span>
+                  </div>
+                </div>
+
+              </div>
+              <span style="font-size: 11.5px; color: #525a78; max-width: 390px;">With exactly one profile the trash is absent from the page, per the rule that a control you may not use is not drawn: the last profile cannot be deleted (backend 0049 section 1.3).</span>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 450px;"><p>Plan 0046. A profile is how the app knows where somebody shops: postal codes, chains included or excluded (the franchise, never one shop), and the saving that makes a second stop worth it. Profiles are several, named, switchable; one is the default that catalog reads and generated runs use when nothing says otherwise.</p><p>Every user already has one (backend 0049 creates it lazily), so the page never has a create-your-first wall.</p></aside>
+      <aside class="note" style="left: 530px; top: 0px; width: 450px;"><p>RULE R1: A PROFILE NAME IS ONE LINE, ALWAYS. The selector row, the open list, 0045's generation sheet and anywhere else render it with ellipsis, and the layout never grows to fit it. Plus and trash never move. The server caps names at 64 characters so the truncation is cosmetic; the full name stays the control's accessible name, so a screen reader is never handed the ellipsis.</p></aside>
+      <aside class="note" style="left: 1060px; top: 0px; width: 450px;"><p>PLUS CREATES IMMEDIATELY: a fresh profile, selected, name focused, no modal asking for a name first. Unnamed profiles render as the localized default, My profile.</p><p>THE TRASH IS ABSENT with one profile, because the last one cannot be deleted. Deleting the default promotes another, and the confirm names which. Excluded chains are struck through and stay visible, never hidden, so they can come back.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 1860;
+    var h = 2600;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

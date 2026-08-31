@@ -55,7 +55,7 @@ Both grace periods are configuration values.
 
 ## 5. Additions from later plans
 
-- **Generated lists (0049, 0050).** The `user.deleted` saga also deletes every generated list
+- **Generated lists (0050, 0051).** The `user.deleted` saga also deletes every generated list
   the caller owns, with its lines, provenance rows, share links and participants. A
   `LineSettlement` is a zone fact and is **not** deleted with the account; its
-  `settledByUserId` attribution is nulled (0050 section 10).
+  `settledByUserId` attribution is nulled (0051 section 10).

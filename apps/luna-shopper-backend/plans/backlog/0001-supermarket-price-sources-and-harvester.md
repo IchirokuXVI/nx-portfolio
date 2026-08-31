@@ -5,6 +5,12 @@
 > nothing in them has been built. They carry their own numbering starting at `0001`, separate
 > from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
 > free number there, so parking a design never burns a number in the build sequence.
+>
+> Two pieces of this design have been carved out and built ahead of the rest: plan `0038`
+> built the ingest half (the harvester service, price scopes, the single source price row),
+> and plan `0048` builds product groups and the rewritten search (sections 3.2 to 3.4 here).
+> The multi source price model, the category tree, the classification ladder and the leaflet
+> and browser adapters remain this plan's.
 
 Follows 0012, which shipped the catalog service (items, supermarkets, locations, per location
 prices) as owner curated data entered by hand. This plan keeps hand entry as one input among

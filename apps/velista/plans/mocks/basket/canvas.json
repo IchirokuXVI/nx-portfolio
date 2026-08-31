@@ -1,0 +1,43 @@
+{
+  "title": "Velista: the shared basket",
+  "lede": "The design for plan <code>0044</code>: the join screen, the basket for owner, registered reader and guest, settling, the allocation sheet, presence and sharing. Server half: backend <code>0051</code>. Phone only, 390 by 844. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Join.dc.html", "x": 0, "y": 0, "w": 900, "h": 1010, "title": "Joining" },
+    { "file": "Basket.dc.html", "x": 960, "y": 0, "w": 1330, "h": 1010, "title": "The basket, three readers" },
+    { "file": "Settle.dc.html", "x": 0, "y": 1160, "w": 900, "h": 1010, "title": "Settling" },
+    { "file": "Allocate.dc.html", "x": 960, "y": 1160, "w": 470, "h": 1010, "title": "Allocate" },
+    { "file": "Share.dc.html", "x": 1490, "y": 1160, "w": 900, "h": 1010, "title": "Links and revoking" },
+    { "file": "People.dc.html", "x": 0, "y": 2330, "w": 900, "h": 1010, "title": "People" },
+    { "file": "DayTheme.dc.html", "x": 960, "y": 2330, "w": 470, "h": 1010, "title": "Day" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -430,
+      "w": 440,
+      "text": "Plan 0044. The person carrying the basket is often not the person who wrote the list, so a basket is shared by a link, the link mints one identity per person who opens it, and what each of them sees is decided by what they can prove.\nEverything here is used one handed, in a shop, by somebody who has never seen this app. That is stricter than the rest of the app."
+    },
+    {
+      "id": "join",
+      "x": 480,
+      "y": -430,
+      "w": 450,
+      "text": "THE JOIN SCREEN IS THE ACQUISITION MOMENT AND MUST NOT ACT LIKE ONE. Continue as guest is the primary action; the name field says Optional on the field itself; sign in is visibly secondary; install is lowest and never a condition.\nThe preview discloses the list's name, how many people are on it, and whether it still accepts people. No lines, no zones, no list names, no members (backend 0051 section 4).\nA revoked link and one that never existed get the same answer, and somebody already signed in never sees this screen at all."
+    },
+    {
+      "id": "absence",
+      "x": 960,
+      "y": -430,
+      "w": 460,
+      "text": "THE THREE VIEWS DIFFER BY ABSENCE, NOT DISABLED CONTROLS (0030's rule). A guest sees lines, quantities, outstanding amounts and who touched what, and never sees a zone, a list name, an origin caption, the history or the allocation sheet.\nA registered participant gets the fuller column only while holding WRITE on every source list, checked per request; the known cliff (one read-only source collapses it) is accepted and recorded in backend 0051 section 11.\nGuests are marked with a dashed ring plus the word GUEST, never colour alone, and the word anonymous appears nowhere in the product."
+    },
+    {
+      "id": "settle",
+      "x": 1450,
+      "y": -430,
+      "w": 450,
+      "text": "SETTLING IS CUMULATIVE AND NEVER MENTIONS A HOUSEHOLD. Got all N is one tap; Got some asks for a number; both allocate oldest origin first server side. The allocation sheet is the same act with the split supplied, and only readers who pass the rule see it.\nThey had none closes the outstanding amount claiming nothing, and feeds the not-available indicator on the zone line (backend 0047 section 5).\nA settle is authorized by the OWNER's access to each origin, never the actor's: the owner delegated shopping, not permission.\nRevoking a link stops new joins and leaves the people already shopping working; removing them too is the checkbox, an explicit second choice, never the default."
+    }
+  ]
+}

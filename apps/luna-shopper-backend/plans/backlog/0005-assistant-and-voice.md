@@ -13,7 +13,7 @@ cheaper to hold from the start than to retrofit.
 A conversational assistant that fills a zone's lists ("add milk, eggs and two kilos of tomatoes
 to the flat list") and explains the app to whoever is lost in it, reachable by typing or by
 speaking. Depends on 0019 for the reason given in section 2, and is far more useful after
-0048, 0049 and backlog 0004, since half of what a user would want to say to it is about baskets and
+0049, 0050 and backlog 0004, since half of what a user would want to say to it is about baskets and
 prices.
 
 ## 1. The rule the whole plan hangs on
@@ -98,7 +98,7 @@ will be deleted the first week it is flaky.
 
 Context is assembled per turn, from the caller's own token and nothing else: their zones, the
 lists they can write, the pending lines of the zone being discussed, their shopping preferences
-(0048). It never sees another user's data, and it never sees a zone the caller is not an
+(0049). It never sees another user's data, and it never sees a zone the caller is not an
 approved member of, because it fetches all of it through the same API with the same token.
 
 Conversation state lives in the assistant's own database: `Conversation` (owner, optional zone,
@@ -144,7 +144,7 @@ changing shared data on a misunderstanding.
   about to add and does it on the next turn. A per user setting can relax this for adds, which
   are the cheap, obvious case, and the setting never applies to the rest.
 - **Bulk and destructive operations always confirm**, with no setting to turn that off:
-  deleting lines, deleting a list, applying statuses back to origins (0049 section 6).
+  deleting lines, deleting a list, applying statuses back to origins (0050 section 6).
 - **Excluded from the tool catalog entirely**: zone governance (approve, kick, ban, roles,
   ownership transfer), account operations (deletion, merge, username changes), and every
   platform admin endpoint from 0012. These are decisions about people, and a chat is the wrong

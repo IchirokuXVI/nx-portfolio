@@ -4,7 +4,8 @@
 > status. Section 1.1 lists what it takes back. `0012` carries a note pointing here.
 >
 > Server half: `apps/luna-shopper-backend/plans/0047`. Nothing here is buildable
-> without it. The basket that eventually settles these lines is `0044`.
+> without it, and the composer's suggestions in section 6 additionally need backend
+> `0048`. The basket that eventually settles these lines is `0044`.
 
 ## 1. Purpose
 
@@ -39,8 +40,10 @@ unchanged.
 
 ## 2. Mock
 
-**Not built.** `0001` section 9's rule stands: it is not
-ready for development until the mock is approved.
+Drawn in `mocks/line/`, published at
+<https://claude.ai/code/artifact/58c83512-3899-4200-bb2b-464c805084fd>, awaiting
+approval. `0001` section 9's rule stands: it is not ready for development until the
+mock is approved.
 
 | Artboard | Frames |
 | --- | --- |
@@ -193,8 +196,8 @@ history, and every price this app will ever show are all keyed on that column.
 Three rules, all of which come from the backend plans that own the search:
 
 - **A group beats an item.** Somebody typing "milk" is offered the group, not one brand of
-  it. The backend's backlog `0001` section 3.4 has `catalog.searchOffers` for exactly
-  this, and its backlog `0004` section 1.2 states the rule as a hard one: nothing is
+  it. Backend `0048` section 3 has `item.searchOffers` for exactly
+  this, and backlog `0004` section 1.2 states the rule as a hard one: nothing is
   resolved to an item when a group would do.
 - **The scope is where you shop.** The search takes a price scope set, so a product from a
   chain the user never visits is not a suggestion.

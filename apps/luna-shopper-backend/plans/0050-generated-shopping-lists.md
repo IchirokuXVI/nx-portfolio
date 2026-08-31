@@ -1,12 +1,12 @@
 # 0049 Generated shopping lists
 
-> **Revised by `0050`, and not current on its own.** This plan was written before a
+> **Revised by `0051`, and not current on its own.** This plan was written before a
 > basket could be shared with people who have no account, and before `0047` took the
 > trip status off a zone line. Four things here are superseded: who may generate (readers, now
 > `WRITE`), the rule that only the owner may ever read a generated list (now participants, on
 > terms), the rule that generated lists emit no zone event (now exactly one), and most of
 > section 6's write back and conflict machinery, which existed only to reconcile a status that
-> no longer exists. `0050` section 1 is the table of what survives. Everything else
+> no longer exists. `0051` section 1 is the table of what survives. Everything else
 > here, including the entity split and the argument for it, still stands.
 
 The feature that makes the zone lists worth keeping: a user presses a button and gets the list
@@ -16,7 +16,7 @@ edit only reaches the shared lists when the user says which shared list it belon
 
 This plan is about **composing, owning and reconciling** that list. Pricing it and splitting it
 across shops is backlog 0004, which consumes what this one produces. Depends on 0007 (lists,
-lines and their two state machines) and on `0048` (which zones and lists feed a run).
+lines and their two state machines) and on `0049` (which zones and lists feed a run).
 
 ## 1. A generated list is not a `ShoppingList`
 
@@ -67,7 +67,8 @@ exactly the household where the admin is not the one doing the shopping.
 The sources are, in order:
 
 1. The `sources` given in the request, if any.
-2. Otherwise the user's stored generation sources (`0048` section 1), which default to
+2. Otherwise the stored generation sources of the shopping profile the run names, or of
+   the caller's default profile when it names none (`0049` section 1). They default to
    `ALL`.
 3. `ALL` means: every zone where the caller's membership is `APPROVED`, and inside each zone
    every list the caller holds a `ListAccess` row for, reader or writer alike.
