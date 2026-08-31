@@ -1,27 +1,21 @@
-# 0009 (backlog) Generated lists, shared with guests
+# 0050 Generated lists, shared with guests
 
-> **Status: backlog. Not scheduled for development.**
-> Plans in `plans/backlog/` are designed and agreed but are not part of the build order, and
-> nothing in them has been built. They carry their own numbering starting at `0001`, separate
-> from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
-> free number there, so parking a design never burns a number in the build sequence.
->
-> **This plan revises backlog `0003`**, which designed generated lists before sharing existed.
-> Section 1 says exactly what survives and what is replaced. `0003` carries a note pointing here
+> **This plan revises `0049`**, which designed generated lists before sharing existed.
+> Section 1 says exactly what survives and what is replaced. `0049` carries a note pointing here
 > and should not be read as current on its own.
 
 A generated list is the thing you carry around the shop. This plan makes it **shareable with
 people who have no account**, by a link, without ever handing them the household's data.
 
-The design turns on one idea that `0003` did not have: **a link is an invitation, and a
+The design turns on one idea that `0049` did not have: **a link is an invitation, and a
 participant is an identity.** One link shared with three people mints three participants, so an
 edit made in the shop can be attributed to a person rather than to a URL.
 
-Depends on backlog `0008` (settlements, which this drives) and backlog `0002` (the sources a run
+Depends on `0047` (settlements, which this drives) and `0048` (the sources a run
 draws from). Pricing the result is backlog `0004`, untouched here. Companion plan:
-`apps/velista/plans/backlog/0002`.
+`apps/velista/plans/0044`.
 
-## 1. What this changes in backlog 0003
+## 1. What this changes in 0049
 
 **Survives unchanged.** The entity split and its argument (a generated list has no `zoneId`, so it
 cannot be a `ShoppingList` with a `kind` column), `GeneratedListLine` with `DERIVED` and `ADDED`
@@ -31,27 +25,27 @@ retention rules.
 
 **Replaced.**
 
-| `0003` said | Now |
+| `0049` said | Now |
 | --- | --- |
 | Any approved member may generate, readers included (section 2) | `WRITE` on the source lists (section 2) |
 | Only `ownerUserId` may ever read it (section 8) | Participants may, on the terms in section 5 |
 | Generated lists never emit zone events (section 8) | They emit one, so a zone line can say somebody is buying it (section 5.3) |
 | `applyStatuses`, `lineVersion` conflicts, partial apply reporting (section 6) | Mostly gone. Section 6 here replaces it |
 
-The last row is the largest simplification. `0003` section 6 existed only because a zone line
+The last row is the largest simplification. `0049` section 6 existed only because a zone line
 carried a trip status that a basket had to write back, with all the version reconciliation that
-implied. Backlog `0008` removes that status, so applying a result is now writing a settlement,
+implied. `0047` removes that status, so applying a result is now writing a settlement,
 which is an append rather than a contested update, and most of the conflict machinery evaporates
 with it.
 
 ## 2. Who may generate, and from what
 
-**`WRITE` on every list a run draws from.** This overrides `0003` section 2, which allowed a
+**`WRITE` on every list a run draws from.** This overrides `0049` section 2, which allowed a
 reader to generate and argued that restricting it would break the household where the shopper is
 not the admin.
 
 That argument still holds against `DECIDE`, and `DECIDE` is not what is being asked for here.
-`DECIDE` approves lines and does nothing else. But generation is no longer the pure read `0003`
+`DECIDE` approves lines and does nothing else. But generation is no longer the pure read `0049`
 took it for: section 5.3 makes a generated list put a visible claim on other people's lines, and
 section 6 lets it settle them. Taking a claim on a line is a write, so it takes `WRITE`.
 
@@ -182,27 +176,27 @@ evaluated at request time.**
 
 **At request time, never from the snapshot.** A basket outlives the access it was built with, and
 a recipient's standing today is the only one that can be honestly checked. This is the same rule
-`0003` section 5 applied to writing back.
+`0049` section 5 applied to writing back.
 
 The all or nothing shape has a known cliff: one source list where the reader holds only `READ`
 collapses the whole view even when they have `WRITE` on the other four. It is accepted for now
 because it fails in the safe direction and because the per line alternative needs a per viewer,
-per line projection. That refinement is in section 11, and the cross list indicator in backlog
-`0008` builds most of the machinery it would need.
+per line projection. That refinement is in section 11, and the cross list indicator in
+`0047` builds most of the machinery it would need.
 
 ### 5.3 The one zone event a generated list emits
 
-`0003` section 8 said generated lists never emit zone events. They emit exactly one, so that a
+`0049` section 8 said generated lists never emit zone events. They emit exactly one, so that a
 zone line can show that somebody is out buying it.
 
 The payload says **that** a line is in an active basket and **whose**, and nothing else: not what
-else is in it, not where they are shopping, not what it costs. That is precisely the leak `0003`
+else is in it, not where they are shopping, not what it costs. That is precisely the leak `0049`
 section 8 already declared acceptable when it noted an admin can see a line was marked bought but
 not what basket it came from.
 
 ## 6. Settling from the basket
 
-The half of the plan that does real work, and the half backlog `0008` was shaped to receive.
+The half of the plan that does real work, and the half `0047` was shaped to receive.
 
 A `GeneratedListLine` gains **`settledQuantity`** (int, default 0) beside its existing `quantity`.
 Outstanding is the difference, the screen shows both, and a line is finished when they are equal.
@@ -221,7 +215,7 @@ shop with a list. So the first two gestures ask for a number at most, and the al
 system's problem.
 
 `NOT_AVAILABLE` is an outcome rather than a quantity: it closes the outstanding amount, writes
-settlements that decrement nothing, and sets the indicator backlog `0008` section 5 derives.
+settlements that decrement nothing, and sets the indicator `0047` section 5 derives.
 
 ### 6.2 The default allocation is oldest origin first
 
@@ -233,7 +227,7 @@ explicable in one sentence, and identical to the obvious answer in the overwhelm
 where a line has exactly one origin. Proportional splitting was rejected for producing fractional
 units of things that come in units.
 
-Every origin touched gets its own `LineSettlement` row (backlog `0008` section 3), each carrying
+Every origin touched gets its own `LineSettlement` row (`0047` section 3), each carrying
 this generated line's id, so the allocation is auditable afterwards rather than being a rule that
 ran once and left no trace.
 
@@ -254,7 +248,7 @@ not a stored grant from generation time, because access moves.
 
 So a guest can never cause a write anywhere the owner could not have written themselves. The owner
 delegated shopping, not permission. An origin whose access has since gone is skipped and reported,
-which is the one piece of `0003` section 6 that survives intact.
+which is the one piece of `0049` section 6 that survives intact.
 
 ## 7. Presence
 
@@ -303,20 +297,20 @@ to be discovered at the guard.
 
 ## 10. Contracts, events, migrations
 
-- New enums `ParticipantKind` and, from backlog `0008`, `SettlementOutcome`, in
+- New enums `ParticipantKind` and, from `0047`, `SettlementOutcome`, in
   `libs/luna-shopper/contracts`, per the constant sets rule.
 - Events on the generated list's own room: `generatedList.updated`, `generatedList.lineUpdated`,
   `generatedList.lineSettled`, `generatedList.participantJoined`, `generatedList.participantLeft`,
   `presence.generatedListUpdated`. One event on the **zone** room, section 5.3.
 - Endpoints under `/v1/generated-lists`, plus an unauthenticated pair for the link preview and the
   join, and a participant authenticated surface for everything a guest does.
-- Migrations, in core: the three tables from `0003` section 1, plus `generated_list_share_links`
+- Migrations, in core: the three tables from `0049` section 1, plus `generated_list_share_links`
   and `generated_list_participants`, plus `settledQuantity` and the two attribution columns on the
-  generated line. One migration widens backlog `0008`'s `line_settlements`, making
+  generated line. One migration widens `0047`'s `line_settlements`, making
   `settledByUserId` nullable and adding `settledByParticipantId`, with a check constraint that
   exactly one is set.
 - Account deletion deletes the caller's generated lists, their links and their participants, and
-  that belongs on plan `0011`'s checklist when this is picked up. A `LineSettlement` is a zone fact
+  that is recorded on plan `0011`'s checklist, section 5. A `LineSettlement` is a zone fact
   and is **not** deleted with the account; its attribution is nulled.
 - The OpenAPI document is regenerated.
 
@@ -330,7 +324,7 @@ to be discovered at the guard.
   plan `0021`: a guest is not an account and opening a link must never create one.
 - Default link expiry. Leaning an absolute cap plus expiry when the list is completed or archived,
   since an unauthenticated read of somebody's shopping habits should not outlive the trip.
-- Whether several `ACTIVE` generated lists per user should be allowed, inherited from `0003`
+- Whether several `ACTIVE` generated lists per user should be allowed, inherited from `0049`
   section 10 and still leaning yes.
 - Whether an owner can hand a generated list to somebody else outright, which is a different thing
   from sharing it and is out of scope here.

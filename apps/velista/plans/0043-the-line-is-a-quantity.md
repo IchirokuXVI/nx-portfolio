@@ -1,17 +1,10 @@
-# 0001 (backlog) The line is a quantity, and it has a history
+# 0043 The line is a quantity, and it has a history
 
-> **Status: backlog. Not scheduled for development.**
-> Plans in `plans/backlog/` are designed and agreed but are not part of the build order,
-> and nothing in them has been built. They carry their own numbering starting at `0001`,
-> separate from the sequence in `plans/`. When one is picked up it moves into `plans/`
-> and takes the next free number there, so parking a design never burns a number in the
-> build sequence.
->
 > **This plan revises `0012`**, the list page, which was built when a line carried a trip
 > status. Section 1.1 lists what it takes back. `0012` carries a note pointing here.
 >
-> Server half: `apps/luna-shopper-backend/plans/backlog/0008`. Nothing here is buildable
-> without it. The basket that eventually settles these lines is velista backlog `0002`.
+> Server half: `apps/luna-shopper-backend/plans/0047`. Nothing here is buildable
+> without it. The basket that eventually settles these lines is `0044`.
 
 ## 1. Purpose
 
@@ -27,7 +20,7 @@ thumb landing on a checkbox and becomes a thumb dragging a number.**
 
 The second half is that a line now has somewhere to go. Tapping one opens what the app
 knows about it, and there is a page behind that with the whole history, which is only
-worth building because backlog `0008` finally records one.
+worth building because backend `0047` finally records one.
 
 ### 1.1 What this takes back from 0012
 
@@ -46,7 +39,7 @@ unchanged.
 
 ## 2. Mock
 
-**Not built.** The plan is in the backlog and `0001` section 9's rule stands: it is not
+**Not built.** `0001` section 9's rule stands: it is not
 ready for development until the mock is approved.
 
 | Artboard | Frames |
@@ -79,7 +72,7 @@ gone all behave exactly as they do, and the header is untouched.
 | Never wanted | `quantity = 0` with no purchase. Somebody typed it and it has not been needed yet. No indicator, because there is nothing to report |
 | Awaiting approval | Unchanged from `0030`. Independent of the above |
 
-The distinction between the middle two rows is why backlog `0008` section 5 says "at
+The distinction between the middle two rows is why backend `0047` section 5 says "at
 least once" rather than testing the quantity alone.
 
 ### 3.3 The three indicators
@@ -145,7 +138,7 @@ Top to bottom, with what is new marked.
 | Delete confirmation | the existing confirm | `shared/ui` |
 
 The reel goes in `velista/ui` rather than beside the row because it is a general control
-over a number and the basket in backlog `0002` needs the same one.
+over a number and the basket in `0044` needs the same one.
 
 ### 5.1 The detail sheet
 
@@ -166,7 +159,7 @@ promise it cannot keep until baskets exist.
 So the detail sheet carries "I bought this", asking how many and defaulting to the whole
 outstanding quantity. It is two taps behind a deliberate open, not a swipe, which is the
 whole distinction being drawn. It writes a settlement with no basket attached, which is
-what backlog `0008` section 4.4 is for, and it is the reason this plan ships on its own.
+what backend `0047` section 4.4 is for, and it is the reason this plan ships on its own.
 
 Marking a line not available lives here too, for the same reason and with the same
 weight: it is something you say afterwards, not something you flick past in an aisle.
@@ -260,7 +253,7 @@ This section replaces `0012` section 7's row mapping in full.
 - **Prices and where to buy.** The line page has a region for them and draws nothing in it
   until the backend's backlog `0004` exists. With one chain harvested and disabled outside
   development, it would show one price at one shop.
-- **The basket**, its sharing and its guests. Velista backlog `0002`.
+- **The basket**, its sharing and its guests. Velista `0044`.
 - **Settling from the row.** The row has no marking control of any kind, which is section
   1.1. Recording a purchase is a deliberate act from the detail sheet, per 5.2, and never
   something a thumb does in passing.

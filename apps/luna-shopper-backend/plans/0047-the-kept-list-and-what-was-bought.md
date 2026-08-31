@@ -1,10 +1,4 @@
-# 0008 (backlog) The kept list, and what was actually bought
-
-> **Status: backlog. Not scheduled for development.**
-> Plans in `plans/backlog/` are designed and agreed but are not part of the build order, and
-> nothing in them has been built. They carry their own numbering starting at `0001`, separate
-> from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
-> free number there, so parking a design never burns a number in the build sequence.
+# 0047 The kept list, and what was actually bought
 
 A zone list stops being a to do list and becomes a **record of what a household keeps**. Nobody
 ticks anything off it. A line's quantity is how many you want right now, buying decrements it,
@@ -15,7 +9,7 @@ that no longer has anywhere to live, a settlement record that has to exist befor
 history the line page promises can be computed, and an assistant tool that stops meaning
 anything.
 
-Companion plan: `apps/velista/plans/backlog/0001`, which is the screen. Backlog `0009` takes the
+Companion plan: `apps/velista/plans/0043`, which is the screen. `0050` takes the
 settlement machinery here and drives it from a shared basket; this plan is deliberately usable
 without it, and section 4.4 is how.
 
@@ -40,7 +34,7 @@ stored, which is section 5.
 
 ## 2. What changes on `ListLine`
 
-**`status` is dropped.** `LineStatus` survives as an enum, because backlog `0009` still needs it
+**`status` is dropped.** `LineStatus` survives as an enum, because `0050` still needs it
 on a basket line where a trip is exactly the right scope for it, and because a settlement records
 which of two things happened. It just stops being a column on `list_lines`.
 
@@ -103,7 +97,7 @@ computable without it.
 - `itemId` (nullable, **copied at settle time**; section 3.2)
 - `outcome`: `SettlementOutcome` enum (`BOUGHT`, `NOT_AVAILABLE`)
 - `quantity` (int; the units bought, and `0` for `NOT_AVAILABLE`)
-- `settledByUserId` (widened by backlog `0009`; section 3.3)
+- `settledByUserId` (widened by `0050`; section 3.3)
 - `settledAt` (timestamptz)
 - `generatedListLineId` (nullable uuid, opaque; null when settled straight from the list page)
 - `pricePaidCents` (nullable int), `supermarketLocationId` (nullable uuid, opaque)
@@ -116,16 +110,16 @@ the table after the happy case would make the other outcome look like a special 
 ### 3.1 A settlement is a zone fact
 
 **Anyone with `READ` on the list may read its settlements.** This is the one place the privacy
-posture had to be decided rather than inherited, because backlog `0003` section 8 makes a
+posture had to be decided rather than inherited, because `0049` section 8 makes a
 generated list readable by its owner alone.
 
 The line the two sides fall on: the **basket** is private, the **purchase** is not. What the flat
 bought and when is exactly the shared knowledge a shared list exists to hold, and a history
 visible only to whoever happened to do the shopping is useless in the household this product is
-for. Backlog `0003` section 8 already drew this distinction for the audit case, noting that an
+for. `0049` section 8 already drew this distinction for the audit case, noting that an
 admin can see a line was marked bought but not what else was in the basket it came from. This
 makes that explicit rather than incidental: `generatedListLineId` is stored but is **never
-served** outside backlog `0009`'s own reads.
+served** outside `0050`'s own reads.
 
 ### 3.2 `itemId` is copied, not joined
 
@@ -134,14 +128,14 @@ later relinks the line to a different product, or unlinks it, the history does n
 rewrite itself, and the cross zone item aggregate in section 6.2 stays answerable by an index on
 the settlement rather than by a join through lines that may have moved.
 
-### 3.3 Attribution, and what backlog 0009 widens
+### 3.3 Attribution, and what 0050 widens
 
 `settledByUserId` is non nullable here, because without baskets the only people who can settle
 are account holders with access to the list.
 
-Backlog `0009` introduces guests, who settle and are not users. It makes this column nullable and
+`0050` introduces guests, who settle and are not users. It makes this column nullable and
 adds `settledByParticipantId` beside it, with exactly one of the two set. That migration belongs
-to `0009` and is named here only so the shape is not a surprise.
+to `0050` and is named here only so the shape is not a surprise.
 
 ### 3.4 Two nullable columns nothing writes yet
 
@@ -162,13 +156,13 @@ One operation, `line.settle`, with three outcomes and a cumulative result.
 
 **Skipping writes nothing at all**, which is deliberate. "I decided not to buy this today" must
 leave the line exactly as it was and must not look like it was dealt with, which is the rule
-backlog `0003` section 5 set for deleting a derived line and it holds here for the same reason.
+`0049` section 5 set for deleting a derived line and it holds here for the same reason.
 
 ### 4.1 Partial settles are cumulative
 
 Asking for three and buying two decrements to one, and the line stays wanted. A second settle
 later takes it the rest of the way. Nothing about settling is terminal, which is what lets a
-basket be worked through two shops in one afternoon, and it is the property backlog `0009`
+basket be worked through two shops in one afternoon, and it is the property `0050`
 section 6 depends on.
 
 ### 4.2 Quantity floors at zero, and the excess is recorded
@@ -178,18 +172,18 @@ extra unit is real and belongs in the consumption history even though it has no 
 and a settlement clamped to the outstanding demand would quietly under report what the household
 actually goes through.
 
-### 4.3 Allocating across several origins is backlog 0009's problem, not this plan's
+### 4.3 Allocating across several origins is 0050's problem, not this plan's
 
 A settle here names one line. A **basket** line can sum several zone lines, and deciding how many
 units each of them gets is a question this plan does not have, because it has no baskets. It is
-backlog `0009` section 6, and this plan's job is only to accept the per line results it produces.
+`0050` section 6, and this plan's job is only to accept the per line results it produces.
 
 ### 4.4 This plan ships without baskets
 
 Settling directly from the list page is a first class gesture, not a stopgap: somebody who has
 just come back from the shop opens the list and says what they got. It writes settlements with a
 null `generatedListLineId`, and it is what makes the entire line page in the companion velista
-plan buildable before backlog `0009` is started.
+plan buildable before `0050` is started.
 
 ## 5. The three indicators, all derived
 
@@ -199,14 +193,14 @@ None of these is a column, and that is the payoff of section 1.
 | --- | --- |
 | Bought | `quantity = 0` **and** at least one `BOUGHT` settlement exists |
 | Not available last trip | the most recent settlement for the line has `outcome = NOT_AVAILABLE` |
-| Somebody is buying this | an active generated list carries this line (backlog `0009`) |
+| Somebody is buying this | an active generated list carries this line (`0050`) |
 
 The first is why "at least once" is in the rule rather than just `quantity = 0`: a line somebody
 typed and never bought is at zero too, and it has not been bought, it has simply never been
 wanted yet.
 
 The third is the only one that reaches outside core's own tables, and it is also the only one
-that leaks the existence of a private basket. Backlog `0009` section 5 owns that decision.
+that leaks the existence of a private basket. `0050` section 5 owns that decision.
 
 ## 6. Reading the history
 

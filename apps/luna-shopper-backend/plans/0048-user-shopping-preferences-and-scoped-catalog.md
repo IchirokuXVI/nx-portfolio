@@ -1,19 +1,12 @@
-# 0002 (backlog) User shopping preferences and a catalog you cannot list whole
-
-> **Status: backlog. Not scheduled for development.**
-> Plans in `plans/backlog/` are designed and agreed but are not part of the build order, and
-> nothing in them has been built. They carry their own numbering starting at `0001`, separate
-> from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
-> free number there, so parking a design never burns a number in the build sequence.
+# 0048 User shopping preferences and a catalog you cannot list whole
 
 Two ideas that turn out to be one plan: a user says where they shop, and the catalog stops
 answering the question "show me everything". The second is what makes the first mandatory rather
-than a convenience, and both exist to serve the generated basket in backlog 0003 and 0004.
+than a convenience, and both exist to serve the generated basket in `0049` and backlog 0004.
 
-Depends on 0012 (the catalog, its items, supermarkets and locations) and reads better after
-backlog 0001, which introduces the `PriceScope` that a postal code actually resolves to. It can
-be built before 0001 by treating a supermarket location as its own scope, at the cost of a
-migration when scopes arrive.
+Depends on 0012 (the catalog, its items, supermarkets and locations). Backlog 0001's
+`PriceScope`, the scope a postal code actually resolves to, has since shipped with plan 0038,
+so the resolver in section 1.1 has real scopes to resolve to.
 
 ## 1. What a user configures
 
@@ -27,7 +20,7 @@ One row per user, in a service settled in section 2, with child rows for the mul
   backlog 0004 section 5.
 - `minSavingPercent` (integer, nullable): the optional relative floor beside the absolute one.
 - `generationScope`: `GenerationScope` enum (`ALL`, `SELECTED`), default `ALL`, which zones and
-  lists feed a generated basket. Consumed by backlog 0003.
+  lists feed a generated basket. Consumed by `0049`.
 
 **UserPostalCode**
 - `id`, `userId`, `postalCode` (string), `label` (free text, "home", "the office"), `position`
@@ -72,7 +65,7 @@ an auth `userId`. Nothing owns all three, so this is a real decision.
 
 **Recommendation: core owns it**, keyed by opaque `userId`, referencing catalog by opaque
 `supermarketId` exactly as `ListLine.itemId` already does (0012 section 4). The argument is that
-the heaviest consumer is the basket generator in backlog 0003, which is core work over core data,
+the heaviest consumer is the basket generator in `0049`, which is core work over core data,
 and putting the preference anywhere else makes the generator do a cross service read on every run
 to learn what the user wants.
 
@@ -149,7 +142,7 @@ store.
 
 A zone list is shopped by several people who may live in different places, so a zone with its own
 postal codes is a coherent idea and will come up. It is deferred, not rejected, because the
-generated basket in backlog 0003 is explicitly per user and private, so the generator always has
+generated basket in `0049` is explicitly per user and private, so the generator always has
 exactly one person whose scopes matter. When a shared, zone owned basket appears, `Zone.config`
 (0006 section 1, the jsonb that exists for this kind of growth) is where the zone level default
 goes, with the user's own preferences overriding it.
@@ -162,7 +155,7 @@ goes, with the user's own preferences overriding it.
   says "no chain we know reaches this postal code" so the client can offer to notify them later.
 - Preferences are private. They are never returned in a zone membership view and never visible to
   other zone members, including admins. A generated basket built from them exposes prices and
-  chosen stores to its owner alone (backlog 0003 section 8).
+  chosen stores to its owner alone (`0049` section 8).
 - A user with several postal codes gets the union of their scopes, and every result says which
   scope produced it. This matters for the basket: two stops in two towns is not the same
   suggestion as two stops on one street, and only the user can judge that.
