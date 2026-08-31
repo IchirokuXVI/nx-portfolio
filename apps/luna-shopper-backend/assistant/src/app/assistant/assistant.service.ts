@@ -289,6 +289,13 @@ export class AssistantService {
     const references = new ReferenceCollector();
     let listResolution: ListResolutionBranch | undefined;
 
+    // What the tool running right now wants the record to say (plan 0043,
+    // section 6). One slot rather than a list, reset by `runTools` before each
+    // call and read straight after it, because the two facts it carries belong
+    // to one call and there is never a second one in flight: the loop runs the
+    // model's calls one at a time.
+    const note: { current: ToolNote } = { current: {} };
+
     const runtime: ToolRuntime = {
       context,
       api: this.api,
@@ -299,6 +306,9 @@ export class AssistantService {
       ],
       recordListResolution: (branch) => {
         listResolution = branch;
+      },
+      noteForRecord: (fields) => {
+        note.current = { ...note.current, ...fields };
       },
     };
 
@@ -370,7 +380,8 @@ export class AssistantService {
           reply.toolCalls,
           runtime,
           calledTools,
-          scoped
+          scoped,
+          note
         ),
       });
     }
@@ -389,7 +400,9 @@ export class AssistantService {
     runtime: ToolRuntime,
     calledTools: ToolCallRecord[],
     /** Which catalog this turn was given, so a name is looked up in that one. */
-    scoped: boolean
+    scoped: boolean,
+    /** What the tool just run wants the record to say (plan 0043, section 6). */
+    note: { current: ToolNote }
   ): Promise<{ id?: string; name: string; result: unknown }[]> {
     const results: { id?: string; name: string; result: unknown }[] = [];
 
@@ -403,7 +416,7 @@ export class AssistantService {
     for (const call of calls) {
       const tool = findTool(call.name, scoped);
       if (!tool) {
-        calledTools.push(record(call, false));
+        calledTools.push(record(call, false, {}));
         results.push({
           ...against(call),
           name: call.name,
@@ -413,9 +426,10 @@ export class AssistantService {
       }
 
       try {
+        note.current = {};
         const result = await tool.execute(call.args, runtime);
         calledTools.push(
-          record(call, (result as { ok?: unknown })?.ok === true)
+          record(call, (result as { ok?: unknown })?.ok === true, note.current)
         );
         results.push({ ...against(call), name: call.name, result });
       } catch (error) {
@@ -427,7 +441,7 @@ export class AssistantService {
           `assistant tool ${call.name} threw`,
           error instanceof Error ? error.stack : String(error)
         );
-        calledTools.push(record(call, false));
+        calledTools.push(record(call, false, {}));
         results.push({
           ...against(call),
           name: call.name,
@@ -664,6 +678,29 @@ interface ToolCallRecord {
   args: unknown;
   ok: boolean;
   items?: number;
+  /**
+   * The list a call touched, when it named one by its lines (plan 0043, section
+   * 6). A deletion is recorded with the number of lines and the list, and the
+   * count is `items`; neither carries what was on them, because the text of a
+   * deleted shopping list line is not part of the question this record exists to
+   * answer.
+   */
+  list?: string;
+  /**
+   * The service refused the call, rather than the gateway refusing the request.
+   *
+   * Two different facts about the prompt (plan 0043, section 6): "the model
+   * tried to delete lines it had not read" is the number to watch, and "the
+   * gateway said no" is an ordinary permission answer the bot relays in words.
+   * A call with neither this nor `ok` is one that reached the gateway and failed.
+   */
+  refused?: true;
+}
+
+/** What a tool asked the record to carry, beside what its arguments already say. */
+export interface ToolNote {
+  list?: string;
+  refused?: true;
 }
 
 /**
@@ -671,16 +708,32 @@ interface ToolCallRecord {
  *
  * Read off the argument shape rather than from a name, because "how many things
  * were asked for in one call" is a property of a batched argument and not of one
- * particular tool. A call with no `items` array carries no count, rather than a
- * one that would then be counted as a basket of one.
+ * particular tool. A call with neither array carries no count, rather than a one
+ * that would then be counted as a basket of one.
+ *
+ * `lineIds` counts the same way `items` does (plan 0043, section 6). It is the
+ * shape the two tools that name lines take, and reading it here is what lets a
+ * deletion be recorded with the number of lines without the record ever going
+ * near the result, which is where the contents are.
  */
-function record(call: ModelToolCall, ok: boolean): ToolCallRecord {
-  const items = (call.args as { items?: unknown } | undefined)?.items;
+function record(
+  call: ModelToolCall,
+  ok: boolean,
+  note: ToolNote
+): ToolCallRecord {
+  const args = call.args as { items?: unknown; lineIds?: unknown } | undefined;
+  const batch = Array.isArray(args?.items)
+    ? args.items
+    : Array.isArray(args?.lineIds)
+      ? args.lineIds
+      : undefined;
+
   return {
     name: call.name,
     args: call.args,
     ok,
-    ...(Array.isArray(items) ? { items: items.length } : {}),
+    ...(batch !== undefined ? { items: batch.length } : {}),
+    ...note,
   };
 }
 
