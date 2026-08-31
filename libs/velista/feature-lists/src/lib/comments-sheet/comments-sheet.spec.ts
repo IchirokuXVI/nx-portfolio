@@ -30,7 +30,7 @@ import {
   type AudioCaptureI,
   type AudioCaptureSession,
 } from '@portfolio/velista/platform';
-import { CommentComposer } from '@portfolio/velista/ui';
+import { CommentComposer, SheetShell } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { CommentsSheet } from './comments-sheet';
 
@@ -239,6 +239,42 @@ function bodies(fixture: ComponentFixture<CommentsSheet>): string[] {
     .map((row) => (row.nativeElement as HTMLElement).textContent?.trim() ?? '');
 }
 
+/**
+ * The shell's body, which is the one thing in the sheet that scrolls (plan 0040).
+ */
+function scroller(fixture: ComponentFixture<CommentsSheet>): HTMLElement {
+  return fixture.debugElement
+    .query(By.directive(SheetShell))
+    .componentInstance.body().nativeElement as HTMLElement;
+}
+
+/**
+ * Give an element a scroll position, which jsdom otherwise reports as zero on
+ * everything and therefore as always sitting at the bottom.
+ */
+function fakeScroll(
+  element: HTMLElement,
+  metrics: { scrollHeight: number; clientHeight: number; scrollTop: number }
+): void {
+  let top = metrics.scrollTop;
+
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    get: () => metrics.scrollHeight,
+  });
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    get: () => metrics.clientHeight,
+  });
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    get: () => top,
+    set: (value: number) => {
+      top = value;
+    },
+  });
+}
+
 describe('CommentsSheet', () => {
   it('reads like a chat: oldest at the top, newest at the bottom', async () => {
     const { fixture } = await render();
@@ -267,6 +303,73 @@ describe('CommentsSheet', () => {
     fixture.detectChanges();
 
     expect(bodies(fixture).at(-1)).toBe('got them');
+  });
+
+  /**
+   * Plan 0040, section 3. The conversation had a 40vh cap and a scroll of its own,
+   * which was the only way to keep the composer in view before `SheetShell` had a
+   * footer. Both are gone, so the sheet scrolls in exactly one place and the composer
+   * is out of that scroll entirely.
+   *
+   * The cap itself is not assertable here: jsdom loads no stylesheet, so every computed
+   * value comes back empty and a check on `max-block-size` would pass whatever the SCSS
+   * said. What is assertable is which element the sheet measures, and that is the one
+   * that fails silently when it is wrong.
+   */
+  describe('one scroll, and it is the shell body (plan 0040)', () => {
+    it('measures the shell body rather than the conversation', async () => {
+      const { fixture } = await render();
+      const conversation = fixture.debugElement.query(By.css('.comments'))
+        .nativeElement as HTMLElement;
+
+      expect(scroller(fixture)).not.toBe(conversation);
+      expect(scroller(fixture).contains(conversation)).toBe(true);
+    });
+
+    it('keeps the composer out of the scroll', async () => {
+      const { fixture } = await render(NEWEST_FIRST, ['READ', 'WRITE']);
+      const composer = fixture.debugElement.query(By.directive(CommentComposer))
+        .nativeElement as HTMLElement;
+
+      expect(scroller(fixture).contains(composer)).toBe(false);
+    });
+
+    it('sticks to the newest comment when the reader is already there', async () => {
+      const { fixture, lines } = await render();
+      const body = scroller(fixture);
+      fakeScroll(body, {
+        scrollHeight: 1000,
+        clientHeight: 200,
+        scrollTop: 800,
+      });
+
+      body.dispatchEvent(new Event('scroll'));
+      lines.addComment(comment('c-4', 'got them', 0));
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(body.scrollTop).toBe(1000);
+    });
+
+    it('leaves a reader who has scrolled up where they were', async () => {
+      // The failure this guards is silent: bound to an element that no longer scrolls,
+      // the tracker never fires, the sheet believes it is always at the bottom, and it
+      // yanks somebody reading an older comment back down every time anybody speaks.
+      const { fixture, lines } = await render();
+      const body = scroller(fixture);
+      fakeScroll(body, {
+        scrollHeight: 1000,
+        clientHeight: 200,
+        scrollTop: 100,
+      });
+
+      body.dispatchEvent(new Event('scroll'));
+      lines.addComment(comment('c-4', 'got them', 0));
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(body.scrollTop).toBe(100);
+    });
   });
 
   it('leaves an empty conversation alone', async () => {
@@ -327,49 +430,65 @@ describe('CommentsSheet', () => {
 
   /** Plan 0039. Nothing here touches a real microphone, media element or socket. */
   describe('a comment can be a recording', () => {
-    it('draws all three controls, so typing is never in the way of speaking', async () => {
+    it('draws one button, which is a microphone on an empty field', async () => {
       const { fixture } = await render();
       const composer = fixture.debugElement.query(
         By.css('lib-comment-composer')
       );
 
-      // The field, the microphone and send, at once. Not the empty field switch
-      // the line composer uses: the choice between typing a message and speaking
-      // one is about the message, not about whether the box happens to be empty.
+      // The assistant's rule, adopted whole (plan 0041, section 2). Plan 0039 drew
+      // the microphone beside the field instead, so that somebody who started
+      // typing and changed their mind did not have to clear the box; that cost is
+      // real and it is the smaller one against a second control scheme for the
+      // same act, two taps from the first.
       expect(composer.query(By.css('.field'))).not.toBeNull();
-      expect(composer.query(By.css('.mic'))).not.toBeNull();
-      expect(composer.query(By.css('.send'))).not.toBeNull();
+      expect(composer.query(By.css('.send lib-mic-icon'))).not.toBeNull();
+      expect(composer.query(By.css('.mic'))).toBeNull();
     });
 
-    it('draws no microphone where the browser cannot record', async () => {
+    it('still draws the button where the browser cannot record', async () => {
       const { fixture } = await render({
         capture: fakeVoiceCapture({ supported: false }),
       });
 
-      // The composer is exactly what it was before, and the field still works.
-      // Drawing a control that cannot work is worse than not drawing one.
+      // A change from plan 0039, which drew no microphone at all here and could,
+      // because the microphone sat beside a send. With one button doing both jobs
+      // there is nothing left to draw on an empty field, so it stays and the
+      // failure is said in words. The field never stops working, which is what
+      // that rule was protecting.
       const composer = fixture.debugElement.query(
         By.css('lib-comment-composer')
       );
-      expect(composer.query(By.css('.mic'))).toBeNull();
+      expect(composer.query(By.css('.field'))).not.toBeNull();
+
+      const instance = componentOf(fixture);
+      instance.press();
+      await flush();
+      fixture.detectChanges();
+
+      expect(instance.errorKey()).toBe('list.comments.micRefused');
       expect(composer.query(By.css('.field'))).not.toBeNull();
     });
 
-    it('records on press and stops on press, holding what came out', async () => {
+    it('records on press and sends on stop, with no second press', async () => {
       const { fixture, voiceSends } = await render();
       const composer = componentOf(fixture);
 
-      await composer.toggleRecording();
+      composer.press();
+      await flush();
       fixture.detectChanges();
-      expect(composer.mode()).toBe('recording');
+      expect(
+        fixture.debugElement.query(By.css('lib-recording-row'))
+      ).not.toBeNull();
 
-      await composer.toggleRecording();
+      await composer.stopAndSend();
+      await flush();
       fixture.detectChanges();
 
-      // Held, not sent. Stopping is not agreeing to send (plan 0032, 4.4).
-      expect(composer.mode()).toBe('held');
-      expect(voiceSends).toEqual([]);
-      expect(composer.canSubmit()).toBe(true);
+      // Stop sends. Plan 0039 held it for a second press on the argument that a
+      // message which leaves on its own is a message nobody agreed to send, and
+      // that rule is about the cap rather than the button (plan 0041, section 3).
+      expect(voiceSends).toHaveLength(1);
     });
 
     it('says so and keeps the field working when the microphone is refused', async () => {
@@ -378,11 +497,14 @@ describe('CommentsSheet', () => {
       });
       const composer = componentOf(fixture);
 
-      await composer.toggleRecording();
+      composer.press();
+      await flush();
       fixture.detectChanges();
 
-      expect(composer.mode()).toBe('idle');
       expect(composer.errorKey()).toBe('list.comments.micRefused');
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer .field'))
+      ).not.toBeNull();
     });
 
     it('shows a pending bubble while a recording uploads, with no invented words', async () => {
@@ -408,13 +530,11 @@ describe('CommentsSheet', () => {
       });
       const composer = componentOf(fixture);
 
-      await composer.toggleRecording();
-      await composer.toggleRecording();
-      fixture.detectChanges();
-
-      // `submit` emits and returns; the sheet does the sending. So the press is
-      // not awaited here, which is also what a real press is.
-      void composer.submit();
+      composer.press();
+      await flush();
+      // `stopAndSend` emits and returns; the sheet does the sending. So it is not
+      // awaited here, which is also what a real press is.
+      void composer.stopAndSend();
       await flush();
       fixture.detectChanges();
 
@@ -438,19 +558,21 @@ describe('CommentsSheet', () => {
       });
       const composer = componentOf(fixture);
 
-      await composer.toggleRecording();
-      await composer.toggleRecording();
-      fixture.detectChanges();
-
-      void composer.submit();
+      composer.press();
+      await flush();
+      void composer.stopAndSend();
       await flush();
       fixture.detectChanges();
 
       // Somebody just spoke. Losing that to a dropped connection is the worst
-      // outcome in the plan, so the blob stays and send can be pressed again.
-      expect(composer.canSubmit()).toBe(true);
+      // outcome in the plan, so the blob stays and the error line carries a retry
+      // that sends the same bytes (plan 0041, section 7).
+      expect(composer.hasHeldRecording()).toBe(true);
       expect(composer.errorKey()).not.toBeNull();
       expect(bodies(fixture)).not.toContain('list.comments.sending');
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer .retry'))
+      ).not.toBeNull();
     });
 
     it('draws a player only for a comment that has a recording', async () => {

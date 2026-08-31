@@ -149,6 +149,17 @@ export class AudioRecorder {
 
   readonly limits = this._limits;
 
+  /**
+   * The stream currently being recorded, or null when nothing is.
+   *
+   * Exposed for the silence detector (plan 0038, section 4), which watches the
+   * same stream the recorder is using. It is deliberately not a signal: nothing
+   * renders it, and a caller reads it once when a recording starts.
+   */
+  get stream(): MediaStream | null {
+    return this._session?.stream ?? null;
+  }
+
   constructor() {
     // The microphone is released when the panel goes, whatever route change took it,
     // including one the person made mid sentence.

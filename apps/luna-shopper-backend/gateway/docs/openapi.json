@@ -9531,6 +9531,16 @@
                     "type": "string",
                     "description": "The conversation so far, oldest first, as a JSON array of {role, content}.",
                     "example": "[{\"role\":\"USER\",\"content\":\"add milk to the weekly shop\"}]"
+                  },
+                  "zoneId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Narrow this turn to one list: the zone it is in. Send it with listId or not at all."
+                  },
+                  "listId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Narrow this turn to one list: the list itself. Send it with zoneId or not at all."
                   }
                 }
               }
@@ -10662,6 +10672,25 @@
           "content"
         ]
       },
+      "TurnScopeDto": {
+        "type": "object",
+        "properties": {
+          "zoneId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The zone the list is in."
+          },
+          "listId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The only list this turn may touch."
+          }
+        },
+        "required": [
+          "zoneId",
+          "listId"
+        ]
+      },
       "AssistantTurnDto": {
         "type": "object",
         "properties": {
@@ -10677,6 +10706,14 @@
             "items": {
               "$ref": "#/components/schemas/AssistantMessageDto"
             }
+          },
+          "scope": {
+            "description": "Narrow this turn to one list. Omit it for the ordinary assistant.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TurnScopeDto"
+              }
+            ]
           }
         },
         "required": [

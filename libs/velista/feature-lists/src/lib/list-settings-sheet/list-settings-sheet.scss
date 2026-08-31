@@ -67,23 +67,11 @@
   }
 }
 
-// Stuck to the bottom of the panel, so Save is on screen at every scroll position and
-// at every member count (plan 0036, section 4). The panel's own bottom padding is
-// pulled back into the footer, exactly as `SheetShell` does with its grabber at the
-// top: the footer is the bottom of the sheet now, so the safe area belongs to it.
+// What is left of the footer once `SheetShell` owns it: the two buttons and the gap
+// between them (plan 0040, section 3). The position, the background, the hairline and
+// the safe area went to the shell's footer slot, which is outside the scroll and
+// therefore covers nothing.
 .footer {
-  position: sticky;
-  inset-block-end: 0;
-  margin-block: var(--app-space-5)
-    calc((var(--app-space-7) + var(--app-safe-bottom)) * -1);
-  margin-inline: calc(var(--app-space-6) * -1);
-  padding-inline: var(--app-space-6);
-  padding-block-end: calc(var(--app-space-4) + var(--app-safe-bottom));
-  // The panel's own background behind it, and a hairline above, so it does not float
-  // over the content it covers ambiguously.
-  background: var(--app-surface-raised);
-  border-block-start: 1px solid var(--app-border-subtle);
-
   // The buttons carry their own top margins from `sheet-form`, which is the spacing
   // the footer wants between them; only the first needs the gap above it reduced, so
   // the bar is a bar rather than a second panel.

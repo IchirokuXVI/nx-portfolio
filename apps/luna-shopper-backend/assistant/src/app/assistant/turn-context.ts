@@ -25,9 +25,85 @@ export interface ContextZone {
   zoneName: string;
 }
 
+/**
+ * The scoped list is not one the caller can use (plan 0044, section 3).
+ *
+ * Thrown before the model is called, so a bad scope costs no provider request.
+ * The gateway is the authority on why, and the three reasons it could be, in
+ * another zone, deleted, or never there, are the same fact from here.
+ */
+export class ScopeUnavailableError extends Error {
+  constructor(readonly listId: string) {
+    super(`the scoped list ${listId} is not available to this caller`);
+    this.name = 'ScopeUnavailableError';
+  }
+}
+
 @Injectable()
 export class TurnContextFactory {
   constructor(private readonly api: GatewayApiClient) {}
+
+  /**
+   * The context for a turn that may only touch one list (plan 0044, section 2.3).
+   *
+   * **One fetch, not two.** The unscoped path below reads the caller's zones and
+   * then every list in each of them, because almost anything needs the index to
+   * resolve against. Here the list is in the request, so the index buys nothing
+   * and the whole of it collapses into reading that one list. That is a real
+   * saving on the path that most needs it: a voice turn already pays for a
+   * transcription call before the turn call, so it has the most latency in it and
+   * the fewest fetches to spare.
+   *
+   * **The fetch is what authorizes the turn**, which is why it is not skipped as
+   * an optimisation when the scope names a list the model never asks about. The
+   * scope is a claim by a browser; reading the list with the caller's own token
+   * is what turns it into a fact, and a caller who cannot read it gets the
+   * gateway's refusal here, before a provider request is spent on them. Skipping
+   * it would make the scope a statement the server simply believed.
+   */
+  async openScoped(
+    caller: ApiCaller,
+    scope: { zoneId: string; listId: string }
+  ): Promise<TurnContext> {
+    // One request, against the zone the caller states, which answers both
+    // questions at once: whether they may be here at all, and whether the list
+    // they named is one they can see. `GET /v1/lists/:id` does not exist, and
+    // adding it for this would be a gateway route, a core handler and a contract
+    // for a fact this route already carries. A zone somebody is not a member of
+    // is the gateway's own refusal, thrown from here before a provider request
+    // is spent.
+    const lists = await this.api.listLists(caller, scope.zoneId);
+    const list = lists.find((one) => one.id === scope.listId);
+
+    // A list that is not in the answer is not a list this caller can use, whether
+    // it is in another zone, was deleted, or never existed. All three are the
+    // same fact from here and none of them is worth a different sentence: the
+    // scope did not hold, so there is no turn to run.
+    if (list === undefined) {
+      throw new ScopeUnavailableError(scope.listId);
+    }
+
+    // The zone's name is not on a `ListView`, and fetching the zone index to
+    // learn it would undo the whole saving this method exists for. It is not
+    // needed either: the prompt names the list, and a scoped turn's references
+    // are to the list and its lines rather than to the zone.
+    const zone: ContextZone = { zoneId: list.zoneId, zoneName: '' };
+
+    return new TurnContext(
+      this.api,
+      caller,
+      [zone],
+      [
+        {
+          listId: list.id,
+          listName: list.name,
+          zoneId: list.zoneId,
+          zoneName: '',
+        },
+      ],
+      list.id
+    );
+  }
 
   async open(caller: ApiCaller): Promise<TurnContext> {
     const zones = await this.api.listZones(caller);
@@ -56,16 +132,54 @@ export class TurnContextFactory {
   }
 }
 
+/** A line this turn genuinely read, and the list it came off. */
+export interface KnownLine {
+  list: ContextList;
+  line: LineView;
+}
+
 export class TurnContext {
   /** Lines already fetched this turn, so two tools do not pay for them twice. */
   private readonly linesByList = new Map<string, LineView[]>();
+
+  /**
+   * Every line this turn has actually read from the gateway, by id (plan 0043,
+   * section 3.1).
+   *
+   * This is what an id in a tool argument is checked against, and it is a
+   * different thing from the cache above even though both are filled by the same
+   * fetch. The cache answers "have I already paid for this list", and a write
+   * empties it so a later read in the same turn is true. This answers "did this
+   * id come back from the gateway during this turn", which stays true after a
+   * write and is the whole of the guarantee rule A3 makes: an id that was read
+   * exists and the caller can see it, an id the model wrote into a sentence has
+   * neither property.
+   *
+   * So it is never invalidated. It is only ever added to, and the one thing that
+   * removes an entry is {@link forgetLine}, for a line that no longer exists.
+   */
+  private readonly readLines = new Map<string, KnownLine>();
 
   constructor(
     private readonly api: GatewayApiClient,
     readonly caller: ApiCaller,
     readonly zones: ContextZone[],
-    readonly lists: ContextList[]
+    readonly lists: ContextList[],
+    /**
+     * The one list this turn may touch, or null on an ordinary turn.
+     *
+     * Read by the tools to refuse a call that named a different list, and by the
+     * prompt to say where it is. Null is the whole of plan 0039's behaviour.
+     */
+    readonly scopedListId: string | null = null
   ) {}
+
+  /** The scoped list itself, when there is one. */
+  get scopedList(): ContextList | undefined {
+    return this.scopedListId === null
+      ? undefined
+      : this.find(this.scopedListId);
+  }
 
   /** Lazily, and once per list per turn. */
   async lines(listId: string): Promise<LineView[]> {
@@ -75,7 +189,33 @@ export class TurnContext {
     }
     const lines = await this.api.listLines(this.caller, listId);
     this.linesByList.set(listId, lines);
+
+    const list = this.find(listId);
+    if (list !== undefined) {
+      for (const line of lines) {
+        this.readLines.set(line.id, { list, line });
+      }
+    }
+
     return lines;
+  }
+
+  /**
+   * The line an id names, when this turn genuinely read it (plan 0043, section
+   * 3.1).
+   *
+   * `undefined` is the answer for everything else, and the tools treat it as a
+   * refusal rather than as a miss to work around: the model has not looked, so
+   * its next move is to look. An id it invented cannot be in here, which is what
+   * makes "it never deletes by name" enforceable rather than instructed.
+   */
+  knownLine(lineId: string): KnownLine | undefined {
+    return this.readLines.get(lineId);
+  }
+
+  /** A line that is gone, so nothing later in the turn can name it again. */
+  forgetLine(lineId: string): void {
+    this.readLines.delete(lineId);
   }
 
   /** Forget what a write just invalidated, so a later read in the same turn is true. */
@@ -96,6 +236,14 @@ export class TurnContext {
    * can be hallucinated into a link that 404s.
    */
   describeForModel(): string {
+    // A scoped turn is looking at one list and the model is told so plainly, in
+    // place of an index it has no use for. There is nothing to resolve and
+    // therefore nothing to ask about (plan 0044, section 2.1).
+    const scoped = this.scopedList;
+    if (scoped !== undefined) {
+      return `This person is looking at one list right now, "${scoped.listName}", and it is the only list you can see or touch this turn.`;
+    }
+
     if (this.lists.length === 0 && this.zones.length === 0) {
       return 'This person belongs to no zones and can see no lists yet.';
     }

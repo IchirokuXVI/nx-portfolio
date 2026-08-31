@@ -43,6 +43,13 @@
 // tall enough to hit without being tall enough to look like a separate control.
 .track {
   flex: 1;
+  // **Do not delete this line.** The app sets `box-sizing: border-box` globally, and
+  // under it `block-size` is the outer height: six pixels of box minus four pixels of
+  // padding on each side leaves a content box of zero, `background-clip: content-box`
+  // then paints the bar nowhere, and `.fill` at 100% of that zero is invisible too.
+  // The bar had never once rendered until this was added. Here the token is the bar
+  // and the padding is the reach, which is what the two comments below describe.
+  box-sizing: content-box;
   block-size: var(--app-audio-track-size);
   border-radius: var(--app-radius-full);
   background: var(--app-border-subtle);
@@ -58,9 +65,12 @@
   background: var(--app-action-quiet-fg);
 }
 
+// `--app-text-xs` and not `-2xs`, whose own comment says "dense metadata only, never
+// body copy". A recording's length is a number somebody reads before deciding whether
+// to press play, which is not the same as a timestamp in a header.
 .clock {
   flex-shrink: 0;
-  font-size: var(--app-text-2xs);
+  font-size: var(--app-text-xs);
   // Tabular, so the row does not shift on every second while it plays.
   font-variant-numeric: tabular-nums;
   color: var(--app-text-muted);

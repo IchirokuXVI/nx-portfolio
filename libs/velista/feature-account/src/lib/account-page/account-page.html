@@ -64,6 +64,63 @@
   </section>
 
   <!--
+    How the microphone behaves. Two switches, both off unless somebody turns them on,
+    because the plain recorder is what a person who has never opened this page should
+    get: stop sends and the bin discards, and nothing leaves on its own.
+
+    They are checkboxes drawn by the platform, for the reason the list settings sheet
+    gives for its own: a checkbox is the widget every assistive technology already
+    understands, and a custom switch here would buy nothing but a name to announce.
+
+    Each saves on the flip. There is nothing to submit on this screen, and a setting
+    that needed confirming would be a setting somebody left half changed.
+
+    The hints are what `aria-describedby` points at, so the part that catches people
+    out is read out with the control rather than found afterwards: the first will cut
+    you off mid thought, and the second leaves a microphone open.
+  -->
+  <section aria-labelledby="account-voice" class="group">
+    <lib-section-heading
+      headingId="account-voice"
+      key="account.voice.section"
+    />
+
+    <div class="choice">
+      <label class="choice-label" for="account-voice-silence">
+        <input
+          (change)="setSendOnSilence($event)"
+          [checked]="sendOnSilence()"
+          aria-describedby="account-voice-silence-hint"
+          class="checkbox"
+          id="account-voice-silence"
+          type="checkbox"
+        />
+        <span>{{ 'account.voice.sendOnSilence.label' | rokuT }}</span>
+      </label>
+      <p class="choice-hint" id="account-voice-silence-hint">
+        {{ 'account.voice.sendOnSilence.hint' | rokuT }}
+      </p>
+    </div>
+
+    <div class="choice">
+      <label class="choice-label" for="account-voice-keep">
+        <input
+          (change)="setKeepListening($event)"
+          [checked]="keepListening()"
+          aria-describedby="account-voice-keep-hint"
+          class="checkbox"
+          id="account-voice-keep"
+          type="checkbox"
+        />
+        <span>{{ 'account.voice.keepListening.label' | rokuT }}</span>
+      </label>
+      <p class="choice-hint" id="account-voice-keep-hint">
+        {{ 'account.voice.keepListening.hint' | rokuT }}
+      </p>
+    </div>
+  </section>
+
+  <!--
     The app (plan 0033, section 4.2). One row, in four forms, and the label is the
     answer rather than an invitation.
 

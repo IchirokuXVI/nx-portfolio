@@ -6,7 +6,6 @@ import {
   inject,
   signal,
   viewChild,
-  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -23,16 +22,21 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  VOICE_COMMENT_MAX_SECONDS,
+  VOICE_COMMENT_WARN_SECONDS,
   type Comment,
   type CommentRowVm,
   type RecordedAudio,
 } from '@portfolio/velista/models';
 import {
   appPath,
+  AudioRecorder,
   lineIdOf,
   listIdOf,
+  RECORDING_LIMITS,
   SheetNavigation,
   zoneIdOf,
+  type RecordingLimits,
 } from '@portfolio/velista/platform';
 import { CommentComposer, CommentRow, SheetShell } from '@portfolio/velista/ui';
 import { listErrorKey } from '../list-error-copy';
@@ -118,6 +122,28 @@ const PENDING_ROW: CommentRowVm = {
   templateUrl: './comments-sheet.html',
   styleUrl: './comments-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // The composer's recorder, with the comment cap on it (plan 0041, section 6.2).
+  //
+  // Here rather than in `root` for the reason `AudioRecorder`'s own doc gives:
+  // destroying it releases the microphone, so closing this sheet mid recording
+  // cannot leave the browser's indicator on behind a component nobody holds. It
+  // also keeps a recording started in a comment from colliding with one open in
+  // the assistant panel, since each has its own instance.
+  //
+  // A minute, where the assistant runs to five. `VOICE_COMMENT_MAX_SECONDS` stays
+  // the single source of the number; what changes is that the composer now reads
+  // it through the token instead of importing the constant, which is what makes
+  // both interesting states reachable in a spec without waiting.
+  providers: [
+    AudioRecorder,
+    {
+      provide: RECORDING_LIMITS,
+      useValue: {
+        warnAtSeconds: VOICE_COMMENT_WARN_SECONDS,
+        maxSeconds: VOICE_COMMENT_MAX_SECONDS,
+      } satisfies RecordingLimits,
+    },
+  ],
 })
 export class CommentsSheet {
   private readonly _comments = inject<CommentServiceI>(COMMENT_SERVICE);
@@ -225,8 +251,17 @@ export class CommentsSheet {
     return selectAbilities(list?.myPermissions ?? []).canComment;
   });
 
-  private readonly _scroller =
-    viewChild<ElementRef<HTMLElement>>('conversation');
+  /**
+   * The shell, for the element that scrolls (plan 0040, section 3).
+   *
+   * The conversation used to scroll inside its own 40vh box and this measured that box.
+   * The sheet is one scroll now and it belongs to `SheetShell`, so both the reading and
+   * the writing below go through the shell's body. Getting this wrong fails silently:
+   * bound to an element that no longer scrolls, {@link trackPosition} never fires,
+   * `_atNewest` stays true forever, and a reader who has gone up to read something older
+   * is yanked back down every time somebody says something.
+   */
+  private readonly _shell = viewChild.required(SheetShell);
 
   /**
    * The composer, so a send can tell it what happened.
@@ -257,16 +292,16 @@ export class CommentsSheet {
     // rather than `effect`, because the rows have to exist before they can be measured,
     // and it runs in the browser and never on the server (plan 0001, D2).
     afterRenderEffect(() => {
-      const list = this._scroller()?.nativeElement;
+      const body = this._shell().body().nativeElement;
 
       // Read so the effect re-runs when somebody says something, here or on the socket.
       const said = this.comments().length;
 
-      if (list === undefined || said === 0 || !this._atNewest) {
+      if (said === 0 || !this._atNewest) {
         return;
       }
 
-      list.scrollTop = list.scrollHeight;
+      body.scrollTop = body.scrollHeight;
     });
   }
 
@@ -274,8 +309,9 @@ export class CommentsSheet {
    * Follow the scrollbar, so a reader who has gone up to read an older comment is not
    * dragged back down the moment the next one lands.
    */
-  trackPosition(list: HTMLElement): void {
-    const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+  trackPosition(): void {
+    const body = this._shell().body().nativeElement;
+    const fromBottom = body.scrollHeight - body.scrollTop - body.clientHeight;
     this._atNewest = fromBottom <= AT_NEWEST_SLACK_PX;
   }
 

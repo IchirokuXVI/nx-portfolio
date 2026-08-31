@@ -10,16 +10,18 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { ASSISTANT_MESSAGE_MAX_LENGTH } from '@portfolio/velista/models';
 import { AudioRecorder } from '@portfolio/velista/platform';
-import {
-  MicIcon,
-  PauseIcon,
-  PlayIcon,
-  SendIcon,
-  StopIcon,
-} from '../icons/icons';
+import { MicIcon, SendIcon } from '../icons/icons';
+import { RecordingElapsed } from '../recording/recording-elapsed';
+import { RecordingRow } from '../recording/recording-row';
 
-/** What the one button on the right is currently for. */
-export type ComposerButton = 'record' | 'send' | 'stop';
+/**
+ * What the one button on the right is currently for.
+ *
+ * Two rather than three since plan 0041: stop moved into `RecordingRow`, which
+ * replaces the field and this button wholesale while a recording is running. It
+ * still lands in the same corner, so the property section 4.1 asked for holds.
+ */
+export type ComposerButton = 'record' | 'send';
 
 /**
  * The field, the recorder, and the one button that is both (plan 0032, section 4).
@@ -29,8 +31,21 @@ export type ComposerButton = 'record' | 'send' | 'stop';
  * The right hand button is the same size in the same corner throughout, and what it is
  * depends only on the state: microphone on an empty field, send on a typed one, stop
  * while recording. Never two buttons competing for one intention, and **nothing moves
- * under the thumb** — stop inherits the microphone's exact position, so the finger that
+ * under the thumb**: stop inherits the microphone's exact position, so the finger that
  * started a recording ends it without travelling.
+ *
+ * Since plan `0041` the third of those is drawn by `RecordingRow`, which replaces the
+ * field and the button together while a recording runs and puts stop in the same
+ * corner. The slot did not change; what changed is which component paints it.
+ *
+ * ## The trash, where pause was
+ *
+ * Pause and resume are gone from this composer. They held a recording and gave it
+ * back, and never gave anybody a way out of one: every recording that started had
+ * exactly one exit, which was to be sent. The trash is that way out, and it sits at
+ * the far left where pause was, as far from stop as the row allows (plan `0041`,
+ * section 4). `AudioRecorder` keeps `pause()` and `resume()`, because they are how the
+ * cap holds a recording without discarding it.
  *
  * ## A press, not a hold
  *
@@ -59,10 +74,9 @@ export type ComposerButton = 'record' | 'send' | 'stop';
   imports: [
     RokuTranslatorPipe,
     MicIcon,
-    PauseIcon,
-    PlayIcon,
     SendIcon,
-    StopIcon,
+    RecordingRow,
+    RecordingElapsed,
   ],
   templateUrl: './assistant-composer.html',
   styleUrl: './assistant-composer.scss',
@@ -96,17 +110,14 @@ export class AssistantComposer {
   });
 
   /**
-   * Which of the three the button is, and the whole of section 4.1 in one expression.
+   * Which of the two the button is, and the whole of section 4.1 in one expression.
    *
-   * Recording wins over a typed field, because a field with dictated text in it and a
-   * microphone still open is a state where stop is unambiguously the next thing.
+   * The recording case is not here any more: while the recorder is active the
+   * template draws `RecordingRow` in place of the field and this button, and stop
+   * lands in the same corner the microphone was in.
    */
   protected readonly button = computed<ComposerButton>(() =>
-    this._recorder.active()
-      ? 'stop'
-      : this.text().trim().length > 0
-        ? 'send'
-        : 'record'
+    this.text().trim().length > 0 ? 'send' : 'record'
   );
 
   /** A message the person typed or dictated with the platform keyboard. */
@@ -137,16 +148,28 @@ export class AssistantComposer {
    * nothing is holding, and both branches already handle their own failure.
    */
   protected press(): void {
-    switch (this.button()) {
-      case 'send':
-        this._submit();
-        return;
-      case 'record':
-        void this._recorder.start();
-        return;
-      default:
-        void this._stop();
+    if (this.button() === 'send') {
+      this._submit();
+      return;
     }
+
+    void this._recorder.start();
+  }
+
+  /** Stop from the recording row, which is the press that sends. */
+  protected stopAndSend(): void {
+    void this._stop();
+  }
+
+  /**
+   * Throw the recording away (plan 0041, section 4).
+   *
+   * `cancel` rather than `stop`, so the blob is never assembled and nothing is
+   * emitted. Available at the cap as well as while recording: the longest
+   * recording is the one somebody most wants to be rid of.
+   */
+  protected discard(): void {
+    this._recorder.cancel();
   }
 
   /** Submitting the form, which is the keyboard's own way of pressing send. */
@@ -156,15 +179,6 @@ export class AssistantComposer {
     if (this.button() === 'send') {
       this._submit();
     }
-  }
-
-  protected pauseOrResume(): void {
-    if (this._recorder.state() === 'paused') {
-      this._recorder.resume();
-      return;
-    }
-
-    this._recorder.pause();
   }
 
   /**

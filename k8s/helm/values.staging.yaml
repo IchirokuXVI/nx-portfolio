@@ -63,6 +63,9 @@ lunaShopperBackend:
     # Sender on the domain that has mail set up, links on the app's domain, for
     # the reasons spelled out in values.production.yaml.
     mailFrom: Luna Shopper (staging) <no-reply@staging.ichirokuxvi.com>
+    smtpHost: in-v3.mailjet.com
+    smtpPort: 587
+    smtpUser: 497721f71489adfcbc3078d2b292aad8
     mailVerifyBaseUrl: https://staging.velista.app/verify-email
     mailResetBaseUrl: https://staging.velista.app/reset-password
     # Staging is the natural place to switch tracing on first, once a collector

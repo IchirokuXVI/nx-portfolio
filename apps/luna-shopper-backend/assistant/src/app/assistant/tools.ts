@@ -10,31 +10,44 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { ModelToolDeclaration } from '../provider/model-provider';
 import { GatewayApiClient, GatewayApiError } from './gateway-api.client';
-import { normalize, resolveList, type ContextList } from './list-resolution';
+import {
+  normalize,
+  resolveList,
+  type ContextList,
+  type ListResolution,
+} from './list-resolution';
 import type { ReferenceCollector } from './references';
-import type { TurnContext } from './turn-context';
+import type { KnownLine, TurnContext } from './turn-context';
 
 /**
- * The three tools (plan 0039, section 6), hand written.
+ * The five tools (plan 0039 section 6, plan 0043 section 1), hand written.
  *
  * Backlog 0005 section 2 wants the catalog generated from the gateway's OpenAPI
- * document, and that stays right for an assistant with a wide surface. Three
+ * document, and that stays right for an assistant with a wide surface. Five
  * tools is not a wide surface, and a generator plus its tests would dwarf the
  * thing being tested.
  *
  * **The freedom is in the text and the constraint is in the actions** (section
- * 7). There is no fourth thing the bot can do because there is no fourth tool,
- * and an absent capability is a much harder boundary than an instruction. What
- * section 12 excludes — every deletion, all zone governance, every account
- * operation but the rename, creating or joining zones, creating lists, the whole
- * catalog service and every platform admin route — is absent from this file
- * rather than discouraged in the prompt.
+ * 7). There is no sixth thing the bot can do because there is no sixth tool, and
+ * an absent capability is a much harder boundary than an instruction. What plan
+ * 0039 section 12 excludes is absent from this file rather than discouraged in
+ * the prompt, and plan 0043 section 2 reopened exactly one entry on that list:
+ * **a line** can now be deleted. Deleting a list, a zone or an account, all zone
+ * governance, and approving or rejecting a line are still not here, and that
+ * section's table is the argument for why a line is different in kind from every
+ * one of them.
  *
  * Two properties every tool here shares:
  *
- * - **It never receives or returns an id.** Arguments name things the way a
- *   person does, results are shaped for a sentence, and the ids the client needs
- *   are emitted separately as references (rule A3).
+ * - **It names things the way a person does, with one deliberate exception.**
+ *   Arguments are product text and list names, results are shaped for a
+ *   sentence, and the ids the client needs are emitted separately as references
+ *   (rule A3). The exception is a **line id**, which `query_lists` returns and
+ *   the two tools from plan 0043 take back: removing a line and settling one
+ *   have to say which line, and a description would be a guess where an id is a
+ *   fact. It is bounded rather than trusted — an id is accepted only if this
+ *   turn genuinely read it from the gateway (plan 0043, section 3.1), so an
+ *   invented one is refused here rather than handed to a `DELETE`.
  * - **It acts through the gateway with the caller's token.** A write the caller
  *   could not make by tapping fails with the ordinary error, which the bot
  *   relays in words.
@@ -49,6 +62,19 @@ export interface ToolRuntime {
   transcript: string[];
   /** Recorded when a write resolved a list, for section 10's turn record. */
   recordListResolution(branch: ListResolutionBranch): void;
+  /**
+   * Facts about this call for the turn record (plan 0043, section 6).
+   *
+   * Kept apart from the result the model sees, and from the arguments, because
+   * neither carries what that section asks the record to carry. **A deletion is
+   * recorded with the number of lines and the list, never with the line
+   * contents**: the count is in the arguments, the contents are in the result,
+   * and the list is in neither. **A refusal by this service is recorded
+   * separately from a failure**, because "the model tried to delete lines it had
+   * not read" and "the gateway said no" are different facts about the prompt,
+   * and the first one is the number to watch.
+   */
+  noteForRecord(fields: { list?: string; refused?: true }): void;
 }
 
 export interface AssistantTool {
@@ -142,12 +168,24 @@ const upsertLines: AssistantTool = {
     // what it meant. "Milk on the flat list and bread on the office list" is two
     // calls, which is correct: they are two decisions about which list, and each
     // deserves its own record and its own chance to ask.
-    const resolution = resolveList({
-      named: readString(args['list']),
-      zone: readString(args['zone']),
-      transcript: runtime.transcript,
-      lists: runtime.context.lists,
-    });
+    //
+    // On a scoped turn there is nothing to resolve: the list came in the request
+    // and `resolveScoped` either returns it or refuses the call outright (plan
+    // 0044, section 2.1).
+    const scopedList = runtime.context.scopedList;
+    if (scopedList !== undefined && namesAnotherList(args, scopedList)) {
+      return outOfScope(scopedList);
+    }
+
+    const resolution: ListResolution =
+      scopedList !== undefined
+        ? { branch: ListResolutionBranch.ONLY_LIST, list: scopedList }
+        : resolveList({
+            named: readString(args['list']),
+            zone: readString(args['zone']),
+            transcript: runtime.transcript,
+            lists: runtime.context.lists,
+          });
     runtime.recordListResolution(resolution.branch);
 
     // Branch 4. A write that guessed is worse than a question, so the turn ends
@@ -365,6 +403,13 @@ const queryLists: AssistantTool = {
           // Reported as found, never derived from a count the model can guess at.
           // Every fact about a line in the reply has to come from this array.
           matches: matching.map((line) => ({
+            // The one id the model is given, and the reason this tool is the
+            // prerequisite for the two that change a line (plan 0043, section
+            // 3.1). It goes back in a tool argument and never into the reply,
+            // which the prompt says in those words. Handing it out here is what
+            // "the model has to have looked" is made of: an id it did not get
+            // from a result in this turn is refused before it reaches a write.
+            id: line.id,
             product: line.content,
             quantity: line.quantity,
             status: line.status,
@@ -473,18 +518,384 @@ const renameMe: AssistantTool = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// 0043.3 remove_lines
+// ---------------------------------------------------------------------------
+
+/**
+ * The most lines one call may take off a list (plan 0043, section 3.4).
+ *
+ * Small enough that a plausible misunderstanding cannot take a whole list with
+ * it, and large enough for the way people actually talk: nobody names eleven
+ * things to remove in one breath, and somebody who means the whole list is asking
+ * for something this tool deliberately cannot do. A call over the cap is refused
+ * whole rather than truncated, because a partially executed deletion is the worst
+ * outcome available here.
+ */
+const REMOVE_LINES_MAX = 10;
+
+const removeLines: AssistantTool = {
+  declaration: {
+    name: 'remove_lines',
+    description:
+      'Take one or more lines off a shopping list. Use it when they ask for something to come off: "take the olive oil off", "we do not need the rice". It works only with line ids that came back from query_lists in this same turn, so look the list up first and never write an id yourself. Before it removes anything, tell them exactly which things are about to go, by name, and call it with confirmed true only once they have said yes. Everything in one call comes off the same list. It cannot empty a list.',
+    parameters: {
+      type: 'object',
+      properties: {
+        lineIds: {
+          type: 'array',
+          minItems: 1,
+          maxItems: REMOVE_LINES_MAX,
+          description:
+            'The ids of the lines to remove, exactly as query_lists gave them to you in this turn. If two things on the list could be what they meant, do not pick one: ask them which.',
+          items: { type: 'string' },
+        },
+        confirmed: {
+          type: 'boolean',
+          description:
+            'True only after they have agreed, in this conversation, to these exact things being removed.',
+        },
+      },
+      required: ['lineIds'],
+    },
+  },
+
+  async execute(args, runtime) {
+    const ids = readIds(args['lineIds']);
+
+    // There is no "empty the list" (section 3.4). A call with no ids is not a
+    // call to delete everything, and the answer names the screen that does it,
+    // which is what plan 0039 section 12's last line provides for everything the
+    // catalog leaves out.
+    if (ids.length === 0) {
+      return blocked(
+        runtime,
+        'Nothing was removed. This takes lines off one at a time and cannot empty a list. If that is what they want, tell them the list settings screen deletes a whole list and asks them to type its name first.'
+      );
+    }
+
+    if (ids.length > REMOVE_LINES_MAX) {
+      return blocked(
+        runtime,
+        `Nothing was removed. That is more than ${REMOVE_LINES_MAX} lines at once, which is more than this can take off in one call. Ask them which ones they mean and do it a few at a time.`
+      );
+    }
+
+    // Rule A3 applied to a write (section 3.1). An id that came back from the
+    // gateway during this turn exists and the caller can see it; an id the model
+    // wrote into a sentence has neither property, and a deletion is the turn
+    // least worth being relaxed about it on.
+    const resolved: KnownLine[] = [];
+    for (const id of ids) {
+      const known = runtime.context.knownLine(id);
+      if (known === undefined) {
+        return blocked(
+          runtime,
+          'Nothing was removed, because you named a line this turn has not read. Call query_lists first and use the ids it gives you.',
+          { notInContext: true }
+        );
+      }
+      resolved.push(known);
+    }
+
+    const list = resolved[0].list;
+    if (resolved.some((known) => known.list.listId !== list.listId)) {
+      return blocked(
+        runtime,
+        'Nothing was removed. Everything in one call has to come off the same list, so make one call per list.'
+      );
+    }
+
+    const scopedList = runtime.context.scopedList;
+    if (scopedList !== undefined && list.listId !== scopedList.listId) {
+      runtime.noteForRecord({ refused: true });
+      return outOfScope(scopedList);
+    }
+
+    // Section 3.3, and the reason it is one round trip rather than a stored
+    // gate: the transcript is the state (plan 0039, section 4), so the question
+    // ends the turn and the answer arrives in the next one with nothing kept in
+    // between. On a voice turn it is read back, which is the case this matters
+    // most in.
+    if (args['confirmed'] !== true) {
+      runtime.references.list(list);
+      return {
+        ok: false,
+        needsConfirmation: true,
+        list: list.listName,
+        count: resolved.length,
+        // By their text, and not "those two items": a confirmation of a pronoun
+        // is not a confirmation.
+        wouldRemove: resolved.map((known) => known.line.content),
+        message:
+          'Nothing has been removed yet. Name these to them exactly, ask them to confirm, then call this again with the same ids and confirmed true.',
+      };
+    }
+
+    // The list, beside the count the arguments already carry, and nothing about
+    // what was on the lines (section 6).
+    runtime.noteForRecord({ list: list.listId });
+
+    const removed: string[] = [];
+    let failure: unknown;
+
+    for (const known of resolved) {
+      try {
+        await runtime.api.deleteLine(runtime.context.caller, known.line.id);
+        removed.push(known.line.content);
+        // Gone, so nothing later in this turn can name it again, and no chip in
+        // the reply points at it (section 5). The second one matters even though
+        // this tool emits no line reference of its own: the `query_lists` that
+        // found the line a moment ago emitted one.
+        runtime.context.forgetLine(known.line.id);
+        runtime.references.forgetLine(known.line.id);
+      } catch (error) {
+        failure = error;
+        break;
+      }
+    }
+
+    if (removed.length > 0) {
+      runtime.context.invalidate(list.listId);
+      // Rule A3, and section 5: the reference is the **list** they came off,
+      // never the lines. A reference is a link, the link opens a line, and that
+      // line is gone; the one guarantee rule A3 makes is that a reference cannot
+      // 404, and this is the only tool that could break it.
+      runtime.references.list(list);
+    }
+
+    if (failure !== undefined) {
+      const { reason } = refused(failure, 'remove that line');
+      return {
+        ok: false,
+        list: list.listName,
+        // Exactly what happened. **It never claims a rollback it did not
+        // perform** (section 3.5): a wrong sentence about what is on the list is
+        // the worst output this feature can produce.
+        removed,
+        stillThere: resolved
+          .slice(removed.length)
+          .map((known) => known.line.content),
+        reason,
+        message:
+          removed.length > 0
+            ? 'Some of them went and the rest are still on the list. Say exactly that, naming which is which. Nothing was put back.'
+            : 'Nothing was removed.',
+      };
+    }
+
+    return { ok: true, list: list.listName, zone: list.zoneName, removed };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// 0043.4 set_line_status
+// ---------------------------------------------------------------------------
+
+const setLineStatus: AssistantTool = {
+  declaration: {
+    name: 'set_line_status',
+    description:
+      'Mark lines as bought, as not available in the shop, or as still needed. It works only with line ids that came back from query_lists in this same turn, so look the list up first and never write an id yourself. Pass every line they mentioned in one call: "we have got the milk and the bread" is one call with two ids. Do not ask them to confirm first, and do not ask afterwards either: it is reversible and they are looking at the screen it changes.',
+    parameters: {
+      type: 'object',
+      properties: {
+        lineIds: {
+          type: 'array',
+          minItems: 1,
+          maxItems: LINE_BATCH_MAX_ITEMS,
+          description:
+            'The ids of the lines to settle, exactly as query_lists gave them to you in this turn.',
+          items: { type: 'string' },
+        },
+        status: {
+          type: 'string',
+          enum: Object.values(LineStatus),
+          description:
+            'READY when they have it: "got the milk", "we have got the bread", "that is in the trolley". NOT_AVAILABLE when the shop did not have it: "they had no eggs", "there was none left". These two are not the same thing and must never be swapped: READY means that errand is done, NOT_AVAILABLE means somebody still has to go somewhere else for it. PENDING puts a line back to still being needed, for "no, put the bread back".',
+        },
+      },
+      required: ['lineIds', 'status'],
+    },
+  },
+
+  async execute(args, runtime) {
+    const status = readStatus(args['status']);
+    if (status === undefined) {
+      return { ok: false, problem: 'that is not a status a line can have' };
+    }
+
+    const ids = readIds(args['lineIds']);
+    if (ids.length === 0) {
+      return blocked(
+        runtime,
+        'Nothing was changed, because no line was named. Call query_lists and use the ids it gives you.'
+      );
+    }
+
+    // The same rule as the deletion, identical in shape and one level lighter in
+    // consequence (section 4): ids from this turn, or nothing is written.
+    const resolved: KnownLine[] = [];
+    for (const id of ids) {
+      const known = runtime.context.knownLine(id);
+      if (known === undefined) {
+        return blocked(
+          runtime,
+          'Nothing was changed, because you named a line this turn has not read. Call query_lists first and use the ids it gives you.',
+          { notInContext: true }
+        );
+      }
+      resolved.push(known);
+    }
+
+    const scopedList = runtime.context.scopedList;
+    if (
+      scopedList !== undefined &&
+      resolved.some((known) => known.list.listId !== scopedList.listId)
+    ) {
+      runtime.noteForRecord({ refused: true });
+      return outOfScope(scopedList);
+    }
+
+    // **No confirmation**, and that is a decision rather than an omission: it is
+    // reversible, it is visible, and confirming a tick is nagging.
+    const results: StatusResult[] = [];
+    const touched = new Set<string>();
+    let firstFailure: unknown;
+
+    for (const known of resolved) {
+      try {
+        const line = await runtime.api.setLineStatus(
+          runtime.context.caller,
+          known.line.id,
+          status
+        );
+        touched.add(known.list.listId);
+        runtime.references.line(known.list, line.id, line.content);
+        results.push({
+          product: line.content,
+          // The server's value, reported rather than assumed to be the one that
+          // was asked for.
+          status: line.status,
+          list: known.list.listName,
+        });
+      } catch (error) {
+        firstFailure ??= error;
+        const { reason } = refused(error, 'that');
+        results.push({ product: known.line.content, refused: true, reason });
+      }
+    }
+
+    for (const listId of touched) {
+      runtime.context.invalidate(listId);
+    }
+
+    if (touched.size === 0 && firstFailure !== undefined) {
+      // Nothing was written and something was refused, so the call refused: the
+      // API's own localized sentence is the answer rather than an envelope
+      // describing a partial success that did not happen.
+      return refused(firstFailure, 'change that');
+    }
+
+    if (touched.size > 0) {
+      runtime.noteForRecord({ list: [...touched].join(',') });
+    }
+
+    return { ok: true, status, lines: results };
+  },
+};
+
 export const ASSISTANT_TOOLS: AssistantTool[] = [
   upsertLines,
   queryLists,
+  removeLines,
+  setLineStatus,
   renameMe,
+];
+
+/**
+ * What a turn scoped to one list may do (plan 0044, section 2.2).
+ *
+ * `rename_me` is **not here**, and that is the whole point of assembling a
+ * catalog per turn rather than filtering inside a tool. Changing your username is
+ * not an operation on a list; it is a perfectly good thing to ask the assistant
+ * for, and the assistant panel is where you ask it. Somebody speaking into a
+ * shopping list's add button has not asked to be renamed, and the one plausible
+ * way it fires from there is a misheard sentence, which is the worst possible
+ * reason for it to be reachable.
+ *
+ * **An absent capability is a much harder boundary than an instruction** (plan
+ * 0039, section 7), and that argument only holds if the absence is real. A tool
+ * that is declared and then refuses is a tool the model can still call and whose
+ * refusal it has to be told how to handle.
+ *
+ * All four of the plan's tools are here now that plan 0043 has built
+ * `remove_lines` and `set_line_status`. Both belong on this list for the reason
+ * `rename_me` does not: they are operations on a list, and taking something off
+ * the list in front of you or ticking it as bought is among the likeliest things
+ * to be said into that microphone.
+ */
+export const SCOPED_TOOLS: AssistantTool[] = [
+  upsertLines,
+  queryLists,
+  removeLines,
+  setLineStatus,
 ];
 
 export const TOOL_DECLARATIONS: ModelToolDeclaration[] = ASSISTANT_TOOLS.map(
   (tool) => tool.declaration
 );
 
-export function findTool(name: string): AssistantTool | undefined {
-  return ASSISTANT_TOOLS.find((tool) => tool.declaration.name === name);
+export const SCOPED_TOOL_DECLARATIONS: ModelToolDeclaration[] =
+  SCOPED_TOOLS.map((tool) => tool.declaration);
+
+/** The catalog this turn was given, which is the only place a tool may be found. */
+export function catalogFor(scoped: boolean): AssistantTool[] {
+  return scoped ? SCOPED_TOOLS : ASSISTANT_TOOLS;
+}
+
+export function findTool(
+  name: string,
+  scoped = false
+): AssistantTool | undefined {
+  return catalogFor(scoped).find((tool) => tool.declaration.name === name);
+}
+
+/**
+ * Whether a call named a list that is not the scoped one.
+ *
+ * Matching is the same normalization list resolution uses, so "the flat list"
+ * and "Flat list" are one answer here and there. A call that named nothing is
+ * not out of scope: it meant the list on the screen, which is the only one.
+ */
+function namesAnotherList(
+  args: Record<string, unknown>,
+  scoped: ContextList
+): boolean {
+  const named = readString(args['list']);
+
+  return (
+    named !== null &&
+    named !== undefined &&
+    named.trim().length > 0 &&
+    normalize(named) !== normalize(scoped.listName)
+  );
+}
+
+/**
+ * The backstop for a call that named another list (plan 0044, section 2.1).
+ *
+ * A backstop rather than a normal path: the model is told in the context that
+ * there is one list and it is this one, so naming another is already unlikely.
+ * It exists because unlikely is not the same as cannot, and a write to the wrong
+ * list is exactly the failure a scope was added to prevent.
+ */
+function outOfScope(scoped: ContextList): unknown {
+  return {
+    ok: false,
+    outOfScope: true,
+    message: `Nothing was written. This person is looking at "${scoped.listName}" and that is the only list you can change right now. Tell them where the other list lives instead of trying again.`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -613,6 +1024,62 @@ function describeScope(propagation: UsernamePropagation): string {
     default:
       return 'their account name, and their name in the groups where it still matches the old one';
   }
+}
+
+/** What one line of a `set_line_status` call ended up saying. */
+interface StatusResult {
+  product: string;
+  status?: LineStatus;
+  list?: string;
+  refused?: true;
+  reason?: string;
+}
+
+/**
+ * A call this service refused, before anything reached the gateway (plan 0043,
+ * section 6).
+ *
+ * Recorded as a refusal rather than as a failure, because "the model tried to
+ * delete lines it had not read" and "the gateway said no" are different facts
+ * about the prompt, and the first one is the number to watch. The model is told
+ * plainly enough that its next move is the tool call that would have made the
+ * request legal, rather than an apology.
+ */
+function blocked(
+  runtime: ToolRuntime,
+  message: string,
+  extra: Record<string, unknown> = {}
+): unknown {
+  runtime.noteForRecord({ refused: true });
+  return { ok: false, blocked: true, ...extra, message };
+}
+
+/** The ids of a call, in the order given, without the repeats. */
+function readIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const ids: string[] = [];
+  for (const entry of value) {
+    const id = readString(entry);
+    if (id !== undefined && !ids.includes(id)) {
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * The status asked for, or `undefined` for anything that is not one of the three.
+ *
+ * Matched against the enum rather than lowercased and mapped, because the three
+ * values are what the tool schema offers and what the gateway takes, and a
+ * spelling this does not recognize is a call that should fail here rather than
+ * be turned into whichever of the three looks closest.
+ */
+function readStatus(value: unknown): LineStatus | undefined {
+  const wanted = readString(value);
+  return Object.values(LineStatus).find((status) => status === wanted);
 }
 
 /** Lists to read: the named one, else the named zone's, else all of them. */

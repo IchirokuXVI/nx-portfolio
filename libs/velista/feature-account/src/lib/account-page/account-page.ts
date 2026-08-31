@@ -33,6 +33,7 @@ import {
   appPath,
   BrowserFacade,
   InstallStore,
+  VoicePreferences,
 } from '@portfolio/velista/platform';
 import {
   AccountRow,
@@ -123,6 +124,22 @@ export class AccountPage {
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _announcement = inject(RenameAnnouncement);
+  private readonly _voice = inject(VoicePreferences);
+
+  /**
+   * How the microphone behaves, as two independent switches (`VoicePreferences`).
+   *
+   * Both off unless somebody turned them on. The plain recorder is the default
+   * because a microphone that ends a recording on its own surprises anybody who
+   * paused to think about the next item, and a microphone that stays open surprises
+   * anybody who thought they had finished.
+   *
+   * Stored on the device rather than on the account, on purpose: the phone in a noisy
+   * kitchen and the laptop at a desk want different answers, and one choice synced
+   * across both would be wrong on one of them.
+   */
+  readonly sendOnSilence = this._voice.sendOnSilence;
+  readonly keepListening = this._voice.keepListening;
   private readonly _install = inject(InstallStore);
   private readonly _browser = inject(BrowserFacade);
   private readonly _brand = inject(APP_BRAND);
@@ -421,6 +438,20 @@ export class AccountPage {
 
   private async _toFrontDoor(): Promise<void> {
     await this._router.navigateByUrl(appPath(this._locale(), this._basePath));
+  }
+
+  /**
+   * Saved on the flip, both of them.
+   *
+   * There is nothing to submit on this screen, and a setting that needed
+   * confirming would be a setting somebody left half changed.
+   */
+  setSendOnSilence(event: Event): void {
+    this._voice.setSendOnSilence((event.target as HTMLInputElement).checked);
+  }
+
+  setKeepListening(event: Event): void {
+    this._voice.setKeepListening((event.target as HTMLInputElement).checked);
   }
 }
 

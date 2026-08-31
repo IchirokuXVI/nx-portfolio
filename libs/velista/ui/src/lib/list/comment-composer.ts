@@ -2,7 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
   inject,
   input,
   output,
@@ -14,23 +13,20 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import {
   COMMENT_BODY_MAX_LENGTH,
   VOICE_COMMENT_MAX_BYTES,
-  VOICE_COMMENT_MAX_SECONDS,
   type RecordedAudio,
 } from '@portfolio/velista/models';
-import {
-  AUDIO_CAPTURE,
-  type AudioCaptureI,
-  type AudioCaptureSession,
-} from '@portfolio/velista/platform';
-import { MicIcon, SendIcon, StopIcon } from '../icons/icons';
+import { AudioRecorder } from '@portfolio/velista/platform';
+import { MicIcon, SendIcon } from '../icons/icons';
+import { RecordingElapsed } from '../recording/recording-elapsed';
+import { RecordingRow } from '../recording/recording-row';
 
-/** What the composer is doing, which decides the whole of what it draws. */
-type Mode = 'idle' | 'recording' | 'held';
+/** What the one button at the end of the row is currently for. */
+type ComposerButton = 'record' | 'send';
 
 /**
  * Saying something about a line, by typing it or by saying it.
  *
- * A textarea rather than the single line input the line composer uses, and the
+ * A textarea rather than the single line input the assistant uses, and the
  * difference is what is being written: a line is a thing to buy and a comment is a
  * sentence about one, so it wraps and it grows.
  *
@@ -40,101 +36,142 @@ type Mode = 'idle' | 'recording' | 'held';
  * so read means read here as well, and the sheet draws this component only for
  * `canComment` (velista plan 0030, section 3.1).
  *
- * ## Both controls are present at once
+ * ## One button, two jobs, and the recording row over both
  *
- * Not the empty field switch the line composer gets. That one has a single job at a
- * time because its row is already crowded with a stepper, and because adding a line
- * is a single act with one output. **A comment is a message**, and the choice
- * between typing one and speaking one is a choice about the message rather than
- * about whether the field happens to be empty: somebody who starts typing, stops,
- * and decides to say it instead should not have to clear the box to find the
- * microphone (plan 0039, section 2).
+ * This is the assistant's rule, adopted whole (plan 0041, section 2). A microphone
+ * on an empty field, a send on a typed one, and while a recording runs the field
+ * and the button are replaced by `RecordingRow`: trash on the far left, the length
+ * in the middle, stop on the far right.
  *
- * While recording, the microphone becomes a stop and the field is **dimmed rather
- * than removed**, because removing it would move the send button under the thumb
- * that is about to press stop.
+ * Plan `0039` put the microphone **beside** the field instead, so that somebody who
+ * started typing and changed their mind would not have to clear the box to find it.
+ * That is a real cost and it is the smaller one. There are two places in this app
+ * where you can speak, they sit two taps apart, and a second control scheme for the
+ * same act costs more than a keystroke on a rare path.
  *
- * ## No silence detection
+ * **The textarea stays a textarea.** What is adopted is the button, not the box.
  *
- * Press to start, press to stop, and a hard cap. Plan 0038's line composer ends a
- * recording when the talking stops, because the person has their hands full in
- * front of a fridge; here they are holding the phone and looking at the screen, and
- * a message is not one sentence. Somebody leaving a comment pauses to think, and a
- * detector that ended the recording during that pause would have cut them off mid
- * message with no way to continue.
+ * ## Stop sends
  *
- * The cap **stops rather than sends**, which is plan 0032 section 4.4's rule: a
- * message that leaves on its own is a message nobody agreed to send.
+ * One press, and the recording goes. Plan `0039` held it for a second press on the
+ * argument that a message which leaves on its own is a message nobody agreed to
+ * send, and that rule is about **the cap, not the button**: a recording that ends
+ * because a timer ran out was never agreed to, and one that ends because somebody
+ * pressed stop was. The check that costs no press is already here, which is the
+ * pending bubble being replaced by the real comment with its transcript in it.
+ *
+ * At the cap the recorder holds instead, in `stopped`, with both the trash and the
+ * stop still live. **The cap stops the recording; the person stops the message.**
  *
  * ## A failed send never discards the recording
  *
  * Somebody just spoke for forty seconds. Losing that to a dropped connection is the
- * worst outcome in this plan and it is entirely avoidable, so the blob is **held
- * here until a send succeeds**: the container reports failure by leaving `busy`,
- * the composer keeps what it has, and the send button can be pressed again. It is
- * held rather than queued, for plan 0038 section 6's reason — retryable by hand is
- * not the same as sent automatically twenty minutes later.
+ * worst outcome in plan `0039` and it is entirely avoidable, so the blob is **held
+ * here until a send succeeds**: the container reports failure through
+ * {@link reportError}, the composer keeps what it has, and the error line carries a
+ * retry that sends the same bytes. It is held rather than queued, for plan 0038
+ * section 6's reason: retryable by hand is not the same as sent automatically twenty
+ * minutes later.
+ *
+ * This is the one thing that is deliberately **not** identical to the assistant,
+ * which throws a failed turn away. A turn is ephemeral by design; a comment is a
+ * message somebody left for the people they shop with.
  */
 @Component({
   selector: 'lib-comment-composer',
-  imports: [RokuTranslatorPipe, SendIcon, MicIcon, StopIcon],
+  imports: [
+    RokuTranslatorPipe,
+    SendIcon,
+    MicIcon,
+    RecordingRow,
+    RecordingElapsed,
+  ],
   template: `
-    <form (submit)="onSubmit($event)" class="composer">
-      <textarea
-        (input)="onInput($event)"
-        [attr.aria-label]="'list.comments.placeholder' | rokuT"
-        [attr.maxlength]="maxLength"
-        [disabled]="mode() === 'recording'"
-        [placeholder]="placeholder() | rokuT"
-        [value]="body()"
-        #field
-        class="field"
-        name="body"
-        rows="2"
-      ></textarea>
+    @let state = recorder.state();
 
-      @if (canRecord()) {
+    <!--
+      The warning and the cap message grow the composer and sit above it, so
+      nothing is covered and neither control moves under the thumb that is about
+      to press one (plan 0032, section 4.4). They are written here rather than
+      inside the recording row because the sentences differ per caller.
+    -->
+    @if (state === 'stopped') {
+      <p aria-live="polite" class="notice">
+        {{ 'list.comments.limit.reached' | rokuT }}
+        <strong>{{ 'list.comments.limit.pressStop' | rokuT }}</strong>
+      </p>
+    } @else if (recorder.warning()) {
+      <p aria-live="polite" class="notice">
+        {{
+          'list.comments.limit.left'
+            | rokuT: { count: recorder.remainingSeconds() }
+        }}
+      </p>
+    }
+
+    @if (recorder.active()) {
+      <lib-recording-row
+        (discard)="discard()"
+        (stop)="stopAndSend()"
+        [discardLabel]="'list.comments.discardRecording'"
+        [phase]="state === 'stopped' ? 'capped' : 'recording'"
+        [stopLabel]="'list.comments.stopRecording'"
+      >
+        <lib-recording-elapsed
+          [elapsed]="elapsed()"
+          [live]="state === 'recording'"
+        />
+      </lib-recording-row>
+    } @else {
+      <form (submit)="onSubmit($event)" class="composer">
+        <textarea
+          (input)="onInput($event)"
+          [attr.aria-label]="'list.comments.placeholder' | rokuT"
+          [attr.maxlength]="maxLength"
+          [placeholder]="'list.comments.placeholder' | rokuT"
+          [value]="body()"
+          #field
+          class="field"
+          name="body"
+          rows="2"
+        ></textarea>
+
         <button
-          (click)="toggleRecording()"
-          [attr.aria-label]="micLabel() | rokuT"
-          [attr.aria-pressed]="mode() === 'recording'"
-          [class.recording]="mode() === 'recording'"
+          (click)="press()"
+          [attr.aria-label]="buttonLabel() | rokuT"
           [disabled]="busy()"
-          class="mic"
+          class="send"
           type="button"
         >
-          @if (mode() === 'recording') {
-            <lib-stop-icon class="glyph" />
+          @if (button() === 'send') {
+            <lib-send-icon class="glyph" />
           } @else {
             <lib-mic-icon class="glyph" />
           }
         </button>
-      }
-
-      <button
-        [attr.aria-label]="'list.comments.send' | rokuT"
-        [disabled]="!canSubmit() || busy()"
-        class="send"
-        type="submit"
-      >
-        <lib-send-icon class="glyph" />
-      </button>
-    </form>
-
-    @if (mode() === 'recording') {
-      <p class="status" role="status">
-        {{ 'list.comments.recording' | rokuT: { seconds: elapsed() } }}
-      </p>
-    }
-
-    @if (mode() === 'held') {
-      <p class="status" role="status">
-        {{ 'list.comments.recordingHeld' | rokuT: { seconds: heldSeconds() } }}
-      </p>
+      </form>
     }
 
     @if (errorKey(); as key) {
-      <p class="error" role="alert">{{ key | rokuT: errorArgs() }}</p>
+      <p class="error" role="alert">
+        {{ key | rokuT: errorArgs() }}
+        <!--
+          The retry is drawn only when there is something to retry with, which is
+          exactly when a send failed with a recording still in hand. A typed
+          comment's failure has the words still in the field and needs no second
+          control to send them again.
+        -->
+        @if (hasHeldRecording()) {
+          <button
+            (click)="retry()"
+            [disabled]="busy()"
+            class="retry"
+            type="button"
+          >
+            {{ 'list.comments.sendAgain' | rokuT }}
+          </button>
+        }
+      </p>
     }
   `,
   styleUrl: './comment-composer.scss',
@@ -146,68 +183,52 @@ export class CommentComposer {
   readonly submitted = output<string>();
 
   /**
-   * A recording the person is ready to send.
+   * A recording the person just finished, on its way out.
    *
-   * The container uploads it and reports back through {@link busy}; on failure it
-   * calls nothing, and the blob stays here to be sent again.
+   * The container uploads it and reports back: {@link clear} on success, and
+   * {@link reportError} on failure, after which the blob is still here.
    */
   readonly recorded = output<RecordedAudio>();
 
   readonly body = signal('');
   readonly maxLength = COMMENT_BODY_MAX_LENGTH;
 
-  readonly mode = signal<Mode>('idle');
-  readonly elapsed = signal(0);
   readonly errorKey = signal<string | null>(null);
   readonly errorArgs = signal<Record<string, string | number>>({});
 
-  private readonly _capture = inject<AudioCaptureI>(AUDIO_CAPTURE);
+  /**
+   * The recorder, provided by the sheet with the comment cap on it.
+   *
+   * Not root scoped, so leaving the sheet releases the microphone, and a recorder
+   * open in a comment cannot collide with the one in the assistant panel. Its
+   * `RECORDING_LIMITS` are the sheet's, which is how a comment stops at a minute
+   * where a message to the assistant runs to five (plan 0041, section 6.2).
+   */
+  protected readonly recorder = inject(AudioRecorder);
+
   private readonly _field = viewChild<ElementRef<HTMLTextAreaElement>>('field');
 
-  private _session: AudioCaptureSession | null = null;
-  private _ticker: ReturnType<typeof setInterval> | null = null;
+  /** The last recording, kept until a send succeeds. Never cleared by a failure. */
   private readonly _held = signal<RecordedAudio | null>(null);
 
-  /**
-   * Whether the microphone is drawn at all.
-   *
-   * A browser that cannot record gets no button and a composer that is exactly
-   * what it was before (plan 0039, section 6). Drawing a control that cannot work
-   * is worse than not drawing one.
-   */
-  readonly canRecord = computed(() => this._capture.supported());
+  readonly hasHeldRecording = computed(() => this._held() !== null);
 
-  readonly heldSeconds = computed(() =>
-    Math.round(this._held()?.durationSeconds ?? 0)
+  readonly button = computed<ComposerButton>(() =>
+    this.body().trim() === '' ? 'record' : 'send'
   );
 
-  /** Something to send: typed words, or a recording waiting to go. */
-  readonly canSubmit = computed(
-    () => this.body().trim() !== '' || this._held() !== null
-  );
-
-  readonly placeholder = computed(() =>
-    this.mode() === 'recording'
-      ? 'list.comments.recordingPlaceholder'
-      : 'list.comments.placeholder'
-  );
-
-  readonly micLabel = computed(() =>
-    this.mode() === 'recording'
-      ? 'list.comments.stopRecording'
+  readonly buttonLabel = computed(() =>
+    this.button() === 'send'
+      ? 'list.comments.send'
       : 'list.comments.startRecording'
   );
 
-  constructor() {
-    // A composer that is destroyed mid recording must not leave the microphone
-    // open: the browser keeps its indicator on and the stream alive behind a
-    // component nobody holds any more.
-    inject(DestroyRef).onDestroy(() => {
-      this._stopClock();
-      this._session?.close();
-      this._session = null;
-    });
-  }
+  /** `m:ss`, the same shape the assistant's clock uses. */
+  readonly elapsed = computed(() => {
+    const seconds = this.recorder.elapsedSeconds();
+
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  });
 
   onInput(event: Event): void {
     this.body.set((event.target as HTMLTextAreaElement).value);
@@ -221,44 +242,112 @@ export class CommentComposer {
    */
   onSubmit(event: Event): void {
     event.preventDefault();
-    void this.submit();
+    this.press();
   }
 
-  async submit(): Promise<void> {
-    // Pressing send while recording ends the recording first, which is what
-    // somebody who reached for the wrong button meant either way.
-    if (this.mode() === 'recording') {
-      await this._finish();
+  /** The one button, pressed. */
+  press(): void {
+    if (this.button() === 'send') {
+      this._submitTyped();
       return;
     }
 
+    void this._record();
+  }
+
+  /**
+   * Start recording, and say so when it did not start.
+   *
+   * The microphone is drawn even where it cannot work, which is a change from plan
+   * `0039` section 6: that plan drew no button at all on a browser that cannot
+   * record, and it could, because the microphone sat beside a send button. With one
+   * button doing both jobs there is nothing left to draw on an empty field, so the
+   * button stays and the failure is said in words. The field never stops working,
+   * which is what that rule was protecting.
+   *
+   * `start()` never rejects: a refused permission and an absent device are states
+   * it renders, so this reads the state rather than catching.
+   */
+  private async _record(): Promise<void> {
+    this.errorKey.set(null);
+    // A new recording replaces a held one. Two recordings in one composer is a
+    // state with no control to resolve it, and the person just started speaking.
+    this._held.set(null);
+
+    await this.recorder.start();
+
+    const state = this.recorder.state();
+    if (state === 'refused' || state === 'unavailable') {
+      // A refused permission and an absent device read the same from here, and
+      // the field still works either way.
+      this.reportError('list.comments.micRefused');
+      this.recorder.cancel();
+    }
+  }
+
+  /** Stop, which sends. There is no second press. */
+  async stopAndSend(): Promise<void> {
+    const seconds = this.recorder.elapsedSeconds();
+    const blob = await this.recorder.stop();
+
+    if (blob === null || blob.size === 0) {
+      // The recorder had nothing, or the browser gave back an empty file. Said
+      // in words rather than sent, because an empty recording is a comment
+      // nobody can read and nobody can play.
+      this.reportError('list.comments.recordingEmpty');
+      return;
+    }
+
+    const recording: RecordedAudio = {
+      blob,
+      mimeType: blob.type,
+      durationSeconds: seconds,
+    };
+
+    if (blob.size > VOICE_COMMENT_MAX_BYTES) {
+      // At a speech bitrate a minute is a fraction of this, so reaching it means
+      // the browser ignored the bitrate entirely. Kept rather than dropped, which
+      // is where every other failure in this composer lands.
+      this._held.set(recording);
+      this.reportError('list.comments.recordingTooBig', {
+        limit: Math.round(VOICE_COMMENT_MAX_BYTES / (1024 * 1024)),
+      });
+      return;
+    }
+
+    this._held.set(recording);
+    this.recorded.emit(recording);
+  }
+
+  /** Throw the recording away. Whatever was typed is still in the field. */
+  discard(): void {
+    this.recorder.cancel();
+    this._held.set(null);
+    this.errorKey.set(null);
+  }
+
+  /** Send the held recording again, after a failure. */
+  retry(): void {
     const held = this._held();
-    if (held !== null) {
-      this.recorded.emit(held);
+    if (held === null) {
       return;
     }
 
-    if (this.body().trim() === '') {
-      return;
-    }
-
-    this.submitted.emit(this.body().trim());
-    this.body.set('');
-    this._field()?.nativeElement.focus();
+    this.errorKey.set(null);
+    this.recorded.emit(held);
   }
 
   /**
    * Clear the composer after a send the container confirmed.
    *
-   * Called by the container **only on success**, which is what makes section 6's
-   * rule hold: nothing in here throws the recording away on its own, so a failed
-   * upload leaves it exactly where it was.
+   * Called by the container **only on success**, which is what makes the held
+   * recording rule hold: nothing in here throws a recording away on its own, so a
+   * failed upload leaves it exactly where it was.
    */
   clear(): void {
     this.body.set('');
     this._held.set(null);
     this.errorKey.set(null);
-    this.mode.set('idle');
   }
 
   /** Report a send that failed, keeping whatever is in the composer. */
@@ -267,91 +356,14 @@ export class CommentComposer {
     this.errorArgs.set(args);
   }
 
-  async toggleRecording(): Promise<void> {
-    if (this.mode() === 'recording') {
-      await this._finish();
+  private _submitTyped(): void {
+    const said = this.body().trim();
+    if (said === '' || this.busy()) {
       return;
     }
 
-    this.errorKey.set(null);
-    // A new recording replaces a held one. Two recordings in one composer is a
-    // state with no control to resolve it, and the person just started speaking.
-    this._held.set(null);
-
-    try {
-      this._session = await this._capture.open();
-    } catch {
-      // A refused permission and an absent device read the same from here, and
-      // the field still works either way (plan 0039, section 6).
-      this.reportError('list.comments.micRefused');
-      return;
-    }
-
-    this.mode.set('recording');
-    this.elapsed.set(0);
-    this._startClock();
-  }
-
-  private _startClock(): void {
-    this._stopClock();
-    this._ticker = setInterval(() => {
-      const next = this.elapsed() + 1;
-      this.elapsed.set(next);
-
-      // The cap stops rather than sends (plan 0032, section 4.4). What is on the
-      // screen afterwards is a held recording and a send button, so leaving is
-      // still something a person does.
-      if (next >= VOICE_COMMENT_MAX_SECONDS) {
-        void this._finish();
-      }
-    }, 1000);
-  }
-
-  private _stopClock(): void {
-    if (this._ticker !== null) {
-      clearInterval(this._ticker);
-      this._ticker = null;
-    }
-  }
-
-  /** Stop recording and hold what came out, or say why it cannot be sent. */
-  private async _finish(): Promise<void> {
-    const session = this._session;
-    this._session = null;
-    this._stopClock();
-
-    if (session === null) {
-      this.mode.set('idle');
-      return;
-    }
-
-    const blob = await session.stop();
-    // The recorder keeps no clock on purpose, so the duration is the one this
-    // composer was already counting for the cap, and the type comes off the blob
-    // rather than being asked for separately.
-    const recording: RecordedAudio = {
-      blob,
-      mimeType: blob.type,
-      durationSeconds: this.elapsed(),
-    };
-    this.mode.set('idle');
-
-    if (recording.blob.size === 0) {
-      this.reportError('list.comments.recordingEmpty');
-      return;
-    }
-
-    // Said in words with the limit in it, and **the recording is kept**, so it can
-    // be sent after trimming rather than lost (plan 0039, section 6). There is no
-    // trimming control today; what this buys is that the bytes are still here when
-    // there is one, and that nothing silently disappeared.
-    if (recording.blob.size > VOICE_COMMENT_MAX_BYTES) {
-      this.reportError('list.comments.recordingTooBig', {
-        limit: Math.round(VOICE_COMMENT_MAX_BYTES / (1024 * 1024)),
-      });
-    }
-
-    this._held.set(recording);
-    this.mode.set('held');
+    this.submitted.emit(said);
+    this.body.set('');
+    this._field()?.nativeElement.focus();
   }
 }

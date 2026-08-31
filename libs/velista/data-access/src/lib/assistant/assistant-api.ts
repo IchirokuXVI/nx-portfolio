@@ -85,6 +85,39 @@ export class AssistantApi implements AssistantServiceI {
 
     return required(toAssistantReply(answer), 'assistant.askAloud');
   }
+
+  /**
+   * A recording, scoped to the list the page is showing (backend `0044`).
+   *
+   * Two flat form fields rather than a nested object, because a multipart body
+   * has no shape for one and these are two ids: JSON for that would be ceremony,
+   * and two fields are what `FormData` naturally sends.
+   *
+   * The transcript is sent empty rather than omitted. The field is required by the
+   * route, and an empty conversation is the honest description of this one: the
+   * list page is not a chat, and each recording is answered on its own.
+   */
+  async askAboutList(
+    zoneId: string,
+    listId: string,
+    recording: Blob
+  ): Promise<AssistantReply> {
+    const form = new FormData();
+    form.set('transcript', JSON.stringify([]));
+    form.set('audio', recording, fileNameFor(recording));
+    form.set('zoneId', zoneId);
+    form.set('listId', listId);
+
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway('/v1/assistant/voice'),
+        form,
+        { context: operation('assistant.askAboutList') }
+      )
+    );
+
+    return required(toAssistantReply(answer), 'assistant.askAboutList');
+  }
 }
 
 /**

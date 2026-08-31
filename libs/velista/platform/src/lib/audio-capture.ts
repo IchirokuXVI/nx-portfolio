@@ -9,6 +9,16 @@ import { BrowserFacade } from './browser-facade';
  * had to keep a clock would be a second implementation of the part worth testing.
  */
 export interface AudioCaptureSession {
+  /**
+   * The live stream this session is recording, for anything that has to listen
+   * to the sound rather than to the file (plan 0038, section 4).
+   *
+   * Null where there is not one, which is every fake in a spec and would be a
+   * server render if one could get this far. A caller that needs it treats null
+   * as "cannot watch" and falls back to its own stop button, which is what
+   * `SilenceDetector.watch` does with an unusable stream anyway.
+   */
+  readonly stream: MediaStream | null;
   /** Hold the recording, keeping what is already in it. */
   pause(): void;
   /** Carry on recording into the same file. */
@@ -168,6 +178,7 @@ export class MediaRecorderCapture implements AudioCaptureI {
     recorder.start();
 
     return {
+      stream,
       pause: () => recorder.pause(),
       resume: () => recorder.resume(),
       stop: () =>

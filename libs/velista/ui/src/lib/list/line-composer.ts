@@ -3,19 +3,37 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  type ElementRef,
+  DestroyRef,
+  inject,
   input,
   output,
   signal,
   viewChild,
+  type ElementRef,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   LINE_CONTENT_COUNTER_FROM,
   LINE_CONTENT_MAX_LENGTH,
+  type RecordedAudio,
 } from '@portfolio/velista/models';
-import { PlusIcon } from '../icons/icons';
+import {
+  AudioRecorder,
+  SILENCE_DETECTOR,
+  type SilenceDetectorI,
+  type SilenceWatch,
+} from '@portfolio/velista/platform';
+import {
+  MicIcon,
+  PlusIcon,
+  SpinnerIcon,
+  StopIcon,
+  TrashIcon,
+} from '../icons/icons';
 import { QuantityStepper } from './quantity-stepper';
+
+/** What the one button at the end of the row is for. */
+export type LineComposerButton = 'add' | 'record';
 
 /**
  * The field at the bottom of the list, and the reason this screen has no floating
@@ -44,10 +62,70 @@ import { QuantityStepper } from './quantity-stepper';
  * Only past 350 of 400 characters. A running count under a field somebody is typing a
  * shopping item into is noise for every realistic entry, and the cap exists to stop an
  * accident rather than to be aimed at.
+ *
+ * ## One slot, two jobs, and the empty field decides
+ *
+ * Somebody standing at an open fridge has one hand free and is not going to type
+ * (plan 0038). So the button at the end of the row is a **microphone** when the
+ * field is empty and the plus it has always been when it is not, and the field's
+ * emptiness is the switch rather than a mode anybody selects: two buttons side by
+ * side, one of which is always inert, is a row of controls that has to be read
+ * before either can be used, and this row already carries a stepper.
+ *
+ * The run property survives it. Somebody typing never sees the microphone and
+ * somebody speaking never has the keyboard open, so neither mode interrupts the
+ * other.
+ *
+ * **A press, not a hold**, as everywhere else in this app: hold to talk needs a
+ * steady hand on a phone being held one handed in a kitchen, and it has no
+ * accessible equivalent.
+ *
+ * ## Two controls, and two settings that change what they mean
+ *
+ * While it listens there are exactly two things on screen: **stop**, which sends
+ * what has been said, and **trash**, which throws it away and ends the session.
+ * Trash is the reason a recording is not a one way door: without it every
+ * recording that was started had to be sent before it could be deleted, and on a
+ * shared list that means saying something to everybody before withdrawing it.
+ *
+ * That is the whole of the default behaviour, and it is deliberately the plain
+ * one. Two inputs change it, and neither reads the other:
+ *
+ * | {@link sendOnSilence} | {@link keepListening} | what it is |
+ * | --- | --- | --- |
+ * | off | off | a plain recorder. The default |
+ * | on | off | quiet ends the recording and sends that one |
+ * | off | on | stop sends, and the microphone stays open |
+ * | on | on | hands free: talk, pause, talk, and each pause is a line |
+ *
+ * `SilenceDetector` is watched in every one of them, because the level meter is
+ * drawn from it and a still meter is what tells somebody the microphone is not
+ * picking them up. What {@link sendOnSilence} decides is only whether its ending
+ * is acted on.
+ *
+ * The reason the settings exist rather than a choice being made here is in
+ * `VoicePreferences`: the person at an open fridge and the person at a desk are
+ * using the same screen for different things, and there is no default that is
+ * right for both.
+ *
+ * ## It is absent without `WRITE`, exactly as the composer is
+ *
+ * The microphone inherits that by being inside a component the container does not
+ * render for somebody who may not write. There is no separate check and there must
+ * not be: a second condition for the same fact is a second place for it to
+ * disagree (plan 0038, section 2.1).
  */
 @Component({
   selector: 'lib-line-composer',
-  imports: [RokuTranslatorPipe, PlusIcon, QuantityStepper],
+  imports: [
+    RokuTranslatorPipe,
+    PlusIcon,
+    MicIcon,
+    StopIcon,
+    TrashIcon,
+    SpinnerIcon,
+    QuantityStepper,
+  ],
   templateUrl: './line-composer.html',
   styleUrl: './line-composer.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -70,7 +148,42 @@ export class LineComposer {
    */
   readonly takeFocus = input(false);
 
+  /**
+   * Whether a silence ends the recording and sends it.
+   *
+   * False by default, which is the plain recorder: the person decides when they have
+   * finished speaking, and nothing leaves until they press stop. It was the only
+   * behaviour when plan 0038 landed, and as a default it surprises anybody who paused
+   * to think about the next item and found half a list already sent.
+   *
+   * The cap is not covered by this. A recording that reaches the maximum ends whatever
+   * this says, because the recorder has already stopped taking audio by then and a
+   * segment left open would simply never be sent.
+   */
+  readonly sendOnSilence = input(false);
+
+  /**
+   * Whether the microphone reopens once a recording has been sent.
+   *
+   * False by default, so a send ends the session and the row goes back to the field.
+   * True is for somebody whose hands are busy and who is naming several things: the
+   * previous one is still on its way to the server while the next is being spoken,
+   * which is what the sending hint is for.
+   */
+  readonly keepListening = input(false);
+
   readonly submitted = output<{ content: string; quantity: number }>();
+
+  /**
+   * Something somebody said, for the page to post to the list scoped assistant.
+   *
+   * The recording and nothing else. Rule D1: this component does not know what
+   * becomes of it, and it certainly does not know there is an assistant.
+   */
+  readonly spoke = output<RecordedAudio>();
+
+  /** It did not start: a refused microphone, no device, or a browser that cannot. */
+  readonly recordingFailed = output<void>();
 
   readonly content = signal('');
   readonly quantity = signal(1);
@@ -86,7 +199,62 @@ export class LineComposer {
 
   private readonly _field = viewChild<ElementRef<HTMLInputElement>>('field');
 
+  private readonly _recorder = inject(AudioRecorder);
+  private readonly _detector = inject<SilenceDetectorI>(SILENCE_DETECTOR);
+
+  private _watch: SilenceWatch | null = null;
+
+  /** 0 to 1, from the detector, for the meter. Reset between recordings. */
+  private readonly _level = signal(0);
+
+  /**
+   * Whether the session is open: pressed, and not yet ended.
+   *
+   * A signal because it is what holds the listening row on screen **across** a
+   * handover: with {@link keepListening} on, `AudioRecorder.active()` goes false the
+   * moment a segment stops and true again only once the next `getUserMedia` resolves,
+   * and a view drawn from the recorder alone would flash the text field, and on a
+   * phone the keyboard, back at every pause in a sentence.
+   */
+  private readonly _listeningOn = signal(false);
+
+  /**
+   * Whether the listening row is on screen.
+   *
+   * The session or the recorder, not the recorder alone: between one segment and the
+   * next the recorder is briefly idle while the browser hands back a fresh stream, and
+   * that gap is not something the person did.
+   */
+  readonly listening = computed(
+    () => this._listeningOn() || this._recorder.active()
+  );
+
+  readonly button = computed<LineComposerButton>(() =>
+    this.canSubmit() ? 'add' : 'record'
+  );
+
+  readonly buttonLabel = computed(() =>
+    this.button() === 'add' ? 'list.add.action' : 'list.add.startListening'
+  );
+
+  /**
+   * The meter, as a width.
+   *
+   * Scaled well past the raw level, because speech at a conversational distance
+   * from a phone microphone reads as a small number and a meter that never leaves
+   * the left hand end says "not hearing you" when it is hearing perfectly.
+   */
+  readonly levelPercent = computed(() =>
+    Math.min(100, Math.round(this._level() * 400))
+  );
+
   constructor() {
+    // A composer destroyed mid recording must not leave the microphone open: the
+    // browser keeps its indicator on and the stream alive behind a component
+    // nobody holds any more. `AudioRecorder` releases itself on destroy; the
+    // watch is this component's and goes with it.
+    inject(DestroyRef).onDestroy(() => this._stopWatching());
+
     // `afterNextRender` runs in the browser and never on the server (plan 0001, D2),
     // which is also why this cannot be an attribute: the attribute would be in the
     // server rendered HTML and would fire on hydration.
@@ -99,6 +267,124 @@ export class LineComposer {
 
   onInput(event: Event): void {
     this.content.set((event.target as HTMLInputElement).value);
+  }
+
+  /** The one button, pressed. */
+  press(): void {
+    if (this.button() === 'add') {
+      this.submit();
+      return;
+    }
+
+    this._listeningOn.set(true);
+    void this._record();
+  }
+
+  /**
+   * Send what has been said.
+   *
+   * Whether the session ends here is {@link keepListening}'s to decide, and it is
+   * decided in `_finish` so that this press and a silence end the same way.
+   */
+  stop(): void {
+    void this._finish();
+  }
+
+  /**
+   * Throw the recording away, and end the session whatever the settings say.
+   *
+   * The one exit that always exits. With {@link keepListening} on, stop reopens the
+   * microphone, so this is what closes it; and it is what somebody who pressed the
+   * microphone by accident, or thought better of what they were saying, reaches for.
+   * Nothing is emitted, so the page never learns there was a recording at all.
+   */
+  discard(): void {
+    this._listeningOn.set(false);
+    this._stopWatching();
+    this._recorder.cancel();
+    this._level.set(0);
+  }
+
+  private async _record(): Promise<void> {
+    await this._recorder.start();
+
+    const state = this._recorder.state();
+    if (state === 'refused' || state === 'unavailable') {
+      // Said by the page, in the strip, because the sentence differs between a
+      // refusal and a device that is not there and neither is this component's
+      // to write (plan 0038, section 6).
+      //
+      // The session ends here as well as the segment. A microphone that has just
+      // been refused will be refused again, and reopening it on every silence
+      // would ask the same question in a loop.
+      this._listeningOn.set(false);
+      this._recorder.cancel();
+      this.recordingFailed.emit();
+      return;
+    }
+
+    this._level.set(0);
+
+    const stream = this._recorder.stream;
+    if (stream === null) {
+      // No stream to watch, which is every fake and any browser without the
+      // audio API. The recording still runs and the stop button still ends it;
+      // what is lost is only the convenience of it ending itself.
+      return;
+    }
+
+    this._watch = this._detector.watch(stream, {
+      onLevel: (reading) => this._level.set(reading.level),
+      // Watched whatever the settings say, because the meter is drawn from the same
+      // handler and a still meter is what tells somebody the microphone is not
+      // hearing them. Only the ending is conditional.
+      //
+      // The cap is not: by then the recorder has stopped taking audio, so a segment
+      // left open would never be sent and the row would sit there looking live.
+      onEnd: (reason) => {
+        if (reason === 'cap' || this.sendOnSilence()) {
+          void this._finish();
+        }
+      },
+    });
+  }
+
+  private async _finish(): Promise<void> {
+    this._stopWatching();
+
+    const seconds = this._recorder.elapsedSeconds();
+    const blob = await this._recorder.stop();
+    this._level.set(0);
+
+    // Reopened before the emit rather than after it, so the gap in which the
+    // microphone is shut is as short as this component can make it: the send that
+    // follows is a request to a transcription provider and takes seconds, and a
+    // person mid sentence does not pause for it.
+    //
+    // Off by default, which is a send that ends the session and puts the field back.
+    if (this.keepListening()) {
+      void this._record();
+    } else {
+      this._listeningOn.set(false);
+    }
+
+    // Nothing to send. An empty file to a paid provider is what the detector's
+    // minimum length exists to prevent, and this is the same rule at the end of
+    // the path rather than a second one.
+    if (blob === null || blob.size === 0) {
+      return;
+    }
+
+    this.spoke.emit({
+      blob,
+      mimeType: blob.type,
+      durationSeconds: seconds,
+    });
+  }
+
+  private _stopWatching(): void {
+    this._watch?.close();
+    this._watch = null;
   }
 
   /**
