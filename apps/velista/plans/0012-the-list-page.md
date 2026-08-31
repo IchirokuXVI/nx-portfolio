@@ -9,6 +9,14 @@
 >
 > It covers one destination, `zones/:zoneId/lists/:listId`, and the four sheets over
 > it. Section 4.1 says why the zone id is in that URL and is not decoration.
+>
+> **Revised by `plans/backlog/0001`, which is not scheduled yet.** That plan makes a line's
+> quantity its state and takes the trip status off it entirely, so three things here stop
+> being true when it lands: the row is no longer a checkbox and section 7's accessibility
+> mapping is rewritten, marking a line ready or not available leaves this page, and the swipe
+> direction is reclaimed for a quantity reel. Everything else, including the composer, the
+> reorder mode, the comment sheet, the optimistic overlay and every problem state, is
+> unchanged. Until that plan is picked up, this one describes what is built.
 
 ## 1. Purpose
 
