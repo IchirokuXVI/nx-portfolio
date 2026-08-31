@@ -6,10 +6,12 @@ import {
   CatalogLocationsController,
   CatalogPriceScopesController,
   CatalogProductGroupsController,
+  CatalogScopeController,
   CatalogSuggestController,
   CatalogSupermarketItemsController,
   CatalogSupermarketsController,
 } from './catalog.controller';
+import { ScopeResolutionService } from './scope-resolution.service';
 
 /**
  * The gateway's catalog surface (plan 0012), proxying to catalog over NATS.
@@ -17,7 +19,9 @@ import {
  * supermarket-items controller to `v2` because its view lost two fields. Plan
  * 0048 added product groups, the ranked searches and the composer's one
  * suggestion endpoint, which is the only route here that fans out to two
- * subjects rather than proxying one.
+ * subjects rather than proxying one. Plan 0049 made the reads that return items
+ * or prices scoped, and added the one endpoint that describes the resolution
+ * instead of using it.
  */
 @Module({
   imports: [MessagingModule],
@@ -26,10 +30,14 @@ import {
     CatalogLocationsController,
     CatalogPriceScopesController,
     CatalogProductGroupsController,
+    CatalogScopeController,
     CatalogSuggestController,
     CatalogItemsController,
     CatalogSupermarketItemsController,
     CatalogLocationItemsController,
   ],
+  // Plan 0049: every read that returns items or prices resolves where the caller
+  // shops first, from an explicit selector or from their profile.
+  providers: [ScopeResolutionService],
 })
 export class GatewayCatalogModule {}

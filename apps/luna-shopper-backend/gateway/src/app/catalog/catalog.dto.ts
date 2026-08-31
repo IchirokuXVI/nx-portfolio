@@ -241,7 +241,8 @@ export class CreateItemDto {
   @ApiPropertyOptional({
     nullable: true,
     minimum: 0,
-    description: 'Without it `defaultUnit` says nothing: "LITER" is not a size.',
+    description:
+      'Without it `defaultUnit` says nothing: "LITER" is not a size.',
   })
   @IsOptional()
   @IsNumber()
@@ -306,7 +307,8 @@ export class UpdateItemDto {
   @ApiPropertyOptional({
     nullable: true,
     minimum: 0,
-    description: 'Without it `defaultUnit` says nothing: "LITER" is not a size.',
+    description:
+      'Without it `defaultUnit` says nothing: "LITER" is not a size.',
   })
   @IsOptional()
   @IsNumber()
@@ -496,18 +498,28 @@ export class SearchOrderQueryDto extends PageQueryDto {
   order?: string;
 }
 
+/** How many postal codes or chains one read may name. Same reasoning, smaller. */
+const MAX_SELECTORS = 20;
+
+/** `?x=a&x=b` for one value arrives as a string; every list parameter needs it. */
+const asArray = ({ value }: { value: unknown }) =>
+  value === undefined || Array.isArray(value) ? value : [value];
+
 /**
- * The price scopes a catalog read may quote a price from (plan 0048, section
- * 3.1).
+ * Where the caller shops, for the reads that return items or prices (plan 0048
+ * section 3.1, and plan 0049 section 3).
  *
- * Repeatable, so `?priceScopeId=a&priceScopeId=b` is the whole syntax, and a
- * single value arrives as a string rather than an array. The transform is what
- * makes that one case behave, and it is why every route that takes scopes
- * inherits this rather than restating the decorator stack.
+ * Three ways to say it, in falling precedence:
  *
- * **Sending none is allowed and means no prices.** Filling the set from the
- * caller's shopping profile is plan 0049; until then an unscoped search still
- * ranks, and simply quotes nothing.
+ * - `priceScopeId`, repeatable: the warehouses themselves. Nothing is resolved.
+ * - `postalCode` and `supermarketId`, repeatable: a place, resolved through the
+ *   ladder in section 3.1.
+ * - Nothing at all, optionally with `profileId`: the caller's default (or named)
+ *   shopping profile is resolved for them.
+ *
+ * **Saying nothing no longer means everything.** A caller whose profile holds
+ * neither a postal code nor a chain is answered with `catalog_scope_required`,
+ * which the client renders as an onboarding step rather than as a failure.
  */
 export class PriceScopedQueryDto extends SearchOrderQueryDto {
   @ApiPropertyOptional({
@@ -515,16 +527,51 @@ export class PriceScopedQueryDto extends SearchOrderQueryDto {
     type: [String],
     format: 'uuid',
     description:
-      'Repeatable. Prices in the response come from these scopes and no others; sending none means no prices are quoted.',
+      'Repeatable. Prices come from these scopes and no others, and nothing is resolved from your profile.',
   })
   @IsOptional()
-  @Transform(({ value }) =>
-    value === undefined || Array.isArray(value) ? value : [value]
-  )
+  @Transform(asArray)
   @IsArray()
   @ArrayMaxSize(MAX_PRICE_SCOPES)
   @IsUUID(undefined, { each: true })
   priceScopeId?: string[];
+
+  @ApiPropertyOptional({
+    name: 'postalCode',
+    type: [String],
+    description:
+      'Repeatable. Where you are shopping from, resolved to scopes per request rather than stored resolved.',
+  })
+  @IsOptional()
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMaxSize(MAX_SELECTORS)
+  @IsString({ each: true })
+  @MaxLength(16, { each: true })
+  postalCode?: string[];
+
+  @ApiPropertyOptional({
+    name: 'supermarketId',
+    type: [String],
+    format: 'uuid',
+    description:
+      'Repeatable. The chains to shop, resolved through the ladder: their scopes serving your postal codes, else a national scope, else the chain default, flagged approximate.',
+  })
+  @IsOptional()
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMaxSize(MAX_SELECTORS)
+  @IsUUID(undefined, { each: true })
+  supermarketId?: string[];
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Shop as this profile of yours rather than as your default one. Somebody else’s profile is not found.',
+  })
+  @IsOptional()
+  @IsUUID()
+  profileId?: string;
 }
 
 export class SearchItemsQueryDto extends PriceScopedQueryDto {

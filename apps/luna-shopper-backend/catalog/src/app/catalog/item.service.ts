@@ -44,6 +44,26 @@ interface ItemCursor {
   id: string;
 }
 
+const EMPTY_ITEM_PAGE: ItemPage = { items: [], nextCursor: null };
+const EMPTY_GROUP_PAGE: ProductGroupOfferPage = { items: [], nextCursor: null };
+
+/**
+ * Whether the caller stated where they shop and reached no chain we know (plan
+ * 0049, section 3).
+ *
+ * **Absent and empty are different, and this is the whole of the difference.**
+ * Absent is an unscoped read, which still ranks the catalog and quotes no price;
+ * that is what the admin surface does and it is not reachable through the
+ * gateway any more. An empty array is a place: a postal code nobody serves, or
+ * chains that were all excluded. Listing the global product table for it would
+ * answer a question the caller did not ask, so the answer is an empty page,
+ * which the client explains from the coverage flags the resolver returned
+ * alongside (section 5).
+ */
+function resolvedToNothing(priceScopeIds: string[] | undefined): boolean {
+  return Array.isArray(priceScopeIds) && priceScopeIds.length === 0;
+}
+
 /** Collects positional parameters while a query is assembled around them. */
 function params() {
   const values: unknown[] = [];
@@ -74,10 +94,19 @@ function params() {
  * ## Scopes are taken and never invented
  *
  * Both reads accept a set of price scope ids and quote prices from those and no
- * others. **A caller that sends none gets no prices**, and this service does not
- * reach for a default: filling the set from the caller's shopping profile is plan
- * 0049's job. Until then suggestions still work and price hints are simply
- * absent, which is exactly how the composer wants it to degrade.
+ * others. **This service never invents a default set**: resolving one from the
+ * caller's shopping profile is the gateway's job (plan 0049, section 2.1), which
+ * is what keeps catalog stateless about users.
+ *
+ * Since plan 0049, section 3, the two ways of sending nothing mean different
+ * things. **Absent** is an unscoped read: it ranks, it quotes no price, and it is
+ * how the admin surface lists the catalog. **An empty array** is a caller who
+ * said where they shop and reached no chain we know, and it answers with an empty
+ * page rather than with the global product table.
+ *
+ * What did not change is that a group with no priced member still comes back
+ * whenever there are scopes at all: the composer is attaching identity, not
+ * quoting a price, and the harvester is off outside development.
  */
 @Injectable()
 export class ItemService {
@@ -179,6 +208,9 @@ export class ItemService {
    * would be a rule that never fired.
    */
   async search(req: SearchItemsRequest): Promise<ItemPage> {
+    if (resolvedToNothing(req.priceScopeIds)) {
+      return EMPTY_ITEM_PAGE;
+    }
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as ItemCursor | undefined;
     const term = parseSearchTerm(req.query);
@@ -196,7 +228,10 @@ export class ItemService {
       req.priceScopeIds
     );
     const last = page[page.length - 1];
-    const nextCursor = !hasMore || !last ? null : this.nextCursor(order, page, cursor, limit, last);
+    const nextCursor =
+      !hasMore || !last
+        ? null
+        : this.nextCursor(order, page, cursor, limit, last);
 
     return {
       items: page.map((row) => toItemView(row, offers.get(row.id))),
@@ -215,6 +250,9 @@ export class ItemService {
    * on a catalog full of exactly the right answers.
    */
   async searchOffers(req: SearchOffersRequest): Promise<ProductGroupOfferPage> {
+    if (resolvedToNothing(req.priceScopeIds)) {
+      return EMPTY_GROUP_PAGE;
+    }
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as ItemCursor | undefined;
     const term = parseSearchTerm(req.query);
@@ -322,7 +360,11 @@ export class ItemService {
     return {
       items: page.map((row) => this.toOfferView(row, byId)),
       nextCursor: hasMore
-        ? encodeCursor({ order: 'relevance', value: String(offset + limit), id: '' })
+        ? encodeCursor({
+            order: 'relevance',
+            value: String(offset + limit),
+            id: '',
+          })
         : null,
     };
   }
@@ -348,7 +390,8 @@ export class ItemService {
       priceScopeId: row.offerScopeId,
       price: row.offerPrice === null ? null : Number(row.offerPrice),
       currency: row.offerCurrency,
-      unitPrice: row.offerUnitPrice === null ? null : Number(row.offerUnitPrice),
+      unitPrice:
+        row.offerUnitPrice === null ? null : Number(row.offerUnitPrice),
       unitPriceLabel: row.offerUnitPriceLabel,
       priceObservedAt: row.offerObservedAt
         ? new Date(row.offerObservedAt).toISOString()
@@ -558,7 +601,10 @@ export class ItemService {
    * `relevance` with no query, which quietly degrades to `name` rather than
    * sorting everything by zero.
    */
-  private resolveOrder(order: string | undefined, term: SearchTerm | null): ItemOrder {
+  private resolveOrder(
+    order: string | undefined,
+    term: SearchTerm | null
+  ): ItemOrder {
     if (order === 'created' || order === 'updated' || order === 'name') {
       return order;
     }

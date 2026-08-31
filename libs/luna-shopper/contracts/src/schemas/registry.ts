@@ -29,6 +29,10 @@ import {
 import { listMessageContracts, listSchemas } from './messages/list.schemas';
 import { mergeMessageContracts, mergeSchemas } from './messages/merge.schemas';
 import {
+  profileMessageContracts,
+  profileSchemas,
+} from './messages/profile.schemas';
+import {
   realtimeMessageContracts,
   realtimeSchemas,
 } from './messages/realtime.schemas';
@@ -47,6 +51,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...zoneMessageContracts,
   ...listMessageContracts,
   ...mergeMessageContracts,
+  ...profileMessageContracts,
   ...realtimeMessageContracts,
   ...catalogMessageContracts,
   ...harvestMessageContracts,
@@ -69,6 +74,7 @@ export const allSchemas: JsonSchema[] = [
   ...zoneSchemas,
   ...listSchemas,
   ...mergeSchemas,
+  ...profileSchemas,
   ...realtimeSchemas,
   ...catalogSchemas,
   ...harvestSchemas,

@@ -11,12 +11,13 @@ import {
   PlatformHealthModule,
   PlatformModule,
 } from '@portfolio/luna-shopper/platform';
+import { AccountModule } from './account/account.module';
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
-import { AccountModule } from './account/account.module';
 import { CORE_ENTITIES } from './entities';
 import { ListsModule } from './lists/lists.module';
 import { MergeModule } from './merge/merge.module';
+import { ProfilesModule } from './profiles/profiles.module';
 import { RealtimeAccessModule } from './realtime/realtime-access.module';
 import { ZonesModule } from './zones/zones.module';
 
@@ -47,6 +48,8 @@ import { ZonesModule } from './zones/zones.module';
     ListsModule,
     MergeModule,
     RealtimeAccessModule,
+    // Shopping profiles: where a person shops (plan 0049).
+    ProfilesModule,
     AccountModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({
