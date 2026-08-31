@@ -30,7 +30,7 @@ approval. Not ready for development until it is.
 | --- | --- |
 | `Join.dc.html` | The join screen, and the hierarchy in section 3. Also the revoked link and the expired link |
 | `Basket.dc.html` | The basket as owner, as a registered participant who passes the rule, and as a guest. The three differ by what is absent |
-| `Settle.dc.html` | Full settle, partial submit, and a line showing what was submitted against what is outstanding |
+| `Settle.dc.html` | Full settle, partial submit, a line showing submitted against outstanding, and the product swap |
 | `Allocate.dc.html` | The per list allocation sheet, and the default it starts from |
 | `People.dc.html` | Presence with guests and registered people together; a participant's details on tap |
 | `Share.dc.html` | The share sheet with the one link, and the revoke confirmation |
@@ -124,6 +124,18 @@ Guests are shown as guests, always visually distinct from registered people. A t
 is unverified text and two guests can both be "Dani": the name is for reading, the identity
 is the participant. The screen must never present the two as the same kind of thing.
 
+### 4.4 The product, and swapping it
+
+Each line means one exact product: the **pick**, defaulted at generation to the best price
+among the line’s options (backend `0050` section 4) and named under the line. Tapping it
+opens the options, each with its price where one is known and the default marked, and
+choosing another swaps the pick. It exists for the person at the shelf: the default is the
+cheapest, and they may simply want to try another brand.
+
+Everyone may swap, guests included. The options are catalog products, never zone data, and
+the settlement that follows records whichever product is actually in the trolley (backend
+`0051` section 6). A free text line has no products and draws nothing here.
+
 ## 5. People, and sharing
 
 ### 5.1 Presence
@@ -170,6 +182,7 @@ Removing a single participant is separate, from their row.
 - The socket. A guest holds a live connection with no account, which no path in the app
   supports today; backend `0051` section 9 is the design and this screen cannot work
   without it.
+- Swapping a line's pick, on the same participant surface, emitting the same line event.
 - Realtime: the basket's own room for lines, settlements and presence.
 
 ## 7. Accessibility and input
@@ -201,6 +214,8 @@ Removing a single participant is separate, from their row.
 - Settle, partial submit and allocate all work, and the first two never mention a list.
 - A partially settled line shows what was submitted and what is outstanding, and finishing
   it takes a second settle.
+- Every line names its picked product; anyone, guests included, swaps it for another of
+  the line’s options, and the next settle records the swap.
 - Every line says who touched it last, and a guest is visibly a guest.
 - Presence shows guests and registered people together, with no sentence and no use of the
   word anonymous.

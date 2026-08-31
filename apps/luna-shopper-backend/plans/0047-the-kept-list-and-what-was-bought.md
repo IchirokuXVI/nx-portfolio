@@ -123,10 +123,13 @@ served** outside `0051`'s own reads.
 
 ### 3.2 `itemId` is copied, not joined
 
-A settlement keeps the item the line pointed at **at the moment it was settled**. If somebody
-later relinks the line to a different product, or unlinks it, the history does not silently
-rewrite itself, and the cross zone item aggregate in section 6.2 stays answerable by an index on
-the settlement rather than by a join through lines that may have moved.
+A settlement keeps **the exact product that was bought**: the basket line’s pick when the
+settle comes through a basket (`0051`), the product chosen in the detail sheet when it comes
+straight from the list page (velista `0043` section 5.2), and null for a free text line. A
+zone line carries a whole product set (`0048` section 1.1) and the set can change afterwards;
+the settlement does not move with it, and the cross zone item aggregate in section 6.2 stays
+answerable by an index on the settlement rather than by a join through lines that may have
+moved.
 
 ### 3.3 Attribution, and what 0051 widens
 
@@ -219,8 +222,8 @@ lists the caller holds read access to **at request time**. This is what makes "y
 every eleven days" a useful number instead of a per list fragment, and it is the read that pays
 for section 3.2's denormalized column.
 
-It only exists for a line that carries an item, so the section is absent rather than empty on a
-free text line. Which makes attaching items the thing the whole line page rests on, and that is
+It only exists for a line that carries at least one product (the page unions it over the
+line’s set), so the section is absent rather than empty on a free text line. Which makes attaching items the thing the whole line page rests on, and that is
 the companion plan's suggestion dropdown.
 
 ### 6.3 Estimating when it will be needed again

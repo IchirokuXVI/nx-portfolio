@@ -7,10 +7,11 @@ multi source price model (section 2), and the harvester's automatic classificati
 (section 6.2) all stay in the backlog.
 
 The consumer that forces the timing is velista `0043` section 6: after three characters the
-list composer offers catalog matches, and choosing one attaches the item to the new line.
-`ListLine.itemId` exists today and is null on every line the product has ever created. That
-dropdown is what finally populates it, and every history in `0047`, every cross list
-indicator, and every price this app will ever show are keyed on that column. The composer
+list composer offers catalog matches, and choosing one attaches its products to the new
+line. A line has never carried a product: the old single `itemId` is null on every line
+ever created, and section 1.1 turns it into a product set. The dropdown is what finally
+fills it, and every history in `0047`, every cross list indicator, and every price this
+app will ever show are keyed on it. The composer
 cannot be built against the search that exists: `item.search` is a substring match over one
 locale's name with no groups, no ranking and no scopes.
 
@@ -47,19 +48,30 @@ Two deliberate omissions against the backlog design:
   review queue that comes with it. With one chain harvested, hand curating the few hundred
   groups that matter (milk, eggs, bread, oil) is an evening, not a blocker.
 
-### 1.1 The group reaches the shopping list line
+### 1.1 A line holds a set of products, and a group fills it
 
-`ListLine` gains a nullable `productGroupId` beside the nullable `itemId` from 0007, with a
-check constraint that **at most one of the two is set**. "Milk" on a shopping list is a real,
-common, deliberately unspecific line, and resolving it to a concrete product is exactly what
-the basket optimizer does later (backlog 0004). `GeneratedListLine` in `0050` already carries
-both columns with the same rule, so the two line shapes stay parallel.
+`ListLine`'s single nullable `itemId` (from 0007, null on every line ever created) is
+replaced by a **product set**: a `list_line_items` join table (`lineId`, `itemId`, unique
+pair, ordered by insertion) and an `itemSetHash` on the line, a digest of the sorted
+distinct item ids, recomputed on write and null while the set is empty.
 
-This is the one part of the plan that reaches outside catalog: one core migration, and
-`line.add` accepts the new field. A line with a `productGroupId` renders by the group's
-localized name; nothing else about lines changes, and the dedup rule in `0050` section 3
-(merge on `itemId`, else `productGroupId`, else normalized text) starts working on its
-second key.
+Picking a group in the composer **copies the group's members onto the line**. The line
+references no group afterwards, so removing a product the household never buys, or adding
+one the group missed, is an ordinary edit of that line. That is the point of the copy: the
+catalog does not have to curate a group for every household's version of "milk", because a
+line is its own hand made group. One deliberately unspecific product set is also exactly
+what the basket needs: `0050` resolves each generated line to the best priced member of
+its set, records which exact product was bought, and lets the shopper swap to another
+member (`0051` section 6).
+
+The hash is what makes the hand made sets legible. Two lines carrying the same products
+carry the same hash however the products got there, which is what the dedup rule in `0050`
+section 3 merges on, what the cross list indicator in velista `0043` matches on, and what
+counts how many households hold the same set, so a popular hand made set can be promoted
+into a curated group later (section 5).
+
+This is the part of the plan that reaches outside catalog: one core migration, and
+`line.add` and `line.update` accept product ids. Nothing else about lines changes.
 
 ## 2. The search implementation
 
@@ -123,8 +135,9 @@ changes the default resolution without touching the messages.
   (`GET /v1/catalog/suggest?q=`) that performs the interleave in section 3, so the ranking
   rule lives server side.
 - Catalog migrations: `product_groups`, `items.productGroupId`, the `tsvector` columns,
-  their triggers, and the `pg_trgm` extension. One core migration: `list_lines.productGroupId`
-  and its check constraint.
+  their triggers, and the `pg_trgm` extension. One core migration: `list_line_items`,
+  `list_lines.itemSetHash`, and the retirement of the single `list_lines.itemId` column
+  into the new table (it is null on every line ever created, so nothing moves).
 - No new events. Catalog reference data has never emitted realtime events and a search does
   not start now.
 - The OpenAPI document is regenerated, per the rule in `CLAUDE.md`.
@@ -139,13 +152,19 @@ changes the default resolution without touching the messages.
   environment actually holds.
 - Whether `item.search` should keep answering with no `query` (today it lists). Leaning
   yes, unchanged, because the admin surface uses it as a listing.
+- The promotion loop: at how many distinct users holding the same `itemSetHash` a hand
+  made set is proposed to the owner as a curated group. The hash is stored so the question
+  is answerable; nothing else is built for it here.
 
 ## 6. Exit criteria
 
 - A `ProductGroup` with localized names and synonyms exists, owner curated, and items can
   be assigned to one.
-- A `ListLine` can carry a `productGroupId` instead of an `itemId`, never both, and renders
-  by the group's name.
+- A `ListLine` carries a set of products with a stable `itemSetHash`; picking a group in
+  the composer copies its members onto the line, and the line references no group
+  afterwards.
+- Two lines holding the same products carry the same hash, however the products were
+  added.
 - Searching "milk" or "leche" returns the Milk group ranked above any single milk item;
   searching a brand returns that brand's items first.
 - A typo within trigram distance still finds the brand.

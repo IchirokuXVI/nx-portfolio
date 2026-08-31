@@ -225,10 +225,16 @@ Settling is cumulative, so one line can be worked through two shops in an aftern
 | Settle | anyone | settles the whole outstanding amount, allocated by 6.2 |
 | Partial submit | anyone | settles a number they type, allocated by 6.2 |
 | Allocate | passes 5.2 | settles per source list, by hand, overriding 6.2 |
+| Change the product | anyone | swaps the line’s pick to another of its options; asks nothing about zones |
 
 **A guest must never have to know which household a tin of tomatoes belongs to.** They are in a
 shop with a list. So the first two gestures ask for a number at most, and the allocation is the
 system's problem.
+
+The product swap is for the same person at the shelf: the pick defaults to the best price
+(`0050` section 4), and whoever is holding the basket may prefer another brand. Options are
+catalog products, never zone data, so a guest sees and switches them freely, and the
+settlement that follows records the product actually in the trolley (`0047` section 3.2).
 
 `NOT_AVAILABLE` is an outcome rather than a quantity: it closes the outstanding amount, writes
 settlements that decrement nothing, and sets the indicator `0047` section 5 derives.
@@ -364,6 +370,8 @@ to be discovered at the guard.
   request.
 - Settling a whole line, submitting part of one, and allocating per list all write the same
   settlements, and the first two never ask which list anything belongs to.
+- Any participant, guests included, swaps a line to another of its options, and the next
+  settlement records the product actually bought.
 - Two origins on one line are settled oldest first, and the allocation sheet overrides that.
 - A guest's settle is refused on any origin the **owner** may no longer write, and reported.
 - A partially settled line shows what was submitted and what is outstanding, and a second settle

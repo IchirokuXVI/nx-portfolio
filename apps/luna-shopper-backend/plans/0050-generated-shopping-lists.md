@@ -44,8 +44,10 @@ New entities, in core:
 - `id`, `generatedListId`
 - `content` (the text as shown, copied at generation time)
 - `quantity` (integer, the sum across origins)
-- `itemId` (nullable, opaque catalog id), `productGroupId` (nullable, per backlog 0001 section
-  3.2; at most one of the two set)
+- `itemId` (nullable, opaque catalog id: **the pick**, the exact product this basket means
+  to buy for the line. Defaulted at generation to the best priced of the line's options at
+  the run's scopes (section 4), switchable to any other option (section 5), and what a
+  settlement records)
 - `status`: reuses `LineStatus` (`PENDING`, `READY`, `NOT_AVAILABLE`) so the shopping gesture is
   the same gesture as in a zone list
 - `origin`: `GeneratedLineOrigin` enum (`DERIVED`, `ADDED`), where `ADDED` means the user typed
@@ -56,6 +58,14 @@ New entities, in core:
 **GeneratedListLineOrigin** (the provenance rows, one per contributing zone line)
 - `id`, `generatedListLineId`, `zoneId`, `listId`, `lineId`, `quantity`, `lineVersion`
 - unique (`generatedListLineId`, `lineId`)
+
+**GeneratedListLineOption** (the products the pick may switch between)
+- `id`, `generatedListLineId`, `itemId`
+- unique (`generatedListLineId`, `itemId`)
+
+The origin lines' product sets (backend `0048` section 1.1), copied at generation time per
+the snapshot posture in section 4. A free text origin contributes no options, and such a
+line's `itemId` stays null.
 
 `sourceSnapshot` is not decoration. A run's meaning depends on which lists it drew from and what
 the thresholds were, and the preferences change; without the snapshot a three week old generated
@@ -98,8 +108,8 @@ A line is picked up when **all** of these hold:
 
 **Deduplication.** The same thing appears in two zones ("Milk" in the flat list and in the
 parents' house list), and the point of the feature is one line to buy once. Lines are merged when
-they resolve to the same `itemId`, or to the same `productGroupId`, or, failing both, on
-normalized text (trimmed, case folded, accent folded). Quantities sum, and every contributing
+they carry the same single product, or the same product set (`itemSetHash`, backend `0048`
+section 1.1), or, failing both, on normalized text (trimmed, case folded, accent folded). Quantities sum, and every contributing
 line gets its provenance row. Text matching is deliberately conservative: "milk" and "whole milk"
 stay separate, because merging two things a user meant separately is a worse failure than showing
 two lines they can merge by hand.
@@ -108,6 +118,11 @@ two lines they can merge by hand.
 
 `generatedList.create { sources?, name?, priceIt? }` is one core operation, with an idempotency
 key (0004 section 9) so a double tap does not produce two baskets.
+
+The run also resolves each line's **pick**: the best priced of its options at the run's
+scopes (the per scope prices plan 0038 ships), falling back to the first option added when
+none is priced. Real basket pricing is backlog 0004; the pick only decides which product
+the line means today.
 
 It is a **snapshot**, not a live view. Nothing in a generated list updates when a zone line
 changes afterwards; the provenance rows carry `lineVersion` precisely so a later reconciliation
@@ -140,6 +155,9 @@ line, add a line. All of it is local by default, and this is the rule the whole 
   a retroactive sweep over lines already added.
 - **Deleting a `DERIVED` line** removes it from the basket and leaves the zone line pending. That
   is the "I decided not to buy this today" gesture, and it must not look like "this is done".
+- **Switching the pick** to another of the line's options is a local edit like the rest: it
+  changes which product the basket means and what the next settlement records, and it never
+  touches the zone line.
 
 The failure mode this rule exists to prevent: a user tidies up their own shopping list at the
 till and, without meaning to, rewrites a list four other people depend on.

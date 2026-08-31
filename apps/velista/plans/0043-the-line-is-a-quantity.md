@@ -151,7 +151,7 @@ over a number and the basket in `0044` needs the same one.
 
 Opens on tapping a row. Answers the question you have while standing in the kitchen:
 
-- Which catalog item the line is linked to, or that it is not linked to one
+- Which products the line carries: one, a set picked from a group, or none
 - When it was last bought and how many
 - Roughly how long until it runs out, **absent entirely until there are three purchases**
 - A way through to the full page
@@ -166,7 +166,9 @@ promise it cannot keep until baskets exist.
 So the detail sheet carries "I bought this", asking how many and defaulting to the whole
 outstanding quantity. It is two taps behind a deliberate open, not a swipe, which is the
 whole distinction being drawn. It writes a settlement with no basket attached, which is
-what backend `0047` section 4.4 is for, and it is the reason this plan ships on its own.
+what backend `0047` section 4.4 is for, and it is the reason this plan ships on its own. On a
+line carrying more than one product it also asks **which one**, preselecting the last one
+bought, because the settlement records the exact product (backend `0047` section 3.2).
 
 Marking a line not available lives here too, for the same reason and with the same
 weight: it is something you say afterwards, not something you flick past in an aisle.
@@ -176,11 +178,15 @@ weight: it is something you say afterwards, not something you flick past in an a
 Its own route, so it can be linked to and reached from a search later.
 
 - **Two history sections, side by side and labelled.** "On this list" is every settlement
-  of this line. "Everywhere you shop" is every settlement of the same catalog item across
+  of this line. "Everywhere you shop" is every settlement of the line’s products across
   the zones you can read. They are separate because one is a household's consumption and
   the other is yours, and a single merged number would be neither.
-- The second section is **absent, not empty**, on a line with no item. Which is the
+- The second section is **absent, not empty**, on a line with no products. Which is the
   argument for section 6.
+- **The products on this line.** One chip per product, removable, plus the composer’s
+  same search to add another. This is where a group picked from the suggestions becomes
+  the household’s own version of it, and where a free text line gets its first product
+  after the fact (backend `0048` section 1.1).
 - **Also on other lists.** Which of your other lists carry this item, or something close
   enough to it, as an indicator rather than a link, filtered to lists you can read.
 - **Where to buy it and for how much** is drawn here and is out of scope, per section 9.
@@ -190,12 +196,14 @@ Its own route, so it can be linked to and reached from a search later.
 ## 6. Suggestions, and why they matter more than they look
 
 After **three characters**, debounced at 200ms, the composer offers catalog matches.
-Choosing one adds the line with the suggestion's name **and its item attached**.
+Choosing an item adds the line with that product attached; **choosing a group attaches
+all of the group’s products** as the line’s own set, free to trim afterwards.
 
-`ListLine.itemId` exists today and is null on every line the product has ever created,
-because `0012` section 1 put catalog items out of scope. This dropdown is what finally
-populates it, and it is therefore not a convenience: the cross list indicator, the item
-history, and every price this app will ever show are all keyed on that column.
+A line has never carried a product: `0012` section 1 put catalog items out of scope, and
+the old single `itemId` was null on every line ever created. Backend `0048` section 1.1
+turns it into a **product set**, and this dropdown is what finally fills it. It is not a
+convenience: the cross list indicator, the item history, and every price this app will
+ever show are keyed on that set.
 
 Three rules, all of which come from the backend plans that own the search:
 
@@ -251,8 +259,10 @@ This section replaces `0012` section 7's row mapping in full.
 - Nothing on the row itself records a purchase or marks anything unavailable.
 - The line page shows the two histories labelled separately, and omits the item history
   entirely when the line has no item.
-- Typing three characters offers suggestions, a group ranks above an item for a bare word,
-  and choosing one attaches the item to the new line.
+- Typing three characters offers suggestions, a group ranks above an item for a bare
+  word, choosing an item attaches it, and choosing a group attaches all of its products.
+- The line page lists the line’s products, removes one by its chip, adds one through the
+  same search, and a purchase recorded on a multi product line asks which one was bought.
 - Typing free text and submitting adds a line with no item and no warning.
 - Deleting a line is confirmed, and it is the only way to lose the history.
 
@@ -265,4 +275,3 @@ This section replaces `0012` section 7's row mapping in full.
 - **Settling from the row.** The row has no marking control of any kind, which is section
   1.1. Recording a purchase is a deliberate act from the detail sheet, per 5.2, and never
   something a thumb does in passing.
-- Editing which item a line points at after the fact.
