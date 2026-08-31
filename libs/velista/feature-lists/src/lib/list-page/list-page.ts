@@ -200,12 +200,18 @@ export class ListPage {
    * One at a time: the next recording replaces this rather than appending to it,
    * because this page is not a chat. Either a sentence the assistant wrote, in
    * `reply`, or one of ours by key, in `messageKey`, never both.
+   *
+   * `failed` is what the strip is coloured by. The same box carries a confirmation of
+   * what was added and the reason nothing was, and those read identically in plain
+   * text: somebody who glances at it has to read a sentence to find out which happened.
+   * A mishearing counts as a failure, because nothing was added.
    */
   readonly voiceStrip = signal<{
     heard: string;
     reply: string;
     messageKey: string | null;
     messageArgs?: Record<string, string | number>;
+    failed: boolean;
   } | null>(null);
 
   private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
@@ -799,8 +805,18 @@ export class ListPage {
 
       this.voiceStrip.set(
         reply.heard === ''
-          ? { heard: '', reply: '', messageKey: 'list.add.notHeard' }
-          : { heard: reply.heard ?? '', reply: reply.text, messageKey: null }
+          ? {
+              heard: '',
+              reply: '',
+              messageKey: 'list.add.notHeard',
+              failed: true,
+            }
+          : {
+              heard: reply.heard ?? '',
+              reply: reply.text,
+              messageKey: null,
+              failed: false,
+            }
       );
     } catch (error) {
       // Everything is said in the strip, in words. Nothing here is a banner or a
@@ -816,6 +832,7 @@ export class ListPage {
         messageKey:
           wait === undefined ? 'list.add.voiceFailed' : 'list.add.voiceBusy',
         messageArgs: wait === undefined ? undefined : { count: wait },
+        failed: true,
       });
     } finally {
       this.composerBusy.set(false);
@@ -828,6 +845,7 @@ export class ListPage {
       heard: '',
       reply: '',
       messageKey: 'list.add.micRefused',
+      failed: true,
     });
   }
 

@@ -38,17 +38,105 @@
 // newest line sits directly above it rather than behind it.
 //
 // It is a sibling of the column rather than a child, so when the column is the scroller
-// this rule does nothing and the composer is simply the last row of the host.
-lib-line-composer {
-  // A component host is an inline box until something says otherwise, and `sticky` on
-  // an inline box is ignored. Set here rather than on the component, so nothing else
-  // that renders a composer changes shape because this page needed it pinned.
+// this rule does nothing and the dock is simply the last row of the host.
+//
+// The pin is on the dock rather than on the composer because the voice strip has to
+// travel with it. Two pinned boxes stacked need the height of the lower one to place
+// the upper, and that height is one row of text plus this device's safe area inset,
+// which no stylesheet can know. One container has no such problem.
+.composer-dock {
   display: block;
   position: sticky;
   inset-block-end: 0;
   // Above the rows it floats over. The composer paints its own surface, so without a
   // stacking order a row's own raised background can show through it.
   z-index: 1;
+}
+
+lib-line-composer {
+  // A component host is an inline box until something says otherwise. Set here rather
+  // than on the component, so nothing else that renders a composer changes shape
+  // because this page needed it in a dock.
+  display: block;
+}
+
+// What was heard and what was done, on the composer's own surface and directly above
+// the field (plan 0038, section 5, whose markup shipped without any of this). The
+// composer draws its own `border-block-start`, so that hairline becomes the rule
+// between the two and the pair reads as one container rather than as loose text
+// floating over the list.
+//
+// The inline padding is the composer's, so a sentence here lines up with the field
+// under it.
+.voice-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-2);
+  padding: var(--app-space-3) var(--app-space-3) var(--app-space-2);
+  background: var(--app-surface-raised);
+  border-block-start: 1px solid var(--app-border-subtle);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+// A failure is the one thing in this strip nobody may scroll past, and the strip says
+// both kinds of thing: what the assistant did with the sentence, and why it could not.
+// Tinted and coloured, so which one it is is visible before it is read. The quiet
+// version stays quiet on purpose: a confirmation that shouts is a confirmation people
+// learn to dismiss unread.
+.voice-strip.failed {
+  background: var(--app-status-danger-bg);
+  border-block-start-color: var(--app-status-danger-border);
+  color: var(--app-status-danger-fg);
+}
+
+.voice-said {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+// What it thought it heard, quieter than what it did about it: the reply is the news
+// and this is the evidence behind it. On a failure it takes the danger colour with
+// everything else, because a mishearing is the failure rather than context for one.
+.voice-heard {
+  margin: 0 0 var(--app-space-hair);
+  color: var(--app-text-muted);
+}
+
+.voice-strip.failed .voice-heard {
+  color: inherit;
+}
+
+.voice-reply {
+  margin: 0;
+}
+
+// A full touch target, pulled back into the strip's own padding so a 44px control does
+// not make the strip 44px tall on its own.
+.voice-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-block: calc(var(--app-space-3) * -1) calc(var(--app-space-2) * -1);
+  margin-inline-end: calc(var(--app-space-3) * -1);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.voice-dismiss-glyph {
+  font-size: var(--app-icon-sm);
 }
 
 .back {
