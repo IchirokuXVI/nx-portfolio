@@ -9,7 +9,10 @@ import type {
   UserProfileView,
   ZonePage,
 } from '@portfolio/luna-shopper/contracts';
-import { UsernamePropagation } from '@portfolio/luna-shopper/contracts';
+import {
+  LineStatus,
+  UsernamePropagation,
+} from '@portfolio/luna-shopper/contracts';
 import {
   CORRELATION_ID_HEADER,
   DEFAULT_LOCALE,
@@ -213,6 +216,43 @@ export class GatewayApiClient {
       'POST',
       `/v1/lines/${encodeURIComponent(lineId)}/quantity`,
       { delta }
+    );
+  }
+
+  /**
+   * Move a line between `PENDING`, `READY` and `NOT_AVAILABLE` (plan 0043,
+   * section 4).
+   *
+   * A sub resource rather than a field on the `PATCH`, which is the gateway's
+   * own shape and not a choice made here. It answers with the line as it now
+   * stands, so what the bot says about it is reported rather than assumed.
+   */
+  setLineStatus(
+    caller: ApiCaller,
+    lineId: string,
+    status: LineStatus
+  ): Promise<LineView> {
+    return this.request<LineView>(
+      caller,
+      'POST',
+      `/v1/lines/${encodeURIComponent(lineId)}/status`,
+      { status }
+    );
+  }
+
+  /**
+   * Take one line off a list (plan 0043, section 3).
+   *
+   * One line per request, because that is the route that exists: there is no
+   * batch delete and this plan adds no gateway route. The caller loops, and
+   * section 3.5 is why it reports exactly which of those requests succeeded
+   * rather than claiming a rollback nothing performed.
+   */
+  deleteLine(caller: ApiCaller, lineId: string): Promise<{ id: string }> {
+    return this.request<{ id: string }>(
+      caller,
+      'DELETE',
+      `/v1/lines/${encodeURIComponent(lineId)}`
     );
   }
 

@@ -39,6 +39,7 @@ import {
   GatewayApiError,
   type ApiCaller,
 } from './gateway-api.client';
+import { SCOPED_TOOL_DECLARATIONS, TOOL_DECLARATIONS } from './tools';
 import { TurnContextFactory } from './turn-context';
 
 /**
@@ -149,6 +150,39 @@ class RecordingApi {
     );
   }
 
+  async setLineStatus(
+    caller: ApiCaller,
+    lineId: string,
+    status: LineStatus
+  ): Promise<LineView> {
+    this.record('setLineStatus', caller, { lineId, status });
+    this.throwIfArmed();
+    const existing = this.findLine(lineId);
+    return {
+      ...line(
+        lineId,
+        existing?.listId ?? 'list-flat',
+        existing?.content ?? 'leche',
+        existing?.quantity ?? 1
+      ),
+      // The server's answer, which is what the tool reports rather than the
+      // value it asked for.
+      status,
+    };
+  }
+
+  async deleteLine(caller: ApiCaller, lineId: string): Promise<{ id: string }> {
+    this.record('deleteLine', caller, { lineId });
+    this.throwIfArmed();
+    for (const [listId, lines] of this.linesByList) {
+      this.linesByList.set(
+        listId,
+        lines.filter((row) => row.id !== lineId)
+      );
+    }
+    return { id: lineId };
+  }
+
   async setUsername(
     caller: ApiCaller,
     username: string,
@@ -157,6 +191,12 @@ class RecordingApi {
     this.record('setUsername', caller, { username, propagation });
     this.throwIfArmed();
     return { username } as UserProfileView;
+  }
+
+  private findLine(lineId: string): LineView | undefined {
+    return [...this.linesByList.values()]
+      .flat()
+      .find((row) => row.id === lineId);
   }
 
   private throwIfArmed(): void {
@@ -861,7 +901,7 @@ describe('AssistantService', () => {
       );
     });
 
-    it('declares exactly three tools and no more', async () => {
+    it('declares exactly five tools and no more', async () => {
       const api = new RecordingApi();
       const provider = new FakeModelProvider([FakeModelProvider.says('Hola.')]);
 
@@ -869,11 +909,19 @@ describe('AssistantService', () => {
 
       // Plan 0040 renamed the write and gave it an array; it did not add a tool.
       // Adding units is not a new capability, it is the write that already
-      // existed reached by different arithmetic, so section 7 of plan 0039 and
-      // its list of what is absent are untouched.
+      // existed reached by different arithmetic.
+      //
+      // Plan 0043 did add two, and the count in this test is the point of the
+      // test rather than an incidental: it goes from three to five and no
+      // further. Deletion was reopened for **lines** and nothing else, so
+      // deleting a list, a zone or an account, all zone governance, and
+      // approving or rejecting a line stay absent from this array, which is a
+      // much harder boundary than a sentence in the prompt would be.
       expect(provider.requests[0].tools.map((tool) => tool.name)).toEqual([
         'upsert_lines',
         'query_lists',
+        'remove_lines',
+        'set_line_status',
         'rename_me',
       ]);
     });
@@ -1645,5 +1693,452 @@ describe('a turn that may only touch one list (plan 0044)', () => {
     // The zone index is not in a scoped prompt at all: there is nothing to
     // resolve against and the other zone is not this turn's business.
     expect(system).not.toContain('Oficina');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Taking a line off a list, and settling one (plan 0043).
+ *
+ * The two things somebody says out loud with their hands full that the catalog
+ * could not express, and one of them is a deletion. Everything here runs against
+ * {@link FakeModelProvider} and nothing reaches a provider (rule A4).
+ *
+ * What most of these assert is a `DELETE` that **did not happen**. That is the
+ * shape of the plan: the tool exists so that "take the olive oil off" works, and
+ * every guard around it exists so that nothing else does.
+ */
+describe('the assistant removes a line, and settles one (plan 0043)', () => {
+  /** A list with things on it, which is what a turn about a line needs. */
+  function withLines(...contents: string[]): RecordingApi {
+    const api = new RecordingApi();
+    api.linesByList.set(
+      'list-flat',
+      contents.map((content, index) =>
+        line(`line-${index}`, 'list-flat', content)
+      )
+    );
+    return api;
+  }
+
+  /** The result of the last tool the model called, as the model saw it. */
+  function lastToolResult(
+    provider: FakeModelProvider
+  ): Record<string, unknown> {
+    const results = provider.requests.at(-1)?.turns.at(-1)?.toolResults;
+    return (results?.[0]?.result ?? {}) as Record<string, unknown>;
+  }
+
+  describe('3.1 it never deletes by name', () => {
+    it('refuses an id this turn has not read, and issues no DELETE', async () => {
+      const api = withLines('aceite', 'arroz');
+      const provider = new FakeModelProvider([
+        // The id is real, and that is the point: the model has not looked it up
+        // in this turn, so it has no business naming it.
+        FakeModelProvider.calls('remove_lines', {
+          lineIds: ['line-0'],
+          confirmed: true,
+        }),
+        FakeModelProvider.says('Déjame mirar la lista primero.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('quita el aceite'));
+
+      expect(api.of('deleteLine')).toHaveLength(0);
+      const result = lastToolResult(provider);
+      expect(result['blocked']).toBe(true);
+      expect(result['notInContext']).toBe(true);
+    });
+
+    it('accepts the same id once query_lists has handed it over', async () => {
+      const api = withLines('aceite', 'arroz');
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', { item: 'aceite' }),
+        FakeModelProvider.calls('remove_lines', {
+          lineIds: ['line-0'],
+          confirmed: true,
+        }),
+        FakeModelProvider.says('Quitado el aceite de Piso.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('quita el aceite, sí'));
+
+      expect(api.of('deleteLine').map((call) => call.detail['lineId'])).toEqual(
+        ['line-0']
+      );
+    });
+  });
+
+  describe('3.3 it confirms, and the confirmation names what goes', () => {
+    it('ends the turn with a question and deletes nothing', async () => {
+      const api = withLines('aceite', 'arroz');
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.calls('remove_lines', {
+          lineIds: ['line-0', 'line-1'],
+        }),
+        FakeModelProvider.says('¿Quito el aceite y el arroz de Piso?'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('quita el aceite y el arroz'));
+
+      expect(api.of('deleteLine')).toHaveLength(0);
+
+      const result = lastToolResult(provider);
+      expect(result['needsConfirmation']).toBe(true);
+      // By their text. "Remove those two items?" is a confirmation of a pronoun,
+      // and somebody who cannot see the screen has heard nothing at all.
+      expect(result['wouldRemove']).toEqual(['aceite', 'arroz']);
+      expect(result['count']).toBe(2);
+    });
+  });
+
+  describe('3.4 two things it will not do', () => {
+    it('refuses a call with no ids, and names the screen that empties a list', async () => {
+      const api = withLines('aceite', 'arroz');
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('remove_lines', {
+          lineIds: [],
+          confirmed: true,
+        }),
+        FakeModelProvider.says('Eso se hace desde los ajustes de la lista.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('vacía la lista'));
+
+      expect(api.of('deleteLine')).toHaveLength(0);
+      expect(String(lastToolResult(provider)['message'])).toContain('settings');
+    });
+
+    it('refuses a call over the cap whole, rather than truncating it', async () => {
+      const api = withLines(
+        ...Array.from({ length: 12 }, (_, index) => `cosa ${index}`)
+      );
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.calls('remove_lines', {
+          lineIds: Array.from({ length: 11 }, (_, index) => `line-${index}`),
+          confirmed: true,
+        }),
+        FakeModelProvider.says('Dime cuáles quieres quitar.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('quita todo eso'));
+
+      // Not ten of the eleven. A partially executed deletion is the worst
+      // outcome available here, so the whole call is refused.
+      expect(api.of('deleteLine')).toHaveLength(0);
+      expect(lastToolResult(provider)['blocked']).toBe(true);
+    });
+  });
+
+  describe('3.5 all or nothing, and never a rollback it did not perform', () => {
+    it('refuses the whole call when one id fails to resolve', async () => {
+      const api = withLines('aceite', 'arroz');
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.calls('remove_lines', {
+          lineIds: ['line-0', 'line-invented'],
+          confirmed: true,
+        }),
+        FakeModelProvider.says('No he encontrado una de las dos.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('quita el aceite y el azúcar'));
+
+      // Nothing at all, including the id that was perfectly good: the check runs
+      // before anything is deleted.
+      expect(api.of('deleteLine')).toHaveLength(0);
+    });
+
+    it('reports exactly which line went when the second delete fails', async () => {
+      const api = withLines('aceite', 'arroz');
+      const removeLine = api.deleteLine.bind(api);
+      let attempts = 0;
+      api.deleteLine = async (caller, lineId) => {
+        attempts += 1;
+        if (attempts === 2) {
+          throw new GatewayApiError(
+            403,
+            'No puedes quitar esa línea.',
+            'forbidden'
+          );
+        }
+        return removeLine(caller, lineId);
+      };
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.calls('remove_lines', {
+          lineIds: ['line-0', 'line-1'],
+          confirmed: true,
+        }),
+        FakeModelProvider.says('He quitado el aceite; el arroz sigue ahí.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('quita el aceite y el arroz, sí'));
+
+      const result = lastToolResult(provider);
+      expect(result['ok']).toBe(false);
+      expect(result['removed']).toEqual(['aceite']);
+      // The one output the plan calls the worst this feature can produce is a
+      // wrong sentence about what is on the list, so the model is told which of
+      // the two is still there rather than left to guess at a rollback.
+      expect(result['stillThere']).toEqual(['arroz']);
+      expect(JSON.stringify(result)).toContain('No puedes quitar esa línea.');
+    });
+  });
+
+  describe('4 set_line_status', () => {
+    it.each([LineStatus.READY, LineStatus.NOT_AVAILABLE, LineStatus.PENDING])(
+      'sets %s without asking anybody to confirm',
+      async (status) => {
+        const api = withLines('leche');
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('query_lists', {}),
+          FakeModelProvider.calls('set_line_status', {
+            lineIds: ['line-0'],
+            status,
+          }),
+          FakeModelProvider.says('Hecho.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('tengo la leche'));
+
+        const calls = api.of('setLineStatus');
+        expect(calls).toHaveLength(1);
+        expect(calls[0].detail['status']).toBe(status);
+      }
+    );
+
+    it('settles two lines in one call', async () => {
+      const api = withLines('leche', 'pan');
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.calls('set_line_status', {
+          lineIds: ['line-0', 'line-1'],
+          status: LineStatus.READY,
+        }),
+        FakeModelProvider.says('Hecho, leche y pan.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('tenemos la leche y el pan'));
+
+      // One breath, one call. The alternative is a loop of round trips through
+      // the gateway inside a turn that is already being waited on.
+      expect(
+        api.of('setLineStatus').map((call) => call.detail['lineId'])
+      ).toEqual(['line-0', 'line-1']);
+    });
+
+    it('refuses an id this turn has not read, and writes nothing', async () => {
+      const api = withLines('leche');
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('set_line_status', {
+          lineIds: ['line-0'],
+          status: LineStatus.READY,
+        }),
+        FakeModelProvider.says('Déjame mirar la lista.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('tengo la leche'));
+
+      expect(api.of('setLineStatus')).toHaveLength(0);
+      expect(lastToolResult(provider)['notInContext']).toBe(true);
+    });
+
+    it("relays the gateway's refusal in words, and the turn succeeds", async () => {
+      const api = withLines('leche');
+      api.failNextWriteWith = new GatewayApiError(
+        403,
+        'Solo puedes leer esta lista.',
+        'forbidden'
+      );
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.calls('set_line_status', {
+          lineIds: ['line-0'],
+          status: LineStatus.READY,
+        }),
+        FakeModelProvider.says('Solo puedes leer esa lista.'),
+      ]);
+      const service = build(provider, api);
+
+      const response = await service.turn(turnRequest('tengo la leche'));
+
+      // A refusal is a successful turn and is not retried (plan 0039, section 7).
+      expect(response.reply).toBe('Solo puedes leer esa lista.');
+      expect(JSON.stringify(lastToolResult(provider))).toContain(
+        'Solo puedes leer esta lista.'
+      );
+    });
+  });
+
+  describe('5 references, and the line that is no longer there', () => {
+    it('emits a line reference for every line it settled', async () => {
+      const api = withLines('leche', 'pan');
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('query_lists', {}),
+          FakeModelProvider.calls('set_line_status', {
+            lineIds: ['line-0', 'line-1'],
+            status: LineStatus.READY,
+          }),
+          FakeModelProvider.says('Hecho.'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('tenemos las dos'));
+
+      expect(
+        response.references
+          .filter((reference) => reference.kind === AssistantReferenceKind.LINE)
+          .map((reference) => reference.lineId)
+      ).toEqual(['line-0', 'line-1']);
+    });
+
+    it('emits the list a deletion came off, and no reference to what it deleted', async () => {
+      const api = withLines('aceite', 'arroz');
+      const service = build(
+        new FakeModelProvider([
+          // The query that found the line emitted a reference to it, which is
+          // exactly the chip that would 404 a moment later.
+          FakeModelProvider.calls('query_lists', { item: 'aceite' }),
+          FakeModelProvider.calls('remove_lines', {
+            lineIds: ['line-0'],
+            confirmed: true,
+          }),
+          FakeModelProvider.says('Quitado.'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('quita el aceite, sí'));
+
+      expect(
+        response.references.filter((reference) => reference.lineId === 'line-0')
+      ).toHaveLength(0);
+      // The list they came off is the screen the person wants next.
+      expect(
+        response.references.filter(
+          (reference) => reference.kind === AssistantReferenceKind.LIST
+        )
+      ).toHaveLength(1);
+    });
+  });
+
+  describe('6 what the turn record says', () => {
+    it('records a deletion with the number of lines and the list', async () => {
+      const api = withLines('aceite', 'arroz');
+      const logged: string[] = [];
+      jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation((message: unknown) => {
+          logged.push(String(message));
+        });
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('query_lists', {}),
+          FakeModelProvider.calls('remove_lines', {
+            lineIds: ['line-0', 'line-1'],
+            confirmed: true,
+          }),
+          FakeModelProvider.says('Quitados.'),
+        ]),
+        api
+      );
+
+      await service.turn(turnRequest('quita los dos, sí'));
+
+      const record = logged
+        .map((entry) => JSON.parse(entry) as Record<string, unknown>)
+        .find((entry) => entry['event'] === 'assistant.turn');
+      const deletion = (
+        record?.['tools'] as { name: string; items?: number; list?: string }[]
+      ).find((tool) => tool.name === 'remove_lines');
+
+      expect(deletion?.items).toBe(2);
+      expect(deletion?.list).toBe('list-flat');
+      // The record answers how the feature is used. What was on a deleted line
+      // is not part of that question.
+      expect(JSON.stringify(deletion)).not.toContain('aceite');
+
+      jest.restoreAllMocks();
+    });
+
+    it('records a call it refused as a refusal, not as a failure', async () => {
+      const api = withLines('aceite');
+      const logged: string[] = [];
+      jest
+        .spyOn(Logger.prototype, 'log')
+        .mockImplementation((message: unknown) => {
+          logged.push(String(message));
+        });
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('remove_lines', {
+            lineIds: ['line-0'],
+            confirmed: true,
+          }),
+          FakeModelProvider.says('Déjame mirar.'),
+        ]),
+        api
+      );
+
+      await service.turn(turnRequest('quita el aceite'));
+
+      const record = logged
+        .map((entry) => JSON.parse(entry) as Record<string, unknown>)
+        .find((entry) => entry['event'] === 'assistant.turn');
+      const call = (
+        record?.['tools'] as { name: string; refused?: true }[]
+      ).find((tool) => tool.name === 'remove_lines');
+
+      // "The model tried to delete lines it had not read" is the number to
+      // watch, and it is a different fact from "the gateway said no".
+      expect(call?.refused).toBe(true);
+
+      jest.restoreAllMocks();
+    });
+  });
+
+  describe('4.2 approval is not status, and stays out', () => {
+    it('has no tool for approving or rejecting a line, in either catalog', () => {
+      const names = [...TOOL_DECLARATIONS, ...SCOPED_TOOL_DECLARATIONS].map(
+        (declaration) => declaration.name
+      );
+
+      expect(names).not.toContain('set_line_approval');
+      expect(names).not.toContain('approve_line');
+      // Deleting anything larger than a line is still absent too (section 2).
+      expect(names).not.toContain('delete_list');
+      expect(names).not.toContain('delete_zone');
+    });
+
+    it('offers both new tools on a turn scoped to one list', () => {
+      const names = SCOPED_TOOL_DECLARATIONS.map(
+        (declaration) => declaration.name
+      );
+
+      expect(names).toContain('remove_lines');
+      expect(names).toContain('set_line_status');
+      // Still not this one (plan 0044, section 2.2).
+      expect(names).not.toContain('rename_me');
+    });
   });
 });

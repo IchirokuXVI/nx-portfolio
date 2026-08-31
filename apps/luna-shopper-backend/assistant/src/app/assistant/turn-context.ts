@@ -132,9 +132,33 @@ export class TurnContextFactory {
   }
 }
 
+/** A line this turn genuinely read, and the list it came off. */
+export interface KnownLine {
+  list: ContextList;
+  line: LineView;
+}
+
 export class TurnContext {
   /** Lines already fetched this turn, so two tools do not pay for them twice. */
   private readonly linesByList = new Map<string, LineView[]>();
+
+  /**
+   * Every line this turn has actually read from the gateway, by id (plan 0043,
+   * section 3.1).
+   *
+   * This is what an id in a tool argument is checked against, and it is a
+   * different thing from the cache above even though both are filled by the same
+   * fetch. The cache answers "have I already paid for this list", and a write
+   * empties it so a later read in the same turn is true. This answers "did this
+   * id come back from the gateway during this turn", which stays true after a
+   * write and is the whole of the guarantee rule A3 makes: an id that was read
+   * exists and the caller can see it, an id the model wrote into a sentence has
+   * neither property.
+   *
+   * So it is never invalidated. It is only ever added to, and the one thing that
+   * removes an entry is {@link forgetLine}, for a line that no longer exists.
+   */
+  private readonly readLines = new Map<string, KnownLine>();
 
   constructor(
     private readonly api: GatewayApiClient,
@@ -165,7 +189,33 @@ export class TurnContext {
     }
     const lines = await this.api.listLines(this.caller, listId);
     this.linesByList.set(listId, lines);
+
+    const list = this.find(listId);
+    if (list !== undefined) {
+      for (const line of lines) {
+        this.readLines.set(line.id, { list, line });
+      }
+    }
+
     return lines;
+  }
+
+  /**
+   * The line an id names, when this turn genuinely read it (plan 0043, section
+   * 3.1).
+   *
+   * `undefined` is the answer for everything else, and the tools treat it as a
+   * refusal rather than as a miss to work around: the model has not looked, so
+   * its next move is to look. An id it invented cannot be in here, which is what
+   * makes "it never deletes by name" enforceable rather than instructed.
+   */
+  knownLine(lineId: string): KnownLine | undefined {
+    return this.readLines.get(lineId);
+  }
+
+  /** A line that is gone, so nothing later in the turn can name it again. */
+  forgetLine(lineId: string): void {
+    this.readLines.delete(lineId);
   }
 
   /** Forget what a write just invalidated, so a later read in the same turn is true. */

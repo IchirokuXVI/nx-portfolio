@@ -59,6 +59,26 @@ export class ReferenceCollector {
     });
   }
 
+  /**
+   * Drop the reference to a line that has just been deleted (plan 0043, section
+   * 5).
+   *
+   * `remove_lines` emits nothing for what it removed, and on its own that is not
+   * enough: the tool call before it was almost certainly the `query_lists` that
+   * found the line, and that call emitted a reference for it. Without this, the
+   * one reply guaranteed to contain a chip that 404s would be the reply about
+   * the line that no longer exists.
+   *
+   * The list survives, because the list is what the person wants next.
+   */
+  forgetLine(lineId: string): void {
+    for (const [key, reference] of this.seen) {
+      if (reference.lineId === lineId) {
+        this.seen.delete(key);
+      }
+    }
+  }
+
   all(): AssistantReference[] {
     return [...this.seen.values()];
   }
