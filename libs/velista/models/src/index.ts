@@ -15,4 +15,5 @@ export * from './lib/limits';
 export * from './lib/list-view';
 export * from './lib/problem';
 export * from './lib/requests';
+export * from './lib/shopping-profile';
 export * from './lib/zone-view';

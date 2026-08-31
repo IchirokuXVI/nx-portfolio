@@ -17,6 +17,8 @@ import { MemberNames } from './memberships/member-names';
 import { MembershipMemory } from './memberships/membership-memory';
 import { MembershipStore } from './memberships/membership-store';
 import { PresenceStore } from './presence/presence-store';
+import { ShoppingProfileMemory } from './profiles/shopping-profile-memory';
+import { ShoppingProfileStore } from './profiles/shopping-profile-store';
 import { ZoneMemory } from './zones/zone-memory';
 import { ZoneStore } from './zones/zone-store';
 
@@ -92,6 +94,15 @@ import { ZoneStore } from './zones/zone-store';
  * for `ZoneMemory`'s reason exactly, and `AccountApi` stays out like every other real
  * transport.
  *
+ * `ShoppingProfileStore` (plan 0046) joins for `ZoneStore`'s reason a fifth time: it
+ * resolves `SHOPPING_PROFILE_SERVICE` and `REALTIME_CLIENT`, so at the root it would
+ * offer fixture chains beside a real account and would apply `profiles.changed` from a
+ * socket nobody was connected to. It is app scoped rather than page scoped for a second
+ * reason as well: the selected profile outlives the profiles page, because `0045`'s
+ * generation sheet asks which profile a basket is being built for.
+ * `ShoppingProfileMemory` joins for `AccountMemory`'s reason exactly, and
+ * `ShoppingProfileApi` stays out like every other real transport.
+ *
  * `AssistantMemory` (plan 0032) joins for `CommentMemory`'s reason and no stronger one:
  * it injects nothing, so root scope would work for it, and it is listed here anyway so
  * that every fake in this library is installed in one place rather than two. It is no
@@ -120,4 +131,6 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   MemberNames,
   MembershipStore,
   PresenceStore,
+  ShoppingProfileMemory,
+  ShoppingProfileStore,
 ];

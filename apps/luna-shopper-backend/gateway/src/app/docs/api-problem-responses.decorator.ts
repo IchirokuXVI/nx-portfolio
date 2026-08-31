@@ -34,6 +34,13 @@ export interface ProblemResponseOptions {
    * environment; this is what says the document is honest about them.
    */
   notConfigured?: boolean;
+  /**
+   * The route is a catalog read that returns items or prices, so it can refuse a
+   * caller who has not said where they shop (plan 0049, section 3). Documented
+   * separately from `body` even though both are 400s, because the two are told
+   * apart by `code` and a client branches on it to open the profile page.
+   */
+  scopeRequired?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -82,6 +89,13 @@ export function ApiProblemResponses(
   }
   if (options.notConfigured) {
     codes.push(ERROR_CODES.NOT_CONFIGURED);
+  }
+  if (options.scopeRequired && !options.body) {
+    // Only when `body` did not already document the 400. Two `@ApiResponse`
+    // decorators on one status keep the last one applied, so declaring both
+    // would replace the validation description rather than add to it, and the
+    // envelope they point at is the same schema either way.
+    codes.push(ERROR_CODES.CATALOG_SCOPE_REQUIRED);
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);

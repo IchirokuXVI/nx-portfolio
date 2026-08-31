@@ -13,9 +13,12 @@ import type {
   ProfileLoad,
   SessionTokens,
   ShoppingListSummary,
+  ShoppingProfile,
+  Supermarket,
   UserKind,
   UsernameScope,
   UserProfile,
+  WriteShoppingProfileRequest,
 } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
@@ -34,6 +37,11 @@ import {
   type MembershipServiceI,
 } from '../memberships/membership-service';
 import { PresenceStore } from '../presence/presence-store';
+import {
+  ShoppingProfileStore,
+  type FieldSaveState,
+  type ProfileField,
+} from '../profiles/shopping-profile-store';
 import {
   ZoneStore,
   type ZoneDeparture,
@@ -1181,4 +1189,248 @@ export function profileFor(overrides: Partial<UserProfile> = {}): UserProfile {
     displayName: null,
     ...overrides,
   };
+}
+
+// --- Shopping profiles (plan 0046) -------------------------------------------
+
+/**
+ * A `ShoppingProfile` with the shape the page actually reads.
+ *
+ * The default is the lazily created one a brand new account gets: a null name, nothing
+ * else set, and the default flag on it. Every other state is one override.
+ */
+export function shoppingProfileFor(
+  overrides: Partial<ShoppingProfile> = {}
+): ShoppingProfile {
+  return {
+    id: 'sp1',
+    name: null,
+    isDefault: true,
+    position: 0,
+    addressText: null,
+    minSavingCents: 0,
+    postalCodes: [],
+    chains: [],
+    ...overrides,
+  };
+}
+
+export interface FakeShoppingProfileOptions {
+  readonly profiles?: readonly ShoppingProfile[];
+  readonly state?: ProfileLoad;
+  readonly error?: unknown;
+  readonly chains?: readonly Supermarket[];
+  /** Codes the catalog is pretending nobody serves. */
+  readonly unserved?: readonly string[];
+  /** Which controls answer `failed` rather than saving. */
+  readonly failing?: readonly ProfileField[];
+  /** Whether `create` fails rather than minting a profile. */
+  readonly createFails?: boolean;
+  /** Whether `remove` fails rather than deleting. */
+  readonly removeFails?: boolean;
+}
+
+/** One recorded call to a faked `ShoppingProfileStore`. */
+export type ShoppingProfileCall =
+  | { readonly method: 'load' }
+  | { readonly method: 'select'; readonly profileId: string }
+  | { readonly method: 'create' }
+  | {
+      readonly method: 'save';
+      readonly profileId: string;
+      readonly field: ProfileField;
+      readonly body: WriteShoppingProfileRequest;
+    }
+  | { readonly method: 'makeDefault'; readonly profileId: string }
+  | { readonly method: 'remove'; readonly profileId: string }
+  | { readonly method: 'clear' };
+
+/**
+ * A `ShoppingProfileStore` that answers without a transport.
+ *
+ * {@link fakeZoneStore}'s reasoning, and two things specific to this one.
+ *
+ * It **applies** what a page saves, through the same `apply` the real store hands to
+ * its overlay, so a spec asserting that the screen followed the selector or that a
+ * chain came back un-excluded is asserting the rendered result rather than the fact
+ * that a method was called. A save it is told to fail changes nothing and reports
+ * `failed`, which is the state the failed treatment is drawn from.
+ *
+ * It keeps the real store's rule that **the list is never empty**: the server creates
+ * the default profile on the first read, so a fake with no profiles would put a page
+ * into a state that cannot happen.
+ */
+export function fakeShoppingProfileStore(
+  options: FakeShoppingProfileOptions = {}
+) {
+  const calls: ShoppingProfileCall[] = [];
+  const profiles = signal<readonly ShoppingProfile[]>(
+    options.profiles ?? [shoppingProfileFor()]
+  );
+  const state = signal<ProfileLoad>(options.state ?? 'loaded');
+  const selectedId = signal<string | null>(null);
+  const saves = signal<ReadonlyMap<string, FieldSaveState>>(new Map());
+  const failing = new Set<ProfileField>(options.failing ?? []);
+  const unserved = new Set(options.unserved ?? []);
+  let minted = 0;
+
+  const selected = computed<ShoppingProfile | null>(() => {
+    const held = profiles();
+    const id = selectedId();
+    return (
+      held.find((profile) => profile.id === id) ??
+      held.find((profile) => profile.isDefault) ??
+      held[0] ??
+      null
+    );
+  });
+
+  const setSave = (key: string, next: FieldSaveState): void => {
+    saves.update((current) => {
+      const map = new Map(current);
+      if (next === 'idle') {
+        map.delete(key);
+      } else {
+        map.set(key, next);
+      }
+      return map;
+    });
+  };
+
+  const successorOf = (profileId: string): ShoppingProfile | null => {
+    const held = profiles();
+    const going = held.find((profile) => profile.id === profileId);
+    return going === undefined || !going.isDefault
+      ? null
+      : (held.find((profile) => profile.id !== profileId) ?? null);
+  };
+
+  return {
+    profiles: profiles.asReadonly(),
+    state: state.asReadonly(),
+    error: () => options.error ?? null,
+    chains: signal<readonly Supermarket[]>(options.chains ?? []).asReadonly(),
+    selected,
+
+    scopeSaid: computed(() => {
+      const profile = selected();
+      return (
+        profile !== null &&
+        (profile.postalCodes.length > 0 ||
+          profile.chains.some((chain) => !chain.excluded))
+      );
+    }),
+
+    saveState: (profileId: string, field: ProfileField): FieldSaveState =>
+      saves().get(`${profileId}:${field}`) ?? 'idle',
+
+    isUnserved: (postalCode: string): boolean => unserved.has(postalCode),
+
+    successorOf,
+
+    load: async () => {
+      calls.push({ method: 'load' });
+    },
+
+    select: (profileId: string) => {
+      calls.push({ method: 'select', profileId });
+      selectedId.set(profileId);
+    },
+
+    refreshCoverage: async () => {
+      // Nothing to refresh: this fake's coverage is whatever the spec declared.
+    },
+
+    create: async (): Promise<ShoppingProfile | null> => {
+      calls.push({ method: 'create' });
+      if (options.createFails === true) {
+        return null;
+      }
+
+      const created = shoppingProfileFor({
+        id: `sp-new-${++minted}`,
+        isDefault: false,
+        position: profiles().length,
+      });
+      profiles.update((held) => [...held, created]);
+      selectedId.set(created.id);
+      return created;
+    },
+
+    save: async (
+      profileId: string,
+      field: ProfileField,
+      body: WriteShoppingProfileRequest,
+      apply: (profile: ShoppingProfile) => ShoppingProfile
+    ): Promise<'saved' | 'failed'> => {
+      calls.push({ method: 'save', profileId, field, body });
+
+      if (failing.has(field)) {
+        setSave(`${profileId}:${field}`, 'failed');
+        return 'failed';
+      }
+
+      profiles.update((held) =>
+        held.map((profile) =>
+          profile.id === profileId ? apply(profile) : profile
+        )
+      );
+      setSave(`${profileId}:${field}`, 'idle');
+      return 'saved';
+    },
+
+    makeDefault: async (profileId: string): Promise<'saved' | 'failed'> => {
+      calls.push({ method: 'makeDefault', profileId });
+      profiles.update((held) =>
+        held.map((profile) => ({
+          ...profile,
+          isDefault: profile.id === profileId,
+        }))
+      );
+      return 'saved';
+    },
+
+    remove: async (profileId: string): Promise<'deleted' | 'failed'> => {
+      calls.push({ method: 'remove', profileId });
+      if (options.removeFails === true) {
+        return 'failed';
+      }
+
+      const successor = successorOf(profileId);
+      profiles.update((held) =>
+        held
+          .filter((profile) => profile.id !== profileId)
+          .map((profile) => ({
+            ...profile,
+            isDefault:
+              successor === null
+                ? profile.isDefault
+                : profile.id === successor.id,
+          }))
+      );
+      if (selectedId() === profileId) {
+        selectedId.set(null);
+      }
+      return 'deleted';
+    },
+
+    clear: () => {
+      calls.push({ method: 'clear' });
+      profiles.set([]);
+    },
+
+    /** Everything the page asked for, in order. */
+    calls: calls as readonly ShoppingProfileCall[],
+  };
+}
+
+export type FakeShoppingProfileStore = ReturnType<
+  typeof fakeShoppingProfileStore
+>;
+
+/** {@link fakeShoppingProfileStore} bound to the real class. */
+export function provideFakeShoppingProfileStore(
+  store: FakeShoppingProfileStore = fakeShoppingProfileStore()
+): Provider {
+  return { provide: ShoppingProfileStore, useValue: store };
 }

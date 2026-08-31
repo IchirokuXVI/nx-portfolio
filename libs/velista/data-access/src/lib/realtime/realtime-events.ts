@@ -5,6 +5,7 @@ import type {
   ListPresence,
   Membership,
   ShoppingList,
+  ShoppingProfile,
   Zone,
   ZonePresence,
 } from '@portfolio/velista/models';
@@ -165,6 +166,26 @@ export type RealtimeEvent =
       readonly mergeId: string;
       readonly zoneId: string;
     }
+  | {
+      /**
+       * The caller's **shopping profiles** changed (backend plan 0049, section 6), on
+       * their own sessions and on nothing else.
+       *
+       * Profiles are private, so this is the one audience it can have: no zone room
+       * hears it, not even one the caller owns.
+       *
+       * It carries the **whole list** rather than the profile that moved, and that is
+       * the payload rather than an oversight: every rule it exists to propagate is
+       * about the set, namely which one is the default, how many are left, and what a
+       * deleted one was replaced by. A single profile could not say any of them.
+       *
+       * An empty array is therefore not a malformed payload either, but it is one this
+       * client will never see: the server creates the default profile on the first
+       * read and refuses to delete the last one.
+       */
+      readonly type: 'profiles.changed';
+      readonly profiles: readonly ShoppingProfile[];
+    }
   | { readonly type: 'presence.zoneUpdated'; readonly presence: ZonePresence }
   | { readonly type: 'presence.listUpdated'; readonly presence: ListPresence };
 
@@ -198,6 +219,7 @@ export const REALTIME_EVENT_NAMES = [
   'merge.requested',
   'merge.approved',
   'merge.rejected',
+  'profiles.changed',
   'presence.zoneUpdated',
   'presence.listUpdated',
 ] as const;

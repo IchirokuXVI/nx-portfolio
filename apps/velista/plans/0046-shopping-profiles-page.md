@@ -26,8 +26,8 @@ one on screen, and everything under the selector belongs to the selected profile
 ## 2. Mock
 
 Drawn in `mocks/profiles/`, published at
-<https://claude.ai/code/artifact/8c20e218-365e-45ad-a401-e96b4ed1252d>, awaiting
-approval. Not ready for development until it is approved (`0001` section 9).
+<https://claude.ai/code/artifact/8c20e218-365e-45ad-a401-e96b4ed1252d>, **approved**
+(`0001` section 9), so the page is ready for development.
 
 | Artboard | Frames |
 | --- | --- |

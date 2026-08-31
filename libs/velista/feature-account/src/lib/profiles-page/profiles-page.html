@@ -1,0 +1,188 @@
+<!--
+  `(account)` is unbound: this page is reached from the account screen, and the button
+  would send somebody back to where they came from by a route that reads as somewhere
+  else. It stays drawn so the header does not change shape between screens.
+-->
+<lib-app-bar
+  (openAssistant)="openAssistant()"
+  [connected]="connected()"
+  [signedIn]="true"
+/>
+
+<main class="page">
+  <button
+    (click)="back()"
+    [attr.aria-label]="'account.back' | rokuT"
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
+  </button>
+
+  <h1 class="title">{{ 'profiles.title' | rokuT }}</h1>
+
+  @switch (state()) {
+    @case ('loading') {
+      <!--
+        The shape of the form rather than a spinner, so the page does not jump when the
+        profiles land. It is announced, because a page that is silently empty for a
+        second is a page somebody thinks is broken.
+      -->
+      <div aria-live="polite" class="skeleton" role="status">
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-field"></span>
+        <span aria-hidden="true" class="skeleton-field"></span>
+        <span aria-hidden="true" class="skeleton-card"></span>
+        <span class="visually-hidden">{{ 'profiles.loading' | rokuT }}</span>
+      </div>
+    }
+
+    @case ('failed') {
+      <p class="failed">
+        <span>{{ 'profiles.error.load' | rokuT }}</span>
+        <button (click)="retry()" class="quiet" type="button">
+          {{ 'profiles.error.retry' | rokuT }}
+        </button>
+      </p>
+    }
+
+    @default {
+      @if (selected(); as profile) {
+        <!--
+          The selector, which is the only control on this page that is about the set
+          rather than about one profile.
+        -->
+        <lib-profile-selector
+          (add)="add()"
+          (remove)="openDelete()"
+          (select)="select($event)"
+          [defaultName]="defaultName()"
+          [profiles]="profiles()"
+          [selectedId]="profile.id"
+        />
+
+        @if (showBanner()) {
+          <!--
+            Why they are here, in one sentence, worded as the thing to do rather than as
+            what went wrong. It disappears the moment either field is filled in, which is
+            the same rule the server applies (section 3.1).
+          -->
+          <p class="banner" role="status">
+            {{ 'profiles.scope.banner' | rokuT }}
+          </p>
+        }
+
+        <div class="field-block">
+          <label class="field-label" for="profiles-name">
+            {{ 'profiles.name.label' | rokuT }}
+          </label>
+          <!--
+            Saved on blur, and on the phone keyboard's Go, which is what `keydown.enter`
+            blurring the field buys without a second handler doing the same work twice.
+            `[value]` and not `[(ngModel)]`: the value is the store's, and a two way bind
+            would let a failed save leave the field holding something the server refused.
+          -->
+          <input
+            (blur)="saveName($event)"
+            (keydown.enter)="$any($event).target.blur()"
+            [attr.aria-busy]="saving('name')"
+            [attr.maxlength]="nameMaxLength"
+            [placeholder]="defaultName()"
+            [value]="profile.name ?? ''"
+            #nameField
+            autocapitalize="words"
+            autocomplete="off"
+            class="field"
+            enterkeyhint="done"
+            id="profiles-name"
+            type="text"
+          />
+          @if (failed('name')) {
+            <p class="field-error" role="alert">
+              {{ 'profiles.error.save' | rokuT }}
+            </p>
+          } @else if (profile.name === null) {
+            <p class="field-hint">
+              {{ 'profiles.name.hint' | rokuT: { name: defaultName() } }}
+            </p>
+          }
+        </div>
+
+        <div class="field-block">
+          <label class="field-label field-label-row" for="profiles-address">
+            <span>{{ 'profiles.address.label' | rokuT }}</span>
+            <span class="optional">{{
+              'profiles.address.optional' | rokuT
+            }}</span>
+          </label>
+          <input
+            (blur)="saveAddress($event)"
+            (keydown.enter)="$any($event).target.blur()"
+            [attr.aria-busy]="saving('addressText')"
+            [attr.maxlength]="addressMaxLength"
+            [placeholder]="'profiles.address.placeholder' | rokuT"
+            [value]="profile.addressText ?? ''"
+            autocapitalize="words"
+            autocomplete="street-address"
+            class="field"
+            enterkeyhint="done"
+            id="profiles-address"
+            type="text"
+          />
+          @if (failed('addressText')) {
+            <p class="field-error" role="alert">
+              {{ 'profiles.error.save' | rokuT }}
+            </p>
+          }
+        </div>
+
+        <lib-postal-code-list
+          (addCode)="addPostalCode($event)"
+          (removeCode)="removePostalCode($event)"
+          [codes]="profile.postalCodes"
+          [failed]="failed('postalCodes')"
+          [uncovered]="uncovered()"
+        />
+
+        <lib-chain-preference-list
+          (toggleChain)="toggleChain($event)"
+          [chains]="chains()"
+          [failed]="failed('chains')"
+          [preferences]="profile.chains"
+        />
+
+        <div class="threshold">
+          <label class="threshold-label" for="profiles-threshold">
+            {{ 'profiles.saving.label' | rokuT }}
+          </label>
+          <span class="threshold-field">
+            <input
+              (blur)="saveThreshold($event)"
+              (keydown.enter)="$any($event).target.blur()"
+              [attr.aria-busy]="saving('minSavingCents')"
+              [value]="thresholdValue()"
+              class="amount"
+              enterkeyhint="done"
+              id="profiles-threshold"
+              inputmode="decimal"
+              min="0"
+              step="0.01"
+              type="number"
+            />
+            <span aria-hidden="true" class="currency">
+              {{ 'profiles.saving.currency' | rokuT }}
+            </span>
+          </span>
+        </div>
+        @if (failed('minSavingCents')) {
+          <p class="field-error" role="alert">
+            {{ 'profiles.error.save' | rokuT }}
+          </p>
+        }
+      }
+    }
+  }
+</main>
+
+<!-- The confirm, as a child of the page it is about (rule E1). -->
+<router-outlet />

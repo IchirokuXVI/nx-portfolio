@@ -12,10 +12,10 @@ import type {
   Item,
   PriceScope,
   ProductGroup,
-  SupermarketItem,
-  SupermarketLocationItem,
-  SupermarketLocation,
   Supermarket,
+  SupermarketItem,
+  SupermarketLocation,
+  SupermarketLocationItem,
 } from '../entities';
 
 /**
@@ -34,6 +34,7 @@ export function toSupermarketView(row: Supermarket): SupermarketView {
     logoUrl: row.logoUrl,
     websiteUrl: row.websiteUrl,
     externalBrandKey: row.externalBrandKey,
+    defaultPriceScopeId: row.defaultPriceScopeId,
   };
 }
 

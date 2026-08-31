@@ -1,0 +1,94 @@
+<!--
+  The row. Three controls, and the name is the only one that flexes: `min-inline-size: 0`
+  plus the ellipsis in the stylesheet is what makes rule R1 true without the plus and the
+  trash ever moving.
+
+  `aria-label` carries the **whole** name, so a screen reader is never handed the
+  ellipsis. That is the half of R1 that cannot live in CSS.
+-->
+<div class="selector-row">
+  <button
+    (click)="toggle()"
+    (keydown.escape)="close()"
+    [attr.aria-expanded]="canOpen() ? open() : null"
+    [attr.aria-haspopup]="canOpen() ? 'listbox' : null"
+    [attr.aria-label]="currentName()"
+    [class.open]="open()"
+    [disabled]="!canOpen()"
+    class="current"
+    type="button"
+  >
+    <span aria-hidden="true" class="name">{{ currentName() }}</span>
+
+    @if (current()?.isDefault === true) {
+      <span class="badge">{{ 'profiles.default.badge' | rokuT }}</span>
+    }
+
+    @if (canOpen()) {
+      <lib-chevron-down-icon [class.flipped]="open()" class="caret" />
+    }
+  </button>
+
+  <!--
+    The plus, beside the selector it belongs to. Separately labelled, because "New
+    profile" and "Delete Home" are two different sentences and a glyph is neither.
+  -->
+  <button
+    (click)="add.emit()"
+    [attr.aria-label]="'profiles.add' | rokuT"
+    class="action"
+    type="button"
+  >
+    <lib-plus-icon class="glyph add-glyph" />
+  </button>
+
+  <!--
+    The trash, at the far end of the row and drawn as the destructive control it is, so
+    it does not read as a sibling of the plus (section 7). Absent, never disabled, when
+    there is only one profile: it cannot be deleted, and a control you may not use is one
+    somebody works out the reason for.
+  -->
+  @if (canRemove()) {
+    <button
+      (click)="remove.emit()"
+      [attr.aria-label]="
+        'profiles.delete.label' | rokuT: { name: currentName() }
+      "
+      class="action destructive"
+      type="button"
+    >
+      <lib-trash-icon class="glyph" />
+    </button>
+  }
+</div>
+
+@if (open()) {
+  <!--
+    Buttons rather than `div role="option"`, so the keyboard works because the element
+    works and not because a `tabindex` was remembered. The role override is what makes
+    them the listbox's options.
+  -->
+  <div
+    (keydown.escape)="close()"
+    [attr.aria-label]="'profiles.title' | rokuT"
+    class="list"
+    role="listbox"
+  >
+    @for (profile of profiles(); track profile.id) {
+      <button
+        (click)="choose(profile.id)"
+        [attr.aria-label]="nameOf(profile)"
+        [attr.aria-selected]="profile.id === current()?.id"
+        [class.picked]="profile.id === current()?.id"
+        class="option"
+        role="option"
+        type="button"
+      >
+        <span aria-hidden="true" class="name">{{ nameOf(profile) }}</span>
+        @if (profile.isDefault) {
+          <span class="badge">{{ 'profiles.default.badge' | rokuT }}</span>
+        }
+      </button>
+    }
+  </div>
+}

@@ -1,0 +1,216 @@
+@use '../account-page' as page;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.page {
+  @include page.page;
+
+  // The open selector list is absolutely positioned over the fields below it, so this
+  // is the box it is positioned against.
+  position: relative;
+}
+
+.back {
+  @include page.back;
+}
+
+.back-glyph {
+  @include page.back-glyph;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+// Visually hidden, and never `display: none`: a region that is not rendered is not
+// announced.
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+// Why somebody was sent here. The attention roles rather than the amber the mock drew:
+// the design system has no amber-tinted surface, hand mixing one is what rule T1
+// forbids, and `attention` is exactly the role for something waiting on a person.
+.banner {
+  margin: 0;
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-status-attention-bg);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.field-label {
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.field-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+// "Optional" is a word rather than the absence of a required mark, because the absence
+// of something is not a thing anybody reads.
+.optional {
+  font-size: var(--app-text-xs);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.field {
+  min-block-size: var(--app-control-height);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  // Rule T3: anything under 16px makes iOS Safari zoom the viewport on focus.
+  font-size: var(--app-field-font-size);
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  @include page.focus-ring;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.field-error {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
+.threshold {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+}
+
+.threshold-label {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.threshold-field {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+
+  &:has(.amount:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.amount {
+  inline-size: var(--app-space-11);
+  min-block-size: var(--app-control-height);
+  border: none;
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-field-font-size);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+
+  // The ring is drawn by the wrapper, which is the thing that looks like the field.
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.currency {
+  color: var(--app-text-secondary);
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.skeleton-row,
+.skeleton-field,
+.skeleton-card {
+  display: block;
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+}
+
+.skeleton-row {
+  block-size: var(--app-button-height);
+}
+
+.skeleton-field {
+  block-size: var(--app-control-height);
+}
+
+.skeleton-card {
+  block-size: var(--app-space-11);
+}
+
+// The read failed. One line and a retry, which is the shared treatment the account
+// screen already uses for the same shape of failure.
+.failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-4);
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.quiet {
+  @include page.quiet-action;
+}

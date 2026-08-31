@@ -313,6 +313,20 @@ export class AccountPage {
     );
   }
 
+  /**
+   * Where you shop (plan 0046).
+   *
+   * A **sibling page** rather than a child of this route, even though the path reads
+   * like one: this screen renders its sheets into an outlet at the bottom of its own
+   * scroll, so a child would be drawn under the account rows rather than instead of
+   * them. `navigateByUrl` and not a relative navigate, for the same reason.
+   */
+  async openProfiles(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'account/profiles')
+    );
+  }
+
   /** The two sheets, as children of this route (rule E1). */
   openRename(): void {
     void this._router.navigate(['name'], { relativeTo: this._route });

@@ -1,0 +1,113 @@
+<span class="label" id="profiles-postal-label">
+  {{ 'profiles.postal.label' | rokuT }}
+</span>
+
+<ul aria-labelledby="profiles-postal-label" class="chips">
+  @for (code of codes(); track code.id) {
+    <li class="chip-holder">
+      <span [class.flagged]="isUncovered(code.postalCode)" class="chip">
+        <span class="code">{{ code.postalCode }}</span>
+        @if (code.label; as label) {
+          <span class="chip-label">{{ label }}</span>
+        }
+        <!--
+          Its own labelled target, and its own 44px, because a remove that shares a hit
+          area with the chip is a remove somebody presses by accident (section 7).
+        -->
+        <button
+          (click)="removeCode.emit(code.id)"
+          [attr.aria-label]="
+            'profiles.postal.remove' | rokuT: { code: code.postalCode }
+          "
+          class="remove"
+          type="button"
+        >
+          <lib-close-icon class="remove-glyph" />
+        </button>
+      </span>
+    </li>
+  }
+
+  @if (!full()) {
+    <li class="chip-holder">
+      <button (click)="open()" class="add" type="button">
+        <lib-plus-icon class="add-glyph" />
+        <span>{{ 'profiles.postal.add' | rokuT }}</span>
+      </button>
+    </li>
+  }
+</ul>
+
+<!--
+  One region for every flag, outside the chip loop so it is never torn down and recreated:
+  a live region that appears at the same moment as its text is often not announced at all.
+  This is what tells somebody who cannot see the amber outline that the code they typed
+  reaches nobody we know of (section 7).
+-->
+<div aria-live="polite" class="flags" role="status">
+  @for (code of codes(); track code.id) {
+    @if (isUncovered(code.postalCode)) {
+      <p class="flag">
+        <span class="flag-code">{{ code.postalCode }}</span>
+        <span>{{ 'profiles.postal.uncovered' | rokuT }}</span>
+      </p>
+    }
+  }
+</div>
+
+@if (adding()) {
+  <!--
+    A real `<form>`, so enter submits with no key handler here and the phone keyboard
+    offers Go (section 7).
+  -->
+  <form (submit)="submit($event)" class="form">
+    <label class="field-label" for="profiles-postal-code">
+      {{ 'profiles.postal.code' | rokuT }}
+    </label>
+    <input
+      (input)="onTyped($event)"
+      [attr.maxlength]="maxLength"
+      [value]="typed()"
+      autocapitalize="characters"
+      autocomplete="postal-code"
+      class="field"
+      enterkeyhint="done"
+      id="profiles-postal-code"
+      inputmode="numeric"
+      type="text"
+    />
+
+    <label class="field-label" for="profiles-postal-name">
+      {{ 'profiles.postal.name' | rokuT }}
+    </label>
+    <input
+      (input)="onLabelTyped($event)"
+      [attr.maxlength]="labelMaxLength"
+      [value]="typedLabel()"
+      autocomplete="off"
+      class="field"
+      enterkeyhint="done"
+      id="profiles-postal-name"
+      type="text"
+    />
+
+    <div class="form-actions">
+      <button [disabled]="typed().trim() === ''" class="primary" type="submit">
+        {{ 'profiles.postal.submit' | rokuT }}
+      </button>
+      <button (click)="cancel()" class="quiet" type="button">
+        {{ 'entry.cancel' | rokuT }}
+      </button>
+    </div>
+  </form>
+}
+
+@if (full()) {
+  <p class="hint">
+    {{ 'profiles.postal.full' | rokuT: { count: maxCodes } }}
+  </p>
+}
+
+@if (failed()) {
+  <p class="error" role="alert">{{ 'profiles.error.save' | rokuT }}</p>
+}

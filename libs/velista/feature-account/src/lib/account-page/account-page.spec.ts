@@ -458,6 +458,29 @@ describe('AccountPage', () => {
     });
   });
 
+  describe('the shopping profiles row (plan 0046)', () => {
+    it('is offered, and goes to a page of its own', async () => {
+      // `navigateByUrl` and not a relative navigate: the profiles page is a sibling
+      // route, because this screen renders its sheets into an outlet at the bottom of
+      // its own scroll and a child would be drawn under the account rows.
+      const { fixture, router } = await render();
+
+      (rowWith(fixture, 'account.row.profiles') as HTMLElement)
+        .querySelector('button')
+        ?.click();
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        expect.stringContaining('account/profiles')
+      );
+    });
+
+    it('is there for a guest too, who shops in exactly the same places', async () => {
+      const { fixture } = await render({ guest: true });
+
+      expect(rowWith(fixture, 'account.row.profiles')).not.toBeNull();
+    });
+  });
+
   describe('the sheets', () => {
     it('opens the rename over this screen rather than navigating away', async () => {
       const { fixture, router } = await render();

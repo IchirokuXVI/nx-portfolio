@@ -30,6 +30,7 @@ export { AUTH_SCHEMA_IDS } from './messages/auth.schemas';
 export { ZONE_SCHEMA_IDS } from './messages/zone.schemas';
 export { LIST_SCHEMA_IDS } from './messages/list.schemas';
 export { MERGE_SCHEMA_IDS } from './messages/merge.schemas';
+export { PROFILE_SCHEMA_IDS } from './messages/profile.schemas';
 export { REALTIME_SCHEMA_IDS } from './messages/realtime.schemas';
 export { STATS_SCHEMA_IDS } from './messages/stats.schemas';
 export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';

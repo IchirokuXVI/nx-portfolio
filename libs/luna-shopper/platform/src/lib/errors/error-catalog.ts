@@ -54,6 +54,13 @@ export const ERROR_CATALOG: Record<
     en: 'This version of the app is out of date. It is updating itself now.',
     es: 'Esta versión de la aplicación está obsoleta. Se está actualizando ahora.',
   },
+  // Phrased as the next thing to do rather than as what went wrong, because the
+  // client shows it on the profile page it just sent the user to (plan 0049,
+  // section 3, and velista 0046 section 6, where the same sentence is the banner).
+  [ERROR_CODES.CATALOG_SCOPE_REQUIRED]: {
+    en: 'Add a postal code or choose a supermarket to see prices.',
+    es: 'Añade un código postal o elige un supermercado para ver precios.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

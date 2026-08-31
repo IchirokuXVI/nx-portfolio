@@ -122,6 +122,21 @@ export const PRICE_SCOPE_PATTERNS = {
   update: 'priceScope.update',
   delete: 'priceScope.delete',
   list: 'priceScope.list',
+  /**
+   * Turn "these postal codes, these chains" into the scopes that answer it today
+   * (plan 0049, sections 1.1 and 3.1).
+   *
+   * **The resolver lives here and not in core**, beside the scopes it resolves
+   * to. A stored scope id silently becomes a lie the moment a chain remaps a
+   * postal code to another warehouse, so the postal code is what is stored and
+   * this is asked per query, cached briefly.
+   *
+   * Open to any authenticated caller, like every other catalog read: it says
+   * which scopes serve a place, which is public reference data. It takes no
+   * `userId` beyond the one every catalog subject carries, and knows nothing
+   * about profiles.
+   */
+  resolve: 'priceScope.resolve',
 } as const;
 
 /**
@@ -150,6 +165,17 @@ export interface SupermarketView {
    * `Carrefour Express`, which may or may not be what the owner wants.
    */
   externalBrandKey: string | null;
+  /**
+   * The scope to quote this chain's prices from when nothing else says which
+   * (plan 0049, section 3.1, the last rung of the ladder).
+   *
+   * Owner set and nullable. A result reached through it is returned **flagged as
+   * approximate**, so a client can say "prices shown for Madrid" rather than
+   * implying the number is the caller's. Silently averaging across a chain's
+   * scopes is not the alternative: an average price is a price that exists in no
+   * store.
+   */
+  defaultPriceScopeId: string | null;
 }
 
 export interface SupermarketLocationView {
@@ -348,6 +374,12 @@ export interface UpdateSupermarketRequest {
   logoUrl?: string | null;
   websiteUrl?: string | null;
   externalBrandKey?: string | null;
+  /**
+   * The last rung of the scope ladder (plan 0049, section 3.1). Settable here
+   * and not on create: a scope belongs to a chain, so a chain that does not
+   * exist yet has none to point at. Must belong to this chain; null clears it.
+   */
+  defaultPriceScopeId?: string | null;
 }
 
 export interface SupermarketIdRequest {
@@ -466,9 +498,13 @@ export interface SearchItemsRequest extends PageQuery {
   /**
    * Price the results, from these scopes and no others (plan 0048, section 3.1).
    *
-   * **No default is resolved when the caller sends none**, which is `0049`'s job.
-   * Until then an unscoped search still ranks and still answers; it quotes no
-   * price, which is exactly how the composer wants it to degrade.
+   * **Absent and empty are different since plan 0049, section 3.** Absent is an
+   * unscoped read, which still ranks and quotes no price; that is what the admin
+   * surface does and it is not reachable from the gateway any more, because every
+   * gateway catalog read either carries scopes or resolves the caller's profile.
+   * An **empty array** is a caller who said where they shop and reached no chain
+   * we know, and it answers with an empty page: listing the global product table
+   * would answer a question they did not ask.
    */
   priceScopeIds?: string[];
 }
@@ -476,8 +512,10 @@ export interface SearchItemsRequest extends PageQuery {
 /**
  * Rank groups for a bare word, and price each one (plan 0048, section 3).
  *
- * It takes the same optional scope set as {@link SearchItemsRequest} and treats
- * an empty one the same way: the groups still rank, no price is quoted.
+ * It takes the same scope set as {@link SearchItemsRequest} and reads it the same
+ * way: absent ranks unscoped and quotes no price, an empty array is a caller
+ * whose place reached no chain and answers with an empty page (plan 0049,
+ * section 3).
  */
 export interface SearchOffersRequest extends PageQuery {
   userId: string;
@@ -642,6 +680,99 @@ export interface PriceScopeIdRequest {
 export interface ListPriceScopesRequest extends PageQuery {
   userId: string;
   supermarketId?: string;
+}
+
+// --- Resolving a place into scopes (plan 0049, sections 1.1 and 3.1) --------
+
+/**
+ * "These postal codes, these chains, not those chains." Every field is optional
+ * and a request with nothing positive in it resolves to nothing, which the
+ * gateway never sends: an empty selector is `CATALOG_SCOPE_REQUIRED` (section 3),
+ * decided where the profile is known rather than here.
+ */
+export interface ResolvePriceScopesRequest {
+  userId: string;
+  /** Stored exactly as typed, resolved here, never stored resolved. */
+  postalCodes?: string[];
+  /** The chains the caller listed. Empty means every chain serving the codes. */
+  supermarketIds?: string[];
+  /** Chains to leave out, applied after the two above. */
+  excludedSupermarketIds?: string[];
+}
+
+/**
+ * How a scope was arrived at (plan 0049, section 3.1).
+ *
+ * A plain string union rather than an entry in `catalog.enums`, like
+ * {@link CATALOG_SUGGESTION_KINDS}: nothing stores it and no column has its type.
+ * It exists so a client can explain a price rather than merely show it.
+ */
+export const SCOPE_ORIGINS = [
+  /** A store of that chain sits in one of the caller's postal codes. */
+  'POSTAL_CODE',
+  /** The chain prices nationally, so location does not enter into it. */
+  'NATIONAL',
+  /** The owner set fallback. Approximate, and says so. */
+  'CHAIN_DEFAULT',
+] as const;
+export type ScopeOrigin = (typeof SCOPE_ORIGINS)[number];
+
+/** One resolved scope, and the reason it is in the answer. */
+export interface ResolvedScopeView {
+  priceScopeId: string;
+  supermarketId: string;
+  /** The caller's postal code that reached it, or null off the other rungs. */
+  postalCode: string | null;
+  origin: ScopeOrigin;
+  /** True exactly when `origin` is `CHAIN_DEFAULT`: prices are for elsewhere. */
+  approximate: boolean;
+}
+
+/**
+ * Whether we know of anybody serving one postal code (plan 0049, section 5).
+ *
+ * A code no chain serves is **accepted and flagged, never rejected**: coverage is
+ * a property of our data and not of the user's address, and refusing the code
+ * would tell somebody they live nowhere.
+ */
+export interface PostalCodeCoverageView {
+  postalCode: string;
+  served: boolean;
+}
+
+/** What a place resolves to today. */
+export interface ResolvedScopesView {
+  /** The union, ready to hand to a scoped read. Order is not significant. */
+  priceScopeIds: string[];
+  scopes: ResolvedScopeView[];
+  /** One entry per postal code asked about, in the order they were given. */
+  coverage: PostalCodeCoverageView[];
+  /** True when any scope came off the last rung. */
+  approximate: boolean;
+}
+
+/**
+ * What the gateway's `GET /v1/catalog/scope` answers (plan 0049, sections 3 and
+ * 5).
+ *
+ * A gateway shape written in `contracts` for the same reason
+ * {@link CatalogSuggestResponse} is: it is assembled from two services and the
+ * one place its halves can reference the same `ResolvedScopeView` is here.
+ *
+ * It exists because the flags have to reach a client and a page cannot carry
+ * them: `ItemPage` is bare by house rule, and wrapping it to hang two booleans
+ * off would change every catalog read's response shape. So the ladder's outcome
+ * is described once, here, and a client that wants to say "prices shown for
+ * Madrid" or "no chain we know reaches 12345" reads it beside its search.
+ */
+export interface CatalogScopeView extends ResolvedScopesView {
+  /** The profile that supplied the selector, or null when the caller stated one. */
+  profileId: string | null;
+  /**
+   * Whether the caller's own query decided the scopes. False means the default
+   * (or named) profile was resolved, which is what an unscoped read does.
+   */
+  explicit: boolean;
 }
 
 // --- Supermarket location item requests ------------------------------------

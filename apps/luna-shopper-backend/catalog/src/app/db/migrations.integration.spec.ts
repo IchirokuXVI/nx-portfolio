@@ -38,7 +38,9 @@ describeIntegration('catalog schema (real Postgres)', () => {
     const rows = await dataSource.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`
     );
-    const names = new Set(rows.map((r: { table_name: string }) => r.table_name));
+    const names = new Set(
+      rows.map((r: { table_name: string }) => r.table_name)
+    );
     for (const table of [
       'supermarkets',
       'supermarket_locations',
@@ -62,8 +64,9 @@ describeIntegration('catalog schema (real Postgres)', () => {
     const vectors = new Set(
       columns
         .filter((c: { udt_name: string }) => c.udt_name === 'tsvector')
-        .map((c: { table_name: string; column_name: string }) =>
-          `${c.table_name}.${c.column_name}`
+        .map(
+          (c: { table_name: string; column_name: string }) =>
+            `${c.table_name}.${c.column_name}`
         )
     );
     for (const column of [
@@ -122,6 +125,18 @@ describeIntegration('catalog schema (real Postgres)', () => {
     // Both moved to supermarket_location_items.
     expect(names.has('supermarketLocationId')).toBe(false);
     expect(names.has('positionInStore')).toBe(false);
+  });
+
+  it('carries the chain’s fallback scope (plan 0049, section 3.1)', async () => {
+    const columns = await dataSource.query(
+      `SELECT column_name, is_nullable FROM information_schema.columns
+       WHERE table_name = 'supermarkets' AND column_name = 'defaultPriceScopeId'`
+    );
+    expect(columns).toHaveLength(1);
+    // Nullable, because most chains never need one: it is the last rung of the
+    // ladder, reached only when a chain named with no location has no national
+    // scope either.
+    expect(columns[0].is_nullable).toBe('YES');
   });
 
   it('round-trips a Supermarket through the jsonb localized name column', async () => {

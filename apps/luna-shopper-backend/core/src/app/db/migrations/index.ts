@@ -3,6 +3,7 @@ import { ListPermissionsAndAutoApprove1756000200000 } from './1756000200000-List
 import { ListSharedWithZone1756000300000 } from './1756000300000-ListSharedWithZone';
 import { VoiceComments1756000400000 } from './1756000400000-VoiceComments';
 import { LineProductSet1756000600000 } from './1756000600000-LineProductSet';
+import { ShoppingProfiles1756000700000 } from './1756000700000-ShoppingProfiles';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -19,4 +20,5 @@ export const CORE_MIGRATIONS = [
   ListSharedWithZone1756000300000,
   VoiceComments1756000400000,
   LineProductSet1756000600000,
+  ShoppingProfiles1756000700000,
 ];

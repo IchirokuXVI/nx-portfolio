@@ -387,6 +387,41 @@ export const AppShellRoutes: Route[] = [
             ],
           },
           {
+            // Shopping profiles (plan 0046). A page of its own and **not a child of
+            // `account`**, which is what the path might suggest: `account` renders its
+            // sheets into an outlet at the bottom of its own scroll, so a child route
+            // here would draw a whole page under the account rows rather than instead
+            // of them.
+            //
+            // Declared **before** `account` for the same reason every non empty path
+            // comes before the front door. A parent with children only matches when one
+            // of them matches the remainder, so `account` would decline `profiles` and
+            // the router would fall through to this one anyway; stating the order makes
+            // that a decision rather than a piece of luck about how backtracking works.
+            //
+            // `authenticatedGuard` and nothing more. A profile is private and resolves
+            // from the caller's own token, so there is nothing here to authorize that
+            // the gateway does not already.
+            path: 'account/profiles',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-account').then(
+                (m) => m.ProfilesPage
+              ),
+            children: [
+              sheet({
+                // `confirm/delete`, matching the shape `0010` gave a member action and
+                // `0015` gave the account, so every destructive confirm in this app is
+                // addressed the same way.
+                path: 'confirm/delete',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-account').then(
+                    (m) => m.DeleteProfileSheet
+                  ),
+              }),
+            ],
+          },
+          {
             // The account (plan 0015). A **route** and not a sheet, by the same test
             // `0009` section 4.1 used for the credential screens: it is deep linkable,
             // it has its own scroll, and it is where somebody goes deliberately rather
