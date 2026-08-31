@@ -1,0 +1,43 @@
+{
+  "title": "Velista: the line is a quantity",
+  "lede": "The design for plan <code>0043</code>: the quantity reel, the three derived indicators, the detail sheet, the line page and the composer's suggestions. Server half: backend <code>0047</code> (settlements) and <code>0048</code> (search). Phone only, 390 by 844. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Line.dc.html", "x": 0, "y": 0, "w": 900, "h": 1010, "title": "The list, remeasured" },
+    { "file": "Reel.dc.html", "x": 960, "y": 0, "w": 900, "h": 1010, "title": "The reel, with motion" },
+    { "file": "LineDetail.dc.html", "x": 0, "y": 1160, "w": 1330, "h": 970, "title": "The detail sheet" },
+    { "file": "Suggest.dc.html", "x": 1390, "y": 1160, "w": 900, "h": 1010, "title": "Suggestions" },
+    { "file": "LinePage.dc.html", "x": 0, "y": 2330, "w": 900, "h": 1010, "title": "The line page" },
+    { "file": "Confirm.dc.html", "x": 960, "y": 2330, "w": 470, "h": 1010, "title": "Delete" },
+    { "file": "DayTheme.dc.html", "x": 1490, "y": 2330, "w": 470, "h": 1010, "title": "Day" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -430,
+      "w": 440,
+      "text": "Plan 0043. The row stops being a checkbox: quantity is the state, buying decrements it, zero means stocked, and the line stays put holding its history. No control on the page marks ready or not available any more; both moved behind the detail sheet as deliberate acts.\nThe quantity pill on the right is the spinbutton; the whole row is the reel's drag target. 44px floor everywhere.\nThe counts change with it: the header says what is WANTED (5 things needed), never what is done."
+    },
+    {
+      "id": "indicators",
+      "x": 480,
+      "y": -430,
+      "w": 450,
+      "text": "THREE INDICATORS, ALL DERIVED, NONE A COLUMN.\nBought: zero quantity plus at least one recorded purchase. Green, quiet, no strikethrough, because the line is not done, the household is stocked.\nNot available: the most recent settlement said the shop had none. Rose.\nSomebody is buying this: the line sits in an active basket. Drawn in the live blue rather than presence green so it can share a row with Bought without the two reading as one thing. It is presence-shaped: it appears and disappears while you watch, and must never read as dealt with.\nA zero line with no purchase shows NOTHING: never wanted is not bought."
+    },
+    {
+      "id": "reel",
+      "x": 960,
+      "y": -430,
+      "w": 450,
+      "text": "THE REEL IS POSITIONAL. One to one with the finger, 40px per unit, no acceleration, no auto repeat. Release snaps to the nearest number and the snap is the only confirmation, so it is animated and short.\nAt zero there is nothing to the left of the current number. No minus one exists and the empty slot says so.\nTHE OVERLAY DOES NOT CLOSE ON RELEASE. It lingers a second or two so the thumb can keep adjusting, and a drag inside that window continues from the snapped number. It closes on idleness, and writes ONE SIGNED DELTA then, through POST /v1/lines/:id/quantity (built by backend 0040, first UI caller). Absolute writes from a moving control race each other; a delta cannot.\nArrow keys step the spinbutton, page keys by five. A gesture is never the only way."
+    },
+    {
+      "id": "sheet",
+      "x": 1440,
+      "y": -430,
+      "w": 450,
+      "text": "RECORDING A PURCHASE LIVES IN THE SHEET AND NOWHERE ELSE. Two taps behind a deliberate open, defaulting to the whole outstanding quantity. It writes a settlement with no basket attached (backend 0047 section 4.4), which is what makes this plan shippable before baskets exist. On a line with several products it also asks which one was bought, because the settlement records the exact product.\nThe estimate obeys the three-buy floor: nothing at all is shown until three purchases exist, because two purchases define one interval, which is a coincidence, not an estimate.\nSUGGESTIONS: after three characters the composer offers the catalog. A GROUP beats an item for a bare word (backend 0048), the scope is where you shop, and free text stays first class with no nagging. Choosing an item attaches one product; choosing a group copies ALL of its products onto the line as the line's own set, trimmable and extendable on the line page. The set's hash is what recognizes two lines holding the same products, and how popular hand made sets can be promoted into curated groups."
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "title": "Velista: shopping profiles",
+  "lede": "The design for plan <code>0046</code>: the profiles page behind the account screen, with the selector, add and delete, and the single-line name rule. Server half: backend <code>0049</code>. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Account.dc.html", "x": 0, "y": 0, "w": 470, "h": 1010, "title": "The account row" },
+    { "file": "Profile.dc.html", "x": 530, "y": 0, "w": 900, "h": 1010, "title": "The page, and rule R1" },
+    { "file": "SwitchAndAdd.dc.html", "x": 0, "y": 1160, "w": 900, "h": 1010, "title": "Switching and adding" },
+    { "file": "Delete.dc.html", "x": 960, "y": 1160, "w": 900, "h": 1010, "title": "Deleting" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -430,
+      "w": 450,
+      "text": "Plan 0046. A profile is how the app knows where somebody shops: postal codes, chains included or excluded (the franchise, never one shop), and the saving that makes a second stop worth it. Profiles are several, named, switchable; one is the default that catalog reads and generated runs use when nothing says otherwise.\nEvery user already has one (backend 0049 creates it lazily), so the page never has a create-your-first wall."
+    },
+    {
+      "id": "r1",
+      "x": 530,
+      "y": -430,
+      "w": 450,
+      "text": "RULE R1: A PROFILE NAME IS ONE LINE, ALWAYS. The selector row, the open list, 0045's generation sheet and anywhere else render it with ellipsis, and the layout never grows to fit it. Plus and trash never move. The server caps names at 64 characters so the truncation is cosmetic; the full name stays the control's accessible name, so a screen reader is never handed the ellipsis."
+    },
+    {
+      "id": "lifecycle",
+      "x": 1060,
+      "y": -430,
+      "w": 450,
+      "text": "PLUS CREATES IMMEDIATELY: a fresh profile, selected, name focused, no modal asking for a name first. Unnamed profiles render as the localized default, My profile.\nTHE TRASH IS ABSENT with one profile, because the last one cannot be deleted. Deleting the default promotes another, and the confirm names which. Excluded chains are struck through and stay visible, never hidden, so they can come back."
+    }
+  ]
+}

@@ -52,3 +52,10 @@ Both grace periods are configuration values.
 - The zone reaper deletes abandoned marked zones after the grace period; the orphan temporary
   user reaper removes membership free temporary accounts.
 - All event handlers are idempotent.
+
+## 5. Additions from later plans
+
+- **Generated lists (0050, 0051).** The `user.deleted` saga also deletes every generated list
+  the caller owns, with its lines, provenance rows, share links and participants. A
+  `LineSettlement` is a zone fact and is **not** deleted with the account; its
+  `settledByUserId` attribution is nulled (0051 section 10).

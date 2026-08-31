@@ -1,15 +1,8 @@
-# 0002 (backlog) The shared basket, and the people you send it to
+# 0044 The shared basket, and the people you send it to
 
-> **Status: backlog. Not scheduled for development.**
-> Plans in `plans/backlog/` are designed and agreed but are not part of the build order,
-> and nothing in them has been built. They carry their own numbering starting at `0001`,
-> separate from the sequence in `plans/`. When one is picked up it moves into `plans/`
-> and takes the next free number there, so parking a design never burns a number in the
-> build sequence.
->
-> Server half: `apps/luna-shopper-backend/plans/backlog/0009`, which owns every rule this
-> plan renders. Depends on velista backlog `0001` for the quantity control and on backend
-> backlog `0008` for settlements.
+> Server half: `apps/luna-shopper-backend/plans/0051`, which owns every rule this
+> plan renders. Depends on `0043` for the quantity control and on backend
+> `0047` for settlements.
 
 ## 1. Purpose
 
@@ -29,16 +22,18 @@ making them register would kill the feature that got them there.
 
 ## 2. Mock
 
-**Not built.** Not ready for development until it is approved.
+Drawn in `mocks/basket/`, published at
+<https://claude.ai/code/artifact/bdc42e90-243f-4cdd-aaf4-54ca73d12ef6>, awaiting
+approval. Not ready for development until it is.
 
 | Artboard | Frames |
 | --- | --- |
 | `Join.dc.html` | The join screen, and the hierarchy in section 3. Also the revoked link and the expired link |
 | `Basket.dc.html` | The basket as owner, as a registered participant who passes the rule, and as a guest. The three differ by what is absent |
-| `Settle.dc.html` | Full settle, partial submit, and a line showing what was submitted against what is outstanding |
+| `Settle.dc.html` | Full settle, partial submit, a line showing submitted against outstanding, and the product swap |
 | `Allocate.dc.html` | The per list allocation sheet, and the default it starts from |
 | `People.dc.html` | Presence with guests and registered people together; a participant's details on tap |
-| `Share.dc.html` | Creating a link, several links with labels, and both revoke confirmations |
+| `Share.dc.html` | The share sheet with the one link, and the revoke confirmation |
 | `DayTheme.dc.html` | The basket on Day |
 
 Phone frames 390 by 844.
@@ -60,7 +55,7 @@ app sits lower still.
   favour into a chore, in a shop, on somebody else's phone.
 - **The preview discloses nothing.** The list's name, how many people are on it, and
   whether it still accepts people. No lines, no zone, no list names, no members. That is
-  backend `0009` section 4 and the screen must not ask for more.
+  backend `0051` section 4 and the screen must not ask for more.
 - **A revoked or expired link says so plainly** and offers nothing to try. It does not
   distinguish a link that was revoked from one that never existed.
 - Somebody who is already signed in **does not see this screen**. They are attached as
@@ -72,7 +67,7 @@ The install prompt from `0033` is offered on this screen, because a guest who is
 walk around a shop with this open is exactly who benefits from it. It is the lowest of the
 four actions and it is never a condition of anything.
 
-A guest who installs and later registers keeps their identity, which is backend `0009`
+A guest who installs and later registers keeps their identity, which is backend `0051`
 section 11's open decision; the screen is drawn so that outcome is possible and does not
 depend on it.
 
@@ -95,7 +90,7 @@ the list page and it holds here: a control you may not use should not be drawn.
 | Another participant's device and join time | yes | yes | **no** |
 
 "Passes the rule" is `WRITE` on **every** source list of the run, checked on each request
-(backend `0009` section 5.2). It is all or nothing today and the cliff is known: one source
+(backend `0051` section 5.2). It is all or nothing today and the cliff is known: one source
 where they hold only `READ` collapses the column to the guest's. The per line version is
 recorded as the target in that plan's open decisions, and this screen is drawn so it can
 arrive without a redesign.
@@ -129,6 +124,18 @@ Guests are shown as guests, always visually distinct from registered people. A t
 is unverified text and two guests can both be "Dani": the name is for reading, the identity
 is the participant. The screen must never present the two as the same kind of thing.
 
+### 4.4 The product, and swapping it
+
+Each line means one exact product: the **pick**, defaulted at generation to the best price
+among the line’s options (backend `0050` section 4) and named under the line. Tapping it
+opens the options, each with its price where one is known and the default marked, and
+choosing another swaps the pick. It exists for the person at the shelf: the default is the
+cheapest, and they may simply want to try another brand.
+
+Everyone may swap, guests included. The options are catalog products, never zone data, and
+the settlement that follows records whichever product is actually in the trolley (backend
+`0051` section 6). A free text line has no products and draws nothing here.
+
 ## 5. People, and sharing
 
 ### 5.1 Presence
@@ -144,10 +151,13 @@ is the same "+X" pattern the price display uses.
 
 The word "anonymous" appears nowhere in the product. They are guests.
 
-### 5.2 Creating and revoking links
+### 5.2 The link, and revoking it
 
-Several links per basket, each with an optional label, so "the flatmates" and "my mother"
-are tellable apart afterwards. The link secret is shown once, on creation.
+**A basket has zero links or one.** It starts with zero; pressing share mints the link
+and shows it; revoking returns it to zero, and sharing again mints a fresh one. The one
+link can be copied again at any time, from any of the owner’s devices, because handing
+it to the next person tomorrow must not depend on a string copied once (backend `0051`
+section 3.1).
 
 Revoking asks a real question, because there are two answers and the wrong default is
 harmful:
@@ -170,8 +180,9 @@ Removing a single participant is separate, from their row.
   server checks it against the database, so a revoked participant is refused on the next
   action with no cache to wait out.
 - The socket. A guest holds a live connection with no account, which no path in the app
-  supports today; backend `0009` section 9 is the design and this screen cannot work
+  supports today; backend `0051` section 9 is the design and this screen cannot work
   without it.
+- Swapping a line's pick, on the same participant surface, emitting the same line event.
 - Realtime: the basket's own room for lines, settlements and presence.
 
 ## 7. Accessibility and input
@@ -182,7 +193,7 @@ Removing a single participant is separate, from their row.
   small phone.
 - Settle and partial submit are 44 square at minimum, and the settle target is not adjacent
   to anything destructive.
-- The quantity control is velista backlog `0001`'s reel and spinbutton, unchanged, so the
+- The quantity control is `0043`'s reel and spinbutton, unchanged, so the
   keyboard path comes with it.
 - Presence changes are announced politely and not per participant per second.
 - Guest status is never conveyed by colour alone.
@@ -203,6 +214,8 @@ Removing a single participant is separate, from their row.
 - Settle, partial submit and allocate all work, and the first two never mention a list.
 - A partially settled line shows what was submitted and what is outstanding, and finishing
   it takes a second settle.
+- Every line names its picked product; anyone, guests included, swaps it for another of
+  the line’s options, and the next settle records the swap.
 - Every line says who touched it last, and a guest is visibly a guest.
 - Presence shows guests and registered people together, with no sentence and no use of the
   word anonymous.
@@ -216,7 +229,7 @@ Removing a single participant is separate, from their row.
 - **Prices, best location and the "+X same price" display.** Backlog `0004` on the backend
   and inert until a second chain is harvested. The basket is drawn with room for them.
 - Splitting a basket across shops, which is the optimizer and is its own problem.
-- Guests seeing anything per line rather than all or nothing (backend `0009` section 11).
+- Guests seeing anything per line rather than all or nothing (backend `0051` section 11).
 - Handing ownership of a basket to somebody else.
-- Any change to how a basket is generated, which is backend `0009` section 2 and has no
+- Any change to how a basket is generated, which is backend `0051` section 2 and has no
   screen of its own in this plan beyond choosing zones and lists.

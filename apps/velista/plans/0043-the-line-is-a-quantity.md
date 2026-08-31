@@ -1,17 +1,11 @@
-# 0001 (backlog) The line is a quantity, and it has a history
+# 0043 The line is a quantity, and it has a history
 
-> **Status: backlog. Not scheduled for development.**
-> Plans in `plans/backlog/` are designed and agreed but are not part of the build order,
-> and nothing in them has been built. They carry their own numbering starting at `0001`,
-> separate from the sequence in `plans/`. When one is picked up it moves into `plans/`
-> and takes the next free number there, so parking a design never burns a number in the
-> build sequence.
->
 > **This plan revises `0012`**, the list page, which was built when a line carried a trip
 > status. Section 1.1 lists what it takes back. `0012` carries a note pointing here.
 >
-> Server half: `apps/luna-shopper-backend/plans/backlog/0008`. Nothing here is buildable
-> without it. The basket that eventually settles these lines is velista backlog `0002`.
+> Server half: `apps/luna-shopper-backend/plans/0047`. Nothing here is buildable
+> without it, and the composer's suggestions in section 6 additionally need backend
+> `0048`. The basket that eventually settles these lines is `0044`.
 
 ## 1. Purpose
 
@@ -27,7 +21,7 @@ thumb landing on a checkbox and becomes a thumb dragging a number.**
 
 The second half is that a line now has somewhere to go. Tapping one opens what the app
 knows about it, and there is a page behind that with the whole history, which is only
-worth building because backlog `0008` finally records one.
+worth building because backend `0047` finally records one.
 
 ### 1.1 What this takes back from 0012
 
@@ -46,8 +40,10 @@ unchanged.
 
 ## 2. Mock
 
-**Not built.** The plan is in the backlog and `0001` section 9's rule stands: it is not
-ready for development until the mock is approved.
+Drawn in `mocks/line/`, published at
+<https://claude.ai/code/artifact/58c83512-3899-4200-bb2b-464c805084fd>, awaiting
+approval. `0001` section 9's rule stands: it is not ready for development until the
+mock is approved.
 
 | Artboard | Frames |
 | --- | --- |
@@ -79,7 +75,7 @@ gone all behave exactly as they do, and the header is untouched.
 | Never wanted | `quantity = 0` with no purchase. Somebody typed it and it has not been needed yet. No indicator, because there is nothing to report |
 | Awaiting approval | Unchanged from `0030`. Independent of the above |
 
-The distinction between the middle two rows is why backlog `0008` section 5 says "at
+The distinction between the middle two rows is why backend `0047` section 5 says "at
 least once" rather than testing the quantity alone.
 
 ### 3.3 The three indicators
@@ -110,6 +106,9 @@ the new quantity.
   gesture rather than three.
 - The snap is animated and short. It is the only confirmation the gesture gives, so it has
   to be felt.
+- **The overlay does not close on release.** It stays up for a second or two so the thumb
+  can keep adjusting, and a drag inside that window continues from the snapped number. It
+  closes after that beat of idleness, and the close is what commits the result.
 - Large changes go through the line editor, which still edits the quantity as a field.
   The reel is for the common case and is not asked to be a general purpose number entry.
 
@@ -120,8 +119,9 @@ built by backend plan `0040` for the assistant and has never had a second caller
 the caller it was shaped for.
 
 Absolute writes from a moving control race each other, and the loser silently wins. One
-delta per settled gesture, sent on release rather than during the drag, is both correct
-and one request.
+delta per settled adjustment, sent when the overlay closes after its idle beat rather than
+during the drag, is both correct and one request however many times the thumb went back
+for more within the window.
 
 ### 4.2 The optimistic overlay applies unchanged
 
@@ -145,13 +145,13 @@ Top to bottom, with what is new marked.
 | Delete confirmation | the existing confirm | `shared/ui` |
 
 The reel goes in `velista/ui` rather than beside the row because it is a general control
-over a number and the basket in backlog `0002` needs the same one.
+over a number and the basket in `0044` needs the same one.
 
 ### 5.1 The detail sheet
 
 Opens on tapping a row. Answers the question you have while standing in the kitchen:
 
-- Which catalog item the line is linked to, or that it is not linked to one
+- Which products the line carries: one, a set picked from a group, or none
 - When it was last bought and how many
 - Roughly how long until it runs out, **absent entirely until there are three purchases**
 - A way through to the full page
@@ -166,7 +166,9 @@ promise it cannot keep until baskets exist.
 So the detail sheet carries "I bought this", asking how many and defaulting to the whole
 outstanding quantity. It is two taps behind a deliberate open, not a swipe, which is the
 whole distinction being drawn. It writes a settlement with no basket attached, which is
-what backlog `0008` section 4.4 is for, and it is the reason this plan ships on its own.
+what backend `0047` section 4.4 is for, and it is the reason this plan ships on its own. On a
+line carrying more than one product it also asks **which one**, preselecting the last one
+bought, because the settlement records the exact product (backend `0047` section 3.2).
 
 Marking a line not available lives here too, for the same reason and with the same
 weight: it is something you say afterwards, not something you flick past in an aisle.
@@ -176,11 +178,15 @@ weight: it is something you say afterwards, not something you flick past in an a
 Its own route, so it can be linked to and reached from a search later.
 
 - **Two history sections, side by side and labelled.** "On this list" is every settlement
-  of this line. "Everywhere you shop" is every settlement of the same catalog item across
+  of this line. "Everywhere you shop" is every settlement of the line’s products across
   the zones you can read. They are separate because one is a household's consumption and
   the other is yours, and a single merged number would be neither.
-- The second section is **absent, not empty**, on a line with no item. Which is the
+- The second section is **absent, not empty**, on a line with no products. Which is the
   argument for section 6.
+- **The products on this line.** One chip per product, removable, plus the composer’s
+  same search to add another. This is where a group picked from the suggestions becomes
+  the household’s own version of it, and where a free text line gets its first product
+  after the fact (backend `0048` section 1.1).
 - **Also on other lists.** Which of your other lists carry this item, or something close
   enough to it, as an indicator rather than a link, filtered to lists you can read.
 - **Where to buy it and for how much** is drawn here and is out of scope, per section 9.
@@ -190,18 +196,20 @@ Its own route, so it can be linked to and reached from a search later.
 ## 6. Suggestions, and why they matter more than they look
 
 After **three characters**, debounced at 200ms, the composer offers catalog matches.
-Choosing one adds the line with the suggestion's name **and its item attached**.
+Choosing an item adds the line with that product attached; **choosing a group attaches
+all of the group’s products** as the line’s own set, free to trim afterwards.
 
-`ListLine.itemId` exists today and is null on every line the product has ever created,
-because `0012` section 1 put catalog items out of scope. This dropdown is what finally
-populates it, and it is therefore not a convenience: the cross list indicator, the item
-history, and every price this app will ever show are all keyed on that column.
+A line has never carried a product: `0012` section 1 put catalog items out of scope, and
+the old single `itemId` was null on every line ever created. Backend `0048` section 1.1
+turns it into a **product set**, and this dropdown is what finally fills it. It is not a
+convenience: the cross list indicator, the item history, and every price this app will
+ever show are keyed on that set.
 
 Three rules, all of which come from the backend plans that own the search:
 
 - **A group beats an item.** Somebody typing "milk" is offered the group, not one brand of
-  it. The backend's backlog `0001` section 3.4 has `catalog.searchOffers` for exactly
-  this, and its backlog `0004` section 1.2 states the rule as a hard one: nothing is
+  it. Backend `0048` section 3 has `item.searchOffers` for exactly
+  this, and backlog `0004` section 1.2 states the rule as a hard one: nothing is
   resolved to an item when a group would do.
 - **The scope is where you shop.** The search takes a price scope set, so a product from a
   chain the user never visits is not a suggestion.
@@ -235,10 +243,11 @@ This section replaces `0012` section 7's row mapping in full.
 
 - No control on the list page marks a line ready or not available.
 - Dragging the quantity moves a reel that shows the neighbouring numbers, shows nothing to
-  the left of zero, and snaps on release.
+  the left of zero, and snaps on release; the overlay stays up for a beat so a second
+  drag continues it, and closes on idleness.
 - One uninterrupted drag takes a line from 2 to 5.
-- A settled gesture sends one signed delta, and a failure restores the previous number with
-  the existing failed treatment.
+- A settled adjustment sends one signed delta when the overlay closes, and a failure
+  restores the previous number with the existing failed treatment.
 - Arrow keys change the quantity without a pointer, and the change is announced once.
 - A line at zero that has been bought shows the bought indicator; one at zero that never
   has shows nothing.
@@ -250,8 +259,10 @@ This section replaces `0012` section 7's row mapping in full.
 - Nothing on the row itself records a purchase or marks anything unavailable.
 - The line page shows the two histories labelled separately, and omits the item history
   entirely when the line has no item.
-- Typing three characters offers suggestions, a group ranks above an item for a bare word,
-  and choosing one attaches the item to the new line.
+- Typing three characters offers suggestions, a group ranks above an item for a bare
+  word, choosing an item attaches it, and choosing a group attaches all of its products.
+- The line page lists the line’s products, removes one by its chip, adds one through the
+  same search, and a purchase recorded on a multi product line asks which one was bought.
 - Typing free text and submitting adds a line with no item and no warning.
 - Deleting a line is confirmed, and it is the only way to lose the history.
 
@@ -260,8 +271,7 @@ This section replaces `0012` section 7's row mapping in full.
 - **Prices and where to buy.** The line page has a region for them and draws nothing in it
   until the backend's backlog `0004` exists. With one chain harvested and disabled outside
   development, it would show one price at one shop.
-- **The basket**, its sharing and its guests. Velista backlog `0002`.
+- **The basket**, its sharing and its guests. Velista `0044`.
 - **Settling from the row.** The row has no marking control of any kind, which is section
   1.1. Recording a purchase is a deliberate act from the detail sheet, per 5.2, and never
   something a thumb does in passing.
-- Editing which item a line points at after the fact.

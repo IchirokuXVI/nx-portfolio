@@ -1,18 +1,12 @@
-# 0003 (backlog) Generated shopping lists
+# 0049 Generated shopping lists
 
-> **Status: backlog. Not scheduled for development.**
-> Plans in `plans/backlog/` are designed and agreed but are not part of the build order, and
-> nothing in them has been built. They carry their own numbering starting at `0001`, separate
-> from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next
-> free number there, so parking a design never burns a number in the build sequence.
->
-> **Revised by backlog `0009`, and not current on its own.** This plan was written before a
-> basket could be shared with people who have no account, and before backlog `0008` took the
+> **Revised by `0051`, and not current on its own.** This plan was written before a
+> basket could be shared with people who have no account, and before `0047` took the
 > trip status off a zone line. Four things here are superseded: who may generate (readers, now
 > `WRITE`), the rule that only the owner may ever read a generated list (now participants, on
 > terms), the rule that generated lists emit no zone event (now exactly one), and most of
 > section 6's write back and conflict machinery, which existed only to reconcile a status that
-> no longer exists. Backlog `0009` section 1 is the table of what survives. Everything else
+> no longer exists. `0051` section 1 is the table of what survives. Everything else
 > here, including the entity split and the argument for it, still stands.
 
 The feature that makes the zone lists worth keeping: a user presses a button and gets the list
@@ -22,7 +16,7 @@ edit only reaches the shared lists when the user says which shared list it belon
 
 This plan is about **composing, owning and reconciling** that list. Pricing it and splitting it
 across shops is backlog 0004, which consumes what this one produces. Depends on 0007 (lists,
-lines and their two state machines) and on backlog 0002 (which zones and lists feed a run).
+lines and their two state machines) and on `0049` (which zones and lists feed a run).
 
 ## 1. A generated list is not a `ShoppingList`
 
@@ -38,7 +32,10 @@ New entities, in core:
 **GeneratedList**
 - `id` (uuid)
 - `ownerUserId` (opaque; the only user who may ever read it)
-- `name` (defaulted to something like "Shopping, 12 March", user editable)
+- `name` (nullable; set only when the owner names it. An unnamed list is displayed as its
+  generation date, localized by the reader’s client, and a second unnamed list on the same
+  day gets a number appended to the display, so the default is never stored, never needs
+  localizing server side, and never collides)
 - `status`: `GeneratedListStatus` enum (`DRAFT`, `ACTIVE`, `COMPLETED`, `ARCHIVED`)
 - `generatedAt`, `sourceSnapshot` (jsonb: the zones, lists and preference values the run used)
 - pricing fields added by backlog 0004, not here
@@ -47,8 +44,10 @@ New entities, in core:
 - `id`, `generatedListId`
 - `content` (the text as shown, copied at generation time)
 - `quantity` (integer, the sum across origins)
-- `itemId` (nullable, opaque catalog id), `productGroupId` (nullable, per backlog 0001 section
-  3.2; at most one of the two set)
+- `itemId` (nullable, opaque catalog id: **the pick**, the exact product this basket means
+  to buy for the line. Defaulted at generation to the best priced of the line's options at
+  the run's scopes (section 4), switchable to any other option (section 5), and what a
+  settlement records)
 - `status`: reuses `LineStatus` (`PENDING`, `READY`, `NOT_AVAILABLE`) so the shopping gesture is
   the same gesture as in a zone list
 - `origin`: `GeneratedLineOrigin` enum (`DERIVED`, `ADDED`), where `ADDED` means the user typed
@@ -59,6 +58,14 @@ New entities, in core:
 **GeneratedListLineOrigin** (the provenance rows, one per contributing zone line)
 - `id`, `generatedListLineId`, `zoneId`, `listId`, `lineId`, `quantity`, `lineVersion`
 - unique (`generatedListLineId`, `lineId`)
+
+**GeneratedListLineOption** (the products the pick may switch between)
+- `id`, `generatedListLineId`, `itemId`
+- unique (`generatedListLineId`, `itemId`)
+
+The origin lines' product sets (backend `0048` section 1.1), copied at generation time per
+the snapshot posture in section 4. A free text origin contributes no options, and such a
+line's `itemId` stays null.
 
 `sourceSnapshot` is not decoration. A run's meaning depends on which lists it drew from and what
 the thresholds were, and the preferences change; without the snapshot a three week old generated
@@ -73,7 +80,8 @@ exactly the household where the admin is not the one doing the shopping.
 The sources are, in order:
 
 1. The `sources` given in the request, if any.
-2. Otherwise the user's stored generation sources (backlog 0002 section 1), which default to
+2. Otherwise the stored generation sources of the shopping profile the run names, or of
+   the caller's default profile when it names none (`0049` section 1). They default to
    `ALL`.
 3. `ALL` means: every zone where the caller's membership is `APPROVED`, and inside each zone
    every list the caller holds a `ListAccess` row for, reader or writer alike.
@@ -100,8 +108,8 @@ A line is picked up when **all** of these hold:
 
 **Deduplication.** The same thing appears in two zones ("Milk" in the flat list and in the
 parents' house list), and the point of the feature is one line to buy once. Lines are merged when
-they resolve to the same `itemId`, or to the same `productGroupId`, or, failing both, on
-normalized text (trimmed, case folded, accent folded). Quantities sum, and every contributing
+they carry the same single product, or the same product set (`itemSetHash`, backend `0048`
+section 1.1), or, failing both, on normalized text (trimmed, case folded, accent folded). Quantities sum, and every contributing
 line gets its provenance row. Text matching is deliberately conservative: "milk" and "whole milk"
 stay separate, because merging two things a user meant separately is a worse failure than showing
 two lines they can merge by hand.
@@ -110,6 +118,11 @@ two lines they can merge by hand.
 
 `generatedList.create { sources?, name?, priceIt? }` is one core operation, with an idempotency
 key (0004 section 9) so a double tap does not produce two baskets.
+
+The run also resolves each line's **pick**: the best priced of its options at the run's
+scopes (the per scope prices plan 0038 ships), falling back to the first option added when
+none is priced. Real basket pricing is backlog 0004; the pick only decides which product
+the line means today.
 
 It is a **snapshot**, not a live view. Nothing in a generated list updates when a zone line
 changes afterwards; the provenance rows carry `lineVersion` precisely so a later reconciliation
@@ -142,6 +155,9 @@ line, add a line. All of it is local by default, and this is the rule the whole 
   a retroactive sweep over lines already added.
 - **Deleting a `DERIVED` line** removes it from the basket and leaves the zone line pending. That
   is the "I decided not to buy this today" gesture, and it must not look like "this is done".
+- **Switching the pick** to another of the line's options is a local edit like the rest: it
+  changes which product the basket means and what the next settlement records, and it never
+  touches the zone line.
 
 The failure mode this rule exists to prevent: a user tidies up their own shopping list at the
 till and, without meaning to, rewrites a list four other people depend on.
@@ -178,8 +194,8 @@ two weeks ago and what it cost.
 - Retention is unbounded for now; a cap or an age based archive is an open decision, and the fact
   that lines are copies rather than references means the history stays readable however much the
   zones change afterwards.
-- Account deletion (0011) deletes every generated list of that user, and that fact belongs in
-  0011's account deletion checklist when this plan is picked up.
+- Account deletion (0011) deletes every generated list of that user, and that fact is recorded in
+  0011's checklist, section 5.
 
 ## 8. Privacy
 

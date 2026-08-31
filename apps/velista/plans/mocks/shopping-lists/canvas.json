@@ -1,0 +1,33 @@
+{
+  "title": "Velista: your shopping list",
+  "lede": "The design for plan <code>0045</code>: the shopping list card that replaces the resume card, the enabled Get shopping list button, the generation sheet, and the history page. Server half: backend <code>0050</code> and <code>0051</code>. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Home.dc.html", "x": 0, "y": 0, "w": 470, "h": 1010, "title": "The dashboard, with the card" },
+    { "file": "HomeNoList.dc.html", "x": 530, "y": 0, "w": 470, "h": 1010, "title": "No active list" },
+    { "file": "GetSheet.dc.html", "x": 1060, "y": 0, "w": 470, "h": 1010, "title": "The generation sheet" },
+    { "file": "History.dc.html", "x": 0, "y": 1160, "w": 900, "h": 1010, "title": "The history" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -430,
+      "w": 450,
+      "text": "Plan 0045. PICK UP WHERE YOU LEFT OFF is removed, not restyled: it answered what was I doing with device-local guesswork, and the shopping list card answers it with server truth, the ACTIVE generated list. With no active list the section is absent entirely: no header, no empty card, no gap.\n0019 section 4's Get shopping list button ships enabled at last; the sheet behind it is what it was waiting for."
+    },
+    {
+      "id": "sheet",
+      "x": 530,
+      "y": -430,
+      "w": 450,
+      "text": "THE SHEET'S THREE INPUTS. Name, empty: an unnamed list shows its generation date, and a second one the same day gets a number appended. Profile, one row naming the default shopping profile (0049), absent when the user has exactly one. Sources: a checkbox tree of zones and lists, prechecked from the profile's stored generation scope, showing only lists where the caller holds WRITE (backend 0051 section 2).\nA zone checked whole means every writable list in it, including ones created later, which is what ALL stores. Submitting is idempotent and lands in the new basket (0044's screen)."
+    },
+    {
+      "id": "history",
+      "x": 1060,
+      "y": -430,
+      "w": 450,
+      "text": "THE HISTORY CANNOT LOSE ENTRIES. Newest first, cursor paginated, active runs marked and sorted on top. There is no delete and no archive control anywhere on the page: the API keeps deletion (backend 0050 section 7) and no screen offers it for now, deliberately. That is the point of keeping a history.\nNight only: no colour role here is new since 0003, so the mock README's rule says no Day artboard is drawn."
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+    @keyframes reel-drag {
+      0%   { transform: translateX(0); }
+      18%  { transform: translateX(0); }
+      55%  { transform: translateX(-120px); }
+      70%  { transform: translateX(-120px); }
+      82%  { transform: translateX(-120px); }
+      100% { transform: translateX(-120px); }
+    }
+    @keyframes reel-snap {
+      0%, 90% { opacity: 1; }
+      96%, 100% { opacity: 0; }
+    }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; flex-direction: column; gap: 26px;">
+
+  <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE REEL &middot; positional, 40px per unit, one delta on release</span>
+
+  <!-- at rest -->
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">AT REST &middot; the row as it always looks. The reel is the row, not the pill</span>
+    <div style="width: 390px; background: #161a28; border-radius: 12px; height: 56px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px;">
+      <span style="flex: 1 1 auto; font-size: 16px; color: #f7f8fc;">Milk</span>
+      <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #f7f8fc;">2</span>
+    </div>
+  </div>
+
+  <!-- mid drag -->
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">MID DRAG &middot; the overlay above the quantity: previous left, current centre, next right, following the finger one to one</span>
+    <div style="width: 390px; background: #161a28; border-radius: 12px; height: 56px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px; position: relative;">
+      <span style="flex: 1 1 auto; font-size: 16px; color: #6f7899;">Milk</span>
+      <div style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); height: 48px; padding: 0 14px; border-radius: 14px; background: #262b40; border: 1px solid rgba(255,255,255,0.16); box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 22px;">
+        <span style="font-size: 15px; color: #525a78; font-variant-numeric: tabular-nums;">2</span>
+        <span style="font-size: 21px; font-weight: 700; color: #ffc271; font-variant-numeric: tabular-nums;">3</span>
+        <span style="font-size: 15px; color: #525a78; font-variant-numeric: tabular-nums;">4</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- at zero -->
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">AT ZERO &middot; nothing to the left: there is no minus one, and the absence is the affordance</span>
+    <div style="width: 390px; background: #161a28; border-radius: 12px; height: 56px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px; position: relative;">
+      <span style="flex: 1 1 auto; font-size: 16px; color: #6f7899;">Olive oil</span>
+      <div style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); height: 48px; padding: 0 14px; border-radius: 14px; background: #262b40; border: 1px solid rgba(255,255,255,0.16); box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 22px;">
+        <span style="width: 10px;"></span>
+        <span style="font-size: 21px; font-weight: 700; color: #ffc271; font-variant-numeric: tabular-nums;">0</span>
+        <span style="font-size: 15px; color: #525a78; font-variant-numeric: tabular-nums;">1</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- the motion, animated -->
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">THE MOTION &middot; a looping demo of one drag from 2 to 5: the tape follows the finger, 40px per unit; after release the overlay lingers a second or two, then fades</span>
+    <div style="width: 390px; background: #161a28; border-radius: 12px; height: 72px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px; position: relative; overflow: hidden;">
+      <span style="flex: 1 1 auto; font-size: 16px; color: #6f7899;">Sparkling water</span>
+      <div style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 168px; height: 56px; border-radius: 14px; background: #262b40; border: 1px solid rgba(255,255,255,0.16); overflow: hidden; animation: reel-snap 5.2s ease-in-out infinite;">
+        <div style="position: absolute; top: 0; bottom: 0; left: 24px; display: flex; align-items: center; gap: 12px; animation: reel-drag 5.2s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;">
+          <span style="width: 28px; text-align: center; font-size: 17px; color: #525a78; font-variant-numeric: tabular-nums;">1</span>
+          <span style="width: 28px; text-align: center; font-size: 17px; color: #98a0bb; font-variant-numeric: tabular-nums;">2</span>
+          <span style="width: 28px; text-align: center; font-size: 17px; color: #98a0bb; font-variant-numeric: tabular-nums;">3</span>
+          <span style="width: 28px; text-align: center; font-size: 17px; color: #98a0bb; font-variant-numeric: tabular-nums;">4</span>
+          <span style="width: 28px; text-align: center; font-size: 17px; color: #98a0bb; font-variant-numeric: tabular-nums;">5</span>
+          <span style="width: 28px; text-align: center; font-size: 17px; color: #98a0bb; font-variant-numeric: tabular-nums;">6</span>
+        </div>
+        <div style="position: absolute; top: 4px; bottom: 4px; left: 50%; width: 34px; transform: translateX(-50%); border-radius: 10px; border: 1.5px solid #ffc271;"></div>
+      </div>
+    </div>
+    <span style="font-size: 11.5px; color: #525a78;">The overlay stays up for a second or two after release, so a second drag continues from the snapped number. It fades after that idle beat, and one signed delta (+3) for the whole adjustment is sent then.</span>
+  </div>
+
+  <!-- the measurements -->
+  <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px; width: 700px;">
+    <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">THE NUMBERS</span>
+    <div style="display: flex; gap: 12px;">
+      <div style="flex: 1; background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 12px 14px;">
+        <div style="font-size: 19px; font-weight: 700; color: #ffc271;">40px</div>
+        <div style="margin-top: 3px; font-size: 12px; line-height: 1.45; color: #98a0bb;">per unit of travel. ~280px of comfortable thumb travel on a 390px phone covers seven units in one drag</div>
+      </div>
+      <div style="flex: 1; background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 12px 14px;">
+        <div style="font-size: 19px; font-weight: 700; color: #ffc271;">1:1</div>
+        <div style="margin-top: 3px; font-size: 12px; line-height: 1.45; color: #98a0bb;">positional. No acceleration, no auto repeat. Letting go snaps, and the overlay lingers a beat for another drag</div>
+      </div>
+      <div style="flex: 1; background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 12px 14px;">
+        <div style="font-size: 19px; font-weight: 700; color: #ffc271;">1 delta</div>
+        <div style="margin-top: 3px; font-size: 12px; line-height: 1.45; color: #98a0bb;">POST /v1/lines/:id/quantity when the overlay closes, signed. The spinbutton's arrow keys are the non pointer path</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
