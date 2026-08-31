@@ -218,4 +218,60 @@ describe('resolveList', () => {
       });
     });
   });
+
+  /**
+   * A tapped chip is an ordinary typed turn (plan 0046, section 4.3).
+   *
+   * The whole guarantee behind offering a chip at all is that what it sends
+   * comes back and resolves, so the round trip is asserted here rather than
+   * against a model: the chip's `message` is fed in as the next turn's `named`
+   * and has to take the NAMED branch to the list it came from. A chip whose text
+   * did not resolve would fail silently, with the assistant asking the same
+   * question again.
+   */
+  describe('a tapped choice comes back and resolves', () => {
+    it('resolves the bare list name a chip sends', () => {
+      const result = resolveList({
+        named: 'Piso',
+        transcript: ['añade leche', '¿En cuál?'],
+        lists: [flat, beach, weekly],
+      });
+
+      expect(result).toEqual({
+        branch: ListResolutionBranch.NAMED,
+        list: flat,
+      });
+    });
+
+    it('resolves the zone qualified name a chip sends when two share one', () => {
+      // "Compra (Casa)" is what a chip sends when another candidate is also
+      // called "Compra". The parentheses are punctuation, which `normalize`
+      // flattens, so what matches is the name plus the zone.
+      const homeShop: ContextList = {
+        listId: 'list-home-shop',
+        listName: 'Compra',
+        zoneId: 'zone-home',
+        zoneName: 'Casa',
+      };
+      const beachShop: ContextList = {
+        listId: 'list-beach-shop',
+        listName: 'Compra',
+        zoneId: 'zone-beach',
+        zoneName: 'Playa',
+      };
+
+      // No `zone` argument: the chip's whole text arrives as the name, which is
+      // the case that has to work, because nothing makes the model split it.
+      const result = resolveList({
+        named: 'Compra (Playa)',
+        transcript: ['añade leche'],
+        lists: [homeShop, beachShop],
+      });
+
+      expect(result).toEqual({
+        branch: ListResolutionBranch.NAMED,
+        list: beachShop,
+      });
+    });
+  });
 });

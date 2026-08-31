@@ -41,7 +41,11 @@ function recording(bytes: number, type = 'audio/webm'): Blob {
 }
 
 async function boot() {
-  const send = jest.fn(async () => ({ reply: 'Vale.', references: [] }));
+  const send = jest.fn(async () => ({
+    reply: 'Vale.',
+    link: null,
+    choices: [],
+  }));
 
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -116,7 +120,12 @@ async function boot() {
 /** Posts a multipart body the way a browser does: no hand written boundary. */
 async function post(
   origin: string,
-  parts: { audio?: Blob; transcript?: string }
+  parts: {
+    audio?: Blob;
+    transcript?: string;
+    zoneId?: string;
+    listId?: string;
+  }
 ) {
   const form = new FormData();
   if (parts.audio !== undefined) {
@@ -124,6 +133,14 @@ async function post(
   }
   if (parts.transcript !== undefined) {
     form.set('transcript', parts.transcript);
+  }
+  // The scope, as the two flat fields a browser's `FormData` naturally sends: a
+  // multipart body has no shape for a nested object (plan 0044).
+  if (parts.zoneId !== undefined) {
+    form.set('zoneId', parts.zoneId);
+  }
+  if (parts.listId !== undefined) {
+    form.set('listId', parts.listId);
   }
 
   return fetch(`${origin}/v1/assistant/voice`, { method: 'POST', body: form });
@@ -159,6 +176,63 @@ describe('POST /v1/assistant/voice', () => {
         64
       );
       expect(payload['mimeType']).toBe('audio/webm');
+    } finally {
+      await nest.close();
+    }
+  });
+
+  /**
+   * The scope's gateway leg (plan 0046, section 5.4).
+   *
+   * The controller folds `zoneId` and `listId` into one `scope`, both or neither,
+   * and the frontend sends both. Nothing covered it, which is why a regression
+   * here would have been silent: a dropped scope does not fail, it quietly turns
+   * a turn about one list back into a turn about all of them, and the person is
+   * asked which list they meant while looking at one.
+   */
+  it('folds both scope fields into one scope', async () => {
+    const { nest, send, origin } = await boot();
+    try {
+      const res = await post(origin, {
+        audio: recording(64),
+        transcript: '[]',
+        zoneId: '11111111-1111-4111-8111-111111111111',
+        listId: '22222222-2222-4222-8222-222222222222',
+      });
+
+      expect(res.status).toBe(201);
+
+      const [, payload] = send.mock.calls[0] as unknown as [
+        string,
+        Record<string, unknown>,
+      ];
+      expect(payload['scope']).toEqual({
+        zoneId: '11111111-1111-4111-8111-111111111111',
+        listId: '22222222-2222-4222-8222-222222222222',
+      });
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('sends no scope at all when only one half arrived', async () => {
+    // Half a scope is ambiguous rather than narrow, and the service would have
+    // to decide what it meant. The turn is the unscoped one instead.
+    const { nest, send, origin } = await boot();
+    try {
+      const res = await post(origin, {
+        audio: recording(64),
+        transcript: '[]',
+        zoneId: '11111111-1111-4111-8111-111111111111',
+      });
+
+      expect(res.status).toBe(201);
+
+      const [, payload] = send.mock.calls[0] as unknown as [
+        string,
+        Record<string, unknown>,
+      ];
+      expect(payload['scope']).toBeUndefined();
     } finally {
       await nest.close();
     }

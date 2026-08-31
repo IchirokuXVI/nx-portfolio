@@ -10721,38 +10721,50 @@
           "transcript"
         ]
       },
-      "assistant.AssistantReference": {
+      "assistant.AssistantChoice": {
         "type": "object",
         "properties": {
-          "kind": {
-            "$ref": "#/components/schemas/enums.AssistantReferenceKind"
+          "label": {
+            "type": "string",
+            "minLength": 1
           },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "label",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "assistant.AssistantListLink": {
+        "type": "object",
+        "properties": {
           "zoneId": {
             "type": "string",
             "minLength": 1
           },
           "listId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "lineId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "minLength": 1
           },
           "label": {
             "type": "string"
+          },
+          "zoneLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
-          "kind",
           "zoneId",
           "listId",
-          "lineId",
-          "label"
+          "label",
+          "zoneLabel"
         ],
         "additionalProperties": false
       },
@@ -11382,14 +11394,6 @@
           "mercadona-api",
           "osm-places",
           "manual"
-        ]
-      },
-      "enums.AssistantReferenceKind": {
-        "type": "string",
-        "enum": [
-          "ZONE",
-          "LIST",
-          "LINE"
         ]
       },
       "enums.CommentTranscription": {
@@ -12649,10 +12653,20 @@
           "reply": {
             "type": "string"
           },
-          "references": {
+          "link": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/assistant.AssistantListLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "choices": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/assistant.AssistantReference"
+              "$ref": "#/components/schemas/assistant.AssistantChoice"
             }
           },
           "listResolution": {
@@ -12664,7 +12678,8 @@
         },
         "required": [
           "reply",
-          "references"
+          "link",
+          "choices"
         ],
         "additionalProperties": false
       },

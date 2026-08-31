@@ -1,5 +1,4 @@
 import {
-  AssistantReferenceKind,
   AssistantRole,
   ListResolutionBranch,
 } from '../lib/enums/assistant.enums';
@@ -41,7 +40,6 @@ export const ENUM_IDS = {
   commentTranscription: schemaId('enums/CommentTranscription'),
   mergeRequestStatus: schemaId('enums/MergeRequestStatus'),
   assistantRole: schemaId('enums/AssistantRole'),
-  assistantReferenceKind: schemaId('enums/AssistantReferenceKind'),
   listResolutionBranch: schemaId('enums/ListResolutionBranch'),
 } as const;
 
@@ -58,9 +56,5 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.commentTranscription, Object.values(CommentTranscription)),
   enumOf(ENUM_IDS.mergeRequestStatus, Object.values(MergeRequestStatus)),
   enumOf(ENUM_IDS.assistantRole, Object.values(AssistantRole)),
-  enumOf(
-    ENUM_IDS.assistantReferenceKind,
-    Object.values(AssistantReferenceKind)
-  ),
   enumOf(ENUM_IDS.listResolutionBranch, Object.values(ListResolutionBranch)),
 ];
