@@ -373,6 +373,7 @@
       "fewer": "One fewer",
       "startListening": "Say what you need",
       "stopListening": "Stop listening",
+      "discard": "Throw this recording away",
       "listening": "Listening",
       "sending": "Sending what you said",
       "heard": "I heard",
@@ -581,6 +582,17 @@
       "badName": "Names are 2 to 40 characters, and can use letters, numbers, spaces and . _ ' -",
       "gone": "That account no longer exists",
       "failed": "That did not go through. Try again"
+    },
+    "voice": {
+      "section": "Voice",
+      "sendOnSilence": {
+        "label": "Send when I stop talking",
+        "hint": "The recording ends by itself after a moment of quiet, instead of waiting for you to press stop. Useful with your hands full, and it will cut you off if you pause to think."
+      },
+      "keepListening": {
+        "label": "Keep listening after sending",
+        "hint": "The microphone stays open once a recording is on its way, so you can name several things in a row. The bin closes it."
+      }
     },
     "app": {
       "section": "The app",

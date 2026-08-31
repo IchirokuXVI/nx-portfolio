@@ -9,6 +9,25 @@
 -->
 @if (listening()) {
   <div class="listening">
+    <!--
+      Trash first, and as far from stop as the row allows, which is `RecordingRow`'s
+      rule kept here: they are the only two controls on screen and confusing them
+      costs the whole recording. Coral, because it is the control that destroys
+      something, and never colour alone since it is also the only bin glyph here.
+
+      It is the exit that always exits. Without it a recording had one way out, which
+      was to be sent, so somebody who pressed the microphone by accident had to say
+      something to the whole list before they could withdraw it.
+    -->
+    <button
+      (click)="discard()"
+      [attr.aria-label]="'list.add.discard' | rokuT"
+      class="discard"
+      type="button"
+    >
+      <lib-trash-icon class="send-glyph" />
+    </button>
+
     <button
       (click)="stop()"
       [attr.aria-label]="'list.add.stopListening' | rokuT"

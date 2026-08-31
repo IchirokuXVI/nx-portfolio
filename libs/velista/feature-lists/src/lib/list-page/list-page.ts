@@ -50,6 +50,7 @@ import {
   NOTIFICATION_TONE,
   RECORDING_LIMITS,
   StorageKeys,
+  VoicePreferences,
   zoneIdOf,
   type RecordingLimits,
 } from '@portfolio/velista/platform';
@@ -195,6 +196,17 @@ export class ListPage {
 
   private readonly _assistant = inject<AssistantServiceI>(ASSISTANT_SERVICE);
   private readonly _tone = inject(NOTIFICATION_TONE);
+  private readonly _voice = inject(VoicePreferences);
+
+  /**
+   * How the microphone behaves, from the device's own settings.
+   *
+   * Read here and handed down rather than injected by the composer, because a `ui`
+   * component may not reach a store (rule D1): what it takes is two booleans, and it
+   * is the page that knows where they come from.
+   */
+  readonly sendOnSilence = this._voice.sendOnSilence;
+  readonly keepListening = this._voice.keepListening;
 
   /**
    * What was heard and what was done, or null (plan 0038, section 5).
