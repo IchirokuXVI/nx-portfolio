@@ -1,4 +1,5 @@
 import {
+  toAssistantReply,
   toComment,
   toLine,
   toListAccessEntries,
@@ -577,5 +578,109 @@ describe('toZonePresence', () => {
     });
 
     expect(presence?.online).toEqual([{ userId: 'u1', username: 'Ana' }]);
+  });
+});
+
+/**
+ * The one link and the answers under a question (plan 0042, section 9).
+ *
+ * The wire shape changed under this app in `0046`, so the cases worth having are the
+ * ones a type cannot state: a link that cannot address a list, an old backend's fields,
+ * and the difference between a zone the server named and one it deliberately did not.
+ */
+describe('toAssistantReply', () => {
+  it('reads the one link, and the zone only when the server named it', () => {
+    expect(
+      toAssistantReply({
+        reply: 'It is not on the weekly shop, so I have added it.',
+        link: {
+          zoneId: 'z1',
+          listId: 'l1',
+          label: 'Compra semanal',
+          zoneLabel: 'Casa',
+        },
+        choices: [],
+      })
+    ).toEqual({
+      text: 'It is not on the weekly shop, so I have added it.',
+      link: {
+        zoneId: 'z1',
+        listId: 'l1',
+        label: 'Compra semanal',
+        zoneLabel: 'Casa',
+      },
+      choices: [],
+    });
+  });
+
+  it('keeps a null zoneLabel null rather than composing one', () => {
+    // Section 3.1: whether the zone is worth naming is the server's rule, and this
+    // side counts nothing. A null here has to survive as a null.
+    const reply = toAssistantReply({
+      reply: 'Added.',
+      link: { zoneId: 'z1', listId: 'l1', label: 'Weekly', zoneLabel: null },
+    });
+
+    expect(reply?.link?.zoneLabel).toBeNull();
+  });
+
+  it('drops a link that is missing its listId (rule A3)', () => {
+    // A link this app cannot address would 404, which is the thing rule A3 exists to
+    // prevent, so it is dropped rather than half built.
+    const reply = toAssistantReply({
+      reply: 'There.',
+      link: { zoneId: 'z1', listId: null, label: 'Weekly', zoneLabel: null },
+    });
+
+    expect(reply).toEqual({ text: 'There.', link: null, choices: [] });
+  });
+
+  it('reads the answers to a question', () => {
+    const reply = toAssistantReply({
+      reply: 'Which list did you mean?',
+      listResolution: 'ASKED',
+      link: null,
+      choices: [
+        { label: 'Compra semanal · Casa', message: 'the weekly shop' },
+        { label: 'Compra · Oficina', message: 'the office one' },
+      ],
+    });
+
+    expect(reply).toEqual({
+      text: 'Which list did you mean?',
+      listResolution: 'asked',
+      link: null,
+      choices: [
+        { label: 'Compra semanal · Casa', message: 'the weekly shop' },
+        { label: 'Compra · Oficina', message: 'the office one' },
+      ],
+    });
+  });
+
+  it('drops a choice with no message, since tapping it would say nothing', () => {
+    const reply = toAssistantReply({
+      reply: 'Which one?',
+      choices: [
+        { label: 'Weekly', message: 'the weekly shop' },
+        { label: 'Other' },
+      ],
+    });
+
+    expect(reply?.choices).toEqual([
+      { label: 'Weekly', message: 'the weekly shop' },
+    ]);
+  });
+
+  it('reads an old backend as an answer with nothing under it', () => {
+    // Section 8. `link` absent is null, `choices` absent is empty, and a stray
+    // `references` array is ignored rather than read. Nobody sees an error.
+    expect(
+      toAssistantReply({
+        reply: 'Yes.',
+        references: [
+          { kind: 'LIST', zoneId: 'z1', listId: 'l1', label: 'Weekly' },
+        ],
+      })
+    ).toEqual({ text: 'Yes.', link: null, choices: [] });
   });
 });

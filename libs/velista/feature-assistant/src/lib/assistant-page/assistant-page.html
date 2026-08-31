@@ -21,8 +21,14 @@
   @if (messages().length === 0) {
     <lib-assistant-intro />
   } @else {
+    <!--
+      `chose` goes to the same `send` the composer calls (plan 0042, section 4.2).
+      Tapping an answer is typing it: the caller's own bubble shows the text that was
+      sent, the transcript records it, and the store's cap counts it. There is no
+      second request shape and nothing new for the store to remember.
+    -->
     @for (message of messages(); track $index) {
-      <lib-assistant-message [message]="message" />
+      <lib-assistant-message (chose)="send($event)" [message]="message" />
     }
   }
 </main>

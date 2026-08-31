@@ -14,7 +14,8 @@ import {
   ZONE_ROLES,
   ZONE_STATUS_FALLBACK,
   ZONE_STATUSES,
-  type AssistantReference,
+  type AssistantChoice,
+  type AssistantListLink,
   type AssistantReply,
   type Comment,
   type CommentRecording,
@@ -594,12 +595,16 @@ function toListAccessEntry(raw: unknown): ListAccessEntry | null {
  * text is unrenderable, so this returns `null` and the panel says the turn failed,
  * which is honest — an empty bubble is not.
  *
- * `references` is the half rule A3 exists for. Every entry the panel draws a link from
- * came out of a tool result in the same turn, so the target exists and the caller can
- * see it. That guarantee is only worth anything if a malformed entry is **dropped**
- * rather than defaulted: a reference missing its `listId` cannot address a list, and
- * inventing one would produce exactly the 404 the rule is written to prevent. So each
- * kind requires its own ids and nothing is filled in.
+ * `link` is the half rule A3 exists for. The list the panel offers to open came out of
+ * a tool result in the same turn, so it exists and the caller can see it. That
+ * guarantee is only worth anything if a malformed link is **dropped** rather than
+ * defaulted: a link missing its `listId` cannot address a list, and inventing one
+ * would produce exactly the 404 the rule is written to prevent. So it requires both
+ * ids and nothing is filled in.
+ *
+ * Both `link` and `choices` default when absent, which is what makes an older backend
+ * readable (plan 0042, section 8): no link and no chips, which is the whole answer
+ * anyway. A stray `references` array from that backend is ignored rather than read.
  */
 export function toAssistantReply(raw: unknown): AssistantReply | null {
   if (!isRecord(raw)) {
@@ -623,7 +628,8 @@ export function toAssistantReply(raw: unknown): AssistantReply | null {
 
   return {
     text,
-    references: mapArray(raw['references'], toAssistantReference),
+    link: toAssistantListLink(raw['link']),
+    choices: mapArray(raw['choices'], toAssistantChoice),
     ...(resolution === undefined ? {} : { listResolution: resolution }),
     ...(typeof heard === 'string' ? { heard } : {}),
   };
@@ -644,49 +650,52 @@ const LIST_RESOLUTIONS: Readonly<Record<string, ListResolution | undefined>> = {
   ASKED: 'asked',
 };
 
-/** `AssistantReferenceKind` on the wire, this app's own words here. */
-const REFERENCE_KINDS: Readonly<
-  Record<string, AssistantReference['kind'] | undefined>
-> = {
-  ZONE: 'zone',
-  LIST: 'list',
-  LINE: 'line',
-};
-
-function toAssistantReference(raw: unknown): AssistantReference | null {
+/**
+ * The one link a reply may carry (luna `0046`, section 2).
+ *
+ * Null in, null out, and null for anything that cannot address a list. The ids are
+ * required and neither is defaulted, which is what makes rule A3 hold: a link this app
+ * cannot address is dropped rather than half built, and a link that would 404 is never
+ * drawn.
+ *
+ * `zoneLabel` is genuinely nullable on the wire. The server sends the zone's name only
+ * when it has decided naming it is worth the words, and this side neither composes it
+ * nor counts the zones that would decide it.
+ */
+function toAssistantListLink(raw: unknown): AssistantListLink | null {
   if (!isRecord(raw)) {
     return null;
   }
 
-  // Unlike every other narrowing in this file, an unrecognised kind has no fallback to
-  // land on. There is no generic reference the panel could link somewhere sensible, so
-  // a kind from a newer backend is dropped and the reply renders with one link fewer.
-  const kind = REFERENCE_KINDS[strOr(raw['kind'], '')];
-  const label = strOr(raw['label'], '');
   const zoneId = str(raw['zoneId']);
-  if (kind === undefined || zoneId === null) {
-    return null;
-  }
-
-  if (kind === 'zone') {
-    return { kind, zoneId, label };
-  }
-
-  // `listId` and `lineId` are **nullable** on the wire: the contract sets them per
-  // kind and sends null for the ones that do not apply. `str` already collapses a null
-  // to null, so this is the same check it always was, and it is what makes rule A3
-  // hold: a reference this app cannot address is dropped rather than half built, and a
-  // link that would 404 is never drawn.
   const listId = str(raw['listId']);
-  if (listId === null) {
+
+  if (zoneId === null || listId === null) {
     return null;
   }
 
-  if (kind === 'list') {
-    return { kind, zoneId, listId, label };
+  return {
+    zoneId,
+    listId,
+    label: strOr(raw['label'], ''),
+    zoneLabel: str(raw['zoneLabel']),
+  };
+}
+
+/**
+ * One answer to the question a turn ended with (luna `0046`, section 4).
+ *
+ * Both halves are required and neither is defaulted. A chip with no `message` sends
+ * nothing when it is tapped, and a chip with no `label` is an unreadable target: both
+ * are worse than one chip fewer under a question that is still there in words.
+ */
+function toAssistantChoice(raw: unknown): AssistantChoice | null {
+  if (!isRecord(raw)) {
+    return null;
   }
 
-  const lineId = str(raw['lineId']);
+  const label = str(raw['label']);
+  const message = str(raw['message']);
 
-  return lineId === null ? null : { kind, zoneId, listId, lineId, label };
+  return label === null || message === null ? null : { label, message };
 }

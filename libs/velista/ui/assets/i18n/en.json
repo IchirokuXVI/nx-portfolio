@@ -725,6 +725,11 @@
     "dropped": "The start of this conversation is too long to keep, so I let it go.",
     "spoken": "You said something. I am listening to it now.",
     "tooLong": "That recording was too big to send. I can take up to {{limit}} MB at a time, so a shorter message will get through.",
-    "badFormat": "Your browser recorded that in a way I cannot read. You can still type it."
+    "badFormat": "Your browser recorded that in a way I cannot read. You can still type it.",
+    "goTo": "Go to {{list}}",
+    "goToInZone": "Go to {{list}}, in {{zone}}",
+    "choices": {
+      "label": "Answers"
+    }
   }
 }

@@ -17,7 +17,7 @@ import {
   APP_BASE_PATH,
   ASSISTANT_AUDIO_MAX_MB,
   type AssistantEntry,
-  type AssistantReference,
+  type AssistantListLink,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -52,18 +52,26 @@ import { AssistantStore } from '../assistant-store';
  * Android's back button would close the app rather than the panel, which is the defect
  * rule E1 exists to prevent and the one plan `0031` spent a whole plan repairing.
  *
- * ## Where the links come from
+ * ## Where the link comes from
  *
- * `references`, and nowhere else (backend rule A3). Each becomes a `routerLink` built
+ * `reply.link`, and nowhere else (backend rule A3). It becomes a `routerLink` built
  * with `appPath`, never an assembled string: that helper is what makes one link correct
  * at `/velista/en/...` mounted in the portfolio shell and at `/en/...` on velista's own
  * origin. A hardcoded path is wrong in exactly one of the two run modes, and it is the
  * mode nobody looks at.
  *
- * A `line` has no route of its own and deliberately gets none. The list page's three
- * line sheets all **do something** to a line and none of them simply shows one, so a
- * link from a chat message goes to the list with `?line=`, which scrolls and marks and
- * opens nothing (section 8).
+ * There is one link and it always addresses a list (plan 0042, section 3). Whether to
+ * name its zone is the server's decision and arrives as `zoneLabel`; nothing here
+ * counts zones or composes that sentence.
+ *
+ * ## Only the last message may be answered
+ *
+ * A turn that ended with a question sends the answers to it, and they are drawn as
+ * chips under the question. They are filled in here for the **last** entry only: an
+ * answer to a question three turns ago is a wrong answer, and a chip that is still
+ * tappable is a chip that invites it (section 4.3). The question itself stays
+ * readable, which is what matters — it was asked in words and the words are still
+ * there.
  *
  * ## The copy for what went wrong is chosen here
  *
@@ -113,11 +121,14 @@ export class AssistantPage {
   /** The transcript, ready to draw. Empty means the intro is on screen instead. */
   readonly messages = computed<readonly AssistantMessageVm[]>(() => {
     // Read unconditionally, and this line is the reason: the app's own copy and every
-    // link below depend on the locale, but a transcript with no references would not
-    // touch it, so switching language would leave the failure messages in the old one.
+    // link below depend on the locale, but a transcript with no link would not touch
+    // it, so switching language would leave the failure messages in the old one.
     const locale = this._locale();
+    const entries = this._store.entries();
 
-    return this._store.entries().map((entry) => this._toMessage(entry, locale));
+    return entries.map((entry, index) =>
+      this._toMessage(entry, locale, index === entries.length - 1)
+    );
   });
 
   constructor() {
@@ -184,8 +195,11 @@ export class AssistantPage {
 
   private _toMessage(
     entry: AssistantEntry,
-    locale: string
+    locale: string,
+    isLast: boolean
   ): AssistantMessageVm {
+    const link = entry.link;
+
     return {
       speaker: entry.speaker,
       kind: entry.kind,
@@ -193,9 +207,15 @@ export class AssistantPage {
         entry.kind === 'said' || entry.kind === 'pending'
           ? entry.text
           : this._copyFor(entry),
-      links: entry.references.map((reference) =>
-        this._toLink(reference, locale)
-      ),
+      ...(link === null ? {} : { link: this._toLink(link, locale) }),
+      // Section 4.3: chips on anything but the newest message are answers to a
+      // question that has already been answered.
+      choices: isLast ? entry.choices : [],
+      // The chip group is labelled by the bubble above it, so the bubble needs an id
+      // and only the one with chips under it needs one.
+      ...(isLast && entry.choices.length > 0
+        ? { bubbleId: `bubble-${entry.id}` }
+        : {}),
       waitSeconds: entry.retryAfterSeconds,
     };
   }
@@ -240,46 +260,18 @@ export class AssistantPage {
     }
   }
 
-  private _toLink(
-    reference: AssistantReference,
-    locale: string
-  ): AssistantLinkVm {
-    const base = this._basePath;
-
-    switch (reference.kind) {
-      case 'zone':
-        return {
-          kind: 'zone',
-          label: reference.label,
-          path: appPath(locale, base, 'zones', reference.zoneId),
-        };
-      case 'list':
-        return {
-          kind: 'list',
-          label: reference.label,
-          path: appPath(
-            locale,
-            base,
-            'zones',
-            reference.zoneId,
-            'lists',
-            reference.listId
-          ),
-        };
-      default:
-        return {
-          kind: 'line',
-          label: reference.label,
-          path: appPath(
-            locale,
-            base,
-            'zones',
-            reference.zoneId,
-            'lists',
-            reference.listId
-          ),
-          queryParams: { line: reference.lineId },
-        };
-    }
+  private _toLink(link: AssistantListLink, locale: string): AssistantLinkVm {
+    return {
+      label: link.label,
+      zoneLabel: link.zoneLabel,
+      path: appPath(
+        locale,
+        this._basePath,
+        'zones',
+        link.zoneId,
+        'lists',
+        link.listId
+      ),
+    };
   }
 }
