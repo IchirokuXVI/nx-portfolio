@@ -72,7 +72,7 @@ export class GeminiProvider implements ModelProvider {
    * rather than one is the decision that buys the caller a transcription they can
    * check; asking the model to answer *and* say what it heard in the same reply
    * would mean parsing prose for a fact, which is what rule A3 refuses to do for
-   * references and refuses to do here for the same reason.
+   * the link and refuses to do here for the same reason.
    *
    * The locale goes in because the reply's does (section 7 of plan 0039): a
    * shopping list is brand names and two languages in one sentence, and telling

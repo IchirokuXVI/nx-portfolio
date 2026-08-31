@@ -22,7 +22,8 @@ import { ENUM_IDS } from '../enums.schemas';
  */
 export const ASSISTANT_SCHEMA_IDS = {
   message: schemaId('assistant/AssistantMessage'),
-  reference: schemaId('assistant/AssistantReference'),
+  listLink: schemaId('assistant/AssistantListLink'),
+  choice: schemaId('assistant/AssistantChoice'),
   turnRequest: schemaId('msg/assistant/turnRequest'),
   turnResponse: schemaId('msg/assistant/turnResponse'),
   voiceRequest: schemaId('msg/assistant/voiceRequest'),
@@ -40,16 +41,40 @@ const assistantMessage = object(
   ['role', 'content']
 );
 
-const assistantReference = object(
-  ASSISTANT_SCHEMA_IDS.reference,
+/**
+ * The one place an answer can send somebody (plan 0046, section 2).
+ *
+ * Always a list, so there is no `kind` to branch on and no `lineId`: a chip for a
+ * line and a chip for its list led to the same screen. `zoneLabel` is null when
+ * the caller has one zone, which is the only condition the client has to render
+ * and none it has to compute.
+ */
+const assistantListLink = object(
+  ASSISTANT_SCHEMA_IDS.listLink,
   {
-    kind: ref(ENUM_IDS.assistantReferenceKind),
     zoneId: nonEmptyString(),
-    listId: nullableString(),
-    lineId: nullableString(),
+    listId: nonEmptyString(),
     label: string(),
+    zoneLabel: nullableString(),
   },
-  ['kind', 'zoneId', 'listId', 'lineId', 'label']
+  ['zoneId', 'listId', 'label', 'zoneLabel']
+);
+
+/**
+ * One answer to the question a turn ended with (plan 0046, section 4).
+ *
+ * `message` is what the client sends back as an ordinary typed turn, so a tapped
+ * chip is indistinguishable from somebody answering the question in words. It is
+ * separate from `label` because the two diverge as soon as a choice is not a list
+ * name, and changing the wire later for that would be a release nobody needs.
+ */
+const assistantChoice = object(
+  ASSISTANT_SCHEMA_IDS.choice,
+  {
+    label: nonEmptyString(),
+    message: nonEmptyString(),
+  },
+  ['label', 'message']
 );
 
 /**
@@ -115,13 +140,19 @@ const turnResponse = object(
   ASSISTANT_SCHEMA_IDS.turnResponse,
   {
     reply: string(),
-    references: array(ref(ASSISTANT_SCHEMA_IDS.reference)),
+    // Nullable rather than optional, and an empty array rather than an absent
+    // one: a reader should never have to work out whether missing and empty are
+    // the same thing (plan 0046, section 7).
+    link: {
+      oneOf: [ref(ASSISTANT_SCHEMA_IDS.listLink), { type: 'null' }],
+    },
+    choices: array(ref(ASSISTANT_SCHEMA_IDS.choice)),
     listResolution: ref(ENUM_IDS.listResolutionBranch),
     // Present on a spoken turn and absent on every typed one, so it is optional
     // here and both subjects can answer with the same schema (plan 0041).
     heard: string(),
   },
-  ['reply', 'references']
+  ['reply', 'link', 'choices']
 );
 
 /**
@@ -153,7 +184,8 @@ const transcribeResponse = object(
 
 export const assistantSchemas: JsonSchema[] = [
   assistantMessage,
-  assistantReference,
+  assistantListLink,
+  assistantChoice,
   turnScope,
   turnRequest,
   voiceRequest,

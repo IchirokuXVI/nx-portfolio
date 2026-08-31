@@ -33,8 +33,8 @@ import {
 } from '../provider/model-provider';
 import { ConcurrencyGate, TurnLimiter } from '../provider/turn-limiter';
 import { GatewayApiClient } from './gateway-api.client';
-import { buildSystemPrompt } from './prompt';
-import { ReferenceCollector } from './references';
+import { ChoiceCollector, ListLinkCollector } from './link-and-choices';
+import { buildSystemPrompt, namesZones } from './prompt';
 import {
   findTool,
   SCOPED_TOOL_DECLARATIONS,
@@ -53,7 +53,7 @@ import { ScopeUnavailableError, TurnContextFactory } from './turn-context';
  * the same and it lives in the service (section 13).
  *
  * The service **stores nothing between turns** (rule A2). Everything below is
- * built from the request, used once, and dropped: the context, the references,
+ * built from the request, used once, and dropped: the context, the collectors,
  * the limiter's decision. What outlives the request is one structured log record,
  * which is the whole point of the test (section 10).
  */
@@ -161,7 +161,7 @@ export class AssistantService {
    * Transcribe, then answer, and **the second half is the typed path byte for
    * byte**: `answer` below is the same method a typed turn runs, called with the
    * transcription as the message. That is the design rather than an
-   * implementation detail — the tools, the loop, the references, the context
+   * implementation detail: the tools, the loop, the link, the context
    * fetch and rule A1 are all untouched, and every existing test on that path
    * goes on testing the thing it tested.
    *
@@ -217,7 +217,7 @@ export class AssistantService {
         outcome: 'unheard',
       });
 
-      return { reply: NOTHING_HEARD, references: [], heard };
+      return { reply: NOTHING_HEARD, link: null, choices: [], heard };
     }
 
     const answer = await this.answer(
@@ -286,7 +286,12 @@ export class AssistantService {
     const contextReadyAtMs = Date.now();
     const scoped = context.scopedListId !== null;
 
-    const references = new ReferenceCollector();
+    // One fact, read once, and it decides two things (plan 0046, section 3.1):
+    // whether the prompt tells the model to name a list's zone, and whether the
+    // link and the chips carry it.
+    const withZones = namesZones(context);
+    const link = new ListLinkCollector(withZones);
+    const choices = new ChoiceCollector(withZones);
     let listResolution: ListResolutionBranch | undefined;
 
     // What the tool running right now wants the record to say (plan 0043,
@@ -299,7 +304,8 @@ export class AssistantService {
     const runtime: ToolRuntime = {
       context,
       api: this.api,
-      references,
+      link,
+      choices,
       transcript: [
         ...transcript.map((entry) => entry.content),
         request.message,
@@ -364,7 +370,8 @@ export class AssistantService {
 
         return {
           reply: text,
-          references: references.all(),
+          link: link.link(),
+          choices: choices.all(),
           ...(listResolution ? { listResolution } : {}),
         };
       }

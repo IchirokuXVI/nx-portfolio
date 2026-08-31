@@ -1,5 +1,4 @@
 import type {
-  AssistantReferenceKind,
   AssistantRole,
   ListResolutionBranch,
 } from '../enums/assistant.enums';
@@ -18,7 +17,7 @@ import type {
  * transcript entry is never treated as an instruction from the operator.
  */
 export const ASSISTANT_PATTERNS = {
-  /** One conversation turn: transcript in, reply and references out. */
+  /** One conversation turn: transcript in, reply, link and choices out. */
   turn: 'assistant.turn',
   /**
    * The same turn, spoken (plan 0041): a recording in, the same answer out plus
@@ -86,22 +85,52 @@ export interface AssistantMessage {
 }
 
 /**
- * Something the answer genuinely touched, for the client to draw a link to
- * (rule A3, section 8).
+ * Where an answer can send somebody, when there is exactly one such place (plan
+ * 0046, section 2).
  *
- * Every reference here came back from a gateway call **in this turn**, so the id
- * exists, the caller can see it, and the link cannot 404. Ids are never parsed
- * out of the reply text, and the model is never asked to write one.
+ * This link came back from a gateway call **in this turn**, so the list exists,
+ * the caller can see it, and the link cannot 404. Ids are never parsed out of the
+ * reply text, and the model is never asked to write one. That is rule A3, kept
+ * whole; what plan 0046 changed is how many links an answer may carry and what
+ * they may point at.
+ *
+ * **At most one, and always a list.** A row of chips under a one sentence answer
+ * was not a set of destinations, it was a table of contents: a line and its list
+ * led to the same screen, and a turn that read a whole list emitted twenty of
+ * them. The reply already says the thing; the link is for going to where it is
+ * true, and that place is the list.
  */
-export interface AssistantReference {
-  kind: AssistantReferenceKind;
-  zoneId: string;
-  /** Set for LIST and LINE references, null for a zone. */
-  listId: string | null;
-  /** Set for LINE references only. */
-  lineId: string | null;
-  /** The name the gateway returned, for the link's text. */
-  label: string;
+export interface AssistantListLink {
+  readonly zoneId: string;
+  readonly listId: string;
+  /** The list's own name, as the gateway returned it. */
+  readonly label: string;
+  /**
+   * The zone's name, when the caller is in more than one zone. Null otherwise,
+   * because naming the only zone somebody is in is noise.
+   */
+  readonly zoneLabel: string | null;
+}
+
+/**
+ * One answer to the question this turn ended with (plan 0046, section 4).
+ *
+ * Emitted by the tool result that asked the question, never written by the model.
+ * That is rule A3 applied to a question instead of an answer, and it buys the
+ * same guarantee: a chip always names a list that exists, that the caller can
+ * see, and that list resolution will match when it comes back. A chip the model
+ * invented would have none of those properties and would fail silently — the
+ * person taps it and the assistant asks the same question again.
+ *
+ * Two fields rather than one because they diverge the moment a choice is not a
+ * list name: a confirmation's chip says "Yes" and sends something the resolver
+ * can act on. Today both usually carry the same string.
+ */
+export interface AssistantChoice {
+  /** What the chip says. */
+  readonly label: string;
+  /** What the client sends as the next turn when somebody taps it. */
+  readonly message: string;
 }
 
 /**
@@ -178,14 +207,20 @@ export interface AssistantVoiceRequest {
 }
 
 /**
- * The answer: free form text, plus the references the turn actually earned.
+ * The answer: free form text, plus the one link and the choices the turn earned.
  *
- * `references` is empty for a redirect, a refusal or a turn that called no tool,
- * which is exactly right — there was nothing to link to.
+ * Neither is optional, and both are required for the same reason: absent and
+ * empty meaning the same thing is a question every reader has to ask once. `link`
+ * is null for a redirect, a refusal, a turn that called no tool, and a turn that
+ * touched more than one list. `choices` is empty on every turn that asked
+ * nothing, which is nearly all of them.
  */
 export interface AssistantTurnResponse {
   reply: string;
-  references: AssistantReference[];
+  /** The one list this answer can send somebody to, or null. */
+  link: AssistantListLink | null;
+  /** The answers to the question this turn ended with. Empty when it asked none. */
+  choices: AssistantChoice[];
   /**
    * Present when the turn resolved a list for a write, absent otherwise. It rides
    * on the response rather than living only in a log line because the client's

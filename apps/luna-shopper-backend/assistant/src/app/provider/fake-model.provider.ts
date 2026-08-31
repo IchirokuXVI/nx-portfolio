@@ -9,7 +9,7 @@ import type {
  * The provider the suite runs against (rule A4).
  *
  * It exists so that everything above {@link ModelProvider} — the turn loop, the
- * three tools, list resolution, references, the limiters, the error mapping — is
+ * three tools, list resolution, the link, the limiters, the error mapping, is
  * tested exhaustively and offline, while the one thing that genuinely needs a
  * network is a single class with no logic in it.
  *
