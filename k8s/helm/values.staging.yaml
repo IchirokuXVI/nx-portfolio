@@ -66,7 +66,10 @@ lunaShopperBackend:
     smtpHost: in-v3.mailjet.com
     smtpPort: 587
     smtpUser: 497721f71489adfcbc3078d2b292aad8
-    mailVerifyBaseUrl: https://staging.velista.app/verify-email
+    # `auth/verify`, and with no locale segment, for the reasons spelled out
+    # beside the production pair. `mailResetBaseUrl` is still a placeholder for a
+    # page the app does not have.
+    mailVerifyBaseUrl: https://staging.velista.app/auth/verify
     mailResetBaseUrl: https://staging.velista.app/reset-password
     # Staging is the natural place to switch tracing on first, once a collector
     # lands in the cluster. Off until then, same as production.
