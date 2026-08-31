@@ -789,3 +789,27 @@ export class SignalIcon {
       import('./signal-icon.svg?raw')
   );
 }
+
+/**
+ * Throw away a recording that has not been sent (plan 0041, section 4).
+ *
+ * Here rather than from `@portfolio/shared/ui`, which does have a `trash-icon`:
+ * that one is the older four file pattern with an `@Input` for its colour, and
+ * velista imports none of the shared icons. Reaching for it would add this
+ * library's first cross library icon dependency and leave two icon languages
+ * inside one row, which is the same reasoning the note at the top of this file
+ * gives for the product neutral glyphs.
+ */
+@Component({
+  selector: 'lib-trash-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class TrashIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./trash-icon.svg?raw')
+  );
+}

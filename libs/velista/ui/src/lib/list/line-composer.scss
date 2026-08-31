@@ -75,3 +75,62 @@
 .send-glyph {
   font-size: var(--app-icon-md);
 }
+
+// While it listens, the whole row is this (plan 0038, section 4.1). Same height as
+// the row it replaced, so the list above does not jump when the mode changes.
+.listening {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+}
+
+// Coral and round, in the same corner the microphone was. It is the only way out
+// that does not depend on the detector noticing, which is why it is never absent
+// and never disabled.
+.stop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  background: var(--app-status-danger-fg);
+  border: 0;
+  border-radius: var(--app-radius-full);
+  color: var(--app-text-on-action);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The level. `aria-hidden`, because what it says is said in words beside it: a
+// meter is a reassurance for somebody watching, not information a screen reader
+// can use four times a second.
+.meter {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: var(--app-audio-track-size);
+  border-radius: var(--app-radius-full);
+  background: var(--app-border-subtle);
+  overflow: hidden;
+}
+
+.meter-fill {
+  block-size: 100%;
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-danger-fg);
+  // Fast enough to track a voice and slow enough not to strobe.
+  transition: inline-size var(--app-motion-fast) linear;
+}
+
+.hint {
+  flex-shrink: 0;
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}

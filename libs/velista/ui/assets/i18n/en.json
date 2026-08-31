@@ -370,7 +370,17 @@
       "action": "Add",
       "quantity": "How many",
       "more": "One more",
-      "fewer": "One fewer"
+      "fewer": "One fewer",
+      "startListening": "Say what you need",
+      "stopListening": "Stop listening",
+      "listening": "Listening",
+      "heard": "I heard",
+      "micRefused": "Velista cannot hear you. The microphone is switched off for this app, so turn it back on in your browser, or type it instead",
+      "micMissing": "There is no microphone on this device, so type it instead",
+      "notHeard": "I did not catch that",
+      "voiceFailed": "That did not send. Nothing was added, so try again or type it",
+      "voiceBusy": "A lot of people are asking at once. Try again in {{count}} seconds",
+      "dismissHeard": "Close"
     },
     "empty": {
       "title": "Nothing on this list yet",
@@ -442,19 +452,25 @@
       "loading": "Loading what people said",
       "readOnly": "You can read what people said here, not add to it",
       "startRecording": "Say it instead of typing",
-      "stopRecording": "Stop recording",
-      "recordingPlaceholder": "Recording. Press stop when you are done",
-      "recording": "Recording, {{seconds}}s",
-      "recordingHeld": "A {{seconds}}s recording, ready to send",
+      "stopRecording": "Stop and send",
       "recordingEmpty": "That recording came out empty. Try again",
-      "recordingTooBig": "That recording is over the {{limit}} MB limit. It is still here, so you can record a shorter one",
+      "recordingTooBig": "That recording is over the {{limit}} MB limit, so it did not send. It is still here",
       "micRefused": "Velista could not use the microphone. Check the permission in your browser, or type it instead",
       "sending": "Sending a recording",
       "transcribing": "Writing this down",
       "noTranscript": "A recording. It could not be written down",
       "play": "Play this recording",
       "pause": "Pause",
-      "playFailed": "That recording would not play"
+      "playFailed": "That recording would not play",
+      "discardRecording": "Throw this recording away",
+      "sendAgain": "Send again",
+      "autoTranscript": "Written automatically from the recording",
+      "limit": {
+        "left_one": "1 second left",
+        "left_other": "{{count}} seconds left",
+        "reached": "That is a minute, so I stopped recording.",
+        "pressStop": "Press stop to send it."
+      }
     },
     "settings": {
       "title": "List settings",
@@ -673,8 +689,7 @@
       "stop": "Stop and send"
     },
     "recorder": {
-      "pause": "Pause",
-      "resume": "Carry on recording",
+      "discard": "Throw this recording away",
       "refused": "I cannot hear you. The microphone is switched off for this app",
       "unavailable": "This browser cannot record. You can still type",
       "dismiss": "Close",

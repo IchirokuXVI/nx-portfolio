@@ -74,6 +74,21 @@ export class AssistantMemory implements AssistantServiceI {
     return { ...answerFor(heard), heard };
   }
 
+  /**
+   * A recording spoken into a list's own composer (velista `0038`).
+   *
+   * The same canned answers, and the scope is accepted rather than checked: this
+   * fake stands in for a gateway, and what a scope actually buys is enforced on
+   * the server by the tool catalog a scoped turn is given.
+   */
+  async askAboutList(
+    _zoneId: string,
+    _listId: string,
+    recording: Blob
+  ): Promise<AssistantReply> {
+    return this.askAloud([], recording);
+  }
+
   /** Make the next spoken turn come back having heard nothing. */
   hearNothingNext(): void {
     this._heardNothing = true;

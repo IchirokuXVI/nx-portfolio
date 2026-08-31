@@ -327,49 +327,63 @@ describe('CommentsSheet', () => {
 
   /** Plan 0039. Nothing here touches a real microphone, media element or socket. */
   describe('a comment can be a recording', () => {
-    it('draws all three controls, so typing is never in the way of speaking', async () => {
+    it('draws one button, which is a microphone on an empty field', async () => {
       const { fixture } = await render();
       const composer = fixture.debugElement.query(
         By.css('lib-comment-composer')
       );
 
-      // The field, the microphone and send, at once. Not the empty field switch
-      // the line composer uses: the choice between typing a message and speaking
-      // one is about the message, not about whether the box happens to be empty.
+      // The assistant's rule, adopted whole (plan 0041, section 2). Plan 0039 drew
+      // the microphone beside the field instead, so that somebody who started
+      // typing and changed their mind did not have to clear the box; that cost is
+      // real and it is the smaller one against a second control scheme for the
+      // same act, two taps from the first.
       expect(composer.query(By.css('.field'))).not.toBeNull();
-      expect(composer.query(By.css('.mic'))).not.toBeNull();
-      expect(composer.query(By.css('.send'))).not.toBeNull();
+      expect(composer.query(By.css('.send lib-mic-icon'))).not.toBeNull();
+      expect(composer.query(By.css('.mic'))).toBeNull();
     });
 
-    it('draws no microphone where the browser cannot record', async () => {
+    it('still draws the button where the browser cannot record', async () => {
       const { fixture } = await render({
         capture: fakeVoiceCapture({ supported: false }),
       });
 
-      // The composer is exactly what it was before, and the field still works.
-      // Drawing a control that cannot work is worse than not drawing one.
+      // A change from plan 0039, which drew no microphone at all here and could,
+      // because the microphone sat beside a send. With one button doing both jobs
+      // there is nothing left to draw on an empty field, so it stays and the
+      // failure is said in words. The field never stops working, which is what
+      // that rule was protecting.
       const composer = fixture.debugElement.query(
         By.css('lib-comment-composer')
       );
-      expect(composer.query(By.css('.mic'))).toBeNull();
+      expect(composer.query(By.css('.field'))).not.toBeNull();
+
+      const instance = componentOf(fixture);
+      instance.press();
+      await flush();
+      fixture.detectChanges();
+
+      expect(instance.errorKey()).toBe('list.comments.micRefused');
       expect(composer.query(By.css('.field'))).not.toBeNull();
     });
 
-    it('records on press and stops on press, holding what came out', async () => {
+    it('records on press and sends on stop, with no second press', async () => {
       const { fixture, voiceSends } = await render();
       const composer = componentOf(fixture);
 
-      await composer.toggleRecording();
+      composer.press();
+      await flush();
       fixture.detectChanges();
-      expect(composer.mode()).toBe('recording');
+      expect(fixture.debugElement.query(By.css('lib-recording-row'))).not.toBeNull();
 
-      await composer.toggleRecording();
+      await composer.stopAndSend();
+      await flush();
       fixture.detectChanges();
 
-      // Held, not sent. Stopping is not agreeing to send (plan 0032, 4.4).
-      expect(composer.mode()).toBe('held');
-      expect(voiceSends).toEqual([]);
-      expect(composer.canSubmit()).toBe(true);
+      // Stop sends. Plan 0039 held it for a second press on the argument that a
+      // message which leaves on its own is a message nobody agreed to send, and
+      // that rule is about the cap rather than the button (plan 0041, section 3).
+      expect(voiceSends).toHaveLength(1);
     });
 
     it('says so and keeps the field working when the microphone is refused', async () => {
@@ -378,11 +392,14 @@ describe('CommentsSheet', () => {
       });
       const composer = componentOf(fixture);
 
-      await composer.toggleRecording();
+      composer.press();
+      await flush();
       fixture.detectChanges();
 
-      expect(composer.mode()).toBe('idle');
       expect(composer.errorKey()).toBe('list.comments.micRefused');
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer .field'))
+      ).not.toBeNull();
     });
 
     it('shows a pending bubble while a recording uploads, with no invented words', async () => {
@@ -408,13 +425,11 @@ describe('CommentsSheet', () => {
       });
       const composer = componentOf(fixture);
 
-      await composer.toggleRecording();
-      await composer.toggleRecording();
-      fixture.detectChanges();
-
-      // `submit` emits and returns; the sheet does the sending. So the press is
-      // not awaited here, which is also what a real press is.
-      void composer.submit();
+      composer.press();
+      await flush();
+      // `stopAndSend` emits and returns; the sheet does the sending. So it is not
+      // awaited here, which is also what a real press is.
+      void composer.stopAndSend();
       await flush();
       fixture.detectChanges();
 
@@ -438,19 +453,21 @@ describe('CommentsSheet', () => {
       });
       const composer = componentOf(fixture);
 
-      await composer.toggleRecording();
-      await composer.toggleRecording();
-      fixture.detectChanges();
-
-      void composer.submit();
+      composer.press();
+      await flush();
+      void composer.stopAndSend();
       await flush();
       fixture.detectChanges();
 
       // Somebody just spoke. Losing that to a dropped connection is the worst
-      // outcome in the plan, so the blob stays and send can be pressed again.
-      expect(composer.canSubmit()).toBe(true);
+      // outcome in the plan, so the blob stays and the error line carries a retry
+      // that sends the same bytes (plan 0041, section 7).
+      expect(composer.hasHeldRecording()).toBe(true);
       expect(composer.errorKey()).not.toBeNull();
       expect(bodies(fixture)).not.toContain('list.comments.sending');
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer .retry'))
+      ).not.toBeNull();
     });
 
     it('draws a player only for a comment that has a recording', async () => {

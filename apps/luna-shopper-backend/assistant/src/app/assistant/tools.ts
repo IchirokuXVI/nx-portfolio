@@ -10,7 +10,12 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { ModelToolDeclaration } from '../provider/model-provider';
 import { GatewayApiClient, GatewayApiError } from './gateway-api.client';
-import { normalize, resolveList, type ContextList } from './list-resolution';
+import {
+  normalize,
+  resolveList,
+  type ContextList,
+  type ListResolution,
+} from './list-resolution';
 import type { ReferenceCollector } from './references';
 import type { TurnContext } from './turn-context';
 
@@ -142,12 +147,24 @@ const upsertLines: AssistantTool = {
     // what it meant. "Milk on the flat list and bread on the office list" is two
     // calls, which is correct: they are two decisions about which list, and each
     // deserves its own record and its own chance to ask.
-    const resolution = resolveList({
-      named: readString(args['list']),
-      zone: readString(args['zone']),
-      transcript: runtime.transcript,
-      lists: runtime.context.lists,
-    });
+    //
+    // On a scoped turn there is nothing to resolve: the list came in the request
+    // and `resolveScoped` either returns it or refuses the call outright (plan
+    // 0044, section 2.1).
+    const scopedList = runtime.context.scopedList;
+    if (scopedList !== undefined && namesAnotherList(args, scopedList)) {
+      return outOfScope(scopedList);
+    }
+
+    const resolution: ListResolution =
+      scopedList !== undefined
+        ? { branch: ListResolutionBranch.ONLY_LIST, list: scopedList }
+        : resolveList({
+            named: readString(args['list']),
+            zone: readString(args['zone']),
+            transcript: runtime.transcript,
+            lists: runtime.context.lists,
+          });
     runtime.recordListResolution(resolution.branch);
 
     // Branch 4. A write that guessed is worse than a question, so the turn ends
@@ -479,12 +496,82 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
   renameMe,
 ];
 
+/**
+ * What a turn scoped to one list may do (plan 0044, section 2.2).
+ *
+ * `rename_me` is **not here**, and that is the whole point of assembling a
+ * catalog per turn rather than filtering inside a tool. Changing your username is
+ * not an operation on a list; it is a perfectly good thing to ask the assistant
+ * for, and the assistant panel is where you ask it. Somebody speaking into a
+ * shopping list's add button has not asked to be renamed, and the one plausible
+ * way it fires from there is a misheard sentence, which is the worst possible
+ * reason for it to be reachable.
+ *
+ * **An absent capability is a much harder boundary than an instruction** (plan
+ * 0039, section 7), and that argument only holds if the absence is real. A tool
+ * that is declared and then refuses is a tool the model can still call and whose
+ * refusal it has to be told how to handle.
+ *
+ * Two tools rather than the plan's four: `set_line_status` and `remove_lines`
+ * are backend plan 0043's and are not built yet. They join this list where they
+ * join the other, and nothing here has to change when they do.
+ */
+export const SCOPED_TOOLS: AssistantTool[] = [upsertLines, queryLists];
+
 export const TOOL_DECLARATIONS: ModelToolDeclaration[] = ASSISTANT_TOOLS.map(
   (tool) => tool.declaration
 );
 
-export function findTool(name: string): AssistantTool | undefined {
-  return ASSISTANT_TOOLS.find((tool) => tool.declaration.name === name);
+export const SCOPED_TOOL_DECLARATIONS: ModelToolDeclaration[] =
+  SCOPED_TOOLS.map((tool) => tool.declaration);
+
+/** The catalog this turn was given, which is the only place a tool may be found. */
+export function catalogFor(scoped: boolean): AssistantTool[] {
+  return scoped ? SCOPED_TOOLS : ASSISTANT_TOOLS;
+}
+
+export function findTool(
+  name: string,
+  scoped = false
+): AssistantTool | undefined {
+  return catalogFor(scoped).find((tool) => tool.declaration.name === name);
+}
+
+/**
+ * Whether a call named a list that is not the scoped one.
+ *
+ * Matching is the same normalization list resolution uses, so "the flat list"
+ * and "Flat list" are one answer here and there. A call that named nothing is
+ * not out of scope: it meant the list on the screen, which is the only one.
+ */
+function namesAnotherList(
+  args: Record<string, unknown>,
+  scoped: ContextList
+): boolean {
+  const named = readString(args['list']);
+
+  return (
+    named !== null &&
+    named !== undefined &&
+    named.trim().length > 0 &&
+    normalize(named) !== normalize(scoped.listName)
+  );
+}
+
+/**
+ * The backstop for a call that named another list (plan 0044, section 2.1).
+ *
+ * A backstop rather than a normal path: the model is told in the context that
+ * there is one list and it is this one, so naming another is already unlikely.
+ * It exists because unlikely is not the same as cannot, and a write to the wrong
+ * list is exactly the failure a scope was added to prevent.
+ */
+function outOfScope(scoped: ContextList): unknown {
+  return {
+    ok: false,
+    outOfScope: true,
+    message: `Nothing was written. This person is looking at "${scoped.listName}" and that is the only list you can change right now. Tell them where the other list lives instead of trying again.`,
+  };
 }
 
 // ---------------------------------------------------------------------------

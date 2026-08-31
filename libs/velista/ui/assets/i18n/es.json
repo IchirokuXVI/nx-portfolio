@@ -370,7 +370,17 @@
       "action": "Añadir",
       "quantity": "Cuántos",
       "more": "Uno más",
-      "fewer": "Uno menos"
+      "fewer": "Uno menos",
+      "startListening": "Di lo que necesitas",
+      "stopListening": "Dejar de escuchar",
+      "listening": "Escuchando",
+      "heard": "He oído",
+      "micRefused": "Velista no puede oírte. El micrófono está desactivado para esta aplicación, así que actívalo en el navegador, o escríbelo",
+      "micMissing": "Este dispositivo no tiene micrófono, así que escríbelo",
+      "notHeard": "No te he entendido",
+      "voiceFailed": "Eso no se ha enviado. No se ha añadido nada, así que inténtalo otra vez o escríbelo",
+      "voiceBusy": "Mucha gente está preguntando a la vez. Inténtalo dentro de {{count}} segundos",
+      "dismissHeard": "Cerrar"
     },
     "empty": {
       "title": "Todavía no hay nada en esta lista",
@@ -442,19 +452,25 @@
       "loading": "Cargando lo que se ha dicho",
       "readOnly": "Puedes leer lo que se ha dicho, pero no escribir aquí",
       "startRecording": "Dilo en vez de escribirlo",
-      "stopRecording": "Parar de grabar",
-      "recordingPlaceholder": "Grabando. Pulsa parar cuando termines",
-      "recording": "Grabando, {{seconds}}s",
-      "recordingHeld": "Una grabación de {{seconds}}s, lista para enviar",
+      "stopRecording": "Parar y enviar",
       "recordingEmpty": "Esa grabación ha salido vacía. Inténtalo otra vez",
-      "recordingTooBig": "Esa grabación pasa del límite de {{limit}} MB. Sigue aquí, así que puedes grabar una más corta",
+      "recordingTooBig": "Esa grabación pasa del límite de {{limit}} MB, así que no se ha enviado. Sigue aquí",
       "micRefused": "Velista no ha podido usar el micrófono. Revisa el permiso en el navegador, o escríbelo",
       "sending": "Enviando una grabación",
       "transcribing": "Escribiendo esto",
       "noTranscript": "Una grabación. No se ha podido escribir",
       "play": "Reproducir esta grabación",
       "pause": "Pausar",
-      "playFailed": "Esa grabación no se ha podido reproducir"
+      "playFailed": "Esa grabación no se ha podido reproducir",
+      "discardRecording": "Descartar esta grabación",
+      "sendAgain": "Enviar otra vez",
+      "autoTranscript": "Escrito automáticamente a partir de la grabación",
+      "limit": {
+        "left_one": "Queda 1 segundo",
+        "left_other": "Quedan {{count}} segundos",
+        "reached": "Ha pasado un minuto, así que he dejado de grabar.",
+        "pressStop": "Pulsa parar para enviarlo."
+      }
     },
     "settings": {
       "title": "Ajustes de la lista",
@@ -673,8 +689,7 @@
       "stop": "Parar y enviar"
     },
     "recorder": {
-      "pause": "Pausar",
-      "resume": "Seguir grabando",
+      "discard": "Descartar esta grabación",
       "refused": "No te oigo. El micrófono está desactivado para esta aplicación",
       "unavailable": "Este navegador no puede grabar. Puedes escribir igualmente",
       "dismiss": "Cerrar",

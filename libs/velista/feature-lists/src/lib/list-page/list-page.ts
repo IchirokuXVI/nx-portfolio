@@ -18,6 +18,8 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ASSISTANT_SERVICE,
+  GatewayError,
   LineStore,
   ListStore,
   MemberNames,
@@ -27,26 +29,33 @@ import {
   REALTIME_CLIENT,
   SessionStore,
   ZoneStore,
+  type AssistantServiceI,
   type RealtimeClientI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  LINE_VOICE_MAX_SECONDS,
   type ListGoneReason,
   type ListPageState,
   type ListViewerVm,
   type PresenceUser,
+  type RecordedAudio,
 } from '@portfolio/velista/models';
 import {
   appPath,
+  AudioRecorder,
   BrowserFacade,
   lineQueryOf,
   listIdOf,
+  RECORDING_LIMITS,
   StorageKeys,
   zoneIdOf,
+  type RecordingLimits,
 } from '@portfolio/velista/platform';
 import {
   AppBar,
   ChevronLeftIcon,
+  CloseIcon,
   ErrorState,
   LineComposer,
   LineList,
@@ -109,6 +118,7 @@ import { selectListState } from '../select-list-state';
     RouterOutlet,
     AppBar,
     ChevronLeftIcon,
+    CloseIcon,
     ErrorState,
     LineComposer,
     LineList,
@@ -119,6 +129,26 @@ import { selectListState } from '../select-list-state';
   templateUrl: './list-page.html',
   styleUrl: './list-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // The composer's microphone, with this page's cap on it (plan 0038, section 4).
+  //
+  // Here rather than in `root`, so leaving the page releases the microphone: a
+  // recording does not survive walking away from the list it was about. Thirty
+  // seconds, where a comment runs to a minute and the assistant to five, because
+  // this is one sentence about a shopping list.
+  //
+  // `warnAtSeconds` equals the cap on purpose. The warning strip earns its place
+  // in the assistant panel at five minutes; a thirty second cap does not, and
+  // there is no clock on this row for the same reason (section 4.1).
+  providers: [
+    AudioRecorder,
+    {
+      provide: RECORDING_LIMITS,
+      useValue: {
+        warnAtSeconds: LINE_VOICE_MAX_SECONDS,
+        maxSeconds: LINE_VOICE_MAX_SECONDS,
+      } satisfies RecordingLimits,
+    },
+  ],
 })
 export class ListPage {
   private readonly _zones = inject(ZoneStore);
@@ -161,6 +191,22 @@ export class ListPage {
   readonly announcement = signal('');
 
   readonly composerBusy = signal(false);
+
+  private readonly _assistant = inject<AssistantServiceI>(ASSISTANT_SERVICE);
+
+  /**
+   * What was heard and what was done, or null (plan 0038, section 5).
+   *
+   * One at a time: the next recording replaces this rather than appending to it,
+   * because this page is not a chat. Either a sentence the assistant wrote, in
+   * `reply`, or one of ours by key, in `messageKey`, never both.
+   */
+  readonly voiceStrip = signal<{
+    heard: string;
+    reply: string;
+    messageKey: string | null;
+    messageArgs?: Record<string, string | number>;
+  } | null>(null);
 
   private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
 
@@ -718,6 +764,75 @@ export class ListPage {
     }
 
     this.announcement.set(entry.content);
+  }
+
+  /**
+   * Somebody said what they needed (plan 0038).
+   *
+   * The recording goes to the **list scoped** assistant route with this page's
+   * zone and list on it, so the turn never has to work out which list anybody
+   * meant and cannot touch anything else (backend `0044`).
+   *
+   * **The lines themselves arrive on their own.** The assistant writes through
+   * the gateway with the caller's token, core emits the ordinary line events, and
+   * this page is in the room, so new rows appear through exactly the path a line
+   * added from another phone already takes. Nothing here merges the response into
+   * the list, and nothing here may: two paths writing the same row is how a
+   * duplicate appears and then disappears.
+   */
+  async addAloud(recording: RecordedAudio): Promise<void> {
+    const zoneId = this.zoneId();
+    const listId = this.listId();
+    if (zoneId === null || listId === null) {
+      return;
+    }
+
+    this.composerBusy.set(true);
+    this.voiceStrip.set(null);
+
+    try {
+      const reply = await this._assistant.askAboutList(
+        zoneId,
+        listId,
+        recording.blob
+      );
+
+      this.voiceStrip.set(
+        reply.heard === ''
+          ? { heard: '', reply: '', messageKey: 'list.add.notHeard' }
+          : { heard: reply.heard ?? '', reply: reply.text, messageKey: null }
+      );
+    } catch (error) {
+      // Everything is said in the strip, in words. Nothing here is a banner or a
+      // dialog (plan 0038, section 6), and a rate limit counts down in seconds
+      // because that is the one failure with a number worth showing.
+      const wait =
+        error instanceof GatewayError && error.code === 'rate_limited'
+          ? error.retryAfterSeconds
+          : undefined;
+      this.voiceStrip.set({
+        heard: '',
+        reply: '',
+        messageKey:
+          wait === undefined ? 'list.add.voiceFailed' : 'list.add.voiceBusy',
+        messageArgs: wait === undefined ? undefined : { count: wait },
+      });
+    } finally {
+      this.composerBusy.set(false);
+    }
+  }
+
+  /** The microphone did not start. Two sentences, because they read differently. */
+  onRecordingFailed(): void {
+    this.voiceStrip.set({
+      heard: '',
+      reply: '',
+      messageKey: 'list.add.micRefused',
+    });
+  }
+
+  dismissVoice(): void {
+    this.voiceStrip.set(null);
   }
 
   /** The inline failure notice was tapped. Retries the write that failed. */

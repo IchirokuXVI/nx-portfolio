@@ -1,0 +1,36 @@
+:host {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--app-space-4);
+}
+
+.dot {
+  flex: none;
+  inline-size: var(--app-recording-dot-size);
+  block-size: var(--app-recording-dot-size);
+  border: 1px solid var(--app-text-muted);
+  border-radius: var(--app-radius-full);
+}
+
+// Red while the microphone is open, which is what a red dot means everywhere. It
+// stays red here even though the stop beside it no longer is: the dot reports a
+// state and the buttons offer actions, and they are not saying the same thing.
+.dot.live {
+  border-color: var(--app-status-danger-fg);
+  background: var(--app-status-danger-fg);
+}
+
+.clock {
+  flex: 1;
+  margin: 0;
+  color: var(--app-text-primary);
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+  // The digits must not jog sideways once a second while somebody is watching them.
+  font-variant-numeric: tabular-nums;
+}
+
+.clock.held {
+  color: var(--app-text-secondary);
+}

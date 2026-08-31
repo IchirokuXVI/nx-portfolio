@@ -1,0 +1,59 @@
+:host {
+  display: block;
+}
+
+// Trash at the far left, stop at the far right, and the middle taking every pixel
+// between them. The distance is the safeguard (plan 0032, section 4.3, kept through
+// plan 0041 section 4), so it is `space-between` and a `flex: 1` middle rather than a
+// gap somebody could tune down.
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+}
+
+.middle {
+  display: flex;
+  flex: 1;
+  min-inline-size: 0;
+  align-items: center;
+  gap: var(--app-space-4);
+}
+
+.discard,
+.stop {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-button-height);
+  block-size: var(--app-button-height);
+  border-radius: var(--app-radius-lg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// Outlined rather than filled: it is the way out, not the thing to do. Coral,
+// because it destroys, which is what coral means everywhere else in this app.
+.discard {
+  border: 1px solid var(--app-status-danger-border);
+  background: transparent;
+  color: var(--app-status-danger-fg);
+}
+
+// Filled amber, because this is the send. It was coral when it was the only control
+// that ended a recording; with a trash beside it, coral on both would say the two do
+// the same kind of thing.
+.stop {
+  border: none;
+  background: var(--app-action-bg);
+  color: var(--app-text-on-action);
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+}
