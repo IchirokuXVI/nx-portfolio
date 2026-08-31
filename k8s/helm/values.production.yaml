@@ -80,6 +80,10 @@ lunaShopperBackend:
     # confirmation mail lands in spam. SMTP is off in this cluster either way
     # (smtpHost is empty), so nothing here is live yet.
     mailFrom: Luna Shopper <no-reply@ichirokuxvi.com>
+    smtpHost: in-v3.mailjet.com
+    smtpPort: 587
+    smtpUser: 497721f71489adfcbc3078d2b292aad8
+
     # The links inside those mails, on the other hand, point at the app, and the
     # app is on velista.app now.
     mailVerifyBaseUrl: https://velista.app/verify-email
