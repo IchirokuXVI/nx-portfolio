@@ -17,6 +17,8 @@ import {
   type AssistantChoice,
   type AssistantListLink,
   type AssistantReply,
+  type CatalogScope,
+  type ChainPreference,
   type Comment,
   type CommentRecording,
   type CommentTranscription,
@@ -26,14 +28,19 @@ import {
   type ListPresence,
   type ListPreview,
   type ListResolution,
+  type LocalizedName,
   type Membership,
   type MyZone,
   type Page,
+  type PostalCodeCoverage,
   type PresenceEditor,
   type PresenceUser,
+  type ProfilePostalCode,
   type SessionTokens,
   type ShoppingList,
   type ShoppingListSummary,
+  type ShoppingProfile,
+  type Supermarket,
   type UserProfile,
   type Zone,
   type ZoneCounts,
@@ -698,4 +705,126 @@ function toAssistantChoice(raw: unknown): AssistantChoice | null {
   const message = str(raw['message']);
 
   return label === null || message === null ? null : { label, message };
+}
+
+// --- Shopping profiles (plan 0046; backend 0049) -----------------------------
+
+/**
+ * From `LocalizedText`, which the catalog holds for every chain.
+ *
+ * Neither half is required, because a chain named in one language and not the other is
+ * a curation gap rather than an unrenderable record: `inLocale` already falls back to
+ * English, and an empty English name renders as an empty row rather than as no row,
+ * which is the honest report of what the catalog holds.
+ */
+function toLocalizedName(raw: unknown): LocalizedName {
+  return isRecord(raw)
+    ? { en: strOr(raw['en'], ''), es: strOr(raw['es'], '') }
+    : { en: '', es: '' };
+}
+
+/** From `SupermarketView` (`GET /v1/catalog/supermarkets`). */
+export function toSupermarket(raw: unknown): Supermarket | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  return id === null ? null : { id, name: toLocalizedName(raw['name']) };
+}
+
+/** From `ProfilePostalCodeView`. */
+function toProfilePostalCode(raw: unknown): ProfilePostalCode | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  const postalCode = str(raw['postalCode']);
+
+  // The code itself is required and is not defaulted to the empty string: a chip with
+  // no code is a chip nobody can act on, and the page sends the whole list back on the
+  // next edit, so an invented empty code would become one the server refuses.
+  return id === null || postalCode === null
+    ? null
+    : {
+        id,
+        postalCode,
+        label: nullableStr(raw['label']),
+        position: numOr(raw['position'], 0),
+      };
+}
+
+/** From `ProfileSupermarketPreferenceView`. */
+function toChainPreference(raw: unknown): ChainPreference | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  const supermarketId = str(raw['supermarketId']);
+
+  return id === null || supermarketId === null
+    ? null
+    : { id, supermarketId, excluded: raw['excluded'] === true };
+}
+
+/**
+ * From `ShoppingProfileView`.
+ *
+ * `name` is `nullableStr` and **not** `strOr(..., '')`: null is the profile nobody has
+ * named, which the page renders as the localized default, and collapsing it to an
+ * empty string would erase the difference between unnamed and named nothing.
+ */
+export function toShoppingProfile(raw: unknown): ShoppingProfile | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  if (id === null) {
+    return null;
+  }
+
+  return {
+    id,
+    name: nullableStr(raw['name']),
+    isDefault: raw['isDefault'] === true,
+    position: numOr(raw['position'], 0),
+    addressText: nullableStr(raw['addressText']),
+    minSavingCents: numOr(raw['minSavingCents'], 0),
+    postalCodes: mapArray(raw['postalCodes'], toProfilePostalCode),
+    // `supermarkets` on the wire, `chains` here, because the preference names the
+    // franchise and never one of its shops and the app's own word should say so.
+    chains: mapArray(raw['supermarkets'], toChainPreference),
+  };
+}
+
+/** From `PostalCodeCoverageView`. */
+function toPostalCodeCoverage(raw: unknown): PostalCodeCoverage | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const postalCode = str(raw['postalCode']);
+
+  // `served` defaults to true rather than false, because the one thing the app does
+  // with a false is tell somebody that no chain we know reaches their address. A body
+  // this build cannot read must not be what says that.
+  return postalCode === null
+    ? null
+    : { postalCode, served: raw['served'] !== false };
+}
+
+/** From `CatalogScopeView` (`GET /v1/catalog/scope`). */
+export function toCatalogScope(raw: unknown): CatalogScope | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  return {
+    profileId: nullableStr(raw['profileId']),
+    coverage: mapArray(raw['coverage'], toPostalCodeCoverage),
+    approximate: raw['approximate'] === true,
+  };
 }

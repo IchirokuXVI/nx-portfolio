@@ -263,6 +263,34 @@ export interface SetGlobalUsernameRequest {
   readonly propagation: 'GLOBAL_ONLY' | 'MATCHING_ZONES';
 }
 
+/**
+ * A shopping profile's editable half (`POST` and `PATCH /v1/account/shopping-profiles`).
+ *
+ * Create and edit take the same body, and the **collections are full replacements**:
+ * absent leaves them alone, present makes them exactly what was sent, empty clears
+ * them (backend `0049` section 6). Which is why every field here is optional and why
+ * this app sends the whole postal code list to change one of them, rather than there
+ * being an add and a remove route.
+ *
+ * `generationScope`, `generationSources` and `minSavingPercent` exist on the wire and
+ * are deliberately absent from this type. Plan 0046 section 9 keeps them off the page,
+ * and a field that nothing renders must not be one this app can send: sending an empty
+ * `generationSources` would clear a set no screen ever showed anybody.
+ */
+export interface WriteShoppingProfileRequest {
+  readonly name?: string | null;
+  readonly addressText?: string | null;
+  readonly minSavingCents?: number;
+  readonly postalCodes?: readonly {
+    readonly postalCode: string;
+    readonly label?: string | null;
+  }[];
+  readonly supermarkets?: readonly {
+    readonly supermarketId: string;
+    readonly excluded?: boolean;
+  }[];
+}
+
 /** Orders `GET /v1/zones/:id/members` accepts. Anything else is rejected by the DTO. */
 export const MEMBER_ORDERS = ['joined', 'name', 'role'] as const;
 export type MemberOrder = (typeof MEMBER_ORDERS)[number];

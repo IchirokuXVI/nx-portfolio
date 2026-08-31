@@ -30,6 +30,8 @@ import {
   MembershipApi,
   REALTIME_CLIENT,
   RealtimeSocket,
+  SHOPPING_PROFILE_SERVICE,
+  ShoppingProfileApi,
   VELISTA_DATA_ACCESS_PROVIDERS,
   ZONE_SERVICE,
   ZoneApi,
@@ -191,6 +193,13 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // origin, no second base URL, and `gatewayInterceptor` already attaching the token
   // and the `Accept-Language` the bot answers in.
   provideService(ASSISTANT_SERVICE, AssistantApi),
+
+  // Shopping profiles (plan 0046). A ninth time, and the only thing worth noting is
+  // that one service reaches two of the gateway's areas: the profile routes on
+  // `/v1/account` and the two catalog reads that fill a profile in. That is a fact
+  // about the screen rather than about the transport, and both are the same base URL
+  // through the same `HttpClient`.
+  provideService(SHOPPING_PROFILE_SERVICE, ShoppingProfileApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches

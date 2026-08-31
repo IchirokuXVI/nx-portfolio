@@ -64,6 +64,31 @@
   </section>
 
   <!--
+    Where you shop (plan 0046). One row, above the exits and above everything about the
+    device, because it is about the account in the same way the name above it is.
+
+    **Outside the guest and registered branches**, and that is the point of putting it in
+    a section of its own: a profile is keyed on the caller's own token, and a guest shops
+    in exactly the same places a registered account does. It is a page rather than a
+    sheet, by `0015`'s own test: deep linkable, its own scroll, and somewhere somebody
+    goes deliberately.
+  -->
+  <section aria-labelledby="account-shopping" class="group">
+    <lib-section-heading
+      headingId="account-shopping"
+      key="account.section.shopping"
+    />
+
+    <lib-account-row
+      (activate)="openProfiles()"
+      [chevron]="true"
+      [divided]="false"
+      [hasAction]="true"
+      [value]="'account.row.profiles' | rokuT"
+    />
+  </section>
+
+  <!--
     How the microphone behaves. Two switches, both off unless somebody turns them on,
     because the plain recorder is what a person who has never opened this page should
     get: stop sends and the bin discards, and nothing leaves on its own.

@@ -525,7 +525,8 @@
     "back": "Back",
     "section": {
       "you": "You",
-      "access": "Getting in"
+      "access": "Getting in",
+      "shopping": "Shopping"
     },
     "name": {
       "label": "Name",
@@ -604,6 +605,9 @@
       "installed": "Installed",
       "elsewhere": "Get the app",
       "elsewhereDetail": "Velista has its own address, {{origin}}. That is where it can be installed"
+    },
+    "row": {
+      "profiles": "Shopping profiles"
     }
   },
   "install": {
@@ -730,6 +734,59 @@
     "goToInZone": "Go to {{list}}, in {{zone}}",
     "choices": {
       "label": "Answers"
+    }
+  },
+  "profiles": {
+    "title": "Shopping profiles",
+    "defaultName": "My profile",
+    "loading": "Loading your profiles",
+    "add": "New profile",
+    "default": {
+      "badge": "Default"
+    },
+    "name": {
+      "label": "Name",
+      "hint": "Until you name it, it shows as {{name}}"
+    },
+    "address": {
+      "label": "Address",
+      "optional": "Optional",
+      "placeholder": "Street and number"
+    },
+    "postal": {
+      "label": "Postal codes",
+      "add": "Add postal code",
+      "code": "Postal code",
+      "name": "Label, optional",
+      "submit": "Add",
+      "remove": "Remove {{code}}",
+      "full": "You can keep up to {{count}} postal codes",
+      "uncovered": "No supermarket we know reaches this code yet"
+    },
+    "chains": {
+      "label": "Supermarkets",
+      "excluded": "Excluded",
+      "hint": "The whole chain, never one shop. An excluded chain stays here so it can come back"
+    },
+    "saving": {
+      "label": "A second stop must save at least",
+      "currency": "€"
+    },
+    "scope": {
+      "banner": "Add a postal code or choose a supermarket to see prices"
+    },
+    "delete": {
+      "label": "Delete {{name}}",
+      "title": "Delete this profile?",
+      "body": "Its postal codes and supermarket choices go with it. Your lists are not touched",
+      "default": "{{name}} will become your default",
+      "confirm": "Delete the profile"
+    },
+    "error": {
+      "load": "We could not read your profiles",
+      "retry": "Try again",
+      "save": "That did not save. Try again",
+      "delete": "That did not go through. Try again"
     }
   }
 }
