@@ -9,6 +9,25 @@
 -->
 @if (listening()) {
   <div class="listening">
+    <!--
+      Trash first, and as far from stop as the row allows, which is `RecordingRow`'s
+      rule kept here: they are the only two controls on screen and confusing them
+      costs the whole recording. Coral, because it is the control that destroys
+      something, and never colour alone since it is also the only bin glyph here.
+
+      It is the exit that always exits. Without it a recording had one way out, which
+      was to be sent, so somebody who pressed the microphone by accident had to say
+      something to the whole list before they could withdraw it.
+    -->
+    <button
+      (click)="discard()"
+      [attr.aria-label]="'list.add.discard' | rokuT"
+      class="discard"
+      type="button"
+    >
+      <lib-trash-icon class="send-glyph" />
+    </button>
+
     <button
       (click)="stop()"
       [attr.aria-label]="'list.add.stopListening' | rokuT"
@@ -22,7 +41,23 @@
       <div [style.inline-size.%]="levelPercent()" class="meter-fill"></div>
     </div>
 
-    <p class="hint">{{ 'list.add.listening' | rokuT }}</p>
+    <!--
+      The meter stays whatever else is happening, because the microphone is still
+      open: the previous sentence being on its way to the server is not a reason to
+      stop showing that this one is being heard.
+
+      Only the words under it change. A pause sends what was said and reopens the
+      microphone at once, so there is a stretch where both are true, and saying so is
+      the difference between a system that is working and one that looks stuck.
+    -->
+    @if (busy()) {
+      <p aria-live="polite" class="hint">
+        <lib-spinner-icon class="hint-spinner" />
+        <span>{{ 'list.add.sending' | rokuT }}</span>
+      </p>
+    } @else {
+      <p class="hint">{{ 'list.add.listening' | rokuT }}</p>
+    }
   </div>
 } @else {
   <!--

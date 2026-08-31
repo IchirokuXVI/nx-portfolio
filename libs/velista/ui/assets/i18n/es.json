@@ -373,7 +373,9 @@
       "fewer": "Uno menos",
       "startListening": "Di lo que necesitas",
       "stopListening": "Dejar de escuchar",
+      "discard": "Descartar esta grabación",
       "listening": "Escuchando",
+      "sending": "Enviando lo que has dicho",
       "heard": "He oído",
       "micRefused": "Velista no puede oírte. El micrófono está desactivado para esta aplicación, así que actívalo en el navegador, o escríbelo",
       "micMissing": "Este dispositivo no tiene micrófono, así que escríbelo",
@@ -404,7 +406,7 @@
       "markPending": "Devolverlo a la lista",
       "edit": "Cambiar esto",
       "editing": "Editando",
-      "comments": "Lo que se ha dicho",
+      "comments": "Comentarios",
       "delete": "Quitar de la lista",
       "menuFor": "Más opciones para {{name}}",
       "overwritten": "{{name}} cambió esto mientras lo editabas",
@@ -449,8 +451,8 @@
       "send": "Enviar",
       "empty": "Todavía nadie ha dicho nada",
       "someone": "Alguien del grupo",
-      "loading": "Cargando lo que se ha dicho",
-      "readOnly": "Puedes leer lo que se ha dicho, pero no escribir aquí",
+      "loading": "Cargando los comentarios",
+      "readOnly": "Puedes leer los comentarios, pero no escribir aquí",
       "startRecording": "Dilo en vez de escribirlo",
       "stopRecording": "Parar y enviar",
       "recordingEmpty": "Esa grabación ha salido vacía. Inténtalo otra vez",
@@ -580,6 +582,17 @@
       "badName": "Los nombres tienen de 2 a 40 caracteres y admiten letras, números, espacios y . _ ' -",
       "gone": "Esa cuenta ya no existe",
       "failed": "No se pudo completar. Inténtalo de nuevo"
+    },
+    "voice": {
+      "section": "Voz",
+      "sendOnSilence": {
+        "label": "Enviar cuando deje de hablar",
+        "hint": "La grabación termina sola tras un momento de silencio, en vez de esperar a que pulses parar. Útil con las manos ocupadas, y te cortará si te paras a pensar."
+      },
+      "keepListening": {
+        "label": "Seguir escuchando tras enviar",
+        "hint": "El micrófono sigue abierto cuando una grabación va de camino, para que puedas nombrar varias cosas seguidas. La papelera lo cierra."
+      }
     },
     "app": {
       "section": "La app",

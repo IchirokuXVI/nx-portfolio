@@ -78,6 +78,10 @@
 
 // While it listens, the whole row is this (plan 0038, section 4.1). Same height as
 // the row it replaced, so the list above does not jump when the mode changes.
+// Trash at one end, stop at the other, and the meter taking every pixel between them.
+// The distance is the safeguard, which is `RecordingRow`'s rule (plan 0032, section
+// 4.3): they are the only two controls on screen and confusing them costs the whole
+// recording, so it is not a gap somebody could tune down.
 .listening {
   display: flex;
   align-items: center;
@@ -85,9 +89,9 @@
   min-block-size: var(--app-touch-target);
 }
 
-// Coral and round, in the same corner the microphone was. It is the only way out
-// that does not depend on the detector noticing, which is why it is never absent
-// and never disabled.
+// The two controls of a running recording. Round, in the corner the microphone was,
+// and the same size as every other target in this row.
+.discard,
 .stop {
   display: inline-flex;
   align-items: center;
@@ -96,16 +100,33 @@
   inline-size: var(--app-touch-target);
   block-size: var(--app-touch-target);
   padding: 0;
-  background: var(--app-status-danger-fg);
-  border: 0;
   border-radius: var(--app-radius-full);
-  color: var(--app-text-on-action);
   cursor: pointer;
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }
+}
+
+// Outlined rather than filled: it is the way out, not the thing to do. Coral, because
+// it destroys, which is what coral means everywhere else in this app, and never colour
+// alone since it is also the only bin glyph on screen. The same treatment
+// `RecordingRow` gives its own trash, for the same reasons.
+.discard {
+  border: 1px solid var(--app-status-danger-border);
+  background: transparent;
+  color: var(--app-status-danger-fg);
+}
+
+// Filled amber, because this is the send. It was coral, which was right while it was
+// the only control that ended a recording and there was nothing destructive beside it
+// to confuse it with. With a trash in the row, coral on both would say the two do the
+// same kind of thing, and mistaking them costs the whole recording.
+.stop {
+  border: 0;
+  background: var(--app-action-bg);
+  color: var(--app-text-on-action);
 }
 
 // The level. `aria-hidden`, because what it says is said in words beside it: a
@@ -129,8 +150,20 @@
 }
 
 .hint {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
   flex-shrink: 0;
   margin: 0;
   font-size: var(--app-text-xs);
   color: var(--app-text-secondary);
+}
+
+// The previous sentence is still on its way while this one is being spoken, which is
+// the whole point of a session that listens through its own pauses. Small and beside
+// the words rather than over the row: it reports on something that has already left,
+// and the control it sits next to is still live.
+.hint-spinner {
+  flex-shrink: 0;
+  font-size: var(--app-icon-sm);
 }

@@ -1,6 +1,7 @@
 <lib-sheet-shell
   (dismiss)="dismiss()"
   [dismissible]="!submitting()"
+  [hasFooter]="true"
   #shell
   labelledBy="list-settings-title"
 >
@@ -152,16 +153,21 @@
   }
 
   <!--
-    The footer, stuck to the bottom of the panel while the body scrolls past it (plan
-    0036, section 4). Save and Cancel were ordinary elements at the end of a scrolling
-    panel, so with more than about four members the primary action of the sheet was off
-    screen and had to be hunted for through a nested scroll.
+    The footer, which `SheetShell` now draws outside its own scroll (plan 0040,
+    section 3). Save and Cancel were ordinary elements at the end of a scrolling panel,
+    so with more than about four members the primary action of the sheet was off screen
+    and had to be hunted for; `0036` pinned them with `position: sticky`, which put them
+    on screen and over the share rows underneath. In the shell's footer slot they are on
+    screen and over nothing.
+
+    It stays written at the end of the template, where it reads in the order it is
+    drawn: a selective slot takes the matching node from wherever it appears.
 
     One Save, which commits whatever the sheet is holding, and Cancel beside it. The
     delete confirmation borrows the same footer for its Cancel: its own action is in the
     body, where a destructive action belongs.
   -->
-  <div class="footer">
+  <div class="footer" sheetFooter>
     @if (!confirmingDelete()) {
       <button
         (click)="save()"

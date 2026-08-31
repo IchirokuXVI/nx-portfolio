@@ -22,14 +22,15 @@ import {
   type FakeZoneStore,
 } from '@portfolio/velista/data-access';
 import type { MyZone, ProfileLoad, ZoneRole } from '@portfolio/velista/models';
+import { APP_STANDALONE_ORIGIN } from '@portfolio/velista/models';
 import {
   InstallStore,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   TEST_BRAND,
+  VoicePreferences,
   type InstallState,
 } from '@portfolio/velista/platform';
-import { APP_STANDALONE_ORIGIN } from '@portfolio/velista/models';
 import { of } from 'rxjs';
 import { AccountPage } from './account-page';
 
@@ -67,7 +68,9 @@ interface Options {
   readonly emailVerified?: boolean;
   readonly profileState?: ProfileLoad;
   readonly zones?: readonly MyZone[];
-  readonly forgotPassword?: Parameters<typeof fakeAuthService>[0] extends infer O
+  readonly forgotPassword?: Parameters<
+    typeof fakeAuthService
+  >[0] extends infer O
     ? O extends { forgotPassword?: infer F }
       ? F
       : never
@@ -306,7 +309,9 @@ describe('AccountPage', () => {
       // A guest's profile carries a null email and a name this screen already has.
       const { profile } = await render({ guest: true });
 
-      expect(profile.calls.filter((call) => call.method === 'load')).toEqual([]);
+      expect(profile.calls.filter((call) => call.method === 'load')).toEqual(
+        []
+      );
     });
 
     it('goes to auth/upgrade and never to auth/register', async () => {
@@ -457,12 +462,11 @@ describe('AccountPage', () => {
     it('opens the rename over this screen rather than navigating away', async () => {
       const { fixture, router } = await render();
 
-      (rowWith(fixture, 'Marta') as HTMLElement).querySelector('button')?.click();
+      (rowWith(fixture, 'Marta') as HTMLElement)
+        .querySelector('button')
+        ?.click();
 
-      expect(router.navigate).toHaveBeenCalledWith(
-        ['name'],
-        expect.anything()
-      );
+      expect(router.navigate).toHaveBeenCalledWith(['name'], expect.anything());
     });
 
     it('opens the delete confirm', async () => {
@@ -481,7 +485,9 @@ describe('AccountPage', () => {
     it('has an outlet for them to render into', async () => {
       const { fixture } = await render();
 
-      expect(fixture.nativeElement.querySelector('router-outlet')).not.toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('router-outlet')
+      ).not.toBeNull();
     });
   });
 
@@ -614,6 +620,68 @@ describe('AccountPage', () => {
       expect(row).toBeDefined();
       expect(row?.querySelector('button')).toBeNull();
       expect(opened).toEqual([]);
+    });
+  });
+
+  /**
+   * The two voice settings (`VoicePreferences`). They are on this screen rather than
+   * decided in the composer because the person at an open fridge and the person at a
+   * desk are using the same screen for different things.
+   */
+  describe('the voice settings', () => {
+    it('offers both, off, for somebody who has never touched them', async () => {
+      const { fixture } = await render();
+      const host = fixture.nativeElement as HTMLElement;
+      const silence = host.querySelector<HTMLInputElement>(
+        '#account-voice-silence'
+      );
+      const keep = host.querySelector<HTMLInputElement>('#account-voice-keep');
+
+      expect(silence).not.toBeNull();
+      expect(keep).not.toBeNull();
+      expect(silence?.checked).toBe(false);
+      expect(keep?.checked).toBe(false);
+    });
+
+    it('saves each on the flip, with nothing to submit', async () => {
+      const { fixture } = await render();
+      const host = fixture.nativeElement as HTMLElement;
+      const voice = TestBed.inject(VoicePreferences);
+
+      const silence = host.querySelector<HTMLInputElement>(
+        '#account-voice-silence'
+      ) as HTMLInputElement;
+      silence.checked = true;
+      silence.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+
+      expect(voice.sendOnSilence()).toBe(true);
+      // And independently: flipping one must not carry the other with it.
+      expect(voice.keepListening()).toBe(false);
+
+      const keep = host.querySelector<HTMLInputElement>(
+        '#account-voice-keep'
+      ) as HTMLInputElement;
+      keep.checked = true;
+      keep.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+
+      expect(voice.keepListening()).toBe(true);
+    });
+
+    it('explains what each one costs, beside the control', async () => {
+      // `aria-describedby`, so the part that catches people out is read with the
+      // control rather than found afterwards.
+      const { fixture } = await render();
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(
+        host
+          .querySelector('#account-voice-silence')
+          ?.getAttribute('aria-describedby')
+      ).toBe('account-voice-silence-hint');
+      expect(host.querySelector('#account-voice-silence-hint')).not.toBeNull();
+      expect(host.querySelector('#account-voice-keep-hint')).not.toBeNull();
     });
   });
 });

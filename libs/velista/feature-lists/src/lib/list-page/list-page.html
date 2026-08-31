@@ -149,41 +149,60 @@
       it: this is not a chat. Somebody who wants a conversation has the assistant
       panel, and this page has a list.
     -->
-    @if (voiceStrip(); as strip) {
-      <div aria-live="polite" class="voice-strip">
-        <div class="voice-said">
-          @if (strip.heard) {
-            <p class="voice-heard">
-              {{ 'list.add.heard' | rokuT }}: “{{ strip.heard }}”
-            </p>
-          }
-          @if (strip.messageKey) {
-            <p class="voice-reply">
-              {{ strip.messageKey | rokuT: strip.messageArgs ?? {} }}
-            </p>
-          } @else if (strip.reply) {
-            <p class="voice-reply">{{ strip.reply }}</p>
-          }
-        </div>
-
-        <button
-          (click)="dismissVoice()"
-          [attr.aria-label]="'list.add.dismissHeard' | rokuT"
-          class="voice-dismiss"
-          type="button"
+    <!--
+      The strip and the field are one pinned container, so what was heard sits on the
+      composer's own surface directly above it and shares its width, its background and
+      its scroll position. As siblings the strip was an unstyled run of text floating on
+      the page while the composer stayed pinned beneath it.
+    -->
+    <div class="composer-dock">
+      @if (voiceStrip(); as strip) {
+        <div
+          [class.failed]="strip.failed"
+          aria-live="polite"
+          class="voice-strip"
         >
-          <lib-close-icon class="voice-dismiss-glyph" />
-        </button>
-      </div>
-    }
+          <div class="voice-said">
+            @if (strip.heard) {
+              <p class="voice-heard">
+                {{ 'list.add.heard' | rokuT }}: “{{ strip.heard }}”
+              </p>
+            }
+            @if (strip.messageKey) {
+              <p class="voice-reply">
+                {{ strip.messageKey | rokuT: strip.messageArgs ?? {} }}
+              </p>
+            } @else if (strip.reply) {
+              <p class="voice-reply">{{ strip.reply }}</p>
+            }
+          </div>
 
-    <lib-line-composer
-      (recordingFailed)="onRecordingFailed()"
-      (spoke)="addAloud($event)"
-      (submitted)="add($event)"
-      [busy]="composerBusy()"
-      [takeFocus]="page.empty"
-    />
+          <button
+            (click)="dismissVoice()"
+            [attr.aria-label]="'list.add.dismissHeard' | rokuT"
+            class="voice-dismiss"
+            type="button"
+          >
+            <lib-close-icon class="voice-dismiss-glyph" />
+          </button>
+        </div>
+      }
+
+      <!--
+        The two voice settings, read from the device rather than decided here. The
+        default is the plain recorder: stop sends, the bin discards, and nothing
+        happens on its own (`VoicePreferences`).
+      -->
+      <lib-line-composer
+        (recordingFailed)="onRecordingFailed()"
+        (spoke)="addAloud($event)"
+        (submitted)="add($event)"
+        [busy]="composerBusy()"
+        [keepListening]="keepListening()"
+        [sendOnSilence]="sendOnSilence()"
+        [takeFocus]="page.empty"
+      />
+    </div>
   }
 }
 

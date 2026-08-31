@@ -1,4 +1,10 @@
-<lib-sheet-shell (dismiss)="dismiss()" #shell labelledBy="comments-title">
+<lib-sheet-shell
+  (bodyScroll)="trackPosition()"
+  (dismiss)="dismiss()"
+  [hasFooter]="true"
+  #shell
+  labelledBy="comments-title"
+>
   <h2 class="title" id="comments-title">
     {{ 'list.comments.title' | rokuT: { name: lineName() } }}
   </h2>
@@ -11,8 +17,17 @@
     <p class="body">{{ 'list.comments.empty' | rokuT }}</p>
   }
 
+  <!--
+    No scroll of its own any more (plan 0040, section 3). The conversation is as tall as
+    it is and the sheet's body scrolls past it, which is the one scroll `0036` section 4
+    asked every sheet to have: a nested scroll on a phone catches whichever of the two
+    the thumb happens to land in, and leaves the other unreachable.
+
+    The cap at 40vh was how the composer was kept in view before there was a footer to
+    put it in. It is in view now because it is not in the scroll.
+  -->
   @if (comments().length > 0) {
-    <ul (scroll)="trackPosition(conversation)" #conversation class="comments">
+    <ul class="comments">
       @for (comment of comments(); track comment.id) {
         <li class="comment">
           <lib-comment-row [comment]="comment" [loadAudio]="loadAudio" />
@@ -35,17 +50,19 @@
     comment, which would read as a conversation that failed to load (plan 0030,
     section 3.1).
   -->
-  @if (canComment()) {
-    <lib-comment-composer
-      (recorded)="sendVoice($event)"
-      (submitted)="send($event)"
-      [busy]="sending()"
-    />
-  } @else {
-    <p class="read-only">{{ 'list.comments.readOnly' | rokuT }}</p>
-  }
+  <div class="footer" sheetFooter>
+    @if (canComment()) {
+      <lib-comment-composer
+        (recorded)="sendVoice($event)"
+        (submitted)="send($event)"
+        [busy]="sending()"
+      />
+    } @else {
+      <p class="read-only">{{ 'list.comments.readOnly' | rokuT }}</p>
+    }
 
-  <button (click)="shell.requestDismiss()" class="cancel" type="button">
-    {{ 'entry.cancel' | rokuT }}
-  </button>
+    <button (click)="shell.requestDismiss()" class="cancel" type="button">
+      {{ 'entry.cancel' | rokuT }}
+    </button>
+  </div>
 </lib-sheet-shell>

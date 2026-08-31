@@ -36,6 +36,7 @@ import type {
   ZoneRole,
 } from '@portfolio/velista/models';
 import {
+  NOTIFICATION_TONE,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   StorageKeys,
@@ -162,8 +163,11 @@ async function render(options: Options = {}): Promise<{
   realtime: RealtimeMemory;
   storage: Map<string, string>;
   router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
+  tone: { play: jest.Mock };
 }> {
   TestBed.resetTestingModule();
+
+  const tone = { play: jest.fn() };
 
   const zones = fakeZoneStore({ zones: [zone(options.role ?? 'MEMBER')] });
   const lists = fakeListStore({
@@ -213,6 +217,9 @@ async function render(options: Options = {}): Promise<{
       // than a stub: a real implementation that never gets called is cheaper to
       // keep true than a hand written one that drifts.
       { provide: ASSISTANT_SERVICE, useClass: AssistantMemory },
+      // The blip that says a recording left the device. A fake, so a spec can ask
+      // whether it was played without a browser and without making a noise.
+      { provide: NOTIFICATION_TONE, useValue: tone },
     ],
   }).compileComponents();
 
@@ -221,7 +228,7 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, lines, lists, realtime, storage, router };
+  return { fixture, lines, lists, realtime, storage, router, tone };
 }
 
 /**
@@ -249,6 +256,75 @@ function query(fixture: ComponentFixture<ListPage>, selector: string) {
 }
 
 describe('ListPage', () => {
+  /**
+   * Plan 0038 section 5 shipped this strip's markup with no stylesheet and no way to
+   * tell its two kinds of message apart, so a failure and a confirmation drew as the
+   * same run of unstyled text floating above a pinned composer.
+   *
+   * jsdom has no layout, so the sharing of one surface is asserted as the structure
+   * that produces it: the strip and the composer are in the same pinned container.
+   */
+  describe('the voice strip shares the composer container', () => {
+    it('puts the strip and the field in one dock', async () => {
+      const { fixture } = await render();
+      fixture.componentInstance.onRecordingFailed();
+      fixture.detectChanges();
+
+      const dock = query(fixture, '.composer-dock');
+      const strip = query(fixture, '.voice-strip');
+
+      expect(dock).not.toBeNull();
+      expect(strip).not.toBeNull();
+      expect(dock?.contains(strip)).toBe(true);
+      expect(dock?.querySelector('lib-line-composer')).not.toBeNull();
+      // On top of the field, which is what "above the composer" means in markup.
+      const composer = dock?.querySelector('lib-line-composer') as Node;
+      const relation = strip?.compareDocumentPosition(composer) ?? 0;
+
+      expect(relation & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    });
+
+    it('colours a failure, so it is not read as a confirmation', async () => {
+      const { fixture } = await render();
+      fixture.componentInstance.onRecordingFailed();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.voiceStrip()?.failed).toBe(true);
+      expect(query(fixture, '.voice-strip')?.classList).toContain('failed');
+    });
+
+    it('plays a sound the moment a recording leaves the device', async () => {
+      // The eyes are the sense that is busy: somebody holding a fridge door open is
+      // looking into it, and the microphone no longer closes to mark the moment.
+      const { fixture, tone } = await render();
+
+      expect(tone.play).not.toHaveBeenCalled();
+
+      await fixture.componentInstance.addAloud({
+        blob: new Blob(['audio'], { type: 'audio/webm' }),
+        mimeType: 'audio/webm',
+        durationSeconds: 3,
+      });
+
+      expect(tone.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a confirmation quiet', async () => {
+      // The other half of the same rule: a confirmation that shouts is one people
+      // learn to dismiss unread.
+      const { fixture } = await render();
+      fixture.componentInstance.voiceStrip.set({
+        heard: 'add olives',
+        reply: 'Added olives.',
+        messageKey: null,
+        failed: false,
+      });
+      fixture.detectChanges();
+
+      expect(query(fixture, '.voice-strip')?.classList).not.toContain('failed');
+    });
+  });
+
   describe('rule L2: the lines never wait for the name', () => {
     it('issues both requests without ordering between them', async () => {
       // Two independent calls. `GET /v1/lists/:id/lines` needs only the list id, while

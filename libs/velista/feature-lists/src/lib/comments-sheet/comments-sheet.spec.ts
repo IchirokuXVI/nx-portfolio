@@ -30,7 +30,7 @@ import {
   type AudioCaptureI,
   type AudioCaptureSession,
 } from '@portfolio/velista/platform';
-import { CommentComposer } from '@portfolio/velista/ui';
+import { CommentComposer, SheetShell } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { CommentsSheet } from './comments-sheet';
 
@@ -239,6 +239,42 @@ function bodies(fixture: ComponentFixture<CommentsSheet>): string[] {
     .map((row) => (row.nativeElement as HTMLElement).textContent?.trim() ?? '');
 }
 
+/**
+ * The shell's body, which is the one thing in the sheet that scrolls (plan 0040).
+ */
+function scroller(fixture: ComponentFixture<CommentsSheet>): HTMLElement {
+  return fixture.debugElement
+    .query(By.directive(SheetShell))
+    .componentInstance.body().nativeElement as HTMLElement;
+}
+
+/**
+ * Give an element a scroll position, which jsdom otherwise reports as zero on
+ * everything and therefore as always sitting at the bottom.
+ */
+function fakeScroll(
+  element: HTMLElement,
+  metrics: { scrollHeight: number; clientHeight: number; scrollTop: number }
+): void {
+  let top = metrics.scrollTop;
+
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    get: () => metrics.scrollHeight,
+  });
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    get: () => metrics.clientHeight,
+  });
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    get: () => top,
+    set: (value: number) => {
+      top = value;
+    },
+  });
+}
+
 describe('CommentsSheet', () => {
   it('reads like a chat: oldest at the top, newest at the bottom', async () => {
     const { fixture } = await render();
@@ -267,6 +303,73 @@ describe('CommentsSheet', () => {
     fixture.detectChanges();
 
     expect(bodies(fixture).at(-1)).toBe('got them');
+  });
+
+  /**
+   * Plan 0040, section 3. The conversation had a 40vh cap and a scroll of its own,
+   * which was the only way to keep the composer in view before `SheetShell` had a
+   * footer. Both are gone, so the sheet scrolls in exactly one place and the composer
+   * is out of that scroll entirely.
+   *
+   * The cap itself is not assertable here: jsdom loads no stylesheet, so every computed
+   * value comes back empty and a check on `max-block-size` would pass whatever the SCSS
+   * said. What is assertable is which element the sheet measures, and that is the one
+   * that fails silently when it is wrong.
+   */
+  describe('one scroll, and it is the shell body (plan 0040)', () => {
+    it('measures the shell body rather than the conversation', async () => {
+      const { fixture } = await render();
+      const conversation = fixture.debugElement.query(By.css('.comments'))
+        .nativeElement as HTMLElement;
+
+      expect(scroller(fixture)).not.toBe(conversation);
+      expect(scroller(fixture).contains(conversation)).toBe(true);
+    });
+
+    it('keeps the composer out of the scroll', async () => {
+      const { fixture } = await render(NEWEST_FIRST, ['READ', 'WRITE']);
+      const composer = fixture.debugElement.query(By.directive(CommentComposer))
+        .nativeElement as HTMLElement;
+
+      expect(scroller(fixture).contains(composer)).toBe(false);
+    });
+
+    it('sticks to the newest comment when the reader is already there', async () => {
+      const { fixture, lines } = await render();
+      const body = scroller(fixture);
+      fakeScroll(body, {
+        scrollHeight: 1000,
+        clientHeight: 200,
+        scrollTop: 800,
+      });
+
+      body.dispatchEvent(new Event('scroll'));
+      lines.addComment(comment('c-4', 'got them', 0));
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(body.scrollTop).toBe(1000);
+    });
+
+    it('leaves a reader who has scrolled up where they were', async () => {
+      // The failure this guards is silent: bound to an element that no longer scrolls,
+      // the tracker never fires, the sheet believes it is always at the bottom, and it
+      // yanks somebody reading an older comment back down every time anybody speaks.
+      const { fixture, lines } = await render();
+      const body = scroller(fixture);
+      fakeScroll(body, {
+        scrollHeight: 1000,
+        clientHeight: 200,
+        scrollTop: 100,
+      });
+
+      body.dispatchEvent(new Event('scroll'));
+      lines.addComment(comment('c-4', 'got them', 0));
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(body.scrollTop).toBe(100);
+    });
   });
 
   it('leaves an empty conversation alone', async () => {
@@ -374,7 +477,9 @@ describe('CommentsSheet', () => {
       composer.press();
       await flush();
       fixture.detectChanges();
-      expect(fixture.debugElement.query(By.css('lib-recording-row'))).not.toBeNull();
+      expect(
+        fixture.debugElement.query(By.css('lib-recording-row'))
+      ).not.toBeNull();
 
       await composer.stopAndSend();
       await flush();
