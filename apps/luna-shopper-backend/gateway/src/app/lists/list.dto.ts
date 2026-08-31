@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   LINE_BATCH_MAX_ITEMS,
+  LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
   LineApprovalStatus,
@@ -140,13 +141,17 @@ export class AddLineDto {
   quantity?: number;
 
   @ApiPropertyOptional({
+    type: [String],
     format: 'uuid',
-    nullable: true,
-    description: 'Optional catalog item this line references (plan 0012)',
+    maxItems: LINE_ITEM_SET_MAX,
+    description:
+      'The catalog products this line stands for (plan 0048, section 1.1). Picking a group in the composer sends that group’s members here. Absent or empty is a free text line, which stays first class.',
   })
   @IsOptional()
-  @IsUUID()
-  itemId?: string | null;
+  @IsArray()
+  @ArrayMaxSize(LINE_ITEM_SET_MAX)
+  @IsUUID(undefined, { each: true })
+  itemIds?: string[];
 }
 
 /**
@@ -214,14 +219,17 @@ export class UpdateLineDto {
   quantity?: number;
 
   @ApiPropertyOptional({
+    type: [String],
     format: 'uuid',
-    nullable: true,
+    maxItems: LINE_ITEM_SET_MAX,
     description:
-      'Set or clear the catalog item link; null clears it (plan 0012)',
+      'Replace the line’s product set (plan 0048, section 1.1); an empty array clears it back to free text. A whole set and not an add or a remove, for the same reason reorder takes the whole order.',
   })
   @IsOptional()
-  @IsUUID()
-  itemId?: string | null;
+  @IsArray()
+  @ArrayMaxSize(LINE_ITEM_SET_MAX)
+  @IsUUID(undefined, { each: true })
+  itemIds?: string[];
 }
 
 export class SetApprovalDto {

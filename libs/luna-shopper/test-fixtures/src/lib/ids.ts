@@ -111,3 +111,26 @@ export const SUPERMARKET_ITEM_BREAD_ID = '51e00000-0000-4000-a000-000000000002';
 // --- Catalog: the per store half (plan 0038, section 5.2) --------------------
 export const LOCATION_ITEM_MILK_ID = '10c1e000-0000-4000-a000-000000000001';
 export const LOCATION_ITEM_BREAD_ID = '10c1e000-0000-4000-a000-000000000002';
+
+// --- Catalog: product groups (plan 0048, section 1) --------------------------
+export const PRODUCT_GROUP_MILK_ID = '9a0d0000-0000-4000-b000-000000000001';
+export const PRODUCT_GROUP_BREAD_ID = '9a0d0000-0000-4000-b000-000000000002';
+
+// --- Core: a line's product set (plan 0048, section 1.1) ---------------------
+export const LINE_ITEM_MILK_ID = '11e10000-0000-4000-a000-000000000001';
+export const LINE_ITEM_BREAD_ID = '11e10000-0000-4000-a000-000000000002';
+
+/**
+ * The `itemSetHash` of a set holding only the milk item, written out.
+ *
+ * A literal rather than a call, deliberately. The digest is computed in two
+ * places that have to agree, core's `item-set-hash.ts` and the core migration's
+ * SQL, and a fixture that computed it a third way would be a third
+ * implementation rather than a check on the other two. Written out, it is a value
+ * both of them are measured against, and `demo-world.spec.ts` is where that
+ * measurement is asserted.
+ */
+export const LINE_MILK_SET_HASH =
+  'ec78935ab47cba6f035dce46a44ff56a9b54ce3e12adb727abca3abf2ae2f7cc';
+export const LINE_BREAD_SET_HASH =
+  '519747c897ef7713b41959553e35ff04fc248ef44e91f25e5c4d79feb384b752';

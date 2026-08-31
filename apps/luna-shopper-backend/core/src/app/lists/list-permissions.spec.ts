@@ -10,8 +10,10 @@ import {
 import type { DataSource } from 'typeorm';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { ListLineItem } from '../entities';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { CommentService } from './comment.service';
+import { fakeLineItems } from './line-items.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 
@@ -76,7 +78,7 @@ function world(options: {
     listId: LIST_ID,
     content: 'Tinned tomatoes',
     quantity: 3,
-    itemId: null,
+    itemSetHash: null,
     position: 10,
     approvalStatus: LineApprovalStatus.PENDING,
     status: LineStatus.PENDING,
@@ -159,9 +161,16 @@ function world(options: {
     new ZoneAuthzService(memberships as never)
   );
 
+  // Plan 0048: the line's product set. This file is about who may do what, not
+  // about products, but every write path now touches a set.
+  const lineItems = fakeLineItems();
+
   const dataSource = {
     transaction: async <T>(run: (m: unknown) => Promise<T>) =>
-      run({ getRepository: () => lineRepo }),
+      run({
+        getRepository: (entity: unknown) =>
+          entity === ListLineItem ? lineItems.repo : lineRepo,
+      }),
   } as unknown as DataSource;
 
   const publisher = {
@@ -174,6 +183,7 @@ function world(options: {
   const lines = new LineService(
     dataSource,
     lineRepo as never,
+    lineItems.repo as never,
     listAccess,
     publisher
   );

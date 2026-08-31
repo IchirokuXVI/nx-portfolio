@@ -1,6 +1,8 @@
 import type {
+  ItemOfferView,
   ItemView,
   PriceScopeView,
+  ProductGroupView,
   SupermarketItemView,
   SupermarketLocationItemView,
   SupermarketLocationView,
@@ -9,6 +11,7 @@ import type {
 import type {
   Item,
   PriceScope,
+  ProductGroup,
   SupermarketItem,
   SupermarketLocationItem,
   SupermarketLocation,
@@ -63,8 +66,32 @@ export function toPriceScopeView(row: PriceScope): PriceScopeView {
   };
 }
 
-export function toItemView(row: Item): ItemView {
+export function toProductGroupView(row: ProductGroup): ProductGroupView {
   return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    referenceUnit: row.referenceUnit,
+    // A row written before the column had a default, or one hand edited in psql,
+    // can hold a shape the type promises is there. The search degrades to no
+    // synonyms rather than throwing halfway through building a suggestion.
+    synonyms: {
+      en: row.synonyms?.en ?? [],
+      es: row.synonyms?.es ?? [],
+    },
+  };
+}
+
+/**
+ * An item on the wire.
+ *
+ * `bestOffer` is added **only when there is one**, rather than always written as
+ * null: the field is optional in the contract precisely so the reads with no
+ * scopes to price against say nothing about price at all, and a literal `null`
+ * on `item.get` would be a claim that this product has no price anywhere.
+ */
+export function toItemView(row: Item, bestOffer?: ItemOfferView): ItemView {
+  const view: ItemView = {
     id: row.id,
     name: row.name,
     brand: row.brand,
@@ -74,6 +101,23 @@ export function toItemView(row: Item): ItemView {
     unitSize: toNumber(row.unitSize),
     category: row.category,
     defaultUnit: row.defaultUnit,
+    productGroupId: row.productGroupId,
+  };
+  return bestOffer ? { ...view, bestOffer } : view;
+}
+
+export function toItemOfferView(row: SupermarketItem): ItemOfferView {
+  return {
+    itemId: row.itemId,
+    priceScopeId: row.priceScopeId,
+    price: toNumber(row.price),
+    currency: row.currency,
+    unitPrice: toNumber(row.unitPrice),
+    unitPriceLabel: row.unitPriceLabel,
+    priceObservedAt: row.priceObservedAt
+      ? row.priceObservedAt.toISOString()
+      : null,
+    priceSourceKind: row.priceSourceKind,
   };
 }
 

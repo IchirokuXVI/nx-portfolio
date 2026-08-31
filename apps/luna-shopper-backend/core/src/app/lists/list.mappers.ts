@@ -55,13 +55,24 @@ const PERMISSION_ORDER: readonly ListPermission[] = [
   ListPermission.MANAGE,
 ];
 
-export function toLineView(line: ListLine): LineView {
+/**
+ * A line on the wire.
+ *
+ * The product set arrives as a **parameter** rather than through a loaded
+ * relation (plan 0048, section 1.1). A relation would default to undefined
+ * wherever it had not been joined, and this mapper would then quietly report a
+ * line with two products as a free text line: a wrong answer that looks like a
+ * right one. An argument the compiler insists on means every caller has to say
+ * what the set is, and there is exactly one service that calls this.
+ */
+export function toLineView(line: ListLine, itemIds: readonly string[]): LineView {
   return {
     id: line.id,
     listId: line.listId,
     content: line.content,
     quantity: line.quantity,
-    itemId: line.itemId,
+    itemIds: [...itemIds],
+    itemSetHash: line.itemSetHash,
     position: line.position,
     approvalStatus: line.approvalStatus,
     status: line.status,

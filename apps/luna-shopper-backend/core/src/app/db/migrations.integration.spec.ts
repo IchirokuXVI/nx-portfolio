@@ -61,9 +61,44 @@ describeIntegration('core schema (real Postgres)', () => {
       'line_comments',
       'comment_audio',
       'merge_requests',
+      // Plan 0048: a line holds a set of products.
+      'list_line_items',
     ]) {
       expect(names.has(table)).toBe(true);
     }
+  });
+
+  it('retired the single line itemId for a set and a hash (plan 0048, section 1.1)', async () => {
+    const columns = await dataSource.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'list_lines'`
+    );
+    const names = new Set(
+      columns.map((c: { column_name: string }) => c.column_name)
+    );
+    expect(names.has('itemSetHash')).toBe(true);
+    // Gone, not merely unused. It was null on every line ever created, so
+    // nothing moved and nothing needs it.
+    expect(names.has('itemId')).toBe(false);
+  });
+
+  it('computes the same digest in SQL that the service computes in TypeScript', async () => {
+    // The migration backfills `itemSetHash` with `encode(sha256(...), 'hex')`
+    // over the sorted distinct ids joined with commas. `item-set-hash.spec.ts`
+    // pins the TypeScript half against the same two literals; this is the SQL
+    // half of the same pin, and the only place the two can be caught disagreeing.
+    const [{ hash }] = await dataSource.query(
+      `SELECT encode(
+         sha256(convert_to(string_agg(DISTINCT id, ',' ORDER BY id), 'UTF8')),
+         'hex'
+       ) AS "hash"
+       FROM (VALUES
+         ('22222222-2222-4222-8222-222222222222'),
+         ('11111111-1111-4111-8111-111111111111')
+       ) AS t(id)`
+    );
+    expect(hash).toBe(
+      'f1263a03cdb2be40b54df53df70602a0e9fcc7f8df4e1715891bbf0e92d83f4f'
+    );
   });
 
   it('round-trips a Zone through the enum column and jsonb config default', async () => {
@@ -247,7 +282,7 @@ describeIntegration('core schema (real Postgres)', () => {
           listId: list.id,
           content: 'Olive oil',
           quantity: 1,
-          itemId: null,
+          itemSetHash: null,
           position: 1,
           createdByUserId: randomUUID(),
         })

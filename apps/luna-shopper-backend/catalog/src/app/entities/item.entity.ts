@@ -44,4 +44,18 @@ export class Item extends BaseEntity {
 
   @Column({ type: 'enum', enum: UnitOfMeasure, default: UnitOfMeasure.UNIT })
   defaultUnit!: UnitOfMeasure;
+
+  /**
+   * The {@link ProductGroup} this product belongs to, or null (plan 0048).
+   *
+   * Nullable and owner curated: nothing assigns it, and an unassigned product is
+   * the ordinary state of a freshly harvested one. Assigning it is what declares
+   * that this milk is comparable with that milk.
+   *
+   * A real foreign key, unlike core's `itemId`, because both tables live in the
+   * catalog database. Writing it (or writing the group) re-runs the trigger that
+   * refreshes this row's search vectors.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  productGroupId!: string | null;
 }

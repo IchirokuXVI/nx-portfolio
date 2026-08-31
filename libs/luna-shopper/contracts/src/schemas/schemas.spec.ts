@@ -248,14 +248,17 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    it('line.add response (both enum states, itemId null)', () => {
+    it('line.add response (both enum states, free text line)', () => {
       expect(
         validateMessageResponse('line.add', {
           id: 'l',
           listId: 'li',
           content: 'Milk',
           quantity: 1,
-          itemId: null,
+          // A free text line, which is what most lines are: an empty set and a
+          // null hash, both stated rather than left out (plan 0048, 1.1).
+          itemIds: [],
+          itemSetHash: null,
           position: 1,
           approvalStatus: 'PENDING',
           status: 'PENDING',
@@ -321,13 +324,23 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    it('line.add request may carry an optional itemId (plan 0012)', () => {
+    it('line.add request may carry a product set (plan 0048, section 1.1)', () => {
+      // Picking a group in the composer copies its members here, so a set of
+      // several is the ordinary case rather than the exotic one.
       expect(
         validateMessageRequest('line.add', {
           userId: 'u',
           listId: 'li',
           content: 'Milk',
-          itemId: 'item-1',
+          itemIds: ['item-1', 'item-2'],
+        }).valid
+      ).toBe(true);
+      // ...and omitting it entirely is still a plain line.
+      expect(
+        validateMessageRequest('line.add', {
+          userId: 'u',
+          listId: 'li',
+          content: 'Something for dinner',
         }).valid
       ).toBe(true);
     });
@@ -354,11 +367,107 @@ describe('contract schemas', () => {
               unitSize: null,
               category: 'DAIRY',
               defaultUnit: 'LITER',
+              productGroupId: null,
             },
           ],
           nextCursor: null,
         }).valid
       ).toBe(true);
+    });
+
+    it('an item search with scopes quotes a price on the item (plan 0048)', () => {
+      // `bestOffer` is optional and absent everywhere else, which is what let it
+      // be added to the one view every catalog read already answers with.
+      expect(
+        validateMessageResponse('item.search', {
+          items: [
+            {
+              id: 'i',
+              name: { en: 'Milk', es: 'Leche' },
+              brand: 'Pascual',
+              imageUrl: null,
+              sku: null,
+              ean: null,
+              unitSize: 1,
+              category: 'DAIRY',
+              defaultUnit: 'LITER',
+              productGroupId: 'g',
+              bestOffer: {
+                itemId: 'i',
+                priceScopeId: 's',
+                price: 1.15,
+                currency: 'EUR',
+                unitPrice: 1.15,
+                unitPriceLabel: 'L',
+                priceObservedAt: '2026-08-30T10:00:00.000Z',
+                priceSourceKind: 'OFFICIAL_API',
+              },
+            },
+          ],
+          nextCursor: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('item.searchOffers returns a group with no priced member (plan 0048, section 3)', () => {
+      // The case, not the edge case: the harvester is off outside development,
+      // so a group whose members carry no price is most of the catalog, and it
+      // still has to be suggestible.
+      expect(
+        validateMessageResponse('item.searchOffers', {
+          items: [
+            {
+              group: {
+                id: 'g',
+                name: { en: 'Milk', es: 'Leche' },
+                slug: 'milk',
+                referenceUnit: 'LITER',
+                synonyms: { en: ['milk'], es: ['leche'] },
+              },
+              cheapestItem: null,
+              offer: null,
+            },
+          ],
+          nextCursor: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('item.searchOffers takes scopes, and takes none (plan 0048, section 3.1)', () => {
+      expect(
+        validateMessageRequest('item.searchOffers', {
+          userId: 'u',
+          query: 'leche',
+          priceScopeIds: ['s1', 's2'],
+        }).valid
+      ).toBe(true);
+      // No scopes is not an error. It means no prices, and the suggestions still
+      // work; resolving a default from the profile is plan 0049.
+      expect(
+        validateMessageRequest('item.searchOffers', { userId: 'u', query: 'leche' })
+          .valid
+      ).toBe(true);
+    });
+
+    it('productGroup.create requires a slug and a reference unit (plan 0048)', () => {
+      expect(
+        validateMessageRequest('productGroup.create', {
+          userId: 'owner',
+          name: { en: 'Milk', es: 'Leche' },
+          slug: 'milk',
+          referenceUnit: 'LITER',
+          synonyms: { en: ['milk'], es: ['leche'] },
+        }).valid
+      ).toBe(true);
+      // Without the unit there is no answer to "cheaper per what", which is the
+      // only question a group exists to make askable.
+      expect(
+        validateMessageRequest('productGroup.create', {
+          userId: 'owner',
+          name: { en: 'Milk', es: 'Leche' },
+          slug: 'milk',
+        }).valid
+      ).toBe(false);
     });
 
     it('harvest.spawn request + harvest.run.get response (plan 0038)', () => {

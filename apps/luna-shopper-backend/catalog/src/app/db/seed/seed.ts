@@ -8,6 +8,7 @@ import type {
 import {
   Item,
   PriceScope,
+  ProductGroup,
   Supermarket,
   SupermarketItem,
   SupermarketLocation,
@@ -45,6 +46,12 @@ export const CATALOG_INSERT_ORDER: {
     name: 'SupermarketLocation',
     entity: SupermarketLocation,
     rows: catalog.locations,
+  },
+  // Groups before items, because an item may point at one (plan 0048).
+  {
+    name: 'ProductGroup',
+    entity: ProductGroup,
+    rows: catalog.productGroups,
   },
   { name: 'Item', entity: Item, rows: catalog.items },
   {

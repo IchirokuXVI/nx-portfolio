@@ -15,6 +15,7 @@ import {
   CORE_ENTITIES,
   ListAccess,
   ListLine,
+  ListLineItem,
   ShoppingList,
   Zone,
   ZoneMembership,
@@ -69,6 +70,7 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
     lines = new LineService(
       dataSource,
       dataSource.getRepository(ListLine),
+      dataSource.getRepository(ListLineItem),
       listAccess,
       { emit: jest.fn() } as never
     );

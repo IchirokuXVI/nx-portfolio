@@ -5,6 +5,7 @@ import {
   LineComment,
   ListAccess,
   ListLine,
+  ListLineItem,
   ShoppingList,
   ZoneMembership,
 } from '../entities';
@@ -27,6 +28,7 @@ import { SharedListGrantModule } from './shared-list-grant.module';
       ShoppingList,
       ListAccess,
       ListLine,
+      ListLineItem,
       LineComment,
       CommentAudio,
       ZoneMembership,

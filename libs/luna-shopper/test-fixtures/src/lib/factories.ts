@@ -30,12 +30,14 @@ import type {
   SeedCredential,
   SeedItem,
   SeedLine,
+  SeedLineItem,
   SeedList,
   SeedListAccess,
   SeedMembership,
   SeedMergeRequest,
   SeedOAuthIdentity,
   SeedPriceScope,
+  SeedProductGroup,
   SeedSupermarket,
   SeedSupermarketItem,
   SeedSupermarketLocation,
@@ -154,13 +156,26 @@ export function makeLine(overrides: Partial<SeedLine> = {}): SeedLine {
     listId: uuid(),
     content: 'An item',
     quantity: 1,
-    itemId: null,
+    // A free text line, which is what most lines are (plan 0048, section 1.1).
+    itemSetHash: null,
     position: 1000,
     approvalStatus: LineApprovalStatus.PENDING,
     status: LineStatus.PENDING,
     createdByUserId: uuid(),
     approvedByUserId: null,
     version: 1,
+    ...overrides,
+  };
+}
+
+export function makeLineItem(
+  overrides: Partial<SeedLineItem> = {}
+): SeedLineItem {
+  return {
+    id: uuid(),
+    lineId: uuid(),
+    itemId: uuid(),
+    position: 0,
     ...overrides,
   };
 }
@@ -255,6 +270,22 @@ export function makeItem(overrides: Partial<SeedItem> = {}): SeedItem {
     unitSize: null,
     category: ItemCategory.OTHER,
     defaultUnit: UnitOfMeasure.UNIT,
+    // Unassigned, which is the ordinary state of a product: joining a group is
+    // owner curation and nothing does it automatically (plan 0048, section 1).
+    productGroupId: null,
+    ...overrides,
+  };
+}
+
+export function makeProductGroup(
+  overrides: Partial<SeedProductGroup> = {}
+): SeedProductGroup {
+  return {
+    id: uuid(),
+    name: { en: 'A Group', es: 'Un grupo' },
+    slug: `group-${uuid().slice(0, 8)}`,
+    referenceUnit: UnitOfMeasure.UNIT,
+    synonyms: { en: [], es: [] },
     ...overrides,
   };
 }

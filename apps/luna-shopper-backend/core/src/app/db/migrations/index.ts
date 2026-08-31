@@ -2,6 +2,7 @@ import { InitialCoreSchema1756000100000 } from './1756000100000-InitialCoreSchem
 import { ListPermissionsAndAutoApprove1756000200000 } from './1756000200000-ListPermissionsAndAutoApprove';
 import { ListSharedWithZone1756000300000 } from './1756000300000-ListSharedWithZone';
 import { VoiceComments1756000400000 } from './1756000400000-VoiceComments';
+import { LineProductSet1756000600000 } from './1756000600000-LineProductSet';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -17,4 +18,5 @@ export const CORE_MIGRATIONS = [
   ListPermissionsAndAutoApprove1756000200000,
   ListSharedWithZone1756000300000,
   VoiceComments1756000400000,
+  LineProductSet1756000600000,
 ];

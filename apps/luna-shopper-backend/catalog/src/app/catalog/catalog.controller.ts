@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ITEM_PATTERNS,
   PRICE_SCOPE_PATTERNS,
+  PRODUCT_GROUP_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
@@ -24,6 +25,14 @@ import {
   type UpsertSupermarketItemBatchResult,
   type UpsertSupermarketLocationItemRequest,
   type CreateItemRequest,
+  type CreateProductGroupRequest,
+  type ProductGroupIdRequest,
+  type ProductGroupOfferPage,
+  type ProductGroupPage,
+  type ProductGroupView,
+  type ListProductGroupsRequest,
+  type SearchOffersRequest,
+  type UpdateProductGroupRequest,
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
   type GetSupermarketItemRequest,
@@ -51,6 +60,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { ItemService } from './item.service';
 import { PriceScopeService } from './price-scope.service';
+import { ProductGroupService } from './product-group.service';
 import { SupermarketItemService } from './supermarket-item.service';
 import { SupermarketLocationItemService } from './supermarket-location-item.service';
 import { SupermarketLocationService } from './supermarket-location.service';
@@ -70,7 +80,8 @@ export class CatalogController {
     private readonly items: ItemService,
     private readonly supermarketItems: SupermarketItemService,
     private readonly priceScopes: PriceScopeService,
-    private readonly locationItems: SupermarketLocationItemService
+    private readonly locationItems: SupermarketLocationItemService,
+    private readonly productGroups: ProductGroupService
   ) {}
 
   // --- Supermarkets --------------------------------------------------------
@@ -174,11 +185,60 @@ export class CatalogController {
     return this.items.search(req);
   }
 
+  /**
+   * Ranked groups with their cheapest member (plan 0048, section 3). The read the
+   * list composer runs for a bare word, and the one that enforces "a group beats
+   * an item" by existing at all.
+   */
+  @MessagePattern(ITEM_PATTERNS.searchOffers)
+  searchOffers(
+    @Payload() req: SearchOffersRequest
+  ): Promise<ProductGroupOfferPage> {
+    return this.items.searchOffers(req);
+  }
+
   @MessagePattern(ITEM_PATTERNS.findByEan)
   findItemByEan(
     @Payload() req: FindItemByEanRequest
   ): Promise<FindItemByEanResult> {
     return this.items.findByEan(req);
+  }
+
+  // --- Product groups (plan 0048, section 1) -------------------------------
+
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.create)
+  createProductGroup(
+    @Payload() req: CreateProductGroupRequest
+  ): Promise<ProductGroupView> {
+    return this.productGroups.create(req);
+  }
+
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.update)
+  updateProductGroup(
+    @Payload() req: UpdateProductGroupRequest
+  ): Promise<ProductGroupView> {
+    return this.productGroups.update(req);
+  }
+
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.delete)
+  deleteProductGroup(
+    @Payload() req: ProductGroupIdRequest
+  ): Promise<{ id: string }> {
+    return this.productGroups.delete(req);
+  }
+
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.get)
+  getProductGroup(
+    @Payload() req: ProductGroupIdRequest
+  ): Promise<ProductGroupView> {
+    return this.productGroups.get(req);
+  }
+
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.list)
+  listProductGroups(
+    @Payload() req: ListProductGroupsRequest
+  ): Promise<ProductGroupPage> {
+    return this.productGroups.list(req);
   }
 
   // --- Price scopes (plan 0038) --------------------------------------------
