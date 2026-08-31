@@ -76,11 +76,19 @@ describeIntegration('catalog search (real Postgres)', () => {
       synchronize: false,
       // The migrations are raw SQL naming unqualified tables, so `schema` alone
       // does not put them here: the search_path has to be set on the connection
-      // itself. `public` is deliberately left out, so anything this test fails to
-      // create in the scratch schema errors rather than silently resolving to the
-      // developer's real one. See the price scope migration spec for the whole
-      // argument, which this inherits.
-      extra: { options: `-c search_path=${SCHEMA}` },
+      // itself. See the price scope migration spec for that argument in full.
+      //
+      // **`public` is on the path here and is not on the migration spec's**, and
+      // the difference is deliberate rather than an inconsistency. This file runs
+      // the real services, whose SQL calls `similarity()`, and an extension lives
+      // in exactly one schema per database: `pg_trgm` is in `public` on any
+      // database the stack has already migrated, so a path without it makes every
+      // fuzzy comparison an unresolvable function rather than a wrong answer. The
+      // scratch schema is still **first**, so every table this test creates and
+      // drops resolves to its own copy; what `public` adds is the extension's
+      // functions, and the migrations that run above create their tables in the
+      // first schema on the path whatever else is behind it.
+      extra: { options: `-c search_path=${SCHEMA},public` },
     });
     await dataSource.initialize();
     await dataSource.runMigrations();

@@ -49,6 +49,23 @@ export class CatalogSearchAndProductGroups1756200000000
     // either matches or it does not (plan 0048, section 2).
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
 
+    // Where the extension actually put its objects, which is **not** necessarily
+    // reachable from here. An extension exists once per database, in one schema,
+    // and `IF NOT EXISTS` is satisfied by one that already exists somewhere else
+    // entirely; `gin_trgm_ops` is then resolved through the search_path like any
+    // other name and is simply not found. That is not a hypothetical: it is what
+    // happens the moment these migrations are replayed into a scratch schema,
+    // which is how every migration test in this service works. Qualifying the
+    // operator class with the schema the catalog reports costs one query and
+    // makes the statement correct wherever it runs.
+    const [{ schema: trgm }] = await queryRunner.query(
+      `SELECT n.nspname AS "schema"
+       FROM pg_extension e
+       JOIN pg_namespace n ON n.oid = e.extnamespace
+       WHERE e.extname = 'pg_trgm'`
+    );
+    const trgmOps = `"${trgm}".gin_trgm_ops`;
+
     // 1. The group itself.
     await queryRunner.query(`
       CREATE TABLE "product_groups" (
@@ -214,23 +231,23 @@ export class CatalogSearchAndProductGroups1756200000000
     );
     await queryRunner.query(`
       CREATE INDEX "ix_items_brand_trgm" ON "items"
-        USING gin ("brand" gin_trgm_ops)
+        USING gin ("brand" ${trgmOps})
     `);
     await queryRunner.query(`
       CREATE INDEX "ix_items_name_en_trgm" ON "items"
-        USING gin (("name" ->> 'en') gin_trgm_ops)
+        USING gin (("name" ->> 'en') ${trgmOps})
     `);
     await queryRunner.query(`
       CREATE INDEX "ix_items_name_es_trgm" ON "items"
-        USING gin (("name" ->> 'es') gin_trgm_ops)
+        USING gin (("name" ->> 'es') ${trgmOps})
     `);
     await queryRunner.query(`
       CREATE INDEX "ix_product_groups_name_en_trgm" ON "product_groups"
-        USING gin (("name" ->> 'en') gin_trgm_ops)
+        USING gin (("name" ->> 'en') ${trgmOps})
     `);
     await queryRunner.query(`
       CREATE INDEX "ix_product_groups_name_es_trgm" ON "product_groups"
-        USING gin (("name" ->> 'es') gin_trgm_ops)
+        USING gin (("name" ->> 'es') ${trgmOps})
     `);
   }
 
