@@ -240,10 +240,15 @@ export class ShoppingProfileStore {
    * just typed has no coverage answer yet and the flag has to land under its own chip.
    * A failure leaves the previous answer alone rather than clearing it: forgetting that
    * a code is unserved would silently withdraw an explanation somebody has read.
+   *
+   * A profile that has said nothing is not asked about at all. The endpoint answers
+   * `CATALOG_SCOPE_REQUIRED` for one, by design, so asking would be spending a request
+   * on a refusal the page can already work out from the profile it is holding, on the
+   * very screen somebody is opening for the first time.
    */
   async refreshCoverage(): Promise<void> {
     const profile = this.selected();
-    if (profile === null) {
+    if (profile === null || !this.scopeSaid()) {
       return;
     }
 
@@ -279,9 +284,22 @@ export class ShoppingProfileStore {
       return null;
     }
 
-    this._raw.update((profiles) => [...profiles, outcome.value]);
-    this._selectedId.set(outcome.value.id);
-    return outcome.value;
+    // **Upserted, never appended.** The server emits `profiles.changed` with the whole
+    // list as it creates, and that event routinely arrives before the POST's own
+    // response does. Appending would then add a profile the event had already put in
+    // the list, and the selector would offer the new one twice with the same id, which
+    // is also a duplicate track key. Found live rather than in a spec, because a fake
+    // service emits no events.
+    const created = outcome.value;
+    this._raw.update((profiles) =>
+      profiles.some((profile) => profile.id === created.id)
+        ? profiles.map((profile) =>
+            profile.id === created.id ? created : profile
+          )
+        : [...profiles, created]
+    );
+    this._selectedId.set(created.id);
+    return created;
   }
 
   /**

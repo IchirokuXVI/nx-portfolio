@@ -89,6 +89,28 @@ function fakeService(options: FakeOptions = {}) {
         ...(body.minSavingCents === undefined
           ? {}
           : { minSavingCents: body.minSavingCents }),
+        // The collections are full replacements on the wire, so the fake replaces
+        // them too: a fake that ignored them would let the store's coverage refresh
+        // pass against a profile the server never actually changed.
+        ...(body.postalCodes === undefined
+          ? {}
+          : {
+              postalCodes: body.postalCodes.map((entry, position) => ({
+                id: `pc-${position}`,
+                postalCode: entry.postalCode,
+                label: entry.label ?? null,
+                position,
+              })),
+            }),
+        ...(body.supermarkets === undefined
+          ? {}
+          : {
+              chains: body.supermarkets.map((entry) => ({
+                id: `sm-${entry.supermarketId}`,
+                supermarketId: entry.supermarketId,
+                excluded: entry.excluded === true,
+              })),
+            }),
         ...(options.normalizeTo ?? {}),
       };
       held = held.map((entry) => (entry.id === profileId ? after : entry));
@@ -338,7 +360,12 @@ describe('ShoppingProfileStore', () => {
         'p1',
         'postalCodes',
         { postalCodes: [{ postalCode: '14013', label: null }] },
-        (current) => ({ ...current, postalCodes: [] })
+        (current) => ({
+          ...current,
+          postalCodes: [
+            { id: 'pending', postalCode: '14013', label: null, position: 0 },
+          ],
+        })
       );
 
       expect(
@@ -380,6 +407,26 @@ describe('ShoppingProfileStore', () => {
       expect(created?.name).toBeNull();
       expect(store.selected()?.id).toBe(created?.id);
       expect(store.profiles()).toHaveLength(2);
+    });
+
+    it('does not add it twice when the event beats the response', async () => {
+      // The server emits `profiles.changed` with the whole list as it creates, and
+      // that event routinely arrives first. Appending would offer the new profile
+      // twice under one id. Found live, against a real gateway.
+      const service = fakeService();
+      const { store, realtime } = setUp(service);
+      await store.load();
+
+      const pending = store.create();
+      realtime.emit('profiles.changed', {
+        profiles: [
+          { id: 'p1', name: null, isDefault: true },
+          { id: 'p2', name: null, isDefault: false },
+        ],
+      });
+      await pending;
+
+      expect(store.profiles().map((entry) => entry.id)).toEqual(['p1', 'p2']);
     });
   });
 

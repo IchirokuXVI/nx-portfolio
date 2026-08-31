@@ -335,6 +335,15 @@ export class ProfilesPage {
       return;
     }
 
+    // The same code twice is not two places. The server would refuse the duplicate and
+    // the chip list would carry two rows with the same key until it did, so the second
+    // add is simply not a change.
+    if (
+      profile.postalCodes.some((code) => code.postalCode === entry.postalCode)
+    ) {
+      return;
+    }
+
     const next = [
       ...profile.postalCodes,
       {
