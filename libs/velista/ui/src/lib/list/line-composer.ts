@@ -23,7 +23,7 @@ import {
   type SilenceDetectorI,
   type SilenceWatch,
 } from '@portfolio/velista/platform';
-import { MicIcon, PlusIcon, StopIcon } from '../icons/icons';
+import { MicIcon, PlusIcon, SpinnerIcon, StopIcon } from '../icons/icons';
 import { QuantityStepper } from './quantity-stepper';
 
 /** What the one button at the end of the row is for. */
@@ -74,13 +74,32 @@ export type LineComposerButton = 'add' | 'record';
  * steady hand on a phone being held one handed in a kitchen, and it has no
  * accessible equivalent.
  *
- * ## It ends itself when the talking stops
+ * ## It ends itself when the talking stops, and then it listens again
  *
  * The piece with no precedent here, and the reason the person is speaking at all
  * is that their hands are busy. `SilenceDetector` watches the live stream and
- * says when quiet has lasted long enough; this component stops the recording and
+ * says when quiet has lasted long enough; this component ends the segment and
  * emits it. Stop is on screen throughout, so the detector is a convenience over a
  * control rather than the only way out.
+ *
+ * **A pause is a punctuation mark, not the end of the session.** Somebody at an
+ * open fridge names four things with a breath between them, and a microphone that
+ * closed after the first would need pressing again with the hand that is holding
+ * the door. So the detector's ending sends the segment and immediately opens the
+ * next one, and the previous one is still on its way to the server while the next
+ * is being spoken: that is what the sending hint is for.
+ *
+ * The two ways out of a segment therefore mean different things, and this is the
+ * whole of the state in here:
+ *
+ * | what ended it | what happens next |
+ * | --- | --- |
+ * | the detector, on silence or at the cap | sent, and the microphone reopens |
+ * | the stop button | sent, and the session is over |
+ *
+ * Stop is the only deliberate end, which is what makes it worth its place on
+ * screen: without it a session that listens through its own pauses has no exit
+ * that is not an accident.
  *
  * ## It is absent without `WRITE`, exactly as the composer is
  *
@@ -91,7 +110,14 @@ export type LineComposerButton = 'add' | 'record';
  */
 @Component({
   selector: 'lib-line-composer',
-  imports: [RokuTranslatorPipe, PlusIcon, MicIcon, StopIcon, QuantityStepper],
+  imports: [
+    RokuTranslatorPipe,
+    PlusIcon,
+    MicIcon,
+    StopIcon,
+    SpinnerIcon,
+    QuantityStepper,
+  ],
   templateUrl: './line-composer.html',
   styleUrl: './line-composer.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -149,7 +175,28 @@ export class LineComposer {
   /** 0 to 1, from the detector, for the meter. Reset between recordings. */
   private readonly _level = signal(0);
 
-  readonly listening = computed(() => this._recorder.active());
+  /**
+   * Whether the session is open: pressed, and not yet stopped.
+   *
+   * It decides two things, and the second is why it is a signal. It decides whether a
+   * segment that ends reopens the microphone. And it holds the listening row on screen
+   * **across** that handover: `AudioRecorder.active()` goes false the moment a segment
+   * stops and true again only once the next `getUserMedia` resolves, so a view drawn
+   * from the recorder alone would flash the text field and the keyboard back at every
+   * pause in a sentence.
+   */
+  private readonly _listeningOn = signal(false);
+
+  /**
+   * Whether the listening row is on screen.
+   *
+   * The session or the recorder, not the recorder alone: between one segment and the
+   * next the recorder is briefly idle while the browser hands back a fresh stream, and
+   * that gap is not something the person did.
+   */
+  readonly listening = computed(
+    () => this._listeningOn() || this._recorder.active()
+  );
 
   readonly button = computed<LineComposerButton>(() =>
     this.canSubmit() ? 'add' : 'record'
@@ -198,16 +245,19 @@ export class LineComposer {
       return;
     }
 
+    this._listeningOn.set(true);
     void this._record();
   }
 
   /**
-   * End the recording by hand and send what there is.
+   * End the session by hand and send what there is.
    *
-   * The same press the detector's decision runs, so there is one path out and one
-   * place the minimum length is enforced.
+   * The deliberate exit, and the only one: a segment that ends because somebody
+   * stopped talking reopens the microphone, so without this a session begun by
+   * accident would have no way out that was not another accident.
    */
   stop(): void {
+    this._listeningOn.set(false);
     void this._finish();
   }
 
@@ -219,6 +269,11 @@ export class LineComposer {
       // Said by the page, in the strip, because the sentence differs between a
       // refusal and a device that is not there and neither is this component's
       // to write (plan 0038, section 6).
+      //
+      // The session ends here as well as the segment. A microphone that has just
+      // been refused will be refused again, and reopening it on every silence
+      // would ask the same question in a loop.
+      this._listeningOn.set(false);
       this._recorder.cancel();
       this.recordingFailed.emit();
       return;
@@ -246,6 +301,14 @@ export class LineComposer {
     const seconds = this._recorder.elapsedSeconds();
     const blob = await this._recorder.stop();
     this._level.set(0);
+
+    // Reopened before the emit rather than after it, so the gap in which the
+    // microphone is shut is as short as this component can make it: the send that
+    // follows is a request to a transcription provider and takes seconds, and a
+    // person mid sentence does not pause for it.
+    if (this._listeningOn()) {
+      void this._record();
+    }
 
     // Nothing to send. An empty file to a paid provider is what the detector's
     // minimum length exists to prevent, and this is the same rule at the end of

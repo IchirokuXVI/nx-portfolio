@@ -22,7 +22,23 @@
       <div [style.inline-size.%]="levelPercent()" class="meter-fill"></div>
     </div>
 
-    <p class="hint">{{ 'list.add.listening' | rokuT }}</p>
+    <!--
+      The meter stays whatever else is happening, because the microphone is still
+      open: the previous sentence being on its way to the server is not a reason to
+      stop showing that this one is being heard.
+
+      Only the words under it change. A pause sends what was said and reopens the
+      microphone at once, so there is a stretch where both are true, and saying so is
+      the difference between a system that is working and one that looks stuck.
+    -->
+    @if (busy()) {
+      <p aria-live="polite" class="hint">
+        <lib-spinner-icon class="hint-spinner" />
+        <span>{{ 'list.add.sending' | rokuT }}</span>
+      </p>
+    } @else {
+      <p class="hint">{{ 'list.add.listening' | rokuT }}</p>
+    }
   </div>
 } @else {
   <!--

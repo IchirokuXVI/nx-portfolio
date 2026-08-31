@@ -47,6 +47,7 @@ import {
   BrowserFacade,
   lineQueryOf,
   listIdOf,
+  NOTIFICATION_TONE,
   RECORDING_LIMITS,
   StorageKeys,
   zoneIdOf,
@@ -193,6 +194,7 @@ export class ListPage {
   readonly composerBusy = signal(false);
 
   private readonly _assistant = inject<AssistantServiceI>(ASSISTANT_SERVICE);
+  private readonly _tone = inject(NOTIFICATION_TONE);
 
   /**
    * What was heard and what was done, or null (plan 0038, section 5).
@@ -792,6 +794,15 @@ export class ListPage {
     if (zoneId === null || listId === null) {
       return;
     }
+
+    // A sound, because the eyes are the sense that is busy. The microphone stays open
+    // through a pause now, so the moment a sentence is taken is no longer marked by the
+    // row changing back: somebody holding a fridge door open and looking into it has
+    // nothing on screen telling them the last thing they said was heard. The tone is
+    // played here rather than in the composer because this is the line that sends, and
+    // announcing a delivery that has not been attempted would be a lie somebody acts
+    // on by staying quiet.
+    this._tone.play();
 
     this.composerBusy.set(true);
     this.voiceStrip.set(null);

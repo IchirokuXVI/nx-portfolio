@@ -374,6 +374,7 @@
       "startListening": "Di lo que necesitas",
       "stopListening": "Dejar de escuchar",
       "listening": "Escuchando",
+      "sending": "Enviando lo que has dicho",
       "heard": "He oído",
       "micRefused": "Velista no puede oírte. El micrófono está desactivado para esta aplicación, así que actívalo en el navegador, o escríbelo",
       "micMissing": "Este dispositivo no tiene micrófono, así que escríbelo",

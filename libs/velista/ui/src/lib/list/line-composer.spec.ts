@@ -100,6 +100,14 @@ function type(fixture: ComponentFixture<LineComposer>, text: string): void {
   fixture.detectChanges();
 }
 
+/** Let the promises in a handover run out, then render what they left behind. */
+async function settle(fixture: ComponentFixture<LineComposer>): Promise<void> {
+  for (let turn = 0; turn < 6; turn += 1) {
+    await Promise.resolve();
+  }
+  fixture.detectChanges();
+}
+
 async function press(fixture: ComponentFixture<LineComposer>): Promise<void> {
   button(fixture).click();
   await Promise.resolve();
@@ -179,6 +187,115 @@ describe('LineComposer, one slot and the empty field decides', () => {
 
     expect(spoken).toHaveLength(1);
     expect(host(fixture).querySelector('input.field')).not.toBeNull();
+  });
+
+  /**
+   * A pause is punctuation, not the end of the session: somebody at an open fridge
+   * names four things with a breath between them, and a microphone that shut after
+   * the first would need pressing again with the hand holding the door.
+   */
+  describe('it listens through its own pauses', () => {
+    it('sends the segment and opens the microphone again', async () => {
+      const { fixture, detector } = await render();
+      const spoken: RecordedAudio[] = [];
+      fixture.componentInstance.spoke.subscribe((one) => spoken.push(one));
+
+      await press(fixture);
+      detector.handlers?.onEnd('silence');
+      await settle(fixture);
+
+      expect(spoken).toHaveLength(1);
+      // Still listening, and watching a fresh stream: a detector whose handlers went
+      // away with the old segment would never end the next one.
+      expect(host(fixture).querySelector('.stop')).not.toBeNull();
+      expect(host(fixture).querySelector('input.field')).toBeNull();
+      expect(detector.handlers).not.toBeNull();
+    });
+
+    it('keeps going across several pauses', async () => {
+      const { fixture, detector } = await render();
+      const spoken: RecordedAudio[] = [];
+      fixture.componentInstance.spoke.subscribe((one) => spoken.push(one));
+
+      await press(fixture);
+      for (let said = 0; said < 3; said += 1) {
+        detector.handlers?.onEnd('silence');
+        await settle(fixture);
+      }
+
+      expect(spoken).toHaveLength(3);
+      expect(host(fixture).querySelector('.stop')).not.toBeNull();
+    });
+
+    it('never flashes the field back between two segments', async () => {
+      // The recorder is idle for as long as the next `getUserMedia` takes, and a view
+      // drawn from it alone would put the text field, and on a phone the keyboard, back
+      // on screen at every pause in a sentence.
+      //
+      // The second open never resolves, so the fixture is parked in the middle of the
+      // handover: the previous segment is finished and the next stream has not arrived.
+      // That is the frame the bug would appear in, and it is held here indefinitely.
+      const capture = fakeCapture();
+      let opens = 0;
+      const stalling: AudioCaptureI = {
+        ...capture,
+        open: (...args) => {
+          opens += 1;
+          return opens === 1
+            ? capture.open(...args)
+            : new Promise(() => undefined);
+        },
+      };
+
+      const { fixture, detector } = await render(stalling);
+      await press(fixture);
+      detector.handlers?.onEnd('silence');
+      await settle(fixture);
+
+      expect(opens).toBe(2);
+      expect(host(fixture).querySelector('input.field')).toBeNull();
+      expect(host(fixture).querySelector('.stop')).not.toBeNull();
+    });
+
+    it('ends for good when stop is pressed', async () => {
+      const { fixture } = await render();
+      const spoken: RecordedAudio[] = [];
+      fixture.componentInstance.spoke.subscribe((one) => spoken.push(one));
+
+      await press(fixture);
+      await press(fixture);
+
+      expect(spoken).toHaveLength(1);
+      // Back to the field, and no reopened microphone behind it.
+      expect(host(fixture).querySelector('input.field')).not.toBeNull();
+      expect(host(fixture).querySelector('.stop')).toBeNull();
+    });
+
+    it('does not reopen a microphone that was just refused', async () => {
+      // A device that refused once refuses again, and reopening on every silence
+      // would ask the same question in a loop.
+      const { fixture } = await render(
+        fakeCapture({ open: () => Promise.reject(new Error('denied')) })
+      );
+
+      await press(fixture);
+
+      expect(host(fixture).querySelector('input.field')).not.toBeNull();
+      expect(host(fixture).querySelector('.stop')).toBeNull();
+    });
+
+    it('says the last one is on its way while it listens for the next', async () => {
+      const { fixture, detector } = await render();
+      fixture.componentRef.setInput('busy', true);
+      await press(fixture);
+      detector.handlers?.onEnd('silence');
+      await settle(fixture);
+
+      // The meter stays: the microphone is open and being heard is still worth
+      // showing. Only the words under it change.
+      expect(host(fixture).querySelector('.meter')).not.toBeNull();
+      expect(host(fixture).querySelector('.hint-spinner')).not.toBeNull();
+    });
   });
 
   it('moves the meter with the level', async () => {

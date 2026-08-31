@@ -129,8 +129,20 @@
 }
 
 .hint {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
   flex-shrink: 0;
   margin: 0;
   font-size: var(--app-text-xs);
   color: var(--app-text-secondary);
+}
+
+// The previous sentence is still on its way while this one is being spoken, which is
+// the whole point of a session that listens through its own pauses. Small and beside
+// the words rather than over the row: it reports on something that has already left,
+// and the control it sits next to is still live.
+.hint-spinner {
+  flex-shrink: 0;
+  font-size: var(--app-icon-sm);
 }

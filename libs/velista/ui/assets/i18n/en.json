@@ -374,6 +374,7 @@
       "startListening": "Say what you need",
       "stopListening": "Stop listening",
       "listening": "Listening",
+      "sending": "Sending what you said",
       "heard": "I heard",
       "micRefused": "Velista cannot hear you. The microphone is switched off for this app, so turn it back on in your browser, or type it instead",
       "micMissing": "There is no microphone on this device, so type it instead",
