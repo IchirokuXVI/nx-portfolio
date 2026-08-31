@@ -116,6 +116,40 @@ describe('velista production API hosts', () => {
     expect(origins?.[1].split(',')).toContain(hostOf('velista'));
   });
 
+  /**
+   * Every route path `feature-shell` declares, as written in the source.
+   *
+   * Read as text rather than imported: importing the route table drags the whole
+   * Angular app into a spec that only wants to compare two strings, and the
+   * strings are what drifted.
+   */
+  function declaredRoutePaths(): string[] {
+    const source = readValues('libs/velista/feature-shell/src/lib/routes.ts');
+    return [...source.matchAll(/^\s*path: '([^']*)',/gm)].map((m) => m[1]);
+  }
+
+  it('sends the confirmation mail to a route the app actually has', () => {
+    // The same shape of bug as the one above, in the other direction: two files
+    // had to agree and nothing checked that they did. `mailVerifyBaseUrl` said
+    // `/verify-email`, a path no route table has ever declared, so every
+    // confirmation link this cluster sent landed on velista's own 404 and no
+    // account could be confirmed. The route is `auth/verify`.
+    const verify = /^\s*mailVerifyBaseUrl:\s*(\S+)\s*$/m.exec(production);
+    expect(verify).not.toBeNull();
+
+    const url = new URL(verify?.[1] as string);
+
+    // On velista's origin, which is where the app is, and not the portfolio's.
+    expect(`https://${url.hostname}`).toBe(hostOf('velista'));
+
+    // And carrying no locale segment. `localeGuard` inserts one in front of a
+    // path that has none and keeps the query string, so the reader opens the
+    // link in their own language; a locale written into the value would hand
+    // every recipient the same one. A path with a locale on the front fails
+    // here, because `en/auth/verify` is not a path the route table declares.
+    expect(declaredRoutePaths()).toContain(url.pathname.replace(/^\//, ''));
+  });
+
   it('serves the app and its backend from the same domain', () => {
     // Not a style preference. velista is installable, so it is identified by its
     // origin, and the whole point of moving it off the portfolio's domain was that
