@@ -725,6 +725,11 @@
     "dropped": "El principio de esta conversación es demasiado largo para guardarlo, así que lo he soltado.",
     "spoken": "Has dicho algo. Lo estoy escuchando ahora.",
     "tooLong": "Esa grabación era demasiado grande para enviarla. Puedo recibir hasta {{limit}} MB de una vez, así que un mensaje más corto sí llegará.",
-    "badFormat": "Tu navegador grabó eso de una forma que no puedo leer. Puedes escribirlo igualmente."
+    "badFormat": "Tu navegador grabó eso de una forma que no puedo leer. Puedes escribirlo igualmente.",
+    "goTo": "Ir a {{list}}",
+    "goToInZone": "Ir a {{list}}, en {{zone}}",
+    "choices": {
+      "label": "Respuestas"
+    }
   }
 }

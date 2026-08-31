@@ -76,6 +76,7 @@
       them from `unconfigured` above, where trying again cannot help.
     -->
     <p
+      [attr.id]="entry.bubbleId ?? null"
       [class.failed]="
         entry.kind === 'failed' ||
         entry.kind === 'tooLong' ||
@@ -86,33 +87,61 @@
       {{ entry.text }}
     </p>
 
-    @if (entry.links.length > 0) {
-      <!--
-        Rule A3. Every one of these came out of a tool result in the same turn, so
-        it exists and the caller can see it. Nothing here was parsed out of the
-        sentence above it.
-      -->
-      <ul class="links">
-        @for (link of entry.links; track link.path + link.label) {
+    <!--
+      Rule A3. It came out of a tool result in the same turn, so it exists and the
+      caller can see it, and nothing here was parsed out of the sentence above it.
+
+      A sentence rather than a chip (plan 0042, section 3.2): it says where it goes,
+      and the glyph and the word "Go" both carry that alongside the colour, so colour
+      is never the only signal. The zone is named only when the server sent one, and
+      the two readings are two keys because they are two sentences in Spanish.
+    -->
+    @if (entry.link; as link) {
+      <a [routerLink]="link.path" class="link">
+        <lib-chevron-right-icon class="link-glyph" />
+        @if (link.zoneLabel !== null) {
+          {{
+            'assistant.goToInZone'
+              | rokuT: { list: link.label, zone: link.zoneLabel }
+          }}
+        } @else {
+          {{ 'assistant.goTo' | rokuT: { list: link.label } }}
+        }
+      </a>
+    }
+
+    <!--
+      The answers to the question in the bubble above (plan 0042, section 4). Buttons
+      and not links: tapping one **says** something, it does not go anywhere.
+
+      The group is labelled by the question itself where there is one to point at, so a
+      screen reader reads the answers as belonging to it rather than as a loose row of
+      buttons. A reply the panel wrote itself has no question, so it falls back to a
+      key.
+
+      Only the last message is given any, which the container decides: an answer to a
+      question three turns ago is a wrong answer, and a chip that is still tappable is
+      a chip that invites it.
+    -->
+    @if (entry.choices.length > 0) {
+      <ul
+        [attr.aria-label]="
+          entry.bubbleId === undefined
+            ? ('assistant.choices.label' | rokuT)
+            : null
+        "
+        [attr.aria-labelledby]="entry.bubbleId ?? null"
+        class="choices"
+      >
+        @for (choice of entry.choices; track choice.message + choice.label) {
           <li>
-            <a
-              [queryParams]="link.queryParams ?? null"
-              [routerLink]="link.path"
-              class="link"
+            <button
+              (click)="chose.emit(choice.message)"
+              class="choice"
+              type="button"
             >
-              @switch (link.kind) {
-                @case ('zone') {
-                  <lib-person-icon class="link-glyph" />
-                }
-                @case ('list') {
-                  <lib-list-lines-icon class="link-glyph" />
-                }
-                @default {
-                  <lib-check-outline-icon class="link-glyph" />
-                }
-              }
-              {{ link.label }}
-            </a>
+              {{ choice.label }}
+            </button>
           </li>
         }
       </ul>

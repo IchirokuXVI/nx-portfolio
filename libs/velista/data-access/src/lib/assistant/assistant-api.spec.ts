@@ -63,7 +63,7 @@ describe('AssistantApi', () => {
         ],
       });
 
-      request.flush({ reply: 'Added.', references: [] });
+      request.flush({ reply: 'Added.', link: null });
       await turn;
     });
 
@@ -74,7 +74,7 @@ describe('AssistantApi', () => {
       const turn = api.ask([], 'hello');
       const request = httpMock.expectOne(ENDPOINT);
 
-      request.flush({ reply: 'Hello.', references: [] });
+      request.flush({ reply: 'Hello.', link: null });
       await turn;
     });
 
@@ -98,7 +98,7 @@ describe('AssistantApi', () => {
       expect(body.transcript[0].content).toHaveLength(4000);
       expect(body.message).toHaveLength(2000);
 
-      request.flush({ reply: 'ok', references: [] });
+      request.flush({ reply: 'ok', link: null });
       await turn;
     });
   });
@@ -134,7 +134,7 @@ describe('AssistantApi', () => {
         { role: 'ASSISTANT', content: 'Added.' },
       ]);
 
-      request.flush({ reply: 'Added.', references: [], heard: 'and eggs' });
+      request.flush({ reply: 'Added.', link: null, heard: 'and eggs' });
       await turn;
     });
 
@@ -148,7 +148,7 @@ describe('AssistantApi', () => {
 
       expect(request.request.headers.get('Content-Type')).toBeNull();
 
-      request.flush({ reply: 'Vale.', references: [] });
+      request.flush({ reply: 'Vale.', link: null });
       await turn;
     });
 
@@ -156,7 +156,7 @@ describe('AssistantApi', () => {
       const turn = api.askAloud([], recording());
       httpMock
         .expectOne(`${ENDPOINT}/voice`)
-        .flush({ reply: 'Added.', references: [], heard: 'add milk' });
+        .flush({ reply: 'Added.', link: null, heard: 'add milk' });
 
       await expect(turn).resolves.toMatchObject({
         text: 'Added.',
@@ -171,7 +171,7 @@ describe('AssistantApi', () => {
       const turn = api.askAloud([], recording());
       httpMock
         .expectOne(`${ENDPOINT}/voice`)
-        .flush({ reply: 'I did not catch that.', references: [], heard: '' });
+        .flush({ reply: 'I did not catch that.', link: null, heard: '' });
 
       await expect(turn).resolves.toMatchObject({ heard: '' });
     });
@@ -180,107 +180,99 @@ describe('AssistantApi', () => {
       const turn = api.askAloud([], recording());
       httpMock
         .expectOne(`${ENDPOINT}/voice`)
-        .flush({ reply: 'Added.', references: [] });
+        .flush({ reply: 'Added.', link: null });
 
       await expect(turn).resolves.not.toHaveProperty('heard');
     });
   });
 
+  /**
+   * A recording spoken into a list's own composer (velista `0038`, and `0042`
+   * section 5).
+   *
+   * The defect this locks down was reported as the list page's microphone asking which
+   * list on a screen showing one list, and the fix for it is on the server: a scoped
+   * turn narrows the tool catalog and not the tool descriptions. This is the half of
+   * the contract this app owns, and it is one assertion because that is all it takes:
+   * a request that leaves this app either carries the scope or does not exist.
+   */
+  describe('a turn scoped to a list', () => {
+    it('posts zoneId and listId beside the recording', async () => {
+      const turn = api.askAboutList(
+        'zone-flat',
+        'list-weekly',
+        new Blob(['audio'], { type: 'audio/webm' })
+      );
+
+      const request = httpMock.expectOne(`${ENDPOINT}/voice`);
+      const body = request.request.body as FormData;
+
+      expect(body.get('zoneId')).toBe('zone-flat');
+      expect(body.get('listId')).toBe('list-weekly');
+      expect(body.get('audio')).toBeInstanceOf(Blob);
+
+      request.flush({ reply: 'Added.', link: null });
+      await turn;
+    });
+  });
+
   describe('the answer', () => {
-    it('reads reply, and the uppercase reference kinds', async () => {
+    it('reads reply, the one link, and the answers under a question', async () => {
       const turn = api.ask([], 'Is there milk?');
 
       httpMock.expectOne(ENDPOINT).flush({
         reply: 'Yes.',
         listResolution: 'ONLY_LIST',
-        references: [
-          {
-            kind: 'ZONE',
-            zoneId: 'z1',
-            listId: null,
-            lineId: null,
-            label: 'Flat',
-          },
-          {
-            kind: 'LIST',
-            zoneId: 'z1',
-            listId: 'l1',
-            lineId: null,
-            label: 'Weekly',
-          },
-          {
-            kind: 'LINE',
-            zoneId: 'z1',
-            listId: 'l1',
-            lineId: 'ln1',
-            label: 'Milk',
-          },
-        ],
+        link: {
+          zoneId: 'z1',
+          listId: 'l1',
+          label: 'Weekly',
+          zoneLabel: 'Flat',
+        },
+        choices: [],
       });
 
       await expect(turn).resolves.toEqual({
         text: 'Yes.',
         listResolution: 'onlyList',
-        references: [
-          { kind: 'zone', zoneId: 'z1', label: 'Flat' },
-          { kind: 'list', zoneId: 'z1', listId: 'l1', label: 'Weekly' },
-          {
-            kind: 'line',
-            zoneId: 'z1',
-            listId: 'l1',
-            lineId: 'ln1',
-            label: 'Milk',
-          },
-        ],
+        link: {
+          zoneId: 'z1',
+          listId: 'l1',
+          label: 'Weekly',
+          zoneLabel: 'Flat',
+        },
+        choices: [],
       });
     });
 
-    it('drops a reference whose ids do not address anything (rule A3)', async () => {
-      // `listId` and `lineId` are nullable on the wire. A LINE with a null listId
-      // cannot be turned into a URL, and inventing one would produce exactly the 404
-      // that rule A3 exists to prevent, so the link is not drawn at all.
+    it('drops a link whose ids do not address a list (rule A3)', async () => {
+      // `listId` is nullable on the wire. A link without one cannot be turned into a
+      // URL, and inventing one would produce exactly the 404 that rule A3 exists to
+      // prevent, so the link is not drawn at all.
       const turn = api.ask([], 'Where?');
 
       httpMock.expectOne(ENDPOINT).flush({
         reply: 'There.',
-        references: [
-          {
-            kind: 'LINE',
-            zoneId: 'z1',
-            listId: null,
-            lineId: 'ln1',
-            label: 'Milk',
-          },
-          {
-            kind: 'LIST',
-            zoneId: 'z1',
-            listId: null,
-            lineId: null,
-            label: 'X',
-          },
-          { kind: 'ELEPHANT', zoneId: 'z1', listId: 'l1', label: 'X' },
-          {
-            kind: 'ZONE',
-            zoneId: 'z1',
-            listId: null,
-            lineId: null,
-            label: 'Flat',
-          },
-        ],
+        link: { zoneId: 'z1', listId: null, label: 'X', zoneLabel: null },
       });
 
       await expect(turn).resolves.toEqual({
         text: 'There.',
-        references: [{ kind: 'zone', zoneId: 'z1', label: 'Flat' }],
+        link: null,
+        choices: [],
       });
     });
 
     it('carries no listResolution when the turn was not a write', async () => {
       const turn = api.ask([], 'hello');
 
-      httpMock.expectOne(ENDPOINT).flush({ reply: 'Hello.', references: [] });
+      httpMock.expectOne(ENDPOINT).flush({ reply: 'Hello.', link: null });
 
-      await expect(turn).resolves.toEqual({ text: 'Hello.', references: [] });
+      await expect(turn).resolves.toEqual({
+        text: 'Hello.',
+        link: null,
+        choices: [],
+      });
     });
 
     it('rejects a body it cannot read rather than rendering an empty bubble', async () => {
