@@ -4873,6 +4873,399 @@
         ]
       }
     },
+    "/v1/account/shopping-profiles": {
+      "get": {
+        "operationId": "AccountController_listProfiles_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `profiles.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/profile.ShoppingProfileListResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      },
+      "post": {
+        "operationId": "AccountController_createProfile_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShoppingProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `profiles.create` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/profile.ShoppingProfileView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
+    "/v1/account/shopping-profiles/{id}": {
+      "patch": {
+        "operationId": "AccountController_updateProfile_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateShoppingProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `profiles.update` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/profile.ShoppingProfileView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      },
+      "delete": {
+        "operationId": "AccountController_removeProfile_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `profiles.delete` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
+    "/v1/account/shopping-profiles/{id}/default": {
+      "post": {
+        "operationId": "AccountController_setDefaultProfile_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `profiles.setDefault` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/profile.ShoppingProfileView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
     "/v1/catalog/supermarkets": {
       "post": {
         "operationId": "CatalogSupermarketsController_create_v1",
@@ -6930,13 +7323,48 @@
             "name": "priceScopeId",
             "required": false,
             "in": "query",
-            "description": "Repeatable. Prices in the response come from these scopes and no others; sending none means no prices are quoted.",
+            "description": "Repeatable. Prices come from these scopes and no others, and nothing is resolved from your profile.",
             "schema": {
               "type": "array",
               "items": {
                 "type": "string",
                 "format": "uuid"
               }
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Where you are shopping from, resolved to scopes per request rather than stored resolved.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "supermarketId",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. The chains to shop, resolved through the ladder: their scopes serving your postal codes, else a national scope, else the chain default, flagged approximate.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "profileId",
+            "required": false,
+            "in": "query",
+            "description": "Shop as this profile of yours rather than as your default one. Somebody else’s profile is not found.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           }
         ],
@@ -6947,6 +7375,166 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ItemPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`catalog_scope_required` — Add a postal code or choose a supermarket to see prices.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/scope": {
+      "get": {
+        "operationId": "CatalogScopeController_describe_v1",
+        "parameters": [
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "description": "Defaults to `relevance` when a query is given and to `name` when one is not.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "relevance",
+                "name",
+                "created",
+                "updated"
+              ]
+            }
+          },
+          {
+            "name": "priceScopeId",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Prices come from these scopes and no others, and nothing is resolved from your profile.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Where you are shopping from, resolved to scopes per request rather than stored resolved.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "supermarketId",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. The chains to shop, resolved through the ladder: their scopes serving your postal codes, else a national scope, else the chain default, flagged approximate.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "profileId",
+            "required": false,
+            "in": "query",
+            "description": "Shop as this profile of yours rather than as your default one. Somebody else’s profile is not found.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The scopes this caller shops at, the reason for each, and whether every postal code they gave is served by anybody we know.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.CatalogScopeView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`catalog_scope_required` — Add a postal code or choose a supermarket to see prices.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -7035,13 +7623,48 @@
             "name": "priceScopeId",
             "required": false,
             "in": "query",
-            "description": "Repeatable. Prices in the response come from these scopes and no others; sending none means no prices are quoted.",
+            "description": "Repeatable. Prices come from these scopes and no others, and nothing is resolved from your profile.",
             "schema": {
               "type": "array",
               "items": {
                 "type": "string",
                 "format": "uuid"
               }
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Where you are shopping from, resolved to scopes per request rather than stored resolved.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "supermarketId",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. The chains to shop, resolved through the ladder: their scopes serving your postal codes, else a national scope, else the chain default, flagged approximate.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "profileId",
+            "required": false,
+            "in": "query",
+            "description": "Shop as this profile of yours rather than as your default one. Somebody else’s profile is not found.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           },
           {
@@ -7061,6 +7684,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.CatalogSuggestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`catalog_scope_required` — Add a postal code or choose a supermarket to see prices.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -7253,13 +7886,48 @@
             "name": "priceScopeId",
             "required": false,
             "in": "query",
-            "description": "Repeatable. Prices in the response come from these scopes and no others; sending none means no prices are quoted.",
+            "description": "Repeatable. Prices come from these scopes and no others, and nothing is resolved from your profile.",
             "schema": {
               "type": "array",
               "items": {
                 "type": "string",
                 "format": "uuid"
               }
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Where you are shopping from, resolved to scopes per request rather than stored resolved.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "supermarketId",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. The chains to shop, resolved through the ladder: their scopes serving your postal codes, else a national scope, else the chain default, flagged approximate.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "profileId",
+            "required": false,
+            "in": "query",
+            "description": "Shop as this profile of yours rather than as your default one. Somebody else’s profile is not found.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           },
           {
@@ -7310,6 +7978,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ItemPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`catalog_scope_required` — Add a postal code or choose a supermarket to see prices.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -7398,13 +8076,48 @@
             "name": "priceScopeId",
             "required": false,
             "in": "query",
-            "description": "Repeatable. Prices in the response come from these scopes and no others; sending none means no prices are quoted.",
+            "description": "Repeatable. Prices come from these scopes and no others, and nothing is resolved from your profile.",
             "schema": {
               "type": "array",
               "items": {
                 "type": "string",
                 "format": "uuid"
               }
+            }
+          },
+          {
+            "name": "postalCode",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Where you are shopping from, resolved to scopes per request rather than stored resolved.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "supermarketId",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. The chains to shop, resolved through the ladder: their scopes serving your postal codes, else a national scope, else the chain default, flagged approximate.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "profileId",
+            "required": false,
+            "in": "query",
+            "description": "Shop as this profile of yours rather than as your default one. Somebody else’s profile is not found.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           },
           {
@@ -7423,6 +8136,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ProductGroupOfferPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`catalog_scope_required` — Add a postal code or choose a supermarket to see prices.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -10919,6 +11642,175 @@
           "username"
         ]
       },
+      "ProfilePostalCodeDto": {
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "label": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "\"home\", \"the office\". Display only; nothing is derived from it."
+          }
+        },
+        "required": [
+          "postalCode"
+        ]
+      },
+      "ProfileSupermarketDto": {
+        "type": "object",
+        "properties": {
+          "supermarketId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chain, never one of its locations: \"no DIA\" means no DIA anywhere."
+          },
+          "excluded": {
+            "type": "boolean",
+            "description": "Excluded rather than simply absent, so \"everything except DIA\" does not mean listing every other chain, and a chain added later is included by default."
+          }
+        },
+        "required": [
+          "supermarketId"
+        ]
+      },
+      "ProfileGenerationSourceDto": {
+        "type": "object",
+        "properties": {
+          "zoneId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "listId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Null means the whole zone rather than one list within it."
+          }
+        },
+        "required": [
+          "zoneId"
+        ]
+      },
+      "CreateShoppingProfileDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "Null renders as the client’s localized default (\"My profile\" / \"Mi perfil\"). The server stores no English word, because it does not know the caller’s language."
+          },
+          "addressText": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "Display and context only. Nothing is geocoded; the postal codes are what resolve to prices."
+          },
+          "minSavingCents": {
+            "type": "number",
+            "minimum": 0,
+            "description": "What a second stop must save before a generated basket suggests it."
+          },
+          "minSavingPercent": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100,
+            "description": "The optional relative floor beside the absolute one."
+          },
+          "generationScope": {
+            "type": "string",
+            "enum": [
+              "ALL",
+              "SELECTED"
+            ],
+            "description": "Which zones and lists feed a generated basket. SELECTED narrows it to the sources below."
+          },
+          "postalCodes": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfilePostalCodeDto"
+            }
+          },
+          "supermarkets": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfileSupermarketDto"
+            }
+          },
+          "generationSources": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfileGenerationSourceDto"
+            }
+          }
+        }
+      },
+      "UpdateShoppingProfileDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "Null renders as the client’s localized default (\"My profile\" / \"Mi perfil\"). The server stores no English word, because it does not know the caller’s language."
+          },
+          "addressText": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 200,
+            "description": "Display and context only. Nothing is geocoded; the postal codes are what resolve to prices."
+          },
+          "minSavingCents": {
+            "type": "number",
+            "minimum": 0,
+            "description": "What a second stop must save before a generated basket suggests it."
+          },
+          "minSavingPercent": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100,
+            "description": "The optional relative floor beside the absolute one."
+          },
+          "generationScope": {
+            "type": "string",
+            "enum": [
+              "ALL",
+              "SELECTED"
+            ],
+            "description": "Which zones and lists feed a generated basket. SELECTED narrows it to the sources below."
+          },
+          "postalCodes": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfilePostalCodeDto"
+            }
+          },
+          "supermarkets": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfileSupermarketDto"
+            }
+          },
+          "generationSources": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfileGenerationSourceDto"
+            }
+          }
+        }
+      },
       "LocalizedTextDto": {
         "type": "object",
         "properties": {
@@ -11833,6 +12725,51 @@
         ],
         "additionalProperties": false
       },
+      "catalog.CatalogScopeView": {
+        "type": "object",
+        "properties": {
+          "priceScopeIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ResolvedScopeView"
+            }
+          },
+          "coverage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.PostalCodeCoverageView"
+            }
+          },
+          "approximate": {
+            "type": "boolean"
+          },
+          "profileId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "explicit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "priceScopeIds",
+          "scopes",
+          "coverage",
+          "approximate",
+          "profileId",
+          "explicit"
+        ],
+        "additionalProperties": false
+      },
       "catalog.CatalogSuggestion": {
         "type": "object",
         "properties": {
@@ -12083,6 +13020,23 @@
         ],
         "additionalProperties": false
       },
+      "catalog.PostalCodeCoverageView": {
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "served": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "postalCode",
+          "served"
+        ],
+        "additionalProperties": false
+      },
       "catalog.PriceScopePage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -12253,6 +13207,44 @@
           "slug",
           "referenceUnit",
           "synonyms"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ResolvedScopeView": {
+        "type": "object",
+        "properties": {
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "postalCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "POSTAL_CODE",
+              "NATIONAL",
+              "CHAIN_DEFAULT"
+            ]
+          },
+          "approximate": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "priceScopeId",
+          "supermarketId",
+          "postalCode",
+          "origin",
+          "approximate"
         ],
         "additionalProperties": false
       },
@@ -12545,6 +13537,12 @@
               "string",
               "null"
             ]
+          },
+          "defaultPriceScopeId": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -12552,7 +13550,8 @@
           "name",
           "logoUrl",
           "websiteUrl",
-          "externalBrandKey"
+          "externalBrandKey",
+          "defaultPriceScopeId"
         ],
         "additionalProperties": false
       },
@@ -12618,6 +13617,13 @@
           "NEW",
           "IMPORTED",
           "REJECTED"
+        ]
+      },
+      "enums.GenerationScope": {
+        "type": "string",
+        "enum": [
+          "ALL",
+          "SELECTED"
         ]
       },
       "enums.HarvestRunMode": {
@@ -13934,6 +14940,7 @@
               "rate_limited",
               "not_configured",
               "client_too_old",
+              "catalog_scope_required",
               "internal"
             ],
             "description": "The stable machine code the client branches on."
@@ -13966,6 +14973,173 @@
             "description": "Whole seconds to wait before retrying. Present only when `code` is `rate_limited`. Read this rather than assuming a fixed wait: the limits are enforced per gateway pod, so two requests from the same client can legitimately return different numbers."
           }
         }
+      },
+      "profile.ProfileGenerationSourceView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "zoneId",
+          "listId"
+        ],
+        "additionalProperties": false
+      },
+      "profile.ProfilePostalCodeView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "postalCode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "postalCode",
+          "label",
+          "position"
+        ],
+        "additionalProperties": false
+      },
+      "profile.ProfileSupermarketPreferenceView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "excluded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "supermarketId",
+          "excluded"
+        ],
+        "additionalProperties": false
+      },
+      "profile.ShoppingProfileListResult": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/profile.ShoppingProfileView"
+            }
+          }
+        },
+        "required": [
+          "profiles"
+        ],
+        "additionalProperties": false
+      },
+      "profile.ShoppingProfileView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "addressText": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "minSavingCents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "minSavingPercent": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "generationScope": {
+            "$ref": "#/components/schemas/enums.GenerationScope"
+          },
+          "postalCodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/profile.ProfilePostalCodeView"
+            }
+          },
+          "supermarkets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/profile.ProfileSupermarketPreferenceView"
+            }
+          },
+          "generationSources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/profile.ProfileGenerationSourceView"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "isDefault",
+          "position",
+          "addressText",
+          "minSavingCents",
+          "minSavingPercent",
+          "generationScope",
+          "postalCodes",
+          "supermarkets",
+          "generationSources"
+        ],
+        "additionalProperties": false
       },
       "stats.CoreStats": {
         "type": "object",

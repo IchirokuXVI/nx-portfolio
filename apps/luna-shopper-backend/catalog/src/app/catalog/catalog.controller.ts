@@ -8,59 +8,62 @@ import {
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  type CreateItemRequest,
   type CreatePriceScopeRequest,
+  type CreateProductGroupRequest,
+  type CreateSupermarketLocationRequest,
+  type CreateSupermarketRequest,
   type FindItemByEanRequest,
   type FindItemByEanResult,
+  type GetSupermarketItemRequest,
   type GetSupermarketLocationItemRequest,
+  type ItemIdRequest,
+  type ItemPage,
+  type ItemView,
   type ListPriceScopesRequest,
+  type ListProductGroupsRequest,
+  type ListSupermarketItemsByItemRequest,
+  type ListSupermarketItemsByLocationRequest,
   type ListSupermarketItemsByScopeRequest,
   type ListSupermarketLocationItemsRequest,
+  type ListSupermarketLocationsRequest,
+  type ListSupermarketsRequest,
   type PriceScopeIdRequest,
   type PriceScopePage,
   type PriceScopeView,
-  type SupermarketLocationItemPage,
-  type SupermarketLocationItemView,
-  type UpdatePriceScopeRequest,
-  type UpsertSupermarketItemBatchRequest,
-  type UpsertSupermarketItemBatchResult,
-  type UpsertSupermarketLocationItemRequest,
-  type CreateItemRequest,
-  type CreateProductGroupRequest,
   type ProductGroupIdRequest,
   type ProductGroupOfferPage,
   type ProductGroupPage,
   type ProductGroupView,
-  type ListProductGroupsRequest,
-  type SearchOffersRequest,
-  type UpdateProductGroupRequest,
-  type CreateSupermarketLocationRequest,
-  type CreateSupermarketRequest,
-  type GetSupermarketItemRequest,
-  type ItemIdRequest,
-  type ItemPage,
-  type ItemView,
-  type ListSupermarketItemsByItemRequest,
-  type ListSupermarketItemsByLocationRequest,
-  type ListSupermarketLocationsRequest,
-  type ListSupermarketsRequest,
+  type ResolvedScopesView,
+  type ResolvePriceScopesRequest,
   type SearchItemsRequest,
+  type SearchOffersRequest,
   type SupermarketIdRequest,
   type SupermarketItemIdRequest,
   type SupermarketItemPage,
   type SupermarketItemView,
   type SupermarketLocationIdRequest,
+  type SupermarketLocationItemPage,
+  type SupermarketLocationItemView,
   type SupermarketLocationPage,
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
   type UpdateItemRequest,
+  type UpdatePriceScopeRequest,
+  type UpdateProductGroupRequest,
   type UpdateSupermarketLocationRequest,
   type UpdateSupermarketRequest,
+  type UpsertSupermarketItemBatchRequest,
+  type UpsertSupermarketItemBatchResult,
   type UpsertSupermarketItemRequest,
+  type UpsertSupermarketLocationItemRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { ItemService } from './item.service';
 import { PriceScopeService } from './price-scope.service';
 import { ProductGroupService } from './product-group.service';
+import { ScopeResolverService } from './scope-resolver.service';
 import { SupermarketItemService } from './supermarket-item.service';
 import { SupermarketLocationItemService } from './supermarket-location-item.service';
 import { SupermarketLocationService } from './supermarket-location.service';
@@ -81,7 +84,8 @@ export class CatalogController {
     private readonly supermarketItems: SupermarketItemService,
     private readonly priceScopes: PriceScopeService,
     private readonly locationItems: SupermarketLocationItemService,
-    private readonly productGroups: ProductGroupService
+    private readonly productGroups: ProductGroupService,
+    private readonly scopeResolver: ScopeResolverService
   ) {}
 
   // --- Supermarkets --------------------------------------------------------
@@ -269,6 +273,18 @@ export class CatalogController {
     @Payload() req: ListPriceScopesRequest
   ): Promise<PriceScopePage> {
     return this.priceScopes.list(req);
+  }
+
+  /**
+   * What a place resolves to today (plan 0049, sections 1.1 and 3.1). The
+   * gateway's second call before a scoped catalog read: core says what the user
+   * typed, this says what it means.
+   */
+  @MessagePattern(PRICE_SCOPE_PATTERNS.resolve)
+  resolvePriceScopes(
+    @Payload() req: ResolvePriceScopesRequest
+  ): Promise<ResolvedScopesView> {
+    return this.scopeResolver.resolve(req);
   }
 
   // --- Per store rows (plan 0038, section 5.2) -----------------------------

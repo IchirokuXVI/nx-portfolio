@@ -99,6 +99,23 @@ export enum RealtimeEvent {
    * are kept off each other's streams by {@link domainEventSubject}.
    */
   UserUsernameChanged = 'user.usernameChanged',
+
+  /**
+   * The caller's shopping profiles changed (plan 0049, section 6), addressed to
+   * that user's own sessions and to nothing else.
+   *
+   * Profiles are private (section 5), so this is the one audience it can have:
+   * no zone room may hear it, not even one the user owns. It carries the whole
+   * list rather than the one profile that moved, because every rule this event
+   * exists to propagate is about the set: which one is default, how many are
+   * left, and what the one that was deleted was replaced by.
+   *
+   * It is also the invalidation signal for the gateway's resolved scope cache
+   * (section 2.1), which is why it fires on a create and a rename alike: the
+   * rename is the case where nothing about the scopes changed, and paying one
+   * cache miss is cheaper than deciding here which edits matter.
+   */
+  ProfilesChanged = 'profiles.changed',
 }
 
 /**
@@ -138,6 +155,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.MergeApproved,
   RealtimeEvent.MergeRejected,
   RealtimeEvent.UserUsernameChanged,
+  RealtimeEvent.ProfilesChanged,
 ] as const;
 
 /**

@@ -9,6 +9,7 @@ import {
   ITEM_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
+  SCOPE_ORIGINS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
@@ -99,6 +100,11 @@ export const CATALOG_SCHEMA_IDS = {
   updatePriceScopeRequest: schemaId('msg/priceScope.update/request'),
   priceScopeIdRequest: schemaId('msg/priceScope.id/request'),
   listPriceScopesRequest: schemaId('msg/priceScope.list/request'),
+  resolvePriceScopesRequest: schemaId('msg/priceScope.resolve/request'),
+  resolvedScopeView: schemaId('catalog/ResolvedScopeView'),
+  postalCodeCoverageView: schemaId('catalog/PostalCodeCoverageView'),
+  resolvedScopesView: schemaId('catalog/ResolvedScopesView'),
+  catalogScopeView: schemaId('catalog/CatalogScopeView'),
   upsertLocationItemRequest: schemaId(
     'msg/supermarketLocationItem.upsert/request'
   ),
@@ -136,8 +142,17 @@ const supermarketView = object(
     logoUrl: nullableString(),
     websiteUrl: nullableString(),
     externalBrandKey: nullableString(),
+    // The last rung of the scope ladder (plan 0049, section 3.1).
+    defaultPriceScopeId: nullableString(),
   },
-  ['id', 'name', 'logoUrl', 'websiteUrl', 'externalBrandKey']
+  [
+    'id',
+    'name',
+    'logoUrl',
+    'websiteUrl',
+    'externalBrandKey',
+    'defaultPriceScopeId',
+  ]
 );
 
 const supermarketLocationView = object(
@@ -381,6 +396,7 @@ const updateSupermarketRequest = object(
     logoUrl: nullableString(),
     websiteUrl: nullableString(),
     externalBrandKey: nullableString(),
+    defaultPriceScopeId: nullableString(),
   },
   ['userId', 'supermarketId']
 );
@@ -714,6 +730,72 @@ const listPriceScopesRequest = object(
   ['userId']
 );
 
+// --- Resolving a place into scopes (plan 0049, sections 1.1 and 3.1) --------
+
+const resolvePriceScopesRequest = object(
+  CATALOG_SCHEMA_IDS.resolvePriceScopesRequest,
+  {
+    userId: nonEmptyString(),
+    postalCodes: array(nonEmptyString()),
+    supermarketIds: array(nonEmptyString()),
+    excludedSupermarketIds: array(nonEmptyString()),
+  },
+  ['userId']
+);
+
+const resolvedScopeView = object(
+  CATALOG_SCHEMA_IDS.resolvedScopeView,
+  {
+    priceScopeId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    postalCode: nullableString(),
+    origin: { type: 'string', enum: [...SCOPE_ORIGINS] },
+    approximate: boolean(),
+  },
+  ['priceScopeId', 'supermarketId', 'postalCode', 'origin', 'approximate']
+);
+
+const postalCodeCoverageView = object(
+  CATALOG_SCHEMA_IDS.postalCodeCoverageView,
+  { postalCode: nonEmptyString(), served: boolean() },
+  ['postalCode', 'served']
+);
+
+const resolvedScopesFields = {
+  priceScopeIds: array(nonEmptyString()),
+  scopes: array(ref(CATALOG_SCHEMA_IDS.resolvedScopeView)),
+  coverage: array(ref(CATALOG_SCHEMA_IDS.postalCodeCoverageView)),
+  approximate: boolean(),
+};
+const resolvedScopesRequired = [
+  'priceScopeIds',
+  'scopes',
+  'coverage',
+  'approximate',
+];
+
+const resolvedScopesView = object(
+  CATALOG_SCHEMA_IDS.resolvedScopesView,
+  resolvedScopesFields,
+  resolvedScopesRequired
+);
+
+/**
+ * The gateway's answer, which is the catalog's plus who supplied the selector.
+ * Written out rather than composed with `allOf`: the OpenAPI document renders a
+ * flat object beside the search it explains, and one indirection there costs a
+ * reader more than the four repeated field names cost here.
+ */
+const catalogScopeView = object(
+  CATALOG_SCHEMA_IDS.catalogScopeView,
+  {
+    ...resolvedScopesFields,
+    profileId: nullableString(),
+    explicit: boolean(),
+  },
+  [...resolvedScopesRequired, 'profileId', 'explicit']
+);
+
 const upsertLocationItemRequest = object(
   CATALOG_SCHEMA_IDS.upsertLocationItemRequest,
   {
@@ -805,6 +887,11 @@ export const catalogSchemas: JsonSchema[] = [
   updatePriceScopeRequest,
   priceScopeIdRequest,
   listPriceScopesRequest,
+  resolvePriceScopesRequest,
+  resolvedScopeView,
+  postalCodeCoverageView,
+  resolvedScopesView,
+  catalogScopeView,
   upsertLocationItemRequest,
   getLocationItemRequest,
   listLocationItemsRequest,
@@ -945,6 +1032,10 @@ export const catalogMessageContracts: Record<
   [PRICE_SCOPE_PATTERNS.list]: {
     request: CATALOG_SCHEMA_IDS.listPriceScopesRequest,
     response: CATALOG_SCHEMA_IDS.priceScopePage,
+  },
+  [PRICE_SCOPE_PATTERNS.resolve]: {
+    request: CATALOG_SCHEMA_IDS.resolvePriceScopesRequest,
+    response: CATALOG_SCHEMA_IDS.resolvedScopesView,
   },
   [SUPERMARKET_LOCATION_ITEM_PATTERNS.upsert]: {
     request: CATALOG_SCHEMA_IDS.upsertLocationItemRequest,

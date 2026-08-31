@@ -21,6 +21,7 @@ import {
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  type CatalogScopeView,
   type CatalogSuggestResponse,
   type ItemPage,
   type ItemView,
@@ -67,6 +68,10 @@ import {
   UpsertSupermarketItemDto,
   UpsertSupermarketLocationItemDto,
 } from './catalog.dto';
+import {
+  ScopeResolutionService,
+  type ScopeQuery,
+} from './scope-resolution.service';
 
 /**
  * Hoisted at module load, so the component exists before the document is built.
@@ -79,6 +84,29 @@ import {
 const SUGGEST_SCHEMA = hoistContractSchema(
   CATALOG_SCHEMA_IDS.catalogSuggestResponse
 );
+
+/**
+ * The ladder's outcome, for the one endpoint that describes it rather than uses
+ * it (plan 0049, sections 3.1 and 5).
+ */
+const SCOPE_SCHEMA = hoistContractSchema(CATALOG_SCHEMA_IDS.catalogScopeView);
+
+/**
+ * The three ways a query says where the caller shops (plan 0049, section 3),
+ * lifted off the DTO once so five routes cannot spell it four ways.
+ *
+ * The query parameters are singular because that is how a repeated parameter
+ * reads in a URL (`?postalCode=28001&postalCode=41001`); the service takes the
+ * plurals, because by then they are lists.
+ */
+function toScopeQuery(query: PriceScopedQueryDto): ScopeQuery {
+  return {
+    priceScopeIds: query.priceScopeId,
+    postalCodes: query.postalCode,
+    supermarketIds: query.supermarketId,
+    profileId: query.profileId,
+  };
+}
 
 /**
  * The catalog REST surface (plan 0012), proxying to the catalog service over
@@ -268,7 +296,10 @@ export class CatalogLocationsController {
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'catalog/items', version: '1' })
 export class CatalogItemsController {
-  constructor(private readonly nats: NatsClient) {}
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService
+  ) {}
 
   @Post()
   @ApiContractResponse(ITEM_PATTERNS.create, { status: HttpStatus.CREATED })
@@ -284,17 +315,18 @@ export class CatalogItemsController {
   }
 
   /**
-   * Ranked products (plan 0048, section 3), and a plain listing when no query is
-   * given, which is what the admin surface uses it as.
+   * Ranked products (plan 0048, section 3), scoped to where the caller shops
+   * (plan 0049, section 3).
    *
-   * `priceScopeId` is repeatable and optional. Sending none quotes no prices and
-   * is not an error: resolving a default from the caller's shopping profile is
-   * plan 0049's job, and until then the search degrades exactly the way the
-   * composer wants it to.
+   * **Sending no selector no longer means everything.** The caller's default (or
+   * named) profile is resolved for them, and a profile that holds neither a
+   * postal code nor a chain is answered with `catalog_scope_required` rather
+   * than with the whole catalog or with an empty page.
    */
   @Get()
   @ApiContractResponse(ITEM_PATTERNS.search)
-  search(
+  @ApiProblemResponses({ scopeRequired: true })
+  async search(
     @AuthUser() user: CurrentUser,
     @Query() query: SearchItemsQueryDto
   ): Promise<ItemPage> {
@@ -303,7 +335,10 @@ export class CatalogItemsController {
       query: query.query,
       category: query.category,
       productGroupId: query.productGroupId,
-      priceScopeIds: query.priceScopeId,
+      priceScopeIds: await this.scopes.forRead(
+        user.userId,
+        toScopeQuery(query)
+      ),
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
@@ -319,19 +354,31 @@ export class CatalogItemsController {
    */
   @Get('offers')
   @ApiContractResponse(ITEM_PATTERNS.searchOffers)
-  searchOffers(
+  @ApiProblemResponses({ scopeRequired: true })
+  async searchOffers(
     @AuthUser() user: CurrentUser,
     @Query() query: SearchOffersQueryDto
   ): Promise<ProductGroupOfferPage> {
     return this.nats.send<ProductGroupOfferPage>(ITEM_PATTERNS.searchOffers, {
       userId: user.userId,
       query: query.query,
-      priceScopeIds: query.priceScopeId,
+      priceScopeIds: await this.scopes.forRead(
+        user.userId,
+        toScopeQuery(query)
+      ),
       cursor: query.cursor,
       limit: query.limit,
     });
   }
 
+  /**
+   * One known product, **unscoped and deliberately so** (plan 0049, section 3).
+   *
+   * This is how a list line renders its product, and a line can reference an
+   * item the user cannot currently buy anywhere near them. The item exists; its
+   * price at your scopes may be absent; those are different answers, and gating
+   * this read would collapse them into "no such product".
+   */
   @Get(':id')
   @ApiContractResponse(ITEM_PATTERNS.get)
   get(
@@ -371,6 +418,14 @@ export class CatalogItemsController {
     });
   }
 
+  /**
+   * Every price one known product has, across scopes.
+   *
+   * Unscoped for the same reason reading the product is (plan 0049, section 3):
+   * the request already names the one thing it is about, so it cannot return the
+   * catalog, and "what does this cost anywhere" is the question the price detail
+   * of a line asks.
+   */
   @Get(':id/offers')
   @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.listByItem)
   offers(
@@ -404,7 +459,10 @@ export class CatalogItemsController {
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'catalog/product-groups', version: '1' })
 export class CatalogProductGroupsController {
-  constructor(private readonly nats: NatsClient) {}
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService
+  ) {}
 
   @Post()
   @ApiContractResponse(PRODUCT_GROUP_PATTERNS.create, {
@@ -480,10 +538,14 @@ export class CatalogProductGroupsController {
     });
   }
 
-  /** The group's members, which is `item.search` with the group filter set. */
+  /**
+   * The group's members, which is `item.search` with the group filter set, and
+   * therefore scoped exactly as that read is (plan 0049, section 3).
+   */
   @Get(':id/items')
   @ApiContractResponse(ITEM_PATTERNS.search)
-  items(
+  @ApiProblemResponses({ scopeRequired: true })
+  async items(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
     @Query() query: PriceScopedQueryDto
@@ -491,7 +553,10 @@ export class CatalogProductGroupsController {
     return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
       userId: user.userId,
       productGroupId: id,
-      priceScopeIds: query.priceScopeId,
+      priceScopeIds: await this.scopes.forRead(
+        user.userId,
+        toScopeQuery(query)
+      ),
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
@@ -520,7 +585,10 @@ export class CatalogProductGroupsController {
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'catalog/suggest', version: '1' })
 export class CatalogSuggestController {
-  constructor(private readonly nats: NatsClient) {}
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService
+  ) {}
 
   @Get()
   @ApiOkResponse({
@@ -528,20 +596,29 @@ export class CatalogSuggestController {
       'The dropdown, in the order it is to be drawn: every matching group first, then the individual products. One ordered array and not two lists, because the rule it carries is an ordering.',
     schema: componentRef(SUGGEST_SCHEMA),
   })
+  @ApiProblemResponses({ scopeRequired: true })
   async suggest(
     @AuthUser() user: CurrentUser,
     @Query() query: SuggestQueryDto
   ): Promise<CatalogSuggestResponse> {
+    // Resolved once and passed to both halves, so the two reads cannot quote
+    // prices from different places, and so an empty profile refuses the whole
+    // dropdown rather than half of it.
     const common = {
       userId: user.userId,
       query: query.q,
-      priceScopeIds: query.priceScopeId,
+      priceScopeIds: await this.scopes.forRead(
+        user.userId,
+        toScopeQuery(query)
+      ),
       limit: query.limit,
     };
     const [groups, items] = await Promise.all([
       this.nats
         .send<ProductGroupOfferPage>(ITEM_PATTERNS.searchOffers, common)
-        .catch(() => ({ items: [], nextCursor: null }) as ProductGroupOfferPage),
+        .catch(
+          () => ({ items: [], nextCursor: null }) as ProductGroupOfferPage
+        ),
       this.nats
         .send<ItemPage>(ITEM_PATTERNS.search, common)
         .catch(() => ({ items: [], nextCursor: null }) as ItemPage),
@@ -561,6 +638,48 @@ export class CatalogSuggestController {
         })),
       ],
     };
+  }
+}
+
+/**
+ * Where the caller is shopping, and why (plan 0049, sections 3.1 and 5).
+ *
+ * It exists because the flags have to reach a client and a page cannot carry
+ * them: every catalog page is bare by house rule, and wrapping `ItemPage` to
+ * hang two booleans off it would change the shape of every catalog read. So the
+ * resolution is described once, here, beside the searches it explains.
+ *
+ * Three things a client can only learn from it:
+ *
+ * - **which scopes** its results came from, and by which rung of the ladder, so
+ *   it can say "prices shown for Madrid" when `approximate` is set;
+ * - **which postal codes nobody serves**, which is what turns an empty search
+ *   into "no chain we know reaches 12345" rather than "there is nothing";
+ * - **which profile** answered, when the caller named none.
+ *
+ * It resolves exactly as a search does and shares its cache, so calling both is
+ * one resolution and not two.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/scope', version: '1' })
+export class CatalogScopeController {
+  constructor(private readonly scopes: ScopeResolutionService) {}
+
+  @Get()
+  @ApiOkResponse({
+    description:
+      'The scopes this caller shops at, the reason for each, and whether every postal code they gave is served by anybody we know.',
+    schema: componentRef(SCOPE_SCHEMA),
+  })
+  @ApiProblemResponses({ scopeRequired: true })
+  describe(
+    @AuthUser() user: CurrentUser,
+    @Query() query: PriceScopedQueryDto
+  ): Promise<CatalogScopeView> {
+    return this.scopes.describe(user.userId, toScopeQuery(query));
   }
 }
 
