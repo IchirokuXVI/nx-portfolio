@@ -42,7 +42,6 @@ export const GENERATED_LIST_SCHEMA_IDS = {
   summaryView: schemaId('generatedList/GeneratedListSummaryView'),
   skippedLineView: schemaId('generatedList/GeneratedListSkippedLineView'),
   runResult: schemaId('generatedList/GeneratedListRunResult'),
-  settleResult: schemaId('generatedList/GeneratedListSettleResult'),
   page: schemaId('generatedList/GeneratedListPage'),
   sourceInput: schemaId('generatedList/GeneratedListSourceInput'),
   createRequest: schemaId('msg/generatedList.create/request'),
@@ -53,7 +52,6 @@ export const GENERATED_LIST_SCHEMA_IDS = {
   updateLineRequest: schemaId('msg/generatedList.updateLine/request'),
   lineIdRequest: schemaId('msg/generatedList.lineId/request'),
   reorderRequest: schemaId('msg/generatedList.reorderLines/request'),
-  settleRequest: schemaId('msg/generatedList.settleLine/request'),
 } as const;
 
 const lineOriginView = object(
@@ -163,37 +161,6 @@ const runResult = object(
   ['list', 'skipped']
 );
 
-const settleResult = object(
-  GENERATED_LIST_SCHEMA_IDS.settleResult,
-  {
-    line: ref(GENERATED_LIST_SCHEMA_IDS.lineView),
-    settlements: array(
-      object(
-        schemaId('generatedList/GeneratedListSettlementRef'),
-        {
-          lineId: nonEmptyString(),
-          listId: nonEmptyString(),
-          quantity: integer({ minimum: 0 }),
-          settlementId: nonEmptyString(),
-        },
-        ['lineId', 'listId', 'quantity', 'settlementId']
-      )
-    ),
-    skipped: array(
-      object(
-        schemaId('generatedList/GeneratedListSettleSkip'),
-        {
-          lineId: nonEmptyString(),
-          listId: nonEmptyString(),
-          reason: nonEmptyString(),
-        },
-        ['lineId', 'listId', 'reason']
-      )
-    ),
-  },
-  ['line', 'settlements', 'skipped']
-);
-
 const sourceInput = object(
   GENERATED_LIST_SCHEMA_IDS.sourceInput,
   { zoneId: nonEmptyString(), listId: nullableString() },
@@ -301,25 +268,6 @@ const reorderRequest = object(
   ['userId', 'generatedListId', 'lineIds']
 );
 
-const settleRequest = object(
-  GENERATED_LIST_SCHEMA_IDS.settleRequest,
-  {
-    userId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
-    lineId: nonEmptyString(),
-    outcome: nonEmptyString(),
-    quantity: integer({ minimum: 0, maximum: GENERATED_LIST_LIMITS.maxQuantity }),
-    allocation: array(
-      object(
-        schemaId('generatedList/GeneratedListAllocationEntry'),
-        { lineId: nonEmptyString(), quantity: integer({ minimum: 0 }) },
-        ['lineId', 'quantity']
-      )
-    ),
-  },
-  ['userId', 'generatedListId', 'lineId', 'outcome']
-);
-
 export const generatedListSchemas: JsonSchema[] = [
   enumOf(
     GENERATED_LIST_SCHEMA_IDS.generatedListStatus,
@@ -336,7 +284,6 @@ export const generatedListSchemas: JsonSchema[] = [
   summaryView,
   skippedLineView,
   runResult,
-  settleResult,
   paginated(GENERATED_LIST_SCHEMA_IDS.page, GENERATED_LIST_SCHEMA_IDS.summaryView),
   sourceInput,
   createRequest,
@@ -347,7 +294,6 @@ export const generatedListSchemas: JsonSchema[] = [
   updateLineRequest,
   lineIdRequest,
   reorderRequest,
-  settleRequest,
 ];
 
 export const generatedListMessageContracts: Record<
@@ -389,9 +335,5 @@ export const generatedListMessageContracts: Record<
   [GENERATED_LIST_PATTERNS.reorderLines]: {
     request: GENERATED_LIST_SCHEMA_IDS.reorderRequest,
     response: GENERATED_LIST_SCHEMA_IDS.listView,
-  },
-  [GENERATED_LIST_PATTERNS.settleLine]: {
-    request: GENERATED_LIST_SCHEMA_IDS.settleRequest,
-    response: GENERATED_LIST_SCHEMA_IDS.settleResult,
   },
 };
