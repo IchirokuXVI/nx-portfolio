@@ -35,21 +35,21 @@
   position: absolute;
   inset-inline: 0;
   inset-block-end: 0;
+  // A column of three: the grabber, the body that scrolls, and a footer if there is
+  // one (plan 0040, section 2). The scroll is on the middle child rather than on the
+  // panel, which is what lets a footer sit under the content instead of over it.
+  display: flex;
+  flex-direction: column;
   max-block-size: var(--app-sheet-max-height);
-  overflow-y: auto;
-  padding: var(--app-space-4) var(--app-space-6)
-    calc(var(--app-space-7) + var(--app-safe-bottom));
+  // The inline padding and the padding above the grabber stay here, so the grabber's
+  // negative margins still reach the panel's edges and the title is where it was. The
+  // padding below belongs to whichever child is last, which is the body or the footer.
+  padding-block-start: var(--app-space-4);
+  padding-inline: var(--app-space-6);
   background: var(--app-surface-raised);
   border-start-start-radius: var(--app-sheet-radius);
   border-start-end-radius: var(--app-sheet-radius);
   box-shadow: var(--app-sheet-shadow);
-
-  // A scroll that reaches either end of this panel stops here rather than continuing
-  // into the document behind it. Without it the browser chains the leftover distance to
-  // the page, and at the top of the page a downward chain is pull to refresh: dragging
-  // the sheet down reloaded the app. `touch-action: none` on the grabber covers the
-  // gesture that starts on the handle; this covers the one that starts on the content.
-  overscroll-behavior: contain;
 
   // The rise. A transform, so it is composited, and so it is one declaration to
   // skip: under `prefers-reduced-motion` the motion token is zero and the panel is
@@ -93,6 +93,55 @@
   }
 }
 
+// Everything the caller projects, and the only thing in the sheet that scrolls.
+//
+// `flex: 1 1 auto` with `min-block-size: 0`, so the panel is as tall as its content
+// until `--app-sheet-max-height` stops it and only then does the body give way. A
+// `flex-basis` of zero would make the body claim the whole panel on a two line confirm
+// sheet, which has no height to claim.
+.sheet-body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  // A scroll that reaches either end of the body stops here rather than continuing into
+  // the document behind it. Without it the browser chains the leftover distance to the
+  // page, and at the top of the page a downward chain is pull to refresh: dragging the
+  // sheet down reloaded the app. `touch-action: none` on the grabber covers the gesture
+  // that starts on the handle; this covers the one that starts on the content. It lives
+  // on whichever element actually scrolls, which is why it moved here with the scroll.
+  overscroll-behavior: contain;
+  // The bottom of the sheet, when the body is the last thing in it. The value is the
+  // one the panel carried before the split, so a sheet with no footer keeps the space
+  // and the safe area inset it has always had.
+  padding-block-end: calc(var(--app-space-7) + var(--app-safe-bottom));
+}
+
+// With a footer under it the body is no longer the bottom of the sheet, so it keeps
+// only the gap above the hairline and hands the safe area to the footer.
+.panel.has-footer .sheet-body {
+  padding-block-end: var(--app-space-5);
+}
+
+// The bottom of the sheet, outside the scroll.
+//
+// This used to be `position: sticky` in the one sheet that wanted it, which reserves
+// its space at the end of the scrolled content and paints its pixels at the bottom of
+// the scrollport: on a settings sheet with more than a screen of members, the rows
+// under the bottom edge were behind an opaque bar at every scroll position (plan 0040,
+// section 1). Out of the scroll entirely, there is nothing for it to cover.
+//
+// The panel's inline padding is pulled back into it and re-added inside, so the
+// hairline and the background reach both edges of the sheet while the buttons stay in
+// line with the content above them.
+.sheet-footer {
+  flex: 0 0 auto;
+  margin-inline: calc(var(--app-space-6) * -1);
+  padding-inline: var(--app-space-6);
+  padding-block-end: calc(var(--app-space-4) + var(--app-safe-bottom));
+  background: var(--app-surface-raised);
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
 // The drag surface. The bar inside it is the hint; this is the target.
 //
 // It spans the panel and stands about a finger tall, because the gesture it catches is
@@ -102,6 +151,10 @@
 // the title.
 .grabber {
   display: block;
+  // Never shrinks: the panel is a flex column now, and a handle that gives way when
+  // the content is tall is a handle that is hardest to grab exactly when the sheet is
+  // longest.
+  flex: 0 0 auto;
   // The panel's own padding is pulled back into the strip on all three sides rather
   // than added to it, so a target 37px tall and the full width of the sheet leaves the
   // bar and the title exactly where they were.

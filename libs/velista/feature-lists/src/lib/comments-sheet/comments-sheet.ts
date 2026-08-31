@@ -6,7 +6,6 @@ import {
   inject,
   signal,
   viewChild,
-  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -252,8 +251,17 @@ export class CommentsSheet {
     return selectAbilities(list?.myPermissions ?? []).canComment;
   });
 
-  private readonly _scroller =
-    viewChild<ElementRef<HTMLElement>>('conversation');
+  /**
+   * The shell, for the element that scrolls (plan 0040, section 3).
+   *
+   * The conversation used to scroll inside its own 40vh box and this measured that box.
+   * The sheet is one scroll now and it belongs to `SheetShell`, so both the reading and
+   * the writing below go through the shell's body. Getting this wrong fails silently:
+   * bound to an element that no longer scrolls, {@link trackPosition} never fires,
+   * `_atNewest` stays true forever, and a reader who has gone up to read something older
+   * is yanked back down every time somebody says something.
+   */
+  private readonly _shell = viewChild.required(SheetShell);
 
   /**
    * The composer, so a send can tell it what happened.
@@ -284,16 +292,16 @@ export class CommentsSheet {
     // rather than `effect`, because the rows have to exist before they can be measured,
     // and it runs in the browser and never on the server (plan 0001, D2).
     afterRenderEffect(() => {
-      const list = this._scroller()?.nativeElement;
+      const body = this._shell().body().nativeElement;
 
       // Read so the effect re-runs when somebody says something, here or on the socket.
       const said = this.comments().length;
 
-      if (list === undefined || said === 0 || !this._atNewest) {
+      if (said === 0 || !this._atNewest) {
         return;
       }
 
-      list.scrollTop = list.scrollHeight;
+      body.scrollTop = body.scrollHeight;
     });
   }
 
@@ -301,8 +309,9 @@ export class CommentsSheet {
    * Follow the scrollbar, so a reader who has gone up to read an older comment is not
    * dragged back down the moment the next one lands.
    */
-  trackPosition(list: HTMLElement): void {
-    const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+  trackPosition(): void {
+    const body = this._shell().body().nativeElement;
+    const fromBottom = body.scrollHeight - body.scrollTop - body.clientHeight;
     this._atNewest = fromBottom <= AT_NEWEST_SLACK_PX;
   }
 

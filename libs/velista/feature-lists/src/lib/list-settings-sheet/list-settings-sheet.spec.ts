@@ -372,6 +372,23 @@ describe('ListSettingsSheet', () => {
       expect(host.querySelectorAll('.secondary')).toHaveLength(0);
     });
 
+    it('keeps Save out of the scroll, so it covers nothing (plan 0040)', async () => {
+      // `0036` pinned the footer with `position: sticky`, which reserves its space at
+      // the end of the scrolled content and paints its pixels at the bottom of the
+      // scrollport: Save was on screen at every scroll position, and so were the share
+      // rows behind it. In the shell's footer slot there is nothing under it to cover.
+      const { fixture } = await render({ myRole: 'OWNER' });
+      const host = fixture.nativeElement as HTMLElement;
+      const body = host.querySelector('.sheet-body') as HTMLElement;
+      const footer = host.querySelector('.sheet-footer') as HTMLElement;
+
+      expect(footer).not.toBeNull();
+      expect(footer.querySelector('.primary')).not.toBeNull();
+      expect(body.contains(footer)).toBe(false);
+      // ...and the members it used to sit over are still in the part that scrolls.
+      expect(body.contains(host.querySelector('.share'))).toBe(true);
+    });
+
     it('keeps deleting in the body, out of reach of Cancel', async () => {
       // A destructive action beside Cancel is how somebody deletes a list they meant to
       // close.

@@ -20,6 +20,7 @@
   [attr.aria-labelledby]="labelledBy()"
   [class.closing]="closing()"
   [class.dragging]="dragging()"
+  [class.has-footer]="hasFooter()"
   [class.settling]="settling()"
   [style.transform]="
     dragOffset() === null ? null : 'translateY(' + dragOffset() + 'px)'
@@ -55,5 +56,25 @@
     <span class="handle"></span>
   </div>
 
-  <ng-content />
+  <!--
+    The body, which is the thing that scrolls. It used to be the panel itself, and a
+    sheet that wanted a bar along its bottom had to make one sticky, which reserves its
+    space at the end of the document and paints its pixels at the bottom of the window:
+    the two are the same place only at the last scroll position (plan 0040, section 1).
+    A column with the scroll on the middle child has no such gap.
+  -->
+  <div (scroll)="bodyScroll.emit()" #body class="sheet-body">
+    <ng-content />
+  </div>
+
+  <!--
+    Nothing is drawn here unless a caller says there is something to draw, so the nine
+    sheets with no footer keep no border, no background and no height they did not have
+    before. Angular offers no signal for an empty named slot, so the caller states it.
+  -->
+  @if (hasFooter()) {
+    <div class="sheet-footer">
+      <ng-content select="[sheetFooter]" />
+    </div>
+  }
 </div>

@@ -8,6 +8,7 @@ import {
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { OpenSheet, type FallingSheet } from '@portfolio/velista/platform';
 
@@ -72,6 +73,16 @@ const SPEED_WINDOW = 120;
  * scrim without a focus trap is a dialog a screen reader walks straight out of. The
  * body is projected, so the two sheets share all of it and share none of their copy.
  *
+ * ## A column, not a box
+ *
+ * The panel is three things stacked (plan 0040, section 2): the grabber, a body that
+ * scrolls and holds everything projected, and a footer that does not scroll and is
+ * drawn only when {@link hasFooter} says there is one. The scroll moved off the panel
+ * because a sheet that wants a bar along its bottom cannot get one from `position:
+ * sticky`: sticky reserves its space at the end of the scrolled content and paints its
+ * pixels at the bottom of the scrollport, and those are the same place only at the last
+ * scroll position. Everywhere else the bar covers content that no scrolling reveals.
+ *
  * ## Semantics
  *
  * `role="dialog"`, `aria-modal="true"` and a label from the title the caller renders,
@@ -113,7 +124,37 @@ export class SheetShell implements FallingSheet {
    */
   readonly dismissible = input(true);
 
+  /**
+   * Whether this sheet projects a footer, and therefore whether one is drawn.
+   *
+   * A boolean rather than a look at what was projected, because Angular gives no
+   * signal for an empty named slot and guessing at one would decide a border and a
+   * background from a query that can only ever be approximate. Defaulted false, so
+   * the nine sheets that want no footer say nothing and get nothing.
+   */
+  readonly hasFooter = input(false);
+
   readonly dismiss = output<void>();
+
+  /**
+   * The body scrolled.
+   *
+   * The scroll belongs to the shell now, so the event does too: a sheet that follows
+   * the scrollbar (the comments sheet does, to decide whether to stick to the newest
+   * comment) can no longer put a `(scroll)` on content it projects, because that
+   * content no longer scrolls.
+   */
+  readonly bodyScroll = output<void>();
+
+  /**
+   * The element that scrolls, for a sheet that has to measure or move it.
+   *
+   * Exposed here rather than reached for with a `viewChild` on the sheet, which would
+   * be a component reaching through another component's template at an element it does
+   * not own. The scroll is the shell's, so the shell is what answers questions about
+   * it.
+   */
+  readonly body = viewChild.required<ElementRef<HTMLElement>>('body');
 
   /**
    * Set while the panel is falling, between the gesture and the navigation.

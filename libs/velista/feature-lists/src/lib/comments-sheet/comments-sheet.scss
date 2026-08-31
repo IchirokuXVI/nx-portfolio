@@ -2,21 +2,31 @@
 
 @include sheet-form.sheet-form;
 
-// Capped and scrollable, so a long conversation cannot push the composer off the
-// bottom of the sheet: the field is the reason somebody opened this.
+// As tall as the conversation is. The sheet's body scrolls past it, which is the one
+// scroll in the sheet (plan 0040, section 3).
+//
+// It was capped at 40vh with a scroll of its own, which was the only way to keep the
+// composer in view before `SheetShell` had a footer: the conversation was stopped from
+// growing so that the thing under it could not be pushed off. The composer is in the
+// footer now, so it is in view because it is outside the scroll.
 .comments {
   display: flex;
   flex-direction: column;
   gap: var(--app-space-2);
-  max-block-size: 40vh;
-  margin: 0 0 var(--app-space-4);
+  margin: 0;
   padding: 0;
   list-style: none;
-  overflow-y: auto;
 }
 
 .comment {
   display: block;
+}
+
+// The composer, or the line standing in for it, and Cancel under it. In the shell's
+// footer slot, so the conversation scrolls behind it and nothing scrolls under it. The
+// gap is above the hairline the shell draws, so the field does not sit on it.
+.footer {
+  padding-block-start: var(--app-space-4);
 }
 
 // Where the composer would be, and at roughly its height, so the sheet keeps its shape

@@ -1,5 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { SheetShell } from './sheet-shell';
 
 /**
@@ -26,6 +27,27 @@ class SheetHost {
   readonly dismissals = signal(0);
 }
 
+/**
+ * A second host, because the footer is the one thing about the shell that only exists
+ * when a caller asks for it, and the assertion that matters is where the two halves
+ * end up relative to the scroll (plan 0040, section 5).
+ */
+@Component({
+  selector: 'lib-sheet-footer-host',
+  imports: [SheetShell],
+  template: `
+    <lib-sheet-shell [hasFooter]="true" labelledBy="footer-host-title">
+      <h2 id="footer-host-title">List settings</h2>
+      <p class="row">Somebody on the list</p>
+
+      <div class="actions" sheetFooter>
+        <button class="save" type="button">Save</button>
+      </div>
+    </lib-sheet-shell>
+  `,
+})
+class FooterSheetHost {}
+
 async function render(): Promise<ComponentFixture<SheetHost>> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -41,7 +63,20 @@ async function render(): Promise<ComponentFixture<SheetHost>> {
   return fixture;
 }
 
-function query(fixture: ComponentFixture<SheetHost>, selector: string) {
+async function renderWithFooter(): Promise<ComponentFixture<FooterSheetHost>> {
+  TestBed.resetTestingModule();
+  await TestBed.configureTestingModule({
+    imports: [FooterSheetHost],
+  }).compileComponents();
+
+  const fixture = TestBed.createComponent(FooterSheetHost);
+  fixture.detectChanges();
+  await fixture.whenStable();
+
+  return fixture;
+}
+
+function query(fixture: ComponentFixture<unknown>, selector: string) {
   return (fixture.nativeElement as HTMLElement).querySelector(selector);
 }
 
@@ -354,6 +389,61 @@ describe('SheetShell', () => {
       expect(grabber.getAttribute('aria-hidden')).toBe('true');
       expect(grabber.hasAttribute('tabindex')).toBe(false);
       expect(document.activeElement).toBe(query(fixture, '.first'));
+    });
+  });
+
+  /**
+   * The overlap this plan fixes is a layout fact, and jsdom has neither layout nor the
+   * component's stylesheet: nothing here can see a bar painted over a row, and asking
+   * for the body's `overflow-y` answers the empty string. What it can see is the
+   * structure that makes the overlap impossible, which is that the footer is not inside
+   * the element that scrolls. That is the property, and the pixels follow from it.
+   */
+  describe('the body and the footer (plan 0040)', () => {
+    it('projects into the body, and draws no footer when none was asked for', async () => {
+      // The cheapest evidence that the nine sheets not touched by this plan were not
+      // touched: a regression in them is a layout change nothing else would catch.
+      const fixture = await render();
+      const body = query(fixture, '.sheet-body') as HTMLElement;
+
+      expect(query(fixture, '.sheet-footer')).toBeNull();
+      expect(body).not.toBeNull();
+      expect(body.contains(query(fixture, '.first'))).toBe(true);
+      expect(body.contains(query(fixture, '.last'))).toBe(true);
+    });
+
+    it('answers with the element that scrolls', async () => {
+      // What a sheet measures when it follows the scrollbar. The comments sheet reads
+      // it to decide whether to stick to the newest comment, and pointing that at the
+      // wrong element fails silently rather than loudly.
+      const fixture = await render();
+      const shell = fixture.debugElement.query(By.directive(SheetShell))
+        .componentInstance as SheetShell;
+
+      expect(shell.body().nativeElement).toBe(query(fixture, '.sheet-body'));
+    });
+
+    it('keeps a projected footer outside the scrollport', async () => {
+      const fixture = await renderWithFooter();
+      const body = query(fixture, '.sheet-body') as HTMLElement;
+      const footer = query(fixture, '.sheet-footer') as HTMLElement;
+
+      expect(footer).not.toBeNull();
+      expect(footer.querySelector('.save')).not.toBeNull();
+      // The whole point: what the footer covers is nothing, because what scrolls under
+      // it is not under it.
+      expect(body.contains(footer)).toBe(false);
+      expect(body.contains(query(fixture, '.row'))).toBe(true);
+    });
+
+    it('leaves the body projecting everything the footer did not claim', async () => {
+      // A selective slot takes its node from wherever it appears in the caller's
+      // template, so a footer written last still reads in the order it is drawn.
+      const fixture = await renderWithFooter();
+      const body = query(fixture, '.sheet-body') as HTMLElement;
+
+      expect(body.querySelector('.actions')).toBeNull();
+      expect(body.querySelector('#footer-host-title')).not.toBeNull();
     });
   });
 });
