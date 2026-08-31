@@ -436,6 +436,52 @@ describe('AppShellRoutes', () => {
     });
   });
 
+  describe('the shopping profiles page (plan 0046)', () => {
+    const profiles = pages.find((route) => route.path === 'account/profiles');
+
+    it('is a page of its own, not a child of the account screen', () => {
+      // `account` renders its sheets into an outlet at the bottom of its own scroll,
+      // so a child here would draw a whole page under the account rows rather than
+      // instead of them.
+      const account = pages.find((route) => route.path === 'account');
+
+      expect(profiles).toBeDefined();
+      expect(account?.children?.map((route) => route.path)).not.toContain(
+        'profiles'
+      );
+    });
+
+    it('is declared before `account`, so nothing rests on backtracking', () => {
+      const paths = pages.map((route) => route.path);
+
+      expect(paths.indexOf('account/profiles')).toBeLessThan(
+        paths.indexOf('account')
+      );
+      expect(paths.indexOf('account/profiles')).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('is authenticated, and guarded by nothing else', () => {
+      // A profile is private and resolves from the caller's own token, so there is
+      // nothing here to authorize that the gateway does not already.
+      expect(profiles?.canActivate).toHaveLength(1);
+      expect(profiles?.canMatch).toBeUndefined();
+    });
+
+    it('offers the delete confirm as a sheet over it', () => {
+      expect(profiles?.children?.map((route) => route.path)).toEqual([
+        'confirm/delete',
+      ]);
+    });
+
+    it('keeps the page and its sheet lazy', () => {
+      const added = [profiles, ...(profiles?.children ?? [])];
+
+      expect(added.every((route) => route?.loadComponent !== undefined)).toBe(
+        true
+      );
+    });
+  });
+
   describe('the assistant', () => {
     const assistant = pages.find((route) => route.path === 'assistant');
 

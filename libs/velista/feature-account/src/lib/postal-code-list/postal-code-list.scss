@@ -1,0 +1,181 @@
+@use '../account-page' as page;
+
+:host {
+  display: block;
+}
+
+.label {
+  display: block;
+  margin-block-end: var(--app-space-3);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip-holder {
+  display: flex;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding-inline: var(--app-space-4) var(--app-space-2);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-surface-raised);
+}
+
+// An uncovered code. The outline agrees with the sentence under it and never carries the
+// message on its own (section 7).
+.flagged {
+  border-color: var(--app-action-quiet-fg);
+}
+
+.code {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.chip-label {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  // Pulled back in so the chip keeps its pill shape while the target keeps its 44px:
+  // the hit area is what has to be 44 square, not the drawing.
+  margin-block: calc(var(--app-space-2) * -1);
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  @include page.focus-ring;
+}
+
+.remove-glyph {
+  font-size: var(--app-text-sm);
+}
+
+.add {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-4);
+  border: 1px dashed var(--app-border-strong);
+  border-radius: var(--app-chip-radius);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  cursor: pointer;
+
+  @include page.focus-ring;
+}
+
+.add-glyph {
+  font-size: var(--app-text-sm);
+}
+
+.flags {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+
+  &:not(:empty) {
+    margin-block-start: var(--app-space-3);
+  }
+}
+
+.flag {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-action-quiet-fg);
+}
+
+.flag-code {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin-block-start: var(--app-space-4);
+}
+
+.field-label {
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.field {
+  min-block-size: var(--app-control-height);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  // Rule T3: anything under 16px makes iOS Safari zoom the viewport on focus.
+  font-size: var(--app-field-font-size);
+
+  @include page.focus-ring;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin-block-start: var(--app-space-2);
+}
+
+.primary {
+  @include page.primary-action;
+}
+
+.quiet {
+  @include page.quiet-action;
+}
+
+.hint {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.error {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}

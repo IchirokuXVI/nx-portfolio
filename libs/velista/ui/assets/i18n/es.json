@@ -525,7 +525,8 @@
     "back": "Atrás",
     "section": {
       "you": "Tú",
-      "access": "Cómo entras"
+      "access": "Cómo entras",
+      "shopping": "Compra"
     },
     "name": {
       "label": "Nombre",
@@ -604,6 +605,9 @@
       "installed": "Instalada",
       "elsewhere": "Consigue la app",
       "elsewhereDetail": "Velista tiene su propia dirección, {{origin}}. Ahí es donde se instala"
+    },
+    "row": {
+      "profiles": "Perfiles de compra"
     }
   },
   "install": {
@@ -730,6 +734,59 @@
     "goToInZone": "Ir a {{list}}, en {{zone}}",
     "choices": {
       "label": "Respuestas"
+    }
+  },
+  "profiles": {
+    "title": "Perfiles de compra",
+    "defaultName": "Mi perfil",
+    "loading": "Cargando tus perfiles",
+    "add": "Nuevo perfil",
+    "default": {
+      "badge": "Predeterminado"
+    },
+    "name": {
+      "label": "Nombre",
+      "hint": "Hasta que le pongas nombre, aparece como {{name}}"
+    },
+    "address": {
+      "label": "Dirección",
+      "optional": "Opcional",
+      "placeholder": "Calle y número"
+    },
+    "postal": {
+      "label": "Códigos postales",
+      "add": "Añadir código postal",
+      "code": "Código postal",
+      "name": "Etiqueta, opcional",
+      "submit": "Añadir",
+      "remove": "Quitar {{code}}",
+      "full": "Puedes guardar hasta {{count}} códigos postales",
+      "uncovered": "Ningún supermercado que conozcamos llega aún a este código"
+    },
+    "chains": {
+      "label": "Supermercados",
+      "excluded": "Excluido",
+      "hint": "La cadena entera, nunca una tienda. Una cadena excluida sigue aquí para poder volver"
+    },
+    "saving": {
+      "label": "Una segunda parada debe ahorrar al menos",
+      "currency": "€"
+    },
+    "scope": {
+      "banner": "Añade un código postal o elige un supermercado para ver precios"
+    },
+    "delete": {
+      "label": "Eliminar {{name}}",
+      "title": "¿Eliminar este perfil?",
+      "body": "Sus códigos postales y sus supermercados se van con él. Tus listas no se tocan",
+      "default": "{{name}} pasará a ser tu predeterminado",
+      "confirm": "Eliminar el perfil"
+    },
+    "error": {
+      "load": "No hemos podido leer tus perfiles",
+      "retry": "Inténtalo de nuevo",
+      "save": "No se ha guardado. Inténtalo de nuevo",
+      "delete": "No se pudo completar. Inténtalo de nuevo"
     }
   }
 }

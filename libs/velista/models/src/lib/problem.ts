@@ -43,6 +43,18 @@ export const ERROR_CODES = [
    * into it before the user finishes reading whatever was shown.
    */
   'client_too_old',
+  /**
+   * The caller's shopping profile says nothing about where they shop, so a catalog
+   * read that would have quoted prices refuses instead (backend plan 0049, section 3),
+   * as a 400.
+   *
+   * Neither "there is nothing" nor "here is everything": a profile holding no postal
+   * code and no included chain has not said where it is, and both of those answers
+   * would be a lie about the catalog rather than a statement about the profile. The
+   * app answers it by sending somebody to the profiles page (plan 0046, section 3.1),
+   * which is the one screen that can turn it into a real answer.
+   */
+  'catalog_scope_required',
   'internal',
 ] as const;
 

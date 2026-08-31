@@ -1,0 +1,34 @@
+<span class="label" id="profiles-chains-label">
+  {{ 'profiles.chains.label' | rokuT }}
+</span>
+
+<div aria-labelledby="profiles-chains-label" class="card" role="group">
+  @for (row of rows(); track row.supermarketId) {
+    <!--
+      The whole row is the target, because a `<label>` wrapping the checkbox is what
+      makes it one. 44px comes from the row rather than from the box (section 7).
+    -->
+    <label [class.excluded]="row.excluded" class="row">
+      <input
+        (change)="toggleChain.emit(row.supermarketId)"
+        [checked]="!row.excluded"
+        class="checkbox"
+        type="checkbox"
+      />
+      <span class="name">{{ row.name }}</span>
+      @if (row.excluded) {
+        <!--
+          The word, beside the strikethrough and the dimming. Three signals, and none of
+          them is the colour.
+        -->
+        <span class="mark">{{ 'profiles.chains.excluded' | rokuT }}</span>
+      }
+    </label>
+  }
+</div>
+
+<p class="hint">{{ 'profiles.chains.hint' | rokuT }}</p>
+
+@if (failed()) {
+  <p class="error" role="alert">{{ 'profiles.error.save' | rokuT }}</p>
+}

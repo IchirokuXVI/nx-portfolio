@@ -5,6 +5,7 @@ import {
   toListPresence,
   toMembership,
   toShoppingList,
+  toShoppingProfile,
   toZone,
   toZonePresence,
 } from '../mapping/mappers';
@@ -216,6 +217,21 @@ export function toRealtimeEvent(
       return mergeId === null || zoneId === null
         ? null
         : { type: name, mergeId, zoneId };
+    }
+
+    case 'profiles.changed': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+
+      // `mapArray` drops a profile this build cannot read, which is right here for the
+      // reason it is right everywhere: one malformed row must not cost the user the
+      // whole list. A payload whose `profiles` is missing altogether yields an empty
+      // array, and that is dropped rather than applied: the server never sends one, and
+      // applying it would delete every profile on screen on the strength of a body this
+      // build could not read.
+      const profiles = mapArray(payload['profiles'], toShoppingProfile);
+      return profiles.length === 0 ? null : { type: name, profiles };
     }
 
     case 'presence.zoneUpdated': {
