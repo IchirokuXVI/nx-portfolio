@@ -62,10 +62,17 @@ Two tables, and the split between them is the whole design.
 **GeneratedListShareLink** (the thing you copy and send)
 
 - `id` (uuid), `generatedListId`
-- `secretHash` (the link secret, **hashed**; section 3.1)
-- `label` (nullable free text, "the flatmates", so several links are tellable apart)
+- `secret` (the link secret, stored retrievably; section 3.1)
 - `createdByParticipantId`, `createdAt`
 - `expiresAt` (nullable), `revokedAt` (nullable)
+- partial unique index on `generatedListId` where `revokedAt` is null
+
+**A generated list has zero share links or one.** It starts with zero; pressing share
+mints the link, revoking returns the list to zero, and sharing again mints a fresh one.
+Several concurrent links with per link labels were in the first draft and were dropped at
+review: one link at a time is easier to understand, and it costs nothing, because the one
+link can be handed to any number of people. Revoked rows are kept, since participants
+reference the link they arrived by.
 
 **GeneratedListParticipant** (a person acting on the list)
 
@@ -80,12 +87,20 @@ Two tables, and the split between them is the whole design.
 - `joinedAt`, `lastSeenAt`, `revokedAt` (nullable)
 - unique (`generatedListId`, `userId`) where `userId` is not null
 
-### 3.1 The secrets are opaque and stored hashed, and neither is a JWT
+### 3.1 The secrets are opaque, and neither is a JWT
 
 A share link secret is high entropy random, not a signed token. The requirement is that it be
 checked against the database on every use, and a JWT you must look up anyway is a JWT with no
-benefit and a signing key's worth of risk. Both secrets are stored as hashes, like a password, so
-a database leak does not hand over working links.
+benefit and a signing key’s worth of risk.
+
+The two secrets are stored differently, because they are different things. The **participant**
+session secret is a credential and is stored hashed, like a password. The **link** secret is an
+invitation the owner must be able to copy again tomorrow, from another device, for the next
+person, so it is stored retrievably and the share sheet returns it on every read. The cost is
+named rather than hidden: a database leak hands over working invitations, which mint guests on
+baskets until revoked or expired. It hands over no participant’s session, and a basket lives
+about as long as a shopping trip, which is why the trade is acceptable here and would not be
+for a credential.
 
 Ids are uuids and nothing in the URL is enumerable. A request for a link that never existed and
 one for a link that was revoked get the same answer.
@@ -120,7 +135,8 @@ Two levels, and both are things somebody actually wants.
 - **Revoke the link.** No new participant may be minted from it. **Every existing participant
   keeps working**, including the ability to open the list from that same URL, because their
   session is what authorizes them and the link is only an invitation they already accepted. This
-  is the common case: stop it spreading, do not throw out the people in the shop.
+  is the common case: stop it spreading, do not throw out the people in the shop. The list
+  is back to zero links, and sharing again mints a fresh one.
 - **Revoke the link and its guests**, offered as an explicit second choice ("revoke all guests
   from this link?"). Sets `revokedAt` on every participant minted from it.
 - **Revoke one participant.** Only that one. For the lost phone and the guest who should not have
@@ -338,6 +354,8 @@ to be discovered at the guard.
 - A registered user opening a link is attached as themselves, once, however many links they open.
 - Revoking a link stops new joins and leaves the people already shopping working; revoking with
   the cascade removes them; revoking one participant touches nobody else.
+- A list holds at most one live link; revoking it leaves zero, and the owner can copy the
+  live link again at any time.
 - A revoked participant is refused on the next request, with no cache to wait out.
 - The link preview discloses no line, list, zone or member.
 - A guest sees the basket and never sees a zone, a list name, a settlement history or the

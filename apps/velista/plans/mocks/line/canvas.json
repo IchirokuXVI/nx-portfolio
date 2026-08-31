@@ -30,7 +30,7 @@
       "x": 960,
       "y": -430,
       "w": 450,
-      "text": "THE REEL IS POSITIONAL. One to one with the finger, 40px per unit, no acceleration, no auto repeat. Release snaps to the nearest number and the snap is the only confirmation, so it is animated and short.\nAt zero there is nothing to the left of the current number. No minus one exists and the empty slot says so.\nIt writes ONE SIGNED DELTA on release through POST /v1/lines/:id/quantity (built by backend 0040, first UI caller). Absolute writes from a moving control race each other; a delta cannot.\nArrow keys step the spinbutton, page keys by five. A gesture is never the only way."
+      "text": "THE REEL IS POSITIONAL. One to one with the finger, 40px per unit, no acceleration, no auto repeat. Release snaps to the nearest number and the snap is the only confirmation, so it is animated and short.\nAt zero there is nothing to the left of the current number. No minus one exists and the empty slot says so.\nTHE OVERLAY DOES NOT CLOSE ON RELEASE. It lingers a second or two so the thumb can keep adjusting, and a drag inside that window continues from the snapped number. It closes on idleness, and writes ONE SIGNED DELTA then, through POST /v1/lines/:id/quantity (built by backend 0040, first UI caller). Absolute writes from a moving control race each other; a delta cannot.\nArrow keys step the spinbutton, page keys by five. A gesture is never the only way."
     },
     {
       "id": "sheet",

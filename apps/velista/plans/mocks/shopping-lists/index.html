@@ -380,8 +380,9 @@
 
                 <label style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">Name</label>
                 <div style="height: 48px; border-radius: 14px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; padding: 0 15px;">
-                  <span style="font-size: 15.5px; color: #f7f8fc;">Shopping, 31 August</span>
+                  <span style="font-size: 15.5px; color: #525a78;">31 August</span>
                 </div>
+                <div style="margin-top: 6px; font-size: 11.5px; color: #6f7899;">Left empty, the list shows its date; a second one the same day gets a number</div>
 
                 <div style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between; height: 44px;">
                   <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb;">Shopping profile</span>
@@ -468,7 +469,7 @@
 
                   <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 16px; padding: 14px 15px; display: flex; align-items: center; gap: 12px;">
                     <div style="flex: 1 1 auto; min-width: 0;">
-                      <div style="font-size: 15.5px; font-weight: 600; color: #f7f8fc;">Shopping, 24 August</div>
+                      <div style="font-size: 15.5px; font-weight: 600; color: #f7f8fc;">24 August</div>
                       <div style="margin-top: 4px; font-size: 12.5px; color: #6f7899;">last Sunday &middot; 11 of 11 got</div>
                     </div>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
@@ -476,7 +477,7 @@
 
                   <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 16px; padding: 14px 15px; display: flex; align-items: center; gap: 12px;">
                     <div style="flex: 1 1 auto; min-width: 0;">
-                      <div style="font-size: 15.5px; font-weight: 600; color: #f7f8fc;">Quick top up</div>
+                      <div style="font-size: 15.5px; font-weight: 600; color: #f7f8fc;">21 August 2</div>
                       <div style="margin-top: 4px; font-size: 12.5px; color: #6f7899;">21 August &middot; 3 of 4 got, 1 not available</div>
                     </div>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
@@ -484,14 +485,14 @@
 
                   <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 16px; padding: 14px 15px; display: flex; align-items: center; gap: 12px;">
                     <div style="flex: 1 1 auto; min-width: 0;">
-                      <div style="font-size: 15.5px; font-weight: 600; color: #f7f8fc;">Shopping, 17 August</div>
-                      <div style="margin-top: 4px; font-size: 12.5px; color: #6f7899;">17 August &middot; 9 of 9 got</div>
+                      <div style="font-size: 15.5px; font-weight: 600; color: #f7f8fc;">21 August</div>
+                      <div style="margin-top: 4px; font-size: 12.5px; color: #6f7899;">21 August &middot; 9 of 9 got</div>
                     </div>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
                   </div>
 
                   <div style="padding: 13px 14px; border: 1px dashed rgba(255,255,255,0.12); border-radius: 14px;">
-                    <span style="font-size: 12.5px; line-height: 1.5; color: #525a78;">No swipe actions, no overflow, no delete anywhere on this page. The API keeps deletion (backend 0050 section 7); no screen offers it for now. Scrolling loads the next page.</span>
+                    <span style="font-size: 12.5px; line-height: 1.5; color: #525a78;">No swipe actions, no overflow, no delete anywhere on this page. The API keeps deletion (backend 0050 section 7); no screen offers it for now. Scrolling loads the next page. An unnamed list shows its date, and a second one the same day gets a number.</span>
                   </div>
 
                 </div>
@@ -534,7 +535,7 @@
         </div>
       </figure>
       <aside class="note" style="left: 0px; top: 0px; width: 450px;"><p>Plan 0045. PICK UP WHERE YOU LEFT OFF is removed, not restyled: it answered what was I doing with device-local guesswork, and the shopping list card answers it with server truth, the ACTIVE generated list. With no active list the section is absent entirely: no header, no empty card, no gap.</p><p>0019 section 4's Get shopping list button ships enabled at last; the sheet behind it is what it was waiting for.</p></aside>
-      <aside class="note" style="left: 530px; top: 0px; width: 450px;"><p>THE SHEET'S THREE INPUTS. Name, prefilled with the server default and editable. Profile, one row naming the default shopping profile (0049), absent when the user has exactly one. Sources: a checkbox tree of zones and lists, prechecked from the profile's stored generation scope, showing only lists where the caller holds WRITE (backend 0051 section 2).</p><p>A zone checked whole means every writable list in it, including ones created later, which is what ALL stores. Submitting is idempotent and lands in the new basket (0044's screen).</p></aside>
+      <aside class="note" style="left: 530px; top: 0px; width: 450px;"><p>THE SHEET'S THREE INPUTS. Name, empty: an unnamed list shows its generation date, and a second one the same day gets a number appended. Profile, one row naming the default shopping profile (0049), absent when the user has exactly one. Sources: a checkbox tree of zones and lists, prechecked from the profile's stored generation scope, showing only lists where the caller holds WRITE (backend 0051 section 2).</p><p>A zone checked whole means every writable list in it, including ones created later, which is what ALL stores. Submitting is idempotent and lands in the new basket (0044's screen).</p></aside>
       <aside class="note" style="left: 1060px; top: 0px; width: 450px;"><p>THE HISTORY CANNOT LOSE ENTRIES. Newest first, cursor paginated, active runs marked and sorted on top. There is no delete and no archive control anywhere on the page: the API keeps deletion (backend 0050 section 7) and no screen offers it for now, deliberately. That is the point of keeping a history.</p><p>Night only: no colour role here is new since 0003, so the mock README's rule says no Day artboard is drawn.</p></aside>
   </div>
 </div>

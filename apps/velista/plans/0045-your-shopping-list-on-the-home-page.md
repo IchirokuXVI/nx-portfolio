@@ -85,7 +85,7 @@ entries is the point of keeping one.
 
 | State | Meaning |
 | --- | --- |
-| Ready | Name prefilled with the localized default ("Shopping, 12 March"), profile row showing the default profile, sources defaulting to the profile's stored generation scope |
+| Ready | Name empty, its placeholder the date an unnamed list will show; profile row showing the default profile; sources defaulting to the profile's stored generation scope |
 | Submitting | The submit disabled with the working treatment, one request, idempotent per `0050` section 4 |
 | No sources | The caller holds `WRITE` on nothing: the source list is replaced by a sentence saying a group where they can write is needed first |
 | Failed | The error under the submit, sheet stays open, nothing lost |
@@ -113,7 +113,10 @@ a shipped screen.
 
 ### 4.1 The sheet's three inputs
 
-- **Name.** Optional, prefilled with the server's default, editable in place.
+- **Name.** Optional and empty. An unnamed list is displayed as its generation date,
+  localized, and a second unnamed list on the same day gets a number appended ("21
+  August 2"), per `0050` section 1. Typing here stores a real name; leaving it empty
+  stores none.
 - **Profile.** One row showing the default shopping profile's name, tappable to switch
   when the user has more than one (`0049`). Absent when they have exactly one, per the
   absence rule: a chooser with one choice is furniture.
@@ -157,6 +160,9 @@ Submitting calls the create with what is checked, navigates to the new basket in
 | `history.empty.title` | No shopping lists yet | Aún no hay listas de la compra |
 | `history.status.active` | Shopping now | Comprando ahora |
 
+An unnamed list’s display name is its formatted generation date plus the disambiguating
+number, built client side (`0050` section 1); it needs no key of its own.
+
 `home.section.resume` and its Spanish twin are deleted, not orphaned.
 
 ## 7. Accessibility and input
@@ -181,7 +187,8 @@ Submitting calls the create with what is checked, navigates to the new basket in
   `shopping-lists`.
 - Get shopping list is enabled, opens the sheet, and a user with no writable list reads
   why the source list is empty instead of finding a dead button.
-- The sheet prefills name, profile and sources; unchecking works per list and per zone;
+- The sheet leaves the name empty with its date placeholder and prefills profile and
+  sources; unchecking works per list and per zone;
   submitting once creates one run (double tap included) and lands in the basket.
 - The history lists every run newest first, pages on scroll, marks active ones, and
   offers no way to delete anything.

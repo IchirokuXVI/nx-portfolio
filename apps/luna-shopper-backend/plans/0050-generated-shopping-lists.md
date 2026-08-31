@@ -32,7 +32,10 @@ New entities, in core:
 **GeneratedList**
 - `id` (uuid)
 - `ownerUserId` (opaque; the only user who may ever read it)
-- `name` (defaulted to something like "Shopping, 12 March", user editable)
+- `name` (nullable; set only when the owner names it. An unnamed list is displayed as its
+  generation date, localized by the reader’s client, and a second unnamed list on the same
+  day gets a number appended to the display, so the default is never stored, never needs
+  localizing server side, and never collides)
 - `status`: `GeneratedListStatus` enum (`DRAFT`, `ACTIVE`, `COMPLETED`, `ARCHIVED`)
 - `generatedAt`, `sourceSnapshot` (jsonb: the zones, lists and preference values the run used)
 - pricing fields added by backlog 0004, not here

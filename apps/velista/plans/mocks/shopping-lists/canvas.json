@@ -20,7 +20,7 @@
       "x": 530,
       "y": -430,
       "w": 450,
-      "text": "THE SHEET'S THREE INPUTS. Name, prefilled with the server default and editable. Profile, one row naming the default shopping profile (0049), absent when the user has exactly one. Sources: a checkbox tree of zones and lists, prechecked from the profile's stored generation scope, showing only lists where the caller holds WRITE (backend 0051 section 2).\nA zone checked whole means every writable list in it, including ones created later, which is what ALL stores. Submitting is idempotent and lands in the new basket (0044's screen)."
+      "text": "THE SHEET'S THREE INPUTS. Name, empty: an unnamed list shows its generation date, and a second one the same day gets a number appended. Profile, one row naming the default shopping profile (0049), absent when the user has exactly one. Sources: a checkbox tree of zones and lists, prechecked from the profile's stored generation scope, showing only lists where the caller holds WRITE (backend 0051 section 2).\nA zone checked whole means every writable list in it, including ones created later, which is what ALL stores. Submitting is idempotent and lands in the new basket (0044's screen)."
     },
     {
       "id": "history",

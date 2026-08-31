@@ -83,8 +83,8 @@
 #ab-Reel 70% { transform: translateX(-120px); }
 #ab-Reel 82% { transform: translateX(-120px); }
 #ab-Reel 100% { transform: translateX(-120px); }
-#ab-Reel @keyframes reel-snap { 0%, 88% { opacity: 1; }
-#ab-Reel 94%, #ab-Reel 100% { opacity: 0; }
+#ab-Reel @keyframes reel-snap { 0%, 90% { opacity: 1; }
+#ab-Reel 96%, #ab-Reel 100% { opacity: 0; }
 #ab-LineDetail * { box-sizing: border-box; }
 #ab-LineDetail a { color: #ffb454; text-decoration: none; }
 #ab-LineDetail a:hover { color: #ffc271; }
@@ -377,11 +377,11 @@
 
             <!-- the motion, animated -->
             <div style="display: flex; flex-direction: column; gap: 6px;">
-              <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">THE MOTION &middot; a looping demo of one drag from 2 to 5: the tape follows the finger, 40px per unit, and the snap is the only confirmation</span>
+              <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">THE MOTION &middot; a looping demo of one drag from 2 to 5: the tape follows the finger, 40px per unit; after release the overlay lingers a second or two, then fades</span>
               <div style="width: 390px; background: #161a28; border-radius: 12px; height: 72px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px; position: relative; overflow: hidden;">
                 <span style="flex: 1 1 auto; font-size: 16px; color: #6f7899;">Sparkling water</span>
-                <div style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 168px; height: 56px; border-radius: 14px; background: #262b40; border: 1px solid rgba(255,255,255,0.16); overflow: hidden; animation: reel-snap 3.6s ease-in-out infinite;">
-                  <div style="position: absolute; top: 0; bottom: 0; left: 24px; display: flex; align-items: center; gap: 12px; animation: reel-drag 3.6s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;">
+                <div style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 168px; height: 56px; border-radius: 14px; background: #262b40; border: 1px solid rgba(255,255,255,0.16); overflow: hidden; animation: reel-snap 5.2s ease-in-out infinite;">
+                  <div style="position: absolute; top: 0; bottom: 0; left: 24px; display: flex; align-items: center; gap: 12px; animation: reel-drag 5.2s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;">
                     <span style="width: 28px; text-align: center; font-size: 17px; color: #525a78; font-variant-numeric: tabular-nums;">1</span>
                     <span style="width: 28px; text-align: center; font-size: 17px; color: #98a0bb; font-variant-numeric: tabular-nums;">2</span>
                     <span style="width: 28px; text-align: center; font-size: 17px; color: #98a0bb; font-variant-numeric: tabular-nums;">3</span>
@@ -392,7 +392,7 @@
                   <div style="position: absolute; top: 4px; bottom: 4px; left: 50%; width: 34px; transform: translateX(-50%); border-radius: 10px; border: 1.5px solid #ffc271;"></div>
                 </div>
               </div>
-              <span style="font-size: 11.5px; color: #525a78;">The overlay fades on release and the pill shows the snapped number. One signed delta (+3) is sent then, not during the drag.</span>
+              <span style="font-size: 11.5px; color: #525a78;">The overlay stays up for a second or two after release, so a second drag continues from the snapped number. It fades after that idle beat, and one signed delta (+3) for the whole adjustment is sent then.</span>
             </div>
 
             <!-- the measurements -->
@@ -405,11 +405,11 @@
                 </div>
                 <div style="flex: 1; background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 12px 14px;">
                   <div style="font-size: 19px; font-weight: 700; color: #ffc271;">1:1</div>
-                  <div style="margin-top: 3px; font-size: 12px; line-height: 1.45; color: #98a0bb;">positional. No acceleration, no auto repeat. Letting go snaps to the nearest number</div>
+                  <div style="margin-top: 3px; font-size: 12px; line-height: 1.45; color: #98a0bb;">positional. No acceleration, no auto repeat. Letting go snaps, and the overlay lingers a beat for another drag</div>
                 </div>
                 <div style="flex: 1; background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; padding: 12px 14px;">
                   <div style="font-size: 19px; font-weight: 700; color: #ffc271;">1 delta</div>
-                  <div style="margin-top: 3px; font-size: 12px; line-height: 1.45; color: #98a0bb;">POST /v1/lines/:id/quantity on release, signed. The spinbutton's arrow keys are the non pointer path</div>
+                  <div style="margin-top: 3px; font-size: 12px; line-height: 1.45; color: #98a0bb;">POST /v1/lines/:id/quantity when the overlay closes, signed. The spinbutton's arrow keys are the non pointer path</div>
                 </div>
               </div>
             </div>
@@ -919,7 +919,7 @@
       </figure>
       <aside class="note" style="left: 0px; top: 0px; width: 440px;"><p>Plan 0043. The row stops being a checkbox: quantity is the state, buying decrements it, zero means stocked, and the line stays put holding its history. No control on the page marks ready or not available any more; both moved behind the detail sheet as deliberate acts.</p><p>The quantity pill on the right is the spinbutton; the whole row is the reel's drag target. 44px floor everywhere.</p><p>The counts change with it: the header says what is WANTED (5 things needed), never what is done.</p></aside>
       <aside class="note" style="left: 480px; top: 0px; width: 450px;"><p>THREE INDICATORS, ALL DERIVED, NONE A COLUMN.</p><p>Bought: zero quantity plus at least one recorded purchase. Green, quiet, no strikethrough, because the line is not done, the household is stocked.</p><p>Not available: the most recent settlement said the shop had none. Rose.</p><p>Somebody is buying this: the line sits in an active basket. Drawn in the live blue rather than presence green so it can share a row with Bought without the two reading as one thing. It is presence-shaped: it appears and disappears while you watch, and must never read as dealt with.</p><p>A zero line with no purchase shows NOTHING: never wanted is not bought.</p></aside>
-      <aside class="note" style="left: 960px; top: 0px; width: 450px;"><p>THE REEL IS POSITIONAL. One to one with the finger, 40px per unit, no acceleration, no auto repeat. Release snaps to the nearest number and the snap is the only confirmation, so it is animated and short.</p><p>At zero there is nothing to the left of the current number. No minus one exists and the empty slot says so.</p><p>It writes ONE SIGNED DELTA on release through POST /v1/lines/:id/quantity (built by backend 0040, first UI caller). Absolute writes from a moving control race each other; a delta cannot.</p><p>Arrow keys step the spinbutton, page keys by five. A gesture is never the only way.</p></aside>
+      <aside class="note" style="left: 960px; top: 0px; width: 450px;"><p>THE REEL IS POSITIONAL. One to one with the finger, 40px per unit, no acceleration, no auto repeat. Release snaps to the nearest number and the snap is the only confirmation, so it is animated and short.</p><p>At zero there is nothing to the left of the current number. No minus one exists and the empty slot says so.</p><p>THE OVERLAY DOES NOT CLOSE ON RELEASE. It lingers a second or two so the thumb can keep adjusting, and a drag inside that window continues from the snapped number. It closes on idleness, and writes ONE SIGNED DELTA then, through POST /v1/lines/:id/quantity (built by backend 0040, first UI caller). Absolute writes from a moving control race each other; a delta cannot.</p><p>Arrow keys step the spinbutton, page keys by five. A gesture is never the only way.</p></aside>
       <aside class="note" style="left: 1440px; top: 0px; width: 450px;"><p>RECORDING A PURCHASE LIVES IN THE SHEET AND NOWHERE ELSE. Two taps behind a deliberate open, defaulting to the whole outstanding quantity. It writes a settlement with no basket attached (backend 0047 section 4.4), which is what makes this plan shippable before baskets exist.</p><p>The estimate obeys the three-buy floor: nothing at all is shown until three purchases exist, because two purchases define one interval, which is a coincidence, not an estimate.</p><p>SUGGESTIONS: after three characters the composer offers the catalog. A GROUP beats an item for a bare word (backend 0048), the scope is where you shop, and free text stays first class with no nagging. Choosing a suggestion is what finally populates ListLine.itemId.</p></aside>
   </div>
 </div>

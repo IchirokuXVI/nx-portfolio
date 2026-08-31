@@ -106,6 +106,9 @@ the new quantity.
   gesture rather than three.
 - The snap is animated and short. It is the only confirmation the gesture gives, so it has
   to be felt.
+- **The overlay does not close on release.** It stays up for a second or two so the thumb
+  can keep adjusting, and a drag inside that window continues from the snapped number. It
+  closes after that beat of idleness, and the close is what commits the result.
 - Large changes go through the line editor, which still edits the quantity as a field.
   The reel is for the common case and is not asked to be a general purpose number entry.
 
@@ -116,8 +119,9 @@ built by backend plan `0040` for the assistant and has never had a second caller
 the caller it was shaped for.
 
 Absolute writes from a moving control race each other, and the loser silently wins. One
-delta per settled gesture, sent on release rather than during the drag, is both correct
-and one request.
+delta per settled adjustment, sent when the overlay closes after its idle beat rather than
+during the drag, is both correct and one request however many times the thumb went back
+for more within the window.
 
 ### 4.2 The optimistic overlay applies unchanged
 
@@ -231,10 +235,11 @@ This section replaces `0012` section 7's row mapping in full.
 
 - No control on the list page marks a line ready or not available.
 - Dragging the quantity moves a reel that shows the neighbouring numbers, shows nothing to
-  the left of zero, and snaps on release.
+  the left of zero, and snaps on release; the overlay stays up for a beat so a second
+  drag continues it, and closes on idleness.
 - One uninterrupted drag takes a line from 2 to 5.
-- A settled gesture sends one signed delta, and a failure restores the previous number with
-  the existing failed treatment.
+- A settled adjustment sends one signed delta when the overlay closes, and a failure
+  restores the previous number with the existing failed treatment.
 - Arrow keys change the quantity without a pointer, and the change is announced once.
 - A line at zero that has been bought shows the bought indicator; one at zero that never
   has shows nothing.

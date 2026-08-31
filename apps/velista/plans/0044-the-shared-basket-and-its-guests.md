@@ -33,7 +33,7 @@ approval. Not ready for development until it is.
 | `Settle.dc.html` | Full settle, partial submit, and a line showing what was submitted against what is outstanding |
 | `Allocate.dc.html` | The per list allocation sheet, and the default it starts from |
 | `People.dc.html` | Presence with guests and registered people together; a participant's details on tap |
-| `Share.dc.html` | Creating a link, several links with labels, and both revoke confirmations |
+| `Share.dc.html` | The share sheet with the one link, and the revoke confirmation |
 | `DayTheme.dc.html` | The basket on Day |
 
 Phone frames 390 by 844.
@@ -139,10 +139,13 @@ is the same "+X" pattern the price display uses.
 
 The word "anonymous" appears nowhere in the product. They are guests.
 
-### 5.2 Creating and revoking links
+### 5.2 The link, and revoking it
 
-Several links per basket, each with an optional label, so "the flatmates" and "my mother"
-are tellable apart afterwards. The link secret is shown once, on creation.
+**A basket has zero links or one.** It starts with zero; pressing share mints the link
+and shows it; revoking returns it to zero, and sharing again mints a fresh one. The one
+link can be copied again at any time, from any of the owner’s devices, because handing
+it to the next person tomorrow must not depend on a string copied once (backend `0051`
+section 3.1).
 
 Revoking asks a real question, because there are two answers and the wrong default is
 harmful:
