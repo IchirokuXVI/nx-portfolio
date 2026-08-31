@@ -10,7 +10,10 @@ import {
 import type { DataSource, EntityManager } from 'typeorm';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { ListLineItem } from '../entities';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { itemSetHash } from './item-set-hash';
+import { fakeLineItems, type FakeLineItems } from './line-items.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 
@@ -36,11 +39,14 @@ const ZONE_ID = 'z1';
 const SHOPPER = 'u-shopper';
 const AUTHOR = 'u-author';
 const APPROVER = 'u-approver';
+/** A real uuid, because the service checks the shape of every product id. */
+const ITEM_TOMATOES = '33333333-3333-4333-8333-333333333333';
 
 interface Split {
   service: LineService;
   saved: Partial<ListLine>[];
   events: { event: RealtimeEvent; line: LineView }[];
+  lineItems: FakeLineItems;
 }
 
 function build(options: {
@@ -68,7 +74,7 @@ function build(options: {
     listId: LIST_ID,
     content: 'Tinned tomatoes',
     quantity: options.quantity ?? 3,
-    itemId: 'item-1',
+    itemSetHash: itemSetHash([ITEM_TOMATOES]),
     position: options.position ?? 10,
     approvalStatus: options.approvalStatus ?? LineApprovalStatus.APPROVED,
     status: LineStatus.PENDING,
@@ -134,9 +140,18 @@ function build(options: {
     new ZoneAuthzService(memberships as never)
   );
 
+  // Plan 0048: the remainder gets a copy of the original's product set, so this
+  // harness has to be able to hold one even though the split is about quantity.
+  const lineItems = fakeLineItems([
+    { lineId: 'li1', itemId: ITEM_TOMATOES, position: 0 },
+  ]);
+
   const dataSource = {
     transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
-      run({ getRepository: () => lineRepo } as unknown as EntityManager),
+      run({
+        getRepository: (entity: unknown) =>
+          entity === ListLineItem ? lineItems.repo : lineRepo,
+      } as unknown as EntityManager),
   } as unknown as DataSource;
 
   const publisher = {
@@ -147,11 +162,12 @@ function build(options: {
   const service = new LineService(
     dataSource,
     lineRepo as never,
+    lineItems.repo as never,
     listAccess,
     publisher
   );
 
-  return { service, saved, events };
+  return { service, saved, events, lineItems };
 }
 
 const DECIDER = [ListPermission.READ, ListPermission.DECIDE];
@@ -320,13 +336,30 @@ describe('what the remainder carries', () => {
     expect(w.saved[1].approvedByUserId).toBe(APPROVER);
   });
 
-  it('copies the content and the item reference', async () => {
+  it('copies the content and the product set (plan 0048, section 1.1)', async () => {
     const w = build({ permissions: DECIDER });
 
-    await w.service.update({ userId: SHOPPER, lineId: 'li1', quantity: 1 });
+    const view = await w.service.update({
+      userId: SHOPPER,
+      lineId: 'li1',
+      quantity: 1,
+    });
 
     expect(w.saved[1].content).toBe('Tinned tomatoes');
-    expect(w.saved[1].itemId).toBe('item-1');
+    // The remainder carries the same products, so it carries the same hash: the
+    // two rows are recognisably one request that was only partly filled.
+    expect(w.saved[1].itemSetHash).toBe(view.itemSetHash);
+    expect(w.saved[1].itemSetHash).toBe(itemSetHash([ITEM_TOMATOES]));
+    // ...and it is a copy, not a share, so either can be edited afterwards.
+    const remainderId = w.saved[1].id;
+    expect(
+      w.lineItems.rows
+        .filter((row) => row.lineId === remainderId)
+        .map((row) => row.itemId)
+    ).toEqual([ITEM_TOMATOES]);
+    expect(
+      w.lineItems.rows.filter((row) => row.lineId === 'li1')
+    ).toHaveLength(1);
   });
 
   it('bumps the original version and starts the remainder at 1', async () => {

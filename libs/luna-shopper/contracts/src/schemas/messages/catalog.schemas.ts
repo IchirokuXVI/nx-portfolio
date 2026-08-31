@@ -5,8 +5,10 @@ import {
   UnitOfMeasure,
 } from '../../lib/enums/catalog.enums';
 import {
+  CATALOG_SUGGESTION_KINDS,
   ITEM_PATTERNS,
   PRICE_SCOPE_PATTERNS,
+  PRODUCT_GROUP_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
@@ -38,6 +40,19 @@ export const CATALOG_SCHEMA_IDS = {
   priceScopeKind: schemaId('enums/PriceScopeKind'),
   priceSourceKind: schemaId('enums/PriceSourceKind'),
   localizedText: schemaId('catalog/LocalizedText'),
+  localizedSynonyms: schemaId('catalog/LocalizedSynonyms'),
+  productGroupView: schemaId('catalog/ProductGroupView'),
+  itemOfferView: schemaId('catalog/ItemOfferView'),
+  productGroupOfferView: schemaId('catalog/ProductGroupOfferView'),
+  productGroupPage: schemaId('catalog/ProductGroupPage'),
+  productGroupOfferPage: schemaId('catalog/ProductGroupOfferPage'),
+  catalogSuggestion: schemaId('catalog/CatalogSuggestion'),
+  catalogSuggestResponse: schemaId('catalog/CatalogSuggestResponse'),
+  createProductGroupRequest: schemaId('msg/productGroup.create/request'),
+  updateProductGroupRequest: schemaId('msg/productGroup.update/request'),
+  productGroupIdRequest: schemaId('msg/productGroup.id/request'),
+  listProductGroupsRequest: schemaId('msg/productGroup.list/request'),
+  searchOffersRequest: schemaId('msg/item.searchOffers/request'),
   supermarketView: schemaId('catalog/SupermarketView'),
   supermarketLocationView: schemaId('catalog/SupermarketLocationView'),
   priceScopeView: schemaId('catalog/PriceScopeView'),
@@ -104,6 +119,13 @@ const localizedText = object(
   ['en', 'es']
 );
 
+/** Per locale alternative words, so `leche` and `milk` reach one group (0048). */
+const localizedSynonyms = object(
+  CATALOG_SCHEMA_IDS.localizedSynonyms,
+  { en: array(string()), es: array(string()) },
+  ['en', 'es']
+);
+
 // --- Views -----------------------------------------------------------------
 
 const supermarketView = object(
@@ -162,6 +184,43 @@ const priceScopeView = object(
   ['id', 'supermarketId', 'kind', 'externalKey', 'label']
 );
 
+const productGroupView = object(
+  CATALOG_SCHEMA_IDS.productGroupView,
+  {
+    id: nonEmptyString(),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    slug: nonEmptyString(),
+    referenceUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+    synonyms: ref(CATALOG_SCHEMA_IDS.localizedSynonyms),
+  },
+  ['id', 'name', 'slug', 'referenceUnit', 'synonyms']
+);
+
+/** A price a search result quotes, with the provenance that lets it be labelled. */
+const itemOfferView = object(
+  CATALOG_SCHEMA_IDS.itemOfferView,
+  {
+    itemId: nonEmptyString(),
+    priceScopeId: nonEmptyString(),
+    price: numberOrNull(),
+    currency: nullableString(),
+    unitPrice: numberOrNull(),
+    unitPriceLabel: nullableString(),
+    priceObservedAt: nullableString(),
+    priceSourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+  },
+  [
+    'itemId',
+    'priceScopeId',
+    'price',
+    'currency',
+    'unitPrice',
+    'unitPriceLabel',
+    'priceObservedAt',
+    'priceSourceKind',
+  ]
+);
+
 const itemView = object(
   CATALOG_SCHEMA_IDS.itemView,
   {
@@ -174,6 +233,12 @@ const itemView = object(
     unitSize: numberOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+    productGroupId: nullableString(),
+    // Deliberately NOT required: only the reads that take price scopes fill it,
+    // and absent means the same as null (plan 0048, section 3.1).
+    bestOffer: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemOfferView), { type: 'null' }],
+    },
   },
   [
     'id',
@@ -185,7 +250,40 @@ const itemView = object(
     'unitSize',
     'category',
     'defaultUnit',
+    'productGroupId',
   ]
+);
+
+const productGroupOfferView = object(
+  CATALOG_SCHEMA_IDS.productGroupOfferView,
+  {
+    group: ref(CATALOG_SCHEMA_IDS.productGroupView),
+    cheapestItem: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemView), { type: 'null' }],
+    },
+    offer: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemOfferView), { type: 'null' }],
+    },
+  },
+  ['group', 'cheapestItem', 'offer']
+);
+
+const catalogSuggestion = object(
+  CATALOG_SCHEMA_IDS.catalogSuggestion,
+  {
+    kind: { type: 'string', enum: [...CATALOG_SUGGESTION_KINDS] },
+    group: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.productGroupOfferView), { type: 'null' }],
+    },
+    item: { anyOf: [ref(CATALOG_SCHEMA_IDS.itemView), { type: 'null' }] },
+  },
+  ['kind', 'group', 'item']
+);
+
+const catalogSuggestResponse = object(
+  CATALOG_SCHEMA_IDS.catalogSuggestResponse,
+  { suggestions: array(ref(CATALOG_SCHEMA_IDS.catalogSuggestion)) },
+  ['suggestions']
 );
 
 const supermarketItemView = object(
@@ -251,6 +349,14 @@ const priceScopePage = paginated(
 const supermarketLocationItemPage = paginated(
   CATALOG_SCHEMA_IDS.supermarketLocationItemPage,
   CATALOG_SCHEMA_IDS.supermarketLocationItemView
+);
+const productGroupPage = paginated(
+  CATALOG_SCHEMA_IDS.productGroupPage,
+  CATALOG_SCHEMA_IDS.productGroupView
+);
+const productGroupOfferPage = paginated(
+  CATALOG_SCHEMA_IDS.productGroupOfferPage,
+  CATALOG_SCHEMA_IDS.productGroupOfferView
 );
 
 // --- Requests --------------------------------------------------------------
@@ -353,6 +459,7 @@ const createItemRequest = object(
     unitSize: numberOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+    productGroupId: nullableString(),
   },
   ['userId', 'name', 'category', 'defaultUnit']
 );
@@ -369,6 +476,7 @@ const updateItemRequest = object(
     unitSize: numberOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+    productGroupId: nullableString(),
   },
   ['userId', 'itemId']
 );
@@ -397,6 +505,64 @@ const searchItemsRequest = object(
     userId: nonEmptyString(),
     query: string(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+    // Plan 0048: the group filter, and the scopes a price may be quoted from. No
+    // default is resolved when the scopes are absent; that is plan 0049.
+    productGroupId: string(),
+    priceScopeIds: array(nonEmptyString()),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId']
+);
+const searchOffersRequest = object(
+  CATALOG_SCHEMA_IDS.searchOffersRequest,
+  {
+    userId: nonEmptyString(),
+    query: string(),
+    priceScopeIds: array(nonEmptyString()),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId']
+);
+
+// --- Product groups (plan 0048, section 1) ---------------------------------
+
+const createProductGroupRequest = object(
+  CATALOG_SCHEMA_IDS.createProductGroupRequest,
+  {
+    userId: nonEmptyString(),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    slug: nonEmptyString(),
+    referenceUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+    synonyms: ref(CATALOG_SCHEMA_IDS.localizedSynonyms),
+  },
+  ['userId', 'name', 'slug', 'referenceUnit']
+);
+const updateProductGroupRequest = object(
+  CATALOG_SCHEMA_IDS.updateProductGroupRequest,
+  {
+    userId: nonEmptyString(),
+    productGroupId: nonEmptyString(),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    slug: nonEmptyString(),
+    referenceUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+    synonyms: ref(CATALOG_SCHEMA_IDS.localizedSynonyms),
+  },
+  ['userId', 'productGroupId']
+);
+const productGroupIdRequest = object(
+  CATALOG_SCHEMA_IDS.productGroupIdRequest,
+  { userId: nonEmptyString(), productGroupId: nonEmptyString() },
+  ['userId', 'productGroupId']
+);
+const listProductGroupsRequest = object(
+  CATALOG_SCHEMA_IDS.listProductGroupsRequest,
+  {
+    userId: nonEmptyString(),
+    query: string(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -586,16 +752,24 @@ export const catalogSchemas: JsonSchema[] = [
   enumOf(CATALOG_SCHEMA_IDS.priceScopeKind, Object.values(PriceScopeKind)),
   enumOf(CATALOG_SCHEMA_IDS.priceSourceKind, Object.values(PriceSourceKind)),
   localizedText,
+  localizedSynonyms,
   supermarketView,
   supermarketLocationView,
   priceScopeView,
+  productGroupView,
+  itemOfferView,
   itemView,
+  productGroupOfferView,
+  catalogSuggestion,
+  catalogSuggestResponse,
   supermarketItemView,
   supermarketLocationItemView,
   supermarketPage,
   supermarketLocationPage,
   priceScopePage,
   itemPage,
+  productGroupPage,
+  productGroupOfferPage,
   supermarketItemPage,
   supermarketLocationItemPage,
   createSupermarketRequest,
@@ -610,6 +784,11 @@ export const catalogSchemas: JsonSchema[] = [
   updateItemRequest,
   itemIdRequest,
   searchItemsRequest,
+  searchOffersRequest,
+  createProductGroupRequest,
+  updateProductGroupRequest,
+  productGroupIdRequest,
+  listProductGroupsRequest,
   findItemByEanRequest,
   findItemByEanResult,
   upsertSupermarketItemRequest,
@@ -695,9 +874,33 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.searchItemsRequest,
     response: CATALOG_SCHEMA_IDS.itemPage,
   },
+  [ITEM_PATTERNS.searchOffers]: {
+    request: CATALOG_SCHEMA_IDS.searchOffersRequest,
+    response: CATALOG_SCHEMA_IDS.productGroupOfferPage,
+  },
   [ITEM_PATTERNS.findByEan]: {
     request: CATALOG_SCHEMA_IDS.findItemByEanRequest,
     response: CATALOG_SCHEMA_IDS.findItemByEanResult,
+  },
+  [PRODUCT_GROUP_PATTERNS.create]: {
+    request: CATALOG_SCHEMA_IDS.createProductGroupRequest,
+    response: CATALOG_SCHEMA_IDS.productGroupView,
+  },
+  [PRODUCT_GROUP_PATTERNS.update]: {
+    request: CATALOG_SCHEMA_IDS.updateProductGroupRequest,
+    response: CATALOG_SCHEMA_IDS.productGroupView,
+  },
+  [PRODUCT_GROUP_PATTERNS.delete]: {
+    request: CATALOG_SCHEMA_IDS.productGroupIdRequest,
+    response: COMMON_IDS.idResult,
+  },
+  [PRODUCT_GROUP_PATTERNS.get]: {
+    request: CATALOG_SCHEMA_IDS.productGroupIdRequest,
+    response: CATALOG_SCHEMA_IDS.productGroupView,
+  },
+  [PRODUCT_GROUP_PATTERNS.list]: {
+    request: CATALOG_SCHEMA_IDS.listProductGroupsRequest,
+    response: CATALOG_SCHEMA_IDS.productGroupPage,
   },
   [SUPERMARKET_ITEM_PATTERNS.upsert]: {
     request: CATALOG_SCHEMA_IDS.upsertSupermarketItemRequest,

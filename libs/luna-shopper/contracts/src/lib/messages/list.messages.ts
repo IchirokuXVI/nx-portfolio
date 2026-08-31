@@ -54,6 +54,16 @@ export const LINE_QUANTITY_MAX = 100000;
  */
 export const LINE_BATCH_MAX_ITEMS = 50;
 
+/**
+ * How many products one line's set may hold (plan 0048, section 1.1).
+ *
+ * A bound rather than a budget, like the batch above it. Picking a group copies
+ * that group's members onto the line, and a group is a few dozen products at
+ * most; a request naming more than this is a client bug or an attempt to write an
+ * unbounded number of join rows from one call.
+ */
+export const LINE_ITEM_SET_MAX = 100;
+
 export const COMMENT_PATTERNS = {
   add: 'comment.add',
   list: 'comment.list',
@@ -150,7 +160,26 @@ export interface LineView {
   listId: string;
   content: string;
   quantity: number;
-  itemId: string | null;
+  /**
+   * The products this line stands for (plan 0048, section 1.1), in the order they
+   * were attached. Empty for a free text line, which stays first class.
+   *
+   * It replaced a single nullable `itemId` that was null on every line ever
+   * created. Picking a group in the composer **copies the group's members here**
+   * and the line references no group afterwards, so removing a product the
+   * household never buys is an ordinary edit: a line is its own hand made group.
+   */
+  itemIds: string[];
+  /**
+   * A digest of the sorted distinct {@link itemIds}, or null while the set is
+   * empty (plan 0048, section 1.1).
+   *
+   * What makes the hand made sets legible. Two lines carrying the same products
+   * carry the same hash **however the products got there**, which is what the
+   * dedup rule in `0050` merges on and what the cross list indicator in velista
+   * `0043` matches on.
+   */
+  itemSetHash: string | null;
   position: number;
   approvalStatus: LineApprovalStatus;
   status: LineStatus;
@@ -288,19 +317,23 @@ export interface AddLineRequest {
   content: string;
   quantity?: number;
   /**
-   * Optional opaque reference to a catalog Item (plan 0012). Validated as a UUID
-   * in application code, never a database foreign key: catalog is a separate
-   * service with its own database and core never joins to it.
+   * The products this line stands for (plan 0048, section 1.1). Opaque references
+   * into the catalog, validated as UUIDs in application code and never a database
+   * foreign key: catalog is a separate service with its own database and core
+   * never joins to it.
+   *
+   * Absent or empty is a free text line, which is deliberately still the ordinary
+   * case: typing something and ignoring the dropdown adds a plain line.
    */
-  itemId?: string | null;
+  itemIds?: string[];
 }
 
 /** One line of a {@link AddLinesRequest} batch (plan 0040, section 6.5). */
 export interface AddLinesItem {
   content: string;
   quantity?: number;
-  /** The same optional catalog Item reference {@link AddLineRequest} carries. */
-  itemId?: string | null;
+  /** The same product set {@link AddLineRequest} carries. */
+  itemIds?: string[];
 }
 
 /**
@@ -331,8 +364,16 @@ export interface UpdateLineRequest {
   lineId: string;
   content?: string;
   quantity?: number;
-  /** Set/clear the optional catalog Item reference (plan 0012). `null` clears it. */
-  itemId?: string | null;
+  /**
+   * Replace the line's product set (plan 0048, section 1.1). An empty array
+   * clears it and returns the line to free text.
+   *
+   * A whole set and not an add or a remove, for the same reason `reorder` takes
+   * the whole order: the client holds the set it is drawing, and two callers
+   * trimming different products from one line should race over a value somebody
+   * chose rather than compose into a set neither of them meant.
+   */
+  itemIds?: string[];
 }
 
 /**

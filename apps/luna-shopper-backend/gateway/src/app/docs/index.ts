@@ -20,6 +20,7 @@ export {
 export {
   componentNameFor,
   componentRef,
+  hoistContractSchema,
   hoistPlatformStats,
   openApiComponents,
   toOpenApiSchema,

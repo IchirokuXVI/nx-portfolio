@@ -10,7 +10,9 @@ import {
 import type { DataSource, EntityManager } from 'typeorm';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { ListLineItem } from '../entities';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { fakeLineItems } from './line-items.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 
@@ -69,7 +71,7 @@ function build(options: {
     listId: LIST_ID,
     content: 'Tinned tomatoes',
     quantity: options.quantity ?? 3,
-    itemId: 'item-1',
+    itemSetHash: null,
     position: 10,
     approvalStatus: options.approvalStatus ?? LineApprovalStatus.APPROVED,
     status: LineStatus.PENDING,
@@ -146,9 +148,16 @@ function build(options: {
     new ZoneAuthzService(memberships as never)
   );
 
+  // Plan 0048: the line's product set. Nothing in this file is about the set,
+  // but every write path now touches one, so it has to work.
+  const lineItems = fakeLineItems();
+
   const dataSource = {
     transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
-      run({ getRepository: () => lineRepo } as unknown as EntityManager),
+      run({
+        getRepository: (entity: unknown) =>
+          entity === ListLineItem ? lineItems.repo : lineRepo,
+      } as unknown as EntityManager),
   } as unknown as DataSource;
 
   const publisher = {
@@ -159,6 +168,7 @@ function build(options: {
   const service = new LineService(
     dataSource,
     lineRepo as never,
+    lineItems.repo as never,
     listAccess,
     publisher
   );

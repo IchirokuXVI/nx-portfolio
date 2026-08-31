@@ -1,6 +1,7 @@
 import {
   COMMENT_PATTERNS,
   LINE_BATCH_MAX_ITEMS,
+  LINE_ITEM_SET_MAX,
   LINE_PATTERNS,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
@@ -130,7 +131,10 @@ const lineView = object(
     listId: nonEmptyString(),
     content: string(),
     quantity: integer(),
-    itemId: nullableString(),
+    // The product set and its digest (plan 0048, section 1.1). Both required and
+    // both honest when empty: `[]` and `null` say "this is a free text line".
+    itemIds: array(nonEmptyString()),
+    itemSetHash: nullableString(),
     position: integer(),
     approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
     status: ref(ENUM_IDS.lineStatus),
@@ -144,7 +148,8 @@ const lineView = object(
     'listId',
     'content',
     'quantity',
-    'itemId',
+    'itemIds',
+    'itemSetHash',
     'position',
     'approvalStatus',
     'status',
@@ -289,8 +294,9 @@ const addLineRequest = object(
       minimum: LINE_QUANTITY_MIN,
       maximum: LINE_QUANTITY_MAX,
     }),
-    // Optional opaque catalog Item reference (plan 0012); null or absent = none.
-    itemId: nullableString(),
+    // The line's product set (plan 0048, section 1.1). Absent or empty is a free
+    // text line, which is deliberately still the ordinary case.
+    itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
   },
   ['userId', 'listId', 'content']
 );
@@ -302,7 +308,7 @@ const addLinesItem = object(
       minimum: LINE_QUANTITY_MIN,
       maximum: LINE_QUANTITY_MAX,
     }),
-    itemId: nullableString(),
+    itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
   },
   ['content']
 );
@@ -342,8 +348,8 @@ const updateLineRequest = object(
       minimum: LINE_QUANTITY_MIN,
       maximum: LINE_QUANTITY_MAX,
     }),
-    // Set or clear the catalog Item reference (plan 0012); null clears it.
-    itemId: nullableString(),
+    // Replace the line's product set (plan 0048, section 1.1); `[]` clears it.
+    itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
   },
   ['userId', 'lineId']
 );

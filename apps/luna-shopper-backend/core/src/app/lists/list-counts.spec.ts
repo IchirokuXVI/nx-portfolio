@@ -56,7 +56,7 @@ describe('list mappers (plan 0017, sections 3.4 and 7)', () => {
       listId: 'l1',
       content: 'Milk',
       quantity: 1,
-      itemId: null,
+      itemSetHash: null,
       position: 1,
       approvalStatus: LineApprovalStatus.PENDING,
       status: LineStatus.READY,
@@ -67,9 +67,13 @@ describe('list mappers (plan 0017, sections 3.4 and 7)', () => {
       updatedAt: new Date('2026-03-02T00:00:00.000Z'),
     } as ListLine;
 
-    const view = toLineView(line);
+    const view = toLineView(line, []);
     expect(view.createdAt).toBe('2026-03-01T00:00:00.000Z');
     expect(view.updatedAt).toBe('2026-03-02T00:00:00.000Z');
+    // A free text line, which is what most lines are: an empty set and a null
+    // hash, said out loud rather than left absent (plan 0048, section 1.1).
+    expect(view.itemIds).toEqual([]);
+    expect(view.itemSetHash).toBeNull();
   });
 });
 
