@@ -116,6 +116,27 @@ export enum RealtimeEvent {
    * cache miss is cheaper than deciding here which edits matter.
    */
   ProfilesChanged = 'profiles.changed',
+
+  /**
+   * A generated list changed (plan 0050, section 9), addressed to its owner's own
+   * sessions and to nothing else.
+   *
+   * A basket is private (section 8), so the owner's room is the only audience it
+   * can have: not the zones it drew from, not the admins of those zones, nobody.
+   * What it buys is the one thing a private resource still needs from realtime,
+   * which is that the same basket stays in sync between the phone in the shop and
+   * the laptop at home.
+   *
+   * These four are the whole surface. Settling a line reaches the zones as an
+   * ordinary `line.settled` (plan 0047, section 8), which is what makes the loop
+   * visible to everybody else without telling any of them which basket it came
+   * from.
+   */
+  GeneratedListCreated = 'generatedList.created',
+  GeneratedListUpdated = 'generatedList.updated',
+  /** One line of a basket moved: an edit, a pick switch, or a settle. */
+  GeneratedListLineUpdated = 'generatedList.lineUpdated',
+  GeneratedListDeleted = 'generatedList.deleted',
 }
 
 /**
@@ -156,6 +177,10 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.MergeRejected,
   RealtimeEvent.UserUsernameChanged,
   RealtimeEvent.ProfilesChanged,
+  RealtimeEvent.GeneratedListCreated,
+  RealtimeEvent.GeneratedListUpdated,
+  RealtimeEvent.GeneratedListLineUpdated,
+  RealtimeEvent.GeneratedListDeleted,
 ] as const;
 
 /**

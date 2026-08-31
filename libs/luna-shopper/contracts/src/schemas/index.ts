@@ -34,6 +34,7 @@ export { PROFILE_SCHEMA_IDS } from './messages/profile.schemas';
 export { REALTIME_SCHEMA_IDS } from './messages/realtime.schemas';
 export { STATS_SCHEMA_IDS } from './messages/stats.schemas';
 export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';
+export { GENERATED_LIST_SCHEMA_IDS } from './messages/generated-list.schemas';
 export { HARVEST_SCHEMA_IDS } from './messages/harvest.schemas';
 export { IDENTITY_EVENT_SCHEMA_IDS } from './events/identity.schemas';
 export { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';

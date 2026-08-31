@@ -15,6 +15,7 @@ import { AccountModule } from './account/account.module';
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
 import { CORE_ENTITIES } from './entities';
+import { GeneratedListsModule } from './generated-lists/generated-lists.module';
 import { ListsModule } from './lists/lists.module';
 import { MergeModule } from './merge/merge.module';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -50,6 +51,8 @@ import { ZonesModule } from './zones/zones.module';
     RealtimeAccessModule,
     // Shopping profiles: where a person shops (plan 0049).
     ProfilesModule,
+    // Generated shopping lists: the basket you carry round the shop (plan 0050).
+    GeneratedListsModule,
     AccountModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({

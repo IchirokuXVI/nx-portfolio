@@ -1,4 +1,8 @@
 import { CommentAudio } from './comment-audio.entity';
+import { GeneratedListLineOption } from './generated-list-line-option.entity';
+import { GeneratedListLineOrigin } from './generated-list-line-origin.entity';
+import { GeneratedListLine } from './generated-list-line.entity';
+import { GeneratedList } from './generated-list.entity';
 import { LineComment } from './line-comment.entity';
 import { ListAccess } from './list-access.entity';
 import { ListLineItem } from './list-line-item.entity';
@@ -15,6 +19,10 @@ import { Zone } from './zone.entity';
 
 export { BaseEntity } from './base.entity';
 export { CommentAudio } from './comment-audio.entity';
+export { GeneratedListLineOption } from './generated-list-line-option.entity';
+export { GeneratedListLineOrigin } from './generated-list-line-origin.entity';
+export { GeneratedListLine } from './generated-list-line.entity';
+export { GeneratedList } from './generated-list.entity';
 export { LineComment } from './line-comment.entity';
 export { ListAccess } from './list-access.entity';
 export { ListLineItem } from './list-line-item.entity';
@@ -47,4 +55,10 @@ export const CORE_ENTITIES = [
   ProfilePostalCode,
   ProfileSupermarketPreference,
   ProfileGenerationSource,
+  // Generated shopping lists (plan 0050). The basket comes first: its lines
+  // reference it, and the origins and options reference the lines.
+  GeneratedList,
+  GeneratedListLine,
+  GeneratedListLineOrigin,
+  GeneratedListLineOption,
 ];
