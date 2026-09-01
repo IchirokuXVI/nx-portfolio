@@ -293,6 +293,36 @@ export class BasketStore {
   }
 
   /**
+   * Let the basket go, because the screen holding it has been left.
+   *
+   * Called from the page's own teardown rather than from a `DestroyRef` in here, and
+   * that is the point of the method rather than an incidental detail. This store and
+   * its socket are provided by the basket **route**, and Angular keeps a route's
+   * environment injector on the route config, destroying it only under
+   * `withExperimentalAutoCleanupInjectors()`, which this app does not turn on. So the
+   * `DestroyRef` this class can reach never fires at all: without this call the
+   * participant socket stays connected and its room stays joined for the rest of the
+   * page's life, long after the shopper has gone somewhere else. A component is
+   * destroyed for certain, so the component is what says when.
+   *
+   * The event subscription is deliberately **left alone**. The same instance is handed
+   * back on the next visit, for the same reason, so unsubscribing here would leave the
+   * second basket of a session with a live socket and nothing listening to it: the bug
+   * this method exists to remove, wearing a different hat.
+   */
+  leave(): void {
+    this._socket.close();
+    this._cancelRefresh();
+    this._id = null;
+    this._basket.set(null);
+    this._link.set(null);
+    this._present.set([]);
+    this._busyLines.set(new Set());
+    this._state.set('loading');
+    this._error.set(null);
+  }
+
+  /**
    * Re-read the basket.
    *
    * Called after this store's own writes, and by the page when the app comes back

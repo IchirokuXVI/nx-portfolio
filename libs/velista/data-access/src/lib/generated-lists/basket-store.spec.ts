@@ -81,12 +81,14 @@ class FakeSocket {
   readonly revoked = signal(false);
 
   readonly opened: string[] = [];
+  closes = 0;
 
   open(generatedListId: string): void {
     this.opened.push(generatedListId);
   }
 
   close(): void {
+    this.closes += 1;
     this.connected.set(false);
   }
 }
@@ -482,6 +484,60 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
 
       expect(socket.opened).toEqual(['basket-saturday']);
+    });
+
+    it('closes the connection when the screen is left', async () => {
+      // Nothing else does. This store and its socket are provided by the basket route
+      // and Angular does not destroy a route's environment injector, so the hooks that
+      // read as though they closed this connection never run: the socket stayed up,
+      // and stayed in the room, for the rest of the page's life. `BasketPage` calls
+      // this from its own teardown, which is a component's and therefore real.
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+
+      store.leave();
+
+      expect(socket.closes).toBe(1);
+      expect(store.basket()).toBeNull();
+      expect(store.present()).toEqual([]);
+    });
+
+    it('is opened again after being left, still listening', async () => {
+      // The same instance is handed back on the next visit, since the injector holding
+      // it was never destroyed. So leaving must not unsubscribe: a second basket with
+      // a live socket and nothing listening to it is the same bug one screen later.
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+      store.leave();
+
+      await store.open('basket-saturday');
+      const held = store.lines()[0];
+      socket.events.next({
+        type: 'generatedList.lineSettled',
+        generatedListId: 'basket-saturday',
+        line: { ...held, settled: held.settled + 1 },
+      });
+
+      expect(socket.opened).toEqual(['basket-saturday', 'basket-saturday']);
+      expect(store.lines()[0].settled).toBe(held.settled + 1);
+    });
+
+    it('drops an event that arrives after the screen was left', async () => {
+      // A broadcast can be in flight while somebody walks out of the screen, and the
+      // socket is closed rather than instantly silent. Applying it would refetch a
+      // basket nobody is looking at.
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+      const held = store.lines()[0];
+
+      store.leave();
+      socket.events.next({
+        type: 'generatedList.lineSettled',
+        generatedListId: 'basket-saturday',
+        line: { ...held, settled: held.settled + 1 },
+      });
+
+      expect(store.basket()).toBeNull();
     });
 
     it('merges a settled line off the room with no refetch', async () => {

@@ -457,9 +457,13 @@ describe('BasketSocket', () => {
       expect(refreshes).toEqual(['basket-saturday', 'basket-sunday']);
     });
 
-    it('closes when the screen is left', async () => {
-      // The route provides it, so leaving the basket destroys the injector that
-      // holds it, whether that was a tap, the back gesture or a sheet's dismissal.
+    it('closes when the injector holding it is destroyed', async () => {
+      // A backstop and nothing more, which is why this test is no longer named after
+      // the shopper leaving. The basket route's injector is **not** destroyed by
+      // navigating away (Angular keeps it on the route config), so what closes this
+      // socket on a real screen is `BasketPage` calling `BasketStore.leave()`, and
+      // `basket-page.spec.ts` is where that is asserted. This test only says the hook
+      // works where an injector genuinely ends, `TestBed`'s being one.
       const client = TestBed.inject(BasketSocket);
       client.open('basket-saturday');
       await settle();
