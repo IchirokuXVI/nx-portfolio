@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
-  GeneratedLineOrigin,
   GENERATED_LIST_LIMITS,
+  GeneratedLineOrigin,
   RealtimeEvent,
   type AddGeneratedListLineRequest,
   type GeneratedListLineIdRequest,
@@ -85,7 +85,10 @@ export class GeneratedListLineService {
   async addLine(
     req: AddGeneratedListLineRequest
   ): Promise<GeneratedListLineView> {
-    const list = await this.generatedLists.load(req.userId, req.generatedListId);
+    const list = await this.generatedLists.load(
+      req.userId,
+      req.generatedListId
+    );
     const content = checkContent(req.content);
     const quantity = checkQuantity(req.quantity ?? 1);
     const target =
@@ -139,7 +142,10 @@ export class GeneratedListLineService {
   async updateLine(
     req: UpdateGeneratedListLineRequest
   ): Promise<GeneratedListLineView> {
-    const list = await this.generatedLists.load(req.userId, req.generatedListId);
+    const list = await this.generatedLists.load(
+      req.userId,
+      req.generatedListId
+    );
     const line = await this.loadLine(list.id, req.lineId);
 
     if (req.content !== undefined) {
@@ -181,7 +187,10 @@ export class GeneratedListLineService {
    * "somebody bought this".
    */
   async deleteLine(req: GeneratedListLineIdRequest): Promise<{ id: string }> {
-    const list = await this.generatedLists.load(req.userId, req.generatedListId);
+    const list = await this.generatedLists.load(
+      req.userId,
+      req.generatedListId
+    );
     const line = await this.loadLine(list.id, req.lineId);
     await this.lines.delete({ id: line.id });
     await this.announceList(req.userId, list);
@@ -197,7 +206,10 @@ export class GeneratedListLineService {
   async reorderLines(
     req: ReorderGeneratedListLinesRequest
   ): Promise<GeneratedListView> {
-    const list = await this.generatedLists.load(req.userId, req.generatedListId);
+    const list = await this.generatedLists.load(
+      req.userId,
+      req.generatedListId
+    );
     const lines = await this.lines.find({
       where: { generatedListId: list.id },
     });

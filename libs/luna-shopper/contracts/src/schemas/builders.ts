@@ -13,7 +13,18 @@
 /** A JSON Schema fragment. Loose on purpose: authored by hand, checked by Ajv. */
 export type JsonSchema = Record<string, unknown>;
 
-/** Builds a `luna://...` schema id from a slash path. */
+/**
+ * Builds a `luna://...` schema id from a slash path.
+ *
+ * **The first segment is a URI authority, so keep it lower case.** Ajv resolves
+ * `$ref`s through a URI parser, which normalizes the authority to lower case
+ * while leaving the path alone, so `luna://generatedList/Foo` is registered as
+ * `luna://generatedlist/Foo` and every reference to it fails to resolve. The
+ * failure surfaces as "can't resolve reference ... from id ...", which reads like
+ * a missing schema rather than a spelling of one. Use a hyphen for a domain of
+ * two words (`generated-list/GeneratedListView`), as the existing single word
+ * domains do by accident.
+ */
 export const schemaId = (path: string): string => `luna://${path}`;
 
 export const string = (extra: JsonSchema = {}): JsonSchema => ({

@@ -29,7 +29,10 @@ import { GeneratedListLine } from './generated-list-line.entity';
  */
 @Entity({ name: 'generated_list_line_options' })
 @Unique('uq_generated_list_line_option', ['generatedListLineId', 'itemId'])
-@Index('ix_generated_list_line_options_line', ['generatedListLineId', 'position'])
+@Index('ix_generated_list_line_options_line', [
+  'generatedListLineId',
+  'position',
+])
 export class GeneratedListLineOption {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

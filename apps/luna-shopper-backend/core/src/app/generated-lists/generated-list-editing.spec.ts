@@ -87,7 +87,9 @@ function build(options: {
       lines.find((row) => row.id === where.id) ?? null,
     find: async () => lines,
     create: (data: Partial<GeneratedListLine>) => ({ ...data }),
-    save: async (row: Partial<GeneratedListLine> | Partial<GeneratedListLine>[]) => {
+    save: async (
+      row: Partial<GeneratedListLine> | Partial<GeneratedListLine>[]
+    ) => {
       const rows = Array.isArray(row) ? row : [row];
       for (const one of rows) {
         saved.push({ ...one, id: one.id ?? `gll-new-${saved.length}` });
@@ -135,7 +137,11 @@ function build(options: {
   } as unknown as ListAccessService;
 
   const zoneLines = {
-    add: async (req: { listId: string; content: string; quantity?: number }) => {
+    add: async (req: {
+      listId: string;
+      content: string;
+      quantity?: number;
+    }) => {
       zoneAdds.push(req);
       return { id: 'zone-line-1', version: 1 } as LineView;
     },
@@ -207,7 +213,10 @@ describe('editing a basket line', () => {
 
   it('switches the pick to another option without touching the zone line', async () => {
     const { service, saved, zoneAdds } = build({
-      optionRows: [{ itemId: 'item-a' } as never, { itemId: 'item-b' } as never],
+      optionRows: [
+        { itemId: 'item-a' } as never,
+        { itemId: 'item-b' } as never,
+      ],
     });
 
     await service.updateLine({
@@ -279,7 +288,13 @@ describe('adding a line to a basket', () => {
     // Through LineService.add and not an insert of our own, so WRITE is checked
     // at that moment and the line starts PENDING approval like any other.
     expect(zoneAdds).toEqual([
-      { userId: OWNER, listId: TARGET_LIST, content: 'Batteries', quantity: 2, itemIds: [] },
+      {
+        userId: OWNER,
+        listId: TARGET_LIST,
+        content: 'Batteries',
+        quantity: 2,
+        itemIds: [],
+      },
     ]);
     // The created line becomes the basket line's provenance row.
     expect(promotions).toHaveLength(1);

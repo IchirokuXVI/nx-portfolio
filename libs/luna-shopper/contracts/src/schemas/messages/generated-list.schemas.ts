@@ -35,15 +35,18 @@ import { COMMON_IDS } from '../common.schemas';
 export const GENERATED_LIST_SCHEMA_IDS = {
   generatedListStatus: schemaId('enums/GeneratedListStatus'),
   generatedLineOrigin: schemaId('enums/GeneratedLineOrigin'),
-  lineOriginView: schemaId('generatedList/GeneratedListLineOriginView'),
-  lineView: schemaId('generatedList/GeneratedListLineView'),
-  sourceSnapshot: schemaId('generatedList/GeneratedListSourceSnapshot'),
-  listView: schemaId('generatedList/GeneratedListView'),
-  summaryView: schemaId('generatedList/GeneratedListSummaryView'),
-  skippedLineView: schemaId('generatedList/GeneratedListSkippedLineView'),
-  runResult: schemaId('generatedList/GeneratedListRunResult'),
-  page: schemaId('generatedList/GeneratedListPage'),
-  sourceInput: schemaId('generatedList/GeneratedListSourceInput'),
+  lineOriginView: schemaId('generated-list/GeneratedListLineOriginView'),
+  lineView: schemaId('generated-list/GeneratedListLineView'),
+  sourceSnapshotEntry: schemaId(
+    'generated-list/GeneratedListSourceSnapshotEntry'
+  ),
+  sourceSnapshot: schemaId('generated-list/GeneratedListSourceSnapshot'),
+  listView: schemaId('generated-list/GeneratedListView'),
+  summaryView: schemaId('generated-list/GeneratedListSummaryView'),
+  skippedLineView: schemaId('generated-list/GeneratedListSkippedLineView'),
+  runResult: schemaId('generated-list/GeneratedListRunResult'),
+  page: schemaId('generated-list/GeneratedListPage'),
+  sourceInput: schemaId('generated-list/GeneratedListSourceInput'),
   createRequest: schemaId('msg/generatedList.create/request'),
   idRequest: schemaId('msg/generatedList.id/request'),
   listMineRequest: schemaId('msg/generatedList.listMine/request'),
@@ -97,17 +100,27 @@ const lineView = object(
   ]
 );
 
+/**
+ * One (zone, list) pair a run actually read.
+ *
+ * A registered schema of its own rather than an object inlined into the snapshot
+ * below, and that is a rule of this file rather than a preference: a nested
+ * `$id` opens a new resolution scope inside its parent, which leaves the sibling
+ * schemas registered after it unreachable and turns every `$ref` to them into
+ * "can't resolve reference" at compile time. Every schema here is top level and
+ * referenced by id.
+ */
+const sourceSnapshotEntry = object(
+  GENERATED_LIST_SCHEMA_IDS.sourceSnapshotEntry,
+  { zoneId: nonEmptyString(), listId: nonEmptyString() },
+  ['zoneId', 'listId']
+);
+
 const sourceSnapshot = object(
   GENERATED_LIST_SCHEMA_IDS.sourceSnapshot,
   {
     profileId: nullableString(),
-    sources: array(
-      object(
-        schemaId('generatedList/GeneratedListSourceSnapshotEntry'),
-        { zoneId: nonEmptyString(), listId: nonEmptyString() },
-        ['zoneId', 'listId']
-      )
-    ),
+    sources: array(ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshotEntry)),
   },
   ['profileId', 'sources']
 );
@@ -224,7 +237,10 @@ const addLineRequest = object(
     content: nonEmptyString({
       maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
     }),
-    quantity: integer({ minimum: 1, maximum: GENERATED_LIST_LIMITS.maxQuantity }),
+    quantity: integer({
+      minimum: 1,
+      maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    }),
     itemId: nullableString(),
     options: array(nonEmptyString()),
     targetListId: nullableString(),
@@ -241,7 +257,10 @@ const updateLineRequest = object(
     content: nonEmptyString({
       maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
     }),
-    quantity: integer({ minimum: 0, maximum: GENERATED_LIST_LIMITS.maxQuantity }),
+    quantity: integer({
+      minimum: 0,
+      maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    }),
     itemId: nullableString(),
     targetListId: nullableString(),
   },
@@ -279,12 +298,16 @@ export const generatedListSchemas: JsonSchema[] = [
   ),
   lineOriginView,
   lineView,
+  sourceSnapshotEntry,
   sourceSnapshot,
   listView,
   summaryView,
   skippedLineView,
   runResult,
-  paginated(GENERATED_LIST_SCHEMA_IDS.page, GENERATED_LIST_SCHEMA_IDS.summaryView),
+  paginated(
+    GENERATED_LIST_SCHEMA_IDS.page,
+    GENERATED_LIST_SCHEMA_IDS.summaryView
+  ),
   sourceInput,
   createRequest,
   idRequest,

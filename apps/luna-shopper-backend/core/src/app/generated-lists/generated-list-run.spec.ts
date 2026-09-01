@@ -193,13 +193,17 @@ function build(options: {
       if (entity === GeneratedListLineOrigin) {
         return {
           insert: async (rows: Partial<GeneratedListLineOrigin>[]) => {
-            written.origins.push(...rows.map((row) => ({ ...row, id: id('o') })));
+            written.origins.push(
+              ...rows.map((row) => ({ ...row, id: id('o') }))
+            );
           },
         };
       }
       return {
         insert: async (rows: Partial<GeneratedListLineOption>[]) => {
-          written.options.push(...rows.map((row) => ({ ...row, id: id('op') })));
+          written.options.push(
+            ...rows.map((row) => ({ ...row, id: id('op') }))
+          );
         },
       };
     },
@@ -366,7 +370,14 @@ describe('the generation run', () => {
 
   it('leaves a free text line with no pick and no options', async () => {
     const { service, written } = build({
-      candidates: [{ id: 'a1', listId: LIST_A, content: 'Ask about the cake', quantity: 1 }],
+      candidates: [
+        {
+          id: 'a1',
+          listId: LIST_A,
+          content: 'Ask about the cake',
+          quantity: 1,
+        },
+      ],
     });
 
     await service.create({ userId: OWNER });

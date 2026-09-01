@@ -1,8 +1,8 @@
-import type { Paginated } from '../pagination';
 import type {
   GeneratedLineOrigin,
   GeneratedListStatus,
 } from '../enums/generated-list.enums';
+import type { Paginated } from '../pagination';
 
 /**
  * Generated shopping list contracts (plan 0050): the basket a person actually
