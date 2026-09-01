@@ -119,10 +119,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  // Larger than the 44 minimum, because these two are the controls a thumb hunts
-  // for while the other hand is holding a trolley.
-  inline-size: var(--app-control-height);
-  block-size: var(--app-control-height);
+  // `--app-button-height` and not `--app-control-height`: the latter *is* the 44
+  // minimum, and these two want to be larger than it. They are the controls a
+  // thumb hunts for while the other hand is holding a trolley.
+  inline-size: var(--app-button-height);
+  block-size: var(--app-button-height);
   border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-radius-full);
   background: var(--app-surface-raised);
