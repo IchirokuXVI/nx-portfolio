@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -49,7 +48,7 @@ import { participantName } from '../basket-labels';
  */
 @Component({
   selector: 'lib-people-sheet',
-  imports: [DatePipe, RokuTranslatorPipe, SheetShell],
+  imports: [RokuTranslatorPipe, SheetShell],
   templateUrl: './people-sheet.html',
   styleUrl: './people-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -97,6 +96,37 @@ export class PeopleSheet {
     return id === null
       ? null
       : this._store.participants().find((person) => person.id === id) ?? null;
+  });
+
+  /**
+   * When the open participant joined, in the reader's language.
+   *
+   * `Intl` rather than `DatePipe`, which is this library's convention and
+   * `formatDay`'s reason: the pipe needs `registerLocaleData` per locale and a
+   * `LOCALE_ID` this app does not set, because the language is runtime state
+   * rather than the shell's build time locale. Resolved here, where the locale
+   * already is, rather than in the template.
+   *
+   * A date **and** a time, unlike a settlement history's day: "joined today,
+   * 10:41" is what tells somebody whether the person on this row is the one they
+   * just sent the link to, which is the question the sheet is open to answer.
+   */
+  protected readonly joinedAt = computed<string | null>(() => {
+    const at = this.openPerson()?.joinedAt ?? null;
+    if (at === null) {
+      return null;
+    }
+    const locale = this._locale();
+    try {
+      return new Intl.DateTimeFormat(locale, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(at);
+    } catch {
+      // An unrecognised tag, which `Intl` throws a `RangeError` for. The ISO
+      // string is ugly and correct, and a row with no time would be worse.
+      return at.toISOString();
+    }
   });
 
   /** The first two initials of a name, for the avatar. Never a whole name. */

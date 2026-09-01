@@ -111,10 +111,23 @@ export class BasketPage {
     if (basket.name !== null && basket.name !== '') {
       return basket.name;
     }
-    return (
-      basket.generatedAt?.toLocaleDateString(this._locale()) ??
-      this._translator.t('basket.unnamed', undefined, this._locale())
-    );
+    const at = basket.generatedAt;
+    if (at === null) {
+      return this._translator.t('basket.unnamed', undefined, this._locale());
+    }
+    try {
+      // `Intl` rather than `DatePipe`, which is this library's convention: the
+      // pipe needs `registerLocaleData` per locale and a `LOCALE_ID` this app
+      // does not set, because the language is runtime state rather than the
+      // shell's build time locale.
+      return new Intl.DateTimeFormat(this._locale(), {
+        dateStyle: 'medium',
+      }).format(at);
+    } catch {
+      // An unrecognised tag, which `Intl` throws a `RangeError` for. A basket
+      // titled by its ISO date is ugly; one with no title at all is worse.
+      return at.toISOString().slice(0, 10);
+    }
   });
 
   /**

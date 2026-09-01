@@ -26,7 +26,7 @@
 
     <dl class="facts">
       <dt>{{ 'basket.people.joined' | rokuT }}</dt>
-      <dd>{{ person.joinedAt | date: 'short' }}</dd>
+      <dd>{{ joinedAt() || ('basket.people.deviceUnknown' | rokuT) }}</dd>
       <dt>{{ 'basket.people.device' | rokuT }}</dt>
       <dd>{{ person.device || ('basket.people.deviceUnknown' | rokuT) }}</dd>
     </dl>
