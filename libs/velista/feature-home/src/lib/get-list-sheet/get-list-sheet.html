@@ -82,6 +82,20 @@
     <p class="none" role="status">{{ 'getList.sources.none' | rokuT }}</p>
   } @else {
     <!--
+      The other way of having nowhere to draw from (plan 0049, section 4): somebody who
+      is in groups but can write in none of them. This screen cannot know it on open
+      without a `listLists` per group, so it is said the moment every group that has
+      been expanded comes back with nothing writable in it, rather than leaving the
+      person to infer it from an empty expansion. `polite`, because it appears while
+      they are opening groups rather than in answer to a question they asked.
+    -->
+    @if (noWritableSources()) {
+      <p aria-live="polite" class="none" role="status">
+        {{ 'getList.sources.noneWritable' | rokuT }}
+      </p>
+    }
+
+    <!--
       A real checkbox tree (section 7): the group's name is a disclosure button with
       `aria-expanded`, its tick is a separate `role="checkbox"` that reports
       `mixed` when its lists disagree, and each list is a checkbox of its own. Two
@@ -142,7 +156,14 @@
             } @else if (loaded?.state === 'failed') {
               <p class="list-note">{{ 'getList.error' | rokuT }}</p>
             } @else if (loaded?.lists?.length === 0) {
-              <p class="list-note">{{ 'getList.sources.none' | rokuT }}</p>
+              <!--
+                This one group has nothing writable in it, which is ordinary among
+                several. The sentence above appears only once *every* expanded group
+                has answered this way.
+              -->
+              <p class="list-note">
+                {{ 'getList.sources.noneWritable' | rokuT }}
+              </p>
             } @else {
               @for (list of loaded?.lists ?? []; track list.id) {
                 <button

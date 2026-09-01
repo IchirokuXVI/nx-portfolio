@@ -26,7 +26,6 @@ import type {
 } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
-import { ItemNames } from '../catalog/item-names';
 import {
   AUTH_SERVICE,
   type AuthServiceI,
@@ -34,6 +33,7 @@ import {
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
+import { ItemNames } from '../catalog/item-names';
 import { GeneratedListStore } from '../generated-lists/generated-list-store';
 import { LineStore, type LineLoadState } from '../lines/line-store';
 import { ListStore, type ListLoadState } from '../lists/list-store';
@@ -614,14 +614,18 @@ export interface FakeLineStateOptions {
    * skeleton from.
    */
   readonly settlements?: Readonly<Record<string, readonly LineSettlement[]>>;
-  readonly itemSettlements?: Readonly<Record<string, readonly LineSettlement[]>>;
+  readonly itemSettlements?: Readonly<
+    Record<string, readonly LineSettlement[]>
+  >;
   /**
    * A further page of either history, keyed by line id (plan 0047, section 4).
    *
    * Present means `hasMore` is true and one press will append these rows; absent means
    * the store holds the whole history and the control is not drawn.
    */
-  readonly moreSettlements?: Readonly<Record<string, readonly LineSettlement[]>>;
+  readonly moreSettlements?: Readonly<
+    Record<string, readonly LineSettlement[]>
+  >;
   readonly moreItemSettlements?: Readonly<
     Record<string, readonly LineSettlement[]>
   >;
@@ -933,10 +937,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       const next = moreSettlements.get(lineId) ?? [];
       moreSettlements.delete(lineId);
       settlements.update((current) =>
-        new Map(current).set(lineId, [
-          ...(current.get(lineId) ?? []),
-          ...next,
-        ])
+        new Map(current).set(lineId, [...(current.get(lineId) ?? []), ...next])
       );
     },
     loadMoreItemSettlements: async (line: Line) => {
@@ -1120,8 +1121,7 @@ export function fakeItemNames(options: FakeItemNamesOptions = {}) {
   const asked: string[][] = [];
 
   return {
-    nameOf: (itemId: string) =>
-      items.find((row) => row.id === itemId) ?? null,
+    nameOf: (itemId: string) => items.find((row) => row.id === itemId) ?? null,
     anyFailed: (itemIds: readonly string[]) =>
       itemIds.some((itemId) => failed.has(itemId)),
     ensure: async (itemIds: readonly string[]) => {
@@ -1733,6 +1733,8 @@ export function fakeGeneratedListStore(
     state?: ShoppingListsLoad;
     error?: unknown;
     hasMore?: boolean;
+    /** Pages landed so far. Defaults to one; zero is a store that has read nothing. */
+    pagesLoaded?: number;
   } = {}
 ) {
   const lists = signal<readonly GeneratedListSummary[]>(initial);
@@ -1740,6 +1742,12 @@ export function fakeGeneratedListStore(
   const error = signal<unknown>(options.error ?? null);
   const loadingMore = signal(false);
   const hasMore = signal(options.hasMore ?? false);
+  /**
+   * How many pages have landed. One by default, because a fixture handed a listing is
+   * a page that has already arrived, which is what the history's live region speaks
+   * about. `landPage` is how a spec makes a second one arrive.
+   */
+  const pagesLoaded = signal(options.pagesLoaded ?? 1);
 
   /** What the page asked for, so a spec can assert the read happened at all. */
   const calls: string[] = [];
@@ -1750,6 +1758,7 @@ export function fakeGeneratedListStore(
     error: error.asReadonly(),
     loadingMore: loadingMore.asReadonly(),
     hasMore: hasMore.asReadonly(),
+    pagesLoaded: pagesLoaded.asReadonly(),
     active: computed(() => lists().filter((list) => list.status === 'ACTIVE')),
 
     load: async () => {
@@ -1776,6 +1785,19 @@ export function fakeGeneratedListStore(
     },
     setLoadingMore: (next: boolean) => loadingMore.set(next),
     setHasMore: (next: boolean) => hasMore.set(next),
+
+    /**
+     * A further page of results arriving: the rows, and the counter that says so.
+     *
+     * The two move **together** here because they move together in the real store, and
+     * the history's live region is the thing that tells them apart from a settle
+     * refresh, which changes the rows and leaves the counter where it is. A spec about
+     * that quiet case uses {@link set} on its own.
+     */
+    landPage: (next: readonly GeneratedListSummary[]) => {
+      lists.set(next);
+      pagesLoaded.update((n) => n + 1);
+    },
   };
 }
 

@@ -126,6 +126,16 @@
   color: var(--app-text-secondary);
 }
 
+// Who is here now, quieter still than the progress line beneath the bar: it is context
+// rather than the card's own answer, and it appears and disappears while somebody is
+// looking at the card, so it must not move the layout around it more than one line.
+.present {
+  display: block;
+  margin-block-start: var(--app-space-1);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}
+
 // Quiet, and outside the card: it is the second destination on this section, and
 // making it look like part of the card would hide that it goes somewhere else.
 .more {

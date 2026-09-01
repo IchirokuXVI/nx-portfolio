@@ -11,20 +11,29 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore } from '@portfolio/velista/data-access';
+import {
+  BasketStore,
+  LINE_SERVICE,
+  type LineServiceI,
+} from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   inLocale,
   outstanding,
   QUANTITY_REEL_PAGE_STEP,
+  toSettlementRow,
   type BasketLine,
+  type BasketParticipant,
   type BasketSettleResult,
+  type SettlementOutcome,
+  type SettlementRowVm,
 } from '@portfolio/velista/models';
 import {
   generatedListIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
+import { participantName } from '../basket-labels';
 import { basketPath } from '../basket-paths';
 
 /**
@@ -36,7 +45,10 @@ import { basketPath } from '../basket-paths';
  * make the precise ones two taps and a navigation away from the number they were
  * about to type.
  */
-type Pane = 'settle' | 'quantity' | 'product' | 'allocate';
+type Pane = 'settle' | 'quantity' | 'product' | 'allocate' | 'history';
+
+/** How the settlement history's read has got on. Four states, not two booleans. */
+type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
 
 /**
  * How far each key moves the spinbutton, matching `QuantityReel`'s own table.
@@ -90,6 +102,30 @@ const STEP_FOR: Readonly<Record<string, number>> = {
  * reader who passes the rule is told which lists; everybody else is told only how
  * many, because the names are zone data. Both are drawn: a shopper who has
  * already bought the thing has to know something did not land.
+ *
+ * ## What happened here, and who may read it
+ *
+ * The fifth pane is the line's **settlement history** (plan 0049, section 1.1), which
+ * `0044` section 4.1 has always listed among what an owner and a passing registered
+ * participant see and which no screen drew. Attribution on a row answers who; this
+ * answers what happened in what order, which is the question after a trip where two
+ * people bought against one line.
+ *
+ * A pane rather than a sheet of its own, for the reason the other three are: somebody
+ * in an aisle reaches it in one tap from the row, where a route of its own would cost
+ * two taps and a navigation.
+ *
+ * It reads a **different surface** from everything else here — the account
+ * authenticated, zone scoped `GET /v1/lines/:id/settlements` rather than the
+ * participant authenticated basket — which is exactly why `0044` skipped it, and why
+ * the control is drawn only for a reader who holds an account and passes the all or
+ * nothing rule. A guest never sees it, and could not use it if a template mistake drew
+ * one: they have no account token to present.
+ *
+ * **Privilege is checked per request and never cached at join** (backend `0051`).
+ * `seesZoneData` is the server's answer on the most recent basket read, so a
+ * participant who loses `WRITE` loses the control on the next one, and the request
+ * behind it is refused by the gateway regardless of what is on screen.
  */
 @Component({
   selector: 'lib-settle-sheet',
@@ -100,6 +136,14 @@ const STEP_FOR: Readonly<Record<string, number>> = {
 })
 export class SettleSheet {
   private readonly _store = inject(BasketStore);
+  /**
+   * The zone list line surface, for the settlement history and nothing else.
+   *
+   * The one place this sheet reaches past the basket. It is account authenticated where
+   * everything else here is participant authenticated, which is the whole reason the
+   * history is gated (plan 0049, section 1.1).
+   */
+  private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -115,11 +159,23 @@ export class SettleSheet {
   private readonly _failed = signal(false);
   private readonly _result = signal<BasketSettleResult | null>(null);
 
+  private readonly _history = signal<readonly SettlementRowVm[]>([]);
+  private readonly _historyState = signal<HistoryLoad>('idle');
+  /** The next cursor per origin line, so `Show more` knows what is left to ask. */
+  private readonly _historyCursors = signal<ReadonlyMap<string, string>>(
+    new Map()
+  );
+
   protected readonly pane = this._pane.asReadonly();
   protected readonly busy = this._busy.asReadonly();
   protected readonly failed = this._failed.asReadonly();
   protected readonly result = this._result.asReadonly();
   protected readonly seesZoneData = this._store.seesZoneData;
+  protected readonly history = this._history.asReadonly();
+  protected readonly historyState = this._historyState.asReadonly();
+  protected readonly historyHasMore = computed(
+    () => this._historyCursors().size > 0
+  );
 
   /** The line this sheet is about, read live so a settle updates it under us. */
   protected readonly line = computed<BasketLine | null>(
@@ -207,8 +263,28 @@ export class SettleSheet {
     }));
   });
 
+  /**
+   * Whether this reader may read what happened to the line (plan 0049, section 1.1).
+   *
+   * Two conditions, and they are two because they are two different facts. The reader
+   * must hold an **account**, since the settlement route authenticates one and a guest
+   * has none to present; and they must pass the **all or nothing rule**, which is
+   * `WRITE` on every source list of the run as the server evaluated it on the most
+   * recent basket read. The owner satisfies both by owning the basket.
+   *
+   * A control you may not use is not drawn (`0030`), so this decides whether the way
+   * into the pane exists at all rather than whether it is disabled. Losing `WRITE`
+   * flips `seesZoneData` on the next basket read and the control goes with it, which
+   * is the per request check working rather than a second copy of it.
+   */
+  protected readonly canReadHistory = computed(
+    () => this._store.seesZoneData() && this._store.me()?.kind !== 'GUEST'
+  );
+
   /** What the person has put against each list, keyed by list id. */
-  protected readonly allocation = signal<ReadonlyMap<string, number>>(new Map());
+  protected readonly allocation = signal<ReadonlyMap<string, number>>(
+    new Map()
+  );
 
   protected readonly allocated = computed(() =>
     [...this.allocation().values()].reduce((sum, n) => sum + n, 0)
@@ -264,6 +340,11 @@ export class SettleSheet {
 
   protected openPane(pane: Pane): void {
     this._failed.set(false);
+    if (pane === 'history') {
+      // Read on the way in rather than with the basket: most people settle a line and
+      // never ask what happened to it, and this is one request per origin.
+      void this._loadHistory();
+    }
     if (pane === 'allocate') {
       // Seeded from the default the server would have applied, so the sheet
       // opens on "what one tap would have done" and the person corrects it
@@ -346,6 +427,14 @@ export class SettleSheet {
    *
    * A reader who passes the rule gets the list names; everybody else gets the
    * count alone, which is section 6.4's report with the zone data taken out.
+   *
+   * **The count is always drawn, and the names are added to it** (plan 0049,
+   * section 1.2). "2 lines could not be updated" is true for everybody and
+   * unactionable on its own, so a reader entitled to the names is told which
+   * list to go and look at; a guest keeps the sentence unchanged. The names
+   * arrive **on the report**, composed by the gateway, so this screen still
+   * reaches no zone list store and still cannot name a household it was not
+   * handed one for.
    */
   protected readonly missed = computed<string | null>(() => {
     const result = this._result();
@@ -353,12 +442,203 @@ export class SettleSheet {
       return null;
     }
 
-    // The count, for every reader. Naming the lists would need the zone list
-    // store, which this screen deliberately does not reach into: a basket screen
-    // that could name a household would be a basket screen a guest could be
-    // shown one from by a template mistake. `skipped` carries the ids for a
-    // privileged reader and is left unused here for exactly that reason.
-    return this._translator.t('basket.settle.missed', undefined, this._locale(), { count: result.skippedCount });
+    const locale = this._locale();
+    const count = this._translator.t(
+      'basket.settle.missed',
+      undefined,
+      locale,
+      {
+        count: result.skippedCount,
+      }
+    );
+
+    const named = this._missedNames();
+    if (named === null) {
+      return count;
+    }
+
+    return `${count} ${this._translator.t(
+      'basket.settle.missedNamed',
+      undefined,
+      locale,
+      { lists: named }
+    )}`;
+  });
+
+  /**
+   * The skipped lists as one phrase, or null when there is nothing to name.
+   *
+   * Null covers the two cases that must not be told apart in the copy: a reader
+   * whose report has no `skipped` key at all, and an entitled report whose
+   * entries have all lost their names to a deleted list. Both leave the bare
+   * count, which is the honest half of the sentence.
+   *
+   * Deduplicated by name rather than by list id: two origins on one list are one
+   * household to the person reading, and the report carries an entry per origin.
+   */
+  private readonly _missedNames = computed<string | null>(() => {
+    const skipped = this._result()?.skipped ?? [];
+    const names = new Set<string>();
+
+    for (const entry of skipped) {
+      if (entry.listName === null || entry.listName === '') {
+        continue;
+      }
+      // The group is appended only where there is one, so a reader with two
+      // lists called "Food" can tell them apart and everybody else is not made
+      // to read a redundant word.
+      names.add(
+        entry.zoneName === null || entry.zoneName === ''
+          ? entry.listName
+          : `${entry.listName} (${entry.zoneName})`
+      );
+    }
+
+    return names.size === 0 ? null : [...names].join(', ');
+  });
+
+  /**
+   * What happened to this line, newest first, across every origin it was composed from.
+   *
+   * **One request per origin, and the answers merged.** The settlement route is keyed
+   * on a *zone list line*, and a basket line is a sum of several: two flats both
+   * wanting milk merge into one row here and contribute an origin each. Asking only the
+   * first would draw one household's half of a shared line's history and give no sign
+   * that the other half existed.
+   *
+   * `origins` is absent for a reader who does not pass the rule, which is the same
+   * reader the control is not drawn for, so the empty list this produces for them is
+   * belt and braces rather than the only guard.
+   *
+   * A failure of **any** origin fails the pane. This is a history, and a history
+   * silently missing one shop's purchases is worse than one that says it could not
+   * load: the whole reason to open it is to reconcile two people's trips.
+   */
+  private async _loadHistory(reset = true): Promise<void> {
+    const origins = this.line()?.origins ?? [];
+    if (origins.length === 0) {
+      this._history.set([]);
+      this._historyCursors.set(new Map());
+      this._historyState.set('loaded');
+      return;
+    }
+
+    // Which line to ask about, and from where. A reset asks each origin from the
+    // beginning; `Show more` asks only the origins that still have a cursor.
+    const asking = reset
+      ? [...new Set(origins.map((origin) => origin.lineId))].map(
+          (lineId) => [lineId, undefined] as const
+        )
+      : [...this._historyCursors()].map(
+          ([lineId, cursor]) => [lineId, cursor] as const
+        );
+
+    if (asking.length === 0) {
+      return;
+    }
+
+    this._historyState.set('loading');
+
+    try {
+      const pages = await Promise.all(
+        asking.map(([lineId, cursor]) =>
+          this._lines
+            .listSettlements(lineId, cursor === undefined ? {} : { cursor })
+            .then((page) => ({ lineId, page }))
+        )
+      );
+
+      const cursors = new Map(reset ? [] : this._historyCursors());
+      const rows = reset ? [] : [...this._history()];
+
+      for (const { lineId, page } of pages) {
+        if (page.nextCursor === null) {
+          cursors.delete(lineId);
+        } else {
+          cursors.set(lineId, page.nextCursor);
+        }
+        rows.push(...page.items.map((row) => this._toRow(row)));
+      }
+
+      // Sorted after merging, not before: each origin answers newest first on its own,
+      // and two origins interleaved by time is the order somebody actually shopped in.
+      this._history.set(
+        rows.sort((left, right) => right.at.getTime() - left.at.getTime())
+      );
+      this._historyCursors.set(cursors);
+      this._historyState.set('loaded');
+    } catch {
+      // Including the 403 a participant gets on the request after losing `WRITE`.
+      // The pane says it would not load rather than drawing a half history, and the
+      // control itself disappears on the next basket read.
+      this._historyState.set('failed');
+    }
+  }
+
+  /** Ask each origin that still has a cursor for its next page. */
+  protected retryHistory(): void {
+    void this._loadHistory();
+  }
+
+  protected moreHistory(): void {
+    void this._loadHistory(false);
+  }
+
+  /**
+   * One settlement as a row, with its actor resolved against **the basket's people**.
+   *
+   * The same function the line page and the detail sheet use, which is why it lives in
+   * `models` now: a history that read differently on two screens would cost the only
+   * thing a history has. What differs is where a name comes from, and that is the
+   * argument it takes: there it is the zone's members, here it is the participants, who
+   * are the only people this screen has ever heard of.
+   *
+   * A settle made from a basket carries **no user id at all** when a guest made it
+   * (backend `0051`), and the row draws the neutral phrase for that, which is right:
+   * the person genuinely has no account to be named by.
+   */
+  private _toRow(settlement: {
+    id: string;
+    outcome: SettlementOutcome;
+    quantity: number;
+    settledByUserId: string | null;
+    settledAt: Date;
+  }): SettlementRowVm {
+    const locale = this._locale();
+    const byUserId = this._byUserId();
+
+    return toSettlementRow(
+      settlement,
+      {
+        nameOf: (userId) => {
+          const person = byUserId.get(userId);
+          return person === undefined
+            ? null
+            : participantName(person, this._translator, locale);
+        },
+        callerUserId: this._store.me()?.userId ?? null,
+        locale,
+      },
+      null
+    );
+  }
+
+  /**
+   * The basket's people by **account id**, for resolving a settlement's actor.
+   *
+   * Keyed on `userId` and not on the participant id, because those are different
+   * identifiers and a settlement carries the account's. Guests are absent from this map
+   * by construction, having no account, which is exactly the settle that arrives with a
+   * null user id anyway.
+   */
+  private readonly _byUserId = computed(() => {
+    const map = new Map<string, BasketParticipant>();
+    for (const person of this._store.participants()) {
+      if (person.userId !== null) {
+        map.set(person.userId, person);
+      }
+    }
+    return map;
   });
 
   private _defaultAllocation(): ReadonlyMap<string, number> {
@@ -376,7 +656,9 @@ export class SettleSheet {
     return seeded;
   }
 
-  private async _send(body: Parameters<BasketStore['settle']>[1]): Promise<void> {
+  private async _send(
+    body: Parameters<BasketStore['settle']>[1]
+  ): Promise<void> {
     this._busy.set(true);
     this._failed.set(false);
     const result = await this._store.settle(this._lineId, body);

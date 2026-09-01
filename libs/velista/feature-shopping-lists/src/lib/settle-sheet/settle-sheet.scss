@@ -259,6 +259,57 @@
   color: var(--app-status-danger-fg);
 }
 
+// --- What happened to this line ---------------------------------------------
+
+// The way into the history, from the settle pane. A link rather than a button
+// shape: it goes somewhere to read rather than doing anything to the line, and
+// three button shaped controls above it are already competing for the thumb.
+.link {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  margin-block-start: var(--app-space-3);
+  padding: var(--app-space-2);
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-action-quiet-fg);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// The act and the day on one line, the day pushed to the end: a history is read
+// down the left edge for what happened, and the dates are the second pass.
+.history-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  padding-block: var(--app-space-2);
+  border-block-end: 1px solid var(--app-border-subtle);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+}
+
+.history-when {
+  flex: none;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
 // Not an error: the settle worked, and part of it did not land. Attention rather
 // than danger says exactly that.
 .missed {

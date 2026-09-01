@@ -17,6 +17,23 @@ import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { ProfilesPage, SCOPE_REQUIRED_PARAM } from './profiles-page';
 
+/**
+ * Every field this page has a control for, and therefore the whole of what a save from
+ * it may name (plan 0049, section 7).
+ *
+ * A closed set rather than a list of forbidden names, so a field added to
+ * `WriteShoppingProfileRequest` later is refused here until somebody adds the control
+ * that edits it. That is the direction that keeps the guarantee: the hazard is a body
+ * carrying something nothing on screen decided.
+ */
+const EDITED_FIELDS = new Set([
+  'name',
+  'addressText',
+  'minSavingCents',
+  'postalCodes',
+  'supermarkets',
+]);
+
 const CHAINS: readonly Supermarket[] = [
   { id: 'c1', name: { en: 'Mercadona', es: 'Mercadona' } },
   { id: 'c2', name: { en: 'DIA', es: 'DIA' } },
@@ -479,6 +496,159 @@ describe('ProfilesPage', () => {
       expect(
         store.calls.filter((call) => call.method === 'load').length
       ).toBeGreaterThan(before);
+    });
+  });
+
+  /**
+   * What a save is allowed to send (plan 0049, section 7).
+   *
+   * This is the spec that makes the generation scope safe to read at all, which is why
+   * that plan calls it the one worth writing first. `PATCH` treats a **present**
+   * collection as a full replacement and an absent one as "leave it alone", so a page
+   * that sent a collection it does not edit would replace it with whatever this build
+   * happened to hold. For `generationSources` that would be nothing, and somebody's
+   * stored scope would be erased by an interaction that renamed their profile.
+   *
+   * The structural half of the guarantee is that `ShoppingProfile` does not carry the
+   * field, so the page has nothing to send. This is the behavioural half: every save
+   * sends exactly the one thing its control edits, and a future editor who spreads a
+   * profile into a body fails here rather than in somebody's account.
+   */
+  describe('what a save sends', () => {
+    /** Every field name any save on this page has ever put in a body. */
+    async function keysSentBy(
+      act: (fixture: ComponentFixture<ProfilesPage>) => void | Promise<void>,
+      options: Options = {}
+    ): Promise<string[][]> {
+      const { fixture, store } = await render(options);
+
+      await act(fixture);
+      await Promise.resolve();
+
+      return store.calls
+        .filter((call) => call.method === 'save')
+        .map((call) => Object.keys(call.body).sort());
+    }
+
+    it('sends only the name when the name is edited', async () => {
+      const sent = await keysSentBy(
+        (fixture) => {
+          const field = query<HTMLInputElement>(fixture, '#profiles-name');
+          if (field === null) {
+            throw new Error('no name field');
+          }
+          field.value = 'Elsewhere';
+          field.dispatchEvent(new Event('blur'));
+        },
+        { profiles: [shoppingProfileFor({ id: 'a', name: 'Home' })] }
+      );
+
+      expect(sent).toEqual([['name']]);
+    });
+
+    it('sends only the address when the address is edited', async () => {
+      const sent = await keysSentBy((fixture) => {
+        const field = query<HTMLInputElement>(fixture, '#profiles-address');
+        if (field === null) {
+          throw new Error('no address field');
+        }
+        field.value = '12 Calle Mayor';
+        field.dispatchEvent(new Event('blur'));
+      });
+
+      expect(sent).toEqual([['addressText']]);
+    });
+
+    it('sends only the threshold when the threshold is edited', async () => {
+      const sent = await keysSentBy((fixture) => {
+        const field = query<HTMLInputElement>(fixture, '#profiles-threshold');
+        if (field === null) {
+          throw new Error('no threshold field');
+        }
+        field.value = '2';
+        field.dispatchEvent(new Event('blur'));
+      });
+
+      expect(sent).toEqual([['minSavingCents']]);
+    });
+
+    /**
+     * The postal code list is one of the two collections this page really does edit, so
+     * sending it whole is correct. What must not ride along is the other collection, or
+     * anything the page does not render at all.
+     */
+    it('sends only the postal codes when one is added', async () => {
+      const sent = await keysSentBy(async (fixture) => {
+        query<HTMLButtonElement>(fixture, '.add')?.click();
+        fixture.detectChanges();
+
+        const field = query<HTMLInputElement>(fixture, '#profiles-postal-code');
+        if (field === null) {
+          throw new Error('no postal code field');
+        }
+        field.value = '14001';
+        field.dispatchEvent(new Event('input'));
+        fixture.detectChanges();
+
+        query<HTMLFormElement>(fixture, '.form')?.dispatchEvent(
+          new Event('submit')
+        );
+      });
+
+      expect(sent).toEqual([['postalCodes']]);
+    });
+
+    it('sends only the chains when one is excluded', async () => {
+      const sent = await keysSentBy((fixture) => {
+        queryAll<HTMLInputElement>(fixture, '.checkbox')[1].click();
+      });
+
+      expect(sent).toEqual([['supermarkets']]);
+    });
+
+    /**
+     * Stated as a rule over every save this page can make, rather than as five
+     * examples: a sixth control added later is caught by this without anybody
+     * remembering to extend the list above.
+     */
+    it('never sends a collection this page does not edit', async () => {
+      const { fixture, store } = await render();
+
+      // Every control on the page, in one pass.
+      const name = query<HTMLInputElement>(fixture, '#profiles-name');
+      if (name !== null) {
+        name.value = 'Elsewhere';
+        name.dispatchEvent(new Event('blur'));
+      }
+      const address = query<HTMLInputElement>(fixture, '#profiles-address');
+      if (address !== null) {
+        address.value = '12 Calle Mayor';
+        address.dispatchEvent(new Event('blur'));
+      }
+      const threshold = query<HTMLInputElement>(fixture, '#profiles-threshold');
+      if (threshold !== null) {
+        threshold.value = '3';
+        threshold.dispatchEvent(new Event('blur'));
+      }
+      queryAll<HTMLInputElement>(fixture, '.checkbox')[1].click();
+      await Promise.resolve();
+
+      const bodies = store.calls
+        .filter((call) => call.method === 'save')
+        .map((call) => call.body as Record<string, unknown>);
+
+      expect(bodies.length).toBeGreaterThan(0);
+      for (const body of bodies) {
+        // The two fields plan 0046 kept off the model, by name, because these are the
+        // ones an empty replacement destroys silently.
+        expect(body).not.toHaveProperty('generationScope');
+        expect(body).not.toHaveProperty('generationSources');
+        // And nothing at all beyond what this page renders, so the rule survives a
+        // field being added to the write request later.
+        expect(Object.keys(body).every((key) => EDITED_FIELDS.has(key))).toBe(
+          true
+        );
+      }
     });
   });
 

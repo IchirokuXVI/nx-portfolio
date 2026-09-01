@@ -6,7 +6,11 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore, SessionStore } from '@portfolio/velista/data-access';
+import {
+  BasketStore,
+  LINE_SERVICE,
+  SessionStore,
+} from '@portfolio/velista/data-access';
 import {
   provideVelistaTesting,
   SheetNavigation,
@@ -124,6 +128,15 @@ async function render(
     providers: [
       provideVelistaTesting({ basePath }),
       { provide: BasketStore, useValue: storeDouble() },
+      // The settle sheet reads a line's settlement history through this. These tests
+      // are about the URL a sheet leaves on and never open that pane, so an empty page
+      // is enough: what matters is that the injection resolves.
+      {
+        provide: LINE_SERVICE,
+        useValue: {
+          listSettlements: async () => ({ items: [], nextCursor: null }),
+        },
+      },
       // The people sheet names the reader's own row from the account, because core
       // keeps no `displayName` for an owner. These tests are about the URL a sheet
       // leaves on, so the emptiest session there is keeps them about it.

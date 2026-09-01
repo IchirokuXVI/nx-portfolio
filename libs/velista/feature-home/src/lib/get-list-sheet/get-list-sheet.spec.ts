@@ -7,14 +7,18 @@ import {
   LIST_SERVICE,
   provideFakeSessionStore,
   provideFakeZoneStore,
+  SHOPPING_PROFILE_SERVICE,
   ShoppingProfileStore,
   type ListServiceI,
+  type ShoppingProfileServiceI,
 } from '@portfolio/velista/data-access';
 import type {
   CreateGeneratedListRequest,
   GeneratedListRun,
   MyZone,
+  ProfileGenerationScope,
   ShoppingListSummary,
+  ShoppingProfile,
 } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
@@ -81,22 +85,85 @@ interface Options {
    * what the route table said before the history gained a copy of its own.
    */
   readonly returnTo?: 'home' | 'shopping-lists';
+  /** The profiles the chooser has to choose between. One unnamed default by default. */
+  readonly profiles?: readonly ShoppingProfile[];
+  /**
+   * What each profile stores as its generation scope, by profile id.
+   *
+   * Absent for a profile means the service answers null, which is a profile that has
+   * never narrowed anything and is the case the sheet falls back to prechecking
+   * everything for.
+   */
+  readonly scopes?: Readonly<Record<string, ProfileGenerationScope>>;
+  /**
+   * How many lists one page of `listLists` answers with.
+   *
+   * Left out, every list comes back at once and no cursor is ever offered, which is
+   * every test but the paging one.
+   */
+  readonly pageSize?: number;
+}
+
+/** One profile, named or not, for the chooser and the scope read. */
+function profile(
+  id: string,
+  overrides: Partial<ShoppingProfile> = {}
+): ShoppingProfile {
+  return {
+    id,
+    name: null,
+    isDefault: false,
+    position: 0,
+    addressText: null,
+    minSavingCents: 0,
+    postalCodes: [],
+    chains: [],
+    ...overrides,
+  };
 }
 
 /** Records what the sheet asked the store to compose. */
 const created: CreateGeneratedListRequest[] = [];
+
+/** Every `listLists` the sheet made, so the cursor test can see it followed one. */
+const listPages: { zoneId: string; cursor: string | null }[] = [];
+
+/** Which profiles the sheet asked for a stored scope, in order. */
+const scopeReads: string[] = [];
 
 async function render(
   options: Options = {}
 ): Promise<ComponentFixture<GetListSheet>> {
   TestBed.resetTestingModule();
   created.length = 0;
+  scopeReads.length = 0;
+
+  listPages.length = 0;
 
   const listService: Partial<ListServiceI> = {
-    listLists: async (zoneId: string) => ({
-      items: [...(options.lists?.[zoneId] ?? [])],
-      nextCursor: null,
-    }),
+    listLists: async (
+      zoneId: string,
+      page?: { cursor?: string; limit?: number }
+    ) => {
+      listPages.push({ zoneId, cursor: page?.cursor ?? null });
+
+      const all = [...(options.lists?.[zoneId] ?? [])];
+      const size = options.pageSize;
+      if (size === undefined) {
+        return { items: all, nextCursor: null };
+      }
+
+      // A cursor that is simply the index of the next item, which is all a fake needs
+      // it to be: the sheet must pass back whatever it was handed and stop when it is
+      // handed null, and neither of those is a fact about the cursor's shape.
+      const from = page?.cursor === undefined ? 0 : Number(page.cursor);
+      const items = all.slice(from, from + size);
+      const next = from + size;
+      return {
+        items,
+        nextCursor: next < all.length ? String(next) : null,
+      };
+    },
   };
 
   const generated = {
@@ -113,14 +180,36 @@ async function render(
           generatedAt: new Date(),
           lineCount: 3,
           settledLineCount: 0,
+          boughtLineCount: 0,
+          notAvailableLineCount: 0,
+          presentCount: 0,
         },
         skipped: [],
       } as GeneratedListRun;
     },
   };
 
-  // Only `profiles` is read, and only to decide whether the chooser is drawn at all.
-  const profiles = { profiles: () => [], load: async () => undefined };
+  const held = options.profiles ?? [];
+
+  // The store, for the chooser: which profiles there are, and which is the default.
+  const profiles = {
+    profiles: () => held,
+    load: async () => undefined,
+  };
+
+  /**
+   * The service, for the generation scope and nothing else.
+   *
+   * A second double beside the store's, which mirrors the production split exactly and
+   * is the point of it (plan 0049, section 3): the scope is not on the profile the
+   * store holds, so a spec cannot state one by putting a field on a profile.
+   */
+  const profileService: Partial<ShoppingProfileServiceI> = {
+    readGenerationScope: async (profileId: string) => {
+      scopeReads.push(profileId);
+      return options.scopes?.[profileId] ?? null;
+    },
+  };
 
   await TestBed.configureTestingModule({
     imports: [GetListSheet, RokuTranslatorTestingModule.forTesting()],
@@ -132,6 +221,7 @@ async function render(
       provideFakeZoneStore(fakeZoneStore({ zones: options.zones ?? [zone()] })),
       { provide: LIST_SERVICE, useValue: listService },
       { provide: ShoppingProfileStore, useValue: profiles },
+      { provide: SHOPPING_PROFILE_SERVICE, useValue: profileService },
       // The real store's own behaviour is covered by its spec; here it is a recorder,
       // so what is under test is what the sheet decides to send.
       { provide: GeneratedListStore, useValue: generated },
@@ -157,6 +247,9 @@ async function render(
   fixture.detectChanges();
   return fixture;
 }
+
+const text = (fixture: ComponentFixture<GetListSheet>) =>
+  (fixture.nativeElement as HTMLElement).textContent ?? '';
 
 const query = (fixture: ComponentFixture<GetListSheet>, selector: string) =>
   (fixture.nativeElement as HTMLElement).querySelector(selector);
@@ -420,6 +513,226 @@ describe('GetListSheet', () => {
 
       expect(fixture.componentInstance.showProfiles()).toBe(false);
       expect(query(fixture, '.profile-select')).toBeNull();
+    });
+
+    /**
+     * `0045` covered only the absent-with-one case, which plan 0049 section 7 asks to
+     * finish: with two profiles the chooser is drawn, and the run still names whichever
+     * is selected rather than letting the server pick.
+     */
+    it('is drawn for somebody with more than one, defaulting to theirs', async () => {
+      const fixture = await render({
+        profiles: [
+          profile('p1', { name: 'Weekday' }),
+          profile('p2', { name: 'Big shop', isDefault: true, position: 1 }),
+        ],
+      });
+
+      expect(fixture.componentInstance.showProfiles()).toBe(true);
+      expect(query(fixture, '.profile-select')).not.toBeNull();
+      // The default profile and not the first in the list, which are different rows
+      // here on purpose.
+      expect(fixture.componentInstance.selectedProfileId()).toBe('p2');
+    });
+  });
+
+  /**
+   * Prefilling the tree from the profile's stored scope (plan 0049, section 3).
+   *
+   * The scope is read through its **own** call and never off the profile, which is why
+   * every case here is stated on the service double rather than as a field on a
+   * profile: a spec that could put it on the profile would be a spec proving the
+   * hazard plan 0046 refused is back.
+   */
+  describe('the stored generation scope', () => {
+    it('prechecks exactly what a SELECTED scope names', async () => {
+      const fixture = await render({
+        zones: [zone(), zone({ id: 'z2', name: 'Home' })],
+        scopes: {
+          p1: {
+            profileId: 'p1',
+            scope: 'SELECTED',
+            sources: [{ zoneId: 'z1', listId: 'l1' }],
+          },
+        },
+        profiles: [profile('p1', { isDefault: true })],
+      });
+
+      await fixture.whenStable();
+
+      // The named list, and nothing from the group the scope did not mention. That
+      // second half is the one that breaks quietly: an unmentioned group defaults to
+      // ticked, so without the prefill flipping that default the run would draw from a
+      // household somebody had deliberately left out.
+      expect(fixture.componentInstance.sources()).toEqual([
+        { zoneId: 'z1', listId: 'l1' },
+      ]);
+    });
+
+    /**
+     * A `null` list id means the whole group **including lists made later**, which is
+     * the `all` mode and not an enumeration of today's ids. Reading it as ticks would
+     * send today's lists and quietly stop including new ones.
+     */
+    it('keeps a whole group stored as a group, not as its lists', async () => {
+      const fixture = await render({
+        zones: [zone(), zone({ id: 'z2', name: 'Home' })],
+        lists: { z1: [list('l1', 'Weekly shop'), list('l2', 'Costco run')] },
+        scopes: {
+          p1: {
+            profileId: 'p1',
+            scope: 'SELECTED',
+            sources: [{ zoneId: 'z1', listId: null }],
+          },
+        },
+        profiles: [profile('p1', { isDefault: true })],
+      });
+
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.sources()).toEqual([
+        { zoneId: 'z1', listId: null },
+      ]);
+      expect(fixture.componentInstance.zoneState('z1')).toBe('all');
+    });
+
+    // The default for somebody who has never narrowed anything, and the behaviour
+    // this sheet shipped with.
+    it('prechecks everything where the profile stores no scope', async () => {
+      const fixture = await render({
+        zones: [zone(), zone({ id: 'z2', name: 'Home' })],
+        profiles: [profile('p1', { isDefault: true })],
+      });
+
+      await fixture.whenStable();
+
+      expect(scopeReads).toEqual(['p1']);
+      expect(fixture.componentInstance.sources()).toEqual([
+        { zoneId: 'z1', listId: null },
+        { zoneId: 'z2', listId: null },
+      ]);
+    });
+
+    it('prechecks everything for an ALL scope', async () => {
+      const fixture = await render({
+        zones: [zone(), zone({ id: 'z2', name: 'Home' })],
+        scopes: { p1: { profileId: 'p1', scope: 'ALL', sources: [] } },
+        profiles: [profile('p1', { isDefault: true })],
+      });
+
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.sources()).toEqual([
+        { zoneId: 'z1', listId: null },
+        { zoneId: 'z2', listId: null },
+      ]);
+    });
+
+    // The ticks belong to the profile, so switching reopens the tree on the new one's.
+    it('re-reads when the profile changes', async () => {
+      const fixture = await render({
+        zones: [zone(), zone({ id: 'z2', name: 'Home' })],
+        profiles: [
+          profile('p1', { isDefault: true }),
+          profile('p2', { position: 1 }),
+        ],
+        scopes: {
+          p2: {
+            profileId: 'p2',
+            scope: 'SELECTED',
+            sources: [{ zoneId: 'z2', listId: null }],
+          },
+        },
+      });
+
+      await fixture.whenStable();
+
+      fixture.componentInstance.onProfileChange({
+        target: { value: 'p2' },
+      } as unknown as Event);
+      await fixture.whenStable();
+
+      expect(scopeReads).toEqual(['p1', 'p2']);
+      expect(fixture.componentInstance.sources()).toEqual([
+        { zoneId: 'z2', listId: null },
+      ]);
+    });
+  });
+
+  /**
+   * Somebody who is in groups but can write in none of them (plan 0049, section 4).
+   *
+   * This screen cannot know it on open without a `listLists` per group, so it says so
+   * as the groups expand instead of leaving the person to infer it from an empty
+   * expansion.
+   */
+  describe('in groups, writable nowhere', () => {
+    it('says why once every expanded group has come back empty', async () => {
+      const fixture = await render({
+        // `READ` and nothing more, so the group has lists and none of them may feed a
+        // run: the exact shape "member of zero groups" cannot detect.
+        lists: { z1: [list('l1', 'Weekly shop', ['READ'])] },
+      });
+
+      expect(fixture.componentInstance.noSources()).toBe(false);
+      expect(fixture.componentInstance.noWritableSources()).toBe(false);
+
+      fixture.componentInstance.toggleExpanded('z1');
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.noWritableSources()).toBe(true);
+      expect(text(fixture)).toContain('getList.sources.noneWritable');
+    });
+
+    // One empty group among several says nothing about whether the run can draw from
+    // anywhere, so the sentence waits until every expanded group has answered.
+    it('stays quiet while another expanded group has writable lists', async () => {
+      const fixture = await render({
+        zones: [zone(), zone({ id: 'z2', name: 'Home' })],
+        lists: {
+          z1: [list('l1', 'Weekly shop', ['READ'])],
+          z2: [list('l2', 'Costco run')],
+        },
+      });
+
+      fixture.componentInstance.toggleExpanded('z1');
+      fixture.componentInstance.toggleExpanded('z2');
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.noWritableSources()).toBe(false);
+    });
+  });
+
+  /**
+   * A group with more than one page of writable lists (plan 0049, section 4).
+   *
+   * The sheet used to ask for one page of a hundred and stop, so the hundred and first
+   * list was simply not there to be found. Silence was the defect rather than the
+   * hundred.
+   */
+  describe('paging through a group s lists', () => {
+    it('follows the cursor rather than showing the first page', async () => {
+      const fixture = await render({
+        pageSize: 2,
+        lists: {
+          z1: [
+            list('l1', 'Weekly shop'),
+            list('l2', 'Costco run'),
+            list('l3', 'Chemist'),
+          ],
+        },
+      });
+
+      fixture.componentInstance.toggleExpanded('z1');
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.listsOf('z1')?.lists).toHaveLength(3);
+      // Two pages asked for, the second carrying back the cursor the first answered.
+      expect(listPages).toEqual([
+        { zoneId: 'z1', cursor: null },
+        { zoneId: 'z1', cursor: '2' },
+      ]);
     });
   });
 

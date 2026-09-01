@@ -309,7 +309,10 @@
       "more_other": "and {{count}} more",
       "progress": "{{settled}} of {{total}} finished",
       "generatedToday": "generated today",
-      "generatedOn": "generated {{date}}"
+      "generatedOn": "generated {{date}}",
+      "got": "{{bought}} of {{total}} got",
+      "unavailable_one": "{{count}} not available",
+      "unavailable_other": "{{count}} not available"
     },
     "zone": {
       "members_one": "{{count}} member",
@@ -950,7 +953,8 @@
       "viaLink": "joined with the list’s link",
       "viaOwner": "made this list",
       "remove": "Remove from this list",
-      "close": "Close"
+      "close": "Close",
+      "joinedUnknown": "Not known"
     },
     "share": {
       "open": "Share this list",
@@ -995,6 +999,21 @@
       "checking": "Checking the link",
       "joining": "Joining",
       "failed": "That did not work. Try again."
+    },
+    "history": {
+      "open": "What happened to this line",
+      "title": "What happened here",
+      "loading": "Loading what happened",
+      "failed": "That would not load",
+      "retry": "Try again",
+      "empty": "Nothing has happened to this line yet",
+      "more": "Show more",
+      "bought_one": "{{who}} got {{count}}",
+      "bought_other": "{{who}} got {{count}}",
+      "none": "{{who}} says they had none",
+      "someone": "Someone",
+      "you": "You",
+      "close": "Close"
     }
   },
   "getList": {
@@ -1012,7 +1031,8 @@
       "hint": "Only lists where you can edit appear. A group checked whole includes lists made later.",
       "none": "You need a group where you can edit lists first",
       "expand": "Show the lists in {{name}}",
-      "collapse": "Hide the lists in {{name}}"
+      "collapse": "Hide the lists in {{name}}",
+      "noneWritable": "You can edit lists in none of your groups"
     },
     "submit": "Generate",
     "submitting": "Generating",
@@ -1027,7 +1047,10 @@
     },
     "row": {
       "progress": "{{settled}} of {{total}} finished",
-      "loading": "Loading your shopping lists"
+      "loading": "Loading your shopping lists",
+      "got": "{{bought}} of {{total}} got",
+      "unavailable_one": "{{count}} not available",
+      "unavailable_other": "{{count}} not available"
     },
     "empty": {
       "title": "No shopping lists yet",

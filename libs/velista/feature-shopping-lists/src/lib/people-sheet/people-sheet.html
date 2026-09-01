@@ -26,7 +26,12 @@
 
     <dl class="facts">
       <dt>{{ 'basket.people.joined' | rokuT }}</dt>
-      <dd>{{ joinedAt() || ('basket.people.deviceUnknown' | rokuT) }}</dd>
+      <!--
+        Its own key, not the device's (plan 0049, section 6). "Not recorded" reads as
+        a device fact where it stands for a time, and a language that inflects the
+        phrase for what is missing cannot say both with one string.
+      -->
+      <dd>{{ joinedAt() || ('basket.people.joinedUnknown' | rokuT) }}</dd>
       <dt>{{ 'basket.people.device' | rokuT }}</dt>
       <dd>{{ person.device || ('basket.people.deviceUnknown' | rokuT) }}</dd>
     </dl>

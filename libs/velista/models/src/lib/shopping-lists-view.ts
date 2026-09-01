@@ -1,6 +1,51 @@
 import type { GeneratedListSummary } from './generated-list-view';
 
 /**
+ * What a finished trip actually came to: bought, and not available (plan 0049,
+ * section 2).
+ *
+ * Null wherever the summary cannot support the sentence, which is what the copy
+ * branches on. See {@link outcomeBreakdown} for when that is.
+ */
+export interface OutcomeBreakdownVm {
+  readonly bought: number;
+  readonly notAvailable: number;
+}
+
+/**
+ * The breakdown, or null when the numbers cannot justify one.
+ *
+ * **The test is that the two halves account for every finished line**, and it is that
+ * rather than a version flag because it is the condition the sentence actually needs.
+ * Three things fail it and all three should:
+ *
+ * - A server older than backend `0053`, whose two fields map to zero while
+ *   `settledLineCount` does not. It says "finished", which is what velista `0045`
+ *   shipped and is still true.
+ * - A finished line with no settlement behind it, which the counts leave in neither
+ *   bucket. Drawing "2 of 4 got" over three finished lines would lose one silently.
+ * - An outcome added later that this build has never heard of. The same arithmetic
+ *   catches it, with no release of this app required.
+ *
+ * Plan 0049 section 2 is explicit that the copy must not change before the field
+ * exists, and this is how a screen honours that without asking what it is talking to:
+ * "finished" is the honest word for a number that merges outcomes, and a screen that
+ * says "got" for a shop that had none of it is worse than a screen that is vague.
+ */
+export function outcomeBreakdown(
+  summary: Pick<
+    GeneratedListSummary,
+    'settledLineCount' | 'boughtLineCount' | 'notAvailableLineCount'
+  >
+): OutcomeBreakdownVm | null {
+  const { boughtLineCount, notAvailableLineCount, settledLineCount } = summary;
+
+  return boughtLineCount + notAvailableLineCount === settledLineCount
+    ? { bought: boughtLineCount, notAvailable: notAvailableLineCount }
+    : null;
+}
+
+/**
  * The view models for the shopping list card and the history page (plan 0045).
  *
  * Separate from `generated-list-view.ts`, which holds what a generated list **is**:
@@ -35,11 +80,32 @@ export interface ShoppingListCardVm {
    * carrying numbers alone cannot tell "they had none" from "they got it", and the
    * shorter word would be claiming a purchase that may never have happened.
    *
-   * The mock's "3 of 4 got, 1 not available" needs the per line `lastOutcome` that
-   * `0044`'s basket view carries and this one does not. It belongs on a screen holding
-   * the lines, which is the basket, not on a card holding two integers.
+   * The mock's "3 of 4 got, 1 not available" is {@link breakdown}, which the summary
+   * now carries directly (backend `0053`). This number stays because it is still the
+   * one the progress bar is a fraction of, and because it is what the copy falls back
+   * to where the breakdown cannot be trusted.
    */
   readonly settledLineCount: number;
+  /**
+   * Bought against not available, or null where the summary cannot say.
+   *
+   * Null is the `0045` behaviour unchanged: the card says "finished". See
+   * {@link outcomeBreakdown} for the three cases that produce it.
+   */
+  readonly breakdown: OutcomeBreakdownVm | null;
+  /**
+   * How many people have this basket open right now. Zero draws nothing.
+   *
+   * `0045` refused this row and named the price: a request per card on every dashboard
+   * load, to draw something usually absent. Backend `0053` puts it on the summary the
+   * card already reads, so it now costs a field. The row is still not drawn at zero,
+   * which is most of the time, because "0 people here now" is furniture.
+   *
+   * It counts **sessions**, not people, which is what presence means everywhere in this
+   * app: one person on a phone and a laptop is two. That is truthful rather than a
+   * rounding error, and it is why the copy counts rather than naming anybody.
+   */
+  readonly presentCount: number;
   /**
    * How many other `ACTIVE` baskets there are besides this one.
    *
@@ -59,6 +125,15 @@ export interface ShoppingListRowVm {
   readonly lineCount: number;
   /** Finished rather than bought, for the reason on {@link ShoppingListCardVm}. */
   readonly settledLineCount: number;
+  /**
+   * Bought against not available, or null where the summary cannot say.
+   *
+   * The history row is the screen plan 0049 section 2 is really about: it is read
+   * after a trip, when the question is what actually came home, and "3 of 4 finished"
+   * answers a different one. The card gets the same treatment for consistency, but a
+   * card is read mid trip where "finished" was already close enough.
+   */
+  readonly breakdown: OutcomeBreakdownVm | null;
   /**
    * Whether this trip is the one being shopped now.
    *

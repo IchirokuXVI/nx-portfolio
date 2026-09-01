@@ -62,9 +62,15 @@
         <!--
           One announcement for the page, not one per row (section 7). It is `polite`, so
           it waits for whatever the reader is in the middle of rather than cutting in.
+
+          The sentence comes from `announced`, written once per page of results, rather
+          than from the row count in this expression. Interpolating the count made the
+          region re-read the whole total whenever the count moved, and the count moves
+          on the quiet refresh every time somebody else in the shop settles a line
+          (plan 0049, section 6).
         -->
         <p aria-live="polite" class="visually-hidden" role="status">
-          {{ 'history.announce.loaded' | rokuT: { count: page.rows.length } }}
+          {{ announced() }}
         </p>
 
         <div class="rows">

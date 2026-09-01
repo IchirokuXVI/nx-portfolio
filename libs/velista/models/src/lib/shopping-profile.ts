@@ -1,3 +1,6 @@
+import type { GenerationScope } from './enums';
+import type { GeneratedListSource } from './generated-list-view';
+
 /**
  * Where somebody shops, as this app models it (plan 0046; backend plan 0049).
  *
@@ -10,6 +13,14 @@
  *   collection as "leave it alone" and a present one as a full replacement, so a model
  *   that carried them would sooner or later be sent back with whatever this build
  *   happened to hold, which for a build that never renders them is nothing.
+ *
+ *   **They are still read, and they are read somewhere else** (plan 0049, section 3).
+ *   {@link ProfileGenerationScope} is its own type behind its own call, held by the
+ *   generation sheet and never merged into the profile the profiles page edits and
+ *   saves. Keeping the field off this interface was the safe choice available at the
+ *   time; keeping it off while reading it separately is the safe choice that also
+ *   prefills the sheet. The point is not to be careful with a field that can erase
+ *   somebody's stored scope, it is that no field on this object can.
  * - `minSavingPercent` is the optional relative floor beside the absolute one. Nothing
  *   on this page draws it, and the same replacement argument applies one field down.
  */
@@ -94,6 +105,36 @@ export interface ShoppingProfile {
   readonly minSavingCents: number;
   readonly postalCodes: readonly ProfilePostalCode[];
   readonly chains: readonly ChainPreference[];
+}
+
+/**
+ * What a profile draws from when it generates a basket (plan 0049, section 3).
+ *
+ * **Its own type, read by its own call, held on its own.** It comes off the same
+ * listing response as {@link ShoppingProfile} and is deliberately not part of it: the
+ * profiles page holds a profile and saves it, `PATCH` treats a present collection as a
+ * full replacement, and a field riding along on an object that gets saved is a field
+ * that will one day be saved empty. That is not a thing to be careful about, it is a
+ * thing to make impossible, and this type is how.
+ *
+ * The generation sheet is the only reader. It prechecks its tree from
+ * {@link sources} where the scope is `SELECTED`, and prechecks everything where it is
+ * `ALL`, which is both today's behaviour and the right default for somebody who has
+ * never narrowed anything.
+ */
+export interface ProfileGenerationScope {
+  readonly profileId: string;
+  readonly scope: GenerationScope;
+  /**
+   * The stored sources, meaningful only when {@link scope} is `SELECTED`.
+   *
+   * A null `listId` is the whole group including lists made later, exactly as it is on
+   * a generation request, which is why this is `GeneratedListSource` and not a second
+   * type saying the same thing. The server keeps them under `ALL` too and this carries
+   * whatever it sent, because a scope widened to `ALL` and then narrowed again should
+   * find its old ticks where it left them.
+   */
+  readonly sources: readonly GeneratedListSource[];
 }
 
 /**

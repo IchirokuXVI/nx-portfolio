@@ -82,6 +82,13 @@ export class GeneratedListMemory implements GeneratedListServiceI {
       // to draw and the progress bar has a fraction to be.
       lineCount: 8,
       settledLineCount: 0,
+      // Nothing settled, so both halves of the breakdown are zero and they add up to
+      // the settled count, which is what makes the row draw "0 of 8 got" rather than
+      // falling back to "finished". That is the truthful sentence for a fresh basket.
+      boughtLineCount: 0,
+      notAvailableLineCount: 0,
+      // Nobody is holding a basket that has just been composed.
+      presentCount: 0,
     };
 
     this._lists = [summary, ...this._lists];

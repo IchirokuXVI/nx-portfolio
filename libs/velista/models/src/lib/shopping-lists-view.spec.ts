@@ -3,6 +3,7 @@ import {
   displayNames,
   formatGeneratedDate,
   isSameDay,
+  outcomeBreakdown,
 } from './shopping-lists-view';
 
 /**
@@ -159,6 +160,66 @@ describe('formatGeneratedDate', () => {
     const nextYear = new Date('2027-02-02T10:00:00.000Z');
 
     expect(formatGeneratedDate(august, 'en', nextYear)).toContain('2026');
+  });
+});
+
+/**
+ * Whether the two outcome counts may be drawn (plan 0049, section 2).
+ *
+ * The test is arithmetic rather than a version flag, because arithmetic is the
+ * condition the sentence actually needs: the breakdown may be drawn exactly when it
+ * accounts for every finished line. Three different things fail it and all three should
+ * fall back to "finished", which is the honest word for a number that merges outcomes.
+ */
+describe('outcomeBreakdown', () => {
+  it('answers the two halves when they account for every finished line', () => {
+    expect(
+      outcomeBreakdown({
+        settledLineCount: 4,
+        boughtLineCount: 3,
+        notAvailableLineCount: 1,
+      })
+    ).toEqual({ bought: 3, notAvailable: 1 });
+  });
+
+  // A basket nobody has settled anything on. Zero of zero still accounts for itself, so
+  // the row says "0 of 12 got", which is true and better than "0 of 12 finished".
+  it('answers zeroes on a trip nothing has happened to', () => {
+    expect(
+      outcomeBreakdown({
+        settledLineCount: 0,
+        boughtLineCount: 0,
+        notAvailableLineCount: 0,
+      })
+    ).toEqual({ bought: 0, notAvailable: 0 });
+  });
+
+  // A server older than backend `0053` sends neither field, so both map to zero while
+  // lines really are finished. Claiming "0 got" over three purchases would be worse
+  // than being vague.
+  it('declines where the counts are missing and lines are finished', () => {
+    expect(
+      outcomeBreakdown({
+        settledLineCount: 3,
+        boughtLineCount: 0,
+        notAvailableLineCount: 0,
+      })
+    ).toBeNull();
+  });
+
+  /**
+   * An outcome this build has never heard of, or a finished line with no settlement
+   * behind it: either way a line is finished and in neither bucket, and the same
+   * arithmetic catches it with no release of this app required.
+   */
+  it('declines where an outcome it does not know is in play', () => {
+    expect(
+      outcomeBreakdown({
+        settledLineCount: 5,
+        boughtLineCount: 3,
+        notAvailableLineCount: 1,
+      })
+    ).toBeNull();
   });
 });
 

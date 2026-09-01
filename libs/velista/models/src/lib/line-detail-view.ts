@@ -1,5 +1,5 @@
-import type { LineIndicator } from './list-view';
 import type { SettlementOutcome } from './enums';
+import type { LineIndicator } from './list-view';
 
 /**
  * What the detail sheet and the line page draw, as plain data (velista plan
@@ -326,4 +326,84 @@ export interface LinePageVm {
   /** Whether this caller may edit the product set and delete the line. */
   readonly canEdit: boolean;
   readonly canDelete: boolean;
+}
+
+// --- Turning a settlement into a row ---------------------------------------
+
+/**
+ * A date, in the reader's language.
+ *
+ * `Intl` rather than Angular's `DatePipe`, which is `CommentRow`'s reason and this
+ * app's convention: the pipe needs `registerLocaleData` per locale and a `LOCALE_ID`
+ * this app does not set, because the language is the app's own runtime state rather
+ * than the shell's build time locale. `Intl` reads the tag it is handed, which is
+ * exactly the tag `RokuLocaleStore` is holding.
+ *
+ * A **date** and not a time, unlike the comment timestamps beside it, and the
+ * difference is the subject: a history says which day the household bought something,
+ * and the hour is noise nobody reading their own consumption has ever wanted.
+ */
+export function formatDay(at: Date, locale: string): string {
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(at);
+  } catch {
+    // An unrecognised tag, which `Intl` throws a `RangeError` for. The ISO date is
+    // ugly and correct, and a history row with no date at all would be worse.
+    return at.toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * One settlement, ready to draw.
+ *
+ * `who` collapses three cases into what a person reads: the reader, somebody named, or
+ * nobody. The last covers a settlement with no user at all, which is a guest settling
+ * from a shared basket (backend plan 0051), and a name that simply would not resolve.
+ * Both draw the neutral phrase, because an id is not a person to somebody reading their
+ * own buy history.
+ *
+ * **Here rather than beside one of the screens that calls it**, since velista plan 0049
+ * section 1.1: the line page, the detail sheet and the basket's own settlement history
+ * all draw this row, and a history that read differently on two screens would cost the
+ * only thing a history has. They resolve a name from different places, the zone's
+ * members on one and the basket's participants on the other, which is exactly why
+ * `nameOf` is a function the caller supplies rather than a lookup done in here.
+ *
+ * The settlement is taken **structurally** and not as `LineSettlement`, so a basket
+ * line's history can be drawn without the basket screen importing a zone list's model
+ * to satisfy a parameter.
+ */
+export function toSettlementRow(
+  settlement: {
+    readonly id: string;
+    readonly outcome: SettlementOutcome;
+    readonly quantity: number;
+    readonly settledByUserId: string | null;
+    readonly settledAt: Date;
+  },
+  input: {
+    nameOf: (userId: string) => string | null;
+    callerUserId: string | null;
+    locale: string;
+  },
+  listName: string | null
+): SettlementRowVm {
+  const mine =
+    settlement.settledByUserId !== null &&
+    settlement.settledByUserId === input.callerUserId;
+
+  return {
+    id: settlement.id,
+    outcome: settlement.outcome,
+    quantity: settlement.quantity,
+    who: mine
+      ? null
+      : settlement.settledByUserId === null
+        ? null
+        : input.nameOf(settlement.settledByUserId),
+    mine,
+    at: settlement.settledAt,
+    when: formatDay(settlement.settledAt, input.locale),
+    listName,
+  };
 }

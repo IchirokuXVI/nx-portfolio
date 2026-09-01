@@ -2,13 +2,16 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
+  RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   GatewayError,
@@ -18,6 +21,7 @@ import {
 import {
   displayNames,
   formatGeneratedDate,
+  outcomeBreakdown,
   type ShoppingListsState,
 } from '@portfolio/velista/models';
 import {
@@ -83,6 +87,7 @@ export class ShoppingListsPage {
   private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _browser = inject(BrowserFacade);
+  private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
 
   private readonly _correlationId = computed(() => {
@@ -128,6 +133,7 @@ export class ShoppingListsPage {
         generatedAt: list.generatedAt,
         lineCount: list.lineCount,
         settledLineCount: list.settledLineCount,
+        breakdown: outcomeBreakdown(list),
         active: list.status === 'ACTIVE',
       })),
       loadingMore: this._generated.loadingMore(),
@@ -142,11 +148,44 @@ export class ShoppingListsPage {
    * The **count**, announced once per page rather than once per row (section 7). A live
    * region per row would read a hundred rows aloud on the way down; this says how many
    * there now are, which is the fact somebody scrolling actually wants confirmed.
+   *
+   * Written by {@link _announcePages} rather than interpolated in the template, and
+   * that is the fix rather than a preference (plan 0049, section 6). The region used to
+   * render the row count straight, so it re-read the total on **every** change to it,
+   * including the quiet refetch a flatmate's settle triggers. Somebody standing in a
+   * shop heard their whole history re-announced each time anybody bought anything.
    */
   readonly announced = signal('');
 
   constructor() {
     void this._generated.load();
+
+    // An effect rather than a `computed`, because this is an announcement and not a
+    // value: it must be written when a page lands and must **not** be recomputed when
+    // the count moves underneath it. `allowSignalWrites` is unnecessary in a zoneless
+    // app on a signal nothing else reads back.
+    effect(() => this._announcePages());
+  }
+
+  /**
+   * Say how many there now are, once per page of results.
+   *
+   * The read of {@link GeneratedListStore.pagesLoaded} is what makes this fire, and the
+   * count is read **untracked** so that a settle moving `settledLineCount`, or a
+   * basket appearing on the quiet refresh, cannot re-trigger it. That asymmetry is the
+   * whole behaviour: pages speak, everything else is silent.
+   */
+  private _announcePages(): void {
+    if (this._generated.pagesLoaded() === 0) {
+      return;
+    }
+
+    const count = untracked(() => this._generated.lists().length);
+    this.announced.set(
+      this._translator.t('history.announce.loaded', undefined, this._locale(), {
+        count,
+      })
+    );
   }
 
   /** The generation date of one row, in the reader's language. */

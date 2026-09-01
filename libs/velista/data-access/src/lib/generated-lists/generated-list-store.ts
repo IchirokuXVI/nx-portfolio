@@ -79,6 +79,7 @@ export class GeneratedListStore {
   private readonly _error = signal<unknown>(null);
   private readonly _cursor = signal<string | null>(null);
   private readonly _loadingMore = signal(false);
+  private readonly _pagesLoaded = signal(0);
 
   /** The pending coalesced refresh, or null. See {@link _scheduleRefresh}. */
   private _refreshAt: ReturnType<typeof setTimeout> | null = null;
@@ -106,6 +107,21 @@ export class GeneratedListStore {
 
   /** Whether there is a further page to ask for. */
   readonly hasMore = computed(() => this._cursor() !== null);
+
+  /**
+   * How many pages of results have landed, counting from zero (plan 0049, section 6).
+   *
+   * The history's live region is driven off this rather than off the row count, and the
+   * difference is a screen reader user standing in a shop. A region keyed on the count
+   * re-reads the whole total every time a flatmate settles a line, because the quiet
+   * refresh can change it; a region keyed on this speaks once when a page arrives and
+   * stays silent for everything else. It is deliberately **not** a page *number*: what
+   * the page needs is a value that changes exactly when new results have been drawn,
+   * and a first read after a retry is new results.
+   *
+   * {@link _refreshQuietly} does not touch it, which is the whole reason it exists.
+   */
+  readonly pagesLoaded = this._pagesLoaded.asReadonly();
 
   /**
    * The baskets being shopped right now, newest first.
@@ -183,6 +199,7 @@ export class GeneratedListStore {
       const page = await this._service.listMine();
       this._lists.set(page.items);
       this._cursor.set(page.nextCursor);
+      this._pagesLoaded.update((n) => n + 1);
       this._state.set('loaded');
     } catch (error) {
       this._error.set(error);
@@ -216,8 +233,9 @@ export class GeneratedListStore {
         return [...lists, ...page.items.filter((item) => !known.has(item.id))];
       });
       this._cursor.set(page.nextCursor);
+      this._pagesLoaded.update((n) => n + 1);
     } catch {
-      // Deliberately swallowed. See above.
+      // Deliberately swallowed. See above. Nothing landed, so nothing is announced.
     } finally {
       this._loadingMore.set(false);
     }

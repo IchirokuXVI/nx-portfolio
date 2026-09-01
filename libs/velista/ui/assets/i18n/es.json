@@ -309,7 +309,10 @@
       "more_other": "y {{count}} más",
       "progress": "{{settled}} de {{total}} terminadas",
       "generatedToday": "generada hoy",
-      "generatedOn": "generada el {{date}}"
+      "generatedOn": "generada el {{date}}",
+      "got": "{{bought}} de {{total}} cogidas",
+      "unavailable_one": "{{count}} sin existencias",
+      "unavailable_other": "{{count}} sin existencias"
     },
     "zone": {
       "members_one": "{{count}} miembro",
@@ -950,7 +953,8 @@
       "viaLink": "se unió con el enlace de la lista",
       "viaOwner": "hizo esta lista",
       "remove": "Quitar de esta lista",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "joinedUnknown": "No consta"
     },
     "share": {
       "open": "Compartir esta lista",
@@ -995,6 +999,21 @@
       "checking": "Comprobando el enlace",
       "joining": "Uniéndote",
       "failed": "No ha funcionado. Inténtalo de nuevo."
+    },
+    "history": {
+      "open": "Qué ha pasado con esta línea",
+      "title": "Qué ha pasado aquí",
+      "loading": "Cargando lo que ha pasado",
+      "failed": "Esto no se ha podido cargar",
+      "retry": "Reintentar",
+      "empty": "Todavía no ha pasado nada con esta línea",
+      "more": "Ver más",
+      "bought_one": "{{who}} cogió {{count}}",
+      "bought_other": "{{who}} cogió {{count}}",
+      "none": "{{who}} dice que no tenían",
+      "someone": "Alguien",
+      "you": "Tú",
+      "close": "Cerrar"
     }
   },
   "getList": {
@@ -1012,7 +1031,8 @@
       "hint": "Solo aparecen las listas que puedes editar. Un grupo marcado entero incluye las listas que se creen después.",
       "none": "Primero necesitas un grupo donde puedas editar listas",
       "expand": "Mostrar las listas de {{name}}",
-      "collapse": "Ocultar las listas de {{name}}"
+      "collapse": "Ocultar las listas de {{name}}",
+      "noneWritable": "No puedes editar listas en ninguno de tus grupos"
     },
     "submit": "Generar",
     "submitting": "Generando",
@@ -1027,7 +1047,10 @@
     },
     "row": {
       "progress": "{{settled}} de {{total}} terminadas",
-      "loading": "Cargando tus listas de la compra"
+      "loading": "Cargando tus listas de la compra",
+      "got": "{{bought}} de {{total}} cogidas",
+      "unavailable_one": "{{count}} sin existencias",
+      "unavailable_other": "{{count}} sin existencias"
     },
     "empty": {
       "title": "Aún no hay listas de la compra",
