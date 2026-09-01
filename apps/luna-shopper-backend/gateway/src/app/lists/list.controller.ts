@@ -38,6 +38,8 @@ import {
   type LineView,
   type ListAccessView,
   type ListPage,
+  type ListsHoldingItemRequest,
+  type ListsHoldingItemResult,
   type ListView,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -146,6 +148,48 @@ export class ItemHistoryController {
       cursor: query.cursor,
       limit: query.limit,
     });
+  }
+
+  /**
+   * Which of the caller's other lists still want this product (plan 0053,
+   * section 3).
+   *
+   * The read behind a line screen's "also on Weekly shop" indicator, which
+   * velista `0047` section 5 could previously only compute from whatever lists
+   * the session happened to have loaded: it under reported, and drew nothing
+   * when empty, so "nobody asked" and "it is on no other list" were one picture.
+   *
+   * Here rather than under a list, for the reason the settlement history above is
+   * here: it is keyed on a **catalog item** and spans every zone the caller is
+   * in, so there is no one list or zone it belongs beneath. It is core that
+   * answers it, not catalog, because the access that decides which lists may be
+   * named lives beside the lists.
+   *
+   * `excludeListId` is the list the caller is asking *from*, which a list screen
+   * sends and a basket screen does not: a basket line belongs to no single list,
+   * so there is nothing for it to exclude.
+   *
+   * Capped rather than paginated, and it takes no page query at all: the answer
+   * is a caption, and a cursor would make it a listing of every readable list
+   * that happens to want milk.
+   */
+  @Get(':id/lists')
+  @ApiContractResponse(LIST_PATTERNS.holdingItem)
+  @ApiProblemResponses({ body: true })
+  holdingLists(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Query('excludeListId') excludeListId?: string
+  ): Promise<ListsHoldingItemResult> {
+    const req: ListsHoldingItemRequest = {
+      userId: user.userId,
+      itemId: id,
+      excludeListId: excludeListId ?? null,
+    };
+    return this.nats.send<ListsHoldingItemResult>(
+      LIST_PATTERNS.holdingItem,
+      req
+    );
   }
 }
 

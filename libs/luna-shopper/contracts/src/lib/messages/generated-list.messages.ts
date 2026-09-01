@@ -173,7 +173,40 @@ export interface GeneratedListSummaryView {
   status: GeneratedListStatus;
   generatedAt: string;
   lineCount: number;
+  /**
+   * How many lines are finished, whatever finished them (plan 0053, section 2).
+   *
+   * Unchanged, and deliberately so: `NOT_AVAILABLE` closes a line's outstanding
+   * amount exactly as a purchase does, so this has always been the count of lines
+   * with nothing left to do and it still is. The two counts below say which of
+   * the two things happened, and neither replaces it.
+   */
   settledLineCount: number;
+  /**
+   * Of the finished lines, how many were actually bought (plan 0053, section 2).
+   *
+   * An aggregate over `lastOutcome`, which the basket's own line view already
+   * carries, rather than a new fact: a line's last settle is what decided it, and
+   * the history row is summing what the shop screen already showed.
+   */
+  boughtLineCount: number;
+  /** Of the finished lines, how many the shop did not have. */
+  notAvailableLineCount: number;
+  /**
+   * How many people are in this basket right now (plan 0053, section 2).
+   *
+   * **A count, never a list of who.** The home card is a card, and velista `0049`
+   * section 4 refuses to spend a request per card on the question; it is resolved
+   * here, beside the projection, where it is one read for a whole page.
+   *
+   * Resolved from the presence store **at read time** rather than stored, so a
+   * card cannot say "2 shopping" about a shop everybody has left, which is the
+   * exact staleness velista `0048` section 5 refuses to draw. Zero when presence
+   * cannot be read at all: presence fails open and empty everywhere else in this
+   * system, and a card that says nobody is here is much better than a history
+   * that will not load.
+   */
+  presentCount: number;
 }
 
 /**

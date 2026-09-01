@@ -18,6 +18,15 @@ export const LIST_PATTERNS = {
   update: 'list.update',
   delete: 'list.delete',
   list: 'list.list',
+  /**
+   * Which lists still want a given product (plan 0053, section 3). Answers the
+   * "this is also on" indicator a line screen draws.
+   *
+   * It lives beside the list reads rather than beside the line ones because the
+   * answer is a set of **lists**: the line that carries the product is how the
+   * question is asked, not what it is about.
+   */
+  holdingItem: 'list.holdingItem',
 } as const;
 
 export const LINE_PATTERNS = {
@@ -695,6 +704,77 @@ export interface ListLineSettlementsRequest extends PageQuery {
 export interface ListItemSettlementsRequest extends PageQuery {
   userId: string;
   itemId: string;
+}
+
+/** How much one {@link LIST_PATTERNS.holdingItem} read may answer with. */
+export const LIST_HOLDING_ITEM_LIMITS = {
+  /**
+   * A ceiling, not a page size, and the read is deliberately not paginated.
+   *
+   * What it feeds is an indicator on a line screen: "also on Weekly shop and
+   * Flat 3B". Nobody reads the twenty first entry, and a cursor would turn a
+   * caption into a listing of every list a person can read that happens to want
+   * milk, which is the search this is not. Past the cap the answer says there are
+   * more rather than offering to enumerate them.
+   */
+  maxLists: 20,
+} as const;
+
+/**
+ * Which lists still want a product, for one caller (plan 0053, section 3).
+ *
+ * Restricted to the lists this caller may read **at request time**, the same rule
+ * {@link ListItemSettlementsRequest} applies and for the same reason: a zone you
+ * have left takes its lists with it (plan 0047, section 9). It is the same
+ * privacy question and it gets the same answer.
+ *
+ * **Items only, never groups** (plan 0053, section 6). A line references no group
+ * once the composer has copied its members, and answering for a group would need
+ * a rule for partial overlap that nothing yet asks for. A client holding a line
+ * with several products asks once per product and merges.
+ *
+ * The item id is required and must name a product. A line carrying **no** product
+ * has no question to ask here and is refused rather than answered with an empty
+ * array: "this is on no other list" and "there was nothing to look for" are
+ * different, and velista `0047` section 5 draws them differently.
+ */
+export interface ListsHoldingItemRequest {
+  userId: string;
+  itemId: string;
+  /**
+   * The list the caller is asking *from*, left out of the answer.
+   *
+   * Null or absent asks about every readable list, which is what a basket line
+   * wants: it belongs to no single list, so there is nothing to exclude.
+   */
+  excludeListId?: string | null;
+}
+
+/** One list that still wants the product, named for a caption. */
+export interface ListHoldingItemView {
+  listId: string;
+  /** The list's own name, e.g. "Weekly shop". */
+  name: string;
+  zoneId: string;
+  /** The zone it belongs to, e.g. "Flat 3B". */
+  zoneName: string;
+  /** How many of the product that list is still asking for. */
+  quantity: number;
+}
+
+/**
+ * The lists holding the product, most recently touched first.
+ *
+ * An explicit `hasMore` rather than a cursor, because
+ * {@link LIST_HOLDING_ITEM_LIMITS.maxLists} is a ceiling and not a page: the
+ * caption says "and 3 more" and stops. An **empty** `lists` is a real answer and
+ * means no other readable list wants this, which is exactly the thing the client
+ * could not previously tell apart from not having asked.
+ */
+export interface ListsHoldingItemResult {
+  lists: ListHoldingItemView[];
+  /** Whether the cap cut the answer short. */
+  hasMore: boolean;
 }
 
 export interface ReorderLinesRequest {

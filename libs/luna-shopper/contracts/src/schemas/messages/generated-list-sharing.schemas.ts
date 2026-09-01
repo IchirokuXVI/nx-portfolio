@@ -30,14 +30,18 @@ import { GENERATED_LIST_SCHEMA_IDS } from './generated-list.schemas';
 export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   shareLinkView: schemaId('generated-list-sharing/ShareLinkView'),
   participantView: schemaId('generated-list-sharing/ParticipantView'),
-  participantListResult: schemaId('generated-list-sharing/ParticipantListResult'),
+  participantListResult: schemaId(
+    'generated-list-sharing/ParticipantListResult'
+  ),
   linkPreview: schemaId('generated-list-sharing/LinkPreview'),
   joinCoreResult: schemaId('generated-list-sharing/JoinCoreResult'),
   /** The gateway's composed body: the core result plus a signed socket token. */
   joinResult: schemaId('generated-list-sharing/JoinResult'),
   participantContext: schemaId('generated-list-sharing/ParticipantContext'),
   /** The gateway's composed body for a token refresh. */
-  participantTokenResult: schemaId('generated-list-sharing/ParticipantTokenResult'),
+  participantTokenResult: schemaId(
+    'generated-list-sharing/ParticipantTokenResult'
+  ),
   settlementRef: schemaId('generated-list-sharing/SettlementRef'),
   settleSkip: schemaId('generated-list-sharing/SettleSkip'),
   allocationEntry: schemaId('generated-list-sharing/AllocationEntry'),
@@ -147,9 +151,7 @@ const participantView = object(
 const participantListResult = object(
   GENERATED_LIST_SHARING_SCHEMA_IDS.participantListResult,
   {
-    participants: array(
-      ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)
-    ),
+    participants: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)),
   },
   ['participants']
 );
@@ -242,8 +244,10 @@ const settleSkip = object(
     lineId: nonEmptyString(),
     listId: nonEmptyString(),
     reason: { type: 'string', enum: ['ACCESS_GONE', 'ORIGIN_DELETED'] },
+    listName: nullableString(),
+    zoneName: nullableString(),
   },
-  ['lineId', 'listId', 'reason']
+  ['lineId', 'listId', 'reason', 'listName', 'zoneName']
 );
 
 const allocationEntry = object(
@@ -275,7 +279,10 @@ const basketLineView = object(
     lastEditedAt: nullableString(),
     // Null until somebody settles. Without it a NOT_AVAILABLE line reads as a
     // bought one, because both close the outstanding amount.
-    lastOutcome: { type: ['string', 'null'], enum: ['BOUGHT', 'NOT_AVAILABLE', null] },
+    lastOutcome: {
+      type: ['string', 'null'],
+      enum: ['BOUGHT', 'NOT_AVAILABLE', null],
+    },
     origins: array(ref(GENERATED_LIST_SCHEMA_IDS.lineOriginView)),
     targetListId: nullableString(),
     origin: ref(GENERATED_LIST_SCHEMA_IDS.generatedLineOrigin),
@@ -312,9 +319,7 @@ const basketView = object(
     status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
     generatedAt: nonEmptyString(),
     lines: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView)),
-    participants: array(
-      ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)
-    ),
+    participants: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)),
     me: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
     seesZoneData: boolean(),
     // Zone data, so absent under section 5.2 like the line's three fields.
@@ -370,9 +375,7 @@ const basketResult = object(
     status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
     generatedAt: nonEmptyString(),
     lines: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView)),
-    participants: array(
-      ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)
-    ),
+    participants: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)),
     me: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
     seesZoneData: boolean(),
     sourceSnapshot: ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshot),

@@ -4374,6 +4374,109 @@
         ]
       }
     },
+    "/v1/items/{id}/lists": {
+      "get": {
+        "operationId": "ItemHistoryController_holdingLists_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "excludeListId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `list.holdingItem` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.list.holdingItem.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lines"
+        ]
+      }
+    },
     "/v1/zones/{zoneId}/merges": {
       "post": {
         "operationId": "MergeController_request_v1",
@@ -10137,6 +10240,102 @@
         ]
       }
     },
+    "/v1/catalog/items/lookup": {
+      "post": {
+        "operationId": "CatalogItemsController_lookup_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `item.getMany` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.item.getMany.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/v1/catalog/items/{id}": {
       "get": {
         "operationId": "CatalogItemsController_get_v1",
@@ -14382,6 +14581,21 @@
           "defaultUnit"
         ]
       },
+      "LookupItemsDto": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
       "UpdateItemDto": {
         "type": "object",
         "properties": {
@@ -16382,12 +16596,26 @@
               "ACCESS_GONE",
               "ORIGIN_DELETED"
             ]
+          },
+          "listName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zoneName": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "lineId",
           "listId",
-          "reason"
+          "reason",
+          "listName",
+          "zoneName"
         ],
         "additionalProperties": false
       },
@@ -16714,6 +16942,18 @@
           "settledLineCount": {
             "type": "integer",
             "minimum": 0
+          },
+          "boughtLineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notAvailableLineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "presentCount": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
@@ -16722,7 +16962,10 @@
           "status",
           "generatedAt",
           "lineCount",
-          "settledLineCount"
+          "settledLineCount",
+          "boughtLineCount",
+          "notAvailableLineCount",
+          "presentCount"
         ],
         "additionalProperties": false
       },
@@ -17805,6 +18048,37 @@
         ],
         "additionalProperties": false
       },
+      "list.ListHoldingItemView": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneName": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "listId",
+          "name",
+          "zoneId",
+          "zoneName",
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
       "list.ListPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -18011,6 +18285,40 @@
         },
         "required": [
           "revoked"
+        ],
+        "additionalProperties": false
+      },
+      "msg.item.getMany.response": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemView"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "msg.list.holdingItem.response": {
+        "type": "object",
+        "properties": {
+          "lists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.ListHoldingItemView"
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lists",
+          "hasMore"
         ],
         "additionalProperties": false
       },

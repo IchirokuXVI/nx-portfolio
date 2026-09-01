@@ -1,5 +1,4 @@
 import type {
-  SettlementOutcome,
   GeneratedListBasketLineView,
   GeneratedListBasketView,
   GeneratedListLineOriginView,
@@ -8,6 +7,7 @@ import type {
   GeneratedListSourceName,
   GeneratedListSummaryView,
   GeneratedListView,
+  SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
 import type {
   GeneratedList,
@@ -169,14 +169,22 @@ export function toGeneratedListView(
 /**
  * A basket without its lines, for the history listing (section 7).
  *
- * The two counts are passed in rather than derived from loaded lines, because the
+ * The counts are passed in rather than derived from loaded lines, because the
  * listing deliberately does not load them: a page of trips that read every line
  * of every trip to render a date and a number is the read that would eventually
  * need fixing.
+ *
+ * `presentCount` is passed in separately from the rest and defaults to zero,
+ * because it is the one number here that does not come from the database (plan
+ * 0053, section 2). It is resolved from the presence store at read time by
+ * whoever can reach it, and core cannot: a basket nobody is in, a presence store
+ * that is down and a caller that did not ask all answer nobody, which is what
+ * presence failing open and empty means everywhere else in this system.
  */
 export function toGeneratedListSummaryView(
   row: GeneratedList,
-  counts: { lineCount: number; settledLineCount: number }
+  counts: GeneratedListLineCounts,
+  presentCount = 0
 ): GeneratedListSummaryView {
   return {
     id: row.id,
@@ -185,5 +193,24 @@ export function toGeneratedListSummaryView(
     generatedAt: row.generatedAt.toISOString(),
     lineCount: counts.lineCount,
     settledLineCount: counts.settledLineCount,
+    boughtLineCount: counts.boughtLineCount,
+    notAvailableLineCount: counts.notAvailableLineCount,
+    presentCount,
   };
 }
+
+/** What a history row counts, before it is a view. */
+export interface GeneratedListLineCounts {
+  lineCount: number;
+  settledLineCount: number;
+  boughtLineCount: number;
+  notAvailableLineCount: number;
+}
+
+/** A basket whose lines have not been read at all, or which has none. */
+export const NO_GENERATED_LINE_COUNTS: GeneratedListLineCounts = {
+  lineCount: 0,
+  settledLineCount: 0,
+  boughtLineCount: 0,
+  notAvailableLineCount: 0,
+};

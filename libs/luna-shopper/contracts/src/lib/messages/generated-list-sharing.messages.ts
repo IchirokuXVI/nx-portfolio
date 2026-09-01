@@ -542,6 +542,23 @@ export interface GeneratedListSettleSkip {
    * `ORIGIN_DELETED` when the zone line is not there any more.
    */
   reason: 'ACCESS_GONE' | 'ORIGIN_DELETED';
+  /**
+   * The list's own name, so a reader is told *which* origin was missed rather
+   * than how many (plan 0053, section 4).
+   *
+   * Composed the way {@link GeneratedListSourceName} is, and carrying the same
+   * redaction: the whole `skipped` array is absent for a reader who does not pass
+   * section 5.2, so a guest keeps {@link GeneratedListSettleResult.skippedCount}
+   * and gains nothing from this.
+   *
+   * Null when the list itself could not be read back, which is the ordinary case
+   * for `ORIGIN_DELETED` reaching a list that has since gone: the settle still
+   * happened and the count is still honest, and a name nobody can supply is
+   * better absent than invented.
+   */
+  listName: string | null;
+  /** The zone the list belongs to, e.g. "Flat 3B". Null under the same rule. */
+  zoneName: string | null;
 }
 
 /**

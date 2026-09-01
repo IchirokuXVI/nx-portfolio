@@ -149,8 +149,21 @@ const summaryView = object(
     generatedAt: nonEmptyString(),
     lineCount: integer({ minimum: 0 }),
     settledLineCount: integer({ minimum: 0 }),
+    boughtLineCount: integer({ minimum: 0 }),
+    notAvailableLineCount: integer({ minimum: 0 }),
+    presentCount: integer({ minimum: 0 }),
   },
-  ['id', 'name', 'status', 'generatedAt', 'lineCount', 'settledLineCount']
+  [
+    'id',
+    'name',
+    'status',
+    'generatedAt',
+    'lineCount',
+    'settledLineCount',
+    'boughtLineCount',
+    'notAvailableLineCount',
+    'presentCount',
+  ]
 );
 
 const skippedLineView = object(

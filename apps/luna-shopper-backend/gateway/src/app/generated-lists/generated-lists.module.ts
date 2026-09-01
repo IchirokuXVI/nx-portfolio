@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import type { GatewayConfig } from '../config/app-config';
 import { MessagingModule } from '../messaging/messaging.module';
+import { BasketPresenceService } from './basket-presence.service';
 import { GENERATED_LIST_SHARING_CONTROLLERS } from './generated-list-sharing.controller';
 import { GeneratedListController } from './generated-list.controller';
 import { ParticipantGuard } from './participant.guard';
@@ -41,6 +42,6 @@ import { ParticipantGuard } from './participant.guard';
     }),
   ],
   controllers: [GeneratedListController, ...GENERATED_LIST_SHARING_CONTROLLERS],
-  providers: [ParticipantGuard],
+  providers: [ParticipantGuard, BasketPresenceService],
 })
 export class GatewayGeneratedListsModule {}
