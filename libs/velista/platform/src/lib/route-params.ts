@@ -83,6 +83,17 @@ export function lineIdOf(route: ActivatedRoute): Signal<string> {
 }
 
 /**
+ * The basket a screen under `shopping-lists/:generatedListId` is about.
+ *
+ * Walked up the tree like the rest, and every reader of it is a sheet rather than the
+ * page: the page holds the parameter on its own route, while the sheets that cover it
+ * sit one and three levels below it.
+ */
+export function generatedListIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'generatedListId');
+}
+
+/**
  * The line a link asked the list page to show, from `?line=` (plan 0032, section 8).
  *
  * A **query parameter** and not a route segment, and that is the whole design rather
