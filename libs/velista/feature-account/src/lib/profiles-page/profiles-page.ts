@@ -25,7 +25,7 @@ import {
   PROFILE_LIMITS,
   type ShoppingProfile,
 } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, PageNavigation } from '@portfolio/velista/platform';
 import { AppBar, ChevronLeftIcon } from '@portfolio/velista/ui';
 import { ChainPreferenceList } from '../chain-preference-list/chain-preference-list';
 import {
@@ -97,6 +97,7 @@ export const SCOPE_REQUIRED_VALUE = 'required';
 export class ProfilesPage {
   private readonly _store = inject(ShoppingProfileStore);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -195,9 +196,7 @@ export class ProfilesPage {
 
   /** Back to the account screen, which is the only place this page is reached from. */
   async back(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'account')
-    );
+    await this._pages.back(appPath(this._locale(), this._basePath, 'account'));
   }
 
   /** The assistant, which is the one app bar button that goes anywhere from here. */

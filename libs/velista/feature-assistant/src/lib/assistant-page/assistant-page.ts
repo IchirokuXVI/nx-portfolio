@@ -7,7 +7,6 @@ import {
   inject,
   viewChild,
 } from '@angular/core';
-import { Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -23,6 +22,7 @@ import {
   appPath,
   AudioRecorder,
   BrowserFacade,
+  PageNavigation,
 } from '@portfolio/velista/platform';
 import {
   AssistantComposer,
@@ -108,7 +108,7 @@ import { AssistantStore } from '../assistant-store';
 })
 export class AssistantPage {
   private readonly _store = inject(AssistantStore);
-  private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _translator = inject(RokuTranslatorService);
@@ -160,22 +160,13 @@ export class AssistantPage {
   /**
    * Back to wherever the person was.
    *
-   * `history.back()` and not a navigation to a fixed screen, because this panel is
-   * reached from six different pages and sending everybody to the dashboard would take
-   * somebody standing in an aisle away from the list they were shopping. A cold arrival
-   * on the deep link has nothing behind it, so that one falls back to the dashboard.
+   * A pop and not a navigation to a fixed screen, because this panel is reached from
+   * six different pages and sending everybody to the dashboard would take somebody
+   * standing in an aisle away from the list they were shopping. A cold arrival on the
+   * deep link has nothing behind it, so that one falls back to the dashboard.
    */
   back(): void {
-    const win = this._browser.window;
-
-    if (win !== null && win.history.length > 1) {
-      win.history.back();
-      return;
-    }
-
-    void this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'home')
-    );
+    void this._pages.back(appPath(this._locale(), this._basePath, 'home'));
   }
 
   async send(text: string): Promise<void> {

@@ -20,7 +20,7 @@ import {
   formatGeneratedDate,
   type ShoppingListsState,
 } from '@portfolio/velista/models';
-import { BrowserFacade } from '@portfolio/velista/platform';
+import { BrowserFacade, PageNavigation } from '@portfolio/velista/platform';
 import {
   BasketIcon,
   ChevronLeftIcon,
@@ -75,6 +75,7 @@ import { ShoppingListRow } from '../shopping-list-row/shopping-list-row';
 export class ShoppingListsPage {
   private readonly _generated = inject(GeneratedListStore);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _browser = inject(BrowserFacade);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -174,7 +175,11 @@ export class ShoppingListsPage {
 
   /** Back to wherever this was opened from, which is the dashboard in every path. */
   back(): void {
-    void this._router.navigate(['..', 'home'], { relativeTo: this._route });
+    const dashboard = this._router.createUrlTree(['..', 'home'], {
+      relativeTo: this._route,
+    });
+
+    void this._pages.back(this._router.serializeUrl(dashboard));
   }
 
   open(generatedListId: string): void {

@@ -28,7 +28,12 @@ import {
   type GroupState,
   type PresenceUser,
 } from '@portfolio/velista/models';
-import { appPath, BrowserFacade, zoneIdOf } from '@portfolio/velista/platform';
+import {
+  appPath,
+  BrowserFacade,
+  PageNavigation,
+  zoneIdOf,
+} from '@portfolio/velista/platform';
 import {
   AppBar,
   ChevronLeftIcon,
@@ -99,6 +104,7 @@ export class GroupPage {
   private readonly _names = inject(MemberNames);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _browser = inject(BrowserFacade);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -380,11 +386,9 @@ export class GroupPage {
     });
   }
 
-  /** Back to the dashboard. A destination's back, not a sheet's dismiss. */
+  /** Back to wherever this group was opened from, the dashboard being the usual one. */
   async back(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'home')
-    );
+    await this._pages.back(appPath(this._locale(), this._basePath, 'home'));
   }
 
   /**
