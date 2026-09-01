@@ -86,6 +86,30 @@ spec:
       containers:
         - name: migrate
           image: {{ .image }}:{{ $tag }}
+          # The same policy the Deployment uses, and for a stronger reason.
+          #
+          # Omitting it does not mean "the default": Kubernetes derives one from
+          # the tag, and derives IfNotPresent for every tag that is not `latest`.
+          # Staging's tag is `staging`, which is mutable and re-pushed on every
+          # deploy, so the kubelet found the name already on the node and ran the
+          # PREVIOUS release's image. Its bundled migrate.js carries the previous
+          # release's migrations array, so the Job applied nothing, exited 0, and
+          # the hook passed. The Deployment then pulled the new image, because it
+          # does set this, and staging came up as new code on an old schema:
+          #
+          #   select name from migrations  ->  stopped at VoiceComments1756000400000
+          #   GET /v1/share-links/{secret} ->  500, on a route that cannot fail
+          #
+          # Every route wanting a new table or column answered 500 while the
+          # deploy stayed green throughout. hook-delete-policy removes the Job on
+          # success, so no pod survived to explain it either.
+          #
+          # Production escaped only by luck: deploy-release.sh passes an immutable
+          # `--set imageTag=<version>`, and a tag the node has never seen is
+          # pulled even under IfNotPresent. That leaves the mutable tag as the one
+          # case the derived default gets wrong, which is precisely the case
+          # staging is. Saying the policy out loud ends the dependence on the tag.
+          imagePullPolicy: {{ $ls.imagePullPolicy }}
           command: {{ toYaml $ls.migrations.command | nindent 12 }}
           # The role's own DB URL and nothing else, from the Secret, which the
           # chart does not render. NOT `lunaShopperBackend.env`: on the

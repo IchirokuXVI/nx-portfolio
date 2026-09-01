@@ -21,7 +21,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --chown=node:node . ./
-RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 USER node
 
