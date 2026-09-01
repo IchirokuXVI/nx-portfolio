@@ -27,6 +27,8 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
     approvalStatus: 'APPROVED',
     boughtCount: 0,
     lastSettlementOutcome: null,
+    claimed: false,
+    claimedByUserId: null,
     createdByUserId: ME,
     approvedByUserId: ME,
     version: 1,
@@ -741,6 +743,91 @@ describe('LineStore', () => {
 
       expect(outcome.state).toBe('failed');
       expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['a', 'b']);
+    });
+  });
+
+  /**
+   * The third indicator (backend plan 0052).
+   *
+   * Two halves, and the second is the one plan 0051 did not answer: the event moves
+   * it for a client that is watching, and the **read** carries it for one that was
+   * asleep in a pocket while somebody generated a basket. An indicator that is right
+   * only for whoever happened to be connected is worse than absent.
+   */
+  describe('who is out buying it (backend plan 0052)', () => {
+    it('reads the claim off the line rather than waiting for an event', async () => {
+      const { store } = await build([
+        line('a', { claimed: true, claimedByUserId: 'user-ana' }),
+      ]);
+
+      await store.load(LIST);
+
+      expect(store.claimOf('a')).toBe('user-ana');
+    });
+
+    it('marks every line one event names, because a run claims them together', async () => {
+      // One event per zone rather than one per line (backend plan 0052, section
+      // 3.1): a run takes every wanted line of every list it drew from.
+      const { store, realtime } = await build([line('a'), line('b')]);
+      await store.load(LIST);
+
+      realtime.emit('line.claimChanged', {
+        zoneId: 'zone-1',
+        claimed: true,
+        claimedByUserId: 'user-ana',
+        lines: [
+          { lineId: 'a', listId: LIST },
+          { lineId: 'b', listId: LIST },
+        ],
+      });
+
+      expect(store.claimOf('a')).toBe('user-ana');
+      expect(store.claimOf('b')).toBe('user-ana');
+    });
+
+    it('lets go when the trip is over', async () => {
+      const { store, realtime } = await build([
+        line('a', { claimed: true, claimedByUserId: 'user-ana' }),
+      ]);
+      await store.load(LIST);
+
+      realtime.emit('line.claimChanged', {
+        zoneId: 'zone-1',
+        claimed: false,
+        claimedByUserId: null,
+        lines: [{ lineId: 'a', listId: LIST }],
+      });
+
+      expect(store.claimOf('a')).toBeNull();
+    });
+
+    it('names nobody for a claim whose owner has left the zone', async () => {
+      // Section 6: the line still reads as claimed and there is no name to put on
+      // it, so the map that holds names has no entry.
+      const { store } = await build([
+        line('a', { claimed: true, claimedByUserId: null }),
+      ]);
+
+      await store.load(LIST);
+
+      expect(store.claimOf('a')).toBeNull();
+      expect(store.linesIn(LIST)[0].claimed).toBe(true);
+    });
+
+    it('ignores a line it has never loaded', async () => {
+      // There is no row to mark, and the read that eventually brings the line in
+      // carries the claim with it.
+      const { store, realtime } = await build([line('a')]);
+      await store.load(LIST);
+
+      realtime.emit('line.claimChanged', {
+        zoneId: 'zone-1',
+        claimed: true,
+        claimedByUserId: 'user-ana',
+        lines: [{ lineId: 'never-seen', listId: LIST }],
+      });
+
+      expect(store.claims().size).toBe(0);
     });
   });
 });

@@ -282,10 +282,11 @@ export class ListPage {
       linesComplete: lines.complete,
       writes: lines.writes,
       commentCounts: lines.commentCounts,
-      // Who is out buying what, from the zone room rather than from any read. It is
-      // empty until backend plan 0051's `line.claimChanged` has a publisher, which is
-      // honest: no claim is the truthful answer to "is somebody in a shop with this
-      // right now" when nothing has said otherwise.
+      // Who is out buying what: read off the lines and moved by `line.claimChanged`
+      // on the zone room (backend plan 0052). Both halves matter and the read is the
+      // one that was missing: a phone that was asleep while somebody generated a
+      // basket draws the same row as one that was watching, where an event only
+      // client would be blank until the next thing happened.
       claims: lines.claims,
       // The server's answer, straight through. No zone role, no inference from a refused
       // write, and nothing to reconcile between the two (plan 0030, section 3): staff

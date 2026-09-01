@@ -74,6 +74,18 @@ export interface LineWriteNote {
 // Provided by the app layer, never root: rule D5, plan 0004 section 9. It resolves
 // `LINE_SERVICE` in the injector where the app binds it, and at the root it would
 // silently get the token's own default instead.
+/**
+ * What a claim change says about one line (backend plan 0052, section 2).
+ *
+ * The pair rather than one nullable field, because `claimed` with no name is a real
+ * state: the basket's owner has left the zone, so the line is still being bought and
+ * whose it is has stopped being this reader's to know.
+ */
+export interface LineClaim {
+  readonly claimed: boolean;
+  readonly claimedByUserId: string | null;
+}
+
 @Injectable()
 export class LineStore {
   private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
@@ -146,14 +158,35 @@ export class LineStore {
   >(new Map());
 
   /**
-   * Which lines are in somebody's active basket right now, and whose.
+   * Which lines are in somebody's live basket right now, and whose.
    *
-   * **Presence, not state** (velista plan 0043, section 3.3). It is held beside the
-   * lines rather than on them precisely so it cannot be mistaken for one: it never
-   * survives a reconnect, nothing derived from it is written back, and a line being
-   * carried around a shop is not a line that has been dealt with.
+   * **Derived from the lines rather than held beside them**, which is where velista
+   * plan 0043 section 3.3 put it and where backend plan 0052 section 4 moved it. The
+   * argument for presence was that a claim is not a fact about the record; the
+   * argument against was decisive, and it is that presence only ever reaches a client
+   * that happened to be connected. A shopping trip lasts an hour while a phone sleeps
+   * in a pocket, and an indicator that is right for whoever was watching and blank for
+   * everybody else is worse than one that is absent.
+   *
+   * So the server answers it on every line it serves, `line.claimChanged` moves it on
+   * the lines already held, and this is the projection the page reads. Nothing derived
+   * from it is written back and a claimed line is still not a line that has been dealt
+   * with: those halves of section 3.3 are untouched.
+   *
+   * A line claimed by somebody who has left the zone has no entry here, because there
+   * is no name to put in one. It still reads `claimed` on the line itself.
    */
-  private readonly _claims = signal<ReadonlyMap<string, string>>(new Map());
+  private readonly _claims = computed<ReadonlyMap<string, string>>(() => {
+    const claims = new Map<string, string>();
+    for (const lines of this._byList().values()) {
+      for (const line of lines) {
+        if (line.claimedByUserId !== null) {
+          claims.set(line.id, line.claimedByUserId);
+        }
+      }
+    }
+    return claims;
+  });
 
   /**
    * Server ids this store minted itself, so their own echo is not drawn twice.
@@ -371,10 +404,12 @@ export class LineStore {
       // An auto-approved line has **no** approver, because nobody decided: the list is
       // configured not to ask, and a null here is the honest record of that.
       approvedByUserId: approval.canDecide ? createdByUserId : null,
-      // Nothing has ever happened to a line that does not exist yet, so both
+      // Nothing has ever happened to a line that does not exist yet, so all three
       // indicators start off, and the server's answer cannot disagree.
       boughtCount: 0,
       lastSettlementOutcome: null,
+      claimed: false,
+      claimedByUserId: null,
       createdByUserId,
       version: 0,
     };
@@ -608,29 +643,27 @@ export class LineStore {
   }
 
   /**
-   * Record that a line is, or is no longer, in somebody's active basket.
+   * Record that a line is, or is no longer, in somebody's live basket.
    *
-   * Presence shaped rather than state shaped (velista plan 0043, section 3.3): it is
-   * held beside the lines rather than on them, it never survives a reconnect, and
-   * nothing derived from it is ever written back. The name is resolved by the page,
-   * because this store holds lines and not people.
+   * Written onto the line, because that is where the claim lives (backend plan 0052,
+   * section 4): the server answers it on every read, so an event that wrote somewhere
+   * else would leave the two disagreeing the moment either one arrived second. The
+   * name is resolved by the page, because this store holds lines and not people.
    *
-   * Fed by `line.claimChanged` on the zone room. **Nothing publishes that event
-   * yet**: backend plan 0051 section 5.3 specifies it and the enum member exists,
-   * with no payload contract and no publisher, so this path is wired and dormant. It
-   * is here rather than waiting because the alternative is a view model with a field
-   * nothing can ever set, which is the kind of gap that gets filled by guessing.
+   * Fed by `line.claimChanged` on the zone room, which is the one zone event a
+   * generated list emits. A line this client has not loaded is skipped rather than
+   * remembered: there is no row to mark, and the read that eventually brings the line
+   * in carries the claim with it.
    */
-  setClaim(lineId: string, claimedByUserId: string | null): void {
-    this._claims.update((current) => {
-      const next = new Map(current);
-      if (claimedByUserId === null) {
-        next.delete(lineId);
-      } else {
-        next.set(lineId, claimedByUserId);
-      }
-      return next;
-    });
+  setClaim(listId: string, lineId: string, claim: LineClaim): void {
+    if (this._lineById(lineId) === null) {
+      return;
+    }
+    this._patch(listId, lineId, (line) => ({
+      ...line,
+      claimed: claim.claimed,
+      claimedByUserId: claim.claimedByUserId,
+    }));
   }
 
   /** Approve a suggested line, turn it down, or put a turned down one back. */
@@ -803,7 +836,8 @@ export class LineStore {
     // through twenty lists would hold every settlement it had ever read.
     this._settlements.update((current) => without(current, lineIds));
     this._itemSettlements.update((current) => without(current, lineIds));
-    this._claims.update((current) => without(current, lineIds));
+    // The claims need no eviction of their own any more: they are derived from the
+    // lines, and the lines have just gone.
     this._setState(listId, 'idle');
   }
 
@@ -957,7 +991,14 @@ export class LineStore {
       }
 
       case 'line.claimChanged': {
-        this.setClaim(event.lineId, event.claimedByUserId);
+        // One event names every line one run took out of this zone (backend plan
+        // 0052, section 3.1), so it is a loop rather than a single write.
+        for (const ref of event.lines) {
+          this.setClaim(ref.listId, ref.lineId, {
+            claimed: event.claimed,
+            claimedByUserId: event.claimedByUserId,
+          });
+        }
         break;
       }
 

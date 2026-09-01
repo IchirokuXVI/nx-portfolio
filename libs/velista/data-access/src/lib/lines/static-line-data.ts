@@ -206,6 +206,10 @@ function line(
     // draws no indicator. The helpers below are what say otherwise.
     boughtCount: 0,
     lastSettlementOutcome: null,
+    // And nobody out buying it. A seeded claim would be a name the fixtures cannot
+    // resolve on a screen nobody is shopping from.
+    claimed: false,
+    claimedByUserId: null,
     createdByUserId: SEED_USER_ID,
     approvedByUserId: SEED_USER_ID,
     version: 1,
