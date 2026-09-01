@@ -1,6 +1,14 @@
-import type { ParticipantKind } from '../enums/generated-list.enums';
+import type {
+  GeneratedLineOrigin,
+  GeneratedListStatus,
+  ParticipantKind,
+} from '../enums/generated-list.enums';
 import type { SettlementOutcome } from '../enums/list.enums';
-import type { GeneratedListLineView } from './generated-list.messages';
+import type { ItemView } from './catalog.messages';
+import type {
+  GeneratedListLineOriginView,
+  GeneratedListSourceSnapshot,
+} from './generated-list.messages';
 
 /**
  * Sharing a generated list with people who have no account (plan 0051).
@@ -75,6 +83,25 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * with the trip status plan 0047 deleted.
    */
   settleLine: 'generatedList.settleLine',
+  /**
+   * The basket as a **participant** sees it (section 5).
+   *
+   * Separate from `generatedList.get`, which resolves a basket by its owner's id
+   * and therefore cannot answer a guest at all. The difference is not only the
+   * credential: this projection is redacted per reader by section 5.2, so it
+   * could not share a response shape with the owner's read even if it shared a
+   * route.
+   */
+  basketGet: 'generatedList.basket.get',
+  /**
+   * Swap a line's pick to another of its options (section 6.1).
+   *
+   * On the participant surface rather than beside `generatedList.updateLine`,
+   * because **anyone** holding the basket may do it, guests included: the options
+   * are catalog products and never zone data, and the person at the shelf is
+   * exactly who wants another brand.
+   */
+  setPick: 'generatedList.setPick',
 } as const;
 
 /**
@@ -518,16 +545,193 @@ export interface GeneratedListSettleSkip {
 }
 
 /**
- * What one basket settle did.
+ * What one basket settle did, projected for the participant who did it.
  *
- * The skipped list is as much the answer as the settlements are, for the reason
- * in {@link GeneratedListSettleSkip}, and a client that ignores it will silently
- * under report what the shopper actually bought.
+ * ## Why the line is redacted and the two lists are optional
+ *
+ * This is answered on the **participant** surface, which a guest reaches. Every
+ * field of `GeneratedListSettlementRef`, of `GeneratedListSettleSkip` and of
+ * `GeneratedListLineView.origins` names a zone or a list, so returning them
+ * whole would hand a guest exactly what section 5.2 spends its length refusing.
+ * They are therefore present only for an actor who passes that rule, on the same
+ * redact-by-absence principle as {@link GeneratedListBasketLineView}.
+ *
+ * ## Why the count survives the redaction
+ *
+ * Section 6.4 insists a partial settle is a real outcome and must be reported
+ * rather than swallowed: a shopper who bought three and reached two households
+ * needs to know. {@link skippedCount} is that report with the names taken out, so
+ * a guest is told honestly that one origin could not be reached without being
+ * told whose it was. A client that shows neither will silently under report what
+ * the shopper actually bought, which is the failure `0051` section 6.4 names.
  */
 export interface GeneratedListSettleResult {
-  line: GeneratedListLineView;
-  settlements: GeneratedListSettlementRef[];
-  skipped: GeneratedListSettleSkip[];
+  line: GeneratedListBasketLineView;
+  /**
+   * How many origins this act could not reach. Always present, for every reader,
+   * because the fact is the actor's business and only the names are not.
+   */
+  skippedCount: number;
+  /** Where the units landed. Absent for a reader who does not pass section 5.2. */
+  settlements?: GeneratedListSettlementRef[];
+  /** Which origins were missed, and why. Absent under the same rule. */
+  skipped?: GeneratedListSettleSkip[];
+}
+
+/**
+ * What the basket's own room hears when a line moves (plan 0051, section 10):
+ * a settle, or a pick swapped at the shelf.
+ *
+ * **Redacted to the least privileged reader in the room, always.** A basket room
+ * holds the owner and every guest at once, and a broadcast cannot be projected
+ * per socket, so it carries only what a guest may see. Nothing is lost by that:
+ * the three redacted fields (`origins`, `targetListId`, `origin`) do not change
+ * when a line is settled or its pick is swapped, so a client that passes
+ * section 5.2 merges the mutable fields onto the line it already holds and keeps
+ * its own captions.
+ *
+ * The settlements and the skipped origins are deliberately **not** here at all,
+ * for any reader. They are the acting participant's own feedback and belong in
+ * their HTTP response, not in a broadcast to everybody in the shop.
+ */
+export interface GeneratedListLineMovedEvent {
+  generatedListId: string;
+  line: GeneratedListBasketLineView;
+}
+
+// --- The basket, as a participant reads it ---------------------------------
+
+/**
+ * One line of a basket, projected for the participant reading it (plan 0051,
+ * section 5).
+ *
+ * ## Why this is not `GeneratedListLineView`
+ *
+ * Section 5.2 redacts **by absence**, not by a flag the client is trusted to
+ * honour. `origins`, `targetListId` and `origin` all name zone data, so for a
+ * reader who does not pass the rule they are not present in the payload at all,
+ * and a guest's basket therefore cannot leak a list name through a field
+ * somebody forgot to hide in a template.
+ *
+ * The alternative, making those three optional on the shared line view, would
+ * have made every existing owner-side reader defensive about fields that are
+ * always there for it. A different reader set gets a different projection, which
+ * is what section 5.2 describes.
+ */
+export interface GeneratedListBasketLineView {
+  id: string;
+  content: string;
+  /** How many the basket is asking for, summed across the origins. */
+  quantity: number;
+  /** How many have been settled so far. Outstanding is the difference. */
+  settledQuantity: number;
+  /** The pick: the exact product this line means. Null for a free text line. */
+  itemId: string | null;
+  /** The products the pick may be switched between. Catalog data, never zone data. */
+  options: string[];
+  position: number;
+  /**
+   * Who last edited or settled this line, so the row can say who got the bread
+   * (plan 0044, section 4.3).
+   *
+   * A participant id and never a name: two guests can both type "Dani", so the
+   * client resolves it against the participant list and renders a guest visibly
+   * as a guest. Null when nobody has touched it since it was generated.
+   */
+  lastEditedByParticipantId: string | null;
+  /** When {@link lastEditedByParticipantId} last touched it. Null with it. */
+  lastEditedAt: string | null;
+  /**
+   * Where this line came from. **Absent** for a reader who does not pass
+   * section 5.2, rather than empty: a tin of tomatoes never names its household.
+   */
+  origins?: GeneratedListLineOriginView[];
+  /** Zone data, so absent under the same rule as {@link origins}. */
+  targetListId?: string | null;
+  /** Zone data, so absent under the same rule as {@link origins}. */
+  origin?: GeneratedLineOrigin;
+}
+
+/**
+ * A shared basket and everybody on it, as one participant reads it (plan 0051,
+ * section 5; velista `0044`, section 4).
+ *
+ * One request rather than three, because the basket screen cannot draw a single
+ * row without all of it: a line's attribution is a participant id, so the people
+ * are not a second screen's data but this screen's vocabulary.
+ *
+ * `seesZoneData` is stated rather than inferred so the client can decide what to
+ * **draw** without guessing from which fields happened to arrive. It is the same
+ * value the redaction was performed with, evaluated at request time, and it is
+ * never the authority for anything: the server has already removed what this
+ * reader may not have, and refuses the allocation sheet on its own.
+ */
+export interface GeneratedListBasketView {
+  id: string;
+  /** Null is not missing: the client renders the generation date (plan 0050). */
+  name: string | null;
+  status: GeneratedListStatus;
+  generatedAt: string;
+  lines: GeneratedListBasketLineView[];
+  /** Everybody live on this basket, for attribution and for presence. */
+  participants: GeneratedListParticipantView[];
+  /** The reader's own row, so the screen can tell "you" from everybody else. */
+  me: GeneratedListParticipantView;
+  /** Whether this reader passes section 5.2, evaluated on this request. */
+  seesZoneData: boolean;
+  /** What the run drew from. Zone data, so absent unless {@link seesZoneData}. */
+  sourceSnapshot?: GeneratedListSourceSnapshot;
+}
+
+/**
+ * The basket as the **gateway** answers it: core's view, plus the products it
+ * names (velista `0044`, section 4.4).
+ *
+ * Composed rather than stored, in the same way {@link GeneratedListJoinResult}
+ * is: core holds the basket and references products by an opaque `itemId`,
+ * catalog holds the products, and neither can answer this alone.
+ *
+ * ## Why the names travel with the basket rather than being fetched after it
+ *
+ * Every catalog route needs an account token, and the reader here may be a guest
+ * who has none. Section 6.1 says a line's options are catalog products and never
+ * zone data, so a guest is entitled to the names; carrying them here is how they
+ * get them without a second public catalog surface, and it makes the whole screen
+ * one request rather than one plus a fan out over every option.
+ *
+ * A product an id no longer names is simply absent, because a basket outlives the
+ * catalog it was composed from. The client draws such a line with no product
+ * caption rather than treating the page as broken.
+ */
+export interface GeneratedListBasketResult extends GeneratedListBasketView {
+  /** Every product named by a line's pick or its options, deduplicated. */
+  products: ItemView[];
+}
+
+/**
+ * Read a basket as the participant the gateway's guard resolved.
+ *
+ * No `userId`: the participant id is the whole credential's worth of identity,
+ * and an owner reading their own basket arrives here as their own participant
+ * row like everybody else.
+ */
+export interface GetGeneratedListBasketRequest {
+  generatedListId: string;
+  participantId: string;
+}
+
+/**
+ * Swap a line's pick (plan 0051, section 6.1).
+ *
+ * `itemId` must be one of the line's own options, which the service checks: the
+ * options are the line's set rather than the whole catalog, so this cannot be
+ * used to point a line at an arbitrary product.
+ */
+export interface SetGeneratedListPickRequest {
+  generatedListId: string;
+  lineId: string;
+  participantId: string;
+  itemId: string;
 }
 
 // --- Presence --------------------------------------------------------------

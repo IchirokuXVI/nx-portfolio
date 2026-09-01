@@ -56,6 +56,17 @@ export const ITEM_PATTERNS = {
   delete: 'item.delete',
   get: 'item.get',
   /**
+   * Several products by id, in one round trip (plan 0051, section 6.1).
+   *
+   * A basket line names a pick and every option it may be switched to, all as
+   * opaque ids, and a screen of twenty lines with three options each would
+   * otherwise be sixty {@link ITEM_PATTERNS.get} calls to render one page. It is
+   * a lookup and not a search: unknown ids are simply absent from the answer,
+   * because a basket can outlive a product catalog has since deleted and that is
+   * an ordinary thing for a history to contain rather than an error.
+   */
+  getMany: 'item.getMany',
+  /**
    * Ranked **items** (plan 0048, section 3). Answers "Pascual Milk".
    *
    * Upgraded in place: the subject, its request and its response are the ones
@@ -487,6 +498,42 @@ export interface FindItemByEanResult {
 export interface ItemIdRequest {
   userId: string;
   itemId: string;
+}
+
+/** How many products one {@link ITEM_PATTERNS.getMany} may name. */
+export const ITEM_LOOKUP_LIMITS = {
+  /**
+   * Comfortably above a basket's worth of picks and options, and low enough that
+   * the request stays one bounded `IN` clause rather than an unbounded one.
+   */
+  maxIds: 500,
+} as const;
+
+/**
+ * Several products by id (plan 0051, section 6.1).
+ *
+ * **No `userId`, deliberately**, which is the one place this departs from every
+ * other catalog read. A product's name is not private: `0051` section 6.1 is
+ * explicit that a line's options are catalog products and never zone data, and
+ * this exists so a **guest** holding a shared basket can read the name of the
+ * thing they are being asked to buy. The caller that reaches it is the gateway,
+ * on behalf of a participant it has already authorized against the basket.
+ */
+export interface GetItemsRequest {
+  /** At most {@link ITEM_LOOKUP_LIMITS.maxIds}. Duplicates are harmless. */
+  ids: string[];
+}
+
+/**
+ * The products that exist, in no promised order.
+ *
+ * Ids that name nothing are **absent** rather than null: a basket can outlive a
+ * product catalog has since deleted, which is an ordinary thing for a history to
+ * contain, so the caller matches by id and draws a line with no product name
+ * rather than being handed an error for the whole page.
+ */
+export interface GetItemsResult {
+  items: ItemView[];
 }
 
 export interface SearchItemsRequest extends PageQuery {

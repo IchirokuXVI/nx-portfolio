@@ -460,6 +460,26 @@ export class GeneratedListSharingService {
     };
   }
 
+  /**
+   * One live participant by id, on this basket (plan 0051, section 3.3).
+   *
+   * The row itself rather than {@link livePresenceEntry}'s projection, because
+   * the callers that need it go on to ask {@link seesZoneData}, which is a
+   * question about the participant's account and not about what is shown.
+   *
+   * The basket is part of the lookup rather than assumed from the id, on the same
+   * reasoning as {@link isParticipantLive}: a participant of one basket must
+   * never be admitted to another's by an id that happens to be valid somewhere.
+   */
+  async liveParticipantById(
+    participantId: string,
+    generatedListId: string
+  ): Promise<GeneratedListParticipant | null> {
+    return this.participants.findOne({
+      where: { id: participantId, generatedListId, revokedAt: IsNull() },
+    });
+  }
+
   /** The participant behind a presented credential, or null. Live rows only. */
   async findLiveParticipant(
     req: ResolveParticipantRequest

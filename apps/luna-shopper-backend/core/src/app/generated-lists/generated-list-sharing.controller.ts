@@ -3,6 +3,8 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   GENERATED_LIST_SHARING_PATTERNS,
   type EnsureShareLinkRequest,
+  type GeneratedListBasketLineView,
+  type GeneratedListBasketView,
   type GeneratedListJoinCoreResult,
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
@@ -11,14 +13,17 @@ import {
   type GeneratedListShareLinkResult,
   type GeneratedListShareLinkView,
   type GeneratedListShareRequest,
+  type GetGeneratedListBasketRequest,
   type JoinGeneratedListRequest,
   type ListParticipantsRequest,
   type PreviewShareLinkRequest,
   type ResolveParticipantRequest,
   type RevokeParticipantRequest,
   type RevokeShareLinkRequest,
+  type SetGeneratedListPickRequest,
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 
@@ -37,7 +42,8 @@ import { GeneratedListSharingService } from './generated-list-sharing.service';
 export class GeneratedListSharingController {
   constructor(
     private readonly sharing: GeneratedListSharingService,
-    private readonly settle: GeneratedListSettleService
+    private readonly settle: GeneratedListSettleService,
+    private readonly basket: GeneratedListBasketService
   ) {}
 
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.linkEnsure)
@@ -114,5 +120,31 @@ export class GeneratedListSharingController {
     @Payload() req: SettleGeneratedListLineRequest
   ): Promise<GeneratedListSettleResult> {
     return this.settle.settle(req);
+  }
+
+  /**
+   * The basket as a participant reads it (plan 0051, section 5).
+   *
+   * Distinct from `generatedList.get`, which resolves by the owner's id and so
+   * cannot answer a guest at all, and redacted per reader by section 5.2.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.basketGet)
+  getBasket(
+    @Payload() req: GetGeneratedListBasketRequest
+  ): Promise<GeneratedListBasketView> {
+    return this.basket.getBasket(req);
+  }
+
+  /**
+   * Swap a line's pick (plan 0051, section 6.1).
+   *
+   * Any participant may, guests included: the options are catalog products and
+   * never zone data, and the person at the shelf is who wants another brand.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.setPick)
+  setPick(
+    @Payload() req: SetGeneratedListPickRequest
+  ): Promise<GeneratedListBasketLineView> {
+    return this.basket.setPick(req);
   }
 }

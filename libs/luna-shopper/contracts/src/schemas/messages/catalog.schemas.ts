@@ -77,6 +77,9 @@ export const CATALOG_SCHEMA_IDS = {
   createItemRequest: schemaId('msg/item.create/request'),
   updateItemRequest: schemaId('msg/item.update/request'),
   itemIdRequest: schemaId('msg/item.id/request'),
+  /** Several products by id, for the basket screen (plan 0051, section 6.1). */
+  getItemsRequest: schemaId('msg/item.getMany/request'),
+  getItemsResult: schemaId('msg/item.getMany/response'),
   searchItemsRequest: schemaId('msg/item.search/request'),
   findItemByEanRequest: schemaId('msg/item.findByEan/request'),
   findItemByEanResult: schemaId('catalog/FindItemByEanResult'),
@@ -515,6 +518,26 @@ const itemIdRequest = object(
   { userId: nonEmptyString(), itemId: nonEmptyString() },
   ['userId', 'itemId']
 );
+/**
+ * Several products by id (plan 0051, section 6.1).
+ *
+ * **No `userId`**, unlike every other catalog request, and the omission is the
+ * point: a product's name is not private, and this exists so a guest holding a
+ * shared basket can read the name of the thing they are being asked to buy.
+ */
+const getItemsRequest = object(
+  CATALOG_SCHEMA_IDS.getItemsRequest,
+  { ids: array(nonEmptyString()) },
+  ['ids']
+);
+
+/** Ids that name nothing are absent rather than null: a basket outlives a product. */
+const getItemsResult = object(
+  CATALOG_SCHEMA_IDS.getItemsResult,
+  { items: array(ref(CATALOG_SCHEMA_IDS.itemView)) },
+  ['items']
+);
+
 const searchItemsRequest = object(
   CATALOG_SCHEMA_IDS.searchItemsRequest,
   {
@@ -865,6 +888,8 @@ export const catalogSchemas: JsonSchema[] = [
   createItemRequest,
   updateItemRequest,
   itemIdRequest,
+  getItemsRequest,
+  getItemsResult,
   searchItemsRequest,
   searchOffersRequest,
   createProductGroupRequest,
@@ -956,6 +981,10 @@ export const catalogMessageContracts: Record<
   [ITEM_PATTERNS.get]: {
     request: CATALOG_SCHEMA_IDS.itemIdRequest,
     response: CATALOG_SCHEMA_IDS.itemView,
+  },
+  [ITEM_PATTERNS.getMany]: {
+    request: CATALOG_SCHEMA_IDS.getItemsRequest,
+    response: CATALOG_SCHEMA_IDS.getItemsResult,
   },
   [ITEM_PATTERNS.search]: {
     request: CATALOG_SCHEMA_IDS.searchItemsRequest,

@@ -71,6 +71,16 @@ function build(options: {
   missingZoneLines?: string[];
   itemId?: string | null;
   optionIds?: string[];
+  /**
+   * Whether the acting participant passes section 5.2, which decides what the
+   * **response** carries rather than what the settle writes.
+   *
+   * Defaults to true, so the allocation tests describe a reader entitled to see
+   * which lists their units landed on. The guest case is exercised explicitly in
+   * "what a settle tells the person who made it", because a guest is told the
+   * count and never the names.
+   */
+  actorSeesZoneData?: boolean;
 }): Harness {
   const origins = options.origins ?? [
     {
@@ -165,14 +175,20 @@ function build(options: {
     transaction: async (fn: (m: typeof manager) => Promise<unknown>) => fn(manager),
   } as unknown as DataSource;
 
+  const seesZoneData = options.actorSeesZoneData ?? true;
+
   const sharing = {
     livePresenceEntry: async () => ({
       participantId: GUEST_PARTICIPANT,
-      kind: ParticipantKind.GUEST,
+      kind: seesZoneData ? ParticipantKind.REGISTERED : ParticipantKind.GUEST,
       displayName: null,
-      guestNumber: 1,
+      guestNumber: seesZoneData ? null : 1,
       userId: null,
     }),
+    // Read again by id rather than taken from the request: section 5.2 is a
+    // question about core's own access tables, asked at request time.
+    liveParticipantById: async () => ({ id: GUEST_PARTICIPANT }),
+    seesZoneData: async () => seesZoneData,
     // The whole of section 6.4 in one fake: this is asked about the **owner**,
     // and the service passes `list.ownerUserId` rather than the actor.
     writableAmong: async (userId: string, listIds: readonly string[]) => {
@@ -186,6 +202,19 @@ function build(options: {
       id: BASKET_LINE,
       quantity: basketLine.quantity,
       settledQuantity: basketLine.settledQuantity,
+    }),
+    // The projected line, which is what both the response and the basket room's
+    // broadcast now carry (section 5.2).
+    basketLineViewFor: async (
+      _line: unknown,
+      lineSeesZoneData: boolean
+    ) => ({
+      id: BASKET_LINE,
+      quantity: basketLine.quantity,
+      settledQuantity: basketLine.settledQuantity,
+      itemId: basketLine.itemId,
+      lastEditedByParticipantId: GUEST_PARTICIPANT,
+      ...(lineSeesZoneData ? { targetListId: null } : {}),
     }),
   } as unknown as GeneratedListService;
 
@@ -481,5 +510,80 @@ describe('what the settle tells the rest of the system (section 10)', () => {
       // And the basket's own room, so four people in a shop agree.
       { event: RealtimeEvent.GeneratedListLineSettled, generatedListId: BASKET },
     ]);
+  });
+});
+
+/**
+ * Section 5.2 on the way **out**.
+ *
+ * The settle route is on the participant surface, so a guest reaches it, and
+ * every field of a settlement ref, of a skip and of a line's origins names a zone
+ * or a list. These are the assertions that stop the answer to a settle being the
+ * disclosure the rest of the plan refuses.
+ */
+describe('what a settle tells the person who made it (section 5.2)', () => {
+  const twoOrigins: OriginSeed[] = [
+    { id: 'o-1', lineId: 'zl-1', listId: LIST_A, zoneId: ZONE_A, quantity: 2, order: 1 },
+    { id: 'o-2', lineId: 'zl-2', listId: LIST_B, zoneId: ZONE_B, quantity: 1, order: 2 },
+  ];
+
+  it('names no list to a guest, in the settlements or in the skips', async () => {
+    const harness = build({
+      quantity: 3,
+      origins: twoOrigins,
+      ownerWritable: [LIST_A],
+      actorSeesZoneData: false,
+    });
+    const result = await settle(harness);
+
+    // Absent rather than empty: an empty array would read as "nothing was
+    // missed", which is the opposite of what happened here.
+    expect(result.settlements).toBeUndefined();
+    expect(result.skipped).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain(LIST_B);
+  });
+
+  it('still tells a guest that an origin was missed, without whose it was', async () => {
+    // Section 6.4: a partial settle is a real outcome and has to be reported. The
+    // count survives the redaction; only the names are gated.
+    const harness = build({
+      quantity: 3,
+      origins: twoOrigins,
+      ownerWritable: [LIST_A],
+      actorSeesZoneData: false,
+    });
+    const result = await settle(harness);
+
+    expect(result.skippedCount).toBe(1);
+  });
+
+  it('gives a reader who passes the rule both the count and the names', async () => {
+    const harness = build({
+      quantity: 3,
+      origins: twoOrigins,
+      ownerWritable: [LIST_A],
+    });
+    const result = await settle(harness);
+
+    expect(result.skippedCount).toBe(1);
+    expect(result.skipped).toEqual([
+      { lineId: 'zl-2', listId: LIST_B, reason: 'ACCESS_GONE' },
+    ]);
+    expect(result.settlements).toHaveLength(1);
+  });
+
+  it('settles the same units either way, because redaction is not authorization', async () => {
+    // What a reader may be told and what an actor may do are different
+    // questions. A guest settles exactly what anybody else would.
+    const guest = build({ quantity: 2, actorSeesZoneData: false });
+    const writer = build({ quantity: 2 });
+    await settle(guest);
+    await settle(writer);
+
+    expect(guest.settlements).toHaveLength(1);
+    expect(guest.settlements[0].quantity).toBe(2);
+    expect(guest.basketLine.settledQuantity).toBe(
+      writer.basketLine.settledQuantity
+    );
   });
 });

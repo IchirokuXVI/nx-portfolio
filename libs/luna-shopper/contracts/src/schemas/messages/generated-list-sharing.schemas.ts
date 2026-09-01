@@ -12,6 +12,7 @@ import {
   string,
 } from '../builders';
 import { ENUM_IDS } from '../enums.schemas';
+import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
 import { GENERATED_LIST_SCHEMA_IDS } from './generated-list.schemas';
 
 /**
@@ -62,6 +63,16 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   settleRequest: schemaId('msg/generatedList.settleLine/request'),
   /** Zero links or one, so `link` is optional rather than nullable (section 3). */
   shareLinkResult: schemaId('generated-list-sharing/ShareLinkResult'),
+  /** A basket line as a participant reads it, redacted by section 5.2. */
+  basketLineView: schemaId('generated-list-sharing/BasketLineView'),
+  /** The basket, its people and the reader's own row, in one read. */
+  basketView: schemaId('generated-list-sharing/BasketView'),
+  /** The gateway's composed body: core's basket plus the products it names. */
+  basketResult: schemaId('generated-list-sharing/BasketResult'),
+  basketRequest: schemaId('msg/generatedList.basket.get/request'),
+  setPickRequest: schemaId('msg/generatedList.setPick/request'),
+  /** What the basket's room hears when a line is settled or its pick swapped. */
+  lineMovedEvent: schemaId('generated-list-sharing/LineMovedEvent'),
 } as const;
 
 const shareLinkView = object(
@@ -239,16 +250,141 @@ const allocationEntry = object(
   ['listId', 'quantity']
 );
 
+/**
+ * A basket line as a participant reads it (section 5).
+ *
+ * The three zone naming fields are **absent** rather than nullable for a reader
+ * who does not pass section 5.2, which is why they are not in the required list:
+ * a guest's payload does not carry them at all.
+ */
+const basketLineView = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView,
+  {
+    id: nonEmptyString(),
+    content: string(),
+    quantity: integer({ minimum: 0 }),
+    settledQuantity: integer({ minimum: 0 }),
+    itemId: nullableString(),
+    options: array(nonEmptyString()),
+    position: integer({ minimum: 0 }),
+    // Who got the bread (velista 0044, section 4.3). An id and never a name:
+    // two guests can both type "Dani".
+    lastEditedByParticipantId: nullableString(),
+    lastEditedAt: nullableString(),
+    origins: array(ref(GENERATED_LIST_SCHEMA_IDS.lineOriginView)),
+    targetListId: nullableString(),
+    origin: ref(GENERATED_LIST_SCHEMA_IDS.generatedLineOrigin),
+  },
+  [
+    'id',
+    'content',
+    'quantity',
+    'settledQuantity',
+    'itemId',
+    'options',
+    'position',
+    'lastEditedByParticipantId',
+    'lastEditedAt',
+  ]
+);
+
+const basketView = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.basketView,
+  {
+    id: nonEmptyString(),
+    name: nullableString(),
+    status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
+    generatedAt: nonEmptyString(),
+    lines: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView)),
+    participants: array(
+      ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)
+    ),
+    me: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
+    seesZoneData: boolean(),
+    // Zone data, so absent under section 5.2 like the line's three fields.
+    sourceSnapshot: ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshot),
+  },
+  [
+    'id',
+    'name',
+    'status',
+    'generatedAt',
+    'lines',
+    'participants',
+    'me',
+    'seesZoneData',
+  ]
+);
+
+/**
+ * What one settle did, for the participant who did it (sections 5.2 and 6.4).
+ *
+ * `skippedCount` is required and the two named lists are not: the fact that an
+ * origin was missed is the actor's business whoever they are, and only the names
+ * of the lists it was missed on are gated.
+ */
 const settleResult = object(
   GENERATED_LIST_SHARING_SCHEMA_IDS.settleResult,
   {
-    line: ref(GENERATED_LIST_SCHEMA_IDS.lineView),
+    line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
+    skippedCount: integer({ minimum: 0 }),
     settlements: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.settlementRef)),
     // As much the answer as the settlements are: a client that ignores it will
     // silently under report what the shopper actually bought (section 6.4).
     skipped: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.settleSkip)),
   },
-  ['line', 'settlements', 'skipped']
+  ['line', 'skippedCount']
+);
+
+/**
+ * What the **gateway** answers a basket read with: core's view plus the products
+ * it names (velista `0044`, section 4.4).
+ *
+ * An HTTP shape rather than a NATS one, like `joinResult` and
+ * `participantTokenResult` above it, and for the same reason: core holds the
+ * basket and references products by an opaque id, catalog holds the products, and
+ * neither can answer alone.
+ */
+const basketResult = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.basketResult,
+  {
+    id: nonEmptyString(),
+    name: nullableString(),
+    status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
+    generatedAt: nonEmptyString(),
+    lines: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView)),
+    participants: array(
+      ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)
+    ),
+    me: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
+    seesZoneData: boolean(),
+    sourceSnapshot: ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshot),
+    products: array(ref(CATALOG_SCHEMA_IDS.itemView)),
+  },
+  [
+    'id',
+    'name',
+    'status',
+    'generatedAt',
+    'lines',
+    'participants',
+    'me',
+    'seesZoneData',
+    'products',
+  ]
+);
+
+/**
+ * The basket room's line event (section 10), redacted to the least privileged
+ * reader in the room, because a broadcast cannot be projected per socket.
+ */
+const lineMovedEvent = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.lineMovedEvent,
+  {
+    generatedListId: nonEmptyString(),
+    line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
+  },
+  ['generatedListId', 'line']
 );
 
 // --- Requests --------------------------------------------------------------
@@ -289,6 +425,28 @@ const previewRequest = object(
   GENERATED_LIST_SHARING_SCHEMA_IDS.previewRequest,
   { secret: nonEmptyString() },
   ['secret']
+);
+
+/**
+ * Read a basket as a participant. No `userId`, deliberately: the participant id
+ * is the whole of the identity here, and an owner arrives as their own
+ * participant row like everybody else.
+ */
+const basketRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.basketRequest,
+  { generatedListId: nonEmptyString(), participantId: nonEmptyString() },
+  ['generatedListId', 'participantId']
+);
+
+const setPickRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.setPickRequest,
+  {
+    generatedListId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    itemId: nonEmptyString(),
+  },
+  ['generatedListId', 'lineId', 'participantId', 'itemId']
 );
 
 const joinRequest = object(
@@ -377,6 +535,12 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   revokeParticipantResult,
   resolveParticipantRequest,
   settleRequest,
+  basketLineView,
+  basketView,
+  basketResult,
+  lineMovedEvent,
+  basketRequest,
+  setPickRequest,
 ];
 
 export const generatedListSharingMessageContracts: Record<
@@ -426,5 +590,15 @@ export const generatedListSharingMessageContracts: Record<
   [GENERATED_LIST_SHARING_PATTERNS.settleLine]: {
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.settleRequest,
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.settleResult,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.basketGet]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.basketRequest,
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.basketView,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.setPick]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.setPickRequest,
+    // The same shape a settle answers with, and for the same reason: both move
+    // one line, and the screen updates one row from either.
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView,
   },
 };

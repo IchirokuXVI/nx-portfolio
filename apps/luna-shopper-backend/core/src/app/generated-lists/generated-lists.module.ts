@@ -14,6 +14,7 @@ import {
 import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
+import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingController } from './generated-list-sharing.controller';
@@ -65,6 +66,7 @@ import { GeneratedListService } from './generated-list.service';
     GeneratedListLineService,
     GeneratedListSharingService,
     GeneratedListSettleService,
+    GeneratedListBasketService,
   ],
   // Exported so account deletion (plan 0011) can drop a departing user's baskets
   // without reaching into the repositories itself. The sharing service is

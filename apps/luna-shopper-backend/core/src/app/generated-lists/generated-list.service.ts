@@ -6,6 +6,7 @@ import {
   GeneratedListStatus,
   RealtimeEvent,
   type CreateGeneratedListRequest,
+  type GeneratedListBasketLineView,
   type GeneratedListIdRequest,
   type GeneratedListLineView,
   type GeneratedListPage,
@@ -31,6 +32,7 @@ import {
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ProfileService } from '../profiles/profile.service';
 import {
+  toBasketLineView,
   toGeneratedLineView,
   toGeneratedListSummaryView,
   toGeneratedListView,
@@ -662,6 +664,65 @@ export class GeneratedListService {
       }),
     ]);
     return toGeneratedLineView(line, { origins, options });
+  }
+
+  /**
+   * Every line of a basket, projected for the participant reading it (plan 0051,
+   * section 5).
+   *
+   * The same two queries as {@link lineViewsFor}; only the projection differs, so
+   * a redacted read costs a privileged one's work and hands back less.
+   */
+  async basketLineViewsFor(
+    generatedListId: string,
+    seesZoneData: boolean
+  ): Promise<GeneratedListBasketLineView[]> {
+    const lines = await this.lines.find({
+      where: { generatedListId },
+      order: { position: 'ASC', createdAt: 'ASC' },
+    });
+    if (lines.length === 0) {
+      return [];
+    }
+    const lineIds = lines.map((line) => line.id);
+    const [origins, options] = await Promise.all([
+      this.origins.find({
+        where: { generatedListLineId: In(lineIds) },
+        order: { createdAt: 'ASC' },
+      }),
+      this.options.find({
+        where: { generatedListLineId: In(lineIds) },
+        order: { position: 'ASC', createdAt: 'ASC' },
+      }),
+    ]);
+    return lines.map((line) =>
+      toBasketLineView(
+        line,
+        {
+          origins: origins.filter((row) => row.generatedListLineId === line.id),
+          options: options.filter((row) => row.generatedListLineId === line.id),
+        },
+        seesZoneData
+      )
+    );
+  }
+
+  /** One line, projected, for the routes that answer with a single line. */
+  async basketLineViewFor(
+    line: GeneratedListLine,
+    seesZoneData: boolean
+  ): Promise<GeneratedListBasketLineView> {
+    const [origins, options] = await Promise.all([
+      this.origins.find({
+        where: { generatedListLineId: line.id },
+        order: { createdAt: 'ASC' },
+      }),
+      this.options.find({
+        where: { generatedListLineId: line.id },
+        order: { position: 'ASC', createdAt: 'ASC' },
+      }),
+    ]);
+    return toBasketLineView(line, { origins, options }, seesZoneData);
   }
 }
 

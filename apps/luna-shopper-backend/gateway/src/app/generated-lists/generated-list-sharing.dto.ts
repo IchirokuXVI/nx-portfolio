@@ -63,6 +63,23 @@ export class JoinGeneratedListDto {
   displayName?: string;
 }
 
+/**
+ * Swap a line's pick (plan 0051, section 6.1).
+ *
+ * A body of one field rather than a query parameter, because it is a write and
+ * because the same shape is where a second product attribute would go if the
+ * pick ever grew one.
+ */
+export class SetGeneratedListPickDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The product to buy instead. Must be one of the line’s own options, which the service checks: the options are the line’s set rather than the whole catalog.',
+  })
+  @IsUUID()
+  itemId!: string;
+}
+
 export class GeneratedListAllocationDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
