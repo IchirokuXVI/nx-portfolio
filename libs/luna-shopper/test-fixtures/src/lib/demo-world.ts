@@ -24,9 +24,11 @@
  *           section 9): they are the two states a single role could not express.
  *           Neither owner has a row anywhere, because creation no longer writes
  *           one for a staff membership (plan 0042, section 1.2).
- *   Lines   Several across both line state machines (approvalStatus x status),
- *           with non sequential float positions (the reordering case), a couple
- *           linked to real catalog items, and two comments on the milk line.
+ *   Lines   Several across every approval state and both sides of the quantity
+ *           that replaced the trip status (plan 0047): two the household still
+ *           wants, one it is stocked on at zero, one it wants a lot of. Non
+ *           sequential float positions (the reordering case), a couple linked to
+ *           real catalog items, and two comments on the milk line.
  *   Catalog Mercadona (one location) with Milk and Bread priced per store; the
  *           milk and bread lines reference those item ids across the databases.
  */
@@ -35,7 +37,6 @@ import {
   AuthProvider,
   ItemCategory,
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
   MembershipStatus,
   MergeRequestStatus,
@@ -335,13 +336,15 @@ const core: CoreSeed = {
       id: LINE_MILK_ID,
       listId: LIST_GROCERIES_ID,
       content: 'Milk',
-      quantity: 2,
+      // Zero: the household has it and does not currently need any (plan 0047,
+      // section 2.2). It is not deleted, it keeps its products and its comments,
+      // and somebody swiping it back up to two costs nothing.
+      quantity: 0,
       // A line that came from the composer: one product, and the digest of that
       // one product set (plan 0048, section 1.1).
       itemSetHash: LINE_MILK_SET_HASH,
       position: 1000,
       approvalStatus: LineApprovalStatus.APPROVED,
-      status: LineStatus.READY,
       createdByUserId: BOB_ID,
       approvedByUserId: ALICE_ID,
       version: 2,
@@ -353,7 +356,6 @@ const core: CoreSeed = {
       quantity: 6,
       position: 1500,
       approvalStatus: LineApprovalStatus.REJECTED,
-      status: LineStatus.PENDING,
       createdByUserId: BOB_ID,
       approvedByUserId: ALICE_ID,
     }),
@@ -365,7 +367,6 @@ const core: CoreSeed = {
       itemSetHash: LINE_BREAD_SET_HASH,
       position: 2000,
       approvalStatus: LineApprovalStatus.PENDING,
-      status: LineStatus.PENDING,
       createdByUserId: BOB_ID,
     }),
     makeLine({
@@ -375,7 +376,6 @@ const core: CoreSeed = {
       quantity: 12,
       position: 3000,
       approvalStatus: LineApprovalStatus.APPROVED,
-      status: LineStatus.NOT_AVAILABLE,
       createdByUserId: ALICE_ID,
       approvedByUserId: ALICE_ID,
       version: 3,
@@ -388,7 +388,6 @@ const core: CoreSeed = {
       quantity: 100,
       position: 1000,
       approvalStatus: LineApprovalStatus.APPROVED,
-      status: LineStatus.READY,
       createdByUserId: ALICE_ID,
       approvedByUserId: ALICE_ID,
     }),

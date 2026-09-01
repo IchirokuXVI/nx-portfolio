@@ -17,10 +17,14 @@ import {
   type GetCommentAudioRequest,
   type GetListAccessRequest,
   type LinePage,
+  type LineSettlementPage,
+  type LineSettlementResult,
   type LineView,
   type ListAccessView,
   type ListCommentsRequest,
   type ListIdRequest,
+  type ListItemSettlementsRequest,
+  type ListLineSettlementsRequest,
   type ListLinesRequest,
   type ListListsRequest,
   type ListPage,
@@ -28,14 +32,15 @@ import {
   type ReorderLinesRequest,
   type SetCommentTranscriptionRequest,
   type SetLineApprovalRequest,
-  type SetLineStatusRequest,
   type SetListAccessRequest,
+  type SettleLineRequest,
   type UpdateLineRequest,
   type UpdateListRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { CommentService } from './comment.service';
 import { LineService } from './line.service';
 import { ListService } from './list.service';
+import { SettlementService } from './settlement.service';
 
 /**
  * Core's shopping list, line and comment NATS surface (plan 0007). The gateway is
@@ -46,7 +51,8 @@ export class ListController {
   constructor(
     private readonly lists: ListService,
     private readonly lines: LineService,
-    private readonly comments: CommentService
+    private readonly comments: CommentService,
+    private readonly history: SettlementService
   ) {}
 
   @MessagePattern(LIST_PATTERNS.create)
@@ -104,9 +110,23 @@ export class ListController {
     return this.lines.setApproval(req);
   }
 
-  @MessagePattern(LINE_PATTERNS.setStatus)
-  setStatus(@Payload() req: SetLineStatusRequest): Promise<LineView> {
-    return this.lines.setStatus(req);
+  @MessagePattern(LINE_PATTERNS.settle)
+  settle(@Payload() req: SettleLineRequest): Promise<LineSettlementResult> {
+    return this.history.settle(req);
+  }
+
+  @MessagePattern(LINE_PATTERNS.settlements)
+  lineSettlements(
+    @Payload() req: ListLineSettlementsRequest
+  ): Promise<LineSettlementPage> {
+    return this.history.listForLine(req);
+  }
+
+  @MessagePattern(LINE_PATTERNS.itemSettlements)
+  itemSettlements(
+    @Payload() req: ListItemSettlementsRequest
+  ): Promise<LineSettlementPage> {
+    return this.history.listForItem(req);
   }
 
   @MessagePattern(LINE_PATTERNS.reorder)

@@ -1,6 +1,5 @@
 import {
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
   MembershipStatus,
   UserKind,
@@ -47,9 +46,8 @@ describe('demoWorld', () => {
     expect(core.zones[0].ownerUserId).toBe(auth.users[0].id);
   });
 
-  it('spans both line state machines and a pending membership', () => {
+  it('spans every approval state, both sides of zero, and a pending membership', () => {
     const approvals = new Set(core.lines.map((l) => l.approvalStatus));
-    const statuses = new Set(core.lines.map((l) => l.status));
     expect(approvals).toEqual(
       new Set([
         LineApprovalStatus.APPROVED,
@@ -57,9 +55,11 @@ describe('demoWorld', () => {
         LineApprovalStatus.REJECTED,
       ])
     );
-    expect(statuses).toEqual(
-      new Set([LineStatus.READY, LineStatus.PENDING, LineStatus.NOT_AVAILABLE])
-    );
+    // The state a line carries since plan 0047 is its quantity, and the world
+    // holds both sides of it: things the household wants, and one it is stocked
+    // on at zero, which is a line nothing has deleted.
+    expect(core.lines.some((l) => l.quantity === 0)).toBe(true);
+    expect(core.lines.some((l) => l.quantity > 0)).toBe(true);
     expect(
       core.memberships.some((m) => m.status === MembershipStatus.PENDING)
     ).toBe(true);

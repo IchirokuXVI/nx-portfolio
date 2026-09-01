@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommentAudio,
   LineComment,
+  LineSettlement,
   ListAccess,
   ListLine,
   ListLineItem,
@@ -15,6 +16,7 @@ import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 import { ListController } from './list.controller';
 import { ListService } from './list.service';
+import { SettlementService } from './settlement.service';
 import { SharedListGrantModule } from './shared-list-grant.module';
 
 /**
@@ -30,6 +32,7 @@ import { SharedListGrantModule } from './shared-list-grant.module';
       ListLine,
       ListLineItem,
       LineComment,
+      LineSettlement,
       CommentAudio,
       ZoneMembership,
     ]),
@@ -37,7 +40,13 @@ import { SharedListGrantModule } from './shared-list-grant.module';
     SharedListGrantModule,
   ],
   controllers: [ListController],
-  providers: [ListService, LineService, CommentService, ListAccessService],
+  providers: [
+    ListService,
+    LineService,
+    CommentService,
+    SettlementService,
+    ListAccessService,
+  ],
   // `ListAccessService` is exported so the realtime access checks (plan 0009)
   // can reuse list-access resolution rather than re-implementing it.
   //

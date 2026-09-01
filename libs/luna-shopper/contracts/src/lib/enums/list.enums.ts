@@ -25,7 +25,7 @@ export enum ListPermission {
   READ = 'READ',
   /** Add lines, edit and delete unapproved ones, reorder, comment. */
   WRITE = 'WRITE',
-  /** Approve, reject, set the item status, change an approved quantity, comment. */
+  /** Approve, reject, settle a line, change an approved quantity, comment. */
   DECIDE = 'DECIDE',
   /** All of the above, plus any line whatever its approval, and governing the list. */
   MANAGE = 'MANAGE',
@@ -38,10 +38,41 @@ export enum LineApprovalStatus {
   REJECTED = 'REJECTED',
 }
 
-/** A line's item state, independent of approval. */
+/**
+ * Where one thing has got to on **one shopping trip**.
+ *
+ * It is no longer a column on a zone line (plan 0047, section 2). A zone list is
+ * a record of what a household keeps, its quantity is the only thing that says
+ * whether it is wanted now, and a fact about one trip written onto a record that
+ * outlives every trip is what made a shared list rot into a screen people stopped
+ * opening.
+ *
+ * The enum survives because a basket line is exactly the scope it was always
+ * right for, which is what plan 0051 builds on it. Nothing in core stores it
+ * today, and a settlement says which of two things happened with
+ * {@link SettlementOutcome} instead.
+ */
 export enum LineStatus {
   PENDING = 'PENDING',
   READY = 'READY',
+  NOT_AVAILABLE = 'NOT_AVAILABLE',
+}
+
+/**
+ * What one settling act said about one line (plan 0047, section 3).
+ *
+ * Two outcomes and not three: **skipping writes nothing at all**. "I decided not
+ * to buy this today" has to leave the line exactly as it was and must not look
+ * like it was dealt with, so there is no row for it and therefore no value here.
+ *
+ * A row saying the shop did not have it is not a purchase, which is why the
+ * enum names the outcome rather than the happy case: {@link NOT_AVAILABLE} would
+ * otherwise read as a special kind of buying.
+ */
+export enum SettlementOutcome {
+  /** It was bought, and `quantity` is how many. Decrements the line. */
+  BOUGHT = 'BOUGHT',
+  /** The shop did not have it. `quantity` is 0 and the line does not move. */
   NOT_AVAILABLE = 'NOT_AVAILABLE',
 }
 

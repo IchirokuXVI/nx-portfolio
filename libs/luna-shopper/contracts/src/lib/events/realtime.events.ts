@@ -56,6 +56,20 @@ export enum RealtimeEvent {
   ListMyAccessChanged = 'list.myAccessChanged',
   LineAdded = 'line.added',
   LineUpdated = 'line.updated',
+  /**
+   * A line was settled: bought, or found missing from the shop (plan 0047,
+   * section 8).
+   *
+   * Its own event rather than a {@link LineUpdated} carrying the new quantity,
+   * because the settlement is half the news. A phone at home has to learn that
+   * two of the three were bought and by whom, and a bare line update says only
+   * that the number moved, which a quantity edit says too. `line.updated`
+   * continues to carry those ordinary edits.
+   *
+   * The payload is a {@link LineSettlementResult}, so a client applies the new
+   * line and appends the settlement without a refetch.
+   */
+  LineSettled = 'line.settled',
   LineReordered = 'line.reordered',
   LineDeleted = 'line.deleted',
   CommentAdded = 'comment.added',
@@ -168,6 +182,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.ListMyAccessChanged,
   RealtimeEvent.LineAdded,
   RealtimeEvent.LineUpdated,
+  RealtimeEvent.LineSettled,
   RealtimeEvent.LineReordered,
   RealtimeEvent.LineDeleted,
   RealtimeEvent.CommentAdded,
