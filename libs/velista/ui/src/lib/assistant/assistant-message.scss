@@ -116,29 +116,27 @@
   text-align: center;
 }
 
-.links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--app-space-3);
-  margin: var(--app-space-3) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
+// One link, as a line of text under the bubble (plan 0042, section 3.2). Not a chip:
+// there is one of these and it is a sentence saying where it goes, so it reads as
+// prose with a target rather than as an item in a row of things.
+//
+// It is still a block level anchor with the control height, because it is a single
+// line of text and a line of text is not a touch target on its own.
 .link {
   display: inline-flex;
   align-items: center;
   gap: var(--app-space-3);
-  // A chip is small, so its own height is what has to reach the touch target: these
-  // sit in a wrapping row where a parent cannot make them tall (plan 0003, section 7).
   min-block-size: var(--app-control-height);
-  padding: 0 var(--app-space-4);
-  border: 1px solid var(--app-status-attention-border);
-  border-radius: var(--app-chip-radius);
-  background: var(--app-status-attention-bg);
+  margin-block-start: var(--app-space-2);
   color: var(--app-status-attention-fg);
-  font-size: var(--app-text-sm);
+  font-size: var(--app-text-base);
   text-decoration: none;
+
+  // Never colour alone: the glyph and the word "Go" say it is a link as well, and both
+  // survive a monochrome rendering and a person who cannot separate the two hues.
+  &:hover {
+    text-decoration: underline;
+  }
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
@@ -147,5 +145,38 @@
 }
 
 .link-glyph {
+  flex-shrink: 0;
   font-size: var(--app-icon-sm);
+}
+
+// The answers to a question, and the chip treatment the links gave up. A wrapping row
+// is exactly where a chip has to reach the touch target on its own height, because no
+// parent here can make it tall (plan 0003, section 7).
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  margin: var(--app-space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.choice {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--app-control-height);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-status-attention-bg);
+  color: var(--app-status-attention-fg);
+  font-size: var(--app-text-sm);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
 }

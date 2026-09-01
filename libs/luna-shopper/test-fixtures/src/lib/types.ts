@@ -17,8 +17,8 @@ import type {
   AuthProvider,
   ItemCategory,
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
+  LocalizedSynonyms,
   LocalizedText,
   MembershipStatus,
   MergeRequestStatus,
@@ -122,14 +122,31 @@ export interface SeedLine {
   listId: string;
   content: string;
   quantity: number;
-  /** Opaque reference into the catalog `items` table, or null (item optional). */
-  itemId: string | null;
+  /**
+   * The digest of this line's product set, or null while it is empty (plan 0048,
+   * section 1.1). The products themselves are {@link SeedLineItem} rows, because
+   * a line holds a set rather than the single `itemId` this replaced.
+   */
+  itemSetHash: string | null;
   position: number;
   approvalStatus: LineApprovalStatus;
-  status: LineStatus;
   createdByUserId: string;
   approvedByUserId: string | null;
   version: number;
+}
+
+/**
+ * One product of a line's set (plan 0048, section 1.1).
+ *
+ * `itemId` reaches across databases into catalog by opaque id, exactly as the
+ * retired `list_lines."itemId"` did, so the demo world's fixed constants are what
+ * keep the two halves consistent.
+ */
+export interface SeedLineItem {
+  id: string;
+  lineId: string;
+  itemId: string;
+  position: number;
 }
 
 export interface SeedComment {
@@ -157,6 +174,8 @@ export interface CoreSeed {
   lists: SeedList[];
   listAccess: SeedListAccess[];
   lines: SeedLine[];
+  /** The products each line stands for (plan 0048, section 1.1). */
+  lineItems: SeedLineItem[];
   comments: SeedComment[];
   mergeRequests: SeedMergeRequest[];
 }
@@ -205,6 +224,23 @@ export interface SeedItem {
   unitSize: number | null;
   category: ItemCategory;
   defaultUnit: UnitOfMeasure;
+  /** The group this product belongs to, or null (plan 0048, section 1). */
+  productGroupId: string | null;
+}
+
+/**
+ * "Milk as a thing you can buy" (plan 0048, section 1), as opposed to one
+ * carton of it.
+ *
+ * The demo world seeds a small hand curated set rather than a generated one,
+ * which is what a group is: a curation decision. Nothing derives these.
+ */
+export interface SeedProductGroup {
+  id: string;
+  name: LocalizedText;
+  slug: string;
+  referenceUnit: UnitOfMeasure;
+  synonyms: LocalizedSynonyms;
 }
 
 /** A price, keyed on a scope since plan 0038 rather than on a store. */
@@ -234,6 +270,8 @@ export interface CatalogSeed {
   supermarkets: SeedSupermarket[];
   priceScopes: SeedPriceScope[];
   locations: SeedSupermarketLocation[];
+  /** Groups come before items: an item may point at one (plan 0048). */
+  productGroups: SeedProductGroup[];
   items: SeedItem[];
   supermarketItems: SeedSupermarketItem[];
   locationItems: SeedSupermarketLocationItem[];

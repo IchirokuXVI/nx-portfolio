@@ -1,7 +1,8 @@
 import {
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
+  NO_LINE_CLAIM,
+  NO_LINE_SETTLEMENTS,
   RealtimeEvent,
   ZoneRole,
   type ListCounts,
@@ -35,7 +36,7 @@ const READ_ONLY = new Set([ListPermission.READ]);
 
 describe('list mappers (plan 0017, sections 3.4 and 7)', () => {
   it('carries the counts it was given and ISO 8601 timestamps', () => {
-    const counts: ListCounts = { lineCount: 12, readyCount: 7 };
+    const counts: ListCounts = { lineCount: 12, wantedCount: 7 };
     const view = toListView(LIST, counts, READ_ONLY);
 
     expect(view.counts).toEqual(counts);
@@ -47,7 +48,7 @@ describe('list mappers (plan 0017, sections 3.4 and 7)', () => {
     // Deliberate: the frontend maps one shape whichever endpoint it came from.
     expect(
       Object.keys(toListView(LIST, EMPTY_LIST_COUNTS, READ_ONLY).counts).sort()
-    ).toEqual(['lineCount', 'readyCount']);
+    ).toEqual(['lineCount', 'wantedCount']);
   });
 
   it('stamps a line view too', () => {
@@ -56,10 +57,9 @@ describe('list mappers (plan 0017, sections 3.4 and 7)', () => {
       listId: 'l1',
       content: 'Milk',
       quantity: 1,
-      itemId: null,
+      itemSetHash: null,
       position: 1,
       approvalStatus: LineApprovalStatus.PENDING,
-      status: LineStatus.READY,
       createdByUserId: 'u1',
       approvedByUserId: null,
       version: 1,
@@ -67,21 +67,41 @@ describe('list mappers (plan 0017, sections 3.4 and 7)', () => {
       updatedAt: new Date('2026-03-02T00:00:00.000Z'),
     } as ListLine;
 
-    const view = toLineView(line);
+    const view = toLineView(line, [], NO_LINE_SETTLEMENTS, NO_LINE_CLAIM);
     expect(view.createdAt).toBe('2026-03-01T00:00:00.000Z');
     expect(view.updatedAt).toBe('2026-03-02T00:00:00.000Z');
+    // A free text line, which is what most lines are: an empty set and a null
+    // hash, said out loud rather than left absent (plan 0048, section 1.1).
+    expect(view.itemIds).toEqual([]);
+    expect(view.itemSetHash).toBeNull();
+    // And nobody out buying it, said out loud for the same reason (plan 0052,
+    // section 4): an absent pair would leave "nobody has this" and "this server
+    // does not say" looking identical, and they draw different rows.
+    expect(view.claimed).toBe(false);
+    expect(view.claimedByUserId).toBeNull();
   });
 });
 
 describe('the line count aggregate (plan 0017, section 4.2)', () => {
-  it('counts READY only, and ignores approvalStatus entirely', () => {
-    // The two state machines are independent by 0007's design, and the mock's
-    // "7 of 12 ready" is about shopping progress, not moderation.
-    expect(LIST_COUNTS_SQL).toContain(`ll.status = 'READY'`);
+  it('counts what is wanted, and ignores approvalStatus entirely', () => {
+    // Plan 0047, section 2.3: the second count was "how many are ready", which
+    // is a fact about somebody's shopping trip. "Four things needed" is the
+    // number a card has always wanted to show. Moderation is still no part of
+    // it: a line awaiting approval is still something the household wants.
+    expect(LIST_COUNTS_SQL).toContain(`ll."quantity" > 0`);
     expect(LIST_COUNTS_SQL).not.toContain('approvalStatus');
   });
 
-  it('counts every line for lineCount, whatever its status', () => {
+  it('counts lines rather than units', () => {
+    // Section 9's open decision, settled: "4 things needed" is legible on a card
+    // and "17 units needed" is not.
+    expect(LIST_COUNTS_SQL).toContain(
+      `count(*) FILTER (WHERE ll."quantity" > 0)`
+    );
+    expect(LIST_COUNTS_SQL).not.toContain('sum(');
+  });
+
+  it('counts every line for lineCount, whatever it holds', () => {
     expect(LIST_COUNTS_SQL).toContain(`'lineCount', count(*)`);
   });
 });
@@ -139,7 +159,7 @@ function build(rows: ShoppingList[], counts: ListCounts) {
 
 describe('ListService.list', () => {
   it('attaches the counts to the listing query rather than fetching per row', async () => {
-    const { svc, qb } = build([LIST], { lineCount: 12, readyCount: 7 });
+    const { svc, qb } = build([LIST], { lineCount: 12, wantedCount: 7 });
 
     const page = await svc.list({ userId: 'u1', zoneId: 'z1' });
 
@@ -149,7 +169,7 @@ describe('ListService.list', () => {
     );
     // One round trip for the whole page, whatever its size.
     expect(qb['getRawAndEntities']).toHaveBeenCalledTimes(1);
-    expect(page.items[0].counts).toEqual({ lineCount: 12, readyCount: 7 });
+    expect(page.items[0].counts).toEqual({ lineCount: 12, wantedCount: 7 });
   });
 
   it('fills myPermissions from one extra query for the whole page', async () => {
@@ -191,7 +211,7 @@ describe('ListService.list', () => {
   });
 
   it('falls back to zeroes rather than crashing on a missing raw row', async () => {
-    const { svc, qb } = build([LIST], { lineCount: 5, readyCount: 1 });
+    const { svc, qb } = build([LIST], { lineCount: 5, wantedCount: 1 });
     (qb['getRawAndEntities'] as jest.Mock).mockResolvedValueOnce({
       entities: [LIST],
       raw: [],

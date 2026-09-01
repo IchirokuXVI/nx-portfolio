@@ -85,8 +85,9 @@ interface RowBand {
             (act)="act.emit($event)"
             (dismiss)="dismiss.emit($event)"
             (grab)="startDrag($event)"
+            (opened)="opened.emit($event)"
+            (quantityChanged)="quantityChanged.emit($event)"
             (retry)="retry.emit($event)"
-            (ticked)="ticked.emit($event)"
             [canMoveDown]="!last"
             [canMoveUp]="!first"
             [line]="line"
@@ -125,7 +126,17 @@ export class LineList {
    */
   readonly markedId = input<string | null>(null);
 
-  readonly ticked = output<string>();
+  /** A row was tapped, which opens its detail sheet. */
+  readonly opened = output<string>();
+
+  /**
+   * One settled quantity adjustment, as a signed delta.
+   *
+   * Passed straight up. This component owns the **order** of the rows and nothing
+   * about what is on one, which is the same division that makes a drag its business
+   * and a tap the row's.
+   */
+  readonly quantityChanged = output<{ lineId: string; delta: number }>();
   readonly act = output<{ action: LineRowAction; lineId: string }>();
   readonly retry = output<string>();
   readonly dismiss = output<string>();

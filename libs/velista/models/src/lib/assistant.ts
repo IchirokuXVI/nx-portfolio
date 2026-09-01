@@ -11,33 +11,45 @@
 export type AssistantSpeaker = 'caller' | 'bot';
 
 /**
- * Something a turn genuinely read or wrote, and therefore something the panel may
- * link to (backend rule A3).
+ * The one place an answer can send somebody (plan 0042, and luna `0046`).
  *
- * **The reply text is never parsed for ids.** An id here came back from the gateway
- * during the turn that produced it, so the target exists and the caller can see it. An
- * id inside a sentence has neither property, and a link to a list that was never there
- * is worse than no link at all (plan 0032, section 7).
+ * **The reply text is never parsed for ids.** The ids here came back from the gateway
+ * during the turn that produced them, so the target exists and the caller can see it.
+ * An id inside a sentence has neither property, and a link to a list that was never
+ * there is worse than no link at all (plan 0032, section 7).
  *
- * A discriminated union rather than one shape with optional ids, because a `line`
- * without a `listId` is not a reference this app can build a URL from, and a type that
- * admits one is a type that pushes the same check into every caller.
+ * It is always a list, and there is at most one. A row of chips, one per thing a turn
+ * touched, is a bill of materials rather than a set of links: what somebody wants after
+ * "there is no milk on the weekly shop" is to go to the weekly shop, not to choose
+ * between two chips that open the same screen.
  */
-export type AssistantReference =
-  | { readonly kind: 'zone'; readonly zoneId: string; readonly label: string }
-  | {
-      readonly kind: 'list';
-      readonly zoneId: string;
-      readonly listId: string;
-      readonly label: string;
-    }
-  | {
-      readonly kind: 'line';
-      readonly zoneId: string;
-      readonly listId: string;
-      readonly lineId: string;
-      readonly label: string;
-    };
+export interface AssistantListLink {
+  readonly zoneId: string;
+  readonly listId: string;
+  readonly label: string;
+
+  /**
+   * The zone's name, when the server says it is worth saying. **Never composed here.**
+   *
+   * Whether to name the zone is one rule about how many zones somebody is in, and the
+   * server is where that rule lives (luna `0046`, section 3). This app renders what it
+   * is handed and counts nothing.
+   */
+  readonly zoneLabel: string | null;
+}
+
+/**
+ * One answer to a question the assistant just asked (plan 0042, section 4).
+ *
+ * `label` is what the chip reads and `message` is what tapping it **says**: the tap
+ * goes through the same path a typed message takes, so there is no second request
+ * shape and nothing new for the store to remember. The two differ because the chip is
+ * short and the sentence it stands for need not be.
+ */
+export interface AssistantChoice {
+  readonly label: string;
+  readonly message: string;
+}
 
 /**
  * One entry in the transcript.
@@ -64,14 +76,26 @@ export type ListResolution = 'named' | 'conversation' | 'onlyList' | 'asked';
 /**
  * What the service answered.
  *
- * `references` is always an array, empty when the turn read nothing — which is exactly
- * right for a redirect, a refusal, or a turn that called no tool. An absent field and
- * an empty one mean the same thing to the panel, so the mapper collapses them rather
- * than making every reader ask.
+ * `link` is null when the turn sent nobody anywhere, which is exactly right for a
+ * redirect, a refusal, a question, or a turn that called no tool. `choices` is empty
+ * unless the turn ended by asking something. An absent field and an empty one mean the
+ * same thing to the panel, so the mapper collapses them rather than making every
+ * reader ask, which is also what makes an older backend readable (plan 0042,
+ * section 8).
  */
 export interface AssistantReply {
   readonly text: string;
-  readonly references: readonly AssistantReference[];
+  readonly link: AssistantListLink | null;
+
+  /**
+   * The answers to the question this turn ended with, and empty when it asked none.
+   *
+   * A turn that asked a question sends no link, and a turn that sends a link asked
+   * nothing (luna `0046`, section 2.4). Both are carried anyway, because a panel that
+   * renders whatever it is handed is one fewer thing that can be wrong when the server
+   * changes its mind.
+   */
+  readonly choices: readonly AssistantChoice[];
 
   /**
    * What the service heard, on a spoken turn (backend `0041`, section 3.1).
@@ -136,7 +160,19 @@ export interface AssistantEntry {
   readonly id: string;
   readonly speaker: AssistantSpeaker;
   readonly text: string;
-  readonly references: readonly AssistantReference[];
+  readonly link: AssistantListLink | null;
+
+  /**
+   * The answers the panel offers under this message, and empty on every entry the
+   * store writes on its own.
+   *
+   * Held on the entry rather than on the store, because only the **last** one may be
+   * tapped: an answer to a question three turns ago is a wrong answer, and a chip that
+   * is still tappable is a chip that invites it (plan 0042, section 4.3). The page is
+   * what applies that rule; the entry keeps what it was given so the transcript stays
+   * a record of what was offered.
+   */
+  readonly choices: readonly AssistantChoice[];
   readonly kind:
     | 'said'
     | 'pending'

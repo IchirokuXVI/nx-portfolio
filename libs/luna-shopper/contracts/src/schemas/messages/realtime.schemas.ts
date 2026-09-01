@@ -1,4 +1,5 @@
 import { REALTIME_ACCESS_PATTERNS } from '../../lib/messages/realtime.messages';
+import { ENUM_IDS } from '../enums.schemas';
 import {
   array,
   boolean,
@@ -20,6 +21,13 @@ export const REALTIME_SCHEMA_IDS = {
   listPresence: schemaId('realtime/ListPresence'),
   editLineSignal: schemaId('realtime/EditLineSignal'),
   stopEditLineSignal: schemaId('realtime/StopEditLineSignal'),
+  // Shared baskets (plan 0051, section 7): the room whose members are
+  // participants rather than users.
+  checkParticipantAccessRequest: schemaId(
+    'msg/realtime.checkParticipantAccess/request'
+  ),
+  participantPresenceEntry: schemaId('realtime/ParticipantPresenceEntry'),
+  generatedListPresence: schemaId('realtime/GeneratedListPresence'),
 } as const;
 
 const checkZoneAccessRequest = object(
@@ -34,8 +42,48 @@ const checkListAccessRequest = object(
 );
 const accessCheckResult = object(
   REALTIME_SCHEMA_IDS.accessCheckResult,
-  { allowed: boolean() },
+  {
+    allowed: boolean(),
+    // The two optional fields the answer carries when the question was about a
+    // zone or about a participant. Both were declared on `AccessCheckResult`
+    // before they were declared here, and `object` defaults
+    // `additionalProperties` to false, so a strictly validated zone answer would
+    // have been rejected for carrying the very field plan 0032 added to it.
+    listIds: array(nonEmptyString()),
+    participant: ref(REALTIME_SCHEMA_IDS.participantPresenceEntry),
+  },
   ['allowed']
+);
+const checkParticipantAccessRequest = object(
+  REALTIME_SCHEMA_IDS.checkParticipantAccessRequest,
+  { participantId: nonEmptyString(), generatedListId: nonEmptyString() },
+  ['participantId', 'generatedListId']
+);
+/**
+ * One participant connected to a shared basket (plan 0051, section 7).
+ *
+ * Deliberately not built on {@link REALTIME_SCHEMA_IDS.presenceUser}: a guest has
+ * no user id at all, so the required `userId` that schema carries is exactly what
+ * this cannot promise.
+ */
+const participantPresenceEntry = object(
+  REALTIME_SCHEMA_IDS.participantPresenceEntry,
+  {
+    participantId: nonEmptyString(),
+    kind: ref(ENUM_IDS.participantKind),
+    displayName: nullableString(),
+    guestNumber: { type: ['integer', 'null'] },
+    userId: nullableString(),
+  },
+  ['participantId', 'kind', 'displayName', 'guestNumber', 'userId']
+);
+const generatedListPresence = object(
+  REALTIME_SCHEMA_IDS.generatedListPresence,
+  {
+    generatedListId: nonEmptyString(),
+    present: array(ref(REALTIME_SCHEMA_IDS.participantPresenceEntry)),
+  },
+  ['generatedListId', 'present']
 );
 const presenceUser = object(
   REALTIME_SCHEMA_IDS.presenceUser,
@@ -78,6 +126,9 @@ const stopEditLineSignal = object(
 export const realtimeSchemas: JsonSchema[] = [
   checkZoneAccessRequest,
   checkListAccessRequest,
+  checkParticipantAccessRequest,
+  participantPresenceEntry,
+  generatedListPresence,
   accessCheckResult,
   presenceUser,
   presenceEditor,
@@ -103,6 +154,12 @@ export const realtimeMessageContracts: Record<
   },
   [REALTIME_ACCESS_PATTERNS.checkList]: {
     request: REALTIME_SCHEMA_IDS.checkListAccessRequest,
+    response: REALTIME_SCHEMA_IDS.accessCheckResult,
+  },
+  // The one check keyed on a participant rather than a user (plan 0051,
+  // section 7), and the only one whose answer carries who the asker is.
+  [REALTIME_ACCESS_PATTERNS.checkParticipant]: {
+    request: REALTIME_SCHEMA_IDS.checkParticipantAccessRequest,
     response: REALTIME_SCHEMA_IDS.accessCheckResult,
   },
 };

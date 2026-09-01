@@ -6,7 +6,8 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
-import { sheetFallGuard } from '@portfolio/velista/platform';
+import { BasketSocket, BasketStore } from '@portfolio/velista/data-access';
+import { SHEET_SEGMENT, sheetFallGuard } from '@portfolio/velista/platform';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import {
   anonymousOnlyGuard,
@@ -15,6 +16,7 @@ import {
 } from './auth-guards';
 import { APP_USABLE_LOCALES } from './usable-locales';
 import {
+  generatedListIdGuard,
   listIdGuard,
   zoneIdGuard,
   zoneMemberGuard,
@@ -58,9 +60,29 @@ import {
  * is destroyed. Stamped by this helper rather than written out twelve times, so a sheet
  * added later cannot quietly be the one that skips it; `routes.spec.ts` asserts that
  * every route with a panel carries it.
+ *
+ * ## It also stamps the URL
+ *
+ * A sheet is addressed `<the covered page's URL>/sheet/<what it is about>`, and this
+ * is where the marker is put on, for the reason the guard is put on here: the rule is
+ * worth nothing if one route can be written without it. So the table below declares
+ * what a sheet is **about**, `lines/:lineId/edit`, and the path that reaches it is
+ * `sheet/lines/:lineId/edit`. `SHEET_SEGMENT` carries the argument for the rule, and
+ * `sheetSegments` is the other half of it, used by everything that opens one.
+ *
+ * The prefix is what stops a sheet and a page competing for one URL. Before it, the
+ * list page's line sheets sat below `lines/:lineId`, which is the line page's own URL,
+ * so the line page was offered all of them first and the delete confirm over the list
+ * resolved to the line page instead. See `SHEET_SEGMENT` for that account in full.
  */
 function sheet(route: Route): Route {
-  return { ...route, canDeactivate: [sheetFallGuard] };
+  const about = route.path ?? '';
+
+  return {
+    ...route,
+    path: about === '' ? SHEET_SEGMENT : `${SHEET_SEGMENT}/${about}`,
+    canDeactivate: [sheetFallGuard],
+  };
 }
 
 /**
@@ -98,6 +120,38 @@ function entrySheetRoutes(returnTo: 'landing' | 'home'): Route[] {
 }
 
 /**
+ * Get shopping list, as a child of whichever page offered it (plan 0045, section 3.4).
+ *
+ * A sheet by rule E1, for the two entry sheets' reason exactly: it covers the page
+ * without losing its scroll, and Android's back button dismisses it rather than
+ * closing the app.
+ *
+ * It exists **twice**, once over the dashboard and once over the history, because both
+ * screens offer the action and a sheet has to cover the page it was opened from. When
+ * it lived only under `home`, pressing Get shopping list on the history swapped the
+ * page underneath for the dashboard on the way in and dropped somebody back on the
+ * history on the way out, which reads as the app losing its place.
+ *
+ * One function called twice rather than two entries written out, for
+ * `entrySheetRoutes`' reason: the two copies must not be able to drift, and the only
+ * thing that differs between them is where Cancel goes back to.
+ *
+ * No guard beyond the page's own. Whether the caller may generate anything is decided
+ * by what they hold `WRITE` on (backend `0051` section 2), which is not knowable
+ * before the sources are read, so the sheet is where it is answered and not the route.
+ */
+function getListSheetRoutes(returnTo: 'home' | 'shopping-lists'): Route[] {
+  return [
+    sheet({
+      path: 'get',
+      data: { returnTo },
+      loadComponent: () =>
+        import('@portfolio/velista/feature-home').then((m) => m.GetListSheet),
+    }),
+  ];
+}
+
+/**
  * The four confirm sheets over a member's row (plan 0010, section 4.2).
  *
  * One component and four entries rather than four components: everything except the
@@ -126,14 +180,21 @@ function memberActionRoutes(): Route[] {
 }
 
 /**
- * The four sheets over the list page (plan 0012, section 4.2).
+ * The five sheets over the list page (plan 0012 section 4.2, velista 0043 section 5.1).
  *
  * Every one is a route and not a template flag, which is rule E1 from `0008`
  * unchanged: each covers the page without losing it, and Android's back button has to
  * dismiss it.
  *
- * Ticking a line off is deliberately not among them and never will be. It is one tap,
- * it is reversible by the same tap, and it is the thing the screen is for.
+ * **Changing a line's quantity is deliberately not among them and never will be.** It
+ * is the gesture the screen is built around, it happens under a thumb, and a sheet
+ * would put a navigation and a dismissal around a number somebody is dragging. What
+ * used to be said in this place about ticking off is the same rule about a different
+ * gesture: the primary act on this page is never a route.
+ *
+ * The detail sheet is new and is what a **tap** opens now. It earns a route twice over:
+ * it covers the page like the rest, and it is where a purchase is recorded, which is a
+ * deliberate act somebody should be able to back out of with the back button.
  *
  * No guards here. Which of these a caller may **use** is decided by the page from the
  * caller's own facts, and it cannot be decided by a guard at all: there is no
@@ -144,6 +205,27 @@ function memberActionRoutes(): Route[] {
  */
 function listSheetRoutes(): Route[] {
   return [
+    sheet({
+      // What a tap on a row opens (velista plan 0043, section 5.1), reached at
+      // `…/lists/:listId/sheet/lines/:lineId/detail`.
+      //
+      // `detail` can be the leaf again because the marker in front of it is what says
+      // this is a panel. The word had to be given up for a while: the sheet was at
+      // `lines/:lineId/detail` and the line page at the bare `lines/:lineId`, so the
+      // one screen that exists to be linked to was the one no word named, and `detail`
+      // sat on the panel while reading as the details of the line. With the two in
+      // separate namespaces neither has to be renamed to stay out of the other's way,
+      // and each takes the word that describes it.
+      //
+      // No guard, like the others here: whether this caller may record a purchase is
+      // decided inside it from the same abilities the page uses, and opening it to read
+      // a history is something anybody holding `READ` may do.
+      path: 'lines/:lineId/detail',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-lists').then(
+          (m) => m.LineDetailSheet
+        ),
+    }),
     sheet({
       path: 'lines/:lineId/edit',
       loadComponent: () =>
@@ -259,7 +341,10 @@ export const AppShellRoutes: Route[] = [
             canActivate: [authenticatedGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-home').then((m) => m.HomePage),
-            children: [...entrySheetRoutes('home')],
+            children: [
+              ...getListSheetRoutes('home'),
+              ...entrySheetRoutes('home'),
+            ],
           },
           // The credential flows (plan 0009). Routes and not sheets, because none of them
           // completes one field in place over a page that keeps its context: each has two
@@ -335,6 +420,44 @@ export const AppShellRoutes: Route[] = [
           // zone segment and `listIdGuard` is **rule L1**: it declines any list segment
           // that is not a UUID, so `/zones/<uuid>/lists/new` falls through to the group
           // page's own `lists/new` child instead of being swallowed by `:listId`.
+          /**
+           * Everything about one line (velista plan 0043, section 5.3).
+           *
+           * **Declared before `zones/:zoneId/lists/:listId`**, which is tidiness now
+           * and used to be load bearing. The list page's path is still a prefix of
+           * this one and it still carries children, so this URL is offered to that
+           * branch first and reaches here by the branch failing. What changed is that
+           * the failure is now guaranteed rather than observed: every child of the
+           * list page begins with `sheet`, so none of them can match a bare line id,
+           * and none added later can either. The order is kept because the specific
+           * before the general is what stays right as pages are added, and it no
+           * longer has anything resting on it.
+           *
+           * A page rather than a deeper sheet because it can be linked to, and it
+           * holds the line's own URL, which is what a link to a line ought to be. The
+           * panel over the list is a sheet and is addressed as one, so the two no
+           * longer have to be told apart by a word.
+           */
+          {
+            path: 'zones/:zoneId/lists/:listId/lines/:lineId',
+            canMatch: [zoneIdGuard, listIdGuard],
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-lists').then(
+                (m) => m.LinePage
+              ),
+            children: [
+              sheet({
+                // The one thing on either screen that discards the history, so it is
+                // confirmed here as well as from the list (section 5.3).
+                path: 'confirm/delete',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.DeleteLineSheet
+                  ),
+              }),
+            ],
+          },
           {
             path: 'zones/:zoneId/lists/:listId',
             canMatch: [zoneIdGuard, listIdGuard],
@@ -382,6 +505,41 @@ export const AppShellRoutes: Route[] = [
                 loadComponent: () =>
                   import('@portfolio/velista/feature-zones').then(
                     (m) => m.GroupSettingsSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            // Shopping profiles (plan 0046). A page of its own and **not a child of
+            // `account`**, which is what the path might suggest: `account` renders its
+            // sheets into an outlet at the bottom of its own scroll, so a child route
+            // here would draw a whole page under the account rows rather than instead
+            // of them.
+            //
+            // Declared **before** `account` for the same reason every non empty path
+            // comes before the front door. A parent with children only matches when one
+            // of them matches the remainder, so `account` would decline `profiles` and
+            // the router would fall through to this one anyway; stating the order makes
+            // that a decision rather than a piece of luck about how backtracking works.
+            //
+            // `authenticatedGuard` and nothing more. A profile is private and resolves
+            // from the caller's own token, so there is nothing here to authorize that
+            // the gateway does not already.
+            path: 'account/profiles',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-account').then(
+                (m) => m.ProfilesPage
+              ),
+            children: [
+              sheet({
+                // `confirm/delete`, matching the shape `0010` gave a member action and
+                // `0015` gave the account, so every destructive confirm in this app is
+                // addressed the same way.
+                path: 'confirm/delete',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-account').then(
+                    (m) => m.DeleteProfileSheet
                   ),
               }),
             ],
@@ -481,6 +639,131 @@ export const AppShellRoutes: Route[] = [
             loadComponent: () =>
               import('@portfolio/velista/feature-install').then(
                 (m) => m.InstallPage
+              ),
+          },
+          {
+            /**
+             * The shared basket (plan 0044). The screen somebody carries around a
+             * shop, which is very often not the person who wrote the list.
+             *
+             * **No `authenticatedGuard`, and that is the feature.** A guest holding
+             * a link has no account and never will through this route; what
+             * authorizes them is their participant session, which the server checks
+             * on every request. A guard here would refuse exactly the reader this
+             * plan exists for.
+             *
+             * Declared before the empty path, and before plan 0045's
+             * `shopping-lists` listing when that lands, with `generatedListIdGuard`
+             * so a future `shopping-lists/new` cannot be swallowed as a basket id
+             * (rule G1).
+             *
+             * The path is a literal rather than `BASKET_PATHS.basket`: importing it
+             * here is a static import of a lazy loaded library, which eslint refuses
+             * and which would pull these pages into the shell's initial payload.
+             * `routes.spec.ts` asserts the path, so a rename cannot land half done.
+             */
+            path: 'shopping-lists/:generatedListId',
+            canMatch: [generatedListIdGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shopping-lists').then(
+                (m) => m.BasketPage
+              ),
+            // Both scoped to this route, so the connection's lifetime is the
+            // screen's: entering the basket opens it and leaving closes it, which is
+            // also what makes presence answer "who is here" rather than "who has ever
+            // opened this" (plan 0048, section 4). `BasketSocket` is listed first for
+            // readability only; the injector resolves it on demand either way.
+            providers: [BasketSocket, BasketStore],
+            children: [
+              // Rule E1: each sheet covers the page without losing it, and Android's
+              // back button dismisses it. None is guarded, because which of them a
+              // caller may **use** is decided from the caller's own facts by the
+              // page, and the server refuses the rest regardless of what is drawn.
+              sheet({
+                path: 'lines/:lineId/settle',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.SettleSheet
+                  ),
+              }),
+              sheet({
+                path: 'people',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.PeopleSheet
+                  ),
+              }),
+              sheet({
+                path: 'share',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.ShareSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            // The history of generated shopping lists (plan 0045, section 3.3).
+            //
+            // The path is written out rather than taken from `BASKET_PATHS`, which the
+            // three screens that link here build their links from: naming that constant
+            // is a static import of `feature-shopping-lists`, which this file lazy
+            // loads, so it would pull those pages into the shell's initial payload.
+            // `routes.spec.ts` asserts the two still agree.
+            //
+            // Declared **after** `shopping-lists/:generatedListId`, which is the one
+            // ordering constraint on it, and it moved here the moment this route grew
+            // a child. The two are siblings rather than parent and child, because the
+            // basket screen is its own destination and not something drawn over this
+            // page; but a parent only matches when one of its children matches the
+            // remainder, so with `get` below it this route now declines
+            // `shopping-lists/<uuid>` and the basket would be reached only by the
+            // router backtracking to a later sibling. Putting the more specific path
+            // first makes the match a decision rather than a piece of luck about how
+            // backtracking works, exactly as `zones/:zoneId/lists/:listId` sits before
+            // `zones/:zoneId`. The `canMatch` UUID guard on the basket is what keeps
+            // the pair unambiguous the other way, so `shopping-lists/get` cannot be
+            // read as a basket id (rule G1).
+            //
+            // Everything else about its position is unchanged: still before the front
+            // door, like every other non empty path. Sitting after `account` costs
+            // nothing, since neither path is a prefix of the other.
+            //
+            // `authenticatedGuard` and nothing more. A basket is private and the
+            // listing resolves from the caller's own token, so there is nothing here to
+            // authorize that the gateway does not already. The **basket** screen is the
+            // one that must not carry this guard, since a guest with no account has to
+            // reach it by link.
+            path: 'shopping-lists',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shopping-lists').then(
+                (m) => m.ShoppingListsPage
+              ),
+            children: [...getListSheetRoutes('shopping-lists')],
+          },
+          {
+            /**
+             * The guest join screen (plan 0044, section 3).
+             *
+             * A short top level segment because this is the one path in the app that
+             * gets pasted into a group chat and read aloud, and **not** under
+             * `shopping-lists/`: a stranger holding this link has no shopping lists
+             * and is not browsing a section of the app.
+             *
+             * Public and full screen, like `join/:code` below it and for the same
+             * reason: it is a cold arrival from somebody else's message, so there is
+             * no page underneath to render over (plan 0008, section 4.1).
+             *
+             * The URL the owner copies carries **no locale**, on purpose:
+             * `localeGuard` inserts the recipient's, and baking the sender's in
+             * would open the app in the wrong language for exactly the person it was
+             * sent to.
+             */
+            path: 's/:secret',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shopping-lists').then(
+                (m) => m.JoinPage
               ),
           },
           {

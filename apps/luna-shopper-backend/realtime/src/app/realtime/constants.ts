@@ -33,31 +33,28 @@ export const DEDUPE_WINDOW_SECONDS = 300;
 export const DEDUPE_KEY_PREFIX = 'dedupe:event';
 
 /**
- * How long a presence member survives without a heartbeat (plan 0028, section
- * 2.2).
+ * The presence store's layout, and the liveness rule that reads it.
  *
- * This is the answer to "a pod was OOM killed and never ran a disconnect
- * handler; how long do its users linger in the room". Ninety seconds against a
- * thirty second heartbeat gives two missed beats of slack, so an ordinary
- * garbage collection pause or a brief Redis blip never evicts a live pod's
- * users, while a genuinely dead one is gone well inside two minutes.
+ * Re exported rather than defined here since plan 0053, section 2. The gateway
+ * now reads the basket room to answer how many people are in a shop, so the keys
+ * and the window are held by two services and belong in `platform`, beside the
+ * Redis client both of them use. Everything in this service goes on importing
+ * them from here.
  *
- * Shortening it makes presence more responsive to crashes and more likely to
- * flap; lengthening it does the reverse. Move it with the heartbeat, never
- * alone: the useful quantity is the ratio.
+ * The ratio is the useful quantity: ninety seconds against a thirty second
+ * heartbeat gives two missed beats of slack, so an ordinary garbage collection
+ * pause never evicts a live pod's users while a genuinely dead one is gone well
+ * inside two minutes. Move them together, never one alone.
  */
-export const PRESENCE_TTL_MS = 90_000;
-
-/** How often a pod re scores the members it is responsible for. */
-export const PRESENCE_HEARTBEAT_MS = 30_000;
-
-/**
- * Expiry on the room keys themselves, as distinct from the per member liveness
- * above. Members are pruned by score, so this only collects a room that nobody
- * has touched at all since well after the last member should have gone. It is
- * generous on purpose: it is a garbage collector, not a correctness mechanism.
- */
-export const PRESENCE_KEY_TTL_SECONDS = 3_600;
+export {
+  generatedListPresenceKey,
+  listEditorsKey,
+  listViewersKey,
+  PRESENCE_HEARTBEAT_MS,
+  PRESENCE_KEY_TTL_SECONDS,
+  PRESENCE_TTL_MS,
+  zonePresenceKey,
+} from '@portfolio/luna-shopper/platform';
 
 /**
  * How long a cached access decision stands with no event to invalidate it (plan
@@ -130,9 +127,3 @@ export const listAccessKey = (listId: string) => `access:list:${listId}`;
  */
 export const zoneListsAccessKey = (zoneId: string) =>
   `access:zonelists:${zoneId}`;
-
-export const zonePresenceKey = (zoneId: string) => `presence:zone:${zoneId}`;
-export const listViewersKey = (listId: string) =>
-  `presence:list:${listId}:viewers`;
-export const listEditorsKey = (listId: string) =>
-  `presence:list:${listId}:editors`;

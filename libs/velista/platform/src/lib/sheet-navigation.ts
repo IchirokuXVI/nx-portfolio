@@ -1,6 +1,7 @@
 import { Location } from '@angular/common';
 import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
+import { AppHistory } from './app-history';
 
 /**
  * How a sheet leaves the screen, so the back button never brings it back.
@@ -20,15 +21,17 @@ import { Router } from '@angular/router';
 export class SheetNavigation {
   private readonly _router = inject(Router);
   private readonly _location = inject(Location);
+  private readonly _history = inject(AppHistory);
 
   /**
    * Cancel, Escape, the scrim, the back button itself, and a save that returns to the
    * page the sheet was covering.
    *
-   * `fallbackUrl` is that page, and it is used only when this sheet is the first thing
-   * the document navigated to: its URL was opened directly, or the tab was reloaded
-   * with the sheet on screen. There is nothing to pop in that case, so the sheet's
-   * entry is replaced instead, which keeps it out of the stack there too.
+   * `fallbackUrl` is that page, and it is used when this sheet's entry is the one the
+   * document loaded on: its URL was opened directly, or the tab was reloaded with the
+   * sheet on screen. Nothing this app wrote is behind it, and what is behind it is
+   * another site, so the sheet's entry is replaced instead. That keeps the sheet out
+   * of the stack there too and keeps the exit inside velista.
    */
   async dismiss(fallbackUrl: string): Promise<void> {
     if (this._openedOverAPage()) {
@@ -54,18 +57,11 @@ export class SheetNavigation {
   /**
    * Whether there is an entry behind this one that this document put there.
    *
-   * The router stamps every history entry with the id of the navigation that wrote it,
-   * counting from one, so an id above one means this document navigated at least once
-   * before arriving here and `back` returns to that. Everything else reads as no: a
-   * null state after a cold load, and any entry this app did not write. Being wrong in
-   * that direction costs a replaced entry, while being wrong the other way would send
-   * somebody out of the app.
+   * Shared with the pages' own back button, which asks the same question for the same
+   * reason (`PageNavigation`). Being wrong here costs a replaced entry, while being
+   * wrong the other way would send somebody out of the app.
    */
   private _openedOverAPage(): boolean {
-    const state = this._location.getState() as {
-      navigationId?: unknown;
-    } | null;
-
-    return typeof state?.navigationId === 'number' && state.navigationId > 1;
+    return this._history.hasEntryBehind();
   }
 }

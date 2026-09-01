@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { context as otelContext } from '@opentelemetry/api';
 import {
   DOMAIN_EVENT_STREAM_SUBJECTS,
+  generatedListRoom,
   listRoom,
   RealtimeEvent,
   userRoom,
@@ -382,6 +383,12 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     }
     for (const userId of envelope.userIds ?? []) {
       rooms.push(userRoom(userId));
+    }
+    // A shared basket (plan 0051, section 7). The fourth audience, and the one
+    // whose members are participants rather than users, which is the only address
+    // that can reach a guest at all.
+    if (envelope.generatedListId) {
+      rooms.push(generatedListRoom(envelope.generatedListId));
     }
     return rooms;
   }

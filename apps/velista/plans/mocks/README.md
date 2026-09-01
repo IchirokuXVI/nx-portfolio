@@ -12,6 +12,10 @@ on top of them, and the page built from both.
 | `account/` | `0015` the account page: your name, your email, and the two ways out | https://claude.ai/code/artifact/724e98ef-0b68-4d62-a19a-3ea29275af36 |
 | `assistant/` | `0032` the chat panel where search was, and backend `0039` behind it | https://claude.ai/code/artifact/0fedd982-86de-47c5-99e1-2458dd04cf2f |
 | `install/` | `0033` installing the app: the page, the account row, and the invite | https://claude.ai/code/artifact/21a89b1f-e8b5-4800-b392-9c4b4670a70c |
+| `line/` | `0043` the line is a quantity: the reel, the indicators, and the histories | https://claude.ai/code/artifact/58c83512-3899-4200-bb2b-464c805084fd |
+| `basket/` | `0044` the shared basket: joining, settling, and the people you send it to | https://claude.ai/code/artifact/bdc42e90-243f-4cdd-aaf4-54ca73d12ef6 |
+| `shopping-lists/` | `0045` your shopping list: the card, the sheet, and the history | https://claude.ai/code/artifact/4e6d5569-dd04-4a77-a46a-8aff2e051cd9 |
+| `profiles/` | `0046` shopping profiles: where you shop, per profile | https://claude.ai/code/artifact/8c20e218-365e-45ad-a401-e96b4ed1252d |
 | `brand/` | The mark itself. Source of truth for both, see below | |
 
 ## How a folder is put together

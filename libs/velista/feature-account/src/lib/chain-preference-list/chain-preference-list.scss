@@ -1,0 +1,92 @@
+:host {
+  display: block;
+}
+
+.label {
+  display: block;
+  margin-block-end: var(--app-space-3);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.card {
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-4);
+  border-block-start: 1px solid var(--app-border-subtle);
+  cursor: pointer;
+
+  &:first-child {
+    border-block-start: none;
+  }
+
+  // The focus ring goes on the row rather than on the box, because the row is what the
+  // keyboard is on: the checkbox inside it is what carries the focus, and a ring drawn
+  // around a 20px box inside a 44px row reads as the wrong thing being focused.
+  &:has(.checkbox:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// Excluded: struck through, dimmed, and labelled with the word. Three signals, so
+// removing the colour removes nothing (section 7).
+.excluded {
+  .name {
+    color: var(--app-text-muted);
+    text-decoration: line-through;
+  }
+}
+
+.checkbox {
+  flex: none;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
+}
+
+.name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mark {
+  flex: none;
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.hint {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.error {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}

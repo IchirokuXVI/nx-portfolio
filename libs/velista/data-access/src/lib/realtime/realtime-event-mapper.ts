@@ -1,10 +1,18 @@
 import {
+  toBasketLine,
+  toBasketParticipant,
+  toBasketPresenceEntry,
+} from '../mapping/basket-mappers';
+import {
   toComment,
+  toGeneratedListFromView,
   toLine,
+  toLineSettlement,
   toListPermissions,
   toListPresence,
   toMembership,
   toShoppingList,
+  toShoppingProfile,
   toZone,
   toZonePresence,
 } from '../mapping/mappers';
@@ -170,6 +178,53 @@ export function toRealtimeEvent(
       return line === null ? null : { type: name, line };
     }
 
+    case 'line.settled': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      // Both halves or neither. Half a settle is not something any consumer can act
+      // on: a line with no settlement leaves a history stale, and a settlement with
+      // no line leaves the row showing a quantity that has moved.
+      const line = toLine(payload['line']);
+      const settlement = toLineSettlement(payload['settlement']);
+      return line === null || settlement === null
+        ? null
+        : { type: name, line, settlement };
+    }
+
+    case 'line.claimChanged': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const zoneId = str(payload['zoneId']);
+      if (zoneId === null) {
+        return null;
+      }
+      // Every entry or none of the malformed ones: a ref missing either half names
+      // no row this store can find, so it is dropped rather than carried as a hole.
+      const lines = mapArray(payload['lines'], (entry) => {
+        if (!isRecord(entry)) {
+          return null;
+        }
+        const lineId = str(entry['lineId']);
+        const listId = str(entry['listId']);
+        return lineId === null || listId === null ? null : { lineId, listId };
+      });
+      if (lines.length === 0) {
+        return null;
+      }
+      // An absent `claimed` reads as a release, and that is the safe direction: an
+      // indicator that says somebody is shopping when nobody is would be read as the
+      // line having been dealt with.
+      return {
+        type: name,
+        zoneId,
+        claimed: payload['claimed'] === true,
+        claimedByUserId: nullableStr(payload['claimedByUserId']),
+        lines,
+      };
+    }
+
     case 'line.reordered': {
       if (!isRecord(payload)) {
         return null;
@@ -216,6 +271,90 @@ export function toRealtimeEvent(
       return mergeId === null || zoneId === null
         ? null
         : { type: name, mergeId, zoneId };
+    }
+
+    case 'profiles.changed': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+
+      // `mapArray` drops a profile this build cannot read, which is right here for the
+      // reason it is right everywhere: one malformed row must not cost the user the
+      // whole list. A payload whose `profiles` is missing altogether yields an empty
+      // array, and that is dropped rather than applied: the server never sends one, and
+      // applying it would delete every profile on screen on the strength of a body this
+      // build could not read.
+      const profiles = mapArray(payload['profiles'], toShoppingProfile);
+      return profiles.length === 0 ? null : { type: name, profiles };
+    }
+
+    case 'generatedList.created':
+    case 'generatedList.updated': {
+      // The payload is the whole basket and only its summary is kept. A body this
+      // build cannot read is dropped and counted rather than applied, which for these
+      // two means the card keeps whatever the last read said instead of losing its
+      // counts to an unreadable event.
+      const list = toGeneratedListFromView(payload);
+      return list === null ? null : { type: name, list };
+    }
+
+    case 'generatedList.lineSettled':
+    case 'generatedList.lineUpdated': {
+      // **Both halves, because there are two listeners with different needs.** The
+      // basket id is what `GeneratedListStore` wants: it holds summaries, and a
+      // settled line cannot say whether `settledLineCount` should move, so it refetches.
+      // The line is what the basket screen wants: it holds the lines, so one merge by
+      // id moves one row with no request at all.
+      //
+      // A line this build cannot read is null rather than fatal to the event. The id is
+      // still readable, so the store that only wanted the id is unaffected, and the one
+      // that wanted the line falls back to its refetch.
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const movedIn = str(payload['generatedListId']);
+      return movedIn === null
+        ? null
+        : {
+            type: name,
+            generatedListId: movedIn,
+            line: toBasketLine(payload['line']),
+          };
+    }
+
+    case 'generatedList.participantJoined':
+    case 'generatedList.participantLeft': {
+      // The bare participant view, with no basket id on it, and it needs none: it
+      // arrives only on a connection pinned to one basket.
+      const participant = toBasketParticipant(payload);
+      return participant === null ? null : { type: name, participant };
+    }
+
+    case 'generatedList.deleted': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const generatedListId = str(payload['id']);
+      return generatedListId === null ? null : { type: name, generatedListId };
+    }
+
+    case 'presence.generatedListUpdated': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const presentIn = str(payload['generatedListId']);
+      if (presentIn === null) {
+        return null;
+      }
+      // `mapArray` drops an entry this build cannot read rather than the whole set:
+      // presence already under reports by design, so one unreadable face is the same
+      // kind of wrong it is already allowed to be, and losing the message would empty
+      // a shop that is full.
+      return {
+        type: name,
+        generatedListId: presentIn,
+        present: mapArray(payload['present'], toBasketPresenceEntry),
+      };
     }
 
     case 'presence.zoneUpdated': {

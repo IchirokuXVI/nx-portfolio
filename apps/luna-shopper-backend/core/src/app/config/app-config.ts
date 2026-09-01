@@ -41,6 +41,24 @@ export const coreValidationSchema = Joi.object({
   ZONE_REAPER_BATCH: Joi.number().integer().min(1).default(200),
 
   /**
+   * How long a basket nobody has shopped goes on claiming its lines (plan 0052,
+   * section 4.1).
+   *
+   * A basket that is neither finished nor archived holds its lines forever, so
+   * somebody who generates one on Tuesday and does not go shopping leaves the
+   * household reading "Ana is buying this" for a month. Deriving the claim rather
+   * than storing it turns that into a question about the basket, and this is the
+   * answer: a live basket older than this window claims nothing.
+   *
+   * Plan 0052 section 4.1 asks for the retention window plan 0050 section 7
+   * defines, so that there is one number rather than two that can disagree. That
+   * section left retention **unbounded**, so there is no number to borrow and this
+   * is the single definition: a cap or an age based archive, when one lands,
+   * should read this rather than declare a second one beside it.
+   */
+  GENERATED_LIST_CLAIM_WINDOW: Joi.string().default('7d'),
+
+  /**
    * The voice comment caps (plan 0045, section 6).
    *
    * They are here as well as on the gateway on purpose, and the two are not a
@@ -79,6 +97,10 @@ export interface CoreConfig {
     graceMs: number;
     intervalMs: number;
     batchSize: number;
+  };
+  generatedList: {
+    /** A live basket older than this claims nothing (plan 0052, section 4.1). */
+    claimWindowMs: number;
   };
   voiceComment: {
     maxBytes: number;
@@ -119,6 +141,11 @@ export const coreConfiguration = registerAs(
       graceMs: parseDurationMs(process.env.ZONE_DELETION_GRACE as string),
       intervalMs: parseDurationMs(process.env.ZONE_REAPER_INTERVAL as string),
       batchSize: Number(process.env.ZONE_REAPER_BATCH),
+    },
+    generatedList: {
+      claimWindowMs: parseDurationMs(
+        process.env.GENERATED_LIST_CLAIM_WINDOW as string
+      ),
     },
     voiceComment: {
       maxBytes: Number(

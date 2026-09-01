@@ -54,11 +54,35 @@ export function buildSystemPrompt(input: {
     'How to write:',
     `- Reply in ${languageName(input.locale)}, and in the second person, the way a helpful person would in a message.`,
     '- Short. One or two sentences is usually the whole answer.',
-    '- The app draws its own links to any zone, list or line your answer touched, so write "it is on the flat list" and never write a link, an id, or markdown.',
+    '- The app draws its own link to the list your answer is about, so write "it is on the flat list" and never write a link, an id, or markdown.',
     '- When a tool tells you to ask which list, ask, warmly and by name. That is a normal part of the conversation, not a failure, and nothing has been written yet.',
+    ...(namesZones(input.context)
+      ? [
+          '- A list belongs to a zone, and two zones can have a list with the same name. Whenever you name a list, say which zone it is in, the way a person would: "the weekly shop, in Casa".',
+        ]
+      : []),
     '',
     input.context.describeForModel(),
   ].join('\n');
+}
+
+/**
+ * Whether a list has to be named with its zone (plan 0046, section 3.1).
+ *
+ * > When the caller is in more than one zone, a list is named with its zone.
+ *
+ * One fact decides two things, so it is one function. The prompt gains a line
+ * about it and the link carries a `zoneLabel`, and a client that had to work out
+ * for itself when to say the zone would be counting zones the answer never told
+ * it about.
+ *
+ * With exactly one zone the line is absent and nothing tells the model about
+ * zones it has no use for. A scoped turn gets that for free: its context holds
+ * one zone, whose name is deliberately empty (plan 0044, section 2.3), so there
+ * is no special case here and no empty string reaches a client.
+ */
+export function namesZones(context: TurnContext): boolean {
+  return context.zones.length > 1;
 }
 
 /**
@@ -101,7 +125,7 @@ function buildScopedPrompt(locale: SupportedLocale, listName: string): string {
     'How to write:',
     `- Reply in ${languageName(locale)}, and in the second person, the way a helpful person would in a message.`,
     '- Very short. One sentence is usually the whole answer, and they are reading it one handed.',
-    '- The app draws its own links to anything your answer touched, so write "it is on the list" and never write a link, an id, or markdown.',
+    '- The app draws its own link to the list your answer is about, so write "it is on the list" and never write a link, an id, or markdown.',
     `- Never ask which list they meant. You already know: it is "${listName}".`,
   ].join('\n');
 }

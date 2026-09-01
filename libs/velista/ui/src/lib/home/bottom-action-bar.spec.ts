@@ -5,11 +5,13 @@ import { BottomActionBar } from './bottom-action-bar';
 /**
  * Plan 0019, section 4. The primary action on the dashboard was **New list**, which
  * called a method that did nothing, because a list belongs to a zone and the dashboard
- * is the one screen with no zone in scope. It is now **Get shopping list**.
+ * is the one screen with no zone in scope. It became **Get shopping list**.
  *
- * It was disabled with a permanent caption underneath. Plan 0025 makes it live and
- * moves the caption behind the tap, so the assertions worth keeping are that nothing
- * says **Coming soon** until somebody asks, and that asking is what says it.
+ * It was disabled with a permanent **Coming soon** caption; `0025` made it live and
+ * moved the caption behind the tap; **plan 0045 built the feature**, so the caption is
+ * gone along with the state that held it. What is left to assert is that the button is
+ * live, that it says nothing about being unbuilt, and that it raises the output the
+ * dashboard turns into a route.
  */
 async function render(): Promise<ComponentFixture<BottomActionBar>> {
   TestBed.resetTestingModule();
@@ -45,7 +47,7 @@ describe('BottomActionBar', () => {
     );
   });
 
-  it('says nothing about it being unbuilt until somebody asks', async () => {
+  it('is live, with nothing hedging it', async () => {
     const fixture = await render();
 
     expect(primary(fixture).disabled).toBe(false);
@@ -55,33 +57,32 @@ describe('BottomActionBar', () => {
     expect(primary(fixture).getAttribute('aria-describedby')).toBeNull();
   });
 
-  it('answers the tap, where a screen reader will hear it', async () => {
+  it('raises the output the dashboard routes to the sheet', async () => {
     const fixture = await render();
 
+    let asked = 0;
+    fixture.componentInstance.getList.subscribe(() => (asked += 1));
+
     primary(fixture).click();
-    fixture.detectChanges();
 
-    const describedBy = primary(fixture).getAttribute('aria-describedby');
-    expect(describedBy).not.toBeNull();
-
-    const reason = (fixture.nativeElement as HTMLElement).querySelector(
-      `#${describedBy}`
-    );
-    expect(reason?.textContent?.trim()).toBe('home.action.generateListSoon');
-    // A live region, because the answer appears with nothing else on screen moving.
-    expect(reason?.getAttribute('role')).toBe('status');
+    expect(asked).toBe(1);
   });
 
-  it('keeps the answer once given, rather than timing it out', async () => {
+  // The caption is gone, and so is the signal behind it (plan 0045). Asserted rather
+  // than merely deleted, because "no Coming soon anywhere" is the visible half of
+  // shipping the feature, and a reintroduced caption would otherwise pass silently.
+  it('never says Coming soon, even after the tap', async () => {
     const fixture = await render();
 
     primary(fixture).click();
-    primary(fixture).click();
     fixture.detectChanges();
 
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).not.toContain('generateListSoon');
     expect(
-      (fixture.nativeElement as HTMLElement).querySelectorAll('.soon')
-    ).toHaveLength(1);
+      (fixture.nativeElement as HTMLElement).querySelector('.soon')
+    ).toBeNull();
+    expect(primary(fixture).getAttribute('aria-describedby')).toBeNull();
   });
 
   it('leaves the join-by-code action working', async () => {

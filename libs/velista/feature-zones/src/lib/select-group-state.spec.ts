@@ -35,7 +35,7 @@ function list(id: string): ShoppingListSummary {
     name: 'Weekly shop',
     createdByUserId: 'user-me',
     lineCount: 12,
-    readyCount: 7,
+    wantedCount: 7,
     autoApproveLines: false,
     // The group page draws no permission badge (plan 0030, section 11), so any
     // non-empty set does: what matters here is that a card renders, not what it permits.
@@ -180,7 +180,7 @@ describe('selectGroupState', () => {
 
       expect(state).toMatchObject({
         kind: 'loaded',
-        lists: [{ id: 'list-1', lineCount: 12, readyCount: 7 }],
+        lists: [{ id: 'list-1', lineCount: 12, wantedCount: 7 }],
       });
     });
 

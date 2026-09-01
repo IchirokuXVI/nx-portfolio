@@ -57,7 +57,7 @@ export class ListHeader {
    * The guard stays anyway, so the computed is safe to read from anywhere.
    */
   readonly percent = computed(() => {
-    const { readyCount, lineCount } = this.header();
-    return lineCount === 0 ? 0 : Math.round((readyCount / lineCount) * 100);
+    const { wantedCount, lineCount } = this.header();
+    return lineCount === 0 ? 0 : Math.round((wantedCount / lineCount) * 100);
   });
 }

@@ -1,6 +1,5 @@
 import {
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
   MembershipStatus,
   ZoneRole,
@@ -211,8 +210,8 @@ describeIntegration('zone summary (real Postgres)', () => {
       })
     );
 
-    // 3 lines on Groceries: 2 READY (one of them still awaiting approval, to
-    // prove readyCount ignores approvalStatus), 1 PENDING.
+    // 3 lines on Groceries: 2 wanted (one of them still awaiting approval, to
+    // prove wantedCount ignores approvalStatus), 1 the household is stocked on.
     const lineRepo = dataSource.getRepository(ListLine);
     await lineRepo.save([
       lineRepo.create({
@@ -221,25 +220,25 @@ describeIntegration('zone summary (real Postgres)', () => {
         quantity: 1,
         position: 1,
         approvalStatus: LineApprovalStatus.APPROVED,
-        status: LineStatus.READY,
         createdByUserId: ids.owner,
       }),
       lineRepo.create({
         listId: groceries.id,
         content: 'Bread',
-        quantity: 1,
+        quantity: 2,
         position: 2,
         approvalStatus: LineApprovalStatus.PENDING,
-        status: LineStatus.READY,
         createdByUserId: ids.owner,
       }),
+      // Zero, which is a line the household knows about and does not currently
+      // need. It is not deleted and it still counts towards `lineCount` (plan
+      // 0047, section 2.2).
       lineRepo.create({
         listId: groceries.id,
         content: 'Eggs',
-        quantity: 1,
+        quantity: 0,
         position: 3,
         approvalStatus: LineApprovalStatus.APPROVED,
-        status: LineStatus.PENDING,
         createdByUserId: ids.owner,
       }),
     ]);
@@ -473,16 +472,18 @@ describeIntegration('zone summary (real Postgres)', () => {
       }
     });
 
-    it('counts lines, and counts READY without looking at approvalStatus', async () => {
+    it('counts lines, and counts what is wanted without looking at approvalStatus', async () => {
       const view = await zones.get({ userId: ids.owner, zoneId: ids.zone });
       const groceries = view.lists.find((l) => l.id === groceriesId);
 
       expect(groceries?.lineCount).toBe(3);
-      // Two READY lines, one of which is still awaiting approval.
-      expect(groceries?.readyCount).toBe(2);
-      expect(groceries?.readyCount).toBe(
+      // Two wanted lines, one of which is still awaiting approval, and one of
+      // which asks for two. Lines and not units, so this is 2 rather than 3
+      // (plan 0047, section 9).
+      expect(groceries?.wantedCount).toBe(2);
+      expect(groceries?.wantedCount).toBe(
         await naive(
-          `SELECT count(*) FROM "list_lines" WHERE "listId" = $1 AND "status" = 'READY'`,
+          `SELECT count(*) FROM "list_lines" WHERE "listId" = $1 AND "quantity" > 0`,
           [groceriesId]
         )
       );
@@ -495,7 +496,7 @@ describeIntegration('zone summary (real Postgres)', () => {
         id: hardwareId,
         name: 'Hardware',
         lineCount: 0,
-        readyCount: 0,
+        wantedCount: 0,
       });
     });
   });
@@ -813,7 +814,9 @@ describeIntegration('zone summary (real Postgres)', () => {
         'ix_memberships_zone_status',
         'ix_memberships_user_status',
         'ix_memberships_zone_pending_created',
-        'ix_lines_list_status',
+        // `(listId, quantity)` since plan 0047: the second list count is what
+        // the household wants rather than what somebody ticked.
+        'ix_lines_list_quantity',
         'ix_lists_zone_updated',
       ]) {
         expect(byName.has(name)).toBe(true);
@@ -823,6 +826,7 @@ describeIntegration('zone summary (real Postgres)', () => {
       for (const dropped of [
         'ix_membership_user',
         'ix_lines_list',
+        'ix_lines_list_status',
         'ix_lists_zone',
       ]) {
         expect(byName.has(dropped)).toBe(false);

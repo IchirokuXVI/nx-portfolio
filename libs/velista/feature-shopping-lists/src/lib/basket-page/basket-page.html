@@ -1,0 +1,207 @@
+<main class="page">
+  <!--
+    The destination header every screen without an app bar draws, written the same
+    way the history's is down to the glyph's class name: the two are the same bar,
+    and a reader moving between them must not see it change size or weight. It
+    used to be a hand drawn one, with a `&larr;` entity where the chevron goes and
+    the title a step small, which is the mistake `0002` section 6 records.
+  -->
+  <header class="bar">
+    <!--
+      No back control for a guest: there is nowhere back to go. They arrived on a
+      link and this screen is the whole app to them (section 4.1).
+    -->
+    @if (isOwner()) {
+      <button
+        (click)="back()"
+        [attr.aria-label]="'basket.back' | rokuT"
+        class="back"
+        type="button"
+      >
+        <lib-chevron-left-icon class="back-glyph" />
+      </button>
+    }
+
+    <h1 class="title">{{ title() }}</h1>
+
+    <!--
+      Who is holding this basket open **right now**, guests marked by a dashed ring.
+      No sentence: a row of faces does the job, and the word "anonymous" appears
+      nowhere in this product (section 5.1).
+
+      Nothing at all for nobody, which is `ListViewers`' rule and matters more here:
+      presence empties the moment the socket drops, and a zero drawn where a crowd
+      was would be a claim about the shop rather than about the connection. The
+      people sheet is still reachable from the header when there is somebody, and
+      it answers the other question — everybody who *can* open this basket.
+    -->
+    @if (faces().length > 0) {
+      <button
+        (click)="openPeople()"
+        [attr.aria-label]="'basket.people.open' | rokuT"
+        class="faces"
+        type="button"
+      >
+        @for (face of faces(); track face.id) {
+          <span [class.is-guest]="face.isGuest" class="face">
+            {{ face.initials }}
+          </span>
+        }
+        @if (overflow() > 0) {
+          <span class="face is-overflow">
+            {{ 'basket.people.more' | rokuT: { count: overflow() } }}
+          </span>
+        }
+      </button>
+    } @else if (hasPeople()) {
+      <!--
+        Nobody is connected, or the socket is not up. The sheet still has an answer
+        worth reading — everybody who *can* open this basket — so the way into it
+        stays, drawn as a plain control that claims nothing about who is here. The
+        faces above are the claim; this is the door.
+      -->
+      <button
+        (click)="openPeople()"
+        [attr.aria-label]="'basket.people.open' | rokuT"
+        class="people"
+        type="button"
+      >
+        <lib-person-icon class="people-glyph" />
+      </button>
+    }
+
+    <!--
+      The one thing that stays the owner's, even for a registered participant who
+      passes the all or nothing rule everywhere else (section 4.1).
+    -->
+    @if (isOwner()) {
+      <button
+        (click)="openShare()"
+        [attr.aria-label]="'basket.share.open' | rokuT"
+        class="share"
+        type="button"
+      >
+        <lib-share-icon class="share-glyph" />
+      </button>
+    }
+  </header>
+
+  <!--
+    Which of the two screens this is. A live basket and a refetching one look
+    identical while nobody else is shopping and completely different the moment
+    somebody is, so the difference is said rather than left to be discovered
+    (plan 0048, section 5). Drawn exactly as `0010` draws it on a group and `0022`
+    on a list, because the situation is the same one.
+
+    The removal is the sharper case and comes first: the screen does not close
+    under somebody standing in a shop with a trolley, it tells them, and what is
+    already on it stays readable (section 7).
+  -->
+  @if (revoked()) {
+    <p class="stale" role="status">
+      <lib-offline-icon class="stale-glyph" />
+      <span>{{ 'basket.revoked.title' | rokuT }}</span>
+    </p>
+  } @else if (!live()) {
+    <p class="stale" role="status">
+      <lib-offline-icon class="stale-glyph" />
+      <span>{{ 'basket.notLive' | rokuT }}</span>
+    </p>
+  }
+
+  @switch (state()) {
+    @case ('loading') {
+      <!--
+        The shape of the list rather than a spinner, so the page does not jump
+        when the lines land. Announced, because a page that is silently empty for
+        a second is a page somebody thinks is broken.
+      -->
+      <div aria-live="polite" class="skeleton" role="status">
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span class="visually-hidden">{{ 'basket.loading' | rokuT }}</span>
+      </div>
+    }
+
+    @case ('failed') {
+      <div class="notice" role="alert">
+        <p class="notice-title">{{ 'basket.failed' | rokuT }}</p>
+        <button (click)="retry()" class="notice-action" type="button">
+          {{ 'basket.retry' | rokuT }}
+        </button>
+      </div>
+    }
+
+    <!--
+      Removed while their phone was in their hand. It says so, and it offers the
+      one thing that might work: the link they still have. It does not offer a
+      retry, because the credential is gone and trying again would fail the same
+      way (backend 0051, section 3.3).
+    -->
+    @case ('revoked') {
+      <div class="notice" role="alert">
+        <p class="notice-title">{{ 'basket.revoked.title' | rokuT }}</p>
+        <p class="notice-body">{{ 'basket.revoked.body' | rokuT }}</p>
+      </div>
+    }
+
+    @case ('needsJoin') {
+      <div class="notice" role="status">
+        <p class="notice-title">{{ 'basket.join.dead' | rokuT }}</p>
+        <p class="notice-body">{{ 'basket.join.deadBody' | rokuT }}</p>
+      </div>
+    }
+
+    @default {
+      @if (lines().length === 0) {
+        <div class="empty">
+          <p class="empty-title">{{ 'basket.empty' | rokuT }}</p>
+          <p class="empty-body">{{ 'basket.emptyHint' | rokuT }}</p>
+        </div>
+      } @else {
+        <!--
+          "got" means bought. A line closed because the shop had none is counted
+          separately rather than folded in, because folding it in would claim a
+          purchase that never happened.
+        -->
+        <p class="progress">
+          {{
+            'basket.progress'
+              | rokuT: { done: progress().done, total: progress().total }
+          }}
+          @if (progress().unavailable > 0) {
+            <span class="progress-unavailable">
+              {{
+                'basket.progressUnavailable'
+                  | rokuT: { count: progress().unavailable }
+              }}
+            </span>
+          }
+        </p>
+
+        <ul class="lines">
+          @for (line of lines(); track line.id) {
+            <li>
+              <lib-basket-line-row
+                (open)="openLine(line)"
+                [busy]="isBusy(line)"
+                [line]="line"
+                [listNames]="listNames()"
+                [meId]="meId()"
+                [people]="participantsById()"
+                [products]="products()"
+              />
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+</main>
+
+<!--
+  The sheets, as children of the page they cover (rule E1, plan 0008): the page
+  keeps its scroll underneath and Android's back button dismisses them.
+-->
+<router-outlet />

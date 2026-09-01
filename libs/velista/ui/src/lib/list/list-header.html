@@ -57,7 +57,7 @@
   <p class="progress-line">
     {{
       'list.header.ready'
-        | rokuT: { ready: header().readyCount, total: header().lineCount }
+        | rokuT: { ready: header().wantedCount, total: header().lineCount }
     }}
   </p>
 

@@ -3,6 +3,7 @@ import { MessagingModule } from '../messaging/messaging.module';
 import { CommentTranscriptionService } from './comment-transcription.service';
 import {
   CommentsController,
+  ItemHistoryController,
   LinesController,
   ListsController,
   ZoneListsController,
@@ -24,6 +25,9 @@ import { VoiceRecordingInterceptor } from './voice-recording.interceptor';
     ListsController,
     LinesController,
     CommentsController,
+    // One product's purchase history, keyed on a catalog item and served by core
+    // (plan 0047, section 6.2).
+    ItemHistoryController,
   ],
   providers: [CommentTranscriptionService, VoiceRecordingInterceptor],
 })

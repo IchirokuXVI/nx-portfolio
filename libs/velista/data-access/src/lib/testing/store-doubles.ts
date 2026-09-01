@@ -1,10 +1,12 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
+  CatalogItem,
   Comment,
+  GeneratedListSummary,
   Identity,
   Line,
   LineApprovalStatus,
-  LineStatus,
+  LineSettlement,
   Membership,
   MembershipStatus,
   MyZone,
@@ -12,10 +14,15 @@ import type {
   PresenceUser,
   ProfileLoad,
   SessionTokens,
+  SettlementOutcome,
+  ShoppingListsLoad,
   ShoppingListSummary,
+  ShoppingProfile,
+  Supermarket,
   UserKind,
   UsernameScope,
   UserProfile,
+  WriteShoppingProfileRequest,
 } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
@@ -26,6 +33,8 @@ import {
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
+import { ItemNames } from '../catalog/item-names';
+import { GeneratedListStore } from '../generated-lists/generated-list-store';
 import { LineStore, type LineLoadState } from '../lines/line-store';
 import { ListStore, type ListLoadState } from '../lists/list-store';
 import { MemberNames } from '../memberships/member-names';
@@ -34,6 +43,11 @@ import {
   type MembershipServiceI,
 } from '../memberships/membership-service';
 import { PresenceStore } from '../presence/presence-store';
+import {
+  ShoppingProfileStore,
+  type FieldSaveState,
+  type ProfileField,
+} from '../profiles/shopping-profile-store';
 import {
   ZoneStore,
   type ZoneDeparture,
@@ -556,7 +570,7 @@ export function fakeListStore(options: FakeListStateOptions = {}) {
         name,
         createdByUserId: 'u1',
         lineCount: 0,
-        readyCount: 0,
+        wantedCount: 0,
         autoApproveLines: false,
         sharedWithZone: shareWithZone,
         // All four, because the person who just created a list holds all four on it
@@ -592,6 +606,31 @@ export interface FakeLineStateOptions {
   readonly complete?: boolean;
   /** What the next write answers, so a spec can drive the failure paths. */
   readonly writeOutcome?: 'succeeded' | 'failed' | 'overwritten';
+  /**
+   * Seeded histories, keyed by line id.
+   *
+   * A record rather than a map because a spec writes it as a literal, and **absent
+   * means unread** rather than empty, which is the distinction the sheet draws a
+   * skeleton from.
+   */
+  readonly settlements?: Readonly<Record<string, readonly LineSettlement[]>>;
+  readonly itemSettlements?: Readonly<
+    Record<string, readonly LineSettlement[]>
+  >;
+  /**
+   * A further page of either history, keyed by line id (plan 0047, section 4).
+   *
+   * Present means `hasMore` is true and one press will append these rows; absent means
+   * the store holds the whole history and the control is not drawn.
+   */
+  readonly moreSettlements?: Readonly<
+    Record<string, readonly LineSettlement[]>
+  >;
+  readonly moreItemSettlements?: Readonly<
+    Record<string, readonly LineSettlement[]>
+  >;
+  /** Seeded claims, keyed by line id, valued by the user id doing the buying. */
+  readonly claims?: Readonly<Record<string, string>>;
 }
 
 /** One write a page asked for, so a spec can assert what was sent and in what order. */
@@ -600,20 +639,66 @@ export type LineWriteCall =
       readonly kind: 'add';
       readonly content: string;
       readonly quantity: number;
+      /**
+       * The products the composer attached, or undefined for a free text line.
+       *
+       * Recorded because "choosing a group attaches all of its products" is an
+       * acceptance criterion in its own right (velista plan 0043, section 8), and
+       * the only place it can be observed is the arguments of this call.
+       */
+      readonly itemIds?: readonly string[];
     }
+  /**
+   * A quantity adjustment, as the **delta** that was sent.
+   *
+   * The delta rather than the resulting number, because that is what the page is
+   * responsible for computing and therefore the thing worth asserting: a reel that
+   * sent two increments where it should have sent one settled adjustment is a defect
+   * a recorded end state would hide (velista plan 0043, section 4.1).
+   */
   | {
-      readonly kind: 'status';
+      readonly kind: 'quantity';
       readonly lineId: string;
-      readonly status: LineStatus;
+      readonly delta: number;
+    }
+  /** A settle, with what it claimed happened. */
+  | {
+      readonly kind: 'settle';
+      readonly lineId: string;
+      readonly outcome: SettlementOutcome;
+      readonly quantity?: number;
+      readonly itemId?: string;
     }
   | {
       readonly kind: 'approval';
       readonly lineId: string;
       readonly status: LineApprovalStatus;
     }
-  | { readonly kind: 'update'; readonly lineId: string }
+  /**
+   * An edit, with whatever it changed.
+   *
+   * `itemIds` is recorded for the `add` call's reason one screen further in: the line
+   * page attaches a product by rewriting the whole set (velista plan 0047, section 2),
+   * and "the chosen product was unioned onto the set rather than replacing it" is only
+   * observable in the arguments.
+   */
+  | {
+      readonly kind: 'update';
+      readonly lineId: string;
+      readonly content?: string;
+      readonly itemIds?: readonly string[];
+    }
   | { readonly kind: 'delete'; readonly lineId: string }
-  | { readonly kind: 'reorder'; readonly orderedLineIds: readonly string[] };
+  | { readonly kind: 'reorder'; readonly orderedLineIds: readonly string[] }
+  /**
+   * A further page of a history, asked for by a "show more" (plan 0047, section 4).
+   *
+   * Recorded because the rule under test is that the second page is **asked for**
+   * rather than sliced off something already held: the cross list history is refiltered
+   * by the caller's read access at request time, which only a fresh request can do.
+   */
+  | { readonly kind: 'moreSettlements'; readonly lineId: string }
+  | { readonly kind: 'moreItemSettlements'; readonly lineId: string };
 
 /**
  * A `LineStore` that is simply in the state you asked for.
@@ -645,6 +730,31 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   const commentCounts = signal<ReadonlyMap<string, number>>(new Map());
   /** Newest first, the wire's order, which is the order the real store keeps. */
   const comments = signal<ReadonlyMap<string, readonly Comment[]>>(new Map());
+  /** One line's own history, for the sheet and the page that draw it. */
+  const settlements = signal<ReadonlyMap<string, readonly LineSettlement[]>>(
+    new Map(Object.entries(options.settlements ?? {}))
+  );
+  /**
+   * The page a "show more" would fetch, per line, consumed once (plan 0047, section 4).
+   *
+   * Plain maps rather than signals: nothing reads them, they only decide what the next
+   * press appends, and deleting the entry as it is handed over is what makes `hasMore`
+   * go false at the end of the history exactly as a spent cursor does.
+   */
+  const moreSettlements = new Map<string, readonly LineSettlement[]>(
+    Object.entries(options.moreSettlements ?? {})
+  );
+  const moreItemSettlements = new Map<string, readonly LineSettlement[]>(
+    Object.entries(options.moreItemSettlements ?? {})
+  );
+  /** The cross list history, keyed by line as the real store keys it. */
+  const itemSettlements = signal<
+    ReadonlyMap<string, readonly LineSettlement[]>
+  >(new Map(Object.entries(options.itemSettlements ?? {})));
+  /** Who is out buying what, which arrives on a zone event and never on a read. */
+  const claims = signal<ReadonlyMap<string, string>>(
+    new Map(Object.entries(options.claims ?? {}))
+  );
   const loads = signal(0);
 
   const calls: LineWriteCall[] = [];
@@ -671,6 +781,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         complete: complete(),
         writes: writes(),
         commentCounts: commentCounts(),
+        claims: claims(),
       })),
 
     load: async () => {
@@ -684,9 +795,11 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       listId: string,
       content: string,
       quantity: number,
-      createdByUserId: string
+      createdByUserId: string,
+      _approval: unknown,
+      itemIds?: readonly string[]
     ) => {
-      calls.push({ kind: 'add', content, quantity });
+      calls.push({ kind: 'add', content, quantity, itemIds });
 
       if (outcome === 'failed') {
         return { state: 'failed' as const, error: new Error('add failed') };
@@ -697,10 +810,13 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         listId,
         content,
         quantity,
-        itemId: null,
+        itemIds: [...(itemIds ?? [])],
         position: lines().length + 1,
         approvalStatus: addedApproval,
-        status: 'PENDING',
+        boughtCount: 0,
+        lastSettlementOutcome: null,
+        claimed: false,
+        claimedByUserId: null,
         createdByUserId,
         approvedByUserId: null,
         version: 1,
@@ -709,20 +825,146 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       return { state: 'added' as const, line: added };
     },
 
-    updateLine: async (lineId: string) => {
-      calls.push({ kind: 'update', lineId });
-      return outcome;
-    },
-
-    setStatus: async (lineId: string, status: LineStatus) => {
-      calls.push({ kind: 'status', lineId, status });
-      if (outcome === 'succeeded') {
+    /**
+     * An edit, **applied** rather than only recorded.
+     *
+     * `addQuantity` below has always applied its change, and this did not, which was
+     * fine while every caller only removed a product and checked the call. Velista plan
+     * 0047 section 2 made the page add one, and the rule worth asserting there is what
+     * the resulting set **is**: unioned onto what the line already carries, with a
+     * product that was already on it a no-op rather than a duplicate. A double that
+     * dropped the patch could not state that.
+     */
+    updateLine: async (
+      lineId: string,
+      patch?: { content?: string; itemIds?: readonly string[] }
+    ) => {
+      calls.push({ kind: 'update', lineId, ...patch });
+      if (outcome === 'succeeded' && patch !== undefined) {
         lines.update((current) =>
-          current.map((l) => (l.id === lineId ? { ...l, status } : l))
+          current.map((l) =>
+            l.id === lineId
+              ? {
+                  ...l,
+                  ...(patch.content === undefined
+                    ? {}
+                    : { content: patch.content }),
+                  ...(patch.itemIds === undefined
+                    ? {}
+                    : { itemIds: patch.itemIds }),
+                }
+              : l
+          )
         );
       }
       return outcome;
     },
+
+    addQuantity: async (lineId: string, delta: number) => {
+      calls.push({ kind: 'quantity', lineId, delta });
+      if (outcome === 'succeeded') {
+        lines.update((current) =>
+          current.map((l) =>
+            l.id === lineId
+              ? { ...l, quantity: Math.max(0, l.quantity + delta) }
+              : l
+          )
+        );
+      }
+      return outcome;
+    },
+
+    settle: async (
+      lineId: string,
+      settleOutcome: SettlementOutcome,
+      settleOptions?: { quantity?: number; itemId?: string }
+    ) => {
+      calls.push({
+        kind: 'settle',
+        lineId,
+        outcome: settleOutcome,
+        ...settleOptions,
+      });
+      if (outcome === 'failed') {
+        return { state: 'failed' as const, error: new Error('settle failed') };
+      }
+
+      const bought =
+        settleOutcome === 'BOUGHT' ? (settleOptions?.quantity ?? 1) : 0;
+      let settled: Line | null = null;
+      lines.update((current) =>
+        current.map((l) => {
+          if (l.id !== lineId) {
+            return l;
+          }
+          settled = {
+            ...l,
+            quantity: Math.max(0, l.quantity - bought),
+            boughtCount: l.boughtCount + (settleOutcome === 'BOUGHT' ? 1 : 0),
+            lastSettlementOutcome: settleOutcome,
+          };
+          return settled;
+        })
+      );
+      return settled === null
+        ? { state: 'failed' as const, error: new Error('no such line') }
+        : { state: 'settled' as const, line: settled };
+    },
+
+    loadSettlements: async () => undefined,
+    loadItemSettlements: async () => undefined,
+    settlementsOf: (lineId: string) => settlements().get(lineId),
+    itemSettlementsOf: (lineId: string) => itemSettlements().get(lineId),
+
+    /**
+     * The paging half (velista plan 0047, section 4).
+     *
+     * `hasMore` is stated as a fact about the fixture rather than derived from a
+     * cursor, because a page spec wants to say "there is another page" and press the
+     * button, not to drive two requests and a merge. The real cursor arithmetic is
+     * covered against the real store in its own spec.
+     *
+     * A further page **appends** what the options seeded as `morePage`, which is what
+     * lets a spec assert the rule that matters: page two joins page one rather than
+     * replacing it.
+     */
+    hasMoreSettlements: (lineId: string) =>
+      (moreSettlements.get(lineId)?.length ?? 0) > 0,
+    hasMoreItemSettlements: (lineId: string) =>
+      (moreItemSettlements.get(lineId)?.length ?? 0) > 0,
+    loadMoreSettlements: async (lineId: string) => {
+      calls.push({ kind: 'moreSettlements', lineId });
+      const next = moreSettlements.get(lineId) ?? [];
+      moreSettlements.delete(lineId);
+      settlements.update((current) =>
+        new Map(current).set(lineId, [...(current.get(lineId) ?? []), ...next])
+      );
+    },
+    loadMoreItemSettlements: async (line: Line) => {
+      calls.push({ kind: 'moreItemSettlements', lineId: line.id });
+      const next = moreItemSettlements.get(line.id) ?? [];
+      moreItemSettlements.delete(line.id);
+      itemSettlements.update((current) =>
+        new Map(current).set(line.id, [
+          ...(current.get(line.id) ?? []),
+          ...next,
+        ])
+      );
+    },
+    claimOf: (lineId: string) => claims().get(lineId) ?? null,
+    claims: () => claims(),
+    setClaim: (lineId: string, claimedByUserId: string | null) => {
+      claims.update((current) => {
+        const next = new Map(current);
+        if (claimedByUserId === null) {
+          next.delete(lineId);
+        } else {
+          next.set(lineId, claimedByUserId);
+        }
+        return next;
+      });
+    },
+    recordSettlement: () => undefined,
 
     setApproval: async (lineId: string, status: LineApprovalStatus) => {
       calls.push({ kind: 'approval', lineId, status });
@@ -848,6 +1090,55 @@ export function provideFakeMemberNames(
   store: ReturnType<typeof fakeMemberNames>
 ): Provider {
   return { provide: MemberNames, useValue: store };
+}
+
+/** What a fake catalog says a product is called, and whether it says anything at all. */
+export interface FakeItemNamesOptions {
+  /** The products it can name, by id. Anything else answers null. */
+  readonly items?: readonly CatalogItem[];
+  /**
+   * Ids whose lookup **failed**, as opposed to answering with nothing.
+   *
+   * The one distinction this double exists to make (velista plan 0047, section 1.2):
+   * a screen draws a failed lookup and a withdrawn product differently, and a fake
+   * that could only be empty could not tell a spec which one it was showing.
+   */
+  readonly failed?: readonly string[];
+}
+
+/**
+ * An `ItemNames` that simply knows what you told it.
+ *
+ * A double rather than the real holder over a fake catalog, for `fakeZoneStore`'s
+ * reason: a screen spec wants to state "this product is called Whole milk and that one
+ * could not be read" as a fact about the world, not to drive a request and await it.
+ * The real holder's own behaviour, which is asking once per id and clearing a failure
+ * when a later answer arrives, is covered against the real thing in its own spec.
+ */
+export function fakeItemNames(options: FakeItemNamesOptions = {}) {
+  const items = options.items ?? [];
+  const failed = new Set(options.failed ?? []);
+  const asked: string[][] = [];
+
+  return {
+    nameOf: (itemId: string) => items.find((row) => row.id === itemId) ?? null,
+    anyFailed: (itemIds: readonly string[]) =>
+      itemIds.some((itemId) => failed.has(itemId)),
+    ensure: async (itemIds: readonly string[]) => {
+      asked.push([...itemIds]);
+    },
+    prime: () => undefined,
+    /** Every set that was asked for, in order, so a spec can assert one request. */
+    asked,
+  };
+}
+
+export type FakeItemNames = ReturnType<typeof fakeItemNames>;
+
+export function provideFakeItemNames(
+  store: FakeItemNames = fakeItemNames()
+): Provider {
+  return { provide: ItemNames, useValue: store };
 }
 
 /** Who a fake says is present, per zone and per list (plan 0017). */
@@ -1181,4 +1472,340 @@ export function profileFor(overrides: Partial<UserProfile> = {}): UserProfile {
     displayName: null,
     ...overrides,
   };
+}
+
+// --- Shopping profiles (plan 0046) -------------------------------------------
+
+/**
+ * A `ShoppingProfile` with the shape the page actually reads.
+ *
+ * The default is the lazily created one a brand new account gets: a null name, nothing
+ * else set, and the default flag on it. Every other state is one override.
+ */
+export function shoppingProfileFor(
+  overrides: Partial<ShoppingProfile> = {}
+): ShoppingProfile {
+  return {
+    id: 'sp1',
+    name: null,
+    isDefault: true,
+    position: 0,
+    addressText: null,
+    minSavingCents: 0,
+    postalCodes: [],
+    chains: [],
+    ...overrides,
+  };
+}
+
+export interface FakeShoppingProfileOptions {
+  readonly profiles?: readonly ShoppingProfile[];
+  readonly state?: ProfileLoad;
+  readonly error?: unknown;
+  readonly chains?: readonly Supermarket[];
+  /** Codes the catalog is pretending nobody serves. */
+  readonly unserved?: readonly string[];
+  /** Which controls answer `failed` rather than saving. */
+  readonly failing?: readonly ProfileField[];
+  /** Whether `create` fails rather than minting a profile. */
+  readonly createFails?: boolean;
+  /** Whether `remove` fails rather than deleting. */
+  readonly removeFails?: boolean;
+}
+
+/** One recorded call to a faked `ShoppingProfileStore`. */
+export type ShoppingProfileCall =
+  | { readonly method: 'load' }
+  | { readonly method: 'select'; readonly profileId: string }
+  | { readonly method: 'create' }
+  | {
+      readonly method: 'save';
+      readonly profileId: string;
+      readonly field: ProfileField;
+      readonly body: WriteShoppingProfileRequest;
+    }
+  | { readonly method: 'makeDefault'; readonly profileId: string }
+  | { readonly method: 'remove'; readonly profileId: string }
+  | { readonly method: 'clear' };
+
+/**
+ * A `ShoppingProfileStore` that answers without a transport.
+ *
+ * {@link fakeZoneStore}'s reasoning, and two things specific to this one.
+ *
+ * It **applies** what a page saves, through the same `apply` the real store hands to
+ * its overlay, so a spec asserting that the screen followed the selector or that a
+ * chain came back un-excluded is asserting the rendered result rather than the fact
+ * that a method was called. A save it is told to fail changes nothing and reports
+ * `failed`, which is the state the failed treatment is drawn from.
+ *
+ * It keeps the real store's rule that **the list is never empty**: the server creates
+ * the default profile on the first read, so a fake with no profiles would put a page
+ * into a state that cannot happen.
+ */
+export function fakeShoppingProfileStore(
+  options: FakeShoppingProfileOptions = {}
+) {
+  const calls: ShoppingProfileCall[] = [];
+  const profiles = signal<readonly ShoppingProfile[]>(
+    options.profiles ?? [shoppingProfileFor()]
+  );
+  const state = signal<ProfileLoad>(options.state ?? 'loaded');
+  const selectedId = signal<string | null>(null);
+  const saves = signal<ReadonlyMap<string, FieldSaveState>>(new Map());
+  const failing = new Set<ProfileField>(options.failing ?? []);
+  const unserved = new Set(options.unserved ?? []);
+  let minted = 0;
+
+  const selected = computed<ShoppingProfile | null>(() => {
+    const held = profiles();
+    const id = selectedId();
+    return (
+      held.find((profile) => profile.id === id) ??
+      held.find((profile) => profile.isDefault) ??
+      held[0] ??
+      null
+    );
+  });
+
+  const setSave = (key: string, next: FieldSaveState): void => {
+    saves.update((current) => {
+      const map = new Map(current);
+      if (next === 'idle') {
+        map.delete(key);
+      } else {
+        map.set(key, next);
+      }
+      return map;
+    });
+  };
+
+  const successorOf = (profileId: string): ShoppingProfile | null => {
+    const held = profiles();
+    const going = held.find((profile) => profile.id === profileId);
+    return going === undefined || !going.isDefault
+      ? null
+      : (held.find((profile) => profile.id !== profileId) ?? null);
+  };
+
+  return {
+    profiles: profiles.asReadonly(),
+    state: state.asReadonly(),
+    error: () => options.error ?? null,
+    chains: signal<readonly Supermarket[]>(options.chains ?? []).asReadonly(),
+    selected,
+
+    scopeSaid: computed(() => {
+      const profile = selected();
+      return (
+        profile !== null &&
+        (profile.postalCodes.length > 0 ||
+          profile.chains.some((chain) => !chain.excluded))
+      );
+    }),
+
+    saveState: (profileId: string, field: ProfileField): FieldSaveState =>
+      saves().get(`${profileId}:${field}`) ?? 'idle',
+
+    isUnserved: (postalCode: string): boolean => unserved.has(postalCode),
+
+    successorOf,
+
+    load: async () => {
+      calls.push({ method: 'load' });
+    },
+
+    select: (profileId: string) => {
+      calls.push({ method: 'select', profileId });
+      selectedId.set(profileId);
+    },
+
+    refreshCoverage: async () => {
+      // Nothing to refresh: this fake's coverage is whatever the spec declared.
+    },
+
+    create: async (): Promise<ShoppingProfile | null> => {
+      calls.push({ method: 'create' });
+      if (options.createFails === true) {
+        return null;
+      }
+
+      const created = shoppingProfileFor({
+        id: `sp-new-${++minted}`,
+        isDefault: false,
+        position: profiles().length,
+      });
+      profiles.update((held) => [...held, created]);
+      selectedId.set(created.id);
+      return created;
+    },
+
+    save: async (
+      profileId: string,
+      field: ProfileField,
+      body: WriteShoppingProfileRequest,
+      apply: (profile: ShoppingProfile) => ShoppingProfile
+    ): Promise<'saved' | 'failed'> => {
+      calls.push({ method: 'save', profileId, field, body });
+
+      if (failing.has(field)) {
+        setSave(`${profileId}:${field}`, 'failed');
+        return 'failed';
+      }
+
+      profiles.update((held) =>
+        held.map((profile) =>
+          profile.id === profileId ? apply(profile) : profile
+        )
+      );
+      setSave(`${profileId}:${field}`, 'idle');
+      return 'saved';
+    },
+
+    makeDefault: async (profileId: string): Promise<'saved' | 'failed'> => {
+      calls.push({ method: 'makeDefault', profileId });
+      profiles.update((held) =>
+        held.map((profile) => ({
+          ...profile,
+          isDefault: profile.id === profileId,
+        }))
+      );
+      return 'saved';
+    },
+
+    remove: async (profileId: string): Promise<'deleted' | 'failed'> => {
+      calls.push({ method: 'remove', profileId });
+      if (options.removeFails === true) {
+        return 'failed';
+      }
+
+      const successor = successorOf(profileId);
+      profiles.update((held) =>
+        held
+          .filter((profile) => profile.id !== profileId)
+          .map((profile) => ({
+            ...profile,
+            isDefault:
+              successor === null
+                ? profile.isDefault
+                : profile.id === successor.id,
+          }))
+      );
+      if (selectedId() === profileId) {
+        selectedId.set(null);
+      }
+      return 'deleted';
+    },
+
+    clear: () => {
+      calls.push({ method: 'clear' });
+      profiles.set([]);
+    },
+
+    /** Everything the page asked for, in order. */
+    calls: calls as readonly ShoppingProfileCall[],
+  };
+}
+
+export type FakeShoppingProfileStore = ReturnType<
+  typeof fakeShoppingProfileStore
+>;
+
+/** {@link fakeShoppingProfileStore} bound to the real class. */
+export function provideFakeShoppingProfileStore(
+  store: FakeShoppingProfileStore = fakeShoppingProfileStore()
+): Provider {
+  return { provide: ShoppingProfileStore, useValue: store };
+}
+
+/**
+ * A `GeneratedListStore` holding a fixed listing (plan 0045).
+ *
+ * A double rather than the real store over a fake service, for `fakeZoneStore`'s
+ * reason: a page spec wants to state "there is one active basket" as a fact about the
+ * world, not to drive a request and wait for it. The real store's own behaviour, which
+ * is the paging, the merge on a further page and the realtime upsert, is covered
+ * against the real thing in its own spec.
+ */
+export function fakeGeneratedListStore(
+  initial: readonly GeneratedListSummary[] = [],
+  options: {
+    state?: ShoppingListsLoad;
+    error?: unknown;
+    hasMore?: boolean;
+    /** Pages landed so far. Defaults to one; zero is a store that has read nothing. */
+    pagesLoaded?: number;
+  } = {}
+) {
+  const lists = signal<readonly GeneratedListSummary[]>(initial);
+  const state = signal<ShoppingListsLoad>(options.state ?? 'loaded');
+  const error = signal<unknown>(options.error ?? null);
+  const loadingMore = signal(false);
+  const hasMore = signal(options.hasMore ?? false);
+  /**
+   * How many pages have landed. One by default, because a fixture handed a listing is
+   * a page that has already arrived, which is what the history's live region speaks
+   * about. `landPage` is how a spec makes a second one arrive.
+   */
+  const pagesLoaded = signal(options.pagesLoaded ?? 1);
+
+  /** What the page asked for, so a spec can assert the read happened at all. */
+  const calls: string[] = [];
+
+  return {
+    lists: lists.asReadonly(),
+    state: state.asReadonly(),
+    error: error.asReadonly(),
+    loadingMore: loadingMore.asReadonly(),
+    hasMore: hasMore.asReadonly(),
+    pagesLoaded: pagesLoaded.asReadonly(),
+    active: computed(() => lists().filter((list) => list.status === 'ACTIVE')),
+
+    load: async () => {
+      calls.push('load');
+    },
+    reload: async () => {
+      calls.push('reload');
+    },
+    loadMore: async () => {
+      calls.push('loadMore');
+    },
+    create: async () => {
+      calls.push('create');
+      throw new Error('fakeGeneratedListStore.create is not configured');
+    },
+
+    calls: calls as readonly string[],
+
+    /** Move the store while a fixture is mounted, to test a live update. */
+    set: (next: readonly GeneratedListSummary[]) => lists.set(next),
+    setState: (next: ShoppingListsLoad, cause: unknown = null) => {
+      state.set(next);
+      error.set(cause);
+    },
+    setLoadingMore: (next: boolean) => loadingMore.set(next),
+    setHasMore: (next: boolean) => hasMore.set(next),
+
+    /**
+     * A further page of results arriving: the rows, and the counter that says so.
+     *
+     * The two move **together** here because they move together in the real store, and
+     * the history's live region is the thing that tells them apart from a settle
+     * refresh, which changes the rows and leaves the counter where it is. A spec about
+     * that quiet case uses {@link set} on its own.
+     */
+    landPage: (next: readonly GeneratedListSummary[]) => {
+      lists.set(next);
+      pagesLoaded.update((n) => n + 1);
+    },
+  };
+}
+
+export type FakeGeneratedListStore = ReturnType<typeof fakeGeneratedListStore>;
+
+/** {@link fakeGeneratedListStore} bound to the real token. */
+export function provideFakeGeneratedListStore(
+  store: FakeGeneratedListStore = fakeGeneratedListStore()
+): Provider {
+  return { provide: GeneratedListStore, useValue: store };
 }

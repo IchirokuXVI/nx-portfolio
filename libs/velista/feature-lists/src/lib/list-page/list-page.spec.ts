@@ -9,22 +9,27 @@ import {
 import {
   ASSISTANT_SERVICE,
   AssistantMemory,
+  CATALOG_SERVICE,
+  CatalogMemory,
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
   fakePresenceStore,
+  fakeShoppingProfileStore,
   fakeZoneStore,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
   provideFakePresenceStore,
   provideFakeSessionStore,
+  provideFakeShoppingProfileStore,
   provideFakeZoneStore,
   REALTIME_CLIENT,
   RealtimeMemory,
   type FakeLineStore,
   type FakeListStore,
   type FakePresenceOptions,
+  type FakeShoppingProfileStore,
 } from '@portfolio/velista/data-access';
 import type {
   Line,
@@ -97,7 +102,7 @@ function list(
     createdByUserId: ME,
     autoApproveLines: false,
     lineCount: 12,
-    readyCount: 7,
+    wantedCount: 7,
     // Everything, so a spec that is not about permissions reads as it did before plan
     // 0030. One that is says so by passing `permissions`.
     myPermissions: ADMIN,
@@ -164,6 +169,7 @@ async function render(options: Options = {}): Promise<{
   storage: Map<string, string>;
   router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
   tone: { play: jest.Mock };
+  profiles: FakeShoppingProfileStore;
 }> {
   TestBed.resetTestingModule();
 
@@ -185,6 +191,7 @@ async function render(options: Options = {}): Promise<{
     complete: options.complete ?? true,
   });
   const realtime = new RealtimeMemory();
+  const profiles = fakeShoppingProfileStore();
   const storage = options.storage ?? new Map<string, string>();
   const router = {
     navigate: jest.fn().mockResolvedValue(true),
@@ -217,6 +224,15 @@ async function render(options: Options = {}): Promise<{
       // than a stub: a real implementation that never gets called is cheaper to
       // keep true than a hand written one that drifts.
       { provide: ASSISTANT_SERVICE, useClass: AssistantMemory },
+      // The composer's suggestions (plan 0043, section 6). In memory rather than a
+      // stub for the reason the assistant above it is: every spec here is about the
+      // typed path, and a real implementation nobody calls is cheaper to keep honest
+      // than a mock that has to be re-taught what a suggestion looks like.
+      { provide: CATALOG_SERVICE, useClass: CatalogMemory },
+      // The scope those suggestions are narrowed to (plan 0047, section 3): the
+      // composer passes the active profile's id, so the store has to be here even
+      // for the specs that never open the dropdown.
+      provideFakeShoppingProfileStore(profiles),
       // The blip that says a recording left the device. A fake, so a spec can ask
       // whether it was played without a browser and without making a noise.
       { provide: NOTIFICATION_TONE, useValue: tone },
@@ -228,7 +244,7 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, lines, lists, realtime, storage, router, tone };
+  return { fixture, lines, lists, realtime, storage, router, tone, profiles };
 }
 
 /**
@@ -366,33 +382,79 @@ describe('ListPage', () => {
     });
   });
 
-  describe('ticking a line off', () => {
-    it('sends the status, and moves the row without waiting', async () => {
+  /**
+   * The reel's write, which replaced ticking off (velista plan 0043, section 4.1).
+   *
+   * What is asserted is the **delta**, because that is what the page is responsible
+   * for passing on: the reel has already snapped, already waited out its idle beat and
+   * already collapsed however many drags happened inside it into one number. A page
+   * that sent two increments where the gesture produced one settled adjustment is a
+   * defect a recorded end state would hide.
+   */
+  describe('moving a quantity', () => {
+    it('sends the delta it was handed, once', async () => {
       const { fixture, lines } = await render({
-        lines: [line('ln-1', { status: 'PENDING' })],
+        lines: [line('ln-1', { quantity: 2 })],
       });
 
-      await fixture.componentInstance.toggle('ln-1');
+      await fixture.componentInstance.changeQuantity({
+        lineId: 'ln-1',
+        delta: 3,
+      });
 
       expect(lines.calls).toContainEqual({
-        kind: 'status',
+        kind: 'quantity',
         lineId: 'ln-1',
-        status: 'READY',
+        delta: 3,
       });
     });
 
-    it('puts a ready line back on a second tap', async () => {
+    it('sends a negative delta the same way', async () => {
       const { fixture, lines } = await render({
-        lines: [line('ln-1', { status: 'READY' })],
+        lines: [line('ln-1', { quantity: 4 })],
       });
 
-      await fixture.componentInstance.toggle('ln-1');
+      await fixture.componentInstance.changeQuantity({
+        lineId: 'ln-1',
+        delta: -4,
+      });
 
       expect(lines.calls).toContainEqual({
-        kind: 'status',
+        kind: 'quantity',
         lineId: 'ln-1',
-        status: 'PENDING',
+        delta: -4,
       });
+    });
+
+    it('announces the settled result once, rather than per step', async () => {
+      // Section 7. The drag is a pointer gesture, so nothing else says out loud that
+      // the number moved; what must not happen is a run of announcements as it moves.
+      const { fixture } = await render({
+        lines: [line('ln-1', { quantity: 2 })],
+      });
+
+      await fixture.componentInstance.changeQuantity({
+        lineId: 'ln-1',
+        delta: 3,
+      });
+
+      expect(fixture.componentInstance.announcement()).toContain(
+        'list.line.quantityChanged'
+      );
+    });
+
+    it('opens the line rather than repeating a write that failed', async () => {
+      // The failed write was a delta this page no longer holds, and re-sending a
+      // guessed one would move the number by an amount nobody asked for a second time.
+      const { fixture, router } = await render();
+
+      fixture.componentInstance.retry('ln-1');
+
+      // The sheet, relative to the list page, exactly as every other sheet is opened.
+      expect(router.navigate).toHaveBeenCalledWith(
+        ['sheet', 'lines', 'ln-1', 'detail'],
+        expect.anything()
+      );
     });
   });
 
@@ -523,11 +585,14 @@ describe('ListPage', () => {
       );
     });
 
-    it('leaves a read-only caller nothing to tap and everything to read', async () => {
+    it('gives a read-only caller a row that opens and a number that does not move', async () => {
       const { fixture } = await render({ permissions: READ_ONLY });
 
       expect(rows(fixture)[0]).toMatchObject({
-        interactive: false,
+        // The tap opens the detail sheet, and knowing is not a permission (section
+        // 5.1). It followed `DECIDE` while the tap was the tick.
+        interactive: true,
+        adjustable: false,
         actions: ['comments'],
         decidable: false,
       });
@@ -541,13 +606,13 @@ describe('ListPage', () => {
       expect(query(fixture, 'lib-line-composer')).toBeNull();
     });
 
-    it('tells a writer who does the ticking, rather than looking broken', async () => {
-      // A screen that takes a new line and ignores a tap on it needs a sentence naming
-      // whose job that is, and it is not an apology (section 7).
+    it('tells a writer who does the buying, rather than looking broken', async () => {
+      // A screen that takes a new line and then ignores a drag on it needs a sentence
+      // naming whose job that is, and it is not an apology (section 7).
       const { fixture } = await render({ permissions: WRITER });
 
       expect(fixture.nativeElement.textContent).toContain(
-        'list.ticking.notMine'
+        'list.buying.notMine'
       );
       expect(fixture.nativeElement.textContent).not.toContain(
         'list.readOnly.banner'
@@ -578,12 +643,15 @@ describe('ListPage', () => {
       ).toBe(false);
     });
 
-    it('does not tick a row for somebody who may not decide', async () => {
-      // The row emits nothing, and the guard behind it is silent belt on braces: the
-      // sentence explaining it is already on screen.
+    it('does not move a quantity for somebody who may not decide', async () => {
+      // The reel is read only for them, and the guard behind it is silent belt on
+      // braces: the sentence explaining it is already on screen.
       const { fixture, lines } = await render({ permissions: WRITER });
 
-      await fixture.componentInstance.toggle('ln-1');
+      await fixture.componentInstance.changeQuantity({
+        lineId: 'ln-1',
+        delta: 1,
+      });
 
       expect(lines.calls).toHaveLength(0);
     });
@@ -612,11 +680,13 @@ describe('ListPage', () => {
       fixture.componentInstance.openSettings();
 
       const paths = router.navigate.mock.calls.map((call) => call[0]);
+      // Every one under the `sheet` marker, which `_openSheet` adds so the five
+      // callers cannot each be the one that forgets it.
       expect(paths).toEqual([
-        ['lines', 'ln-1', 'edit'],
-        ['lines', 'ln-1', 'comments'],
-        ['lines', 'ln-1', 'confirm', 'delete'],
-        ['settings'],
+        ['sheet', 'lines', 'ln-1', 'edit'],
+        ['sheet', 'lines', 'ln-1', 'comments'],
+        ['sheet', 'lines', 'ln-1', 'confirm', 'delete'],
+        ['sheet', 'settings'],
       ]);
     });
   });

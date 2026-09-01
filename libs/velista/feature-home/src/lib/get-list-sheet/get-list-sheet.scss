@@ -1,0 +1,354 @@
+// The sheet is fixed to the viewport, so this host contributes no layout of its own.
+// It exists to carry the styles of the content it projects into `SheetShell`, which
+// under emulated encapsulation is this component's markup and not the shell's.
+//
+// The rules below repeat `feature-entry`'s `_sheet-body` mixin rather than importing
+// it, and that is forced rather than careless: Sass resolves `@use` against the
+// filesystem and not against this workspace's TypeScript path aliases, so a partial in
+// another library cannot be reached without adding an include path to every build. The
+// same constraint is why every component outside `ui` writes the focus ring out.
+:host {
+  display: contents;
+}
+
+@mixin focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The title and the History link share a row, so the link sits at the top of the sheet
+// where the eye already is rather than competing with the submit at the bottom.
+.head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+}
+
+// Quiet, and matching the dashboard's own History link, because it is the same control
+// in the one place the card's copy of it is not drawn.
+.history {
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--app-button-radius);
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+.title {
+  margin: 0 0 var(--app-space-hair);
+  font-size: var(--app-text-xl);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0 0 var(--app-space-5);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.label {
+  display: block;
+  margin-block-end: var(--app-space-3);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+// Rule T3: never under 16px. iOS Safari zooms the viewport when a focused input is
+// smaller, which throws the button off screen at the moment it is about to be tapped.
+.field {
+  inline-size: 100%;
+  block-size: var(--app-button-height);
+  padding-inline: var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-field-font-size);
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  &:focus {
+    border-color: var(--app-action-bg);
+  }
+
+  @include focus-ring;
+}
+
+.hint {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-2xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+// The profile is one row rather than a stacked field, because it is a fact being
+// confirmed rather than a value being composed: most people have one and never look.
+.profile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+  margin-block-start: var(--app-space-4);
+}
+
+.profile-label {
+  margin-block-end: 0;
+}
+
+.profile-select {
+  max-inline-size: 60%;
+  border: none;
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  text-align: end;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+.sources-label {
+  margin-block-start: var(--app-space-4);
+}
+
+.none {
+  margin: 0;
+  padding: var(--app-space-4);
+  border: 1px dashed var(--app-border-subtle);
+  border-radius: var(--app-field-radius);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.tree {
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-field-radius);
+  overflow: hidden;
+}
+
+.zone + .zone,
+.zone-row + .list-row,
+.list-row + .list-row,
+.list-row + .list-note {
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.zone:not(:first-child) .zone-row {
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.zone-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-4);
+  background: var(--app-surface-raised);
+}
+
+.zone-disclosure {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+.twisty {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+.zone-name {
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-9) var(--app-space-4);
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+.list-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-note {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-9) var(--app-space-4);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// The tick, drawn three ways. The `mixed` state is a dash rather than a half filled
+// box, because a partly filled square reads as a rendering artefact at 20px.
+.tick {
+  flex: none;
+  position: relative;
+  inline-size: var(--app-space-6);
+  block-size: var(--app-space-6);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  cursor: pointer;
+
+  @include focus-ring;
+
+  &.is-on,
+  &.is-mixed {
+    border-color: var(--app-action-bg);
+  }
+
+  &.is-on {
+    background: var(--app-action-bg);
+  }
+
+  // The dash for the mixed state, which is a hairline rather than a bar: a partly
+  // filled square reads as a rendering artefact at this size, and a thick dash reads
+  // as a minus sign somebody could press.
+  &.is-mixed::after {
+    content: '';
+    position: absolute;
+    inset-inline-start: 50%;
+    inset-block-start: 50%;
+    inline-size: 45%;
+    block-size: 1px;
+    background: var(--app-action-bg);
+    transform: translate(-50%, -50%);
+  }
+}
+
+// The check itself is `CheckIcon`, not a rotated box drawn out of two borders: the glyph
+// already exists, it scales with the tick, and it takes `currentColor` so it follows a
+// theme change for free.
+.check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 100%;
+  font-size: var(--app-icon-sm);
+  color: var(--app-action-fg);
+}
+
+.error {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
+// The width does not change when the label does, so the button does not jump under the
+// thumb that is about to lift off it.
+.primary {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  margin-block-start: var(--app-space-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-3);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:active:not(:disabled) {
+    background: var(--app-action-bg-pressed);
+  }
+
+  // Dimmed rather than greyed, so it still reads as the action it will become.
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include focus-ring;
+}
+
+// A full height row rather than a small word, so it is a 44px target like everything
+// else, and it is not adjacent to the submit (section 7).
+.cancel {
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin-block-start: var(--app-space-2);
+  border: none;
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+.spinner {
+  font-size: var(--app-icon-sm);
+  flex: none;
+}

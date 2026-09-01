@@ -8,7 +8,7 @@ function header(overrides: Partial<ListHeaderVm> = {}): ListHeaderVm {
   return {
     listName: 'Weekly shop',
     zoneName: 'Home',
-    readyCount: 3,
+    wantedCount: 3,
     lineCount: 7,
     viewers: [],
     live: true,
@@ -60,14 +60,14 @@ describe('ListHeader', () => {
     it('says a list with nothing on it is empty rather than 0 of 0', async () => {
       // "0 of 0 ready" describes progress through a shop nobody has written down, and
       // an empty bar under it describes nothing (plan 0019, section 3).
-      const fixture = await render(header({ readyCount: 0, lineCount: 0 }));
+      const fixture = await render(header({ wantedCount: 0, lineCount: 0 }));
 
       expect(host(fixture).textContent).toContain('list.empty.short');
       expect(host(fixture).querySelector('.progress')).toBeNull();
     });
 
     it('fills the bar from the lines the page is holding', async () => {
-      const fixture = await render(header({ readyCount: 3, lineCount: 4 }));
+      const fixture = await render(header({ wantedCount: 3, lineCount: 4 }));
 
       expect(fixture.componentInstance.percent()).toBe(75);
       expect(

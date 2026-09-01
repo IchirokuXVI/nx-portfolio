@@ -9,6 +9,7 @@ import {
   LineComment,
   ListAccess,
   ListLine,
+  ListLineItem,
   MergeRequest,
   ShoppingList,
   Zone,
@@ -51,6 +52,9 @@ export const CORE_INSERT_ORDER: {
   { name: 'ShoppingList', entity: ShoppingList, rows: core.lists },
   { name: 'ListAccess', entity: ListAccess, rows: core.listAccess },
   { name: 'ListLine', entity: ListLine, rows: core.lines },
+  // The products each line stands for (plan 0048, section 1.1). After the lines,
+  // because a row cannot reference a line that does not exist yet.
+  { name: 'ListLineItem', entity: ListLineItem, rows: core.lineItems },
   { name: 'LineComment', entity: LineComment, rows: core.comments },
   { name: 'MergeRequest', entity: MergeRequest, rows: core.mergeRequests },
 ];

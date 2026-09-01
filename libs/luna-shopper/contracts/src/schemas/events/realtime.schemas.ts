@@ -65,4 +65,9 @@ export const domainEventContracts: Record<string, string> = {
   ),
   [RealtimeEvent.PresenceZoneUpdated]: REALTIME_SCHEMA_IDS.zonePresence,
   [RealtimeEvent.PresenceListUpdated]: REALTIME_SCHEMA_IDS.listPresence,
+  // Like the two above, computed by the realtime service rather than published
+  // by a domain one, so it is mapped here explicitly instead of arriving through
+  // DOMAIN_EVENT_SUBJECTS (plan 0051, section 7).
+  [RealtimeEvent.PresenceGeneratedListUpdated]:
+    REALTIME_SCHEMA_IDS.generatedListPresence,
 };

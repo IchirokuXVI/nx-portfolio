@@ -86,7 +86,23 @@ lunaShopperBackend:
 
     # The links inside those mails, on the other hand, point at the app, and the
     # app is on velista.app now.
-    mailVerifyBaseUrl: https://velista.app/verify-email
+    #
+    # `auth/verify` is the route the app actually has (`routes.ts`, the public
+    # one below `:locale`). `/verify-email` was the name in the plan and never
+    # the name in the route table, so every confirmation link this cluster sent
+    # landed on velista's own 404.
+    #
+    # No locale segment on purpose. `localeGuard` inserts one in front of a path
+    # that has none and carries the query string across, so the link resolves to
+    # `/{locale}/auth/verify?token=...` in the reader's own language: their last
+    # used locale, else the browser's, else the app default. Pinning a locale
+    # here would hand every recipient the same one.
+    mailVerifyBaseUrl: https://velista.app/auth/verify
+    # There is no reset page in the app yet: `feature-auth` exposes sign in,
+    # register, upgrade, verify and the OAuth callback, and nothing routes a
+    # reset token. This value is a placeholder that keeps auth's required config
+    # satisfied, and it is wrong in the same way the verify one was until that
+    # page exists. Nothing sends a reset mail from this cluster today.
     mailResetBaseUrl: https://velista.app/reset-password
 
   # The harvester (plan 0038) is NOT deployed to production, and this line is here

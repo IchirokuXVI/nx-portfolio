@@ -139,8 +139,14 @@ lunaShopperBackend:
     googleCallbackUrl: https://api.ichirokuxvi.com/v1/auth/google/callback
     appBaseUrl: https://velista.ichirokuxvi.com/{locale}
     mailFrom: Luna Shopper <no-reply@ichirokuxvi.com>
-    mailVerifyBaseUrl: https://ichirokuxvi.com/verify-email
-    mailResetBaseUrl: https://ichirokuxvi.com/reset-password
+    # velista's own origin, which on this machine is the `velista` hostPrefix
+    # under baseDomain, and the route the app really has. This line was wrong
+    # twice over: it named the portfolio host, where velista is not served at
+    # all, and a `/verify-email` path no route table has ever matched. See the
+    # comment beside the production pair for why there is no locale segment.
+    mailVerifyBaseUrl: https://velista.ichirokuxvi.com/auth/verify
+    # Placeholder. No reset page exists in the app yet.
+    mailResetBaseUrl: https://velista.ichirokuxvi.com/reset-password
 
   # Off, and this is the one real regression against the VPS deploy. The nightly
   # dump needs the S3 credentials in luna-shopper-backend-backup-secret, which

@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ THE JOIN SCREEN ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A STRANGER ARRIVES &middot; guest is the primary action, register is never a step</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; padding: 0 24px;">
+
+      <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 22px 0 0;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+          <g transform="translate(-0.25 0.732) scale(0.98)">
+            <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+            <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+            <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+          </g>
+        </svg>
+        <span style="font-family: 'Marcellus', Georgia, serif; font-size: 18px; letter-spacing: 0.05em; color: #98a0bb;">Velista</span>
+      </div>
+
+      <!-- what this is: the preview discloses nothing else -->
+      <div style="flex: 0 0 auto; margin-top: 44px;">
+        <div style="font-size: 13px; color: #98a0bb;">You&rsquo;ve been invited to shop</div>
+        <h1 style="margin: 8px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 30px; line-height: 1.2; color: #f7f8fc;">Saturday big shop</h1>
+        <div style="margin-top: 8px; font-size: 13.5px; color: #6f7899;">3 people are on it</div>
+      </div>
+
+      <!-- the name, visibly optional -->
+      <div style="flex: 0 0 auto; margin-top: 34px;">
+        <label style="display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #98a0bb; margin-bottom: 8px;">
+          <span>Your name</span>
+          <span style="color: #6f7899; text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12.5px;">Optional</span>
+        </label>
+        <div style="height: 52px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; padding: 0 15px;">
+          <span style="font-size: 16px; color: #525a78;">So people know who got the bread</span>
+        </div>
+      </div>
+
+      <!-- primary -->
+      <button type="button" style="flex: 0 0 auto; width: 100%; height: 52px; margin-top: 14px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Continue as guest</button>
+
+      <!-- secondary, visibly secondary -->
+      <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 12px; margin: 22px 0 14px;">
+        <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></span>
+        <span style="font-size: 12px; color: #525a78;">or, if you use Velista</span>
+        <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></span>
+      </div>
+      <button type="button" style="flex: 0 0 auto; width: 100%; height: 48px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 550; display: flex; align-items: center; justify-content: center; gap: 9px;">
+        <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path fill="#c2c8db" d="M21.35 11.1H12v2.9h5.35c-.5 2.5-2.6 3.9-5.35 3.9a5.9 5.9 0 1 1 0-11.8c1.5 0 2.85.55 3.9 1.45l2.15-2.15A8.9 8.9 0 1 0 12 20.9c4.45 0 8.55-3.1 8.55-8.9 0-.3-.1-.6-.2-.9z"/></svg>
+        Continue with Google
+      </button>
+      <button type="button" style="flex: 0 0 auto; width: 100%; height: 48px; margin-top: 9px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 550;">Sign in with email</button>
+
+      <div style="flex: 1 1 auto;"></div>
+
+      <!-- install, lowest, never a condition -->
+      <div style="flex: 0 0 auto; margin-bottom: 26px; padding: 13px 14px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.09); display: flex; align-items: center; gap: 11px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <span style="flex: 1; font-size: 13px; line-height: 1.45; color: #98a0bb;">Keep it on your home screen while you shop</span>
+        <span style="font-size: 13px; font-weight: 600; color: #ffb454;">Install</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ REVOKED OR EXPIRED ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REVOKED OR EXPIRED &middot; says so plainly, offers nothing to try, tells nobody which it was</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; padding: 0 24px;">
+
+      <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 22px 0 0;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+          <g transform="translate(-0.25 0.732) scale(0.98)">
+            <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+            <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+            <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+          </g>
+        </svg>
+        <span style="font-family: 'Marcellus', Georgia, serif; font-size: 18px; letter-spacing: 0.05em; color: #98a0bb;">Velista</span>
+      </div>
+
+      <div style="flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-bottom: 80px;">
+        <span style="width: 56px; height: 56px; border-radius: 999px; background: #161a28; border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/><path d="M4 4l16 16" stroke="#fb7185"/></svg>
+        </span>
+        <h1 style="margin: 22px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 26px; color: #f7f8fc;">This link is no longer<br>accepting people</h1>
+        <div style="margin-top: 12px; font-size: 14px; line-height: 1.55; color: #98a0bb; max-width: 280px;">Ask whoever sent it for a new one. If you were already shopping this list, your own link in this browser still works.</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

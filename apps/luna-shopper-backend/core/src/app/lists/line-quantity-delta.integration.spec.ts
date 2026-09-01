@@ -1,6 +1,5 @@
 import {
   LineApprovalStatus,
-  LineStatus,
   MembershipStatus,
   ZoneRole,
   ZoneStatus,
@@ -13,12 +12,15 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
   CORE_ENTITIES,
+  LineSettlement,
   ListAccess,
   ListLine,
+  ListLineItem,
   ShoppingList,
   Zone,
   ZoneMembership,
 } from '../entities';
+import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
@@ -69,7 +71,10 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
     lines = new LineService(
       dataSource,
       dataSource.getRepository(ListLine),
+      dataSource.getRepository(ListLineItem),
+      dataSource.getRepository(LineSettlement),
       listAccess,
+      fakeLineClaims().service,
       { emit: jest.fn() } as never
     );
 
@@ -116,7 +121,7 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
     await dataSource.getRepository(ListLine).delete({ listId: ids.list });
   });
 
-  /** One `PENDING` line, so a positive delta is a plain edit with no split. */
+  /** One `PENDING` line, which is what every case here starts from. */
   async function seedLine(quantity: number): Promise<ListLine> {
     const repo = dataSource.getRepository(ListLine);
     return repo.save(
@@ -126,7 +131,6 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
         quantity,
         position: 1,
         approvalStatus: LineApprovalStatus.PENDING,
-        status: LineStatus.PENDING,
         createdByUserId: ids.owner,
         version: 1,
       })
@@ -240,10 +244,10 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
           { content: 'two' },
           { content: 'three' },
           { content: 'four' },
-          { content: 'five', quantity: 0 },
+          { content: 'five', quantity: -1 },
         ],
       })
-    ).rejects.toThrow(/at least 1/);
+    ).rejects.toThrow(/at least 0/);
 
     expect(
       await dataSource.getRepository(ListLine).count({

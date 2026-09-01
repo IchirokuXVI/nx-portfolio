@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type {
   LinePage,
+  LineSettlementResult,
   LineView,
   ListPage,
   ListView,
@@ -10,7 +11,7 @@ import type {
   ZonePage,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  LineStatus,
+  SettlementOutcome,
   UsernamePropagation,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -220,23 +221,28 @@ export class GatewayApiClient {
   }
 
   /**
-   * Move a line between `PENDING`, `READY` and `NOT_AVAILABLE` (plan 0043,
-   * section 4).
+   * Say what happened to a line on a trip (plan 0047, section 4).
    *
-   * A sub resource rather than a field on the `PATCH`, which is the gateway's
-   * own shape and not a choice made here. It answers with the line as it now
-   * stands, so what the bot says about it is reported rather than assumed.
+   * It replaced `setLineStatus`, which moved a line between trip states a zone
+   * line no longer carries. Buying decrements the quantity by what was bought;
+   * "they had none" records that and moves nothing.
+   *
+   * A sub resource rather than a field on the `PATCH`, which is the gateway's own
+   * shape and not a choice made here. It answers with the line as it now stands
+   * **and** the settlement that moved it, so what the bot says about it is
+   * reported rather than assumed.
    */
-  setLineStatus(
+  settleLine(
     caller: ApiCaller,
     lineId: string,
-    status: LineStatus
-  ): Promise<LineView> {
-    return this.request<LineView>(
+    outcome: SettlementOutcome,
+    quantity?: number
+  ): Promise<LineSettlementResult> {
+    return this.request<LineSettlementResult>(
       caller,
       'POST',
-      `/v1/lines/${encodeURIComponent(lineId)}/status`,
-      { status }
+      `/v1/lines/${encodeURIComponent(lineId)}/settle`,
+      { outcome, ...(quantity === undefined ? {} : { quantity }) }
     );
   }
 

@@ -1,4 +1,3 @@
-import { Location } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -20,6 +19,7 @@ import {
   appPath,
   BrowserFacade,
   InstallStore,
+  PageNavigation,
 } from '@portfolio/velista/platform';
 import {
   AppVersion,
@@ -79,8 +79,8 @@ export class InstallPage {
   private readonly _browser = inject(BrowserFacade);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _origin = inject(APP_STANDALONE_ORIGIN);
-  private readonly _location = inject(Location);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
 
   readonly state = this._install.state;
@@ -149,18 +149,14 @@ export class InstallPage {
   /**
    * Back, to wherever the reader came from.
    *
-   * `Location.back()` rather than a route, because this page is reachable from the
-   * account screen, from a link somebody was sent, and from the front door, and the
-   * page it should return to is whichever of those it was. When there is no history to
-   * go back to, which is what a cold arrival on the link is, it falls to the app's own
-   * front door rather than leaving the button inert.
+   * Popping rather than routing, because this page is reachable from the account
+   * screen, from a link somebody was sent, and from the front door, and the page it
+   * should return to is whichever of those it was. A cold arrival on the link has
+   * nothing behind it, so that one falls to the app's own front door rather than
+   * leaving the button inert.
    */
   back(): void {
-    if ((this._browser.window?.history.length ?? 0) > 1) {
-      this._location.back();
-      return;
-    }
-    void this._toFrontDoor();
+    void this._pages.back(appPath(this._locale(), this._basePath));
   }
 
   /** The confirmation's own way out, for somebody with nothing left to do here. */

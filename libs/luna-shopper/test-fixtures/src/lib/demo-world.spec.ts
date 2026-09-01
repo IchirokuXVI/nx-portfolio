@@ -1,6 +1,5 @@
 import {
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
   MembershipStatus,
   UserKind,
@@ -13,6 +12,7 @@ import {
   ITEM_BREAD_ID,
   ITEM_MILK_ID,
   LINE_MILK_ID,
+  LINE_MILK_SET_HASH,
   LIST_FLAT_SUPPLIES_ID,
   MEMBERSHIP_CAROL_FLAT_ID,
   ZONE_FLAT_ID,
@@ -46,9 +46,8 @@ describe('demoWorld', () => {
     expect(core.zones[0].ownerUserId).toBe(auth.users[0].id);
   });
 
-  it('spans both line state machines and a pending membership', () => {
+  it('spans every approval state, both sides of zero, and a pending membership', () => {
     const approvals = new Set(core.lines.map((l) => l.approvalStatus));
-    const statuses = new Set(core.lines.map((l) => l.status));
     expect(approvals).toEqual(
       new Set([
         LineApprovalStatus.APPROVED,
@@ -56,9 +55,11 @@ describe('demoWorld', () => {
         LineApprovalStatus.REJECTED,
       ])
     );
-    expect(statuses).toEqual(
-      new Set([LineStatus.READY, LineStatus.PENDING, LineStatus.NOT_AVAILABLE])
-    );
+    // The state a line carries since plan 0047 is its quantity, and the world
+    // holds both sides of it: things the household wants, and one it is stocked
+    // on at zero, which is a line nothing has deleted.
+    expect(core.lines.some((l) => l.quantity === 0)).toBe(true);
+    expect(core.lines.some((l) => l.quantity > 0)).toBe(true);
     expect(
       core.memberships.some((m) => m.status === MembershipStatus.PENDING)
     ).toBe(true);
@@ -85,13 +86,44 @@ describe('demoWorld', () => {
     for (const l of core.lines) expect(listIds.has(l.listId)).toBe(true);
     for (const c of core.comments) expect(lineIds.has(c.lineId)).toBe(true);
 
-    // Every line itemId (when set) resolves to a catalog item id.
+    // Every product a line stands for resolves to a catalog item id, and every
+    // one of those rows belongs to a line (plan 0048, section 1.1).
     const itemIds = new Set(catalog.items.map((i) => i.id));
-    for (const l of core.lines) {
-      if (l.itemId) expect(itemIds.has(l.itemId)).toBe(true);
+    for (const li of core.lineItems) {
+      expect(lineIds.has(li.lineId)).toBe(true);
+      expect(itemIds.has(li.itemId)).toBe(true);
     }
     expect(itemIds.has(ITEM_MILK_ID)).toBe(true);
     expect(itemIds.has(ITEM_BREAD_ID)).toBe(true);
+
+    // Every group an item points at exists.
+    const groupIds = new Set(catalog.productGroups.map((g) => g.id));
+    for (const item of catalog.items) {
+      if (item.productGroupId) {
+        expect(groupIds.has(item.productGroupId)).toBe(true);
+      }
+    }
+
+    // A line carries a hash exactly when it carries products, and null when it
+    // does not. The value itself is pinned in core's `item-set-hash.spec.ts`;
+    // what matters here is that the two halves cannot disagree.
+    for (const line of core.lines) {
+      const hasProducts = core.lineItems.some((li) => li.lineId === line.id);
+      expect(line.itemSetHash === null).toBe(!hasProducts);
+    }
+  });
+
+  it('gives the milk line the hash of the set it holds (plan 0048, section 1.1)', () => {
+    // The written out digest, checked against the set it is supposed to be of.
+    // Core's service and the core migration both compute this, in TypeScript and
+    // in SQL; this is the value both are measured against.
+    const milkLine = core.lines.find((l) => l.id === LINE_MILK_ID);
+    expect(milkLine?.itemSetHash).toBe(LINE_MILK_SET_HASH);
+    expect(
+      core.lineItems
+        .filter((li) => li.lineId === LINE_MILK_ID)
+        .map((li) => li.itemId)
+    ).toEqual([ITEM_MILK_ID]);
   });
 
   it('holds one write-without-decide and one decide-without-write row', () => {

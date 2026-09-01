@@ -1,5 +1,6 @@
 import { Item } from './item.entity';
 import { PriceScope } from './price-scope.entity';
+import { ProductGroup } from './product-group.entity';
 import { SupermarketItem } from './supermarket-item.entity';
 import { SupermarketLocationItem } from './supermarket-location-item.entity';
 import { SupermarketLocation } from './supermarket-location.entity';
@@ -8,6 +9,7 @@ import { Supermarket } from './supermarket.entity';
 export { BaseEntity } from './base.entity';
 export { Item } from './item.entity';
 export { PriceScope } from './price-scope.entity';
+export { ProductGroup } from './product-group.entity';
 export { SupermarketItem } from './supermarket-item.entity';
 export { SupermarketLocationItem } from './supermarket-location-item.entity';
 export { SupermarketLocation } from './supermarket-location.entity';
@@ -18,6 +20,8 @@ export const CATALOG_ENTITIES = [
   Supermarket,
   PriceScope,
   SupermarketLocation,
+  // Groups come before items: an item may point at one (plan 0048, section 1).
+  ProductGroup,
   Item,
   SupermarketItem,
   SupermarketLocationItem,

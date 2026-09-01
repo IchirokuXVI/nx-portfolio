@@ -113,7 +113,7 @@ export class ListMemory implements ListServiceI {
       name,
       createdByUserId: this.callerUserId(),
       lineCount: 0,
-      readyCount: 0,
+      wantedCount: 0,
       autoApproveLines: false,
       sharedWithZone: shareWithZone,
       myPermissions: [],

@@ -27,6 +27,11 @@ export interface EventAudience {
   listId?: string;
   /** Users whose own sessions hear it whatever rooms they hold. */
   userIds?: readonly string[];
+  /**
+   * The shared basket whose room hears it (plan 0051, section 7). Its members are
+   * participants rather than users, which is what makes a guest reachable.
+   */
+  generatedListId?: string;
 }
 
 /**
@@ -69,6 +74,23 @@ export class CoreEventsPublisher {
   }
 
   /**
+   * Publish an event addressed to a shared basket (plan 0051, section 7): every
+   * participant holding a live credential for it, guests included.
+   *
+   * Deliberately not `emitToUsers([ownerUserId])`, which is what plan 0050 used
+   * while a basket had exactly one reader. A guest has no user id, so that
+   * address cannot reach them at all, and the owner is a participant like anybody
+   * else here rather than a second audience to name.
+   */
+  emitToGeneratedList<T>(
+    event: RealtimeEvent,
+    generatedListId: string,
+    payload: T
+  ): void {
+    this.emitTo(event, { generatedListId }, payload);
+  }
+
+  /**
    * Publish with an explicit audience, which is what the other two are: an event
    * about a person's standing in a zone is addressed to both, so that it reaches
    * them whether or not they hold the zone's room.
@@ -80,6 +102,9 @@ export class CoreEventsPublisher {
       ...(audience.zoneId ? { zoneId: audience.zoneId } : {}),
       ...(audience.listId ? { listId: audience.listId } : {}),
       ...(audience.userIds?.length ? { userIds: audience.userIds } : {}),
+      ...(audience.generatedListId
+        ? { generatedListId: audience.generatedListId }
+        : {}),
       payload,
     };
     // Inside a producer span so the fan out stays part of the originating

@@ -1,10 +1,16 @@
 import type {
+  BasketLine,
+  BasketParticipant,
+  BasketPresenceEntry,
   Comment,
+  GeneratedListSummary,
   Line,
+  LineSettlement,
   ListPermission,
   ListPresence,
   Membership,
   ShoppingList,
+  ShoppingProfile,
   Zone,
   ZonePresence,
 } from '@portfolio/velista/models';
@@ -22,9 +28,16 @@ import type {
  *
  * - `member.rejected` carries `{ id, userId }`, **not** a membership.
  * - `line.reordered` carries a permutation, not a set of rows.
- * - `line.updated` also fires for approval and status changes, so there is no separate
- *   "status changed" event to listen for.
+ * - `line.updated` also fires for an approval decision, so there is no separate
+ *   "approval changed" event to listen for. It no longer fires for a trip status,
+ *   because there is no longer one: what a shopper found is `line.settled`.
  */
+/** One line named by a claim change, with the list that holds it. */
+export interface LineClaimRef {
+  readonly lineId: string;
+  readonly listId: string;
+}
+
 export type RealtimeEvent =
   | {
       /**
@@ -137,6 +150,50 @@ export type RealtimeEvent =
       readonly permissions: readonly ListPermission[];
     }
   | { readonly type: 'line.added' | 'line.updated'; readonly line: Line }
+  /**
+   * A line was settled: bought, or found missing from the shop (backend plan 0047,
+   * section 8).
+   *
+   * It carries **both halves**, and both are needed. The line has a new quantity and
+   * two moved indicators on it, so a phone in the shop and a phone at home agree
+   * without a refetch; the settlement carries an id and a time nothing else can
+   * produce, which is the row an open history should grow.
+   *
+   * Distinct from `line.updated` on purpose, though the line inside it did change.
+   * "Somebody bought two of these" is a different sentence from "the number moved",
+   * which a quantity edit says too, and only one of them belongs in a history.
+   */
+  | {
+      readonly type: 'line.settled';
+      readonly line: Line;
+      readonly settlement: LineSettlement;
+    }
+  /**
+   * Some lines are, or are no longer, in somebody's live basket (backend plan
+   * 0052), on the **zone** room.
+   *
+   * The one zone event a generated list emits, so a line can show that somebody is out
+   * buying it. The payload says **that** those lines are claimed and **whose**, and
+   * nothing else: not what else is in the basket, not where they are shopping, not
+   * what it costs, and never which basket.
+   *
+   * `claimed` is false when the claim is released, which is what makes one event serve
+   * both directions rather than needing a second one to undo it. `claimedByUserId` is
+   * null on a release, and also null on a claim whose owner has since left the zone:
+   * the line is still claimed and the name is no longer this reader's to have.
+   *
+   * **Many lines and not one.** A run takes every wanted line of every list it drew
+   * from, so the server sends one event per zone rather than a hundred into a
+   * household room (backend plan 0052, section 3.1). The single line transitions use
+   * the same shape carrying one entry, so there is one payload to read and not two.
+   */
+  | {
+      readonly type: 'line.claimChanged';
+      readonly zoneId: string;
+      readonly claimed: boolean;
+      readonly claimedByUserId: string | null;
+      readonly lines: readonly LineClaimRef[];
+    }
   | {
       readonly type: 'line.reordered';
       readonly listId: string;
@@ -165,6 +222,123 @@ export type RealtimeEvent =
       readonly mergeId: string;
       readonly zoneId: string;
     }
+  | {
+      /**
+       * The caller's **shopping profiles** changed (backend plan 0049, section 6), on
+       * their own sessions and on nothing else.
+       *
+       * Profiles are private, so this is the one audience it can have: no zone room
+       * hears it, not even one the caller owns.
+       *
+       * It carries the **whole list** rather than the profile that moved, and that is
+       * the payload rather than an oversight: every rule it exists to propagate is
+       * about the set, namely which one is the default, how many are left, and what a
+       * deleted one was replaced by. A single profile could not say any of them.
+       *
+       * An empty array is therefore not a malformed payload either, but it is one this
+       * client will never see: the server creates the default profile on the first
+       * read and refuses to delete the last one.
+       */
+      readonly type: 'profiles.changed';
+      readonly profiles: readonly ShoppingProfile[];
+    }
+  | {
+      /**
+       * A generated shopping list of the caller's was composed, or one of them moved
+       * (backend `0050` section 9), on their own sessions and on nothing else.
+       *
+       * A basket is private, so the owner's room is the only audience it can have: not
+       * the zones it drew from, not the admins of those zones, nobody. What it buys is
+       * the one thing a private resource still needs from realtime, which is that the
+       * same basket stays in sync between the phone in the shop and the laptop at home.
+       *
+       * The payload is the **whole** basket, lines included, and this app keeps the
+       * summary out of it: the dashboard card and the history draw a name, a date and
+       * two counts, and the screen that wants the lines fetches them itself.
+       */
+      readonly type: 'generatedList.created' | 'generatedList.updated';
+      readonly list: GeneratedListSummary;
+    }
+  | {
+      /**
+       * A line of one of the caller's baskets was settled (backend `0051` section 6).
+       *
+       * It reaches this client on the **owner's own sessions**, which is what makes it
+       * useful to a dashboard: the person watching the card is usually not the person
+       * in the shop. It also goes to the basket's own room, which this app cannot hold
+       * yet, since every socket here authenticates with an account token and a guest
+       * has none (`0044`'s participant connection).
+       *
+       * Only the id is kept. The payload carries the line, redacted to the least
+       * privileged reader in the room because a broadcast cannot be projected per
+       * socket, and **the counts this app draws cannot be derived from one line**: a
+       * summary holds how many lines are finished, and knowing that one of them moved
+       * says nothing about whether it had already been counted. So the id is what the
+       * store needs and the line is the basket screen's business.
+       */
+      readonly type: 'generatedList.lineSettled' | 'generatedList.lineUpdated';
+      readonly generatedListId: string;
+      /**
+       * The line that moved, or null when the payload did not carry a readable one.
+       *
+       * Kept since velista `0048`, and it used to be dropped here on the grounds that
+       * a **summary** cannot use it. That is true of `GeneratedListStore` and false of
+       * the basket screen, which holds the lines themselves and wants exactly this: it
+       * merges the line by id and one row moves, with no request at all.
+       *
+       * **Redacted to the least privileged reader in the room**, because a broadcast
+       * cannot be projected per socket. So a line arriving here carries no `origins`
+       * even for somebody entitled to them, and merging it naively would blank a field
+       * a privileged reader had legitimately fetched. `BasketStore.apply` merges by id
+       * and keeps what it holds, which is what makes that safe.
+       *
+       * Null rather than dropping the whole event, because the id is the half
+       * `GeneratedListStore` needs and it is still readable when the line is not.
+       */
+      readonly line: BasketLine | null;
+    }
+  | {
+      /**
+       * Somebody joined a shared basket, or was removed from it (backend `0051`,
+       * section 3), on the basket's own room.
+       *
+       * `participantLeft` is a **revocation and not a disconnection**: who is
+       * connected right now is presence, and these two are about who is allowed to
+       * be. A guest closing their browser emits neither.
+       *
+       * The payload is the bare participant view, with no basket id on it, and it
+       * needs none: it arrives only on a connection pinned to one basket.
+       */
+      readonly type:
+        | 'generatedList.participantJoined'
+        | 'generatedList.participantLeft';
+      readonly participant: BasketParticipant;
+    }
+  | {
+      /**
+       * Who is holding a connection to one basket right now (backend `0051`,
+       * section 7).
+       *
+       * The whole set on every change, like every other presence event here, because
+       * a diff would leave a client that missed one message permanently wrong about
+       * who is in a shop.
+       */
+      readonly type: 'presence.generatedListUpdated';
+      readonly generatedListId: string;
+      readonly present: readonly BasketPresenceEntry[];
+    }
+  | {
+      /**
+       * A generated shopping list of the caller's was deleted.
+       *
+       * No screen in this app deletes one (plan 0045, section 3.3), so this only ever
+       * arrives from somewhere else: another client, or a future screen. It is applied
+       * anyway, because a card pointing at a basket the server no longer has is worse
+       * than a card that quietly goes away.
+       */
+      readonly type: 'generatedList.deleted';
+      readonly generatedListId: string;
+    }
   | { readonly type: 'presence.zoneUpdated'; readonly presence: ZonePresence }
   | { readonly type: 'presence.listUpdated'; readonly presence: ListPresence };
 
@@ -191,6 +365,8 @@ export const REALTIME_EVENT_NAMES = [
   'list.myAccessChanged',
   'line.added',
   'line.updated',
+  'line.settled',
+  'line.claimChanged',
   'line.reordered',
   'line.deleted',
   'comment.added',
@@ -198,8 +374,17 @@ export const REALTIME_EVENT_NAMES = [
   'merge.requested',
   'merge.approved',
   'merge.rejected',
+  'profiles.changed',
+  'generatedList.created',
+  'generatedList.updated',
+  'generatedList.lineSettled',
+  'generatedList.lineUpdated',
+  'generatedList.participantJoined',
+  'generatedList.participantLeft',
+  'generatedList.deleted',
   'presence.zoneUpdated',
   'presence.listUpdated',
+  'presence.generatedListUpdated',
 ] as const;
 
 /**

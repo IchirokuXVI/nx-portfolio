@@ -1,0 +1,150 @@
+@use '../account-page' as page;
+
+:host {
+  display: block;
+}
+
+.selector-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+}
+
+// The name is the only thing that flexes, and `min-inline-size: 0` is what lets it
+// shrink below its content: without it a flex item refuses to go under its intrinsic
+// width and the long name pushes the two buttons off the row. That is rule R1's whole
+// mechanism.
+.current {
+  display: flex;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-button-height);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &.open {
+    border-color: var(--app-action-quiet-fg);
+  }
+
+  // One profile. The row still looks like the row, because it still says which profile
+  // is being edited; it simply does not open.
+  &:disabled {
+    cursor: default;
+  }
+
+  @include page.focus-ring;
+}
+
+.name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// The default marker. A word and not a dot, so it survives a colourblind reader and a
+// screen reader alike; the amber only agrees with it.
+.badge {
+  flex: none;
+  padding: var(--app-chip-padding-block) var(--app-space-3);
+  border: 1px solid var(--app-action-quiet-fg);
+  border-radius: var(--app-chip-radius);
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.caret {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+  transition: transform var(--app-motion-fast) var(--app-motion-ease);
+
+  &.flipped {
+    transform: rotate(180deg);
+  }
+}
+
+.action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  @include page.focus-ring;
+}
+
+// The trash is pushed to the far end and tinted as what it does, so the two icon
+// buttons do not read as a pair of equals (section 7).
+.destructive {
+  margin-inline-start: var(--app-space-3);
+  border-color: var(--app-status-danger-border);
+  color: var(--app-status-danger-fg);
+}
+
+.glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.add-glyph {
+  color: var(--app-action-quiet-fg);
+}
+
+// The open list, over the page rather than in it, so choosing a profile does not move
+// the fields underneath while the finger is on its way to them.
+.list {
+  position: absolute;
+  z-index: 1;
+  inline-size: calc(100% - var(--app-space-10));
+  margin-block-start: var(--app-space-2);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface-overlay);
+  box-shadow: var(--app-elevation-2);
+  overflow: hidden;
+}
+
+.option {
+  display: flex;
+  inline-size: 100%;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-4);
+  border: none;
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:first-child {
+    border-block-start: none;
+  }
+
+  &.picked {
+    background: var(--app-surface-raised);
+  }
+
+  @include page.focus-ring;
+}

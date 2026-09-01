@@ -2,6 +2,12 @@ import { InitialCoreSchema1756000100000 } from './1756000100000-InitialCoreSchem
 import { ListPermissionsAndAutoApprove1756000200000 } from './1756000200000-ListPermissionsAndAutoApprove';
 import { ListSharedWithZone1756000300000 } from './1756000300000-ListSharedWithZone';
 import { VoiceComments1756000400000 } from './1756000400000-VoiceComments';
+import { LineProductSet1756000600000 } from './1756000600000-LineProductSet';
+import { ShoppingProfiles1756000700000 } from './1756000700000-ShoppingProfiles';
+import { LineSettlements1756000800000 } from './1756000800000-LineSettlements';
+import { GeneratedLists1756001000000 } from './1756001000000-GeneratedLists';
+import { GeneratedListSharing1756001100000 } from './1756001100000-GeneratedListSharing';
+import { SettlementParticipants1756001200000 } from './1756001200000-SettlementParticipants';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -17,4 +23,14 @@ export const CORE_MIGRATIONS = [
   ListPermissionsAndAutoApprove1756000200000,
   ListSharedWithZone1756000300000,
   VoiceComments1756000400000,
+  LineProductSet1756000600000,
+  ShoppingProfiles1756000700000,
+  // Plan 0047 first: it drops `list_lines.status`, and the generated list tables
+  // that follow are additive and reference nothing it touches.
+  LineSettlements1756000800000,
+  GeneratedLists1756001000000,
+  GeneratedListSharing1756001100000,
+  // Last, because it alters plan 0047's table rather than creating one of its
+  // own, so it has to run after whichever migration did (plan 0051, section 10).
+  SettlementParticipants1756001200000,
 ];

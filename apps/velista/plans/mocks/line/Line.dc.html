@@ -1,0 +1,232 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ THE PAGE, REMEASURED ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE LIST &middot; no checkbox anywhere, the quantity is the state</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
+
+      <!-- app bar, unchanged -->
+      <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
+        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Weekly shop</div>
+        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
+          <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
+          <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
+          <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
+        </div>
+      </div>
+
+      <!-- header: the count is what is wanted now -->
+      <div style="flex: 0 0 auto; padding: 2px 20px 16px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+          <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
+          <span style="font-size: 13px; color: #ffc271; font-variant-numeric: tabular-nums;">5 things needed</span>
+        </div>
+      </div>
+
+      <div style="flex: 1 1 auto; background: #161a28; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden;">
+
+        <!-- wanted -->
+        <div style="height: 56px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 1 1 auto; font-size: 16px; line-height: 1.3;">Milk</span>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #f7f8fc;">2</span>
+        </div>
+
+        <!-- wanted, larger quantity -->
+        <div style="height: 56px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 1 1 auto; font-size: 16px; line-height: 1.3;">Tomatoes</span>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #f7f8fc;">6</span>
+        </div>
+
+        <!-- bought: at zero with a purchase on record. Quiet, present, not struck through -->
+        <div style="min-height: 64px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3; color: #98a0bb;">Olive oil</div>
+            <div style="margin-top: 3px; display: flex; align-items: center; gap: 5px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span style="font-size: 12.5px; color: #34d399;">Bought</span>
+            </div>
+          </div>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: transparent; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #525a78;">0</span>
+        </div>
+
+        <!-- not available last trip -->
+        <div style="min-height: 64px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Sourdough loaf</div>
+            <div style="margin-top: 3px; display: flex; align-items: center; gap: 5px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17L17 7M7 7l10 10" stroke="#fb7185" stroke-width="2.4" stroke-linecap="round"/></svg>
+              <span style="font-size: 12.5px; color: #fb7185;">Not in the shop last time</span>
+            </div>
+          </div>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #f7f8fc;">1</span>
+        </div>
+
+        <!-- somebody is buying this, live -->
+        <div style="min-height: 64px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Eggs</div>
+            <div style="margin-top: 3px; display: flex; align-items: center; gap: 6px;">
+              <span style="width: 6px; height: 6px; border-radius: 999px; background: #60a5fa;"></span>
+              <span style="font-size: 12.5px; color: #60a5fa;">Ana is buying this</span>
+            </div>
+          </div>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #f7f8fc;">12</span>
+        </div>
+
+        <!-- never wanted: zero with no purchase. Nothing to report -->
+        <div style="height: 56px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <span style="flex: 1 1 auto; font-size: 16px; line-height: 1.3; color: #98a0bb;">Fairy liquid</span>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: transparent; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #525a78;">0</span>
+        </div>
+
+        <!-- awaiting approval, unchanged from 0030 -->
+        <div style="position: relative; min-height: 72px; padding: 11px 8px 11px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgb(167 139 250 / 7%);">
+          <span style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #a78bfa;"></span>
+          <div style="flex: 1 1 auto; min-width: 0;">
+            <div style="font-size: 16px; line-height: 1.3;">Coffee beans</div>
+            <div style="margin-top: 3px; font-size: 12.5px; color: #a78bfa;">Waiting for approval &middot; Marc</div>
+          </div>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #f7f8fc;">1</span>
+        </div>
+
+        <!-- free text stays first class -->
+        <div style="height: 56px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px;">
+          <span style="flex: 1 1 auto; font-size: 16px; line-height: 1.3;">Something for dinner</span>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #f7f8fc;">1</span>
+        </div>
+
+      </div>
+
+      <!-- composer, unchanged -->
+      <div style="flex: 0 0 auto; background: #1a1e2e; border-top: 1px solid rgba(255,255,255,0.08); padding: 10px 12px 26px; display: flex; align-items: center; gap: 10px;">
+        <div style="flex: 1 1 auto; height: 46px; border-radius: 14px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; padding: 0 14px;">
+          <span style="font-size: 15.5px; color: #6f7899;">Add something</span>
+        </div>
+        <div style="flex: 0 0 auto; height: 46px; border-radius: 14px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center;">
+          <span style="width: 34px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 19px; color: #525a78;">&minus;</span>
+          <span style="min-width: 16px; text-align: center; font-size: 15px; font-variant-numeric: tabular-nums; color: #98a0bb;">1</span>
+          <span style="width: 34px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 19px; color: #98a0bb;">+</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ ROW SPECIMENS ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE ROW SPEC &middot; each state, alone and combined</span>
+    <div style="width: 390px; display: flex; flex-direction: column; gap: 14px;">
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">WANTED &middot; quantity &gt; 0, the ordinary state. The whole row is the reel's target</span>
+        <div style="background: #161a28; border-radius: 12px; height: 56px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px;">
+          <span style="flex: 1 1 auto; font-size: 16px; color: #f7f8fc;">Milk</span>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #f7f8fc;">2</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">BOUGHT &middot; zero, and at least one purchase on record. Dim, never struck through</span>
+        <div style="background: #161a28; border-radius: 12px; min-height: 64px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 12px;">
+          <div style="flex: 1 1 auto;">
+            <div style="font-size: 16px; color: #98a0bb;">Olive oil</div>
+            <div style="margin-top: 3px; display: flex; align-items: center; gap: 5px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span style="font-size: 12.5px; color: #34d399;">Bought</span>
+            </div>
+          </div>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #525a78;">0</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">NEVER WANTED &middot; zero with no purchase. No indicator: nothing to report</span>
+        <div style="background: #161a28; border-radius: 12px; height: 56px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px;">
+          <span style="flex: 1 1 auto; font-size: 16px; color: #98a0bb;">Fairy liquid</span>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #525a78;">0</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">NOT AVAILABLE &middot; the most recent settlement said the shop had none</span>
+        <div style="background: #161a28; border-radius: 12px; min-height: 64px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 12px;">
+          <div style="flex: 1 1 auto;">
+            <div style="font-size: 16px; color: #f7f8fc;">Sourdough loaf</div>
+            <div style="margin-top: 3px; display: flex; align-items: center; gap: 5px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17L17 7M7 7l10 10" stroke="#fb7185" stroke-width="2.4" stroke-linecap="round"/></svg>
+              <span style="font-size: 12.5px; color: #fb7185;">Not in the shop last time</span>
+            </div>
+          </div>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #f7f8fc;">1</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">SOMEBODY IS BUYING THIS &middot; live, appears and disappears, never reads as done</span>
+        <div style="background: #161a28; border-radius: 12px; min-height: 64px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 12px;">
+          <div style="flex: 1 1 auto;">
+            <div style="font-size: 16px; color: #f7f8fc;">Eggs</div>
+            <div style="margin-top: 3px; display: flex; align-items: center; gap: 6px;">
+              <span style="width: 6px; height: 6px; border-radius: 999px; background: #60a5fa;"></span>
+              <span style="font-size: 12.5px; color: #60a5fa;">Ana is buying this</span>
+            </div>
+          </div>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #f7f8fc;">12</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">COMBINED &middot; wanted again, missed last trip, and somebody is on it now</span>
+        <div style="background: #161a28; border-radius: 12px; min-height: 78px; padding: 10px 8px 10px 16px; display: flex; align-items: center; gap: 12px;">
+          <div style="flex: 1 1 auto;">
+            <div style="font-size: 16px; color: #f7f8fc;">Sourdough loaf</div>
+            <div style="margin-top: 3px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span style="display: flex; align-items: center; gap: 5px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17L17 7M7 7l10 10" stroke="#fb7185" stroke-width="2.4" stroke-linecap="round"/></svg>
+                <span style="font-size: 12.5px; color: #fb7185;">Not in the shop last time</span>
+              </span>
+              <span style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 6px; height: 6px; border-radius: 999px; background: #60a5fa;"></span>
+                <span style="font-size: 12.5px; color: #60a5fa;">Ana is buying this</span>
+              </span>
+            </div>
+          </div>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #f7f8fc;">1</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">IN FLIGHT &middot; the optimistic, failed and overwritten treatments survive from 0012 unchanged</span>
+        <div style="background: #161a28; border-radius: 12px; height: 56px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 12px; opacity: 0.62;">
+          <span style="flex: 1 1 auto; font-size: 16px; color: #f7f8fc;">Milk</span>
+          <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #f7f8fc;">4</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

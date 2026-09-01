@@ -8,13 +8,14 @@ import type { AssistantServiceI } from './assistant-service';
  *
  * It does **not** pretend to be a model: it matches a handful of words and answers a
  * canned sentence, because the thing worth exercising here is the shape of a turn and
- * the references that come back with it, not language. The real service is built now
- * (backend `0039`), so this is for specs and for a run with no backend, which is what
- * every other `*Memory` in this library is for.
+ * what comes back with it, not language. The real service is built now (backend
+ * `0039`), so this is for specs and for a run with no backend, which is what every
+ * other `*Memory` in this library is for.
  *
- * The three canned answers are the three tools (backend `0039` section 6), so the
- * empty state's three example sentences each reach a reply with the references that
- * kind of turn would genuinely produce.
+ * The canned answers are the three tools (backend `0039` section 6) plus the turn that
+ * ends by asking, so the empty state's example sentences each reach a reply carrying
+ * what that kind of turn would genuinely produce: a link, a question with answers under
+ * it, or neither.
  *
  * `failNextWith` is how a spec or a backend-less run reaches the two states that are
  * otherwise a matter of luck: a dead network and a busy provider. The second carries a
@@ -65,7 +66,8 @@ export class AssistantMemory implements AssistantServiceI {
       this._heardNothing = false;
       return {
         text: 'I did not catch that. Could you say it again?',
-        references: [],
+        link: null,
+        choices: [],
         heard: '',
       };
     }
@@ -105,51 +107,71 @@ export class AssistantMemory implements AssistantServiceI {
  *
  * Anything unmatched gets the redirect, which is what backend `0039` section 7 says an
  * off topic turn produces: a short friendly sentence and no tool call, and therefore
- * no references.
+ * nowhere to go.
  */
 function answerFor(said: string): AssistantReply {
   const text = said.toLocaleLowerCase();
+
+  // A turn that ended by asking, which is the one branch that sends choices and no
+  // link (velista `0042`, section 4). It matches on the word "list" precisely because
+  // naming no particular list is what leaves the assistant with nothing to resolve.
+  if (text.includes('list')) {
+    return {
+      text: 'Which list did you mean?',
+      listResolution: 'asked',
+      link: null,
+      choices: [
+        { label: 'Weekly shop · Flat 3B', message: 'the weekly shop' },
+        { label: 'Shopping · Office', message: 'the office one' },
+      ],
+    };
+  }
 
   if (text.includes('add')) {
     return {
       text: 'Added. Milk on the weekly shop.',
       listResolution: 'named',
-      references: [
-        {
-          kind: 'line',
-          zoneId: 'zone-flat',
-          listId: 'list-weekly',
-          lineId: 'ln-w-01',
-          label: 'Milk · 2 l',
-        },
-      ],
+      link: {
+        zoneId: 'zone-flat',
+        listId: 'list-weekly',
+        label: 'Weekly shop',
+        zoneLabel: null,
+      },
+      choices: [],
     };
   }
 
   if (text.includes('?')) {
     return {
       text: 'Yes. There are 2 litres of milk on the weekly shop, still to buy.',
-      references: [
-        {
-          kind: 'list',
-          zoneId: 'zone-flat',
-          listId: 'list-weekly',
-          label: 'Weekly shop',
-        },
-      ],
+      // With a zone named, which is what the panel reads as "Go to Weekly shop, in
+      // Flat 3B". The decision is the server's and the fake makes both readings
+      // reachable rather than composing either of them here.
+      link: {
+        zoneId: 'zone-flat',
+        listId: 'list-weekly',
+        label: 'Weekly shop',
+        zoneLabel: 'Flat 3B',
+      },
+      choices: [],
     };
   }
 
+  // Changing a name touches no list, so it sends nobody anywhere. There is no zone
+  // link to offer any more, and inventing a list to point at would be worse than the
+  // sentence standing on its own.
   if (text.includes('call me')) {
     return {
       text: 'Done. You are Marta in your groups now.',
-      references: [{ kind: 'zone', zoneId: 'zone-flat', label: 'Flat 3B' }],
+      link: null,
+      choices: [],
     };
   }
 
   return {
     text: 'I only know about your lists, I am afraid. I can add something, tell you what is on one, or change your name.',
-    references: [],
+    link: null,
+    choices: [],
   };
 }
 

@@ -40,9 +40,42 @@ export const AUTH_PATTERNS = {
   setUsername: 'auth.setUsername',
   /** Read the caller's own profile (plan 0018, section 12). */
   getProfile: 'auth.getProfile',
+  /**
+   * Sign a short lived, basket scoped socket token for a participant (plan 0051,
+   * section 9).
+   *
+   * Auth is here because it holds the private key and nothing else does. It is
+   * **not** an authorization step: core has already decided that this participant
+   * is live on this basket, and this signs what it is handed. Keeping the two
+   * apart is what stops this becoming a general "sign me some claims" capability
+   * on the bus, which is why the request carries a participant and a basket and
+   * has no room for anything else.
+   */
+  mintParticipantToken: 'auth.mintParticipantToken',
 } as const;
 
 export type AuthPattern = (typeof AUTH_PATTERNS)[keyof typeof AUTH_PATTERNS];
+
+/**
+ * Ask auth to sign a participant's socket token (plan 0051, section 9).
+ *
+ * Everything it needs and nothing it does not: auth never learns what a basket
+ * is, never reads core's tables, and never decides whether this participant
+ * should have a token. Core decided that before sending this.
+ */
+export interface MintParticipantTokenRequest {
+  participantId: string;
+  /** Becomes the token's `aud`, so it is worthless on any other basket. */
+  generatedListId: string;
+  /** Copied into the claims so a guard can tell a guest from a member cheaply. */
+  kind: string;
+}
+
+/** A signed participant token and the moment it lapses. */
+export interface MintParticipantTokenResult {
+  socketToken: string;
+  socketTokenExpiresAt: string;
+}
 
 /** The claims carried inside the signed access token. */
 export interface AccessTokenClaims {

@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   ElementRef,
   inject,
   input,
@@ -10,9 +11,19 @@ import {
   viewChild,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { LineAction, LineRowVm } from '@portfolio/velista/models';
-import { CommentIcon, EllipsisIcon, GripIcon } from '../icons/icons';
-import { LineStateControl } from './line-state-control';
+import {
+  QUANTITY_REEL_CLICK_SHIELD_MS,
+  type LineAction,
+  type LineRowVm,
+} from '@portfolio/velista/models';
+import {
+  CheckIcon,
+  CommentIcon,
+  EllipsisIcon,
+  GripIcon,
+  XCircleIcon,
+} from '../icons/icons';
+import { QuantityReel } from './quantity-reel';
 
 /**
  * What the row emits: everything in {@link LineAction}, plus the three approval
@@ -23,24 +34,36 @@ export type LineRowAction = LineAction | 'approve' | 'reject' | 'restore';
 /**
  * One line on the list. The row this whole screen is for.
  *
- * ## The whole row is the checkbox
+ * ## The row is a button, and the number beside it is the control
  *
- * `role="checkbox"` with `aria-checked`, not a button, because that is what it is. Its
- * accessible name is the content plus the quantity, so "Sourdough loaf, 2" is what gets
- * read, and the captions go in `aria-describedby` rather than into the name: a name
- * that grew "Waiting for approval" on the end would be read out every time focus
- * touched the row (section 7).
+ * It was a checkbox: `role="checkbox"`, `aria-checked`, and a tap that ticked it off.
+ * Velista plan 0043 section 1.1 takes all of that back, and it is a rewrite rather than
+ * an edit. There is no checked state left to report, because a tick is a fact about one
+ * shopping trip written onto a record that outlives every trip. What a tap does now is
+ * **open what the app knows about the thing**, which is a button's job, and what says
+ * whether the household wants it is the quantity.
  *
- * The one separate target inside it is the overflow, 44 square, which holds everything
- * that is not ticking off. Two targets and no more: a row with an edit button, a
- * comment button and a delete button on it is a row nobody can tap correctly while
- * walking.
+ * So the row has two live parts and they follow two different permissions. The row
+ * opens for anybody holding `READ`, because knowing is not deciding. The reel moves for
+ * `DECIDE`. A reader gets a row that opens and a number that does not move, which is
+ * honest in both directions.
  *
- * ## A row with a write in flight stays tappable
+ * ## Three targets, and no more
  *
- * Drawn at 70% and `aria-busy`, and still live. Blocking it would make the app feel
- * slow on exactly the connection it was designed for, and the second tap simply
- * supersedes the first (section 3.3).
+ * The row, the reel, and the overflow. A row with an edit button, a comment button and
+ * a delete button on it is a row nobody can tap correctly while walking, and that was
+ * true when there were two.
+ *
+ * The reel takes the row's full height rather than the width of its digits (section 7),
+ * which is why it stops the pointer and the click from reaching the row underneath: a
+ * drag that ended in a tap would otherwise open the sheet every time somebody adjusted
+ * a number.
+ *
+ * ## A row with a write in flight stays live
+ *
+ * Drawn at 70% and `aria-busy`, and still usable. Blocking it would make the app feel
+ * slow on exactly the connection it was designed for, and the next adjustment simply
+ * supersedes the last (`0012`, section 3.3).
  *
  * ## Somebody else editing is drawn, and decides nothing
  *
@@ -50,20 +73,39 @@ export type LineRowAction = LineAction | 'approve' | 'reject' | 'restore';
  * guard, because presence under reports and a guard built on it would refuse an edit
  * nobody is making.
  *
- * ## In reorder mode it stops being a checkbox
+ * ## An open reel makes the rest of the line deaf
  *
- * The role is dropped rather than kept and dishonoured, and a focusable grip appears
- * that moves the row with the up and down keys. A grip that only answered a pointer
- * would put the manual order out of reach of anybody without a working one.
+ * The reel's overlay stands over the row it belongs to, so the tap that dismisses it
+ * lands on the row underneath. That tap **closes the reel and does nothing else**: it
+ * was aimed at the thing on top, and opening the detail sheet on the way out is the
+ * app answering a question nobody asked. The same holds for
+ * {@link QUANTITY_REEL_CLICK_SHIELD_MS} after the overlay times out on its own, since
+ * a finger already falling does not stop when what it was falling towards vanishes.
+ *
+ * It is decided at `pointerdown` and enforced at `click`, in the capture phase, and
+ * both halves are needed. The state has to be read at the press because focus leaves
+ * the reel between the press and the click, which closes it, so by click time there is
+ * nothing left to notice. Capture is what lets one listener cover the whole line: the
+ * overflow trigger, the decision buttons and the inline notices are all under a tap
+ * that was really about the reel, and each of them stops its own propagation.
+ *
+ * ## In reorder mode it stops being a button
+ *
+ * The role is dropped rather than kept and dishonoured, a focusable grip appears that
+ * moves the row with the up and down keys, and **the reel goes away entirely**: a
+ * second gesture living inside a row being dragged would fight the first for the same
+ * finger.
  */
 @Component({
   selector: 'lib-line-row',
   imports: [
     RokuTranslatorPipe,
+    CheckIcon,
     CommentIcon,
     EllipsisIcon,
     GripIcon,
-    LineStateControl,
+    QuantityReel,
+    XCircleIcon,
   ],
   templateUrl: './line-row.html',
   styleUrl: './line-row.scss',
@@ -88,8 +130,16 @@ export class LineRow {
   readonly canMoveUp = input(true);
   readonly canMoveDown = input(true);
 
-  /** A tap on the row: tick it off, or put it back. */
-  readonly ticked = output<string>();
+  /** A tap on the row, which opens the detail sheet. */
+  readonly opened = output<string>();
+
+  /**
+   * One settled adjustment of the quantity, as a signed delta.
+   *
+   * Emitted by the reel when its overlay closes, not per step of the drag, so a thumb
+   * that went from two to five and back to four sends one delta of `+2` (section 4.1).
+   */
+  readonly quantityChanged = output<{ lineId: string; delta: number }>();
 
   /** Anything from the overflow, the decision buttons, or the grip. */
   readonly act = output<{ action: LineRowAction; lineId: string }>();
@@ -108,29 +158,125 @@ export class LineRow {
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly _trigger =
     viewChild<ElementRef<HTMLButtonElement>>('trigger');
+  private readonly _reel = viewChild(QuantityReel);
+  private readonly _reelEl = viewChild('reel', { read: ElementRef });
+
+  /** Until when a tap on this line is swallowed, after the reel closed by itself. */
+  private _deafUntil = 0;
+
+  /** Whether the click this press will produce belongs to the reel rather than the row. */
+  private _swallowClick = false;
+
+  constructor() {
+    const host = this._host.nativeElement;
+    const onPointerDown = (event: Event) => this._notePress(event);
+    const onClick = (event: Event) => this._swallowReelDismissal(event);
+
+    // Native listeners rather than host bindings, because both have to run in the
+    // capture phase and a host binding cannot ask for one. Capture is the point: these
+    // decide whether the line hears the tap at all, so they have to run before the
+    // handlers that would act on it.
+    host.addEventListener('pointerdown', onPointerDown, true);
+    host.addEventListener('click', onClick, true);
+
+    inject(DestroyRef).onDestroy(() => {
+      host.removeEventListener('pointerdown', onPointerDown, true);
+      host.removeEventListener('click', onClick, true);
+    });
+  }
+
+  /**
+   * At the press, work out whether this tap is really about the reel.
+   *
+   * Read here and not at the click because the press moves focus, the reel commits and
+   * closes on losing it, and by the time the click arrives the overlay that the tap was
+   * dismissing is gone.
+   */
+  private _notePress(event: Event): void {
+    if (this._withinReel(event.target)) {
+      this._swallowClick = false;
+      return;
+    }
+
+    const reel = this._reel();
+    const open = reel?.open() ?? false;
+    this._swallowClick = open || Date.now() < this._deafUntil;
+
+    // Closed here rather than left to the blur. A tap on a span that cannot take focus
+    // moves focus nowhere, which is the ordinary case on a touch screen, and the reel
+    // would sit there until its own timer ran out.
+    if (open) {
+      reel?.close();
+    }
+  }
+
+  private _swallowReelDismissal(event: Event): void {
+    if (!this._swallowClick || this._withinReel(event.target)) {
+      return;
+    }
+
+    this._swallowClick = false;
+    event.stopPropagation();
+    event.preventDefault();
+
+    // The swallowed click never reaches the document, so the listener that would have
+    // dismissed an open overflow menu never runs. Dismissing it here keeps a tap that
+    // was ignored from also leaving a menu stuck open behind it.
+    this.menuOpen.set(false);
+  }
+
+  private _withinReel(target: EventTarget | null): boolean {
+    const reel = this._reelEl()?.nativeElement as HTMLElement | undefined;
+    return (
+      target !== null && reel !== undefined && reel.contains(target as Node)
+    );
+  }
+
+  /**
+   * The reel timed out and closed on its own, which starts the deaf beat.
+   *
+   * Only this path. A reel closed by a tap elsewhere on the line has already cost that
+   * tap its effect, and charging the next one for it too would make the row feel stuck.
+   */
+  protected onReelAutoClosed(): void {
+    this._deafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
+  }
 
   /**
    * The accessible name: what it is, and how many.
    *
    * Assembled here rather than in the template so the quantity is present in the name
    * exactly when it is present on screen, and so the two cannot drift.
+   *
+   * **The number is always in it now**, where it used to appear only above one. The
+   * quantity is the line's state rather than an annotation on it, and a name that said
+   * "Olive oil" for a line at zero and "Olive oil, 2" for the same line a moment later
+   * would hide the only thing that changed.
    */
   accessibleName(): string {
     const line = this.line();
-    return line.quantity > 1
-      ? `${line.content}, ${line.quantity}`
-      : line.content;
+    return `${line.content}, ${line.quantity}`;
   }
 
   /**
-   * `aria-checked`.
+   * What `aria-describedby` points at: the indicators, the caption, or both.
    *
-   * NOT_AVAILABLE is **false**, not a third state, because there is no third state in
-   * the checkbox role and mixed means something else entirely. The caption carries the
-   * distinction, in the description, which is where a screen reader user can act on it.
+   * They are descriptions rather than part of the name, which is section 7's rule and
+   * the reason it exists: a name that grew "bought" and "Ana is buying this" would read
+   * both out every time focus touched the row, ahead of the thing itself.
+   *
+   * Assembled here rather than in the template because it is a list of ids that exist
+   * conditionally, and a template expression producing `"ind-x cap-x"` from two `@if`
+   * blocks is the kind of string that ends up pointing at an element nobody rendered.
    */
-  checked(): boolean {
-    return this.line().status === 'READY';
+  describedBy(): string | null {
+    const line = this.line();
+    const ids = [
+      line.indicators.length > 0 ? `ind-${line.id}` : null,
+      line.captionKey !== null ? `cap-${line.id}` : null,
+    ].filter((id): id is string => id !== null);
+
+    return ids.length === 0 ? null : ids.join(' ');
   }
 
   onRowClick(): void {
@@ -138,15 +284,13 @@ export class LineRow {
       return;
     }
 
-    this.ticked.emit(this.line().id);
+    this.opened.emit(this.line().id);
   }
 
   /**
-   * Space and Enter, because a `div` with `role="checkbox"` gets neither for free.
+   * Space and Enter, because a `div` with `role="button"` gets neither for free.
    *
-   * Both, and not only Space. The checkbox role calls for Space, and every person who
-   * has ever used a list of rows will try Enter, so refusing it would be correct by the
-   * specification and wrong for the person holding the keyboard.
+   * Both, which the button role calls for and which everybody expects anyway.
    */
   onRowKeydown(event: KeyboardEvent): void {
     if (event.key !== ' ' && event.key !== 'Enter') {
@@ -204,10 +348,6 @@ export class LineRow {
     switch (action) {
       case 'edit':
         return 'list.line.edit';
-      case 'markNotAvailable':
-        return 'list.line.markNotAvailable';
-      case 'markPending':
-        return 'list.line.markPending';
       case 'comments':
         return 'list.line.comments';
       case 'delete':

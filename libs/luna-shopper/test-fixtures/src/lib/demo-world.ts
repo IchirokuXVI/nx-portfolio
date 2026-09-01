@@ -24,9 +24,11 @@
  *           section 9): they are the two states a single role could not express.
  *           Neither owner has a row anywhere, because creation no longer writes
  *           one for a staff membership (plan 0042, section 1.2).
- *   Lines   Several across both line state machines (approvalStatus x status),
- *           with non sequential float positions (the reordering case), a couple
- *           linked to real catalog items, and two comments on the milk line.
+ *   Lines   Several across every approval state and both sides of the quantity
+ *           that replaced the trip status (plan 0047): two the household still
+ *           wants, one it is stocked on at zero, one it wants a lot of. Non
+ *           sequential float positions (the reordering case), a couple linked to
+ *           real catalog items, and two comments on the milk line.
  *   Catalog Mercadona (one location) with Milk and Bread priced per store; the
  *           milk and bread lines reference those item ids across the databases.
  */
@@ -35,7 +37,6 @@ import {
   AuthProvider,
   ItemCategory,
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
   MembershipStatus,
   MergeRequestStatus,
@@ -50,12 +51,14 @@ import {
   makeCredential,
   makeItem,
   makeLine,
+  makeLineItem,
   makeList,
   makeListAccess,
   makeMembership,
   makeMergeRequest,
   makeOAuthIdentity,
   makePriceScope,
+  makeProductGroup,
   makeSupermarket,
   makeSupermarketItem,
   makeSupermarketLocation,
@@ -81,8 +84,12 @@ import {
   ITEM_MILK_ID,
   LINE_APPLES_ID,
   LINE_BREAD_ID,
+  LINE_BREAD_SET_HASH,
   LINE_EGGS_ID,
+  LINE_ITEM_BREAD_ID,
+  LINE_ITEM_MILK_ID,
   LINE_MILK_ID,
+  LINE_MILK_SET_HASH,
   LINE_NAILS_ID,
   LIST_FLAT_GIFTS_ID,
   LIST_FLAT_SUPPLIES_ID,
@@ -99,6 +106,8 @@ import {
   MEMBERSHIP_TEMP_ID,
   MERGE_TEMP_INTO_BOB_ID,
   PRICE_SCOPE_MERCADONA_VALENCIA_ID,
+  PRODUCT_GROUP_BREAD_ID,
+  PRODUCT_GROUP_MILK_ID,
   SUPERMARKET_ITEM_BREAD_ID,
   SUPERMARKET_ITEM_MILK_ID,
   SUPERMARKET_MERCADONA_ID,
@@ -327,11 +336,15 @@ const core: CoreSeed = {
       id: LINE_MILK_ID,
       listId: LIST_GROCERIES_ID,
       content: 'Milk',
-      quantity: 2,
-      itemId: ITEM_MILK_ID,
+      // Zero: the household has it and does not currently need any (plan 0047,
+      // section 2.2). It is not deleted, it keeps its products and its comments,
+      // and somebody swiping it back up to two costs nothing.
+      quantity: 0,
+      // A line that came from the composer: one product, and the digest of that
+      // one product set (plan 0048, section 1.1).
+      itemSetHash: LINE_MILK_SET_HASH,
       position: 1000,
       approvalStatus: LineApprovalStatus.APPROVED,
-      status: LineStatus.READY,
       createdByUserId: BOB_ID,
       approvedByUserId: ALICE_ID,
       version: 2,
@@ -343,7 +356,6 @@ const core: CoreSeed = {
       quantity: 6,
       position: 1500,
       approvalStatus: LineApprovalStatus.REJECTED,
-      status: LineStatus.PENDING,
       createdByUserId: BOB_ID,
       approvedByUserId: ALICE_ID,
     }),
@@ -352,10 +364,9 @@ const core: CoreSeed = {
       listId: LIST_GROCERIES_ID,
       content: 'Bread',
       quantity: 1,
-      itemId: ITEM_BREAD_ID,
+      itemSetHash: LINE_BREAD_SET_HASH,
       position: 2000,
       approvalStatus: LineApprovalStatus.PENDING,
-      status: LineStatus.PENDING,
       createdByUserId: BOB_ID,
     }),
     makeLine({
@@ -365,7 +376,6 @@ const core: CoreSeed = {
       quantity: 12,
       position: 3000,
       approvalStatus: LineApprovalStatus.APPROVED,
-      status: LineStatus.NOT_AVAILABLE,
       createdByUserId: ALICE_ID,
       approvedByUserId: ALICE_ID,
       version: 3,
@@ -378,7 +388,6 @@ const core: CoreSeed = {
       quantity: 100,
       position: 1000,
       approvalStatus: LineApprovalStatus.APPROVED,
-      status: LineStatus.READY,
       createdByUserId: ALICE_ID,
       approvedByUserId: ALICE_ID,
     }),
@@ -399,6 +408,23 @@ const core: CoreSeed = {
       authorUserId: BOB_ID,
       body: 'On it.',
       createdAt: new Date('2026-01-02T10:05:00.000Z'),
+    }),
+  ],
+  // The products those two lines stand for (plan 0048, section 1.1). Apples and
+  // eggs carry none, which is the ordinary free text line and the case every
+  // reader has to hold: the dropdown is an offer, not a requirement.
+  lineItems: [
+    makeLineItem({
+      id: LINE_ITEM_MILK_ID,
+      lineId: LINE_MILK_ID,
+      itemId: ITEM_MILK_ID,
+      position: 0,
+    }),
+    makeLineItem({
+      id: LINE_ITEM_BREAD_ID,
+      lineId: LINE_BREAD_ID,
+      itemId: ITEM_BREAD_ID,
+      position: 0,
     }),
   ],
   mergeRequests: [
@@ -448,18 +474,58 @@ const catalog: CatalogSeed = {
       postalCode: '46004',
     }),
   ],
+  /**
+   * Two hand curated groups (plan 0048, section 1).
+   *
+   * The plan's leaning for seed depth is the top of Mercadona's own category
+   * labels, and that is right for the **harvested** assortment, which lands in a
+   * developer's database from a harvest run rather than from here. This world is
+   * the two product scenario every other spec is written against, so it gets the
+   * two groups those products belong to and nothing else: a seed that invented a
+   * hundred groups with no members would describe a catalog nothing in the
+   * repository holds.
+   *
+   * The synonyms are the part worth having even at this size. They are what makes
+   * `leche` find the Milk group, which is the search behaviour the composer rests
+   * on and the one an English only fixture would never exercise.
+   */
+  productGroups: [
+    makeProductGroup({
+      id: PRODUCT_GROUP_MILK_ID,
+      name: { en: 'Milk', es: 'Leche' },
+      slug: 'milk',
+      // Litres, because that is what comparing two cartons means.
+      referenceUnit: UnitOfMeasure.LITER,
+      synonyms: {
+        en: ['milk', 'whole milk', 'semi skimmed milk'],
+        es: ['leche', 'leche entera', 'leche semidesnatada'],
+      },
+    }),
+    makeProductGroup({
+      id: PRODUCT_GROUP_BREAD_ID,
+      name: { en: 'Bread', es: 'Pan' },
+      slug: 'bread',
+      referenceUnit: UnitOfMeasure.UNIT,
+      synonyms: {
+        en: ['bread', 'loaf', 'sliced bread'],
+        es: ['pan', 'barra', 'pan de molde'],
+      },
+    }),
+  ],
   items: [
     makeItem({
       id: ITEM_MILK_ID,
       name: { en: 'Milk', es: 'Leche' },
       category: ItemCategory.DAIRY,
       defaultUnit: UnitOfMeasure.LITER,
+      productGroupId: PRODUCT_GROUP_MILK_ID,
     }),
     makeItem({
       id: ITEM_BREAD_ID,
       name: { en: 'Bread', es: 'Pan' },
       category: ItemCategory.BAKERY,
       defaultUnit: UnitOfMeasure.UNIT,
+      productGroupId: PRODUCT_GROUP_BREAD_ID,
     }),
   ],
   supermarketItems: [

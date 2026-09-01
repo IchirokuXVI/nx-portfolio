@@ -565,7 +565,7 @@ describe('MembersPage', () => {
         });
 
         expect(router.navigate).toHaveBeenCalledWith(
-          ['m-marta', 'confirm', action],
+          ['sheet', 'm-marta', 'confirm', action],
           expect.objectContaining({ state: { name: 'Marta' } })
         );
       }

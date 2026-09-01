@@ -1,0 +1,100 @@
+<lib-sheet-shell
+  (dismiss)="close()"
+  [dismissible]="!busy()"
+  labelledBy="people-title"
+>
+  @if (openPerson(); as person) {
+    <!--
+      One participant, on tap. Reached only for somebody whose device the server
+      actually sent, which is a reader who passes the all or nothing rule: guests
+      never see this pane about each other.
+    -->
+    <h2 class="title" id="people-title">
+      {{
+        person.displayName ||
+          ('basket.people.guestNumbered' | rokuT: { count: person.guestNumber })
+      }}
+    </h2>
+
+    <p class="how">
+      @if (person.shareLinkId) {
+        {{ 'basket.people.viaLink' | rokuT }}
+      } @else {
+        {{ 'basket.people.viaOwner' | rokuT }}
+      }
+    </p>
+
+    <dl class="facts">
+      <dt>{{ 'basket.people.joined' | rokuT }}</dt>
+      <!--
+        Its own key, not the device's (plan 0049, section 6). "Not recorded" reads as
+        a device fact where it stands for a time, and a language that inflects the
+        phrase for what is missing cannot say both with one string.
+      -->
+      <dd>{{ joinedAt() || ('basket.people.joinedUnknown' | rokuT) }}</dd>
+      <dt>{{ 'basket.people.device' | rokuT }}</dt>
+      <dd>{{ person.device || ('basket.people.deviceUnknown' | rokuT) }}</dd>
+    </dl>
+
+    <!--
+      Removing one participant touches nobody else, and their next request is
+      refused with no cache to wait out. Only the owner may, and not on
+      themselves: handing a basket to somebody else is out of scope (section 9),
+      so an owner who removed their own row would be locking themselves out of a
+      basket nobody else can share.
+    -->
+    @if (isOwner() && person.kind !== 'OWNER') {
+      <button
+        (click)="remove(person.id)"
+        [disabled]="busy()"
+        class="destructive"
+        type="button"
+      >
+        {{ 'basket.people.remove' | rokuT }}
+      </button>
+    }
+
+    <button (click)="back()" class="quiet" type="button">
+      {{ 'basket.people.close' | rokuT }}
+    </button>
+  } @else {
+    <h2 class="title" id="people-title">{{ 'basket.people.title' | rokuT }}</h2>
+
+    <!--
+      Guests and registered people in one list, in join order. No sentence, no
+      separate section, and the word "anonymous" nowhere: they are guests.
+    -->
+    <ul class="people">
+      @for (row of people(); track row.person.id) {
+        <li class="person">
+          <button
+            (click)="inspect(row.person)"
+            [attr.aria-disabled]="row.inspectable ? null : 'true'"
+            [class.is-guest]="row.isGuest"
+            class="person-button"
+            type="button"
+          >
+            <span [class.is-guest-ring]="row.isGuest" class="avatar">
+              {{ row.initials }}
+            </span>
+            <span class="person-name">
+              {{ row.isMe ? ('basket.people.you' | rokuT) : row.label }}
+            </span>
+            <!--
+              The guest mark is a word as well as a dashed ring. Never colour
+              alone (section 7), and never a form that could be mistaken for a
+              registered member.
+            -->
+            @if (row.isGuest) {
+              <span class="guest-tag">{{ 'basket.people.guest' | rokuT }}</span>
+            }
+          </button>
+        </li>
+      }
+    </ul>
+
+    <button (click)="close()" class="quiet" type="button">
+      {{ 'basket.people.close' | rokuT }}
+    </button>
+  }
+</lib-sheet-shell>

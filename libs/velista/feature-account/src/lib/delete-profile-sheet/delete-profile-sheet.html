@@ -1,0 +1,16 @@
+<!--
+  `ConfirmSheet` with no `confirmWith`: a profile is a set of choices one person can redo
+  in a minute, and the typed confirmation is reserved for what takes something away from
+  other people (see the class comment).
+-->
+<lib-confirm-sheet
+  (confirm)="confirm()"
+  (dismiss)="dismiss()"
+  [body]="body()"
+  [busy]="busy()"
+  [confirmLabel]="confirmLabel()"
+  [destructive]="true"
+  [errorKey]="errorKey()"
+  [title]="title()"
+  titleId="profiles-delete-title"
+/>

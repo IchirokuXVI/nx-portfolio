@@ -99,6 +99,19 @@ export class ClientTooOldException extends DomainException {
 }
 
 /**
+ * A catalog read that returns items or prices was sent with no scope selector,
+ * by a caller whose shopping profile is empty (plan 0049, section 3).
+ *
+ * Renders as 400 beside `validation_failed` and is kept apart from it by code,
+ * because the client's reaction is different in kind: not "fix this field" but
+ * "tell us where you shop", which is a screen (velista 0046) rather than a
+ * message. Thrown by the gateway, which is where the profile and the request meet.
+ */
+export class CatalogScopeRequiredException extends DomainException {
+  readonly code = ERROR_CODES.CATALOG_SCOPE_REQUIRED;
+}
+
+/**
  * Too many attempts. Carries the wait so the client can count it down (plan 0021,
  * section 2.2). The seconds travel in {@link DomainException.details} under
  * {@link RETRY_AFTER_SECONDS_DETAIL}, and the exception filter lifts them onto the

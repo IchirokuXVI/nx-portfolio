@@ -1,14 +1,14 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  AssistantReferenceKind,
   AssistantRole,
   LineApprovalStatus,
-  LineStatus,
   ListResolutionBranch,
+  SettlementOutcome,
   UsernamePropagation,
   type AssistantTurnRequest,
   type AssistantVoiceRequest,
+  type LineSettlementResult,
   type LineView,
   type ListView,
   type MyZoneView,
@@ -150,24 +150,38 @@ class RecordingApi {
     );
   }
 
-  async setLineStatus(
+  async settleLine(
     caller: ApiCaller,
     lineId: string,
-    status: LineStatus
-  ): Promise<LineView> {
-    this.record('setLineStatus', caller, { lineId, status });
+    outcome: SettlementOutcome,
+    quantity?: number
+  ): Promise<LineSettlementResult> {
+    this.record('settleLine', caller, { lineId, outcome, quantity });
     this.throwIfArmed();
     const existing = this.findLine(lineId);
+    const wanted = existing?.quantity ?? 1;
+    const settled = outcome === SettlementOutcome.BOUGHT ? (quantity ?? 1) : 0;
     return {
-      ...line(
-        lineId,
-        existing?.listId ?? 'list-flat',
-        existing?.content ?? 'leche',
-        existing?.quantity ?? 1
-      ),
       // The server's answer, which is what the tool reports rather than the
-      // value it asked for.
-      status,
+      // values it asked for: what came off, and what is still wanted.
+      line: {
+        ...line(
+          lineId,
+          existing?.listId ?? 'list-flat',
+          existing?.content ?? 'leche',
+          Math.max(0, wanted - settled)
+        ),
+      },
+      settlement: {
+        id: `settlement-${lineId}`,
+        lineId,
+        listId: existing?.listId ?? 'list-flat',
+        itemId: null,
+        outcome,
+        quantity: settled,
+        settledByUserId: 'user-1',
+        settledAt: '2026-08-30T00:00:00.000Z',
+      },
     };
   }
 
@@ -191,6 +205,14 @@ class RecordingApi {
     this.record('setUsername', caller, { username, propagation });
     this.throwIfArmed();
     return { username } as UserProfileView;
+  }
+
+  /** How many of one line the list asks for, for the partial settle cases. */
+  setQuantity(lineId: string, quantity: number): void {
+    const found = this.findLine(lineId);
+    if (found) {
+      found.quantity = quantity;
+    }
   }
 
   private findLine(lineId: string): LineView | undefined {
@@ -367,8 +389,8 @@ describe('AssistantService', () => {
     });
   });
 
-  describe('rule A3: references come from tool results, never from the reply', () => {
-    it('emits the list and line a write actually touched', async () => {
+  describe('rule A3: the link comes from tool results, never from the reply', () => {
+    it('links to the one list a write actually touched', async () => {
       const api = new RecordingApi();
       const service = build(
         new FakeModelProvider([
@@ -382,27 +404,21 @@ describe('AssistantService', () => {
 
       const response = await service.turn(turnRequest('añade dos leches'));
 
-      expect(response.references).toEqual([
-        {
-          kind: AssistantReferenceKind.LIST,
-          zoneId: 'zone-home',
-          listId: 'list-flat',
-          lineId: null,
-          label: 'Piso',
-        },
-        {
-          kind: AssistantReferenceKind.LINE,
-          zoneId: 'zone-home',
-          listId: 'list-flat',
-          lineId: 'line-new-0',
-          label: 'leche',
-        },
-      ]);
+      // One link, and it is the list. The line it wrote is not a destination of
+      // its own: it lives on this screen (plan 0046, section 2.2).
+      expect(response.link).toEqual({
+        zoneId: 'zone-home',
+        listId: 'list-flat',
+        label: 'Piso',
+        // One zone, so naming it would be noise (section 3.1).
+        zoneLabel: null,
+      });
+      expect(response.choices).toEqual([]);
     });
 
-    it('emits nothing for a turn that called no tool', async () => {
-      // An off topic redirect is a successful turn, and there was nothing to
-      // link to, so an empty array is exactly right.
+    it('links to nothing for a turn that called no tool', async () => {
+      // An off topic redirect is a successful turn, and there was nowhere to
+      // send anybody, so null is exactly right.
       const api = new RecordingApi();
       const service = build(
         new FakeModelProvider([
@@ -413,14 +429,15 @@ describe('AssistantService', () => {
 
       const response = await service.turn(turnRequest('escríbeme un poema'));
 
-      expect(response.references).toEqual([]);
+      expect(response.link).toBeNull();
+      expect(response.choices).toEqual([]);
       expect(api.of('addLine')).toHaveLength(0);
       expect(api.of('updateLine')).toHaveLength(0);
     });
 
-    it('never emits an id the model wrote into a tool argument', async () => {
+    it('never links to something the model wrote into a tool argument', async () => {
       // The model naming a list that does not exist must not become a link. It
-      // fails to match the index, so the turn asks and no line reference exists.
+      // fails to match the index, so the turn asks and nothing was touched.
       const api = new RecordingApi();
       api.zones = [zone('zone-home', 'Casa'), zone('zone-beach', 'Playa')];
       api.listsByZone.set('zone-beach', [
@@ -440,12 +457,104 @@ describe('AssistantService', () => {
 
       const response = await service.turn(turnRequest('añade leche'));
 
-      expect(
-        response.references.every(
-          (reference) => reference.kind !== AssistantReferenceKind.LINE
-        )
-      ).toBe(true);
+      expect(response.link).toBeNull();
       expect(api.of('addLines')).toHaveLength(0);
+    });
+
+    it('links to one list when two tools both named it', async () => {
+      // Deduplication, which is the whole reason the collector is a set: a query
+      // and then a write in the same turn is ordinary, and it is one list.
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [line('line-0', 'list-flat', 'leche')]);
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('query_lists', { item: 'leche' }),
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'pan' }],
+          }),
+          FakeModelProvider.says('Hecho.'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('hay leche? añade pan'));
+
+      expect(response.link?.listId).toBe('list-flat');
+    });
+
+    it('links to nothing when the turn read every list', async () => {
+      // A `query_lists` with no list reads them all, and there is no single
+      // place to go (plan 0046, section 2.4).
+      const api = new RecordingApi();
+      api.zones = [zone('zone-home', 'Casa'), zone('zone-beach', 'Playa')];
+      api.listsByZone.set('zone-beach', [
+        list('list-beach', 'zone-beach', 'Playa'),
+      ]);
+      api.linesByList.set('list-beach', []);
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('query_lists', { item: 'leche' }),
+          FakeModelProvider.says('No hay leche en ninguna.'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('hay leche?'));
+
+      expect(response.link).toBeNull();
+    });
+
+    it('names the zone on the link when the caller has more than one', async () => {
+      const api = new RecordingApi();
+      api.zones = [zone('zone-home', 'Casa'), zone('zone-beach', 'Playa')];
+      api.listsByZone.set('zone-beach', [
+        list('list-beach', 'zone-beach', 'Playa'),
+      ]);
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+            list: 'Piso',
+          }),
+          FakeModelProvider.says('Añadida.'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('añade leche al piso'));
+
+      expect(response.link).toEqual({
+        zoneId: 'zone-home',
+        listId: 'list-flat',
+        label: 'Piso',
+        zoneLabel: 'Casa',
+      });
+    });
+  });
+
+  describe('3 the zone in the sentence', () => {
+    it('tells the model to name the zone when there is more than one', async () => {
+      const api = new RecordingApi();
+      api.zones = [zone('zone-home', 'Casa'), zone('zone-beach', 'Playa')];
+      api.listsByZone.set('zone-beach', [
+        list('list-beach', 'zone-beach', 'Playa'),
+      ]);
+
+      const provider = new FakeModelProvider([FakeModelProvider.says('Hola.')]);
+      await build(provider, api).turn(turnRequest('hola'));
+
+      expect(provider.requests[0].system).toContain('say which zone it is in');
+    });
+
+    it('says nothing about zones when there is only one', async () => {
+      const provider = new FakeModelProvider([FakeModelProvider.says('Hola.')]);
+      await build(provider, new RecordingApi()).turn(turnRequest('hola'));
+
+      expect(provider.requests[0].system).not.toContain(
+        'say which zone it is in'
+      );
     });
   });
 
@@ -472,6 +581,122 @@ describe('AssistantService', () => {
       expect(response.listResolution).toBe(ListResolutionBranch.ASKED);
       expect(api.of('addLines')).toHaveLength(0);
       expect(api.of('updateLine')).toHaveLength(0);
+    });
+
+    it('offers the candidates as choices and links to nothing', async () => {
+      // Plan 0046, section 2.4's last row: the candidates are the answers to the
+      // question, so they reach the chips and never the link. A link here would
+      // say "several lists" on the one turn that needs the person to pick.
+      const api = new RecordingApi();
+      api.zones = [zone('zone-home', 'Casa'), zone('zone-beach', 'Playa')];
+      api.listsByZone.set('zone-beach', [
+        list('list-beach', 'zone-beach', 'Playa'),
+      ]);
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+          }),
+          FakeModelProvider.says('¿En Piso o en Playa?'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('añade leche'));
+
+      expect(response.link).toBeNull();
+      // In the order the context index holds them: zone order, then list order.
+      // Two zones, so the label names the zone; the names differ, so the message
+      // does not have to.
+      expect(response.choices).toEqual([
+        { label: 'Piso · Casa', message: 'Piso' },
+        { label: 'Playa · Playa', message: 'Playa' },
+      ]);
+    });
+
+    it('names the zone in the message when two candidates share a name', async () => {
+      const api = new RecordingApi();
+      api.zones = [zone('zone-home', 'Casa'), zone('zone-beach', 'Playa')];
+      api.listsByZone.set('zone-home', [
+        list('list-flat', 'zone-home', 'Compra'),
+      ]);
+      api.listsByZone.set('zone-beach', [
+        list('list-beach', 'zone-beach', 'Compra'),
+      ]);
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+          }),
+          FakeModelProvider.says('¿En cuál?'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('añade leche'));
+
+      // The parentheses are for the resolver rather than for the reader: the
+      // zone is the only thing that separates two lists called "Compra".
+      expect(response.choices).toEqual([
+        { label: 'Compra · Casa', message: 'Compra (Casa)' },
+        { label: 'Compra · Playa', message: 'Compra (Playa)' },
+      ]);
+    });
+
+    it('offers no chips at all past the cap of six', async () => {
+      // Section 4.4: seven chips under a one sentence question is worse than the
+      // question on its own, and six of seven would be an arbitrary six.
+      const api = new RecordingApi();
+      api.zones = [zone('zone-home', 'Casa')];
+      api.listsByZone.set(
+        'zone-home',
+        Array.from({ length: 7 }, (_unused, index) =>
+          list(`list-${index}`, 'zone-home', `Lista ${index}`)
+        )
+      );
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+          }),
+          FakeModelProvider.says('¿En cuál de todas?'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('añade leche'));
+
+      expect(response.listResolution).toBe(ListResolutionBranch.ASKED);
+      expect(response.choices).toEqual([]);
+      expect(response.link).toBeNull();
+    });
+
+    it('offers no zone in a chip when the caller has one zone', async () => {
+      const api = new RecordingApi();
+      api.listsByZone.set('zone-home', [
+        list('list-flat', 'zone-home', 'Piso'),
+        list('list-office', 'zone-home', 'Oficina'),
+      ]);
+
+      const service = build(
+        new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche' }],
+          }),
+          FakeModelProvider.says('¿En cuál?'),
+        ]),
+        api
+      );
+
+      const response = await service.turn(turnRequest('añade leche'));
+
+      expect(response.choices).toEqual([
+        { label: 'Piso', message: 'Piso' },
+        { label: 'Oficina', message: 'Oficina' },
+      ]);
     });
 
     it('reports ONLY_LIST when there was nothing to choose', async () => {
@@ -730,7 +955,7 @@ describe('AssistantService', () => {
       jest.restoreAllMocks();
     });
 
-    it('emits a reference for every line it wrote, each from a response', async () => {
+    it('links to the list once however many lines it wrote', async () => {
       const api = new RecordingApi();
       const service = build(
         new FakeModelProvider([
@@ -744,10 +969,10 @@ describe('AssistantService', () => {
 
       const response = await service.turn(turnRequest('añade leche y pan'));
 
-      const lineIds = response.references
-        .filter((reference) => reference.kind === AssistantReferenceKind.LINE)
-        .map((reference) => reference.lineId);
-      expect(lineIds).toEqual(['line-new-0', 'line-new-1']);
+      // Both lines were written, and the answer still has one destination. The
+      // batch is in the reply's words, not in a row of chips.
+      expect(api.of('addLines')).toHaveLength(1);
+      expect(response.link?.listId).toBe('list-flat');
     });
   });
 
@@ -836,16 +1061,9 @@ describe('AssistantService', () => {
       );
       expect(toolResult).toContain('leche');
       expect(toolResult).not.toContain('pan');
-      expect(
-        response.references.some(
-          (reference) => reference.lineId === 'line-milk'
-        )
-      ).toBe(true);
-      expect(
-        response.references.some(
-          (reference) => reference.lineId === 'line-bread'
-        )
-      ).toBe(false);
+      // What the query matched is in the result the model reads. The link is
+      // the list either way, because that is the screen the answer is about.
+      expect(response.link?.listId).toBe('list-flat');
     });
   });
 
@@ -921,7 +1139,7 @@ describe('AssistantService', () => {
         'upsert_lines',
         'query_lists',
         'remove_lines',
-        'set_line_status',
+        'settle_lines',
         'rename_me',
       ]);
     });
@@ -1530,7 +1748,6 @@ function line(
     itemId: null,
     position: 0,
     approvalStatus: LineApprovalStatus.APPROVED,
-    status: LineStatus.PENDING,
     createdByUserId: 'user-1',
     approvedByUserId: null,
     version: 1,
@@ -1693,6 +1910,132 @@ describe('a turn that may only touch one list (plan 0044)', () => {
     // The zone index is not in a scoped prompt at all: there is nothing to
     // resolve against and the other zone is not this turn's business.
     expect(system).not.toContain('Oficina');
+  });
+
+  /**
+   * The defect plan 0046 section 5 names: a scoped turn still asked which list.
+   *
+   * Plan 0044's enforcement was real and unreachable. `upsert_lines` short
+   * circuits to `ONLY_LIST` when there is a scope, so the ASKED branch cannot
+   * fire, and the person was asked anyway because the model asked **instead of**
+   * calling the tool. The scope narrowed the catalog and left the declarations
+   * alone, so the model read a `list` parameter and a description ending "you
+   * will be told to ask" in the same breath the context told it there was one
+   * list.
+   *
+   * Asserted on the declarations rather than on a model's behaviour, for the
+   * same reason the catalog test above is: an absent parameter is a boundary and
+   * a discouraged one is a suggestion.
+   */
+  describe('the declarations a scoped turn reads', () => {
+    function scopedDeclaration(name: string): {
+      description: string;
+      properties: Record<string, unknown>;
+    } {
+      const found = SCOPED_TOOL_DECLARATIONS.find((tool) => tool.name === name);
+      if (found === undefined) {
+        throw new Error(`no scoped declaration for ${name}`);
+      }
+      return {
+        description: found.description,
+        properties: (found.parameters['properties'] ?? {}) as Record<
+          string,
+          unknown
+        >,
+      };
+    }
+
+    it.each(['upsert_lines', 'query_lists'])(
+      'gives %s no list and no zone to choose',
+      (name) => {
+        const { properties } = scopedDeclaration(name);
+
+        expect(properties).not.toHaveProperty('list');
+        expect(properties).not.toHaveProperty('zone');
+      }
+    );
+
+    it.each(['upsert_lines', 'query_lists'])(
+      'never teaches %s the question it must not ask',
+      (name) => {
+        const { description } = scopedDeclaration(name);
+
+        // The sentence that taught the question outright, and the whole of the
+        // defect in section 5.1: the model was told how to get itself asked in
+        // the same breath the context told it there was one list.
+        expect(description).not.toContain('you will be told to ask');
+        // Nor is there a list to look at "every" of.
+        expect(description).not.toContain('every list this person can see');
+      }
+    );
+
+    it('forbids the question outright on upsert_lines', () => {
+      // The positive half, and the reason the negative above is not a search for
+      // the words "ask which": section 5.2 replaces the sentence that taught the
+      // question with one that forbids it, and that replacement necessarily says
+      // "ask which list" in order to forbid it.
+      expect(scopedDeclaration('upsert_lines').description).toContain(
+        'Never ask which list they meant.'
+      );
+    });
+
+    it('keeps the list and the zone on the open declarations', () => {
+      // The other half of the fix: the open assistant resolves a list from a
+      // name, and taking the parameter away there would break the feature.
+      const open = TOOL_DECLARATIONS.find(
+        (tool) => tool.name === 'upsert_lines'
+      );
+      const properties = (open?.parameters['properties'] ?? {}) as Record<
+        string,
+        unknown
+      >;
+
+      expect(properties).toHaveProperty('list');
+      expect(properties).toHaveProperty('zone');
+    });
+
+    it('leaves the tools that name no list alone', () => {
+      // `remove_lines` and `settle_lines` take line ids, so a scope changes
+      // nothing about what they can be asked and they declare once.
+      for (const name of ['remove_lines', 'settle_lines']) {
+        expect(scopedDeclaration(name).description).toBe(
+          TOOL_DECLARATIONS.find((tool) => tool.name === name)?.description
+        );
+      }
+    });
+  });
+
+  /**
+   * The backstop, which keeps its job and stops misfiring (section 5.3).
+   *
+   * A model can still put a `list` key in a call whose schema has no such
+   * property, so `namesAnotherList` survives the declarations above. What it
+   * needed was the matching `resolveList` already uses: a paraphrase of the
+   * scoped list is the scoped list, and only a genuinely different list is
+   * refused.
+   */
+  it('writes to the scoped list when the call named it loosely', async () => {
+    const api = twoLists();
+    const provider = new FakeModelProvider([
+      FakeModelProvider.calls('upsert_lines', {
+        // Not "Piso" exactly, which strict equality read as another list and
+        // then sent the person off to find a list they were already looking at.
+        list: 'la lista del piso',
+        items: [{ product: 'leche' }],
+      }),
+      FakeModelProvider.says('Hecho.'),
+    ]);
+    const service = build(provider, api);
+
+    await service.turn(scopedRequest('añade leche a la del piso'));
+
+    const written = api.calls.find(
+      (call) => call.method === 'addLine' || call.method === 'addLines'
+    );
+    expect(written?.detail['listId']).toBe('list-flat');
+    expect(JSON.stringify(provider.requests[1].turns.at(-1))).not.toContain(
+      'outOfScope'
+    );
   });
 });
 
@@ -1897,16 +2240,16 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
     });
   });
 
-  describe('4 set_line_status', () => {
-    it.each([LineStatus.READY, LineStatus.NOT_AVAILABLE, LineStatus.PENDING])(
-      'sets %s without asking anybody to confirm',
-      async (status) => {
+  describe('4 settle_lines', () => {
+    it.each([SettlementOutcome.BOUGHT, SettlementOutcome.NOT_AVAILABLE])(
+      'records %s without asking anybody to confirm',
+      async (outcome) => {
         const api = withLines('leche');
         const provider = new FakeModelProvider([
           FakeModelProvider.calls('query_lists', {}),
-          FakeModelProvider.calls('set_line_status', {
+          FakeModelProvider.calls('settle_lines', {
             lineIds: ['line-0'],
-            status,
+            outcome,
           }),
           FakeModelProvider.says('Hecho.'),
         ]);
@@ -1914,19 +2257,65 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
 
         await service.turn(turnRequest('tengo la leche'));
 
-        const calls = api.of('setLineStatus');
+        const calls = api.of('settleLine');
         expect(calls).toHaveLength(1);
-        expect(calls[0].detail['status']).toBe(status);
+        expect(calls[0].detail['outcome']).toBe(outcome);
       }
     );
+
+    it('passes on the number they said, and reports what is still wanted', async () => {
+      // A partial settle is the ordinary case rather than an edge one (plan
+      // 0047, section 4.1): three were asked for, two came back, and the line
+      // is still wanted.
+      const api = withLines('leche');
+      api.setQuantity('line-0', 3);
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.calls('settle_lines', {
+          lineIds: ['line-0'],
+          outcome: SettlementOutcome.BOUGHT,
+          quantity: 2,
+        }),
+        FakeModelProvider.says('Hecho, dos.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('he cogido dos leches'));
+
+      expect(api.of('settleLine')[0].detail['quantity']).toBe(2);
+      const result = lastToolResult(provider);
+      const lines = result['lines'] as Record<string, unknown>[];
+      expect(lines[0]['settled']).toBe(2);
+      expect(lines[0]['stillWanted']).toBe(1);
+    });
+
+    it('refuses a quantity on a line the shop did not have, and writes nothing', async () => {
+      // The two fields have been read for each other, which core would refuse
+      // too. It is caught here so the turn says something useful about it.
+      const api = withLines('leche');
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.calls('settle_lines', {
+          lineIds: ['line-0'],
+          outcome: SettlementOutcome.NOT_AVAILABLE,
+          quantity: 3,
+        }),
+        FakeModelProvider.says('No había.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('no había leche'));
+
+      expect(api.of('settleLine')).toHaveLength(0);
+    });
 
     it('settles two lines in one call', async () => {
       const api = withLines('leche', 'pan');
       const provider = new FakeModelProvider([
         FakeModelProvider.calls('query_lists', {}),
-        FakeModelProvider.calls('set_line_status', {
+        FakeModelProvider.calls('settle_lines', {
           lineIds: ['line-0', 'line-1'],
-          status: LineStatus.READY,
+          outcome: SettlementOutcome.BOUGHT,
         }),
         FakeModelProvider.says('Hecho, leche y pan.'),
       ]);
@@ -1936,17 +2325,17 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
 
       // One breath, one call. The alternative is a loop of round trips through
       // the gateway inside a turn that is already being waited on.
-      expect(
-        api.of('setLineStatus').map((call) => call.detail['lineId'])
-      ).toEqual(['line-0', 'line-1']);
+      expect(api.of('settleLine').map((call) => call.detail['lineId'])).toEqual(
+        ['line-0', 'line-1']
+      );
     });
 
     it('refuses an id this turn has not read, and writes nothing', async () => {
       const api = withLines('leche');
       const provider = new FakeModelProvider([
-        FakeModelProvider.calls('set_line_status', {
+        FakeModelProvider.calls('settle_lines', {
           lineIds: ['line-0'],
-          status: LineStatus.READY,
+          outcome: SettlementOutcome.BOUGHT,
         }),
         FakeModelProvider.says('Déjame mirar la lista.'),
       ]);
@@ -1954,7 +2343,7 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
 
       await service.turn(turnRequest('tengo la leche'));
 
-      expect(api.of('setLineStatus')).toHaveLength(0);
+      expect(api.of('settleLine')).toHaveLength(0);
       expect(lastToolResult(provider)['notInContext']).toBe(true);
     });
 
@@ -1968,9 +2357,9 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
 
       const provider = new FakeModelProvider([
         FakeModelProvider.calls('query_lists', {}),
-        FakeModelProvider.calls('set_line_status', {
+        FakeModelProvider.calls('settle_lines', {
           lineIds: ['line-0'],
-          status: LineStatus.READY,
+          outcome: SettlementOutcome.BOUGHT,
         }),
         FakeModelProvider.says('Solo puedes leer esa lista.'),
       ]);
@@ -1986,15 +2375,15 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
     });
   });
 
-  describe('5 references, and the line that is no longer there', () => {
-    it('emits a line reference for every line it settled', async () => {
+  describe('5 the link, and the line that is no longer there', () => {
+    it('links to the list whose lines it settled', async () => {
       const api = withLines('leche', 'pan');
       const service = build(
         new FakeModelProvider([
           FakeModelProvider.calls('query_lists', {}),
-          FakeModelProvider.calls('set_line_status', {
+          FakeModelProvider.calls('settle_lines', {
             lineIds: ['line-0', 'line-1'],
-            status: LineStatus.READY,
+            outcome: SettlementOutcome.BOUGHT,
           }),
           FakeModelProvider.says('Hecho.'),
         ]),
@@ -2003,19 +2392,18 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
 
       const response = await service.turn(turnRequest('tenemos las dos'));
 
-      expect(
-        response.references
-          .filter((reference) => reference.kind === AssistantReferenceKind.LINE)
-          .map((reference) => reference.lineId)
-      ).toEqual(['line-0', 'line-1']);
+      expect(response.link).toEqual({
+        zoneId: 'zone-home',
+        listId: 'list-flat',
+        label: 'Piso',
+        zoneLabel: null,
+      });
     });
 
-    it('emits the list a deletion came off, and no reference to what it deleted', async () => {
+    it('links to the list a deletion came off', async () => {
       const api = withLines('aceite', 'arroz');
       const service = build(
         new FakeModelProvider([
-          // The query that found the line emitted a reference to it, which is
-          // exactly the chip that would 404 a moment later.
           FakeModelProvider.calls('query_lists', { item: 'aceite' }),
           FakeModelProvider.calls('remove_lines', {
             lineIds: ['line-0'],
@@ -2028,15 +2416,11 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
 
       const response = await service.turn(turnRequest('quita el aceite, sí'));
 
-      expect(
-        response.references.filter((reference) => reference.lineId === 'line-0')
-      ).toHaveLength(0);
-      // The list they came off is the screen the person wants next.
-      expect(
-        response.references.filter(
-          (reference) => reference.kind === AssistantReferenceKind.LIST
-        )
-      ).toHaveLength(1);
+      // What plan 0043 section 5 wanted, and what plan 0046 made structural: the
+      // only thing a link can be is a list, so the deleted line cannot be linked
+      // to and there is no chip left to 404. The list survives, because the list
+      // is the screen the person wants next.
+      expect(response.link?.listId).toBe('list-flat');
     });
   });
 
@@ -2136,7 +2520,7 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
       );
 
       expect(names).toContain('remove_lines');
-      expect(names).toContain('set_line_status');
+      expect(names).toContain('settle_lines');
       // Still not this one (plan 0044, section 2.2).
       expect(names).not.toContain('rename_me');
     });

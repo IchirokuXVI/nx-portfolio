@@ -33,12 +33,19 @@ import {
   type CommentPage,
   type CommentView,
   type LinePage,
+  type LineSettlementPage,
+  type LineSettlementResult,
   type LineView,
   type ListAccessView,
   type ListPage,
+  type ListsHoldingItemRequest,
+  type ListsHoldingItemResult,
   type ListView,
 } from '@portfolio/luna-shopper/contracts';
-import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
+import {
+  PageQueryDto,
+  THROTTLE_LIMITS,
+} from '@portfolio/luna-shopper/platform';
 import type { Request, Response } from 'express';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -58,7 +65,7 @@ import {
   ReorderLinesDto,
   SetApprovalDto,
   SetListAccessDto,
-  SetStatusDto,
+  SettleLineDto,
   UpdateLineDto,
   UpdateListDto,
 } from './list.dto';
@@ -107,6 +114,82 @@ export class ZoneListsController {
       limit: query.limit,
       order: query.order,
     });
+  }
+}
+
+/**
+ * One product's purchase history, across every list the caller can read (plan
+ * 0047, section 6.2).
+ *
+ * Its own controller because it is keyed on a **catalog item** rather than on a
+ * list or a line, and it is `/v1/items/:id/settlements` rather than
+ * `/v1/catalog/items/:id/settlements` because catalog does not serve it and could
+ * not: the rows live in core, beside the lists whose access decides which of them
+ * this caller may see.
+ */
+@ApiTags('lines')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'items', version: '1' })
+export class ItemHistoryController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get(':id/settlements')
+  @ApiContractResponse(LINE_PATTERNS.itemSettlements)
+  settlements(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Query() query: PageQueryDto
+  ): Promise<LineSettlementPage> {
+    return this.nats.send<LineSettlementPage>(LINE_PATTERNS.itemSettlements, {
+      userId: user.userId,
+      itemId: id,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  /**
+   * Which of the caller's other lists still want this product (plan 0053,
+   * section 3).
+   *
+   * The read behind a line screen's "also on Weekly shop" indicator, which
+   * velista `0047` section 5 could previously only compute from whatever lists
+   * the session happened to have loaded: it under reported, and drew nothing
+   * when empty, so "nobody asked" and "it is on no other list" were one picture.
+   *
+   * Here rather than under a list, for the reason the settlement history above is
+   * here: it is keyed on a **catalog item** and spans every zone the caller is
+   * in, so there is no one list or zone it belongs beneath. It is core that
+   * answers it, not catalog, because the access that decides which lists may be
+   * named lives beside the lists.
+   *
+   * `excludeListId` is the list the caller is asking *from*, which a list screen
+   * sends and a basket screen does not: a basket line belongs to no single list,
+   * so there is nothing for it to exclude.
+   *
+   * Capped rather than paginated, and it takes no page query at all: the answer
+   * is a caption, and a cursor would make it a listing of every readable list
+   * that happens to want milk.
+   */
+  @Get(':id/lists')
+  @ApiContractResponse(LIST_PATTERNS.holdingItem)
+  @ApiProblemResponses({ body: true })
+  holdingLists(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Query('excludeListId') excludeListId?: string
+  ): Promise<ListsHoldingItemResult> {
+    const req: ListsHoldingItemRequest = {
+      userId: user.userId,
+      itemId: id,
+      excludeListId: excludeListId ?? null,
+    };
+    return this.nats.send<ListsHoldingItemResult>(
+      LIST_PATTERNS.holdingItem,
+      req
+    );
   }
 }
 
@@ -212,7 +295,7 @@ export class ListsController {
       listId: id,
       content: dto.content,
       quantity: dto.quantity,
-      itemId: dto.itemId,
+      itemIds: dto.itemIds,
     });
   }
 
@@ -285,7 +368,7 @@ export class LinesController {
       lineId: id,
       content: dto.content,
       quantity: dto.quantity,
-      itemId: dto.itemId,
+      itemIds: dto.itemIds,
     });
   }
 
@@ -340,18 +423,56 @@ export class LinesController {
     });
   }
 
-  @Post(':id/status')
-  @ApiContractResponse(LINE_PATTERNS.setStatus, { status: HttpStatus.CREATED })
+  /**
+   * Say what happened to this line on a trip (plan 0047, section 4).
+   *
+   * It replaced `POST :id/status`, which moved a line between trip states a zone
+   * line no longer carries. Buying decrements the quantity by what was bought and
+   * records the purchase; finding the shop out of it records that and moves
+   * nothing; **skipping is not a call at all**.
+   *
+   * It answers with both halves, the line as it now stands and the settlement
+   * that moved it, and this is the one line route that does. Neither is derivable
+   * from the other: the caller knows what it asked for and not what the line was
+   * at when the lock was taken, and the settlement carries an id and a time that
+   * exist only after the write.
+   */
+  @Post(':id/settle')
+  @ApiContractResponse(LINE_PATTERNS.settle, { status: HttpStatus.CREATED })
   @ApiProblemResponses({ body: true })
-  setStatus(
+  settle(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
-    @Body() dto: SetStatusDto
-  ): Promise<LineView> {
-    return this.nats.send<LineView>(LINE_PATTERNS.setStatus, {
+    @Body() dto: SettleLineDto
+  ): Promise<LineSettlementResult> {
+    return this.nats.send<LineSettlementResult>(LINE_PATTERNS.settle, {
       userId: user.userId,
       lineId: id,
-      status: dto.status,
+      outcome: dto.outcome,
+      quantity: dto.quantity,
+      itemId: dto.itemId,
+    });
+  }
+
+  /**
+   * This line's own history, newest first (plan 0047, section 6.1). `READ`.
+   *
+   * A settlement is a zone fact: what the flat bought and when is exactly the
+   * shared knowledge a shared list exists to hold. What it never says is which
+   * basket a purchase came out of (section 3.1).
+   */
+  @Get(':id/settlements')
+  @ApiContractResponse(LINE_PATTERNS.settlements)
+  settlements(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Query() query: PageQueryDto
+  ): Promise<LineSettlementPage> {
+    return this.nats.send<LineSettlementPage>(LINE_PATTERNS.settlements, {
+      userId: user.userId,
+      lineId: id,
+      cursor: query.cursor,
+      limit: query.limit,
     });
   }
 

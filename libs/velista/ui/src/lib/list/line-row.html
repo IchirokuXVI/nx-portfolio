@@ -1,28 +1,31 @@
 <!--
-  The row is a `checkbox` and its accessible name is the content plus the quantity.
-  The captions are in `aria-describedby` rather than in the name, so "Waiting for
-  approval" is available on demand and is not read out every time focus touches the
-  row (section 7).
+  **The row is a button, and its action is opening the detail sheet.**
+
+  It was `role="checkbox"` with `aria-checked`, and section 1.1 takes that back in full:
+  there is no checked state left to report, because there is no tick. What a tap does
+  now is open what the app knows about the thing, which is a button's job.
+
+  Its accessible name is the content plus the quantity, so "Sourdough loaf, 2" is what
+  gets read. The indicators are **description, not name**: "bought" and "Ana is buying
+  this" go in `aria-describedby`, so a screen reader reads the thing and its number
+  first and the commentary on demand (section 7).
 
   In reorder mode the role is **dropped** rather than kept and dishonoured: the row is
-  not a checkbox while ticking off is off, and claiming otherwise would announce a
-  control that does nothing.
+  not a button while it is a thing being dragged, and claiming otherwise would announce
+  a control that does nothing.
 -->
 <div
   (click)="onRowClick()"
   (keydown)="onRowKeydown($event)"
   [attr.aria-busy]="line().write === 'pending' ? 'true' : null"
-  [attr.aria-checked]="reordering() ? null : checked()"
-  [attr.aria-describedby]="
-    line().captionKey === null ? null : 'cap-' + line().id
-  "
+  [attr.aria-describedby]="describedBy()"
   [attr.aria-label]="reordering() ? null : accessibleName()"
-  [attr.role]="reordering() ? null : 'checkbox'"
+  [attr.role]="reordering() ? null : 'button'"
   [attr.tabindex]="reordering() || !line().interactive ? null : 0"
   [class.awaiting]="line().approvalStatus === 'PENDING'"
   [class.in-flight]="line().write === 'pending'"
   [class.inert]="!line().interactive && !reordering()"
-  [class.struck]="line().struck"
+  [class.settled]="line().settled"
   [class.turned-down]="line().approvalStatus === 'REJECTED'"
   class="row"
 >
@@ -50,10 +53,9 @@
         The grip proper, and what a pointer takes hold of.
 
         `touch-action: none` is what makes the drag reach the list at all: without it
-        the browser reads the downward movement as a scroll of the page, which is why
-        the grip answered the arrows and nothing else. Still `aria-hidden` and still
-        unfocusable, because the two buttons around it are the accessible way to do
-        the same thing and they are already labelled and announced.
+        the browser reads the downward movement as a scroll of the page. Still
+        `aria-hidden` and still unfocusable, because the two buttons around it are the
+        accessible way to do the same thing and they are already labelled.
       -->
       <span
         (pointerdown)="startDrag($event)"
@@ -75,16 +77,51 @@
         <span aria-hidden="true">&#9660;</span>
       </button>
     </span>
-  } @else {
-    <lib-line-state-control
-      [approvalStatus]="line().approvalStatus"
-      [status]="line().status"
-      class="state"
-    />
   }
 
   <span class="body">
     <span class="content">{{ line().content }}</span>
+
+    <!--
+      The three indicators (section 3.3). A row can carry more than one at once, which
+      is why this is a loop over a list and not a switch: a loaf that was missing last
+      week, is wanted again, and is in somebody's basket right now shows two.
+
+      Each one is a word as well as a colour and a glyph. Plan 0002 section 11: colour
+      is never the only carrier of meaning, and these are read in a bright shop by
+      somebody walking.
+    -->
+    @if (line().indicators.length > 0) {
+      <span [id]="'ind-' + line().id" class="indicators">
+        @for (indicator of line().indicators; track indicator) {
+          <span [class]="'indicator indicator-' + indicator">
+            @switch (indicator) {
+              @case ('bought') {
+                <lib-check-icon aria-hidden="true" class="indicator-glyph" />
+                {{ 'line.indicator.bought' | rokuT }}
+              }
+              @case ('notAvailable') {
+                <lib-x-circle-icon aria-hidden="true" class="indicator-glyph" />
+                {{ 'line.indicator.notAvailable' | rokuT }}
+              }
+              @case ('claimed') {
+                <!--
+                  A live dot rather than a glyph, because this one is presence rather
+                  than state: it appears and disappears while the page is open, and it
+                  must never read as the line having been dealt with (section 3.3).
+                -->
+                <span aria-hidden="true" class="indicator-dot"></span>
+                @if (line().claimedBy; as who) {
+                  {{ 'line.indicator.claimedBy' | rokuT: { name: who } }}
+                } @else {
+                  {{ 'line.indicator.claimed' | rokuT }}
+                }
+              }
+            }
+          </span>
+        }
+      </span>
+    }
 
     @if (line().captionKey !== null) {
       <span [id]="'cap-' + line().id" class="caption">
@@ -94,26 +131,13 @@
   </span>
 
   <!--
-    Drawn only above one, and in tabular numerals so a column of them lines up. A
-    quantity of 1 is the overwhelming majority and writing "x1" on every row would be
-    noise that makes the rows that matter harder to find (section 4.7).
-  -->
-  @if (line().quantity > 1) {
-    <span aria-hidden="true" class="quantity"
-      >&times;{{ line().quantity }}</span
-    >
-  }
-
-  <!--
     Who is editing this line right now: their initial, and the word, subdued. Advisory
-    and nothing more (plan 0022, section 3.4): the row stays a checkbox, it stays
-    tappable, the sheet still opens over it, and a simultaneous edit resolves exactly as
-    it did before. Nothing here is a lock.
+    and nothing more (plan 0022, section 3.4): the row stays tappable, the sheet still
+    opens over it, and a simultaneous edit resolves exactly as it did before.
 
     `aria-hidden`, and deliberately: the row's accessible name is its content and its
     quantity, and a name that grew "Ana is editing" would be read out every time focus
-    touched the row and would go stale between two reads of it. It is the same argument
-    the captions won, and they went to `aria-describedby` for it.
+    touched the row and would go stale between two reads of it.
   -->
   @if (line().editor !== null) {
     <span aria-hidden="true" class="editor">
@@ -127,6 +151,27 @@
       <lib-comment-icon class="comment-glyph" />
       {{ line().commentCount }}
     </span>
+  }
+
+  <!--
+    **The quantity, on every row, zero included.** It stopped being an annotation above
+    one and became the thing the line says, and a control that is only sometimes there
+    is not a control anybody learns to reach for (section 3.2).
+
+    Absent in reorder mode, where the row is a thing being dragged and a second gesture
+    living inside it would fight the first for the same finger.
+  -->
+  @if (!reordering()) {
+    <lib-quantity-reel
+      (autoClosed)="onReelAutoClosed()"
+      (click)="$event.stopPropagation()"
+      (committed)="quantityChanged.emit({ lineId: line().id, delta: $event })"
+      (pointerdown)="$event.stopPropagation()"
+      [label]="'list.line.quantityFor' | rokuT: { name: line().content }"
+      [readonly]="!line().adjustable"
+      [value]="line().quantity"
+      #reel
+    />
   }
 
   <!--
@@ -180,9 +225,7 @@
 <!--
   The decisions sit under the row rather than inside it, because the row is one tap
   target and two more inside it would make the whole thing unhittable. `DECIDE` since
-  velista plan 0030, and only on a line that is actually waiting: approving stopped
-  being a property of the group and became a permission on the list, so the person who
-  walks the aisle can be the one who says what goes in the trolley.
+  velista plan 0030, and only on a line that is actually waiting.
 -->
 @if (line().decidable) {
   <div class="decisions">
@@ -205,7 +248,7 @@
 
 <!--
   Inline, under the row it is about, and never a toast: a toast about a row is read
-  after the row has scrolled away (section 3.3). Tapping it retries.
+  after the row has scrolled away (`0012`, section 3.3). Tapping it retries.
 -->
 @if (line().write === 'failed') {
   <button (click)="retry.emit(line().id)" class="notice failed" type="button">

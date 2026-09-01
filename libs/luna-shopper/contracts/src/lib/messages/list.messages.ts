@@ -1,8 +1,8 @@
 import type {
   CommentTranscription,
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
+  SettlementOutcome,
 } from '../enums/list.enums';
 import type { PageQuery, Paginated } from '../pagination';
 
@@ -18,6 +18,15 @@ export const LIST_PATTERNS = {
   update: 'list.update',
   delete: 'list.delete',
   list: 'list.list',
+  /**
+   * Which lists still want a given product (plan 0053, section 3). Answers the
+   * "this is also on" indicator a line screen draws.
+   *
+   * It lives beside the list reads rather than beside the line ones because the
+   * answer is a set of **lists**: the line that carries the product is how the
+   * question is asked, not what it is about.
+   */
+  holdingItem: 'list.holdingItem',
 } as const;
 
 export const LINE_PATTERNS = {
@@ -26,7 +35,20 @@ export const LINE_PATTERNS = {
   update: 'line.update',
   addQuantity: 'line.addQuantity',
   setApproval: 'line.setApproval',
-  setStatus: 'line.setStatus',
+  /**
+   * Say what happened to a line on a trip (plan 0047, section 4). It replaced
+   * `line.setStatus`, which moved a line between trip states a zone line no
+   * longer carries.
+   */
+  settle: 'line.settle',
+  /** One line's own settlements, newest first (plan 0047, section 6.1). */
+  settlements: 'line.settlements',
+  /**
+   * One product's settlements across every list the caller can read (plan 0047,
+   * section 6.2). Keyed on the settlement's own copied `itemId`, never on a join
+   * through lines whose product set may have moved since.
+   */
+  itemSettlements: 'line.itemSettlements',
   reorder: 'line.reorder',
   delete: 'line.delete',
   list: 'line.list',
@@ -42,7 +64,17 @@ export const LINE_PATTERNS = {
  * result, and a bound written in two files is a bound that disagrees with itself
  * the first time one of them moves.
  */
-export const LINE_QUANTITY_MIN = 1;
+/**
+ * Zero, since plan 0047: a line at zero is a line the household knows about and
+ * does not currently need, and it is the state the primary gesture on the list
+ * page moves lines into. It used to be one, from when a line was a thing you
+ * ticked off and a quantity of nothing was meaningless.
+ *
+ * **Zero is not deleted** (section 2.2). Deleting is a separate, confirmed
+ * gesture and it is the only thing that discards the history, which is the whole
+ * reason the model works.
+ */
+export const LINE_QUANTITY_MIN = 0;
 export const LINE_QUANTITY_MAX = 100000;
 
 /**
@@ -53,6 +85,16 @@ export const LINE_QUANTITY_MAX = 100000;
  * number of rows.
  */
 export const LINE_BATCH_MAX_ITEMS = 50;
+
+/**
+ * How many products one line's set may hold (plan 0048, section 1.1).
+ *
+ * A bound rather than a budget, like the batch above it. Picking a group copies
+ * that group's members onto the line, and a group is a few dozen products at
+ * most; a request naming more than this is a client bug or an attempt to write an
+ * unbounded number of join rows from one call.
+ */
+export const LINE_ITEM_SET_MAX = 100;
 
 export const COMMENT_PATTERNS = {
   add: 'comment.add',
@@ -77,10 +119,19 @@ export const COMMENT_PATTERNS = {
 
 /** The counts shown alongside a full list (plan 0017, section 3.4). */
 export interface ListCounts {
-  /** Every line, whatever its approval or item status. */
+  /** Every line, whatever its approval or its quantity. */
   lineCount: number;
-  /** Lines whose `status` is `LineStatus.READY`. Drives "7 of 12 ready". */
-  readyCount: number;
+  /**
+   * Lines with a quantity above zero: what the household wants right now (plan
+   * 0047, section 2.3).
+   *
+   * It was `readyCount`, counting lines marked ready on some trip, and that is
+   * the number a zone card should never have been showing: "four things needed"
+   * is the useful figure and "four things already bought" never was. **Lines and
+   * not units**, because a card has room for "4 things needed" and not for "17
+   * units needed" (section 9).
+   */
+  wantedCount: number;
 }
 
 export interface ListView {
@@ -149,18 +200,186 @@ export interface LineView {
   id: string;
   listId: string;
   content: string;
+  /**
+   * How many of this the household wants **right now** (plan 0047, section 1).
+   *
+   * The line's only state: buying decrements it, zero means you are stocked, and
+   * the line stays where it is until somebody deletes it on purpose. There is no
+   * trip status beside it any more, because `READY` was a fact about one shopping
+   * trip written onto a record that outlives every trip.
+   */
   quantity: number;
-  itemId: string | null;
+  /**
+   * The products this line stands for (plan 0048, section 1.1), in the order they
+   * were attached. Empty for a free text line, which stays first class.
+   *
+   * It replaced a single nullable `itemId` that was null on every line ever
+   * created. Picking a group in the composer **copies the group's members here**
+   * and the line references no group afterwards, so removing a product the
+   * household never buys is an ordinary edit: a line is its own hand made group.
+   */
+  itemIds: string[];
+  /**
+   * A digest of the sorted distinct {@link itemIds}, or null while the set is
+   * empty (plan 0048, section 1.1).
+   *
+   * What makes the hand made sets legible. Two lines carrying the same products
+   * carry the same hash **however the products got there**, which is what the
+   * dedup rule in `0050` merges on and what the cross list indicator in velista
+   * `0043` matches on.
+   */
+  itemSetHash: string | null;
   position: number;
   approvalStatus: LineApprovalStatus;
-  status: LineStatus;
   createdByUserId: string;
   approvedByUserId: string | null;
   version: number;
+  /**
+   * How many `BOUGHT` settlements this line has ever had (plan 0047, section 5).
+   *
+   * Here, on the line, because it is half of an indicator the list page draws on
+   * every row and neither half is computable from anything else the line carries.
+   * `quantity = 0` alone cannot tell a thing the household has just bought from a
+   * thing somebody typed and has never needed, and those two rows are drawn
+   * differently on purpose (velista `0043`, section 3.2). The alternative was a
+   * settlements read per row, which is a request per line to answer a question the
+   * page asks about all of them at once.
+   *
+   * A **count** rather than a boolean, because the two readings are the same width
+   * on the wire and the number is the one that survives the next question. It is
+   * cumulative and never resets: a line bought, run down to zero and bought again
+   * has two, and a settled line put back up to three still has them.
+   */
+  boughtCount: number;
+  /**
+   * The outcome of this line's most recent settlement, or null when it has none.
+   *
+   * The other half of the indicators, and the reason it is the **most recent** one
+   * rather than a flag: "they did not have it" is a fact about the last trip and
+   * expires the moment somebody does buy it, so it cannot be stored and has to be
+   * read off the top of the history (plan 0047, section 5).
+   */
+  lastSettlementOutcome: SettlementOutcome | null;
+  /**
+   * Whether somebody is out buying this right now (plan 0052, section 4).
+   *
+   * The third indicator plan 0047 section 5 lists, and the one that could not be
+   * derived from the line's own history: the line is carried by a basket that has
+   * been composed and not yet finished, so putting it in a second trolley buys the
+   * household two of it.
+   *
+   * It is **state on the line and not only an event**, which is the correction
+   * plan 0052 makes to plan 0051. An event tells a connected client what changed
+   * and tells a client that connects afterwards nothing at all, and a shopping
+   * trip lasts an hour while a phone sleeps in a pocket. Announced as well as
+   * read, exactly like {@link boughtCount}, so a reconnect and a live socket agree.
+   *
+   * **Derived on read and stored nowhere.** A flag on the line would have to stay
+   * correct across basket deletion, account deletion, a trip nobody ever took and
+   * a line carried by two baskets at once, and every one of those is a way to
+   * leave a line claimed by a basket that no longer exists.
+   */
+  claimed: boolean;
+  /**
+   * Who is out buying it: the basket's **owner**, or null.
+   *
+   * The owner and never the participant holding the line (plan 0052, section 2). A
+   * basket shared with three guests is still one person's trip from the
+   * household's point of view, and naming a guest to a zone member would disclose
+   * a participant of a private basket to somebody who is not on it. "Ana is buying
+   * this" is true when Ana's guest is the one in the shop.
+   *
+   * Null on an unclaimed line, and **also** null on a claimed one whose owner has
+   * since left the zone (section 6): the line still reports `claimed`, without a
+   * name. Access is resolved at request time everywhere else here and this is the
+   * same rule, so a zone a person left takes their name with it.
+   */
+  claimedByUserId: string | null;
   /** ISO 8601 UTC (plan 0017, section 7). */
   createdAt: string;
   /** ISO 8601 UTC (plan 0017, section 7). */
   updatedAt: string;
+}
+
+/**
+ * What one line's settlements say about it, as the line read derives it.
+ *
+ * The two fields {@link LineView} carries, named together so the query that
+ * computes them for a whole page and the mapper that writes them onto one line
+ * agree by type rather than by argument order.
+ */
+export interface LineSettlementSummary {
+  boughtCount: number;
+  lastOutcome: SettlementOutcome | null;
+}
+
+/** A line with no settlements at all, which is every line the moment it is added. */
+export const NO_LINE_SETTLEMENTS: LineSettlementSummary = {
+  boughtCount: 0,
+  lastOutcome: null,
+};
+
+/**
+ * Whether a line is in somebody's live basket, as the line read derives it.
+ *
+ * The two fields {@link LineView} carries, named together for the same reason
+ * {@link LineSettlementSummary} is: the query that answers them for a whole page
+ * and the mapper that writes them onto one line agree by type rather than by
+ * argument order.
+ *
+ * The pair is not one nullable field, and that is section 6 of plan 0052 rather
+ * than an oversight. `claimed` without a `claimedByUserId` is a real state, and
+ * collapsing the two would make a claim whose owner has left the zone
+ * indistinguishable from no claim at all.
+ */
+export interface LineClaim {
+  claimed: boolean;
+  claimedByUserId: string | null;
+}
+
+/** A line nobody is out buying, which is every line most of the time. */
+export const NO_LINE_CLAIM: LineClaim = {
+  claimed: false,
+  claimedByUserId: null,
+};
+
+/** One zone line named by a claim change, with the list that holds it. */
+export interface LineClaimRef {
+  lineId: string;
+  listId: string;
+}
+
+/**
+ * A line is, or is no longer, in somebody's live basket (plan 0052), on the
+ * **zone** room. The payload of {@link RealtimeEvent.LineClaimChanged}.
+ *
+ * ## What it may say, which is very little
+ *
+ * That a line is claimed and whose it is. Not what else is in the basket, not
+ * where they are shopping, not what it costs, and **not the generated list id**.
+ * That last omission is the load bearing one: an id in a payload is an invitation
+ * for a client to fetch it, and the refusal would then be the only thing standing
+ * between a zone member and somebody else's basket. The event names a person, not
+ * a basket.
+ *
+ * ## Why it names many lines and not one
+ *
+ * A run takes every wanted line of every list it drew from, and a per line fan out
+ * of a hundred events into a household room is a self inflicted problem (section
+ * 3.1). One event per zone room carries the whole burst, and the single line
+ * transitions use the same shape with one entry rather than a second payload that
+ * could drift from this one.
+ *
+ * The zone is the room's own addressing and rides the envelope as well; the list
+ * is per line, because one basket draws from several lists of one zone at once.
+ */
+export interface LineClaimChangedEvent {
+  zoneId: string;
+  /** Whether the lines named are now claimed. False is a release. */
+  claimed: boolean;
+  /** The basket's owner, or null on a release and on a name the reader may not have. */
+  claimedByUserId: string | null;
+  lines: LineClaimRef[];
 }
 
 /**
@@ -288,19 +507,23 @@ export interface AddLineRequest {
   content: string;
   quantity?: number;
   /**
-   * Optional opaque reference to a catalog Item (plan 0012). Validated as a UUID
-   * in application code, never a database foreign key: catalog is a separate
-   * service with its own database and core never joins to it.
+   * The products this line stands for (plan 0048, section 1.1). Opaque references
+   * into the catalog, validated as UUIDs in application code and never a database
+   * foreign key: catalog is a separate service with its own database and core
+   * never joins to it.
+   *
+   * Absent or empty is a free text line, which is deliberately still the ordinary
+   * case: typing something and ignoring the dropdown adds a plain line.
    */
-  itemId?: string | null;
+  itemIds?: string[];
 }
 
 /** One line of a {@link AddLinesRequest} batch (plan 0040, section 6.5). */
 export interface AddLinesItem {
   content: string;
   quantity?: number;
-  /** The same optional catalog Item reference {@link AddLineRequest} carries. */
-  itemId?: string | null;
+  /** The same product set {@link AddLineRequest} carries. */
+  itemIds?: string[];
 }
 
 /**
@@ -331,8 +554,16 @@ export interface UpdateLineRequest {
   lineId: string;
   content?: string;
   quantity?: number;
-  /** Set/clear the optional catalog Item reference (plan 0012). `null` clears it. */
-  itemId?: string | null;
+  /**
+   * Replace the line's product set (plan 0048, section 1.1). An empty array
+   * clears it and returns the line to free text.
+   *
+   * A whole set and not an add or a remove, for the same reason `reorder` takes
+   * the whole order: the client holds the set it is drawing, and two callers
+   * trimming different products from one line should race over a value somebody
+   * chose rather than compose into a set neither of them meant.
+   */
+  itemIds?: string[];
 }
 
 /**
@@ -363,10 +594,187 @@ export interface SetLineApprovalRequest {
   approvalStatus: LineApprovalStatus;
 }
 
-export interface SetLineStatusRequest {
+/**
+ * Say what happened to one line on a trip (plan 0047, section 4).
+ *
+ * `BOUGHT` writes a settlement for the units bought and decrements the line by
+ * that many, floored at zero. `NOT_AVAILABLE` writes a settlement of quantity
+ * zero and moves nothing. Skipping is **not a value here**: it writes nothing at
+ * all, so it is the absence of a call rather than an outcome.
+ *
+ * Nothing about settling is terminal (section 4.1). Asking for three and buying
+ * two decrements to one and leaves the line wanted, and a second settle later
+ * takes it the rest of the way, which is what lets a basket be worked through two
+ * shops in one afternoon.
+ */
+export interface SettleLineRequest {
   userId: string;
   lineId: string;
-  status: LineStatus;
+  outcome: SettlementOutcome;
+  /**
+   * The units bought. Required for `BOUGHT`, and refused for `NOT_AVAILABLE`,
+   * whose settlement is always zero.
+   *
+   * It may exceed what the line asks for (section 4.2): buying three of a line
+   * that says two decrements to zero and records a settlement of three, because
+   * the extra unit is real and belongs in the consumption history even though it
+   * has no demand left to satisfy. A settlement clamped to the outstanding demand
+   * would quietly under report what the household goes through.
+   */
+  quantity?: number;
+  /**
+   * The product actually bought, when the caller said which (plan 0047, section
+   * 3.2). It is **copied onto the settlement** rather than joined later, because
+   * a line's product set can change afterwards and the settlement must not move
+   * with it.
+   *
+   * It has to be one of the line's own products. Absent is the honest answer for
+   * a free text line and for a caller that did not say.
+   */
+  itemId?: string;
+}
+
+/**
+ * One origin line, touched by one settling act (plan 0047, section 3).
+ *
+ * `generatedListLineId` is stored and **never served**: which basket a purchase
+ * came out of is the one thing a settlement does not tell the list (section 3.1).
+ * The purchase itself is a zone fact, readable by anybody who can read the list.
+ */
+export interface LineSettlementView {
+  id: string;
+  lineId: string;
+  listId: string;
+  /** The exact product bought, or null for a free text line (section 3.2). */
+  itemId: string | null;
+  outcome: SettlementOutcome;
+  /** Units bought, and 0 for `NOT_AVAILABLE`. */
+  quantity: number;
+  /**
+   * Who settled it, and **null when a shared basket did** (plan 0051,
+   * section 6).
+   *
+   * Null does not mean nobody. It means the settle came off a basket, where the
+   * actor is a participant rather than a user and may be a guest with no account
+   * at all. The participant id is deliberately **not** served here, for the same
+   * reason `generatedListLineId` is not: a participant id is meaningless to a
+   * zone reader who cannot resolve it, and serving one would hand the zone a
+   * handle on a private basket's membership in exchange for nothing.
+   *
+   * What a zone reader learns from a null is that somebody shopping on a basket
+   * got it, which is the disclosure plan 0051 section 5.3 already makes
+   * deliberately and plan 0050 section 8 already called acceptable.
+   */
+  settledByUserId: string | null;
+  /** ISO 8601 UTC. */
+  settledAt: string;
+}
+
+/**
+ * What one settle did: the line as it now stands, and the settlement that moved
+ * it (plan 0047, section 8).
+ *
+ * Both halves, because neither is derivable from the other: the line carries the
+ * new quantity and the settlement carries an id and a time nothing else can
+ * guess. A phone in the shop and a phone at home agree from this without a
+ * refetch, which is why it is also the payload of
+ * {@link RealtimeEvent.LineSettled}.
+ */
+export interface LineSettlementResult {
+  line: LineView;
+  settlement: LineSettlementView;
+}
+
+/** One line's own settlements, newest first (plan 0047, section 6.1). `READ`. */
+export interface ListLineSettlementsRequest extends PageQuery {
+  userId: string;
+  lineId: string;
+}
+
+/**
+ * One product's settlements across every list the caller can read (plan 0047,
+ * section 6.2).
+ *
+ * Restricted to those lists **at request time**, the same rule everything else
+ * here uses: a zone you have left takes its history with it (section 9). It is
+ * what makes "you buy this about every eleven days" a useful number rather than a
+ * per list fragment, and it is what pays for the settlement's own copied
+ * `itemId`.
+ */
+export interface ListItemSettlementsRequest extends PageQuery {
+  userId: string;
+  itemId: string;
+}
+
+/** How much one {@link LIST_PATTERNS.holdingItem} read may answer with. */
+export const LIST_HOLDING_ITEM_LIMITS = {
+  /**
+   * A ceiling, not a page size, and the read is deliberately not paginated.
+   *
+   * What it feeds is an indicator on a line screen: "also on Weekly shop and
+   * Flat 3B". Nobody reads the twenty first entry, and a cursor would turn a
+   * caption into a listing of every list a person can read that happens to want
+   * milk, which is the search this is not. Past the cap the answer says there are
+   * more rather than offering to enumerate them.
+   */
+  maxLists: 20,
+} as const;
+
+/**
+ * Which lists still want a product, for one caller (plan 0053, section 3).
+ *
+ * Restricted to the lists this caller may read **at request time**, the same rule
+ * {@link ListItemSettlementsRequest} applies and for the same reason: a zone you
+ * have left takes its lists with it (plan 0047, section 9). It is the same
+ * privacy question and it gets the same answer.
+ *
+ * **Items only, never groups** (plan 0053, section 6). A line references no group
+ * once the composer has copied its members, and answering for a group would need
+ * a rule for partial overlap that nothing yet asks for. A client holding a line
+ * with several products asks once per product and merges.
+ *
+ * The item id is required and must name a product. A line carrying **no** product
+ * has no question to ask here and is refused rather than answered with an empty
+ * array: "this is on no other list" and "there was nothing to look for" are
+ * different, and velista `0047` section 5 draws them differently.
+ */
+export interface ListsHoldingItemRequest {
+  userId: string;
+  itemId: string;
+  /**
+   * The list the caller is asking *from*, left out of the answer.
+   *
+   * Null or absent asks about every readable list, which is what a basket line
+   * wants: it belongs to no single list, so there is nothing to exclude.
+   */
+  excludeListId?: string | null;
+}
+
+/** One list that still wants the product, named for a caption. */
+export interface ListHoldingItemView {
+  listId: string;
+  /** The list's own name, e.g. "Weekly shop". */
+  name: string;
+  zoneId: string;
+  /** The zone it belongs to, e.g. "Flat 3B". */
+  zoneName: string;
+  /** How many of the product that list is still asking for. */
+  quantity: number;
+}
+
+/**
+ * The lists holding the product, most recently touched first.
+ *
+ * An explicit `hasMore` rather than a cursor, because
+ * {@link LIST_HOLDING_ITEM_LIMITS.maxLists} is a ceiling and not a page: the
+ * caption says "and 3 more" and stops. An **empty** `lists` is a real answer and
+ * means no other readable list wants this, which is exactly the thing the client
+ * could not previously tell apart from not having asked.
+ */
+export interface ListsHoldingItemResult {
+  lists: ListHoldingItemView[];
+  /** Whether the cap cut the answer short. */
+  hasMore: boolean;
 }
 
 export interface ReorderLinesRequest {
@@ -481,6 +889,7 @@ export function baseContentType(value: string): string {
 }
 
 export type ListPage = Paginated<ListView>;
+export type LineSettlementPage = Paginated<LineSettlementView>;
 export type LinePage = Paginated<LineView>;
 export type CommentPage = Paginated<CommentView>;
 

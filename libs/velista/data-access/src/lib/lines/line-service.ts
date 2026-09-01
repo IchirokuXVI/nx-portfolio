@@ -1,11 +1,13 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
+  AlsoOnVm,
   Line,
   LineApprovalStatus,
   LineOrder,
-  LineStatus,
+  LineSettlement,
   Page,
+  SettlementOutcome,
 } from '@portfolio/velista/models';
 import { LineApi } from './line-api';
 
@@ -43,26 +45,128 @@ export interface LineServiceI {
    * Requires WRITER on the list, which `requireWrite` grants from a `ListAccess` row
    * and **not** from being a zone admin: there is no manager bypass on that check.
    *
-   * `itemId` is deliberately absent from this signature. The catalog is out of scope
-   * (section 9) and every line this screen writes leaves it null, so offering the
-   * parameter would be an interface written against a screen that does not exist.
+   * `itemIds` is here now, and its absence used to be the note in this place: the
+   * catalog was out of scope in `0012` and every line this screen wrote left it
+   * null. The composer's suggestions are what fill it (velista plan 0043, section
+   * 6), and choosing a group sends that group's products whole.
    */
-  addLine(listId: string, content: string, quantity?: number): Promise<Line>;
-
-  /** Change what a line says, or how many (`PATCH /v1/lines/:id`). Version bumped. */
-  updateLine(
-    lineId: string,
-    changes: { content?: string; quantity?: number }
+  addLine(
+    listId: string,
+    content: string,
+    quantity?: number,
+    itemIds?: readonly string[]
   ): Promise<Line>;
 
   /**
-   * Tick it off, or mark it as not in the shop (`POST /v1/lines/:id/status`).
+   * Change what a line says, how many, or which products (`PATCH /v1/lines/:id`).
+   * Version bumped.
    *
-   * WRITER and nothing more, which is why a line still waiting for approval can be
-   * ticked off: the backend permits it, and a rule invented in the client that the
-   * backend does not enforce is a lie the next client exposes (section 3.4).
+   * `itemIds` replaces the **whole** set, and an empty array clears it back to
+   * free text. A whole set rather than an add or a remove, for the reason reorder
+   * takes the whole order.
+   *
+   * Not the reel's path, deliberately. This is an absolute write, which is a last
+   * writer wins race over a value somebody deliberately chose; a moving control
+   * writes {@link addQuantity} instead.
    */
-  setStatus(lineId: string, status: LineStatus): Promise<Line>;
+  updateLine(
+    lineId: string,
+    changes: {
+      content?: string;
+      quantity?: number;
+      itemIds?: readonly string[];
+    }
+  ): Promise<Line>;
+
+  /**
+   * Move a line's quantity by a signed delta (`POST /v1/lines/:id/quantity`).
+   *
+   * **The reel's write, and the reason the reel is correct** (velista plan 0043,
+   * section 4.1). Applied atomically under the row's lock, so two people adjusting
+   * the same line both land where two absolute writes would have silently lost
+   * one. Built by backend plan 0040 for the assistant and never called by anything
+   * else until now.
+   *
+   * `DECIDE`, like settling, because both say what the household now has.
+   */
+  addQuantity(lineId: string, delta: number): Promise<Line>;
+
+  /**
+   * Say what happened to a line on a trip (`POST /v1/lines/:id/settle`).
+   *
+   * `DECIDE`. It is what `setStatus` was, and the replacement is not a rename:
+   * that wrote a state onto the line and this appends a fact to its history, which
+   * is what makes the whole model in section 1 work.
+   *
+   * Answers with both halves, and both are needed: the line carries its new
+   * quantity and its moved indicators, and the settlement carries an id and a time
+   * that nothing else can produce.
+   *
+   * Skipping is not a value here. Deciding not to buy something today leaves the
+   * line alone and is the absence of this call.
+   */
+  settle(
+    lineId: string,
+    outcome: SettlementOutcome,
+    options?: { quantity?: number; itemId?: string }
+  ): Promise<{ line: Line; settlement: LineSettlement }>;
+
+  /**
+   * One line's own history, newest first (`GET /v1/lines/:id/settlements`).
+   *
+   * `READ`, because a settlement is a zone fact: what the flat bought and when is
+   * exactly the shared knowledge a shared list exists to hold, and a history
+   * visible only to whoever did the shopping is useless in a household (backend
+   * plan 0047, section 3.1). What it never says is which basket a purchase came
+   * out of.
+   */
+  listSettlements(
+    lineId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<Page<LineSettlement>>;
+
+  /**
+   * One product's history across every list the caller can read
+   * (`GET /v1/items/:id/settlements`).
+   *
+   * The second of the line page's two sections, and they are two rather than one
+   * because they answer different questions: this is the reader's own consumption
+   * across every household they shop for, where the first is one household's.
+   * Filtered by read access **at request time**, so it can never widen with a
+   * stale grant.
+   */
+  /**
+   * Which of the caller's other lists still want a product
+   * (`GET /v1/items/:id/lists`, backend plan 0053 section 3).
+   *
+   * The read behind the line page's "also on" indicator, which velista plan 0047
+   * section 5 could previously only guess at from whatever lists the session happened
+   * to hold. Filtered by the caller's read access **at request time**, the same rule
+   * {@link listItemSettlements} follows and the same privacy question.
+   *
+   * Three things the caller must respect:
+   *
+   * - **Items only, never groups.** A line references no group once the composer has
+   *   copied its members, so a line carrying several products asks once per product
+   *   and merges the answers.
+   * - **A line with no product must not ask.** The server refuses rather than
+   *   answering empty, because "there was nothing to look for" and "no other list has
+   *   this" are different and the page draws them differently.
+   * - **Capped, not paged.** The answer is a caption. `hasMore` says the cap cut it
+   *   short; there is no cursor and asking for one would make this a listing of every
+   *   readable list that happens to want milk.
+   *
+   * `excludeListId` is the list being asked *from*, left out of the answer.
+   */
+  listsHoldingItem(
+    itemId: string,
+    options?: { excludeListId?: string }
+  ): Promise<AlsoOnVm>;
+
+  listItemSettlements(
+    itemId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<Page<LineSettlement>>;
 
   /**
    * Decide a suggested line (`POST /v1/lines/:id/approval`).

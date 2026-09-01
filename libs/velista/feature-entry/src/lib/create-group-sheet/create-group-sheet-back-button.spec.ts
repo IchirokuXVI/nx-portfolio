@@ -1,6 +1,12 @@
 import { Location } from '@angular/common';
 import { provideLocationMocks } from '@angular/common/testing';
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  provideEnvironmentInitializer,
+  signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   provideRouter,
@@ -19,7 +25,7 @@ import {
   provideFakeZoneStore,
   TokenStore,
 } from '@portfolio/velista/data-access';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { AppHistory, provideVelistaTesting } from '@portfolio/velista/platform';
 import { CreateGroupSheet } from './create-group-sheet';
 
 /**
@@ -88,6 +94,7 @@ async function arrive(): Promise<{
       provideRouter(routes),
       provideLocationMocks(),
       provideVelistaTesting({ basePath: '/velista' }),
+      startCountingHistory(),
       provideFakeZoneStore(fakeZoneStore()),
       provideFakeSessionStore('REGISTERED'),
       { provide: TokenStore, useValue: { clear: jest.fn() } },
@@ -150,6 +157,18 @@ function listenForHistory(): void {
   TestBed.inject(Router).setUpLocationChangeListener();
 }
 
+/**
+ * Start `AppHistory`, which is what decides whether a dismissal may pop at all.
+ *
+ * `appProviders` does this in the app, and it is on this spec's list for the same
+ * reason the line above exists: a TestBed assembles the pieces the app assembles and
+ * nothing else. Without it the service counts no entries, every sheet takes itself to
+ * be the first page of the session, and the pop this spec is about never happens.
+ */
+function startCountingHistory() {
+  return provideEnvironmentInitializer(() => inject(AppHistory).watch());
+}
+
 function sheetIsOnScreen(harness: RouterTestingHarness): boolean {
   const host = harness.fixture.nativeElement as HTMLElement;
 
@@ -174,6 +193,27 @@ describe('the back button, over a sheet', () => {
 
     expect(location.path()).toBe(DASHBOARD);
     expect(sheetIsOnScreen(harness)).toBe(false);
+  });
+
+  it('cancels by popping, which leaves the sheet ahead rather than gone', async () => {
+    // The difference between the two ways of closing a sheet that both put the
+    // dashboard on screen. A pop steps off the sheet's entry and leaves it standing, so
+    // forward reaches it again; a replace would have written over it, and forward from
+    // the top of the stack goes nowhere.
+    //
+    // Worth stating because the replace is what happens when nothing is counting the
+    // history: it is the safe answer for an arrival with nothing behind it, and it
+    // would be silently wrong for this one.
+    const { harness, location } = await arrive();
+    await harness.navigateByUrl(SHEET);
+
+    await pressCancel(harness);
+    expect(location.path()).toBe(DASHBOARD);
+
+    location.forward();
+    await settle(harness);
+
+    expect(location.path()).toBe(SHEET);
   });
 
   it('goes back to the page before the dashboard, and not into the sheet again', async () => {
@@ -219,6 +259,7 @@ describe('the back button, over a sheet', () => {
         provideRouter(routes),
         provideLocationMocks(),
         provideVelistaTesting({ basePath: '/velista' }),
+        startCountingHistory(),
         provideFakeZoneStore(fakeZoneStore()),
         provideFakeSessionStore('REGISTERED'),
         { provide: TokenStore, useValue: { clear: jest.fn() } },

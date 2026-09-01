@@ -1,5 +1,9 @@
 import {
+  toAssistantReply,
   toComment,
+  toGeneratedListFromView,
+  toGeneratedListRun,
+  toGeneratedListSummary,
   toLine,
   toListAccessEntries,
   toListPermissions,
@@ -129,7 +133,7 @@ describe('toMyZone', () => {
         pendingRequestCount: 3,
         firstPendingRequesterName: 'Ines',
       },
-      lists: [{ id: 'l1', name: 'Weekly', lineCount: 12, readyCount: 7 }],
+      lists: [{ id: 'l1', name: 'Weekly', lineCount: 12, wantedCount: 7 }],
     });
 
     expect(zone?.counts).toEqual({
@@ -139,7 +143,7 @@ describe('toMyZone', () => {
       firstPendingRequesterName: 'Ines',
     });
     expect(zone?.lists).toEqual([
-      { id: 'l1', name: 'Weekly', lineCount: 12, readyCount: 7 },
+      { id: 'l1', name: 'Weekly', lineCount: 12, wantedCount: 7 },
     ]);
   });
 
@@ -165,12 +169,12 @@ describe('toMyZone', () => {
     // number on the page.
     const zone = toMyZone({
       id: 'z1',
-      lists: [{ id: 'l1', lineCount: 5, readyCount: 9 }],
+      lists: [{ id: 'l1', lineCount: 5, wantedCount: 9 }],
     });
 
     expect(zone?.lists[0]).toMatchObject({
       lineCount: 5,
-      readyCount: 5,
+      wantedCount: 5,
     });
   });
 
@@ -288,10 +292,19 @@ describe('toLine', () => {
     listId: 'l1',
     content: 'Milk',
     quantity: 2,
-    itemId: null,
+    // A product set, where this was a single nullable `itemId` that was null on every
+    // line ever created (backend plan 0048, section 1.1).
+    itemIds: ['item-milk'],
     position: 3,
     approvalStatus: 'APPROVED',
-    status: 'READY',
+    // The two derived indicators, which replaced the trip status (backend plan 0047,
+    // section 5). There is no `status` on a line any more.
+    boughtCount: 4,
+    lastSettlementOutcome: 'BOUGHT',
+    // The third one (backend plan 0052, section 4), which the other two cannot
+    // stand in for: bought is history and this is right now.
+    claimed: true,
+    claimedByUserId: 'u9',
     createdByUserId: 'u1',
     approvedByUserId: 'u2',
     version: 7,
@@ -318,8 +331,60 @@ describe('toLine', () => {
     ).toBe(0);
   });
 
-  it('falls back to PENDING for an unknown line status', () => {
-    expect(toLine({ ...valid, status: 'ON_ORDER' })?.status).toBe('PENDING');
+  it('reads a free text line as a free text line', () => {
+    // Empty and null are what the server sends for a line carrying no products, and
+    // both have to survive: a set that arrived as something else must not become a
+    // product reference nobody can resolve.
+    expect(toLine({ ...valid, itemIds: [] })?.itemIds).toEqual([]);
+    expect(toLine({ ...valid, itemIds: undefined })?.itemIds).toEqual([]);
+    expect(toLine({ ...valid, itemIds: [1, null, 'ok'] })?.itemIds).toEqual([
+      'ok',
+    ]);
+  });
+
+  it('reads no history at all as no history, in the safe direction', () => {
+    // Both default to "nothing has ever happened to this line", which draws no
+    // indicator. Defaulting the other way would put a bought mark on a line over an
+    // absent field.
+    const bare = toLine({
+      ...valid,
+      boughtCount: undefined,
+      lastSettlementOutcome: undefined,
+    });
+
+    expect(bare?.boughtCount).toBe(0);
+    expect(bare?.lastSettlementOutcome).toBeNull();
+  });
+
+  it('reads an absent claim as nobody buying it, in the safe direction', () => {
+    // Same rule as the two above. A row that said somebody was out buying this over
+    // a missing field would be read as the line having been dealt with.
+    const bare = toLine({
+      ...valid,
+      claimed: undefined,
+      claimedByUserId: undefined,
+    });
+
+    expect(bare?.claimed).toBe(false);
+    expect(bare?.claimedByUserId).toBeNull();
+  });
+
+  it('keeps a claim whose owner has left the zone, without the name', () => {
+    // Backend plan 0052, section 6: the household still needs to know somebody has
+    // it, and who that was has stopped being this reader's to have.
+    const anonymous = toLine({ ...valid, claimedByUserId: null });
+
+    expect(anonymous?.claimed).toBe(true);
+    expect(anonymous?.claimedByUserId).toBeNull();
+  });
+
+  it('reads an outcome it has never heard of as the quiet one', () => {
+    // `NOT_AVAILABLE` moves no quantity and counts as no purchase, so an unknown value
+    // reports a trip that happened and claims nothing about what the household has.
+    expect(
+      toLine({ ...valid, lastSettlementOutcome: 'REFUNDED' })
+        ?.lastSettlementOutcome
+    ).toBe('NOT_AVAILABLE');
   });
 });
 
@@ -577,5 +642,315 @@ describe('toZonePresence', () => {
     });
 
     expect(presence?.online).toEqual([{ userId: 'u1', username: 'Ana' }]);
+  });
+});
+
+/**
+ * The one link and the answers under a question (plan 0042, section 9).
+ *
+ * The wire shape changed under this app in `0046`, so the cases worth having are the
+ * ones a type cannot state: a link that cannot address a list, an old backend's fields,
+ * and the difference between a zone the server named and one it deliberately did not.
+ */
+describe('toAssistantReply', () => {
+  it('reads the one link, and the zone only when the server named it', () => {
+    expect(
+      toAssistantReply({
+        reply: 'It is not on the weekly shop, so I have added it.',
+        link: {
+          zoneId: 'z1',
+          listId: 'l1',
+          label: 'Compra semanal',
+          zoneLabel: 'Casa',
+        },
+        choices: [],
+      })
+    ).toEqual({
+      text: 'It is not on the weekly shop, so I have added it.',
+      link: {
+        zoneId: 'z1',
+        listId: 'l1',
+        label: 'Compra semanal',
+        zoneLabel: 'Casa',
+      },
+      choices: [],
+    });
+  });
+
+  it('keeps a null zoneLabel null rather than composing one', () => {
+    // Section 3.1: whether the zone is worth naming is the server's rule, and this
+    // side counts nothing. A null here has to survive as a null.
+    const reply = toAssistantReply({
+      reply: 'Added.',
+      link: { zoneId: 'z1', listId: 'l1', label: 'Weekly', zoneLabel: null },
+    });
+
+    expect(reply?.link?.zoneLabel).toBeNull();
+  });
+
+  it('drops a link that is missing its listId (rule A3)', () => {
+    // A link this app cannot address would 404, which is the thing rule A3 exists to
+    // prevent, so it is dropped rather than half built.
+    const reply = toAssistantReply({
+      reply: 'There.',
+      link: { zoneId: 'z1', listId: null, label: 'Weekly', zoneLabel: null },
+    });
+
+    expect(reply).toEqual({ text: 'There.', link: null, choices: [] });
+  });
+
+  it('reads the answers to a question', () => {
+    const reply = toAssistantReply({
+      reply: 'Which list did you mean?',
+      listResolution: 'ASKED',
+      link: null,
+      choices: [
+        { label: 'Compra semanal · Casa', message: 'the weekly shop' },
+        { label: 'Compra · Oficina', message: 'the office one' },
+      ],
+    });
+
+    expect(reply).toEqual({
+      text: 'Which list did you mean?',
+      listResolution: 'asked',
+      link: null,
+      choices: [
+        { label: 'Compra semanal · Casa', message: 'the weekly shop' },
+        { label: 'Compra · Oficina', message: 'the office one' },
+      ],
+    });
+  });
+
+  it('drops a choice with no message, since tapping it would say nothing', () => {
+    const reply = toAssistantReply({
+      reply: 'Which one?',
+      choices: [
+        { label: 'Weekly', message: 'the weekly shop' },
+        { label: 'Other' },
+      ],
+    });
+
+    expect(reply?.choices).toEqual([
+      { label: 'Weekly', message: 'the weekly shop' },
+    ]);
+  });
+
+  it('reads an old backend as an answer with nothing under it', () => {
+    // Section 8. `link` absent is null, `choices` absent is empty, and a stray
+    // `references` array is ignored rather than read. Nobody sees an error.
+    expect(
+      toAssistantReply({
+        reply: 'Yes.',
+        references: [
+          { kind: 'LIST', zoneId: 'z1', listId: 'l1', label: 'Weekly' },
+        ],
+      })
+    ).toEqual({ text: 'Yes.', link: null, choices: [] });
+  });
+});
+
+/**
+ * Generated shopping lists (plan 0045), which is rule D4 applied to the two shapes the
+ * listing and the create answer with.
+ */
+describe('toGeneratedListSummary', () => {
+  const wire = {
+    id: 'gl1',
+    name: 'Saturday big shop',
+    status: 'ACTIVE',
+    generatedAt: '2026-08-21T10:00:00.000Z',
+    lineCount: 12,
+    settledLineCount: 4,
+    boughtLineCount: 3,
+    notAvailableLineCount: 1,
+    presentCount: 2,
+  };
+
+  it('maps the listing shape', () => {
+    expect(toGeneratedListSummary(wire)).toEqual({
+      id: 'gl1',
+      name: 'Saturday big shop',
+      status: 'ACTIVE',
+      generatedAt: new Date('2026-08-21T10:00:00.000Z'),
+      lineCount: 12,
+      settledLineCount: 4,
+      boughtLineCount: 3,
+      notAvailableLineCount: 1,
+      presentCount: 2,
+    });
+  });
+
+  /**
+   * A server older than backend `0053` sends none of the three, and the row has to
+   * survive it (velista plan 0049, section 2).
+   *
+   * Zero for all three, which is not a lucky default: it makes the two outcome counts
+   * fail to account for four finished lines, so `outcomeBreakdown` answers null and the
+   * screens say "finished" exactly as they did before the field existed. A fabricated
+   * breakdown would claim three purchases nobody made.
+   */
+  it('reads a summary with no breakdown as zeroes rather than dropping it', () => {
+    const mapped = toGeneratedListSummary({
+      id: 'gl1',
+      name: null,
+      status: 'ACTIVE',
+      generatedAt: '2026-08-21T10:00:00.000Z',
+      lineCount: 12,
+      settledLineCount: 4,
+    });
+
+    expect(mapped).not.toBeNull();
+    expect(mapped?.boughtLineCount).toBe(0);
+    expect(mapped?.notAvailableLineCount).toBe(0);
+    expect(mapped?.presentCount).toBe(0);
+  });
+
+  // Null is a basket nobody named, which the client displays as its generation date.
+  // Collapsing it to an empty string would erase the difference between unnamed and
+  // named nothing.
+  it('keeps a null name as null rather than as an empty string', () => {
+    expect(toGeneratedListSummary({ ...wire, name: null })?.name).toBeNull();
+  });
+
+  it('drops a body that is not a record, and one with no id', () => {
+    expect(toGeneratedListSummary(null)).toBeNull();
+    expect(toGeneratedListSummary('gl1')).toBeNull();
+    expect(toGeneratedListSummary({ ...wire, id: undefined })).toBeNull();
+  });
+
+  /**
+   * The one strict field. The date is not decoration on this object: the history is
+   * ordered by it and an unnamed basket's whole display name is built from it, so a row
+   * that kept a fabricated `new Date()` would sort itself to the top of somebody's
+   * history and title itself today.
+   */
+  it('drops a summary whose date cannot be read, rather than inventing one', () => {
+    expect(toGeneratedListSummary({ ...wire, generatedAt: 'soon' })).toBeNull();
+    expect(toGeneratedListSummary({ ...wire, generatedAt: null })).toBeNull();
+  });
+
+  // An unrecognised status must never read as ACTIVE, which would put a basket the
+  // server considers finished back on the dashboard.
+  it('falls back to UNKNOWN for a status this build does not know', () => {
+    expect(toGeneratedListSummary({ ...wire, status: 'PAUSED' })?.status).toBe(
+      'UNKNOWN'
+    );
+  });
+
+  it('reads a missing count as zero rather than dropping the row', () => {
+    const mapped = toGeneratedListSummary({
+      ...wire,
+      lineCount: undefined,
+      settledLineCount: undefined,
+    });
+
+    expect(mapped?.lineCount).toBe(0);
+    expect(mapped?.settledLineCount).toBe(0);
+  });
+});
+
+describe('toGeneratedListFromView', () => {
+  const line = (quantity: number, settled: number) => ({
+    id: `l${quantity}${settled}`,
+    content: 'Milk',
+    quantity,
+    settledQuantity: settled,
+  });
+
+  const view = {
+    id: 'gl1',
+    name: null,
+    status: 'ACTIVE',
+    generatedAt: '2026-08-21T10:00:00.000Z',
+    lines: [line(2, 2), line(1, 0), line(3, 1)],
+  };
+
+  /**
+   * The create and the two owner realtime events answer the whole basket, which carries
+   * no counts because it sent the lines themselves. They are derived in one place so the
+   * three call sites cannot disagree.
+   */
+  it('counts the lines and the finished ones off the basket itself', () => {
+    const mapped = toGeneratedListFromView(view);
+
+    expect(mapped?.lineCount).toBe(3);
+    expect(mapped?.settledLineCount).toBe(1);
+  });
+
+  // A NOT_AVAILABLE outcome closes the outstanding amount without claiming anything was
+  // bought, so the line is done and the card should say so.
+  it('counts a line settled past what was asked for as finished', () => {
+    const mapped = toGeneratedListFromView({
+      ...view,
+      lines: [line(2, 5)],
+    });
+
+    expect(mapped?.settledLineCount).toBe(1);
+  });
+
+  // Zero is not an amount somebody worked through, and counting it would let an empty
+  // basket report itself finished.
+  it('does not count a line asking for nothing', () => {
+    const mapped = toGeneratedListFromView({ ...view, lines: [line(0, 0)] });
+
+    expect(mapped?.lineCount).toBe(1);
+    expect(mapped?.settledLineCount).toBe(0);
+  });
+
+  it('reads a basket with no lines as empty rather than dropping it', () => {
+    const mapped = toGeneratedListFromView({ ...view, lines: [] });
+
+    expect(mapped?.lineCount).toBe(0);
+  });
+
+  it('drops a body it cannot read at all', () => {
+    expect(toGeneratedListFromView(null)).toBeNull();
+    expect(
+      toGeneratedListFromView({ ...view, generatedAt: 'soon' })
+    ).toBeNull();
+  });
+});
+
+describe('toGeneratedListRun', () => {
+  const run = {
+    list: {
+      id: 'gl1',
+      name: null,
+      status: 'ACTIVE',
+      generatedAt: '2026-08-21T10:00:00.000Z',
+      lines: [{ id: 'l1', content: 'Milk', quantity: 1, settledQuantity: 0 }],
+    },
+    skipped: [
+      {
+        zoneId: 'z1',
+        listId: 'list-1',
+        lineId: 'line-1',
+        content: 'Milk',
+        carriedByGeneratedListId: 'gl0',
+      },
+    ],
+  };
+
+  /**
+   * What a run **did not** take is part of the answer to "why is this basket what it
+   * is". A basket missing the milk somebody distinctly remembers putting on the list is
+   * a bug report, and this is the difference between answering it and guessing.
+   */
+  it('keeps what the run skipped beside the basket it made', () => {
+    const mapped = toGeneratedListRun(run);
+
+    expect(mapped?.list.id).toBe('gl1');
+    expect(mapped?.skipped).toEqual([{ listId: 'list-1', content: 'Milk' }]);
+  });
+
+  it('answers an empty skipped list rather than omitting it', () => {
+    expect(toGeneratedListRun({ ...run, skipped: undefined })?.skipped).toEqual(
+      []
+    );
+  });
+
+  it('drops a run whose basket cannot be read', () => {
+    expect(toGeneratedListRun({ ...run, list: null })).toBeNull();
+    expect(toGeneratedListRun(null)).toBeNull();
   });
 });

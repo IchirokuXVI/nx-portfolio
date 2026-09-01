@@ -122,8 +122,11 @@
     }
   },
   "line": {
-    "status": {
-      "notAvailable": "NOT AVAILABLE"
+    "indicator": {
+      "bought": "Bought",
+      "notAvailable": "Not in the shop last time",
+      "claimed": "Somebody is buying this",
+      "claimedBy": "{{name}} is buying this"
     }
   },
   "connection": {
@@ -290,15 +293,26 @@
       "emailSignIn": "Sign in with email",
       "newZone": "New group",
       "generateList": "Get shopping list",
-      "generateListSoon": "Coming soon",
+      "history": "History",
       "account": "Your account",
       "changeLocale": "Change language",
       "assistant": "Assistant"
     },
     "zoneExplainer": "A group is the household or flatmates you share lists with. You can start without an account.",
     "section": {
-      "resume": "Pick up where you left off",
+      "shoppingList": "Your shopping list",
       "zones": "Your groups"
+    },
+    "shoppingList": {
+      "open": "{{name}}, {{count}} still to get",
+      "more_one": "and {{count}} more",
+      "more_other": "and {{count}} more",
+      "progress": "{{settled}} of {{total}} finished",
+      "generatedToday": "generated today",
+      "generatedOn": "generated {{date}}",
+      "got": "{{bought}} of {{total}} got",
+      "unavailable_one": "{{count}} not available",
+      "unavailable_other": "{{count}} not available"
     },
     "zone": {
       "members_one": "{{count}} member",
@@ -382,7 +396,11 @@
       "notHeard": "I did not catch that",
       "voiceFailed": "That did not send. Nothing was added, so try again or type it",
       "voiceBusy": "A lot of people are asking at once. Try again in {{count}} seconds",
-      "dismissHeard": "Close"
+      "dismissHeard": "Close",
+      "suggestions": "Matching products",
+      "groupAdds": "adds its {{count}} products",
+      "groupBadge": "GROUP",
+      "asWritten": "Add “{{text}}” as written"
     },
     "empty": {
       "title": "Nothing on this list yet",
@@ -392,18 +410,12 @@
     "readOnly": {
       "banner": "You can read this list, not change it"
     },
-    "ticking": {
-      "notMine": "Add anything you need. Ticking things off is for whoever does the shop"
-    },
     "line": {
       "awaitingApproval": "Waiting for approval",
       "rejected": "Turned down",
-      "notAvailable": "Not in the shop",
       "approve": "Add it",
       "reject": "Not this",
       "restore": "Put it back",
-      "markNotAvailable": "Mark as not in the shop",
-      "markPending": "Put it back on the list",
       "edit": "Change this",
       "editing": "Editing",
       "comments": "Comments",
@@ -413,7 +425,9 @@
       "overwrittenBySomeone": "Somebody else changed this while you were editing",
       "failed": "That did not save. Tap to try again",
       "move": "Move",
-      "movedTo": "Moved to position {{position}} of {{total}}"
+      "movedTo": "Moved to position {{position}} of {{total}}",
+      "quantityFor": "How many {{name}}",
+      "quantityChanged": "{{name}}, now {{quantity}}"
     },
     "reorder": {
       "enter": "Put them in order",
@@ -518,6 +532,67 @@
       "roleChanged": "Your role in this group changed",
       "tooFast": "Slow down for a moment and try again",
       "failed": "That did not work. Try again in a moment"
+    },
+    "detail": {
+      "title": "About this line",
+      "products": {
+        "none": "Not linked to a product",
+        "one": "{{name}}",
+        "unnamed_one": "{{count}} product",
+        "unnamed_other": "{{count}} products",
+        "many": "{{count}} products",
+        "lastBought": "{{count}} products · last bought {{name}}"
+      },
+      "namesFailed": "Product names could not be loaded",
+      "unnamedProduct": "Unnamed product",
+      "lastBought": "Last bought",
+      "lastBoughtValue": "{{when}} · {{count}}",
+      "never": "Never bought",
+      "rate": "You buy this about",
+      "rateValue": "every {{days}} days",
+      "rateRough": "every few weeks",
+      "bought": "I bought this",
+      "notAvailable": "They did not have it",
+      "everything": "Everything about this line",
+      "howMany": "How many did you get?",
+      "howManyNote": "Prefilled with the whole outstanding quantity. Buying fewer leaves the rest wanted",
+      "whichOne": "Which one did you get?",
+      "record": "Record it",
+      "cancel": "Cancel",
+      "failed": "That did not save. Try again"
+    },
+    "page": {
+      "where": "on {{list}}, in {{zone}}",
+      "noProducts": "No products yet",
+      "products": "PRODUCTS ON THIS LINE",
+      "addProduct": "Add a product",
+      "searchProduct": "Search for a product",
+      "add": "Add",
+      "removeProduct": "Remove {{name}}",
+      "thisList": "ON THIS LIST",
+      "everywhere": "EVERYWHERE YOU SHOP",
+      "alsoOn": "ALSO ON",
+      "alsoOnPlace": "{{zone}} · {{list}}",
+      "alsoOnMore": "and more",
+      "noHistory": "Nothing bought yet",
+      "more": "Show more",
+      "prices": "Where to buy it, and for how much: drawn here once prices exist. Nothing is shown until then.",
+      "delete": "Delete this line",
+      "rate": "about how often you buy it",
+      "lastBought": "last bought, {{count}}",
+      "boughtBy": "Bought {{count}} · {{who}}",
+      "missingBy": "Not in the shop · {{who}}",
+      "you": "you",
+      "someone": "somebody"
+    },
+    "confirmDelete": {
+      "title": "Delete “{{name}}”?",
+      "body": "Its buy history goes with it. A line at zero keeps its history and costs nothing; deleting is for things this list should not know about any more.",
+      "confirm": "Delete the line",
+      "cancel": "Keep it"
+    },
+    "buying": {
+      "notMine": "Anybody can add to this list. Buying is for whoever does the shopping"
     }
   },
   "account": {
@@ -525,7 +600,8 @@
     "back": "Back",
     "section": {
       "you": "You",
-      "access": "Getting in"
+      "access": "Getting in",
+      "shopping": "Shopping"
     },
     "name": {
       "label": "Name",
@@ -604,6 +680,9 @@
       "installed": "Installed",
       "elsewhere": "Get the app",
       "elsewhereDetail": "Velista has its own address, {{origin}}. That is where it can be installed"
+    },
+    "row": {
+      "profiles": "Shopping profiles"
     }
   },
   "install": {
@@ -725,6 +804,266 @@
     "dropped": "The start of this conversation is too long to keep, so I let it go.",
     "spoken": "You said something. I am listening to it now.",
     "tooLong": "That recording was too big to send. I can take up to {{limit}} MB at a time, so a shorter message will get through.",
-    "badFormat": "Your browser recorded that in a way I cannot read. You can still type it."
+    "badFormat": "Your browser recorded that in a way I cannot read. You can still type it.",
+    "goTo": "Go to {{list}}",
+    "goToInZone": "Go to {{list}}, in {{zone}}",
+    "choices": {
+      "label": "Answers"
+    }
+  },
+  "profiles": {
+    "title": "Shopping profiles",
+    "defaultName": "My profile",
+    "loading": "Loading your profiles",
+    "add": "New profile",
+    "default": {
+      "badge": "Default"
+    },
+    "name": {
+      "label": "Name",
+      "hint": "Until you name it, it shows as {{name}}"
+    },
+    "address": {
+      "label": "Address",
+      "optional": "Optional",
+      "placeholder": "Street and number"
+    },
+    "postal": {
+      "label": "Postal codes",
+      "add": "Add postal code",
+      "code": "Postal code",
+      "name": "Label, optional",
+      "submit": "Add",
+      "remove": "Remove {{code}}",
+      "full": "You can keep up to {{count}} postal codes",
+      "uncovered": "No supermarket we know reaches this code yet"
+    },
+    "chains": {
+      "label": "Supermarkets",
+      "excluded": "Excluded",
+      "hint": "The whole chain, never one shop. An excluded chain stays here so it can come back"
+    },
+    "saving": {
+      "label": "A second stop must save at least",
+      "currency": "€"
+    },
+    "scope": {
+      "banner": "Add a postal code or choose a supermarket to see prices"
+    },
+    "delete": {
+      "label": "Delete {{name}}",
+      "title": "Delete this profile?",
+      "body": "Its postal codes and supermarket choices go with it. Your lists are not touched",
+      "default": "{{name}} will become your default",
+      "confirm": "Delete the profile"
+    },
+    "error": {
+      "load": "We could not read your profiles",
+      "retry": "Try again",
+      "save": "That did not save. Try again",
+      "delete": "That did not go through. Try again"
+    }
+  },
+  "basket": {
+    "title": "Shopping list",
+    "loading": "Loading the list",
+    "progress": "{{done}} of {{total}} got",
+    "progressUnavailable_one": "· {{count}} not available",
+    "progressUnavailable_other": "· {{count}} not available",
+    "empty": "Nothing on this list",
+    "emptyHint": "Whoever made it has not put anything on it yet.",
+    "failed": "This list would not load",
+    "retry": "Try again",
+    "back": "Back",
+    "unnamed": "Shopping list",
+    "notLive": "Not updating right now",
+    "revoked": {
+      "title": "You are no longer on this list",
+      "body": "Whoever shared it has taken it back. If you still have the link, you can join again.",
+      "rejoin": "Use the link again"
+    },
+    "line": {
+      "open": "Settle {{name}}",
+      "outstanding_one": "{{count}} outstanding",
+      "outstanding_other": "{{count}} outstanding",
+      "partly": "{{settled}} of {{total}} got",
+      "wanted": "×{{count}}",
+      "free": "No product chosen",
+      "busy": "Saving"
+    },
+    "touched": {
+      "got": "{{name}} got it",
+      "gotSome": "{{name}} got {{count}}",
+      "none": "{{name}} says they had none",
+      "you": "you"
+    },
+    "from": {
+      "one": "from {{first}}",
+      "two": "from {{first}} and {{second}}",
+      "more": "from {{first}} and {{count}} more"
+    },
+    "settle": {
+      "title": "{{name}}",
+      "all_one": "Got it",
+      "all_other": "Got all {{count}}",
+      "some": "Got some",
+      "someTitle": "How many did you get?",
+      "none": "They had none",
+      "cancel": "Cancel",
+      "submit": "Record it",
+      "quantity": "How many",
+      "more": "One more",
+      "fewer": "One fewer",
+      "failed": "That did not save. Try again.",
+      "missed_one": "One household on this line could not be updated.",
+      "missed_other": "{{count}} households on this line could not be updated.",
+      "missedNamed": "Not updated: {{lists}}"
+    },
+    "product": {
+      "change": "Change",
+      "title": "Which one did you get?",
+      "hint": "Any of these counts as this line. Pick the one in your trolley.",
+      "current": "Chosen",
+      "none": "This line names no product"
+    },
+    "allocate": {
+      "open": "Split between lists",
+      "title": "{{name}} · got {{count}}",
+      "hint": "Which list gets how many. Starts from oldest first, which is what one tap would have done.",
+      "wanted": "wanted {{count}}",
+      "total": "Allocated",
+      "totalValue": "{{allocated}} of {{total}}",
+      "over": "That is more than you got",
+      "submit": "Record it",
+      "cancel": "Cancel"
+    },
+    "people": {
+      "title": "On this list",
+      "open": "See who is on this list",
+      "hereNow": "{{count}} on this list",
+      "more": "+{{count}}",
+      "guest": "Guest",
+      "guestNumbered": "Guest {{count}}",
+      "owner": "Owner",
+      "member": "Member",
+      "you": "You",
+      "joined": "Joined",
+      "device": "Device",
+      "deviceUnknown": "Not recorded",
+      "viaLink": "joined with the list’s link",
+      "viaOwner": "made this list",
+      "remove": "Remove from this list",
+      "close": "Close",
+      "joinedUnknown": "Not known"
+    },
+    "share": {
+      "open": "Share this list",
+      "title": "Share this list",
+      "body": "Anyone with the link can shop it, no account needed. They see the lines, never your groups.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "joinedWith_one": "{{count}} person joined with it",
+      "joinedWith_other": "{{count}} people joined with it",
+      "made": "made {{date}}",
+      "note": "This is the list’s one link. Copy it again whenever you need it, for as many people as you like. It stops working when the list is done or when you revoke it.",
+      "revoke": "Revoke the link",
+      "close": "Close",
+      "minting": "Making a link"
+    },
+    "revoke": {
+      "title": "Revoke the link?",
+      "body_one": "Nobody new will be able to join, and the list will have no link until you share it again. The {{count}} person already shopping keeps working.",
+      "body_other": "Nobody new will be able to join, and the list will have no link until you share it again. The {{count}} people already shopping keep working.",
+      "bodyNone": "Nobody new will be able to join, and the list will have no link until you share it again.",
+      "cascade_one": "Also remove the {{count}} guest who joined with it",
+      "cascade_other": "Also remove the {{count}} guests who joined with it",
+      "cascadeHint": "They lose the list on their next action. Only tick this if the link reached the wrong hands.",
+      "confirm": "Revoke the link",
+      "cancel": "Keep it"
+    },
+    "join": {
+      "invited": "You’ve been invited to shop",
+      "people_one": "{{count}} person is on it",
+      "people_other": "{{count}} people are on it",
+      "nameLabel": "Your name",
+      "optional": "Optional",
+      "nameHint": "So people know who got the bread",
+      "continue": "Continue as guest",
+      "or": "or, if you use Velista",
+      "google": "Continue with Google",
+      "email": "Sign in with email",
+      "install": "Keep it on your home screen while you shop",
+      "installAction": "Install",
+      "dead": "This link is no longer accepting people",
+      "deadBody": "Ask whoever sent it for a new one. If you were already shopping this list, your own link in this browser still works.",
+      "checking": "Checking the link",
+      "joining": "Joining",
+      "failed": "That did not work. Try again."
+    },
+    "history": {
+      "open": "What happened to this line",
+      "title": "What happened here",
+      "loading": "Loading what happened",
+      "failed": "That would not load",
+      "retry": "Try again",
+      "empty": "Nothing has happened to this line yet",
+      "more": "Show more",
+      "bought_one": "{{who}} got {{count}}",
+      "bought_other": "{{who}} got {{count}}",
+      "none": "{{who}} says they had none",
+      "someone": "Someone",
+      "you": "You",
+      "close": "Close"
+    }
+  },
+  "getList": {
+    "title": "Get shopping list",
+    "body": "One list to carry around the shop, from everything still needed in the lists you choose.",
+    "name": {
+      "label": "Name",
+      "hint": "Left empty, the list shows its date; a second one the same day gets a number"
+    },
+    "profile": {
+      "label": "Shopping profile"
+    },
+    "sources": {
+      "label": "Draw from",
+      "hint": "Only lists where you can edit appear. A group checked whole includes lists made later.",
+      "none": "You need a group where you can edit lists first",
+      "expand": "Show the lists in {{name}}",
+      "collapse": "Hide the lists in {{name}}",
+      "noneWritable": "You can edit lists in none of your groups"
+    },
+    "submit": "Generate",
+    "submitting": "Generating",
+    "cancel": "Cancel",
+    "error": "That did not go through. Try again"
+  },
+  "history": {
+    "title": "Your shopping lists",
+    "back": "Back",
+    "status": {
+      "active": "Shopping now"
+    },
+    "row": {
+      "progress": "{{settled}} of {{total}} finished",
+      "loading": "Loading your shopping lists",
+      "got": "{{bought}} of {{total}} got",
+      "unavailable_one": "{{count}} not available",
+      "unavailable_other": "{{count}} not available"
+    },
+    "empty": {
+      "title": "No shopping lists yet",
+      "body": "Generate one from everything still needed across your groups, and it will be kept here."
+    },
+    "error": {
+      "title": "We could not load your shopping lists",
+      "body": "Something went wrong on our side. Nothing you saved has been lost.",
+      "retry": "Try again"
+    },
+    "announce": {
+      "loaded_one": "{{count}} shopping list loaded",
+      "loaded_other": "{{count}} shopping lists loaded"
+    }
   }
 }

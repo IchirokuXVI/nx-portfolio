@@ -443,8 +443,19 @@ SMTP_PORT=$smtp
 SMTP_USER=
 SMTP_PASS=
 MAIL_FROM=Luna Shopper <no-reply@luna.localhost>
-MAIL_VERIFY_BASE_URL=http://localhost:$shellPort/verify-email
-MAIL_RESET_BASE_URL=http://localhost:$shellPort/reset-password
+# Where a confirmation mail sends the reader. velista's **own** origin, not the
+# shell's, so a local link has the same shape production sends: on velista.app the
+# app is standalone and the mount is empty, and 4205 is that same app on this
+# machine (plan 0013). ``auth/verify`` is the route the app really has; the
+# ``/verify-email`` this used to name matched nothing and every link 404'd.
+#
+# No locale segment, on purpose. ``localeGuard`` inserts one in front of a path
+# that has none and carries the query string with it, so the link opens at
+# ``/{locale}/auth/verify?token=...`` in the reader's own language.
+MAIL_VERIFY_BASE_URL=http://localhost:$velistaPort/auth/verify
+# A placeholder for a page that does not exist yet: nothing in ``feature-auth``
+# routes a reset token. Auth requires the variable, so it is set and unusable.
+MAIL_RESET_BASE_URL=http://localhost:$velistaPort/reset-password
 GOOGLE_CLIENT_ID=your-dev-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-dev-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:$gateway/auth/google/callback

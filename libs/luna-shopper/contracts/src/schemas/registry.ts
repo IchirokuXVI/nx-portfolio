@@ -23,11 +23,23 @@ import {
   catalogSchemas,
 } from './messages/catalog.schemas';
 import {
+  generatedListSharingMessageContracts,
+  generatedListSharingSchemas,
+} from './messages/generated-list-sharing.schemas';
+import {
+  generatedListMessageContracts,
+  generatedListSchemas,
+} from './messages/generated-list.schemas';
+import {
   harvestMessageContracts,
   harvestSchemas,
 } from './messages/harvest.schemas';
 import { listMessageContracts, listSchemas } from './messages/list.schemas';
 import { mergeMessageContracts, mergeSchemas } from './messages/merge.schemas';
+import {
+  profileMessageContracts,
+  profileSchemas,
+} from './messages/profile.schemas';
 import {
   realtimeMessageContracts,
   realtimeSchemas,
@@ -47,11 +59,14 @@ export const messageContracts: Record<string, MessageContract> = {
   ...zoneMessageContracts,
   ...listMessageContracts,
   ...mergeMessageContracts,
+  ...profileMessageContracts,
   ...realtimeMessageContracts,
   ...catalogMessageContracts,
   ...harvestMessageContracts,
   ...statsMessageContracts,
   ...assistantMessageContracts,
+  ...generatedListMessageContracts,
+  ...generatedListSharingMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -69,11 +84,14 @@ export const allSchemas: JsonSchema[] = [
   ...zoneSchemas,
   ...listSchemas,
   ...mergeSchemas,
+  ...profileSchemas,
   ...realtimeSchemas,
   ...catalogSchemas,
   ...harvestSchemas,
   ...statsSchemas,
   ...assistantSchemas,
+  ...generatedListSchemas,
+  ...generatedListSharingSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
 ];

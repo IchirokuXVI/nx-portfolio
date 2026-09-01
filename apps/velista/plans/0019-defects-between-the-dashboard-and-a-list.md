@@ -125,7 +125,7 @@ wrong button.
 
 It becomes **Get shopping list**, which is the action that genuinely belongs on a screen
 with no zone in scope: a run assembled across every zone and list the user chose. That
-feature is designed and parked, in backend `plans/backlog/0003-generated-shopping-lists.md`,
+feature is designed and scheduled, in backend `plans/0050-generated-shopping-lists.md` (revised by `0051`),
 and this plan does not build any part of it.
 
 So the button ships **disabled**, and that is a deliberate exception to the rule this app

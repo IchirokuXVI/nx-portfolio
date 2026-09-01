@@ -55,7 +55,7 @@ function list(id: string, name: string): ShoppingListSummary {
     name,
     createdByUserId: 'u1',
     lineCount: 12,
-    readyCount: 7,
+    wantedCount: 7,
     autoApproveLines: false,
     // The group page draws no permission badge (plan 0030, section 11), so any
     // non-empty set does: what matters here is that a card renders, not what it permits.
@@ -575,7 +575,7 @@ describe('GroupPage', () => {
       fixture.componentInstance.newList();
 
       expect(router.navigate).toHaveBeenCalledWith(
-        ['lists', 'new'],
+        ['sheet', 'lists', 'new'],
         expect.objectContaining({ relativeTo: expect.anything() })
       );
     });

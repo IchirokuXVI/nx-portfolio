@@ -1,6 +1,7 @@
 import {
   COMMENT_PATTERNS,
   LINE_BATCH_MAX_ITEMS,
+  LINE_ITEM_SET_MAX,
   LINE_PATTERNS,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
@@ -29,6 +30,11 @@ export const LIST_SCHEMA_IDS = {
   listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
   lineViewList: schemaId('list/LineViewList'),
+  lineClaimRef: schemaId('list/LineClaimRef'),
+  lineClaimChangedEvent: schemaId('list/LineClaimChangedEvent'),
+  lineSettlementView: schemaId('list/LineSettlementView'),
+  lineSettlementResult: schemaId('list/LineSettlementResult'),
+  lineSettlementPage: schemaId('list/LineSettlementPage'),
   commentView: schemaId('list/CommentView'),
   commentRecording: schemaId('list/CommentRecording'),
   commentAudioView: schemaId('list/CommentAudioView'),
@@ -47,7 +53,12 @@ export const LIST_SCHEMA_IDS = {
   addLineQuantityRequest: schemaId('msg/line.addQuantity/request'),
   updateLineRequest: schemaId('msg/line.update/request'),
   setApprovalRequest: schemaId('msg/line.setApproval/request'),
-  setStatusRequest: schemaId('msg/line.setStatus/request'),
+  settleLineRequest: schemaId('msg/line.settle/request'),
+  lineSettlementsRequest: schemaId('msg/line.settlements/request'),
+  itemSettlementsRequest: schemaId('msg/line.itemSettlements/request'),
+  listHoldingItemView: schemaId('list/ListHoldingItemView'),
+  listsHoldingItemRequest: schemaId('msg/list.holdingItem/request'),
+  listsHoldingItemResult: schemaId('msg/list.holdingItem/response'),
   reorderRequest: schemaId('msg/line.reorder/request'),
   deleteLineRequest: schemaId('msg/line.delete/request'),
   listLinesRequest: schemaId('msg/line.list/request'),
@@ -71,9 +82,9 @@ const listCounts = object(
   LIST_SCHEMA_IDS.listCounts,
   {
     lineCount: integer({ minimum: 0 }),
-    readyCount: integer({ minimum: 0 }),
+    wantedCount: integer({ minimum: 0 }),
   },
-  ['lineCount', 'readyCount']
+  ['lineCount', 'wantedCount']
 );
 
 const listView = object(
@@ -130,13 +141,32 @@ const lineView = object(
     listId: nonEmptyString(),
     content: string(),
     quantity: integer(),
-    itemId: nullableString(),
+    // The product set and its digest (plan 0048, section 1.1). Both required and
+    // both honest when empty: `[]` and `null` say "this is a free text line".
+    itemIds: array(nonEmptyString()),
+    itemSetHash: nullableString(),
     position: integer(),
     approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
-    status: ref(ENUM_IDS.lineStatus),
     createdByUserId: nonEmptyString(),
     approvedByUserId: nullableString(),
     version: integer(),
+    // The two derived indicators (plan 0047, section 5). Both required, because a
+    // line with no history answers them with 0 and null rather than by leaving
+    // them out: an absent field would make "never bought" indistinguishable from
+    // "this build of the server does not say".
+    boughtCount: integer({ minimum: 0 }),
+    lastSettlementOutcome: {
+      anyOf: [ref(ENUM_IDS.settlementOutcome), { type: 'null' }],
+    },
+    // The third indicator (plan 0052, section 4), derived on read and stored
+    // nowhere. Required for the reason the two above are: an absent field would
+    // make "nobody is buying this" indistinguishable from "this build of the
+    // server does not say", and the two draw different rows.
+    //
+    // Two fields rather than one nullable one, because a claim whose owner has
+    // since left the zone reports `true` with a null name (section 6).
+    claimed: boolean(),
+    claimedByUserId: nullableString(),
     ...timestamps,
   },
   [
@@ -144,15 +174,88 @@ const lineView = object(
     'listId',
     'content',
     'quantity',
-    'itemId',
+    'itemIds',
+    'itemSetHash',
     'position',
     'approvalStatus',
-    'status',
     'createdByUserId',
     'approvedByUserId',
     'version',
+    'boughtCount',
+    'lastSettlementOutcome',
+    'claimed',
+    'claimedByUserId',
     ...timestampKeys,
   ]
+);
+
+// One origin line touched by one settling act (plan 0047, section 3).
+// `generatedListLineId` is deliberately absent: it is stored and never served, so
+// a reader learns that something was bought and not which basket it came out of
+// (section 3.1).
+const lineSettlementView = object(
+  LIST_SCHEMA_IDS.lineSettlementView,
+  {
+    id: nonEmptyString(),
+    lineId: nonEmptyString(),
+    listId: nonEmptyString(),
+    itemId: nullableString(),
+    outcome: ref(ENUM_IDS.settlementOutcome),
+    // Zero for `NOT_AVAILABLE`, and unbounded above by the line's own demand:
+    // buying more than was asked for is recorded as it happened (section 4.2).
+    quantity: integer({ minimum: 0 }),
+    settledByUserId: nonEmptyString(),
+    settledAt: string({ format: 'date-time' }),
+  },
+  [
+    'id',
+    'lineId',
+    'listId',
+    'itemId',
+    'outcome',
+    'quantity',
+    'settledByUserId',
+    'settledAt',
+  ]
+);
+
+// Both halves of what a settle did, because neither is derivable from the other
+// (plan 0047, section 8). It answers the write and it is the `line.settled`
+// payload, so a client applies one shape from either direction.
+const lineSettlementResult = object(
+  LIST_SCHEMA_IDS.lineSettlementResult,
+  {
+    line: ref(LIST_SCHEMA_IDS.lineView),
+    settlement: ref(LIST_SCHEMA_IDS.lineSettlementView),
+  },
+  ['line', 'settlement']
+);
+
+// One zone line named by a claim change (plan 0052, section 2). The list rides
+// per line, because one basket draws from several lists of one zone at once.
+const lineClaimRef = object(
+  LIST_SCHEMA_IDS.lineClaimRef,
+  { lineId: nonEmptyString(), listId: nonEmptyString() },
+  ['lineId', 'listId']
+);
+
+// The zone room's claim event (plan 0052, section 2), and the whole of what it
+// may say: that these lines are claimed, and whose. No generated list id, ever;
+// an id in a payload is an invitation to fetch it, and the refusal would then be
+// the only thing between a zone member and somebody else's basket.
+//
+// Many lines rather than one, because a run claims every line it took and a per
+// line fan out into a household room is a self inflicted problem (section 3.1).
+// The single line transitions send the same shape holding one entry.
+const lineClaimChangedEvent = object(
+  LIST_SCHEMA_IDS.lineClaimChangedEvent,
+  {
+    zoneId: nonEmptyString(),
+    claimed: boolean(),
+    claimedByUserId: nullableString(),
+    lines: array(ref(LIST_SCHEMA_IDS.lineClaimRef)),
+  },
+  ['zoneId', 'claimed', 'claimedByUserId', 'lines']
 );
 
 const commentRecording = object(
@@ -223,6 +326,10 @@ const lineViewList: JsonSchema = {
 };
 
 const listPage = paginated(LIST_SCHEMA_IDS.listPage, LIST_SCHEMA_IDS.listView);
+const lineSettlementPage = paginated(
+  LIST_SCHEMA_IDS.lineSettlementPage,
+  LIST_SCHEMA_IDS.lineSettlementView
+);
 const linePage = paginated(LIST_SCHEMA_IDS.linePage, LIST_SCHEMA_IDS.lineView);
 const commentPage = paginated(
   LIST_SCHEMA_IDS.commentPage,
@@ -289,8 +396,9 @@ const addLineRequest = object(
       minimum: LINE_QUANTITY_MIN,
       maximum: LINE_QUANTITY_MAX,
     }),
-    // Optional opaque catalog Item reference (plan 0012); null or absent = none.
-    itemId: nullableString(),
+    // The line's product set (plan 0048, section 1.1). Absent or empty is a free
+    // text line, which is deliberately still the ordinary case.
+    itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
   },
   ['userId', 'listId', 'content']
 );
@@ -302,7 +410,7 @@ const addLinesItem = object(
       minimum: LINE_QUANTITY_MIN,
       maximum: LINE_QUANTITY_MAX,
     }),
-    itemId: nullableString(),
+    itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
   },
   ['content']
 );
@@ -342,8 +450,8 @@ const updateLineRequest = object(
       minimum: LINE_QUANTITY_MIN,
       maximum: LINE_QUANTITY_MAX,
     }),
-    // Set or clear the catalog Item reference (plan 0012); null clears it.
-    itemId: nullableString(),
+    // Replace the line's product set (plan 0048, section 1.1); `[]` clears it.
+    itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
   },
   ['userId', 'lineId']
 );
@@ -356,14 +464,83 @@ const setApprovalRequest = object(
   },
   ['userId', 'lineId', 'approvalStatus']
 );
-const setStatusRequest = object(
-  LIST_SCHEMA_IDS.setStatusRequest,
+// `quantity` is optional here and conditional in the service: required for
+// `BOUGHT`, refused for `NOT_AVAILABLE`. A JSON Schema `if`/`then` pair could say
+// it, and it would say it to nobody: the refusal a caller reads comes from the
+// DTO and from core, and a third statement of the rule is a third place for it to
+// drift (plan 0047, section 4).
+const settleLineRequest = object(
+  LIST_SCHEMA_IDS.settleLineRequest,
   {
     userId: nonEmptyString(),
     lineId: nonEmptyString(),
-    status: ref(ENUM_IDS.lineStatus),
+    outcome: ref(ENUM_IDS.settlementOutcome),
+    quantity: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
+    itemId: nonEmptyString(),
   },
-  ['userId', 'lineId', 'status']
+  ['userId', 'lineId', 'outcome']
+);
+const lineSettlementsRequest = object(
+  LIST_SCHEMA_IDS.lineSettlementsRequest,
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'lineId']
+);
+const itemSettlementsRequest = object(
+  LIST_SCHEMA_IDS.itemSettlementsRequest,
+  {
+    userId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'itemId']
+);
+
+/**
+ * Which lists still want a product (plan 0053, section 3).
+ *
+ * `excludeListId` is nullable rather than merely optional: a basket line belongs
+ * to no one list and says so by sending null, which is a different statement from
+ * a client that forgot the field.
+ */
+const listsHoldingItemRequest = object(
+  LIST_SCHEMA_IDS.listsHoldingItemRequest,
+  {
+    userId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    excludeListId: nullableString(),
+  },
+  ['userId', 'itemId']
+);
+
+const listHoldingItemView = object(
+  LIST_SCHEMA_IDS.listHoldingItemView,
+  {
+    listId: nonEmptyString(),
+    name: string(),
+    zoneId: nonEmptyString(),
+    zoneName: string(),
+    quantity: integer({ minimum: 0 }),
+  },
+  ['listId', 'name', 'zoneId', 'zoneName', 'quantity']
+);
+
+/**
+ * Capped rather than paginated, so the response says whether the cap bit rather
+ * than offering a cursor into a listing this read refuses to be.
+ */
+const listsHoldingItemResult = object(
+  LIST_SCHEMA_IDS.listsHoldingItemResult,
+  {
+    lists: array(ref(LIST_SCHEMA_IDS.listHoldingItemView)),
+    hasMore: boolean(),
+  },
+  ['lists', 'hasMore']
 );
 const reorderRequest = object(
   LIST_SCHEMA_IDS.reorderRequest,
@@ -448,11 +625,16 @@ export const listSchemas: JsonSchema[] = [
   listAccessView,
   lineView,
   lineViewList,
+  lineClaimRef,
+  lineClaimChangedEvent,
+  lineSettlementView,
+  lineSettlementResult,
   commentRecording,
   commentView,
   commentAudioView,
   listPage,
   linePage,
+  lineSettlementPage,
   commentPage,
   createListRequest,
   setAccessRequest,
@@ -466,7 +648,12 @@ export const listSchemas: JsonSchema[] = [
   addLineQuantityRequest,
   updateLineRequest,
   setApprovalRequest,
-  setStatusRequest,
+  settleLineRequest,
+  lineSettlementsRequest,
+  itemSettlementsRequest,
+  listHoldingItemView,
+  listsHoldingItemRequest,
+  listsHoldingItemResult,
   reorderRequest,
   deleteLineRequest,
   listLinesRequest,
@@ -505,6 +692,10 @@ export const listMessageContracts: Record<
     request: LIST_SCHEMA_IDS.listListsRequest,
     response: LIST_SCHEMA_IDS.listPage,
   },
+  [LIST_PATTERNS.holdingItem]: {
+    request: LIST_SCHEMA_IDS.listsHoldingItemRequest,
+    response: LIST_SCHEMA_IDS.listsHoldingItemResult,
+  },
   [LINE_PATTERNS.add]: {
     request: LIST_SCHEMA_IDS.addLineRequest,
     response: LIST_SCHEMA_IDS.lineView,
@@ -525,9 +716,17 @@ export const listMessageContracts: Record<
     request: LIST_SCHEMA_IDS.setApprovalRequest,
     response: LIST_SCHEMA_IDS.lineView,
   },
-  [LINE_PATTERNS.setStatus]: {
-    request: LIST_SCHEMA_IDS.setStatusRequest,
-    response: LIST_SCHEMA_IDS.lineView,
+  [LINE_PATTERNS.settle]: {
+    request: LIST_SCHEMA_IDS.settleLineRequest,
+    response: LIST_SCHEMA_IDS.lineSettlementResult,
+  },
+  [LINE_PATTERNS.settlements]: {
+    request: LIST_SCHEMA_IDS.lineSettlementsRequest,
+    response: LIST_SCHEMA_IDS.lineSettlementPage,
+  },
+  [LINE_PATTERNS.itemSettlements]: {
+    request: LIST_SCHEMA_IDS.itemSettlementsRequest,
+    response: LIST_SCHEMA_IDS.lineSettlementPage,
   },
   [LINE_PATTERNS.reorder]: {
     request: LIST_SCHEMA_IDS.reorderRequest,

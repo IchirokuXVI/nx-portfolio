@@ -14,6 +14,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { AccountNotice } from '@portfolio/velista/data-access';
 import { APP_KEY, type PreviewLineVm } from '@portfolio/velista/models';
+import { sheetSegments } from '@portfolio/velista/platform';
 import {
   AppBar,
   AppVersion,
@@ -106,7 +107,7 @@ export class LandingPage {
    * The illustrative list.
    *
    * Invented, and it stays invented: it exists to show what the product is in one
-   * glance. It shows all three line states on purpose, because "some of these are done
+   * glance. It shows what a line can be on purpose, because "some of these are dealt with
    * and somebody else did them" is the whole idea of the product and is hard to say in
    * a sentence.
    *
@@ -133,22 +134,27 @@ export class LandingPage {
     return [
       {
         content: this._t.t('home.preview.line.milk.content'),
-        quantity: this._t.t('home.preview.line.milk.quantity'),
-        status: 'READY',
+        // Zero, and bought. The one line on the card that shows what the whole
+        // product is: you wanted some, somebody got them, the line stays where it
+        // is at nought rather than being ticked off or deleted.
+        quantity: '0',
+        indicator: 'bought',
         by: 'A',
       },
       {
         content: this._t.t('home.preview.line.bread.content'),
-        quantity: this._t.t('home.preview.line.bread.quantity'),
-        status: 'PENDING',
+        quantity: '2',
+        indicator: null,
         by: null,
       },
       // The `by` initials stay hardcoded on all three lines: they stand for people
       // rather than words, and a letter is not translatable.
       {
         content: this._t.t('home.preview.line.tomatoes.content'),
-        quantity: '',
-        status: 'NOT_AVAILABLE',
+        // Still wanted, and the shop had none. Not having found something is not the
+        // same as no longer needing it, which is why the number is untouched.
+        quantity: '6',
+        indicator: 'notAvailable',
         by: 'M',
       },
     ];
@@ -181,11 +187,15 @@ export class LandingPage {
    * anywhere in this file (extraction contract, item 5).
    */
   createZone(): void {
-    void this._router.navigate(['zones', 'new'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('zones', 'new'), {
+      relativeTo: this._route,
+    });
   }
 
   joinZone(): void {
-    void this._router.navigate(['zones', 'join'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('zones', 'join'), {
+      relativeTo: this._route,
+    });
   }
 
   /**

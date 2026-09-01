@@ -16,13 +16,6 @@ export enum AssistantRole {
   ASSISTANT = 'ASSISTANT',
 }
 
-/** What kind of thing an answer touched, and therefore what the client links to. */
-export enum AssistantReferenceKind {
-  ZONE = 'ZONE',
-  LIST = 'LIST',
-  LINE = 'LINE',
-}
-
 /**
  * Which branch of section 6.1's resolution decided the list a write went to.
  *

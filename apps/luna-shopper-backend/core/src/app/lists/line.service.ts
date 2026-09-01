@@ -2,24 +2,28 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   LINE_BATCH_MAX_ITEMS,
+  LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
+  NO_LINE_CLAIM,
+  NO_LINE_SETTLEMENTS,
   RealtimeEvent,
+  SettlementOutcome,
   type AddLineQuantityRequest,
   type AddLineRequest,
   type AddLinesItem,
   type AddLinesRequest,
   type DeleteLineRequest,
+  type LineClaim,
   type LineOrder,
   type LinePage,
+  type LineSettlementSummary,
   type LineView,
   type ListLinesRequest,
   type ReorderLinesRequest,
   type SetLineApprovalRequest,
-  type SetLineStatusRequest,
   type UpdateLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -32,15 +36,24 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import {
   DataSource,
+  In,
   Repository,
   type DeepPartial,
   type EntityManager,
   type SelectQueryBuilder,
 } from 'typeorm';
-import { ListLine, ShoppingList } from '../entities';
+import {
+  LineSettlement,
+  ListLine,
+  ListLineItem,
+  ShoppingList,
+} from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { LineClaimService } from '../generated-lists/line-claim.service';
+import { itemSetHash } from './item-set-hash';
 import { ListAccessService } from './list-access.service';
 import { toLineView } from './list.mappers';
+import { readLineSettlementSummaries } from './settlement.sql';
 
 interface LineCursor {
   order: LineOrder;
@@ -53,12 +66,20 @@ interface LineCursor {
  *
  * Every path that writes a line inside a transaction hands one of these back so
  * the enclosing method can emit **after the commit**, as everywhere else in this
- * service. The order of `events` is load bearing wherever there is more than one
- * (plan 0037, section 5), so it is a list rather than a set of flags.
+ * service.
+ *
+ * It used to carry a **list** of events in a load bearing order, because plan
+ * 0037 had a reduction write two rows. Plan 0047 retired that (see
+ * {@link update}), so an edit is one row and one event again.
  */
-interface WrittenLines {
+interface WrittenLine {
   view: LineView;
-  events: { event: RealtimeEvent; line: ListLine }[];
+  line: ListLine;
+  itemIds: string[];
+  /** Carried so the announcement says what a read would, not the zero summary. */
+  settlements: LineSettlementSummary;
+  /** And the third indicator, for the same reason (plan 0052, section 4). */
+  claim: LineClaim;
 }
 
 /** Canonical UUID shape, for validating the cross-service catalog `itemId`. */
@@ -70,30 +91,209 @@ export class LineService {
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(ListLine) private readonly lines: Repository<ListLine>,
+    @InjectRepository(ListLineItem)
+    private readonly lineItems: Repository<ListLineItem>,
+    // Read only, and never written here: what a shopper found is
+    // `SettlementService`'s to record. This service reads it because every line
+    // it answers with carries the two indicators derived from it (plan 0047,
+    // section 5), and a line read that left them out would make a settled line
+    // indistinguishable from one nobody has ever wanted.
+    @InjectRepository(LineSettlement)
+    private readonly settlements: Repository<LineSettlement>,
     private readonly listAccess: ListAccessService,
+    // Read only as well, and for the same shape of reason as the settlements
+    // above: every line this service answers with carries the third indicator
+    // (plan 0052, section 4), and a read that left it out would take the "Ana is
+    // buying this" mark off a line the moment anybody edited it.
+    private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher
   ) {}
 
   /**
-   * Validate the optional catalog `itemId` (plan 0012, section 4). A line may
-   * reference a catalog Item or be free text. The reference is cross service, so
-   * only its shape is checked here (a UUID); its existence is the client's
-   * concern and core never joins to the catalog database. `null` clears it.
+   * Validate a line's product set (plan 0012, section 4; plan 0048, section 1.1).
+   *
+   * Each reference is cross service, so only its **shape** is checked here (a
+   * UUID); whether the catalog holds it is the client's concern and core never
+   * joins to the catalog database. That was true of the single `itemId` this
+   * replaced and nothing about a set changes it.
+   *
+   * Duplicates are dropped rather than refused, keeping the first occurrence.
+   * Naming a product twice is not a request that means anything different from
+   * naming it once, and the hash would flatten it anyway, so a refusal would only
+   * teach a client to de-duplicate before asking.
    */
-  private validateItemId(itemId: string | null): string | null {
-    if (itemId === null) {
-      return null;
+  private validateItemIds(itemIds: readonly string[]): string[] {
+    if (itemIds.length > LINE_ITEM_SET_MAX) {
+      throw new ValidationException(
+        `a line can hold at most ${LINE_ITEM_SET_MAX} products`,
+        { messageArgs: { field: 'itemIds' } }
+      );
     }
-    if (!UUID_PATTERN.test(itemId)) {
-      throw new ValidationException('itemId must be a valid item reference', {
-        messageArgs: { field: 'itemId' },
-      });
+    for (const itemId of itemIds) {
+      if (typeof itemId !== 'string' || !UUID_PATTERN.test(itemId)) {
+        throw new ValidationException(
+          'itemIds must all be valid item references',
+          { messageArgs: { field: 'itemIds' } }
+        );
+      }
     }
-    return itemId;
+    return [...new Set(itemIds)];
   }
 
-  private emit(event: RealtimeEvent, zoneId: string, line: ListLine): void {
-    this.events.emit(event, zoneId, toLineView(line), line.listId);
+  /** A line's products, in the order they were attached. */
+  private async itemIdsOf(
+    lineId: string,
+    manager?: EntityManager
+  ): Promise<string[]> {
+    const repo = manager ? manager.getRepository(ListLineItem) : this.lineItems;
+    const rows = await repo.find({
+      where: { lineId },
+      order: { position: 'ASC', id: 'ASC' },
+    });
+    return rows.map((row) => row.itemId);
+  }
+
+  /** The same, for a page of lines, in one query rather than one per line. */
+  private async itemIdsOfMany(
+    lineIds: string[]
+  ): Promise<Map<string, string[]>> {
+    const sets = new Map<string, string[]>(lineIds.map((id) => [id, []]));
+    if (lineIds.length === 0) {
+      return sets;
+    }
+    const rows = await this.lineItems.find({
+      where: { lineId: In(lineIds) },
+      order: { position: 'ASC', id: 'ASC' },
+    });
+    for (const row of rows) {
+      sets.get(row.lineId)?.push(row.itemId);
+    }
+    return sets;
+  }
+
+  /**
+   * The two derived indicators for a whole page of lines, in one query (plan
+   * 0047, section 5).
+   *
+   * One aggregate over `ix_settlements_line` rather than a read per row, which is
+   * the same rule {@link itemIdsOfMany} follows: the list page asks this question
+   * about every line it draws, so answering it one line at a time would be a
+   * request per row of a screen somebody opens in a shop.
+   *
+   * Raw SQL, because both halves are things a query builder states badly. The
+   * count is a `FILTER` over one outcome, and the most recent outcome is the
+   * first element of an ordered aggregate, which is how it is read without a
+   * correlated subquery per line or a window over the whole table.
+   *
+   * A line with no settlements has **no row here at all**, and the map's default
+   * is what makes that the honest answer rather than an absent one: never bought,
+   * nothing to report.
+   */
+  private async settlementsOfMany(
+    lineIds: string[]
+  ): Promise<Map<string, LineSettlementSummary>> {
+    return readLineSettlementSummaries(
+      (sql, parameters) => this.dataSource.query(sql, parameters),
+      lineIds
+    );
+  }
+
+  /**
+   * One line's summary, for the paths that answer with a single line.
+   *
+   * Two repository reads rather than the aggregate above, and the difference is
+   * deliberate. The aggregate exists because a page asks the question about
+   * twenty lines at once; for one line it is two index lookups on
+   * `ix_settlements_line`, which is cheaper to read here and needs no raw SQL on
+   * a path that is already an edit rather than a report.
+   *
+   * **A caller inside a transaction must pass its manager**, and this is the trap
+   * {@link addQuantity} already documents at length: this service's own repository
+   * draws its own connection from the pool, so reading through it from inside a
+   * transaction means one request holding two connections at once. Ten concurrent
+   * deltas is then ten transactions each waiting on a connection that will never
+   * come free, which is a deadlock that only shows up under load and which the
+   * integration suite caught rather than any unit test.
+   *
+   * Reading through the caller's manager is not a compromise either. This service
+   * never writes `line_settlements`, so the transaction has nothing uncommitted
+   * there and both routes see exactly the same rows.
+   */
+  private async settlementsOf(
+    lineId: string,
+    manager?: EntityManager
+  ): Promise<LineSettlementSummary> {
+    const repo = manager
+      ? manager.getRepository(LineSettlement)
+      : this.settlements;
+
+    // Sequential rather than `Promise.all`, for the same reason. One manager is one
+    // connection, so two queries issued at once on it are serialised by the driver
+    // anyway; on the pooled path the pair is two connections briefly held, which is
+    // exactly what the paragraph above is about.
+    const boughtCount = await repo.count({
+      where: { lineId, outcome: SettlementOutcome.BOUGHT },
+    });
+    const latest = await repo.findOne({
+      where: { lineId },
+      order: { settledAt: 'DESC', id: 'DESC' },
+    });
+
+    return { boughtCount, lastOutcome: latest?.outcome ?? null };
+  }
+
+  /**
+   * Replace a line's product set (plan 0048, section 1.1).
+   *
+   * Delete then insert, rather than a diff, because the request states a whole
+   * set and the join rows carry nothing worth preserving across a replacement:
+   * the only column that is not the pair itself is the insertion order, which the
+   * new set restates. Always inside the caller's transaction, so a line's stored
+   * hash can never disagree with the rows it summarises.
+   */
+  private async writeItemSet(
+    manager: EntityManager,
+    lineId: string,
+    itemIds: readonly string[]
+  ): Promise<void> {
+    const repo = manager.getRepository(ListLineItem);
+    await repo.delete({ lineId });
+    if (itemIds.length > 0) {
+      await repo.insert(
+        itemIds.map((itemId, position) => ({ lineId, itemId, position }))
+      );
+    }
+  }
+
+  /**
+   * Announce a line, exactly as a read of it would answer.
+   *
+   * The settlement summary is a parameter with no default here, unlike on the
+   * mapper, and that is deliberate: every event carries a **whole** line, and a
+   * client reconciles the fields it is not itself writing straight off it. An
+   * edit that announced the zero summary would take the bought indicator off a
+   * settled line on every other phone in the household, for no reason other than
+   * somebody having renamed it. A line that has just been created is the one case
+   * where zero is the truth, and it says so at the call site.
+   *
+   * The claim is carried on exactly the same terms (plan 0052, section 4): it is
+   * a whole line on the wire, so an edit that announced an unclaimed one would
+   * clear the indicator on every phone in the household over a rename.
+   */
+  private emit(
+    event: RealtimeEvent,
+    zoneId: string,
+    line: ListLine,
+    itemIds: string[],
+    settlements: LineSettlementSummary,
+    claim: LineClaim
+  ): void {
+    this.events.emit(
+      event,
+      zoneId,
+      toLineView(line, itemIds, settlements, claim),
+      line.listId
+    );
   }
 
   /**
@@ -120,10 +320,11 @@ export class LineService {
    * lines in a second step. Rule 1 is not a shortcut around approval, it is
    * approval, performed by the only person it could have been asked of.
    *
-   * `status` is `PENDING` in all three cases. The two state machines stay
-   * independent, which is the whole reason 0007 separated them: whether the group
-   * agreed to buy a thing and whether it is in the trolley are different
-   * questions, and auto approving the first answers nothing about the second.
+   * None of the three says anything about whether the thing has been bought.
+   * That was a second state machine on the line until plan 0047 dropped it, and
+   * it is a settlement now: whether the group agreed to buy a thing and whether
+   * somebody has been to the shop are different questions, and auto approving the
+   * first answers nothing about the second.
    */
   async add(req: AddLineRequest): Promise<LineView> {
     const { list, permissions } = await this.listAccess.requireAccess(
@@ -132,17 +333,40 @@ export class LineService {
       ListPermission.WRITE
     );
     const max = await this.maxPosition(this.lines, req.listId);
+    const itemIds = this.validateItemIds(req.itemIds ?? []);
+    const approval = {
+      decides: permissions.has(ListPermission.DECIDE),
+      autoApproves: list.autoApproveLines,
+    };
+    const row = this.newLine(req, req.listId, req.userId, max + 1, approval);
 
-    const saved = await this.lines.save(
-      this.lines.create(
-        this.newLine(req, req.listId, req.userId, max + 1, {
-          decides: permissions.has(ListPermission.DECIDE),
-          autoApproves: list.autoApproveLines,
-        })
-      )
+    // A free text line is still one insert and no transaction, which matters
+    // because it is the busiest write in the product and it is what most adds
+    // still are (velista 0043, section 6: free text stays first class). A line
+    // that arrives with products needs the row and its set to land together, so
+    // that path, and only that path, opens a transaction.
+    const saved =
+      itemIds.length === 0
+        ? await this.lines.save(this.lines.create(row))
+        : await this.dataSource.transaction(async (manager) => {
+            const repo = manager.getRepository(ListLine);
+            const line = await repo.save(repo.create(row));
+            await this.writeItemSet(manager, line.id, itemIds);
+            return line;
+          });
+
+    // A line cannot have been bought in the same breath as being added, nor be
+    // in somebody's basket a moment after it was typed, so the empty pair is the
+    // truth here rather than a stand in for two unread values.
+    this.emit(
+      RealtimeEvent.LineAdded,
+      list.zoneId,
+      saved,
+      itemIds,
+      NO_LINE_SETTLEMENTS,
+      NO_LINE_CLAIM
     );
-    this.emit(RealtimeEvent.LineAdded, list.zoneId, saved);
-    return toLineView(saved);
+    return toLineView(saved, itemIds, NO_LINE_SETTLEMENTS, NO_LINE_CLAIM);
   }
 
   /**
@@ -193,21 +417,27 @@ export class LineService {
       autoApproves: list.autoApproveLines,
     };
 
+    // Validated before the transaction opens, so a bad reference in the tenth
+    // item refuses the request rather than rolling back nine good writes.
+    const itemSets = items.map((item) =>
+      this.validateItemIds(item.itemIds ?? [])
+    );
+
     const saved = await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(ListLine);
       // One MAX(position) for the whole batch, then an increment per item, so the
       // lines land in the order they were given (section 6.2).
       let position = await this.maxPosition(repo, req.listId);
       const rows: ListLine[] = [];
-      for (const item of items) {
+      for (const [index, item] of items.entries()) {
         position += 1;
-        rows.push(
-          await repo.save(
-            repo.create(
-              this.newLine(item, req.listId, req.userId, position, approval)
-            )
+        const line = await repo.save(
+          repo.create(
+            this.newLine(item, req.listId, req.userId, position, approval)
           )
         );
+        await this.writeItemSet(manager, line.id, itemSets[index]);
+        rows.push(line);
       }
       return rows;
     });
@@ -218,10 +448,19 @@ export class LineService {
     // `line.added` correctly, so a client that has never heard of this plan gets
     // a correct list. The burst is exactly the fan out the N separate requests it
     // replaces would have produced anyway.
-    for (const row of saved) {
-      this.emit(RealtimeEvent.LineAdded, list.zoneId, row);
+    for (const [index, row] of saved.entries()) {
+      this.emit(
+        RealtimeEvent.LineAdded,
+        list.zoneId,
+        row,
+        itemSets[index],
+        NO_LINE_SETTLEMENTS,
+        NO_LINE_CLAIM
+      );
     }
-    return saved.map(toLineView);
+    return saved.map((row, index) =>
+      toLineView(row, itemSets[index], NO_LINE_SETTLEMENTS, NO_LINE_CLAIM)
+    );
   }
 
   /**
@@ -244,13 +483,14 @@ export class LineService {
       listId,
       content: item.content,
       quantity: this.validateQuantity(item.quantity ?? 1),
-      itemId: this.validateItemId(item.itemId ?? null),
+      // The digest is a property of the set alone, so it can be stamped on the
+      // row before the join rows exist (plan 0048, section 1.1).
+      itemSetHash: itemSetHash(this.validateItemIds(item.itemIds ?? [])),
       position,
       approvalStatus:
         approval.decides || approval.autoApproves
           ? LineApprovalStatus.APPROVED
           : LineApprovalStatus.PENDING,
-      status: LineStatus.PENDING,
       createdByUserId: userId,
       approvedByUserId: approval.decides ? userId : null,
       version: 1,
@@ -337,10 +577,21 @@ export class LineService {
    * line starts as, and a rejection somebody made on purpose is not undone by an
    * edit. A `PENDING` line stays `PENDING`.
    *
-   * ## Lowering an approved quantity leaves the remainder behind (0037, section 4)
+   * ## Lowering a quantity no longer leaves a remainder behind
    *
-   * See {@link splitRemainder}. The invariant is that the quantity a list asked
-   * for is not lost when a shopper comes back with less.
+   * Plan 0037 made a reduction of an approved line write **two** rows: the line
+   * at its new lower quantity, and a second `NOT_AVAILABLE` line holding the
+   * shortfall, so that a shopper coming back with one tin of three did not
+   * silently rewrite the list into having asked for one.
+   *
+   * That rule died with the trip status it was written in (plan 0047). A zone
+   * line's quantity is now how many the household wants **right now**, and
+   * lowering it is the primary gesture on the list page rather than a report from
+   * a shop; the remainder row would be an ordinary approved line at the shortfall
+   * quantity, which is to say a line the list would immediately count as wanted
+   * again. What a shopper found is a `line_settlements` row now, written by
+   * `SettlementService.settle`, which is the record plan 0037 was reaching for
+   * and could not have without a table to put it in.
    */
   async update(req: UpdateLineRequest): Promise<LineView> {
     const line = await this.listAccess.getLine(req.lineId);
@@ -353,31 +604,48 @@ export class LineService {
     if (req.content !== undefined) {
       line.content = req.content;
     }
-    const previousQuantity = line.quantity;
     if (req.quantity !== undefined) {
       line.quantity = this.validateQuantity(req.quantity);
     }
-    if (req.itemId !== undefined) {
-      line.itemId = this.validateItemId(req.itemId);
+    // `undefined` leaves the set alone; `[]` clears it back to free text.
+    const nextItemIds =
+      req.itemIds === undefined ? undefined : this.validateItemIds(req.itemIds);
+    if (nextItemIds !== undefined) {
+      line.itemSetHash = itemSetHash(nextItemIds);
     }
     this.reopenIfRejected(line);
     line.version += 1;
 
-    const shortfall = this.shortfall(line, previousQuantity, list);
-    if (shortfall <= 0) {
-      // No second row, so no transaction. That is correct here and stays correct
+    if (nextItemIds === undefined) {
+      // No join rows, so no transaction. That is correct here and stays correct
       // now that a delta exists beside it (plan 0040, section 3.4): an absolute
       // write is a last-writer-wins race over a value somebody deliberately
       // chose, and there is nothing to lock it against.
+      // No transaction on this path (see above), so the pooled repositories are
+      // free to answer in parallel.
       const saved = await this.lines.save(line);
-      this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved);
-      return toLineView(saved);
+      const [itemIds, settlements, claim] = await Promise.all([
+        this.itemIdsOf(saved.id),
+        this.settlementsOf(saved.id),
+        this.claims.claimOf(saved.id),
+      ]);
+      this.emit(
+        RealtimeEvent.LineUpdated,
+        list.zoneId,
+        saved,
+        itemIds,
+        settlements,
+        claim
+      );
+      return toLineView(saved, itemIds, settlements, claim);
     }
 
+    // The set and the line have to move together, or a stored hash outlives the
+    // rows it summarises.
     return this.announce(
       list,
       await this.dataSource.transaction((manager) =>
-        this.writeEdit(manager, line, shortfall)
+        this.writeEdit(manager, line, nextItemIds)
       )
     );
   }
@@ -390,12 +658,16 @@ export class LineService {
    *
    * That is the claim the whole thing rests on. The delta is **arithmetic in
    * front of the edit that already exists**: it reaches the same
-   * {@link authorizeEdit}, the same rejected-to-pending reset, the same
-   * {@link splitRemainder}, and it emits the same events. So an approved line's
-   * quantity still moves only for a caller holding `DECIDE`, adding to a rejected
-   * line still returns it to `PENDING` and clears its approver, and a negative
-   * delta on an approved line still leaves the remainder behind. Adding units is
-   * an edit, and this does not get to be a softer edit.
+   * {@link authorizeEdit} and the same rejected-to-pending reset, and it emits
+   * the same event. So an approved line's quantity still moves only for a caller
+   * holding `DECIDE`, and adding to a rejected line still returns it to
+   * `PENDING` and clears its approver. Adding units is an edit, and this does not
+   * get to be a softer edit.
+   *
+   * It is also what velista's quantity reel writes, one delta per settled
+   * adjustment (plan 0047, section 2.1). A control that follows a thumb emits a
+   * run of changes, and absolute writes from a moving control race each other and
+   * lose; a delta cannot.
    *
    * ## The read is inside the write
    *
@@ -440,8 +712,7 @@ export class LineService {
         throw new NotFoundException('Line not found');
       }
 
-      const previousQuantity = line.quantity;
-      const quantity = this.validateQuantity(previousQuantity + req.delta);
+      const quantity = this.validateQuantity(line.quantity + req.delta);
       // The request an absolute edit of the same field would have been, so the
       // refusal a caller gets is word for word the one the PATCH gives them.
       this.authorizeEdit(
@@ -454,11 +725,7 @@ export class LineService {
       this.reopenIfRejected(line);
       line.version += 1;
 
-      return this.writeEdit(
-        manager,
-        line,
-        this.shortfall(line, previousQuantity, list)
-      );
+      return this.writeEdit(manager, line);
     });
 
     return this.announce(list, written);
@@ -505,64 +772,57 @@ export class LineService {
   }
 
   /**
-   * How much of an approved request this edit just dropped, or zero.
-   *
-   * A list with `autoApproveLines` set always answers zero (plan 0037, section
-   * 4.5): it has decided that approval carries no information on it, so there is
-   * nothing for a remainder to preserve, and splitting would leave a trail of
-   * unavailable rows on precisely the lists whose owners chose the setting to
-   * reduce ceremony.
-   */
-  private shortfall(
-    line: ListLine,
-    previousQuantity: number,
-    list: ShoppingList
-  ): number {
-    return line.approvalStatus === LineApprovalStatus.APPROVED &&
-      !list.autoApproveLines
-      ? previousQuantity - line.quantity
-      : 0;
-  }
-
-  /**
    * The write half of an edit, in whatever transaction its caller opened.
    *
    * It never opens one of its own, because the two callers need different ones:
-   * {@link update} opens one only when a split makes two rows depend on each
-   * other, and {@link addQuantity} is already inside one because a delta has to
-   * read under the lock it writes with. Events are returned rather than emitted,
-   * so the caller announces them after its commit, as everywhere else here.
+   * {@link update} opens one only when it is also rewriting the product set, and
+   * {@link addQuantity} is already inside one because a delta has to read under
+   * the lock it writes with. The event is returned rather than emitted, so the
+   * caller announces it after its commit, as everywhere else here.
    */
   private async writeEdit(
     manager: EntityManager,
     line: ListLine,
-    shortfall: number
-  ): Promise<WrittenLines> {
+    nextItemIds?: string[]
+  ): Promise<WrittenLine> {
     const repo = manager.getRepository(ListLine);
-    if (shortfall <= 0) {
-      const saved = await repo.save(line);
-      return {
-        view: toLineView(saved),
-        events: [{ event: RealtimeEvent.LineUpdated, line: saved }],
-      };
+    if (nextItemIds !== undefined) {
+      await this.writeItemSet(manager, line.id, nextItemIds);
     }
-    return this.splitRemainder(repo, line, shortfall);
+    // Whatever the line now holds: the set that was just written, or the one it
+    // already had when this edit did not touch it.
+    const itemIds = nextItemIds ?? (await this.itemIdsOf(line.id, manager));
+    // **Through the caller's manager**, like the product set above it. Reading
+    // through this service's own repository would take a second connection while
+    // this transaction holds one, and `addQuantity` is exactly the concurrent path
+    // where that deadlocks the pool. There is nothing to gain from the other route:
+    // this service never writes settlements, so both see the same rows.
+    const settlements = await this.settlementsOf(line.id, manager);
+    // Through the caller's manager for the same reason, and with one of its own:
+    // inside a settle's transaction the manager is the only route that can see
+    // the basket line the settle has just moved (plan 0052, section 3.3).
+    const claim = await this.claims.claimOf(line.id, manager);
+
+    const saved = await repo.save(line);
+    return {
+      view: toLineView(saved, itemIds, settlements, claim),
+      line: saved,
+      itemIds,
+      settlements,
+      claim,
+    };
   }
 
-  /**
-   * Emits what a committed write produced, and answers with its view.
-   *
-   * The order of the events is load bearing (plan 0037, section 5). A client
-   * rendering optimistically that saw the add first would draw a list momentarily
-   * summing to more than was ever asked for; updating first means every frame it
-   * can paint is arithmetically true. Both are existing event types going to the
-   * existing list room, so a client that knows nothing about either plan still
-   * gets a correct list.
-   */
-  private announce(list: ShoppingList, written: WrittenLines): LineView {
-    for (const { event, line } of written.events) {
-      this.emit(event, list.zoneId, line);
-    }
+  /** Emits what a committed write produced, and answers with its view. */
+  private announce(list: ShoppingList, written: WrittenLine): LineView {
+    this.emit(
+      RealtimeEvent.LineUpdated,
+      list.zoneId,
+      written.line,
+      written.itemIds,
+      written.settlements,
+      written.claim
+    );
     return written.view;
   }
 
@@ -590,7 +850,7 @@ export class LineService {
           'This line has been approved, so only its quantity can be changed and only by somebody who can approve lines'
         );
       }
-      if (req.content !== undefined || req.itemId !== undefined) {
+      if (req.content !== undefined || req.itemIds !== undefined) {
         throw new ForbiddenException(
           'Only the quantity of an approved line can be changed. Set it back to pending first to change anything else'
         );
@@ -600,109 +860,6 @@ export class LineService {
     if (!permissions.has(ListPermission.WRITE)) {
       throw new ForbiddenException('You need write access to this list');
     }
-  }
-
-  /**
-   * Reducing an approved line's quantity writes two rows (plan 0037, section 4).
-   *
-   * Somebody in the aisle finds one tin where the list says three. Setting the
-   * quantity to 1 on its own silently rewrites history: the list would then say
-   * somebody asked for one tin, and the two they did not get would have vanished
-   * with no record that they were ever wanted. So the original keeps the new lower
-   * quantity and a second line records the shortfall, `APPROVED` and
-   * `NOT_AVAILABLE`, in the caller's transaction so neither can exist without the
-   * other. The transaction belongs to the caller because {@link addQuantity} is
-   * already inside one when it gets here (plan 0040, section 3.4) and a second,
-   * nested one would be a lock released halfway through the thing it was taken
-   * for.
-   *
-   * **The server and not the client**, because the caller who performs this edit
-   * holds `DECIDE` and, in the ordinary case, nothing else, and `DECIDE` cannot
-   * create a line. A client physically cannot produce the second row, and a
-   * permission model that needed it to would have to grant every shopper `WRITE`
-   * to make one feature work.
-   *
-   * **The rule is about the line, not about who edited it** (section 4.2). Any
-   * reduction on an approved line splits, including one made by a list admin or a
-   * group admin. The one case that costs us is somebody correcting a typo, who
-   * gets a "2 not available" line nobody ever wanted; that is accepted, because
-   * the line really was approved at 3 and the split is the honest record of
-   * undoing it, and because a rule keyed on the actor produces different data for
-   * the same edit depending on who is signed in, which is not explainable in any
-   * user interface.
-   *
-   * A list with `autoApproveLines` set never gets here, which is checked by the
-   * caller: such a list has decided that approval carries no information on it,
-   * so there is nothing for a remainder to preserve and the split would leave a
-   * trail of unavailable rows on precisely the lists whose owners chose the
-   * setting to reduce ceremony (section 4.5).
-   *
-   * `createdByUserId` is copied from the **original line's author**, not taken
-   * from the shopper: the remainder is the unfilled part of that person's request,
-   * and attributing it to the shopper would put a line nobody asked for under the
-   * shopper's name. `approvedByUserId` is copied for the same reason, since it
-   * carries the approval the original already had. `content` and `itemId` come
-   * from the original as it now stands, which differs from how it stood only for a
-   * `MANAGE` holder editing both at once, and the request as it now reads is the
-   * one the remainder is left over from.
-   */
-  private async splitRemainder(
-    repo: Repository<ListLine>,
-    line: ListLine,
-    shortfall: number
-  ): Promise<WrittenLines> {
-    const position = await this.positionBelow(repo, line);
-
-    const saved = await repo.save(line);
-    const remainder = await repo.save(
-      repo.create({
-        listId: line.listId,
-        content: line.content,
-        quantity: shortfall,
-        itemId: line.itemId,
-        position,
-        approvalStatus: LineApprovalStatus.APPROVED,
-        status: LineStatus.NOT_AVAILABLE,
-        createdByUserId: line.createdByUserId,
-        approvedByUserId: line.approvedByUserId,
-        version: 1,
-      })
-    );
-
-    return {
-      view: toLineView(saved),
-      events: [
-        { event: RealtimeEvent.LineUpdated, line: saved },
-        { event: RealtimeEvent.LineAdded, line: remainder },
-      ],
-    };
-  }
-
-  /**
-   * Where the remainder goes: immediately below the line it came from (0037, 4.3).
-   *
-   * `position` is `double precision` for exactly this. The midpoint between the
-   * original and the next line down, or one past the original when it is last, so
-   * **no other row is renumbered**: nothing else in the list moves and a
-   * concurrent reorder is not invalidated. Appending to the end instead would put
-   * the shortfall a screen away from the request it belongs to, which is the part
-   * a naive implementation gets wrong.
-   */
-  private async positionBelow(
-    repo: Repository<ListLine>,
-    line: ListLine
-  ): Promise<number> {
-    const next = await repo
-      .createQueryBuilder('l')
-      .select('MIN(l.position)', 'next')
-      .where('l."listId" = :listId', { listId: line.listId })
-      .andWhere('l.position > :position', { position: line.position })
-      .getRawOne<{ next: number | null }>();
-
-    const below = next?.next;
-    return below === null || below === undefined
-      ? line.position + 1
-      : (line.position + Number(below)) / 2;
   }
 
   /**
@@ -724,26 +881,20 @@ export class LineService {
       req.approvalStatus === LineApprovalStatus.PENDING ? null : req.userId;
     line.version += 1;
     const saved = await this.lines.save(line);
-    this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved);
-    return toLineView(saved);
-  }
-
-  /**
-   * Move a line between item states (plan 0007, section 2). `DECIDE`.
-   *
-   * Ticking off and writing were the same permission, and should not have been
-   * (plan 0036, section 1.3): there was no way to describe the flatmate who does
-   * the shop but does not decide what goes on the list, which is the commonest
-   * arrangement this product has.
-   */
-  async setStatus(req: SetLineStatusRequest): Promise<LineView> {
-    const line = await this.listAccess.getLine(req.lineId);
-    const list = await this.listAccess.requireDecide(line.listId, req.userId);
-    line.status = req.status;
-    line.version += 1;
-    const saved = await this.lines.save(line);
-    this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved);
-    return toLineView(saved);
+    const [itemIds, settlements, claim] = await Promise.all([
+      this.itemIdsOf(saved.id),
+      this.settlementsOf(saved.id),
+      this.claims.claimOf(saved.id),
+    ]);
+    this.emit(
+      RealtimeEvent.LineUpdated,
+      list.zoneId,
+      saved,
+      itemIds,
+      settlements,
+      claim
+    );
+    return toLineView(saved, itemIds, settlements, claim);
   }
 
   /**
@@ -840,7 +991,25 @@ export class LineService {
     const rows = await qb.getMany();
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
-    const items = page.map(toLineView);
+    const pageIds = page.map((line) => line.id);
+    // Three queries for the page, not three per row: the product sets, the
+    // settlement summary two of the indicators are drawn from, and the live
+    // baskets the third one is (plan 0052, section 4). This is the read that
+    // makes the claim survive a reconnect, so a phone that was asleep while
+    // somebody generated a basket draws the same row as one that was watching.
+    const [sets, settlements, claims] = await Promise.all([
+      this.itemIdsOfMany(pageIds),
+      this.settlementsOfMany(pageIds),
+      this.claims.claimsOf(pageIds),
+    ]);
+    const items = page.map((line) =>
+      toLineView(
+        line,
+        sets.get(line.id) ?? [],
+        settlements.get(line.id) ?? NO_LINE_SETTLEMENTS,
+        claims.get(line.id) ?? NO_LINE_CLAIM
+      )
+    );
     const last = page[page.length - 1];
     const nextCursor =
       hasMore && last

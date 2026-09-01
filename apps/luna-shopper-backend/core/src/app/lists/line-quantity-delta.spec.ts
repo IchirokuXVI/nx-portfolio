@@ -1,6 +1,5 @@
 import {
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
   MembershipStatus,
   RealtimeEvent,
@@ -9,8 +8,12 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
+import { LineSettlement, ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { fakeLineItems } from './line-items.fake';
+import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 
@@ -69,10 +72,9 @@ function build(options: {
     listId: LIST_ID,
     content: 'Tinned tomatoes',
     quantity: options.quantity ?? 3,
-    itemId: 'item-1',
+    itemSetHash: null,
     position: 10,
     approvalStatus: options.approvalStatus ?? LineApprovalStatus.APPROVED,
-    status: LineStatus.PENDING,
     createdByUserId: AUTHOR,
     approvedByUserId: APPROVER,
     version: 4,
@@ -146,9 +148,28 @@ function build(options: {
     new ZoneAuthzService(memberships as never)
   );
 
+  // Plan 0048: the line's product set. Nothing in this file is about the set,
+  // but every write path now touches one, so it has to work.
+  const lineItems = fakeLineItems();
+  const settlements = fakeLineSettlements();
+
   const dataSource = {
     transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
-      run({ getRepository: () => lineRepo } as unknown as EntityManager),
+      run({
+        getRepository: (entity: unknown) => {
+          if (entity === ListLineItem) {
+            return lineItems.repo;
+          }
+          // Answered from the **manager**, which is the point rather than a detail:
+          // a write inside a transaction reads its line's settlement summary through
+          // the connection it already holds, because taking a second one from the
+          // pool is what deadlocked ten concurrent deltas.
+          if (entity === LineSettlement) {
+            return settlements.repo;
+          }
+          return lineRepo;
+        },
+      } as unknown as EntityManager),
   } as unknown as DataSource;
 
   const publisher = {
@@ -159,7 +180,12 @@ function build(options: {
   const service = new LineService(
     dataSource,
     lineRepo as never,
+    lineItems.repo as never,
+    // No settlements on any line here: a delta is an edit, and the two
+    // indicators it carries back are whatever the history already said.
+    settlements.repo as never,
     listAccess,
+    fakeLineClaims().service,
     publisher
   );
 
@@ -198,15 +224,29 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     expect(view.version).toBe(5);
   });
 
-  it('refuses a delta that would take the quantity below one', async () => {
-    // The floor is the resulting quantity's, not the delta's: "none of it was
-    // there" is NOT_AVAILABLE on the whole line, which is a control the same
-    // caller already has.
+  it('takes a line to zero, which is stocked rather than deleted', async () => {
+    // The floor moved to zero with plan 0047: a line at zero is a line the
+    // household knows about and does not currently need, and it is where the
+    // reel on the list page puts one. Deleting is a separate confirmed gesture
+    // and it is the only thing that discards the history (section 2.2).
+    const w = build({ permissions: DECIDER, quantity: 3 });
+
+    const view = await w.service.addQuantity({
+      userId: SHOPPER,
+      lineId: 'li1',
+      delta: -3,
+    });
+
+    expect(view.quantity).toBe(0);
+    expect(w.saved).toHaveLength(1);
+  });
+
+  it('refuses a delta that would take the quantity below zero', async () => {
     const w = build({ permissions: DECIDER, quantity: 3 });
 
     await expect(
-      w.service.addQuantity({ userId: SHOPPER, lineId: 'li1', delta: -3 })
-    ).rejects.toThrow(/at least 1/);
+      w.service.addQuantity({ userId: SHOPPER, lineId: 'li1', delta: -4 })
+    ).rejects.toThrow(/at least 0/);
     expect(w.saved).toHaveLength(0);
     expect(w.events).toHaveLength(0);
   });
@@ -280,8 +320,15 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     expect(view.quantity).toBe(3);
   });
 
-  describe('a negative delta on an approved line splits, exactly as a lowering does', () => {
-    it('writes the same two rows an absolute lowering writes', async () => {
+  describe('a negative delta on an approved line no longer splits', () => {
+    it('writes one row, exactly as an absolute lowering does', async () => {
+      // Plan 0037 wrote a second `NOT_AVAILABLE` line holding the shortfall, so
+      // that a shopper coming back with one tin of three did not silently
+      // rewrite the list into having asked for one. Plan 0047 retired that with
+      // the trip status it was written in: a quantity is how many the household
+      // wants right now, lowering it is the primary gesture on the page, and the
+      // remainder row would be an ordinary approved line the list counted as
+      // wanted all over again. What a shopper found is a settlement now.
       const delta = build({ permissions: DECIDER, quantity: 3 });
       const patch = build({ permissions: DECIDER, quantity: 3 });
 
@@ -298,25 +345,11 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
 
       expect(fromDelta.quantity).toBe(1);
       expect(fromDelta.quantity).toBe(fromPatch.quantity);
-      expect(delta.saved).toHaveLength(2);
-
-      const remainder = delta.saved[1];
-      expect(remainder.quantity).toBe(2);
-      expect(remainder.approvalStatus).toBe(LineApprovalStatus.APPROVED);
-      expect(remainder.status).toBe(LineStatus.NOT_AVAILABLE);
-      // Attributed to the original line's author, not to the shopper: the
-      // remainder is the unfilled part of that person's request.
-      expect(remainder.createdByUserId).toBe(AUTHOR);
-      expect(remainder.approvedByUserId).toBe(APPROVER);
-      expect(patch.saved.map((row) => row.quantity)).toEqual(
-        delta.saved.map((row) => row.quantity)
-      );
+      expect(delta.saved).toHaveLength(1);
+      expect(patch.saved).toHaveLength(1);
     });
 
-    it('emits LineUpdated then LineAdded, in that order', async () => {
-      // The order is load bearing (plan 0037, section 5): a client rendering
-      // optimistically that saw the add first would draw a list momentarily
-      // summing to more than was ever asked for.
+    it('emits one LineUpdated and nothing else', async () => {
       const w = build({ permissions: DECIDER, quantity: 3 });
 
       await w.service.addQuantity({
@@ -325,45 +358,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
         delta: -2,
       });
 
-      expect(w.events.map((e) => e.event)).toEqual([
-        RealtimeEvent.LineUpdated,
-        RealtimeEvent.LineAdded,
-      ]);
-    });
-
-    it('puts the remainder between the line and the next one down', async () => {
-      const w = build({
-        permissions: DECIDER,
-        quantity: 3,
-        nextPosition: 20,
-      });
-
-      await w.service.addQuantity({
-        userId: SHOPPER,
-        lineId: 'li1',
-        delta: -2,
-      });
-
-      // The midpoint, so no other row is renumbered and a concurrent reorder is
-      // not invalidated (plan 0037, section 4.3).
-      expect(w.saved[1].position).toBe(15);
-    });
-
-    it('does not split on a list that auto approves', async () => {
-      const w = build({
-        permissions: DECIDER,
-        quantity: 3,
-        autoApproveLines: true,
-      });
-
-      const view = await w.service.addQuantity({
-        userId: SHOPPER,
-        lineId: 'li1',
-        delta: -2,
-      });
-
-      expect(view.quantity).toBe(1);
-      expect(w.saved).toHaveLength(1);
+      expect(w.events.map((e) => e.event)).toEqual([RealtimeEvent.LineUpdated]);
     });
   });
 });
@@ -469,9 +464,24 @@ describe('line.addMany (plan 0040, section 6)', () => {
       w.service.addMany({
         userId: SHOPPER,
         listId: LIST_ID,
-        items: [{ content: 'leche' }, { content: 'pan', quantity: 0 }],
+        items: [{ content: 'leche' }, { content: 'pan', quantity: -1 }],
       })
-    ).rejects.toThrow(/at least 1/);
+    ).rejects.toThrow(/at least 0/);
+  });
+
+  it('takes an item asked for at zero, which is a line nobody needs yet', async () => {
+    // Zero is a quantity since plan 0047, and a line typed at zero is the
+    // "never wanted" case velista 0043 draws: somebody put it on the list and
+    // the household has not needed it yet.
+    const w = build({ permissions: WRITER });
+
+    const views = await w.service.addMany({
+      userId: SHOPPER,
+      listId: LIST_ID,
+      items: [{ content: 'pan', quantity: 0 }],
+    });
+
+    expect(views[0].quantity).toBe(0);
   });
 
   describe('the approval rules are the ones a single add runs (section 6.2)', () => {
@@ -489,9 +499,9 @@ describe('line.addMany (plan 0040, section 6)', () => {
       for (const view of views) {
         expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
         expect(view.approvedByUserId).toBe(SHOPPER);
-        // The two state machines stay independent: agreeing to buy a thing says
-        // nothing about whether it is in the trolley.
-        expect(view.status).toBe(LineStatus.PENDING);
+        // Agreeing to buy a thing says nothing about whether anybody has been to
+        // the shop: a new line is wanted and has no settlement behind it.
+        expect(view.quantity).toBe(1);
       }
     });
 

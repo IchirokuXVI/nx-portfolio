@@ -2,6 +2,7 @@ import type {
   Line,
   LineAction,
   LineEditScope,
+  LineIndicator,
   LineRowVm,
   LineWriteState,
   ListAbilitiesVm,
@@ -54,6 +55,15 @@ export interface ListStateInput {
     }
   >;
   readonly commentCounts: ReadonlyMap<string, number>;
+  /**
+   * Which lines are in somebody's active basket, by line id, valued by who.
+   *
+   * Presence rather than state (section 3.3), and it arrives on a zone event rather
+   * than on any read, which is why it is a separate map instead of a field on the line:
+   * it appears and disappears while the page is open and nothing derived from it is
+   * ever written back.
+   */
+  readonly claims: ReadonlyMap<string, string>;
   readonly caller: CallerFacts;
   /** Resolves a user id to a name in this zone, or null. */
   readonly nameOf: (userId: string) => string | null;
@@ -150,9 +160,13 @@ function selectHeader(input: ListStateInput): ListHeaderVm {
   return {
     listName: list?.name ?? null,
     zoneName: input.zoneName,
-    readyCount: counted
-      ? lines.filter((line) => line.status === 'READY').length
-      : (list?.readyCount ?? 0),
+    // Lines the household still wants, which is `quantity > 0` (backend plan 0047,
+    // section 2.3). It counted lines somebody had ticked, and the rename is a change
+    // of subject: "four things needed" is the figure a header should have been
+    // showing, and "four things already bought" stopped being computable at all.
+    wantedCount: counted
+      ? lines.filter((line) => line.quantity > 0).length
+      : (list?.wantedCount ?? 0),
     lineCount: counted ? lines.length : (list?.lineCount ?? 0),
     viewers: input.viewers,
     live: input.live,
@@ -234,29 +248,36 @@ function toRow(
 
   const awaiting = line.approvalStatus === 'PENDING';
   const rejected = line.approvalStatus === 'REJECTED';
-  const unavailable = line.status === 'NOT_AVAILABLE';
+  const claimedBy = input.claims.get(line.id) ?? null;
 
   return {
     id: line.id,
     content: line.content,
     quantity: line.quantity,
-    status: line.status,
     approvalStatus: line.approvalStatus,
-    // Three unrelated things strike a row through, and only one of them is a tick.
-    struck: line.status === 'READY' || unavailable || rejected,
-    captionKey: captionKeyFor(awaiting, rejected, unavailable),
+    settled: isSettled(line),
+    indicators: indicatorsFor(line, claimedBy),
+    // A name and not an id: the row says nothing rather than naming a stranger.
+    claimedBy: claimedBy === null ? null : input.nameOf(claimedBy),
+    captionKey: captionKeyFor(awaiting, rejected),
     write,
     overwrittenBy:
       note?.byUserId === null || note?.byUserId === undefined
         ? null
         : input.nameOf(note.byUserId),
     commentCount: input.commentCounts.get(line.id),
-    // In reorder mode nothing is a checkbox. Otherwise it follows `canDecide` and no
-    // longer `canWrite`: the tap **is** ticking off, and ticking off is `DECIDE` now
-    // (section 4). A `WRITE`-only caller therefore has a full composer and rows that do
-    // not answer a tap, which is correct and is why that caller gets a caption naming
-    // who does the ticking (section 7).
-    interactive: abilities.canDecide && !input.reordering,
+    // **Everybody who can see the row can open it**, which is the change (velista plan
+    // 0043, section 5.1). The tap used to be the tick, so it followed `DECIDE` and a
+    // reader's rows sat there not answering; it opens what the app knows about the
+    // thing now, and knowing is not a permission. False only in reorder mode, where
+    // every row is a thing being dragged rather than a thing being read.
+    interactive: !input.reordering,
+    // The reel is the half that still follows `DECIDE`, because moving the number is
+    // saying what the household now has. The two came apart here for the first time,
+    // and a `WRITE` only caller is why: they get a full composer, a row that opens, and
+    // a number that does not move, with one caption at the top of the page saying who
+    // does the buying rather than each row refusing in turn (section 7).
+    adjustable: abilities.canDecide && !input.reordering,
     actions: actionsFor(line, abilities, input.reordering),
     // Both from the same expression as the `edit` entry above, so the invariant
     // `LineRowVm.editScope` states cannot be broken from one side.
@@ -271,25 +292,82 @@ function toRow(
 }
 
 /**
+ * Whether a line is settled: at zero, **with a purchase on record**.
+ *
+ * The count is the whole of it, and it is why backend plan 0047 section 5 says "at
+ * least once" rather than testing the quantity alone. A line somebody typed and has
+ * never needed is at zero too, and it has not been bought, it has simply never been
+ * wanted yet. The two are drawn differently on purpose (section 3.2) and nothing else
+ * on the line can tell them apart.
+ */
+function isSettled(line: Line): boolean {
+  return line.quantity === 0 && line.boughtCount > 0;
+}
+
+/**
+ * The indicators this row carries, in the order they are drawn (section 3.3).
+ *
+ * A **list**, because a row can carry more than one at once: a loaf that was missing
+ * last week, is wanted again, and is in somebody's basket right now shows two of them.
+ * That is the case a single value could not express, and it is the ordinary case rather
+ * than a corner.
+ *
+ * Empty on an ordinary row and empty on the never wanted one, which is the point of
+ * {@link isSettled}: there is nothing to report about a thing nobody has needed yet.
+ *
+ * The order is bought, then missing, then claimed: two facts about the record and then
+ * the one live thing, so a row reads as history followed by news rather than the other
+ * way round.
+ *
+ * **Exported since velista plan 0047 section 5**, for the detail sheet's header. The
+ * sheet opens from a row and has to agree with it, and the only way two surfaces agree
+ * about a rule made of three unrelated facts is by calling the same function: a header
+ * that recomputed "bought when the quantity is zero, unless nothing was ever bought"
+ * would be the second copy this comment already warns about.
+ */
+export function indicatorsFor(
+  line: Line,
+  claimedByUserId: string | null
+): readonly LineIndicator[] {
+  const indicators: LineIndicator[] = [];
+
+  if (isSettled(line)) {
+    indicators.push('bought');
+  }
+
+  // The **most recent** settlement and not a flag, which is why it can be true of a
+  // line that is emphatically still wanted: "they did not have it" is a fact about the
+  // last trip and it expires the moment somebody does buy it.
+  if (line.lastSettlementOutcome === 'NOT_AVAILABLE') {
+    indicators.push('notAvailable');
+  }
+
+  // The only one that comes from outside the list, and the only one that is presence
+  // rather than state. It must never be mistaken for the line having been dealt with,
+  // which is why it is last and why it is drawn as a live dot rather than a mark.
+  if (claimedByUserId !== null) {
+    indicators.push('claimed');
+  }
+
+  return indicators;
+}
+
+/**
  * The caption, or null.
  *
- * Exactly three things produce one and an ordinary row never grows a second line
- * (section 4.7). Approval is checked before item status because a line nobody has
- * agreed to is a more urgent thing to say than a shop not having it.
+ * **Two** things produce one now, where `0012` had three. "Not in the shop" left, and
+ * it is not a loss: it became an indicator, which is what lets it appear beside
+ * "somebody is buying this" on the same row. A caption is one line of text and cannot
+ * say two things at once (section 3.3).
+ *
+ * An ordinary row still never grows a second line.
  */
-function captionKeyFor(
-  awaiting: boolean,
-  rejected: boolean,
-  unavailable: boolean
-): string | null {
+function captionKeyFor(awaiting: boolean, rejected: boolean): string | null {
   if (awaiting) {
     return 'list.line.awaitingApproval';
   }
   if (rejected) {
     return 'list.line.rejected';
-  }
-  if (unavailable) {
-    return 'list.line.notAvailable';
   }
 
   return null;
@@ -353,9 +431,11 @@ export function editScopeFor(
  * "no overflow on any row" cannot hold at the same time as that sentence, and the
  * reasoned passage wins over the checklist line.
  *
- * Everything else is section 4's table, one row at a time. `markNotAvailable` and
- * `markPending` are one control with two directions, and they follow `DECIDE` now
- * because saying what the shop had is deciding rather than writing.
+ * **`markNotAvailable` and `markPending` are gone**, and that is velista plan 0043
+ * section 1.1 rather than an omission. Saying the shop did not have something is a
+ * thing you say afterwards, deliberately, from the detail sheet, and there is no
+ * pending trip state left to put a line back to. The row has no marking control of any
+ * kind, which is the distinction the whole plan draws.
  */
 function actionsFor(
   line: Line,
@@ -372,20 +452,13 @@ function actionsFor(
     actions.push('edit');
   }
 
-  if (abilities.canDecide) {
-    // One control with two directions: a line already marked as missing offers putting
-    // it back, and one that is not offers marking it.
-    actions.push(
-      line.status === 'NOT_AVAILABLE' ? 'markPending' : 'markNotAvailable'
-    );
-  }
-
   actions.push('comments');
 
   // `WRITE` deletes what has not been agreed to yet; `MANAGE` deletes anything at all,
   // including an approved line that should never have existed (backend plan 0036,
-  // section 4.1). There is no third case: `DECIDE` marks a line as not in the shop
-  // rather than removing it, which keeps the record of what was asked for.
+  // section 4.1). There is no third case, and `DECIDE` is deliberately not one: a
+  // decider drags the number to zero, which keeps the line and everything it knows
+  // about itself. Deleting is the only thing that discards a history (section 5.3).
   if (
     abilities.canManage ||
     (abilities.canWrite && line.approvalStatus !== 'APPROVED')

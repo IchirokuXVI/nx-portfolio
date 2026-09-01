@@ -85,9 +85,47 @@ export const MEMBERSHIP_STATUS_FALLBACK: MembershipStatus = 'PENDING';
 export const LIST_PERMISSIONS = ['READ', 'WRITE', 'DECIDE', 'MANAGE'] as const;
 export type ListPermission = (typeof LIST_PERMISSIONS)[number];
 
-/** Where a line has got to on the shopping trip. Unknown reads as not yet done. */
-export const LINE_STATUSES = ['PENDING', 'READY', 'NOT_AVAILABLE'] as const;
-export type LineStatus = (typeof LINE_STATUSES)[number];
+/**
+ * What one settling act said happened (backend plan 0047, section 3).
+ *
+ * It replaced `LineStatus`, and the replacement is not a rename. `READY` was a
+ * fact about **one shopping trip** written onto a record that outlives every
+ * trip, which is why a shared list filled up with ticked lines nobody could get
+ * rid of except by deleting what they knew about the thing. This is a fact about
+ * a moment, recorded once and never edited, and the line's own state is its
+ * quantity (velista plan 0043, section 1).
+ *
+ * There is no fallback, and there is deliberately no `SKIPPED` member. "I decided
+ * not to buy this today" writes nothing at all, because it has to leave the line
+ * exactly as it was and must not look like it was dealt with, so it is the
+ * absence of a settlement rather than a third kind of one.
+ */
+export const SETTLEMENT_OUTCOMES = ['BOUGHT', 'NOT_AVAILABLE'] as const;
+export type SettlementOutcome = (typeof SETTLEMENT_OUTCOMES)[number];
+
+/**
+ * What an unrecognised outcome reads as, and it is the quiet one.
+ *
+ * `NOT_AVAILABLE` moves no quantity and counts as no purchase, so a value this
+ * build has never heard of reports a trip that happened and claims nothing about
+ * what the household now has. Reading it as `BOUGHT` would put a bought indicator
+ * on a line over an outcome nobody here understands.
+ */
+export const SETTLEMENT_OUTCOME_FALLBACK: SettlementOutcome = 'NOT_AVAILABLE';
+
+/**
+ * Whether a catalog suggestion offers a group of products or one of them
+ * (backend plan 0048, section 3).
+ *
+ * A group beats an item and the ranking is the **server's**, not a rule restated
+ * here: somebody typing "milk" is offered the group rather than one brand of it,
+ * and `item.searchOffers` already orders them that way (velista plan 0043,
+ * section 6). Unknown falls back to `item`, which attaches one product instead of
+ * several, and is the smaller thing to have to undo.
+ */
+export const CATALOG_SUGGESTION_KINDS = ['group', 'item'] as const;
+export type CatalogSuggestionKind = (typeof CATALOG_SUGGESTION_KINDS)[number];
+export const CATALOG_SUGGESTION_KIND_FALLBACK: CatalogSuggestionKind = 'item';
 
 /**
  * How far a voice comment's transcript got (backend plan 0045, section 4.2).
@@ -110,7 +148,6 @@ export const COMMENT_TRANSCRIPTIONS = [
 ] as const;
 export type CommentTranscription = (typeof COMMENT_TRANSCRIPTIONS)[number];
 export const COMMENT_TRANSCRIPTION_FALLBACK: CommentTranscription = 'FAILED';
-export const LINE_STATUS_FALLBACK: LineStatus = 'PENDING';
 
 /** Whether a suggested line has been accepted. Unknown reads as still awaiting. */
 export const LINE_APPROVAL_STATUSES = [
@@ -162,3 +199,73 @@ export type UsernameScope = (typeof USERNAME_SCOPES)[number];
  * happens if it is asked for, which is why the client always sends it explicitly.
  */
 export const USERNAME_SCOPE_DEFAULT: UsernameScope = 'MY_GROUPS_TOO';
+
+/**
+ * What kind of person is acting on a shared basket (plan 0051, section 3).
+ *
+ * `UNKNOWN` is a member rather than a fallback onto one of the three, and it is
+ * the safe direction for the same reason `ZONE_STATUSES` has one: every rule this
+ * enum drives is about **widening** what somebody may see, and a kind this build
+ * has never heard of must not be read as the owner. It renders like a guest,
+ * which is the least the screen can offer anybody.
+ *
+ * Falling back to `GUEST` outright was the alternative and is worse: it would
+ * claim a person is unverified when the server may have said the opposite, and
+ * `0044` section 4.3 requires a guest to be *visibly* a guest. Saying that of
+ * somebody who is not is the mistake in the direction that matters.
+ */
+export const PARTICIPANT_KINDS = [
+  'OWNER',
+  'REGISTERED',
+  'GUEST',
+  'UNKNOWN',
+] as const;
+export type ParticipantKind = (typeof PARTICIPANT_KINDS)[number];
+export const PARTICIPANT_KIND_FALLBACK: ParticipantKind = 'UNKNOWN';
+
+/**
+ * Where a generated shopping list has got to (backend plan 0050, section 1).
+ *
+ * `DRAFT` is composed and not yet taken to a shop, `ACTIVE` is the one being worked
+ * through, `COMPLETED` is a trip that is over, and `ARCHIVED` hides a trip from the
+ * default listing without deleting it.
+ *
+ * `ACTIVE` is the only value this app derives anything from: it is what puts a basket
+ * on the dashboard card and marks a row in the history as being shopped now. The other
+ * three are carried so the history can be read back, and nothing branches on them.
+ *
+ * `UNKNOWN` is the fallback for a status this build does not recognise, following
+ * `ZONE_STATUSES`: an unrecognised value must not read as `ACTIVE`, because that would
+ * put a basket the server considers finished back on the dashboard.
+ */
+export const GENERATED_LIST_STATUSES = [
+  'DRAFT',
+  'ACTIVE',
+  'COMPLETED',
+  'ARCHIVED',
+  'UNKNOWN',
+] as const;
+export type GeneratedListStatus = (typeof GENERATED_LIST_STATUSES)[number];
+export const GENERATED_LIST_STATUS_FALLBACK: GeneratedListStatus = 'UNKNOWN';
+
+/**
+ * How much a shopping profile draws from when it generates a basket (backend `0049`,
+ * section 1).
+ *
+ * `ALL` is not "every list I can see today": it means every list the caller may write
+ * to, **including ones made later**, which is a different and better promise than
+ * naming today's ids. `SELECTED` is the explicit set beside it.
+ */
+export const GENERATION_SCOPES = ['ALL', 'SELECTED'] as const;
+export type GenerationScope = (typeof GENERATION_SCOPES)[number];
+
+/**
+ * What an unrecognised scope reads as, and it is the wide one.
+ *
+ * The scope only ever **prefills** a sheet somebody is about to look at, so being
+ * wrong costs a tick they untick. `ALL` is what a fresh profile stores and what
+ * somebody who has never narrowed anything means, and reading an unknown value as
+ * `SELECTED` would prefill from a `sources` list this build could not interpret
+ * either, which is a sheet that draws nothing ticked and a submit that refuses.
+ */
+export const GENERATION_SCOPE_FALLBACK: GenerationScope = 'ALL';

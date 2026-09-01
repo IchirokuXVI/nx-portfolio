@@ -1,5 +1,7 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import {
+  generatedListPresenceRoom,
+  generatedListRoom,
   listPresenceRoom,
   listRoom,
   parseRoom,
@@ -177,8 +179,15 @@ export class RoomSyncService implements OnModuleInit {
     socket: Socket,
     answers: Map<string, Promise<boolean>>
   ): Promise<void> {
+    // Two kinds of socket reach here since plan 0051: one authenticated by an
+    // account token, which carries a user id, and one authenticated by a
+    // participant token, which carries no user at all. Bailing on a missing user
+    // id, as this did while there was only one kind, would have made a guest's
+    // socket unsweepable, and section 3.3 promises that revoking a participant
+    // bites immediately.
     const userId = socket.data.userId as string | undefined;
-    if (!userId) {
+    const participantId = socket.data.participantId as string | undefined;
+    if (!userId && !participantId) {
       return;
     }
 
@@ -188,7 +197,7 @@ export class RoomSyncService implements OnModuleInit {
         // The socket's own id room, which no access question governs.
         continue;
       }
-      if (await this.allowed(userId, parsed, answers)) {
+      if (await this.allowed(socket, parsed, answers)) {
         continue;
       }
       await this.leave(socket, parsed);
@@ -235,26 +244,70 @@ export class RoomSyncService implements OnModuleInit {
    * keying on the room name would ask core the same thing twice.
    */
   private allowed(
-    userId: string,
+    socket: Socket,
     parsed: ParsedRoom,
     answers: Map<string, Promise<boolean>>
   ): Promise<boolean> {
+    const userId = socket.data.userId as string | undefined;
+    const participantId = socket.data.participantId as string | undefined;
+
+    // A shared basket's two rooms are gated by the participant, not the user
+    // (plan 0051, section 7), and they are the only rooms a participant socket
+    // can hold. A socket carrying neither identity for the room in front of it
+    // answers no, which evicts it: that is the safe direction, and it is the
+    // answer for an account socket that somehow reached a `generated:` room.
+    if (
+      parsed.kind === 'generatedList' ||
+      parsed.kind === 'generatedListPresence'
+    ) {
+      if (!participantId) {
+        return Promise.resolve(false);
+      }
+      return this.memo(
+        answers,
+        `${participantId}|participant|${parsed.generatedListId}`,
+        async () =>
+          (await this.coreAccess.checkParticipant(
+            participantId,
+            parsed.generatedListId
+          )) !== undefined
+      );
+    }
+
+    // Every other room is gated by a user, and a participant socket holds none
+    // of them.
+    if (!userId) {
+      return Promise.resolve(false);
+    }
     const key =
       parsed.kind === 'zone' || parsed.kind === 'zoneStaff'
         ? `${userId}|${parsed.kind}|${parsed.zoneId}`
         : `${userId}|list|${parsed.listId}`;
+    return this.memo(answers, key, () => this.ask(userId, parsed));
+  }
 
+  /** One answer per question for the whole sweep, whatever asks it. */
+  private memo(
+    answers: Map<string, Promise<boolean>>,
+    key: string,
+    ask: () => Promise<boolean>
+  ): Promise<boolean> {
     const known = answers.get(key);
     if (known) {
       return known;
     }
-
-    const asked = this.ask(userId, parsed);
+    const asked = ask();
     answers.set(key, asked);
     return asked;
   }
 
-  private ask(userId: string, parsed: ParsedRoom): Promise<boolean> {
+  private ask(
+    userId: string,
+    parsed: Exclude<
+      ParsedRoom,
+      { kind: 'generatedList' } | { kind: 'generatedListPresence' }
+    >
+  ): Promise<boolean> {
     switch (parsed.kind) {
       case 'zone':
         return this.coreAccess.recheckZone(userId, parsed.zoneId);
@@ -289,6 +342,22 @@ export class RoomSyncService implements OnModuleInit {
         // whoever is. So there is nothing to remove from a room here, only the
         // subscription itself (plan 0032, section 3).
         await socket.leave(listPresenceRoom(parsed.listId));
+        return;
+      case 'generatedList':
+        await socket.leave(generatedListRoom(parsed.generatedListId));
+        // Drops the participant's presence entry and rebroadcasts, so a revoked
+        // guest stops appearing in the shop as well as stopping receiving it.
+        await this.presence.leaveGeneratedList(
+          socket.id,
+          parsed.generatedListId
+        );
+        return;
+      case 'generatedListPresence':
+        // The same distinction the list pair draws: hearing about who is there
+        // is not being there, so there is only the subscription to drop.
+        await socket.leave(
+          generatedListPresenceRoom(parsed.generatedListId)
+        );
         return;
     }
   }

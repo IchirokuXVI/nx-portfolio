@@ -64,7 +64,7 @@ function list(
     createdByUserId: 'u1',
     autoApproveLines: false,
     lineCount: 1,
-    readyCount: 0,
+    wantedCount: 0,
     myPermissions: ADMIN,
     ...overrides,
   };

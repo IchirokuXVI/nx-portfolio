@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ ORDINARY PROFILE ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">AN ORDINARY PROFILE &middot; one confirm, plain consequences</span>
+    <div style="width: 390px; height: 620px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+      <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 26px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+        <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+        <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Delete &ldquo;The office&rdquo;?</div>
+        <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb;">Its postal codes and supermarket choices go with it. Your lists are not touched.</div>
+
+        <button type="button" style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: #fb7185; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Delete the profile</button>
+        <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+          <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Keep it</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ THE DEFAULT ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE DEFAULT &middot; the copy names its successor. The last profile shows no trash at all</span>
+    <div style="width: 390px; height: 620px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+      <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 26px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+        <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+        <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 6px;">Delete &ldquo;Home&rdquo;?</div>
+        <div style="font-size: 13.5px; line-height: 1.5; color: #98a0bb;">This is your default profile. <span style="color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 190px; vertical-align: bottom;">The office</span> will become your default, and prices will be shown for it from now on.</div>
+
+        <button type="button" style="width: 100%; height: 52px; margin-top: 18px; border: 0; border-radius: 14px; background: #fb7185; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Delete the profile</button>
+        <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 2px;">
+          <span style="font-size: 14.5px; font-weight: 500; color: #98a0bb;">Keep it</span>
+        </div>
+      </div>
+
+    </div>
+    <span style="font-size: 11.5px; color: #525a78; max-width: 390px;">With exactly one profile the trash is absent from the page, per the rule that a control you may not use is not drawn: the last profile cannot be deleted (backend 0049 section 1.3).</span>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

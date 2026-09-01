@@ -30,4 +30,24 @@ export class Supermarket extends BaseEntity {
    */
   @Column({ type: 'varchar', nullable: true })
   externalBrandKey!: string | null;
+
+  /**
+   * The scope to quote this chain's prices from when nothing else says which
+   * (plan 0049, section 3.1).
+   *
+   * The last rung of the ladder, and the reason it exists: "show me Mercadona"
+   * with no location is ambiguous, because Mercadona prices per warehouse and
+   * there is no single Mercadona price. First the chain's scopes serving the
+   * caller's postal codes, then its NATIONAL scope if it has one, then this,
+   * with the result **flagged as approximate** so a client can say "prices shown
+   * for Madrid". Averaging across the chain's scopes is not an alternative: an
+   * average price is a price that exists in no store.
+   *
+   * Owner set and nullable, and no foreign key: the column names a row of the
+   * table two files over, but a constraint here would make deleting a scope
+   * refuse rather than fall through to "this chain has no default", which is a
+   * perfectly good answer.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  defaultPriceScopeId!: string | null;
 }

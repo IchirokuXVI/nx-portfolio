@@ -1,12 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ITEM_LOOKUP_LIMITS,
   ItemCategory,
   PriceScopeKind,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsIn,
@@ -19,6 +22,36 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+
+/**
+ * How many price scopes one read may name.
+ *
+ * A bound rather than a budget: a shopper's profile holds the chains they
+ * actually visit, which is a handful, and the number is here so one request
+ * cannot turn a search into a scan of every price in the catalog.
+ */
+const MAX_PRICE_SCOPES = 20;
+
+/**
+ * The products a screen needs the names of, by id (plan 0053, section 1).
+ *
+ * **The cap is enforced here and not merely documented.** A batch read with no
+ * ceiling is a listing, and plan 0049 section 3 deliberately stopped the catalog
+ * being listable; {@link ITEM_LOOKUP_LIMITS.maxIds} is spread from the contract
+ * rather than written again, so the route and the message cannot disagree about
+ * what five hundred means.
+ *
+ * Every id is checked for shape, which costs nothing and means a malformed id
+ * fails as a bad request rather than reaching a `WHERE id = ANY(...)` as a cast
+ * error from inside catalog.
+ */
+export class LookupItemsDto {
+  @ApiProperty({ type: [String], maxItems: ITEM_LOOKUP_LIMITS.maxIds })
+  @IsArray()
+  @ArrayMaxSize(ITEM_LOOKUP_LIMITS.maxIds)
+  @IsUUID('all', { each: true })
+  ids!: string[];
+}
 
 /** A localized text value carrying at least English and Spanish (plan 0012). */
 export class LocalizedTextDto {
@@ -33,6 +66,29 @@ export class LocalizedTextDto {
   @MinLength(1)
   @MaxLength(200)
   es!: string;
+}
+
+/**
+ * Per locale alternative words for a product group (plan 0048, section 1).
+ *
+ * The reason a group is findable at all: `leche` and `milk` have to reach the one
+ * Milk group, and neither is a translation of the group's own name in the other
+ * language.
+ */
+export class LocalizedSynonymsDto {
+  @ApiProperty({ type: [String], maxItems: 50 })
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  en!: string[];
+
+  @ApiProperty({ type: [String], maxItems: 50 })
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  es!: string[];
 }
 
 // --- Supermarkets ----------------------------------------------------------
@@ -207,7 +263,8 @@ export class CreateItemDto {
   @ApiPropertyOptional({
     nullable: true,
     minimum: 0,
-    description: 'Without it `defaultUnit` says nothing: "LITER" is not a size.',
+    description:
+      'Without it `defaultUnit` says nothing: "LITER" is not a size.',
   })
   @IsOptional()
   @IsNumber()
@@ -221,6 +278,16 @@ export class CreateItemDto {
   @ApiProperty({ enum: UnitOfMeasure })
   @IsEnum(UnitOfMeasure)
   defaultUnit!: UnitOfMeasure;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The product group this belongs to (plan 0048, section 1): the statement that this milk is comparable with that milk. Owner curation, never assigned automatically.',
+  })
+  @IsOptional()
+  @IsUUID()
+  productGroupId?: string | null;
 }
 
 export class UpdateItemDto {
@@ -262,7 +329,8 @@ export class UpdateItemDto {
   @ApiPropertyOptional({
     nullable: true,
     minimum: 0,
-    description: 'Without it `defaultUnit` says nothing: "LITER" is not a size.',
+    description:
+      'Without it `defaultUnit` says nothing: "LITER" is not a size.',
   })
   @IsOptional()
   @IsNumber()
@@ -278,6 +346,16 @@ export class UpdateItemDto {
   @IsOptional()
   @IsEnum(UnitOfMeasure)
   defaultUnit?: UnitOfMeasure;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Assign, reassign or (with null) unassign the product’s group (plan 0048, section 1).',
+  })
+  @IsOptional()
+  @IsUUID()
+  productGroupId?: string | null;
 }
 
 // --- Price scopes (plan 0038, section 5.1) ---------------------------------
@@ -419,7 +497,106 @@ export class CatalogListQueryDto extends PageQueryDto {
   order?: string;
 }
 
-export class SearchItemsQueryDto extends CatalogListQueryDto {
+/**
+ * The same orders plus `relevance` (plan 0048, section 3).
+ *
+ * A sibling of {@link CatalogListQueryDto} rather than a subclass that widens
+ * `order`: class-validator collects the decorators of the whole prototype chain,
+ * so a subclass restating the field would be validated against **both** lists and
+ * `relevance` would be refused by the parent's.
+ *
+ * `relevance` is what a search does by default when it is given a query, so a
+ * caller states it only to ask for it back after asking for something else. With
+ * no query it degrades to `name`: there is nothing to be relevant to.
+ */
+export class SearchOrderQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    enum: ['relevance', 'name', 'created', 'updated'],
+    description:
+      'Defaults to `relevance` when a query is given and to `name` when one is not.',
+  })
+  @IsOptional()
+  @IsIn(['relevance', 'name', 'created', 'updated'])
+  order?: string;
+}
+
+/** How many postal codes or chains one read may name. Same reasoning, smaller. */
+const MAX_SELECTORS = 20;
+
+/** `?x=a&x=b` for one value arrives as a string; every list parameter needs it. */
+const asArray = ({ value }: { value: unknown }) =>
+  value === undefined || Array.isArray(value) ? value : [value];
+
+/**
+ * Where the caller shops, for the reads that return items or prices (plan 0048
+ * section 3.1, and plan 0049 section 3).
+ *
+ * Three ways to say it, in falling precedence:
+ *
+ * - `priceScopeId`, repeatable: the warehouses themselves. Nothing is resolved.
+ * - `postalCode` and `supermarketId`, repeatable: a place, resolved through the
+ *   ladder in section 3.1.
+ * - Nothing at all, optionally with `profileId`: the caller's default (or named)
+ *   shopping profile is resolved for them.
+ *
+ * **Saying nothing no longer means everything.** A caller whose profile holds
+ * neither a postal code nor a chain is answered with `catalog_scope_required`,
+ * which the client renders as an onboarding step rather than as a failure.
+ */
+export class PriceScopedQueryDto extends SearchOrderQueryDto {
+  @ApiPropertyOptional({
+    name: 'priceScopeId',
+    type: [String],
+    format: 'uuid',
+    description:
+      'Repeatable. Prices come from these scopes and no others, and nothing is resolved from your profile.',
+  })
+  @IsOptional()
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMaxSize(MAX_PRICE_SCOPES)
+  @IsUUID(undefined, { each: true })
+  priceScopeId?: string[];
+
+  @ApiPropertyOptional({
+    name: 'postalCode',
+    type: [String],
+    description:
+      'Repeatable. Where you are shopping from, resolved to scopes per request rather than stored resolved.',
+  })
+  @IsOptional()
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMaxSize(MAX_SELECTORS)
+  @IsString({ each: true })
+  @MaxLength(16, { each: true })
+  postalCode?: string[];
+
+  @ApiPropertyOptional({
+    name: 'supermarketId',
+    type: [String],
+    format: 'uuid',
+    description:
+      'Repeatable. The chains to shop, resolved through the ladder: their scopes serving your postal codes, else a national scope, else the chain default, flagged approximate.',
+  })
+  @IsOptional()
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMaxSize(MAX_SELECTORS)
+  @IsUUID(undefined, { each: true })
+  supermarketId?: string[];
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Shop as this profile of yours rather than as your default one. Somebody else’s profile is not found.',
+  })
+  @IsOptional()
+  @IsUUID()
+  profileId?: string;
+}
+
+export class SearchItemsQueryDto extends PriceScopedQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -430,4 +607,105 @@ export class SearchItemsQueryDto extends CatalogListQueryDto {
   @IsOptional()
   @IsEnum(ItemCategory)
   category?: ItemCategory;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only this group’s members (plan 0048). What "show me every milk" asks.',
+  })
+  @IsOptional()
+  @IsUUID()
+  productGroupId?: string;
+}
+
+/** The composer's own read: ranked groups, priced (plan 0048, section 3). */
+export class SearchOffersQueryDto extends PriceScopedQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  query?: string;
+}
+
+/**
+ * The dropdown's one call (plan 0048, section 3).
+ *
+ * `q` rather than `query`, because it is what the plan names and what a search
+ * box parameter is called everywhere. The limit is per kind, not a total: the
+ * response interleaves two reads and a client asking for ten wants ten of each
+ * to choose from, not a split it cannot predict.
+ */
+export class SuggestQueryDto extends PriceScopedQueryDto {
+  @ApiPropertyOptional({
+    description:
+      'What the person has typed. The composer asks after three characters.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  q?: string;
+}
+
+export class CreateProductGroupDto {
+  @ApiProperty({ type: LocalizedTextDto })
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name!: LocalizedTextDto;
+
+  @ApiProperty({
+    maxLength: 80,
+    description:
+      'A stable handle for admin tooling and tests: lower case words separated by single dashes.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  slug!: string;
+
+  @ApiProperty({
+    enum: UnitOfMeasure,
+    description: 'The unit this group’s members are compared in.',
+  })
+  @IsEnum(UnitOfMeasure)
+  referenceUnit!: UnitOfMeasure;
+
+  @ApiPropertyOptional({ type: LocalizedSynonymsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedSynonymsDto)
+  synonyms?: LocalizedSynonymsDto;
+}
+
+export class UpdateProductGroupDto {
+  @ApiPropertyOptional({ type: LocalizedTextDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name?: LocalizedTextDto;
+
+  @ApiPropertyOptional({ maxLength: 80 })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  slug?: string;
+
+  @ApiPropertyOptional({ enum: UnitOfMeasure })
+  @IsOptional()
+  @IsEnum(UnitOfMeasure)
+  referenceUnit?: UnitOfMeasure;
+
+  @ApiPropertyOptional({ type: LocalizedSynonymsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedSynonymsDto)
+  synonyms?: LocalizedSynonymsDto;
+}
+
+export class ListProductGroupsQueryDto extends CatalogListQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  query?: string;
 }

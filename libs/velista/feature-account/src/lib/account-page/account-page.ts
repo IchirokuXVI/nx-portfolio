@@ -33,6 +33,8 @@ import {
   appPath,
   BrowserFacade,
   InstallStore,
+  PageNavigation,
+  sheetSegments,
   VoicePreferences,
 } from '@portfolio/velista/platform';
 import {
@@ -120,6 +122,7 @@ export class AccountPage {
   private readonly _tokens = inject(TokenStore);
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -269,9 +272,7 @@ export class AccountPage {
 
   /** Back to the dashboard, which is where this screen is opened from. */
   async back(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'home')
-    );
+    await this._pages.back(appPath(this._locale(), this._basePath, 'home'));
   }
 
   /** The assistant (plan 0032), which is the one app bar button that works from here. */
@@ -313,13 +314,29 @@ export class AccountPage {
     );
   }
 
+  /**
+   * Where you shop (plan 0046).
+   *
+   * A **sibling page** rather than a child of this route, even though the path reads
+   * like one: this screen renders its sheets into an outlet at the bottom of its own
+   * scroll, so a child would be drawn under the account rows rather than instead of
+   * them. `navigateByUrl` and not a relative navigate, for the same reason.
+   */
+  async openProfiles(): Promise<void> {
+    await this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, 'account/profiles')
+    );
+  }
+
   /** The two sheets, as children of this route (rule E1). */
   openRename(): void {
-    void this._router.navigate(['name'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('name'), {
+      relativeTo: this._route,
+    });
   }
 
   openDelete(): void {
-    void this._router.navigate(['confirm', 'delete'], {
+    void this._router.navigate(sheetSegments('confirm', 'delete'), {
       relativeTo: this._route,
     });
   }

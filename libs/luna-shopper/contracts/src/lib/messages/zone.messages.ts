@@ -116,7 +116,12 @@ export interface ZoneListPreview {
   id: string;
   name: string;
   lineCount: number;
-  readyCount: number;
+  /**
+   * Lines the household wants right now (plan 0047, section 2.3). Renamed from
+   * `readyCount` with the count itself, so a card says how much is needed rather
+   * than how much of some past trip is done.
+   */
+  wantedCount: number;
 }
 
 /** A zone annotated with the caller's own membership (plan 0006, section 7). */

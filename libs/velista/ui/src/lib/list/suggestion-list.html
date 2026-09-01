@@ -1,0 +1,97 @@
+<!--
+  **No empty state, ever.** An absent list is the ordinary case for two characters, a
+  rare word, or a shop the catalog has not been taught, and "no matches" would be a
+  screen telling somebody their shopping list is wrong.
+
+  Nothing at all is drawn when there is nothing to offer, so a caller that also draws
+  the free text row keeps it reachable by way of its own control rather than through an
+  empty list.
+-->
+@if (suggestions().length > 0 || asWritten() !== null) {
+  <ul [attr.aria-label]="label() | rokuT" class="suggestions" role="listbox">
+    @for (suggestion of suggestions(); track $index) {
+      <li role="none">
+        <!--
+          `aria-selected="false"` on every row, always. Nothing here is ever selected:
+          choosing a suggestion **acts** rather than picking a value that stays picked,
+          so there is no selected state for the list to have. The attribute is still
+          required, and it is not a formality: without it a screen reader announces a
+          list of options with no way to say which one it is on.
+        -->
+        <button
+          (click)="chose.emit(suggestion)"
+          [class.group]="suggestion.kind === 'group'"
+          aria-selected="false"
+          class="suggestion"
+          role="option"
+          type="button"
+        >
+          <span aria-hidden="true" class="suggestion-glyph">
+            @if (suggestion.kind === 'group') {
+              <lib-basket-icon />
+            } @else {
+              <lib-product-icon />
+            }
+          </span>
+
+          <span class="suggestion-body">
+            <span class="suggestion-name">{{ nameOf(suggestion) }}</span>
+
+            @if (suggestion.kind === 'group') {
+              <!--
+                What choosing it will do, said before it is pressed. A group adds
+                several products at once, and a row that quietly did that would be a
+                surprise the first three times.
+              -->
+              <span class="suggestion-note">{{
+                'list.add.groupAdds' | rokuT: groupSummaryArgs(suggestion)
+              }}</span>
+            } @else if (suggestion.item.brand) {
+              <span class="suggestion-note">{{ suggestion.item.brand }}</span>
+            }
+          </span>
+
+          <!--
+            The word as well as the glyph and the tint. A group and an item are the one
+            distinction this list has to make, and it is made three ways because nobody
+            has been taught what a basket outline means here.
+          -->
+          @if (suggestion.kind === 'group') {
+            <span class="suggestion-badge">{{
+              'list.add.groupBadge' | rokuT
+            }}</span>
+          }
+        </button>
+      </li>
+    }
+
+    <!--
+      Free text, always reachable and never nagged, for the caller that has any. It is
+      the last row rather than a hint under the field, so choosing to ignore the catalog
+      is the same kind of gesture as choosing something from it.
+
+      Absent for a caller attaching a catalog product to an existing line, because there
+      is no such thing as attaching a product that is not in the catalog.
+    -->
+    @if (asWritten(); as typed) {
+      <li role="none">
+        <button
+          (click)="choseAsWritten.emit()"
+          aria-selected="false"
+          class="suggestion plain"
+          role="option"
+          type="button"
+        >
+          <span aria-hidden="true" class="suggestion-glyph">
+            <lib-plus-icon />
+          </span>
+          <span class="suggestion-body">
+            <span class="suggestion-name">{{
+              'list.add.asWritten' | rokuT: { text: typed }
+            }}</span>
+          </span>
+        </button>
+      </li>
+    }
+  </ul>
+}

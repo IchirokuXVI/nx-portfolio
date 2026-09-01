@@ -1,0 +1,378 @@
+<lib-sheet-shell
+  (dismiss)="close()"
+  [dismissible]="!busy()"
+  labelledBy="settle-title"
+>
+  <h2 class="title" id="settle-title">{{ title() }}</h2>
+
+  @switch (pane()) {
+    <!--
+      The whole outstanding amount in one tap, a number in two, and "they had
+      none" beside them. None of the three mentions a list: a guest is never
+      asked which household a tin of tomatoes belongs to.
+    -->
+    @case ('settle') {
+      <p class="outstanding">
+        {{ 'basket.line.outstanding' | rokuT: { count: outstanding() } }}
+      </p>
+
+      @if (productName(); as product) {
+        <div class="product">
+          <span class="product-name">{{ product }}</span>
+          <!--
+            Everybody may swap, guests included: the options are catalog products
+            and never zone data (backend 0051, section 6.1).
+          -->
+          @if (options().length > 1) {
+            <button
+              (click)="openPane('product')"
+              class="product-change"
+              type="button"
+            >
+              {{ 'basket.product.change' | rokuT }}
+            </button>
+          }
+        </div>
+      }
+
+      <div class="actions">
+        <button
+          (click)="settleAll()"
+          [disabled]="busy()"
+          class="primary"
+          type="button"
+        >
+          {{ 'basket.settle.all' | rokuT: { count: outstanding() } }}
+        </button>
+
+        @if (outstanding() > 1) {
+          <button
+            (click)="openPane('quantity')"
+            [disabled]="busy()"
+            class="secondary"
+            type="button"
+          >
+            {{ 'basket.settle.some' | rokuT }}
+          </button>
+        }
+
+        <!--
+          Only for a reader who holds WRITE on every source list. A control you
+          may not use is not drawn (section 4.1), and the server refuses an
+          allocation from anybody else regardless of what is on screen.
+        -->
+        @if (seesZoneData() && allocationRows().length > 1) {
+          <button
+            (click)="openPane('allocate')"
+            [disabled]="busy()"
+            class="secondary"
+            type="button"
+          >
+            {{ 'basket.allocate.open' | rokuT }}
+          </button>
+        }
+
+        <!--
+          Deliberately last and visually apart from the settle targets, which are
+          the ones a thumb reaches for: this closes the line without claiming
+          anything was bought (section 7).
+        -->
+        <button
+          (click)="settleNone()"
+          [disabled]="busy()"
+          class="quiet"
+          type="button"
+        >
+          {{ 'basket.settle.none' | rokuT }}
+        </button>
+      </div>
+
+      <!--
+        What happened to this line, for a reader entitled to it (plan 0049, section
+        1.1). Not drawn for a guest, who holds no account to authenticate the read
+        with, and not drawn for a participant who has lost WRITE: `canReadHistory`
+        follows `seesZoneData`, which is the server's answer on the last basket read.
+
+        Below the settle targets and outside the actions group, because it is a thing
+        to read rather than a thing to do, and the thumb reaching for the big button
+        must not find this one.
+      -->
+      @if (canReadHistory()) {
+        <button (click)="openPane('history')" class="link" type="button">
+          {{ 'basket.history.open' | rokuT }}
+        </button>
+      }
+    }
+
+    <!-- A number, and nothing about zones. -->
+    @case ('quantity') {
+      <p class="pane-title">{{ 'basket.settle.someTitle' | rokuT }}</p>
+
+      <!--
+        `spinbutton` rather than a number input: the value is bounded by what is
+        outstanding, and the two buttons beside it are the primary way in on a
+        phone. The keyboard path comes with the role.
+      -->
+      <div class="stepper">
+        <button
+          (click)="step(-1)"
+          [attr.aria-label]="'basket.settle.fewer' | rokuT"
+          [disabled]="typed() <= 1"
+          class="step"
+          type="button"
+        >
+          &minus;
+        </button>
+        <span
+          (keydown)="onKeydown($event)"
+          [attr.aria-label]="'basket.settle.quantity' | rokuT"
+          [attr.aria-valuemax]="outstanding()"
+          [attr.aria-valuemin]="1"
+          [attr.aria-valuenow]="typed()"
+          class="stepper-value"
+          role="spinbutton"
+          tabindex="0"
+        >
+          {{ typed() }}
+        </span>
+        <button
+          (click)="step(1)"
+          [attr.aria-label]="'basket.settle.more' | rokuT"
+          [disabled]="typed() >= outstanding()"
+          class="step"
+          type="button"
+        >
+          +
+        </button>
+      </div>
+
+      <div class="actions">
+        <button
+          (click)="settleSome()"
+          [disabled]="busy()"
+          class="primary"
+          type="button"
+        >
+          {{ 'basket.settle.submit' | rokuT }}
+        </button>
+        <button (click)="openPane('settle')" class="quiet" type="button">
+          {{ 'basket.settle.cancel' | rokuT }}
+        </button>
+      </div>
+    }
+
+    <!--
+      The options are the line's own set, and the default is marked. No price
+      anywhere: the pick is the first option added rather than the cheapest
+      (backend 0050), so a price or a "best price" badge would be a claim
+      nothing computes (section 9).
+    -->
+    @case ('product') {
+      <p class="pane-title">{{ 'basket.product.title' | rokuT }}</p>
+      <p class="hint">{{ 'basket.product.hint' | rokuT }}</p>
+
+      <ul class="options">
+        @for (option of options(); track option.id) {
+          <li>
+            <button
+              (click)="choose(option.id)"
+              [attr.aria-current]="option.chosen ? 'true' : null"
+              [disabled]="busy()"
+              class="option"
+              type="button"
+            >
+              <span class="option-name">{{ option.name }}</span>
+              @if (option.brand) {
+                <span class="option-brand">{{ option.brand }}</span>
+              }
+              @if (option.chosen) {
+                <span class="option-chosen">
+                  {{ 'basket.product.current' | rokuT }}
+                </span>
+              }
+            </button>
+          </li>
+        }
+      </ul>
+
+      <button (click)="openPane('settle')" class="quiet" type="button">
+        {{ 'basket.settle.cancel' | rokuT }}
+      </button>
+    }
+
+    <!--
+      The same act done precisely, and the only pane that names a list. Drawn
+      only for a reader who passes the all or nothing rule.
+    -->
+    @case ('allocate') {
+      <p class="pane-title">
+        {{
+          'basket.allocate.title' | rokuT: { name: title(), count: allocated() }
+        }}
+      </p>
+      <p class="hint">{{ 'basket.allocate.hint' | rokuT }}</p>
+
+      <ul class="allocation">
+        @for (row of allocationRows(); track row.listId) {
+          <li class="allocation-row">
+            <span class="allocation-label">
+              <!--
+                Named, so "two for us, one for my parents" can actually be said.
+                A reader who reaches this pane passes the all or nothing rule, so
+                the names are theirs to see by construction.
+              -->
+              @if (row.name) {
+                <span class="allocation-name">{{ row.name }}</span>
+              }
+              <span class="allocation-wanted">
+                {{ 'basket.allocate.wanted' | rokuT: { count: row.wanted } }}
+              </span>
+            </span>
+            <input
+              (input)="setAllocation(row.listId, +$any($event.target).value)"
+              [attr.aria-label]="
+                row.name ||
+                ('basket.allocate.wanted' | rokuT: { count: row.wanted })
+              "
+              [max]="row.wanted"
+              [value]="allocation().get(row.listId) ?? 0"
+              class="allocation-field"
+              min="0"
+              type="number"
+            />
+          </li>
+        }
+      </ul>
+
+      <!--
+        Announced as it changes, so somebody cannot silently allocate more than
+        they bought (section 7).
+      -->
+      <p aria-live="polite" class="allocation-total" role="status">
+        {{ 'basket.allocate.total' | rokuT }}:
+        {{
+          'basket.allocate.totalValue'
+            | rokuT: { allocated: allocated(), total: outstanding() }
+        }}
+      </p>
+      @if (allocated() > outstanding()) {
+        <p class="failed">{{ 'basket.allocate.over' | rokuT }}</p>
+      }
+
+      <div class="actions">
+        <button
+          (click)="settleAllocated()"
+          [disabled]="busy() || allocated() <= 0 || allocated() > outstanding()"
+          class="primary"
+          type="button"
+        >
+          {{ 'basket.allocate.submit' | rokuT }}
+        </button>
+        <button (click)="openPane('settle')" class="quiet" type="button">
+          {{ 'basket.allocate.cancel' | rokuT }}
+        </button>
+      </div>
+    }
+
+    <!--
+      What happened to this line and in what order (plan 0049, section 1.1).
+
+      The row says who last touched it; this says what everybody did, which is the
+      question after a trip where two people bought against one line. Every row is this
+      one line by construction, across however many households it was composed from, so
+      no row names a list: the pane is about the line and not about where it came from.
+    -->
+    @case ('history') {
+      <p class="pane-title">{{ 'basket.history.title' | rokuT }}</p>
+
+      @switch (historyState()) {
+        @case ('failed') {
+          <p class="failed">{{ 'basket.history.failed' | rokuT }}</p>
+          <button (click)="retryHistory()" class="secondary" type="button">
+            {{ 'basket.history.retry' | rokuT }}
+          </button>
+        }
+
+        @case ('loaded') {
+          @if (history().length === 0) {
+            <p class="hint">{{ 'basket.history.empty' | rokuT }}</p>
+          } @else {
+            <ul class="history">
+              @for (row of history(); track row.id) {
+                <li class="history-row">
+                  <!--
+                    "They had none" is a different sentence from "got 2", not a
+                    quantity of zero: NOT_AVAILABLE closes the outstanding amount
+                    without buying anything, and a row that said "got 0" would be
+                    reporting a purchase that never happened.
+                  -->
+                  <span class="history-what">
+                    @if (row.outcome === 'BOUGHT') {
+                      {{
+                        'basket.history.bought'
+                          | rokuT
+                            : {
+                                who: row.mine
+                                  ? ('basket.history.you' | rokuT)
+                                  : row.who ||
+                                    ('basket.history.someone' | rokuT),
+                                count: row.quantity,
+                              }
+                      }}
+                    } @else {
+                      {{
+                        'basket.history.none'
+                          | rokuT
+                            : {
+                                who: row.mine
+                                  ? ('basket.history.you' | rokuT)
+                                  : row.who ||
+                                    ('basket.history.someone' | rokuT),
+                              }
+                      }}
+                    }
+                  </span>
+                  <span class="history-when">{{ row.when }}</span>
+                </li>
+              }
+            </ul>
+
+            @if (historyHasMore()) {
+              <button (click)="moreHistory()" class="quiet" type="button">
+                {{ 'basket.history.more' | rokuT }}
+              </button>
+            }
+          }
+        }
+
+        @default {
+          <p class="hint">{{ 'basket.history.loading' | rokuT }}</p>
+        }
+      }
+
+      <button (click)="openPane('settle')" class="quiet" type="button">
+        {{ 'basket.history.close' | rokuT }}
+      </button>
+    }
+  }
+
+  @if (failed()) {
+    <p aria-live="assertive" class="failed" role="alert">
+      {{ 'basket.settle.failed' | rokuT }}
+    </p>
+  }
+
+  <!--
+    A partial settle is a real outcome and has to be reported: a shopper who has
+    bought the thing must not be told the whole act failed, and must not be left
+    thinking every household got its share (backend 0051, section 6.4).
+  -->
+  @if (missed(); as report) {
+    <p aria-live="polite" class="missed" role="status">
+      {{ report }}
+      <button (click)="close()" class="quiet" type="button">
+        {{ 'basket.people.close' | rokuT }}
+      </button>
+    </p>
+  }
+</lib-sheet-shell>

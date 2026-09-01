@@ -66,7 +66,7 @@ function header(overrides: Partial<ListHeaderVm> = {}): ListHeaderVm {
   return {
     listName: 'Weekly shop',
     zoneName: 'Flat 3B',
-    readyCount: 0,
+    wantedCount: 0,
     lineCount: 0,
     viewers: [],
     live: true,
@@ -85,7 +85,7 @@ describe('an empty list says so, and an unknown one says nothing', () => {
 
     it('reads "list is empty" at zero lines', async () => {
       const fixture = await renderCard([
-        listRow({ lineCount: 0, readyCount: 0 }),
+        listRow({ lineCount: 0, wantedCount: 0 }),
       ]);
 
       expect(text(fixture, '.list-progress')).toEqual(['list.empty.short']);
@@ -93,7 +93,7 @@ describe('an empty list says so, and an unknown one says nothing', () => {
 
     it('reads the progress when there is something to be through', async () => {
       const fixture = await renderCard([
-        listRow({ lineCount: 12, readyCount: 7 }),
+        listRow({ lineCount: 12, wantedCount: 7 }),
       ]);
 
       expect(text(fixture, '.list-progress')).toEqual(['home.progress.ready']);
@@ -116,14 +116,14 @@ describe('an empty list says so, and an unknown one says nothing', () => {
     }
 
     it('reads "list is empty" at zero lines', async () => {
-      const fixture = await renderRow(listRow({ lineCount: 0, readyCount: 0 }));
+      const fixture = await renderRow(listRow({ lineCount: 0, wantedCount: 0 }));
 
       expect(text(fixture, '.meta')).toEqual(['list.empty.short']);
     });
 
     it('reads the progress when there is something to be through', async () => {
       const fixture = await renderRow(
-        listRow({ lineCount: 12, readyCount: 7 })
+        listRow({ lineCount: 12, wantedCount: 7 })
       );
 
       expect(text(fixture, '.meta')).toEqual(['home.progress.ready']);
@@ -154,7 +154,7 @@ describe('an empty list says so, and an unknown one says nothing', () => {
 
     it('reads the progress and draws the bar once there are lines', async () => {
       const fixture = await renderHeader(
-        header({ lineCount: 12, readyCount: 7 })
+        header({ lineCount: 12, wantedCount: 7 })
       );
 
       expect(text(fixture, '.progress-line')).toEqual(['list.header.ready']);

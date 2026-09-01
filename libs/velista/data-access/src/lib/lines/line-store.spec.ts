@@ -22,10 +22,13 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
     listId: LIST,
     content: 'Sourdough loaf',
     quantity: 1,
-    itemId: null,
+    itemIds: [],
     position: 1,
     approvalStatus: 'APPROVED',
-    status: 'PENDING',
+    boughtCount: 0,
+    lastSettlementOutcome: null,
+    claimed: false,
+    claimedByUserId: null,
     createdByUserId: ME,
     approvedByUserId: ME,
     version: 1,
@@ -97,8 +100,38 @@ function service(seed: readonly Line[]) {
       ),
     updateLine: async (lineId, changes) =>
       answer(line(lineId, { ...changes, version: 2 })),
-    setStatus: async (lineId, status) =>
-      answer(line(lineId, { status, version: 2 })),
+    addQuantity: async (lineId, delta) =>
+      answer(line(lineId, { quantity: 1 + delta, version: 2 })),
+    settle: async (lineId, outcome, options) => {
+      // Awaited, and that matters: `answer` is what `failNext` throws from, and an
+      // unawaited rejection here takes the whole jest worker down rather than failing
+      // the one spec that staged it.
+      const settled = await answer(
+        line(lineId, {
+          quantity: outcome === 'BOUGHT' ? 0 : 1,
+          boughtCount: outcome === 'BOUGHT' ? 1 : 0,
+          lastSettlementOutcome: outcome,
+          version: 2,
+        })
+      );
+      return {
+        line: settled,
+        settlement: {
+          id: 's1',
+          lineId,
+          listId: LIST,
+          itemId: options?.itemId ?? null,
+          outcome,
+          quantity: outcome === 'BOUGHT' ? (options?.quantity ?? 1) : 0,
+          settledByUserId: ME,
+          settledAt: new Date('2026-09-01T10:00:00.000Z'),
+        },
+      };
+    },
+    listSettlements: async () => ({ items: [], nextCursor: null }),
+    listItemSettlements: async () => ({ items: [], nextCursor: null }),
+    // Nothing in this file draws the "also on" indicator; the store does not hold it.
+    listsHoldingItem: async () => ({ places: [], hasMore: false }),
     setApproval: async (lineId, approvalStatus) =>
       answer(line(lineId, { approvalStatus, version: 2 })),
     reorder: async () => {
@@ -346,15 +379,34 @@ describe('LineStore', () => {
     });
   });
 
-  describe('ticking a line off (section 3.3)', () => {
+  /**
+   * The reel's write (velista plan 0043, section 4.1), which replaced ticking off.
+   *
+   * The three endings are the same three `0012` gave the tick, because they are
+   * `Mutations.run`'s and not the gesture's. What is new is the **shape of the write**:
+   * the row shows the snapped number at once while the request carries a signed delta,
+   * and those are two answers to two different problems.
+   */
+  describe('moving a quantity (section 4.1)', () => {
     it('changes the row before the request resolves', async () => {
-      const { store } = await build([line('a')]);
+      const { store } = await build([line('a', { quantity: 2 })]);
       await store.load(LIST);
 
-      const writing = store.setStatus('a', 'READY');
+      const writing = store.addQuantity('a', 3);
 
-      expect(store.linesIn(LIST)[0].status).toBe('READY');
+      expect(store.linesIn(LIST)[0].quantity).toBe(5);
       expect(store.writeNoteOf('a')?.outcome).toBe('pending');
+
+      await writing;
+    });
+
+    it('floors the optimistic number at zero rather than going negative', async () => {
+      const { store } = await build([line('a', { quantity: 2 })]);
+      await store.load(LIST);
+
+      const writing = store.addQuantity('a', -9);
+
+      expect(store.linesIn(LIST)[0].quantity).toBe(0);
 
       await writing;
     });
@@ -363,21 +415,33 @@ describe('LineStore', () => {
       const { store } = await build([line('a')]);
       await store.load(LIST);
 
-      const outcome = await store.setStatus('a', 'READY');
+      const outcome = await store.addQuantity('a', 1);
 
       expect(outcome).toBe('succeeded');
       expect(store.writeNoteOf('a')).toBeNull();
     });
 
+    it('sends nothing for a delta of zero', async () => {
+      // A gesture that ended where it began is not an adjustment, and a delta of zero
+      // is a 400 at the gateway.
+      const { store } = await build([line('a')]);
+      await store.load(LIST);
+
+      expect(await store.addQuantity('a', 0)).toBe('failed');
+      expect(store.writeNoteOf('a')).toBeNull();
+    });
+
     it('snaps the row back and leaves an inline note when it fails', async () => {
-      const { store, lines } = await build([line('a', { status: 'PENDING' })]);
+      const { store, lines } = await build([line('a', { quantity: 2 })]);
       await store.load(LIST);
       lines.failNext(new Error('offline'));
 
-      const outcome = await store.setStatus('a', 'READY');
+      const outcome = await store.addQuantity('a', 3);
 
       expect(outcome).toBe('failed');
-      expect(store.linesIn(LIST)[0].status).toBe('PENDING');
+      // Back to what it was **before this adjustment**, and not the negation of the
+      // delta: somebody else's may have landed while ours was out.
+      expect(store.linesIn(LIST)[0].quantity).toBe(2);
       expect(store.writeNoteOf('a')?.outcome).toBe('failed');
     });
 
@@ -385,9 +449,9 @@ describe('LineStore', () => {
       const { store, lines } = await build([line('a', { version: 1 })]);
       await store.load(LIST);
       // Version 3 off a base of 1: somebody else's change landed in between.
-      lines.answerNext(line('a', { status: 'READY', version: 3 }));
+      lines.answerNext(line('a', { quantity: 9, version: 3 }));
 
-      const outcome = await store.setStatus('a', 'READY');
+      const outcome = await store.addQuantity('a', 1);
 
       expect(outcome).toBe('overwritten');
       expect(store.writeNoteOf('a')?.outcome).toBe('overwritten');
@@ -398,9 +462,56 @@ describe('LineStore', () => {
       await store.load(LIST);
       lines.answerNext(line('a', { content: 'Theirs', version: 3 }));
 
-      await store.setStatus('a', 'READY');
+      await store.addQuantity('a', 1);
 
       expect(store.linesIn(LIST)[0].content).toBe('Theirs');
+    });
+  });
+
+  /**
+   * Settling, which is **not** optimistic and is the one deliberate exception on this
+   * screen (section 5.2).
+   *
+   * Every other write here is a gesture whose result the person already knows. This
+   * one's result is a derivation the server performs over history the client does not
+   * hold, so guessing it to save a round trip on a gesture made once per shop would be
+   * optimism spent in the wrong place.
+   */
+  describe('settling a line (section 5.2)', () => {
+    it('takes the server’s line and its moved indicators', async () => {
+      const { store } = await build([line('a', { quantity: 2 })]);
+      await store.load(LIST);
+
+      const result = await store.settle('a', 'BOUGHT', { quantity: 2 });
+
+      expect(result.state).toBe('settled');
+      expect(store.linesIn(LIST)[0].quantity).toBe(0);
+      expect(store.linesIn(LIST)[0].boughtCount).toBe(1);
+      expect(store.linesIn(LIST)[0].lastSettlementOutcome).toBe('BOUGHT');
+    });
+
+    it('does not move the row before the server answers', async () => {
+      const { store } = await build([line('a', { quantity: 2 })]);
+      await store.load(LIST);
+
+      const settling = store.settle('a', 'BOUGHT', { quantity: 2 });
+
+      expect(store.linesIn(LIST)[0].quantity).toBe(2);
+      expect(store.writeNoteOf('a')?.outcome).toBe('pending');
+
+      await settling;
+    });
+
+    it('leaves a note and moves nothing when it fails', async () => {
+      const { store, lines } = await build([line('a', { quantity: 2 })]);
+      await store.load(LIST);
+      lines.failNext(new Error('offline'));
+
+      const result = await store.settle('a', 'BOUGHT', { quantity: 2 });
+
+      expect(result.state).toBe('failed');
+      expect(store.linesIn(LIST)[0].quantity).toBe(2);
+      expect(store.writeNoteOf('a')?.outcome).toBe('failed');
     });
   });
 
@@ -634,6 +745,91 @@ describe('LineStore', () => {
 
       expect(outcome.state).toBe('failed');
       expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['a', 'b']);
+    });
+  });
+
+  /**
+   * The third indicator (backend plan 0052).
+   *
+   * Two halves, and the second is the one plan 0051 did not answer: the event moves
+   * it for a client that is watching, and the **read** carries it for one that was
+   * asleep in a pocket while somebody generated a basket. An indicator that is right
+   * only for whoever happened to be connected is worse than absent.
+   */
+  describe('who is out buying it (backend plan 0052)', () => {
+    it('reads the claim off the line rather than waiting for an event', async () => {
+      const { store } = await build([
+        line('a', { claimed: true, claimedByUserId: 'user-ana' }),
+      ]);
+
+      await store.load(LIST);
+
+      expect(store.claimOf('a')).toBe('user-ana');
+    });
+
+    it('marks every line one event names, because a run claims them together', async () => {
+      // One event per zone rather than one per line (backend plan 0052, section
+      // 3.1): a run takes every wanted line of every list it drew from.
+      const { store, realtime } = await build([line('a'), line('b')]);
+      await store.load(LIST);
+
+      realtime.emit('line.claimChanged', {
+        zoneId: 'zone-1',
+        claimed: true,
+        claimedByUserId: 'user-ana',
+        lines: [
+          { lineId: 'a', listId: LIST },
+          { lineId: 'b', listId: LIST },
+        ],
+      });
+
+      expect(store.claimOf('a')).toBe('user-ana');
+      expect(store.claimOf('b')).toBe('user-ana');
+    });
+
+    it('lets go when the trip is over', async () => {
+      const { store, realtime } = await build([
+        line('a', { claimed: true, claimedByUserId: 'user-ana' }),
+      ]);
+      await store.load(LIST);
+
+      realtime.emit('line.claimChanged', {
+        zoneId: 'zone-1',
+        claimed: false,
+        claimedByUserId: null,
+        lines: [{ lineId: 'a', listId: LIST }],
+      });
+
+      expect(store.claimOf('a')).toBeNull();
+    });
+
+    it('names nobody for a claim whose owner has left the zone', async () => {
+      // Section 6: the line still reads as claimed and there is no name to put on
+      // it, so the map that holds names has no entry.
+      const { store } = await build([
+        line('a', { claimed: true, claimedByUserId: null }),
+      ]);
+
+      await store.load(LIST);
+
+      expect(store.claimOf('a')).toBeNull();
+      expect(store.linesIn(LIST)[0].claimed).toBe(true);
+    });
+
+    it('ignores a line it has never loaded', async () => {
+      // There is no row to mark, and the read that eventually brings the line in
+      // carries the claim with it.
+      const { store, realtime } = await build([line('a')]);
+      await store.load(LIST);
+
+      realtime.emit('line.claimChanged', {
+        zoneId: 'zone-1',
+        claimed: true,
+        claimedByUserId: 'user-ana',
+        lines: [{ lineId: 'never-seen', listId: LIST }],
+      });
+
+      expect(store.claims().size).toBe(0);
     });
   });
 });

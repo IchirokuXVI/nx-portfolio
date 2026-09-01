@@ -3,6 +3,7 @@
 // helpers.
 
 export {
+  ApiComposedResponse,
   ApiContractResponse,
   type ContractResponseOptions,
 } from './api-contract-response.decorator';
@@ -20,6 +21,7 @@ export {
 export {
   componentNameFor,
   componentRef,
+  hoistContractSchema,
   hoistPlatformStats,
   openApiComponents,
   toOpenApiSchema,

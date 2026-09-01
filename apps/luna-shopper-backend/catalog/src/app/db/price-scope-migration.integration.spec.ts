@@ -69,10 +69,25 @@ describeIntegration('price scope migration (real Postgres)', () => {
     }
   });
 
+  /**
+   * Back to the baseline schema, whatever has been added since.
+   *
+   * It used to be one `undoLastMigration()`, which was the same thing while
+   * exactly two migrations existed and stopped being it the moment plan 0048
+   * added a third: the single undo then left the schema **at** 0038 rather than
+   * before it, and the pre-migration rows this file seeds no longer fit. Counting
+   * the migrations keeps that from being a trap for the next plan too.
+   */
+  async function migrateDownToBaseline(): Promise<void> {
+    for (let i = 1; i < CATALOG_MIGRATIONS.length; i += 1) {
+      await dataSource.undoLastMigration();
+    }
+  }
+
   it('carries every pre-migration price across to a STORE scope unchanged', async () => {
     // 1. The world as it was: the baseline schema only.
     await dataSource.runMigrations();
-    await dataSource.undoLastMigration();
+    await migrateDownToBaseline();
 
     // 2. Two stores of one chain, each with its own price for the same item and
     //    its own aisle. This is exactly the twelve-identical-rows shape the scope
@@ -161,7 +176,7 @@ describeIntegration('price scope migration (real Postgres)', () => {
   it('reverses cleanly, putting the prices back on their stores', async () => {
     // Forward, back, forward. A down migration after a real harvest is not a
     // routine operation, but one that leaves the schema unusable is a trap.
-    await dataSource.undoLastMigration();
+    await migrateDownToBaseline();
 
     const columns = await dataSource.query(
       `SELECT column_name FROM information_schema.columns

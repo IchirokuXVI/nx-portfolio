@@ -10,24 +10,14 @@
 @if (listening()) {
   <div class="listening">
     <!--
-      Trash first, and as far from stop as the row allows, which is `RecordingRow`'s
-      rule kept here: they are the only two controls on screen and confusing them
-      costs the whole recording. Coral, because it is the control that destroys
-      something, and never colour alone since it is also the only bin glyph here.
+      Stop at the leading end and the bin at the trailing one, with the meter taking
+      every pixel between them (plan 0042, section 6). They are the only two controls
+      on screen and confusing them costs the whole recording, so the distance is the
+      safeguard.
 
-      It is the exit that always exits. Without it a recording had one way out, which
-      was to be sent, so somebody who pressed the microphone by accident had to say
-      something to the whole list before they could withdraw it.
+      DOM order is the visual order, so nothing is moved with `order` and the reading
+      order agrees with what is on screen.
     -->
-    <button
-      (click)="discard()"
-      [attr.aria-label]="'list.add.discard' | rokuT"
-      class="discard"
-      type="button"
-    >
-      <lib-trash-icon class="send-glyph" />
-    </button>
-
     <button
       (click)="stop()"
       [attr.aria-label]="'list.add.stopListening' | rokuT"
@@ -58,8 +48,51 @@
     } @else {
       <p class="hint">{{ 'list.add.listening' | rokuT }}</p>
     }
+
+    <!--
+      Last, and pushed to the far end of the row. It is the exit that always exits:
+      without it a recording had one way out, which was to be sent, so somebody who
+      pressed the microphone by accident had to say something to the whole list before
+      they could withdraw it.
+
+      It gets the deliberate reach rather than stop, and section 6.3 is why: stop is
+      pressed once at the end of a sentence, while somebody is looking at the screen,
+      and the bin is the one that gets pressed by accident. The control that costs a
+      recording is the one that should be hard to hit.
+
+      Coral, because it is the control that destroys something, and never colour alone
+      since it is also the only bin glyph here.
+    -->
+    <button
+      (click)="discard()"
+      [attr.aria-label]="'list.add.discard' | rokuT"
+      class="discard"
+      type="button"
+    >
+      <lib-trash-icon class="send-glyph" />
+    </button>
   </div>
 } @else {
+  <!--
+    The suggestions, above the field and below nothing (plan 0043, section 6).
+
+    Above, because the keyboard is under the field and a list drawn beneath it would be
+    behind the keys on every phone. Nearest the field first would be the reverse of the
+    server's ranking, so the order is kept and the whole block sits above: a group is
+    the top row and it is the row closest to what somebody typed.
+
+    **No empty state, ever.** An absent list is the ordinary case for two characters, a
+    rare word, or a shop the catalog has not been taught, and "no matches" would be a
+    screen telling somebody their shopping list is wrong. The free text row below is
+    always the last one, so there is always something to press.
+  -->
+  <lib-suggestion-list
+    (chose)="choose($event)"
+    (choseAsWritten)="submit()"
+    [asWritten]="canSubmit() ? content() : null"
+    [suggestions]="suggestions()"
+  />
+
   <!--
   A form, so Enter on the field submits without a keydown handler and the phone's
   keyboard offers a Go key rather than a newline.

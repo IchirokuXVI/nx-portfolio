@@ -122,7 +122,8 @@ export class AssistantStore {
         speaker: 'bot',
         text: '',
         kind: 'tooLong',
-        references: [],
+        link: null,
+        choices: [],
       });
       return;
     }
@@ -132,7 +133,8 @@ export class AssistantStore {
         speaker: 'bot',
         text: '',
         kind: 'badFormat',
-        references: [],
+        link: null,
+        choices: [],
       });
       return;
     }
@@ -166,7 +168,8 @@ export class AssistantStore {
       speaker: 'caller',
       text: pending.text,
       kind: pending.kind,
-      references: [],
+      link: null,
+      choices: [],
     });
 
     this._busy.set(true);
@@ -178,7 +181,8 @@ export class AssistantStore {
         speaker: 'bot',
         text: reply.text,
         kind: 'said',
-        references: reply.references,
+        link: reply.link,
+        choices: reply.choices,
       });
     } catch (failure) {
       // The caller's message stays in the column whatever went wrong. It is what they
@@ -253,7 +257,8 @@ export class AssistantStore {
         id: `drop-${this._nextId++}`,
         speaker: 'bot',
         text: '',
-        references: [],
+        link: null,
+        choices: [],
         kind: 'dropped',
       },
       ...kept.slice(from),
@@ -275,7 +280,8 @@ export class AssistantStore {
         speaker: 'bot',
         text: '',
         kind: 'throttled',
-        references: [],
+        link: null,
+        choices: [],
         retryAfterSeconds: failure.retryAfterSeconds,
       });
       this._startCountdown(failure.retryAfterSeconds);
@@ -290,7 +296,8 @@ export class AssistantStore {
         speaker: 'bot',
         text: '',
         kind: 'unconfigured',
-        references: [],
+        link: null,
+        choices: [],
       });
       return;
     }
@@ -302,7 +309,8 @@ export class AssistantStore {
       speaker: 'bot',
       text: '',
       kind: 'failed',
-      references: [],
+      link: null,
+      choices: [],
     });
   }
 

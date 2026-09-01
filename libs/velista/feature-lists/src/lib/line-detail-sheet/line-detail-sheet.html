@@ -1,0 +1,227 @@
+<lib-sheet-shell (dismiss)="dismiss()" labelledBy="line-detail-title">
+  @if (detail(); as line) {
+    @if (step() === 'summary') {
+      <!--
+        The header: what it is, what it stands for, and how many are wanted. The
+        quantity sits here exactly as it does on the row, so opening a line does not
+        change what the number means.
+      -->
+      <div class="head">
+        <div class="head-text">
+          <h2 #title class="title" id="line-detail-title" tabindex="-1">
+            {{ line.content }}
+          </h2>
+          <p class="products">
+            {{ line.productsKey | rokuT: line.productsArgs }}
+          </p>
+
+          <!--
+            The names could not be read, which is **not** the line being empty (section
+            1.2). The phrase above still gives the count, because the count is a fact
+            about the line and is known; this is a fact about the request.
+          -->
+          @if (line.namesUnavailable) {
+            <p class="names-failed">{{ 'list.detail.namesFailed' | rokuT }}</p>
+          }
+
+          <!--
+            The same indicators the row carries, from the same function (section 5).
+            The sheet opens from that row, and a row showing "bought" over a header
+            showing nothing is two answers to one question a tap apart.
+          -->
+          @if (line.indicators.length > 0) {
+            <p class="indicators">
+              @for (indicator of line.indicators; track indicator) {
+                <span [class]="'indicator indicator-' + indicator">
+                  @switch (indicator) {
+                    @case ('bought') {
+                      {{ 'line.indicator.bought' | rokuT }}
+                    }
+                    @case ('notAvailable') {
+                      {{ 'line.indicator.notAvailable' | rokuT }}
+                    }
+                    @case ('claimed') {
+                      @if (line.claimedBy; as who) {
+                        {{ 'line.indicator.claimedBy' | rokuT: { name: who } }}
+                      } @else {
+                        {{ 'line.indicator.claimed' | rokuT }}
+                      }
+                    }
+                  }
+                </span>
+              }
+            </p>
+          }
+        </div>
+
+        <span aria-hidden="true" class="quantity">{{ line.quantity }}</span>
+      </div>
+
+      <!--
+        The two facts you have while standing in the kitchen. Each row is absent rather
+        than empty when there is nothing to say: "last bought: never" is a sentence
+        about an absence, and the estimate is **absent below three purchases** because
+        two of them define one interval, which is a coincidence and not a rate
+        (backend plan 0047, section 6.3).
+      -->
+      <dl class="facts">
+        @if (line.lastPurchase; as bought) {
+          <div class="fact">
+            <dt class="fact-label">{{ 'list.detail.lastBought' | rokuT }}</dt>
+            <dd class="fact-value">
+              {{
+                'list.detail.lastBoughtValue'
+                  | rokuT: { when: bought.when, count: bought.quantity }
+              }}
+            </dd>
+          </div>
+        }
+
+        @if (line.estimate; as estimate) {
+          <div class="fact">
+            <dt class="fact-label">{{ 'list.detail.rate' | rokuT }}</dt>
+            <!--
+              Three to six purchases give the phrase, seven and up give the number
+              (section 5). A median over three intervals is a number with no business
+              being one, and the copy for saying so already existed and was read by
+              nothing.
+            -->
+            <dd class="fact-value">
+              @if (estimate.rough) {
+                {{ 'list.detail.rateRough' | rokuT }}
+              } @else {
+                {{
+                  'list.detail.rateValue' | rokuT: { days: estimate.medianDays }
+                }}
+              }
+            </dd>
+          </div>
+        }
+      </dl>
+
+      @if (errorKey(); as key) {
+        <p class="error" role="alert">{{ key | rokuT }}</p>
+      }
+
+      <!--
+        The two things you say after a shop, and they carry the same weight for the
+        same reason (section 5.2). Absent rather than disabled for a caller who may not
+        decide: a disabled pair at the bottom of a sheet is an invitation that does not
+        work, and the reader still gets the history above it, which is what they came
+        for.
+      -->
+      @if (line.canSettle) {
+        <div class="actions">
+          <button
+            (click)="startBought()"
+            [disabled]="line.busy"
+            class="primary"
+            type="button"
+          >
+            {{ 'list.detail.bought' | rokuT }}
+          </button>
+
+          <button
+            (click)="recordNotAvailable()"
+            [disabled]="line.busy"
+            class="secondary"
+            type="button"
+          >
+            {{ 'list.detail.notAvailable' | rokuT }}
+          </button>
+        </div>
+      }
+
+      <div class="through">
+        <button (click)="openPage()" class="link" type="button">
+          {{ 'list.detail.everything' | rokuT }}
+        </button>
+      </div>
+    } @else {
+      <!--
+        The how many step. One question, prefilled with the whole outstanding quantity,
+        because buying everything you asked for is the ordinary case and retyping a
+        number you already know is friction.
+      -->
+      <h2 #title class="title" id="line-detail-title" tabindex="-1">
+        {{ line.content }}
+      </h2>
+
+      <div class="step">
+        <span class="step-label" id="how-many-label">
+          {{ 'list.detail.howMany' | rokuT }}
+        </span>
+
+        <div class="step-row">
+          <lib-quantity-stepper [(value)]="howMany" [disabled]="line.busy" />
+          <p class="step-note">{{ 'list.detail.howManyNote' | rokuT }}</p>
+        </div>
+      </div>
+
+      <!--
+        Which one, on a line carrying more than one product, preselected with the last
+        one bought (backend plan 0047, section 3.2). A line with one product asks
+        nothing: the server copies the only one it has.
+      -->
+      @if (line.choices.length > 0) {
+        <div class="step">
+          <span class="step-label" id="which-one-label">
+            {{ 'list.detail.whichOne' | rokuT }}
+          </span>
+
+          <div
+            aria-labelledby="which-one-label"
+            class="choices"
+            role="radiogroup"
+          >
+            @for (choice of line.choices; track choice.itemId) {
+              <button
+                (click)="chooseItem(choice.itemId)"
+                [attr.aria-checked]="chosenItemId() === choice.itemId"
+                [class.chosen]="chosenItemId() === choice.itemId"
+                [disabled]="line.busy"
+                class="choice"
+                role="radio"
+                type="button"
+              >
+                <!--
+                  A product with no name is drawn as **unnamed**, never as "No products
+                  yet" (section 1.2): it is one of the products this line carries, it is
+                  on screen being offered as a choice, and saying the line has none of
+                  them under a row that is one of them is the defect this plan is about.
+                -->
+                <span class="choice-name">{{
+                  choice.name ?? ('list.detail.unnamedProduct' | rokuT)
+                }}</span>
+                @if (choice.brand) {
+                  <span class="choice-brand">{{ choice.brand }}</span>
+                }
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      @if (errorKey(); as key) {
+        <p class="error" role="alert">{{ key | rokuT }}</p>
+      }
+
+      <div class="actions">
+        <button
+          (click)="recordBought()"
+          [disabled]="line.busy"
+          class="primary"
+          type="button"
+        >
+          {{ 'list.detail.record' | rokuT }}
+        </button>
+
+        <div class="through">
+          <button (click)="cancelStep()" class="link" type="button">
+            {{ 'list.detail.cancel' | rokuT }}
+          </button>
+        </div>
+      </div>
+    }
+  }
+</lib-sheet-shell>

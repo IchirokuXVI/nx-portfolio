@@ -125,6 +125,28 @@ Two consequences worth knowing before editing a route table:
 
 In the shell's `app.routes.ts`, **every mounted app comes before the empty-path `landingV2` entry**; an empty-path route with `loadChildren` is not terminal and would otherwise swallow its siblings. `app.routes.spec.ts` asserts it.
 
+### Sheets are addressed under a `sheet` segment (velista)
+
+**`<the covered page's URL>/sheet/<what the sheet is about>`.** A sheet in velista is a child route by rule E1, so it has a URL, and this is that URL's shape: `…/lists/:listId/sheet/lines/:lineId/edit`, `…/zones/:zoneId/sheet/lists/new`, `…/account/sheet/name`.
+
+The marker sits **immediately after the page being covered** and nowhere else. That placement is the rule, not a detail of it: a page's URL is unique, so stamping the marker straight after it gives every page a sheet namespace no other page can reach into. Moving it rightward, after the resource the sheet addresses, shifts two colliding URLs by the same amount and leaves them colliding.
+
+It exists because pages and sheets used to share one namespace. The list page's line sheets sit below `lines/:lineId`, which is also the **line page's** URL, so `lines/:lineId/confirm/delete` was declared over both screens, resolved to whichever route was declared first, and deleting a line from a row on the list drew the confirmation over the line page instead of the list. Its siblings worked only because the line page had no children by those names.
+
+Two rules follow from it:
+
+- **Never write the segment by hand.** `sheet()` in `libs/velista/feature-shell/src/lib/routes.ts` stamps it, along with `sheetFallGuard`, so the table declares what a sheet is _about_ and cannot declare one that opts out. Callers opening a sheet use `sheetSegments()` from `@portfolio/velista/platform`; `SHEET_SEGMENT` is there too, for the rare absolute URL.
+- **No page may take a `sheet` segment**, or a sheet over it could collide with a sheet over its parent again. `routes.spec.ts` asserts both directions: every route carrying the fall guard is addressed under the marker, nothing else is, and no page's path contains it.
+
+### Going back never leaves the app (velista)
+
+**A back control pops the history, and every one of them names a fallback URL it navigates to instead when popping would not be safe.** `PageNavigation.back(fallbackUrl)` for a page's top left chevron, `SheetNavigation.dismiss(fallbackUrl)` for a sheet's cancel, its scrim and Escape. Both arguments are required, and nothing else in velista may call `Location.back()`: `no-unguarded-history-back.spec.ts` scans the whole scope and the app for a `.back()` with no arguments and names any file that has one.
+
+Popping is only safe onto an entry **this document pushed**. Below the entry a tab loaded on sits whichever site sent the link, so a raw pop from a shared link or a reload leaves velista entirely, from a chevron that promises one screen up. `AppHistory` (`libs/velista/platform`) is what answers that question, and `app-providers.ts` starts it with `watch()` in an environment initializer, because nothing injects it until a back button is pressed and by then every navigation it needed to see has happened.
+
+- **The history state cannot answer it, and used to be asked.** The check was `navigationId > 1`, and a navigation that _replaces_ bumps that id without adding an entry. The replacing navigations are exactly the ones a cold arrival makes: a guard redirect inherits `replaceUrl` from the initial navigation, so the locale guard correcting `/zones/z1` produces id 2 on the first and only entry, and so does a sheet opened from a link and submitted through `leaveTo`. Both read as history and popped off the site.
+- **Under-counting is the safe way to be wrong.** An entry this app cannot account for is treated as none, which costs a back button that walks to its fallback instead of popping. Over-counting sends somebody out of the app, so anything unknown answers no: an unstarted `AppHistory`, a navigation whose start it was created too late to see, a popstate onto an entry it did not write.
+
 ### Localization: RokuTranslator
 
 `libs/shared/localization/rokutranslator` is a hand-rolled i18next wrapper (the `RokuTranslator` **class**) — not a generic i18n library pulled from npm. **There is one instance per app, not one per page**: `provideRokuTranslator` creates it, binds it to the `ROKU_TRANSLATOR` token and provides the `RokuLocaleStore` beside it, so two apps reachable in one session hold independent locales. Resolving either from an injector with no `provideRokuTranslator` above it is an error, by design. Key points:
@@ -205,11 +227,11 @@ stack. The chart still describes it fully, so the files do not drift.
 There are **three** switches, and they are three because they are three different
 decisions:
 
-| Switch | Decides |
-| --- | --- |
-| `lunaShopperBackend.harvester.enabled` (Helm) | whether the service exists in a cluster at all |
-| `HARVEST_ENABLED` | whether a pod that exists may start any run |
-| `MERCADONA_ENABLED` | whether that one storefront specifically may be fetched |
+| Switch                                        | Decides                                                 |
+| --------------------------------------------- | ------------------------------------------------------- |
+| `lunaShopperBackend.harvester.enabled` (Helm) | whether the service exists in a cluster at all          |
+| `HARVEST_ENABLED`                             | whether a pod that exists may start any run             |
+| `MERCADONA_ENABLED`                           | whether that one storefront specifically may be fetched |
 
 All three default to false, including in the `.env` that `luna-slot.sh` writes.
 Bringing the service up and letting it fetch from a third party are not the same
@@ -222,7 +244,7 @@ Two rules that are easy to break by accident:
   whose only purpose is comparison.
 - **An automated fetch never overwrites a price a person typed in** (plan 0038,
   section 6.5). It reports the disagreement instead. When `ItemPrice` and
-  `PricePolicy` arrive that rule is *deleted*, not extended.
+  `PricePolicy` arrive that rule is _deleted_, not extended.
 
 `@portfolio/luna-shopper/mercadona` and `@portfolio/luna-shopper/osm-places` are
 framework free by hard constraint: no TypeORM, no Nest, no database, and every
@@ -249,3 +271,10 @@ with each library's `capture-fixtures` target, never by hand.
 - **Wait for the PR checks.** Opening the PR is not the end of the task. Watch the run (`gh pr checks --watch`), and if it fails, fix the cause and push again rather than handing back a red PR.
 - **Post the PR link in the conversation**, every time one is created, so it is in the transcript beside the work it came from.
 - `main` is still off limits: never push to it, never force-push, never merge. A pull request into `dev` is the only way work lands.
+- **Title the PR `type(scope): summary`** (Conventional Commits, Angular types), optionally `!` before the colon for a breaking change and a trailing `(plan 0045)` when a plan drove it. The release notes are generated from these titles, so a title that cannot be parsed is work missing from a release; `.github/workflows/pr-title.yml` rejects one on every PR, including stacked ones. The types, the scope list and the reasoning are in `CONTRIBUTING.md`, and `tools/release/rules.mjs` is the authority both the check and the generator read. Validate one before opening the PR:
+
+  ```sh
+  node tools/release/release-notes.mjs --check "feat(velista): a card that holds the list (plan 0045)"
+  ```
+
+- **Release notes come from `tools/release/release-notes.mjs`**, not from hand. `node tools/release/release-notes.mjs --from v0.3.1 --to v0.3.2 --out notes.md` groups the merged PRs by section, skips the `dev` to `main` rollups so nothing is counted twice, and prints any title it could not read rather than dropping it. Add a new area of the workspace to `SCOPES` in `tools/release/rules.mjs` in the same PR that creates it.

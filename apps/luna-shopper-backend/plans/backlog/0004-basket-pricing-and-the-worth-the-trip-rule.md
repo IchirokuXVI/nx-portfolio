@@ -7,11 +7,11 @@
 > free number there, so parking a design never burns a number in the build sequence.
 
 The optimizer that backlog 0001 section 3.5 deliberately refused to design, now that the pieces
-it needs exist. Given a generated list (backlog 0003) and a set of price scopes (backlog 0002),
+it needs exist. Given a generated list (0050) and a set of price scopes (0049),
 decide **what to buy, where**, and refuse to send anyone to a second shop for two cents.
 
 Depends on backlog 0001 (effective prices per scope, normalized unit prices, product groups,
-scope aware search) and backlog 0003 (the generated list this writes its answer into). Nothing
+scope aware search) and 0050 (the generated list this writes its answer into). Nothing
 here is buildable without 0001; that is the whole reason it is a separate plan.
 
 ## 1. Two kinds of line, and one that cannot be priced
@@ -51,13 +51,13 @@ over the line text and proposes a match with a confidence, and **a proposal is n
   automatically, recorded as `resolvedAutomatically` so the UI can show it as a guess.
 - Anything else is a suggestion the user confirms, on the line, once, after which the `itemId` or
   `productGroupId` is written back to the **zone** line (subject to the write back rule in
-  backlog 0003 section 5, since it changes shared data) so the next run does not ask again.
+  0050 section 5, since it changes shared data) so the next run does not ask again.
 - Nothing is ever resolved to an item when a group would do. A user who typed "milk" and gets
   Pascual pinned to their zone line has been quietly robbed of the whole feature.
 
 ## 2. What "best price" means
 
-For each priced line, over the scope set from backlog 0002:
+For each priced line, over the scope set from 0049:
 
 - `ITEM` lines: the item's effective price (backlog 0001 section 2.4) in each eligible scope.
 - `GROUP` lines: every group member's effective price in each eligible scope, ranked by
@@ -95,11 +95,11 @@ an uncapacitated facility location variant and is NP hard; at basket sizes of th
 under ten scopes the greedy answer is nearly always the optimal one, and when it is not, the
 difference is smaller than the price staleness already in the data.
 
-1. **Candidate stores.** The scopes from backlog 0002, each carrying its locations.
+1. **Candidate stores.** The scopes from 0049, each carrying its locations.
 2. **Per store basket.** For every store, price every line it can serve, choosing per line the
    cheapest eligible member for `GROUP` lines. Record coverage: how many lines it cannot serve.
 3. **The baseline.** The single store with the lowest total for the lines it covers, tie broken
-   by coverage first, then by the user's preference order (backlog 0002, `position` on the postal
+   by coverage first, then by the user's preference order (0049, `position` on the postal
    code and the chain preference), then by store id so the result is deterministic. **Coverage
    beats price in the baseline**, because a baseline shop that serves nine of twenty lines is not
    a shopping trip.
@@ -119,7 +119,7 @@ from backlog 0001 section 2.4, which is why that column exists.
 ## 5. The threshold, and what it is measured against
 
 The user's rule, made precise. `minSavingCents` (and the optional `minSavingPercent`) from
-backlog 0002 is **per extra stop, not per line and not per basket**.
+0049 is **per extra stop, not per line and not per basket**.
 
 - Per line is wrong: it rejects the case the user described, five items saving eighty cents each,
   which is exactly the trip worth making.
@@ -140,7 +140,7 @@ reason.
 
 ## 6. What the run writes down
 
-Pricing writes onto the generated list from backlog 0003 rather than into a new structure:
+Pricing writes onto the generated list from 0050 rather than into a new structure:
 
 - Per line: `chosenItemId`, `chosenScopeId`, `unitPriceCents`, `lineTotalCents`,
   `priceSourceKind`, `priceObservedAt`, `savingVsBaselineCents`.
@@ -150,7 +150,7 @@ Pricing writes onto the generated list from backlog 0003 rather than into a new 
   the counts of unpriced and unavailable lines. A total that does not say what it is compared
   against is a number the user cannot check.
 
-Everything is a **snapshot**, consistent with backlog 0003 section 4. Prices move; a basket
+Everything is a **snapshot**, consistent with 0050 section 4. Prices move; a basket
 priced on Tuesday says so and does not silently change on Wednesday. `generatedList.reprice`
 produces a new priced revision, and the old one stays in history as what the user actually paid
 against.

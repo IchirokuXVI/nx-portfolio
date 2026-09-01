@@ -1,0 +1,212 @@
+@use '../sheet-form' as form;
+
+:host {
+  display: contents;
+}
+
+@include form.sheet-form;
+
+// The header: the name and what it stands for on the left, the quantity on the right,
+// laid out exactly as the row is so that opening a line does not rearrange it.
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  margin-bottom: var(--app-space-6);
+}
+
+.head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.products {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// The names could not be read. Amber rather than coral: nothing is broken about the
+// line, and the sheet below this is entirely usable. It is a piece of missing text,
+// not a failure to record something (plan 0047, section 1.2).
+.names-failed {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--app-action-quiet-fg);
+}
+
+// The row's indicators, drawn under the products phrase and in the row's own colours.
+// Smaller than the row's, because here they are agreeing with something the reader has
+// just tapped rather than announcing it (section 5).
+.indicators {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2) var(--app-space-4);
+  margin: var(--app-space-2) 0 0;
+}
+
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  font-size: var(--app-text-2xs);
+  white-space: nowrap;
+}
+
+.indicator-bought {
+  color: var(--app-status-success-fg);
+}
+
+.indicator-notAvailable {
+  color: var(--app-status-danger-fg);
+}
+
+// Somebody is out buying this: a thing happening now that will stop happening, and
+// never a sign that the line has been dealt with.
+.indicator-claimed {
+  color: var(--app-status-info-fg);
+}
+
+// The same pill the reel rests in, and deliberately **not** the reel: this sheet is
+// where you report what happened, and a second control for the same number two taps
+// deeper would be two ways to say different things about one line.
+.quantity {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: var(--app-quantity-width);
+  height: var(--app-quantity-height);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.facts {
+  margin: 0 0 var(--app-space-6);
+}
+
+.fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  padding: var(--app-space-4) 0;
+  border-top: 1px solid var(--app-border-subtle);
+}
+
+.fact-label {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.fact-value {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  text-align: end;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+// Through to the line page. A word rather than a button, because it is a way onward
+// rather than an action on this line, and the two must not look alike at the bottom of
+// a sheet whose other controls write to a history.
+.through {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--app-touch-target);
+}
+
+.link {
+  border: 0;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 550;
+  cursor: pointer;
+
+  @include form.focus-ring;
+}
+
+.step {
+  margin-bottom: var(--app-space-6);
+  padding-top: var(--app-space-5);
+  border-top: 1px solid var(--app-border-subtle);
+}
+
+.step-label {
+  display: block;
+  margin-bottom: var(--app-space-3);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+}
+
+.step-note {
+  flex: 1;
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+// Which product was bought. A radio group rather than a select, because there are two
+// or three of them and a native select on a phone is a full screen wheel for a
+// question that fits on one line.
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  width: 100%;
+  min-height: var(--app-touch-target);
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  @include form.focus-ring;
+}
+
+.choice.chosen {
+  border-color: var(--app-action-quiet-border);
+  background: var(--app-action-quiet-bg);
+}
+
+.choice-name {
+  font-size: var(--app-text-sm);
+}
+
+.choice-brand {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}

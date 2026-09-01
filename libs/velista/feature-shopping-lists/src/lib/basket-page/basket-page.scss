@@ -1,0 +1,232 @@
+@use '../basket-shared' as shared;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.page {
+  @include shared.page;
+
+  gap: var(--app-space-3);
+  padding-inline: 0;
+}
+
+// The destination bar, laid out the way the history's is: the same padding, the
+// same rule underneath, so the two do not read as different furniture.
+.bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: var(--app-space-4) var(--app-space-4) var(--app-space-4)
+    var(--app-space-3);
+  padding-block-start: calc(var(--app-space-4) + var(--app-safe-top));
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.back,
+.share,
+.people {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.back-glyph,
+.share-glyph,
+.people-glyph {
+  font-size: var(--app-icon-md);
+}
+
+// The display face at the page title step (plan 0002, section 6), which is what
+// every other destination header in this app sets. This one set `lg`, a step
+// below even the `xl` the history records as the mistake: the words in the top
+// left shrank on the way in from the history, in the same face and the same
+// colour, for no visible reason.
+.title {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+  // The mark's tracking comes with the mark's size, exactly as on the history.
+  letter-spacing: var(--app-tracking-wordmark);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+// A row of faces and no sentence. The overflow collapses into a stacked chip,
+// which is the same "+X" pattern the price display uses.
+.faces {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding: 0 var(--app-space-1);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-avatar-sm);
+  block-size: var(--app-avatar-sm);
+  margin-inline-start: calc(var(--app-space-2) * -1);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  // A ring in the page's own background, so overlapping faces stay separable.
+  box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-surface-ground);
+  font-size: var(--app-text-2xs);
+  text-transform: uppercase;
+  color: var(--app-text-secondary);
+
+  &:first-child {
+    margin-inline-start: 0;
+  }
+}
+
+// A dashed ring marks a guest, never colour alone (section 7).
+.is-guest {
+  @include shared.guest-ring;
+}
+
+.is-overflow {
+  background: var(--app-status-neutral-bg);
+  color: var(--app-status-neutral-fg);
+  font-size: var(--app-text-2xs);
+}
+
+.progress {
+  margin: 0;
+  padding-inline: var(--app-space-4);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// Quieter than the count beside it: it is a fact about the trip rather than
+// progress through it, and it must not read as more of the same number.
+.progress-unavailable {
+  color: var(--app-action-quiet-fg);
+}
+
+.lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// --- The states -------------------------------------------------------------
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding-inline: var(--app-space-4);
+}
+
+.skeleton-row {
+  block-size: var(--app-line-row-height);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+}
+
+.notice {
+  @include shared.card;
+
+  margin-inline: var(--app-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.notice-title {
+  margin: 0;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+  text-wrap: balance;
+}
+
+.notice-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+.notice-action {
+  @include shared.secondary-button;
+
+  margin-block-start: var(--app-space-2);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding: var(--app-space-10) var(--app-space-4);
+  text-align: center;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+}
+
+.empty-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+}
+
+.visually-hidden {
+  @include shared.visually-hidden;
+}
+
+// The basket is not updating itself: the socket was refused or dropped, or this
+// participant has been removed. Same treatment as the list page's, because it is
+// the same situation and a reader who has seen one should recognise the other.
+.stale {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin: 0 var(--app-space-4);
+  padding: var(--app-space-2) var(--app-space-3);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-status-attention-bg);
+  font-size: var(--app-text-xs);
+  color: var(--app-status-attention-fg);
+}
+
+.stale-glyph {
+  flex-shrink: 0;
+  font-size: var(--app-icon-sm);
+}

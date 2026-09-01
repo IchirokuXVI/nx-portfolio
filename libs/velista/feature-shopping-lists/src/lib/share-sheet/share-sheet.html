@@ -1,0 +1,104 @@
+<lib-sheet-shell
+  (dismiss)="close()"
+  [dismissible]="!busy()"
+  labelledBy="share-title"
+>
+  @switch (pane()) {
+    @case ('link') {
+      <h2 class="title" id="share-title">{{ 'basket.share.title' | rokuT }}</h2>
+      <p class="body">{{ 'basket.share.body' | rokuT }}</p>
+
+      @if (link(); as live) {
+        <!--
+          The link itself, readable and selectable. A basket has zero links or
+          one, and this one can be copied again tomorrow from any device, which
+          is why the secret is served on every read rather than once.
+        -->
+        <div class="link-row">
+          <code class="link-url">{{ url() }}</code>
+          <button (click)="copy()" class="copy" type="button">
+            {{ (copied() ? 'basket.share.copied' : 'basket.share.copy') | rokuT }}
+          </button>
+        </div>
+
+        @if (joinedCount() > 0) {
+          <p class="joined">
+            {{ 'basket.share.joinedWith' | rokuT: { count: joinedCount() } }}
+          </p>
+        }
+
+        <p class="note">{{ 'basket.share.note' | rokuT }}</p>
+
+        <button (click)="askRevoke()" class="revoke" type="button">
+          {{ 'basket.share.revoke' | rokuT }}
+        </button>
+      } @else {
+        <p aria-live="polite" class="minting" role="status">
+          {{ 'basket.share.minting' | rokuT }}
+        </p>
+      }
+
+      <button (click)="close()" class="quiet" type="button">
+        {{ 'basket.share.close' | rokuT }}
+      </button>
+    }
+
+    <!--
+      A real question, because there are two answers and the wrong default is
+      harmful. Revoking stops the link spreading; it does **not** evict the
+      people already shopping, whose own sessions authorize them.
+    -->
+    @case ('revoke') {
+      <h2 class="title" id="share-title">{{ 'basket.revoke.title' | rokuT }}</h2>
+
+      <p class="body">
+        @if (joinedCount() > 0) {
+          {{ 'basket.revoke.body' | rokuT: { count: joinedCount() } }}
+        } @else {
+          {{ 'basket.revoke.bodyNone' | rokuT }}
+        }
+      </p>
+
+      <!--
+        The cascade is a second, explicit choice with its own sentence, and it is
+        off by default: throwing three people out of a shop is a different
+        intention from stopping a link spreading, and must be stated.
+      -->
+      @if (joinedCount() > 0) {
+        <label class="cascade">
+          <input
+            (change)="cascade.set($any($event.target).checked)"
+            [checked]="cascade()"
+            type="checkbox"
+          />
+          <span class="cascade-copy">
+            <span class="cascade-label">
+              {{ 'basket.revoke.cascade' | rokuT: { count: joinedCount() } }}
+            </span>
+            <span class="cascade-hint">
+              {{ 'basket.revoke.cascadeHint' | rokuT }}
+            </span>
+          </span>
+        </label>
+      }
+
+      <div class="actions">
+        <!--
+          Says what it does rather than "OK": the button and the tick above it
+          are two different acts, and the label has to make that readable.
+        -->
+        <button
+          (click)="revoke()"
+          [disabled]="busy()"
+          class="destructive"
+          type="button"
+        >
+          {{ 'basket.revoke.confirm' | rokuT }}
+        </button>
+        <button (click)="keepIt()" class="quiet" type="button">
+          {{ 'basket.revoke.cancel' | rokuT }}
+        </button>
+      </div>
+    }
+  }
+</lib-sheet-shell>

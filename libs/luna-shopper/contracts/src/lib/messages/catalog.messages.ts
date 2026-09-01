@@ -21,6 +21,19 @@ export interface LocalizedText {
   es: string;
 }
 
+/**
+ * Alternative words for one thing, per locale (plan 0048, section 1).
+ *
+ * The reason a group is findable at all: `leche` and `milk` have to reach the one
+ * Milk group, and neither is a translation of the group's own name in the other
+ * language. Arrays rather than one string because the search builds a text search
+ * document from them and a caller editing them edits a list.
+ */
+export interface LocalizedSynonyms {
+  en: string[];
+  es: string[];
+}
+
 export const SUPERMARKET_PATTERNS = {
   create: 'supermarket.create',
   update: 'supermarket.update',
@@ -42,9 +55,56 @@ export const ITEM_PATTERNS = {
   update: 'item.update',
   delete: 'item.delete',
   get: 'item.get',
+  /**
+   * Several products by id, in one round trip (plan 0051, section 6.1).
+   *
+   * A basket line names a pick and every option it may be switched to, all as
+   * opaque ids, and a screen of twenty lines with three options each would
+   * otherwise be sixty {@link ITEM_PATTERNS.get} calls to render one page. It is
+   * a lookup and not a search: unknown ids are simply absent from the answer,
+   * because a basket can outlive a product catalog has since deleted and that is
+   * an ordinary thing for a history to contain rather than an error.
+   */
+  getMany: 'item.getMany',
+  /**
+   * Ranked **items** (plan 0048, section 3). Answers "Pascual Milk".
+   *
+   * Upgraded in place: the subject, its request and its response are the ones
+   * plan 0012 shipped, extended rather than replaced, so the admin surface that
+   * calls it with no query keeps getting a listing. What changed underneath is
+   * the matching, from a substring scan of one locale's name to the per locale
+   * `tsvector` plus trigram index of section 2.
+   */
   search: 'item.search',
+  /**
+   * Ranked **groups**, each with its cheapest member (plan 0048, section 3).
+   * Answers "milk", and it is the query the list composer runs for a bare word.
+   *
+   * A separate subject from {@link ITEM_PATTERNS.search} because the two example
+   * queries are genuinely different reads: one ranks products, this one ranks the
+   * thing a shopper means and then prices it. A group with no priced member at
+   * the requested scopes still comes back, with the price fields null.
+   */
+  searchOffers: 'item.searchOffers',
   /** EAN is unique when present, so this is a lookup, not a search (plan 0038). */
   findByEan: 'item.findByEan',
+} as const;
+
+/**
+ * Product groups (plan 0048, section 1): "milk as a thing you can buy", which is
+ * a different concept from a browsing category and needs its own entity.
+ *
+ * Writes are owner curation through the platform admin gate, exactly like every
+ * other catalog write. There is deliberately **no automatic assignment**: the
+ * matching ladder that would let a harvest run classify what it finds is backlog
+ * 0001 section 6.2 and needs the review queue that comes with it.
+ */
+export const PRODUCT_GROUP_PATTERNS = {
+  create: 'productGroup.create',
+  update: 'productGroup.update',
+  delete: 'productGroup.delete',
+  get: 'productGroup.get',
+  list: 'productGroup.list',
 } as const;
 
 export const SUPERMARKET_ITEM_PATTERNS = {
@@ -73,6 +133,21 @@ export const PRICE_SCOPE_PATTERNS = {
   update: 'priceScope.update',
   delete: 'priceScope.delete',
   list: 'priceScope.list',
+  /**
+   * Turn "these postal codes, these chains" into the scopes that answer it today
+   * (plan 0049, sections 1.1 and 3.1).
+   *
+   * **The resolver lives here and not in core**, beside the scopes it resolves
+   * to. A stored scope id silently becomes a lie the moment a chain remaps a
+   * postal code to another warehouse, so the postal code is what is stored and
+   * this is asked per query, cached briefly.
+   *
+   * Open to any authenticated caller, like every other catalog read: it says
+   * which scopes serve a place, which is public reference data. It takes no
+   * `userId` beyond the one every catalog subject carries, and knows nothing
+   * about profiles.
+   */
+  resolve: 'priceScope.resolve',
 } as const;
 
 /**
@@ -101,6 +176,17 @@ export interface SupermarketView {
    * `Carrefour Express`, which may or may not be what the owner wants.
    */
   externalBrandKey: string | null;
+  /**
+   * The scope to quote this chain's prices from when nothing else says which
+   * (plan 0049, section 3.1, the last rung of the ladder).
+   *
+   * Owner set and nullable. A result reached through it is returned **flagged as
+   * approximate**, so a client can say "prices shown for Madrid" rather than
+   * implying the number is the caller's. Silently averaging across a chain's
+   * scopes is not the alternative: an average price is a price that exists in no
+   * store.
+   */
+  defaultPriceScopeId: string | null;
 }
 
 export interface SupermarketLocationView {
@@ -144,6 +230,45 @@ export interface PriceScopeView {
   label: LocalizedText | null;
 }
 
+/**
+ * One thing you can buy, as opposed to one product (plan 0048, section 1).
+ *
+ * Every Pascual, Central Lechera and Hacendado milk points at the one Milk group,
+ * which declares that they are comparable and that the comparison happens in
+ * litres. A category is a browsing structure and this is not one: it carries no
+ * `categoryId`, because the tree is backlog 0001 section 3.1 and nothing in
+ * search or in the composer needs it.
+ */
+export interface ProductGroupView {
+  id: string;
+  name: LocalizedText;
+  /** Stable and unique, for admin tooling and tests. */
+  slug: string;
+  /** The unit its members are compared in. */
+  referenceUnit: UnitOfMeasure;
+  synonyms: LocalizedSynonyms;
+}
+
+/**
+ * A price quoted by a search result, from the {@link SupermarketItemView} rows
+ * plan 0038 already writes (plan 0048, section 3).
+ *
+ * It carries the source kind and the observation time, so a hand entered price is
+ * presentable as one rather than passed off as a chain's published number.
+ */
+export interface ItemOfferView {
+  /** Which product this price is for. Named, because a group's offer is a member's. */
+  itemId: string;
+  priceScopeId: string;
+  price: number | null;
+  currency: string | null;
+  /** Verbatim, and never recomputed (plan 0038, section 2.4). */
+  unitPrice: number | null;
+  unitPriceLabel: string | null;
+  priceObservedAt: string | null;
+  priceSourceKind: PriceSourceKind;
+}
+
 export interface ItemView {
   id: string;
   name: LocalizedText;
@@ -160,6 +285,36 @@ export interface ItemView {
   unitSize: number | null;
   category: ItemCategory;
   defaultUnit: UnitOfMeasure;
+  /**
+   * The group this product belongs to, or null (plan 0048, section 1). Owner
+   * curated: nothing assigns it automatically.
+   */
+  productGroupId: string | null;
+  /**
+   * The cheapest price this product has at the scopes the caller asked about, on
+   * the reads that take scopes.
+   *
+   * **Optional, and absent everywhere else.** `item.get`, `item.create` and the
+   * rest have no scopes to price against and omit it entirely, which is what lets
+   * this be added to the one view every catalog read already answers with rather
+   * than forking a second one. Absent and null mean the same thing to a reader:
+   * no price to show.
+   */
+  bestOffer?: ItemOfferView | null;
+}
+
+/**
+ * A group and the cheapest way to buy it (plan 0048, section 3).
+ *
+ * `cheapestItem` and `offer` are **both null** when no member is priced at the
+ * requested scopes, and the group still comes back: the composer is attaching
+ * identity, not quoting a price, and a group must not vanish from suggestions
+ * because the one harvested chain is switched off outside development.
+ */
+export interface ProductGroupOfferView {
+  group: ProductGroupView;
+  cheapestItem: ItemView | null;
+  offer: ItemOfferView | null;
 }
 
 /**
@@ -230,6 +385,12 @@ export interface UpdateSupermarketRequest {
   logoUrl?: string | null;
   websiteUrl?: string | null;
   externalBrandKey?: string | null;
+  /**
+   * The last rung of the scope ladder (plan 0049, section 3.1). Settable here
+   * and not on create: a scope belongs to a chain, so a chain that does not
+   * exist yet has none to point at. Must belong to this chain; null clears it.
+   */
+  defaultPriceScopeId?: string | null;
 }
 
 export interface SupermarketIdRequest {
@@ -300,6 +461,8 @@ export interface CreateItemRequest {
   unitSize?: number | null;
   category: ItemCategory;
   defaultUnit: UnitOfMeasure;
+  /** Assign the product to a group (plan 0048). Owner curation, never automatic. */
+  productGroupId?: string | null;
 }
 
 export interface UpdateItemRequest {
@@ -313,6 +476,8 @@ export interface UpdateItemRequest {
   unitSize?: number | null;
   category?: ItemCategory;
   defaultUnit?: UnitOfMeasure;
+  /** Assign, reassign or (with `null`) unassign the product's group (plan 0048). */
+  productGroupId?: string | null;
 }
 
 /** Find the item carrying this EAN, if catalog has one (plan 0038, section 6.2). */
@@ -335,10 +500,104 @@ export interface ItemIdRequest {
   itemId: string;
 }
 
+/** How many products one {@link ITEM_PATTERNS.getMany} may name. */
+export const ITEM_LOOKUP_LIMITS = {
+  /**
+   * Comfortably above a basket's worth of picks and options, and low enough that
+   * the request stays one bounded `IN` clause rather than an unbounded one.
+   */
+  maxIds: 500,
+} as const;
+
+/**
+ * Several products by id (plan 0051, section 6.1).
+ *
+ * **No `userId`, deliberately**, which is the one place this departs from every
+ * other catalog read. A product's name is not private: `0051` section 6.1 is
+ * explicit that a line's options are catalog products and never zone data, and
+ * this exists so a **guest** holding a shared basket can read the name of the
+ * thing they are being asked to buy. The caller that reaches it is the gateway,
+ * on behalf of a participant it has already authorized against the basket.
+ */
+export interface GetItemsRequest {
+  /** At most {@link ITEM_LOOKUP_LIMITS.maxIds}. Duplicates are harmless. */
+  ids: string[];
+}
+
+/**
+ * The products that exist, in no promised order.
+ *
+ * Ids that name nothing are **absent** rather than null: a basket can outlive a
+ * product catalog has since deleted, which is an ordinary thing for a history to
+ * contain, so the caller matches by id and draws a line with no product name
+ * rather than being handed an error for the whole page.
+ */
+export interface GetItemsResult {
+  items: ItemView[];
+}
+
 export interface SearchItemsRequest extends PageQuery {
   userId: string;
   query?: string;
   category?: ItemCategory;
+  /** Only this group's members (plan 0048). What "show me every milk" asks. */
+  productGroupId?: string;
+  /**
+   * Price the results, from these scopes and no others (plan 0048, section 3.1).
+   *
+   * **Absent and empty are different since plan 0049, section 3.** Absent is an
+   * unscoped read, which still ranks and quotes no price; that is what the admin
+   * surface does and it is not reachable from the gateway any more, because every
+   * gateway catalog read either carries scopes or resolves the caller's profile.
+   * An **empty array** is a caller who said where they shop and reached no chain
+   * we know, and it answers with an empty page: listing the global product table
+   * would answer a question they did not ask.
+   */
+  priceScopeIds?: string[];
+}
+
+/**
+ * Rank groups for a bare word, and price each one (plan 0048, section 3).
+ *
+ * It takes the same scope set as {@link SearchItemsRequest} and reads it the same
+ * way: absent ranks unscoped and quotes no price, an empty array is a caller
+ * whose place reached no chain and answers with an empty page (plan 0049,
+ * section 3).
+ */
+export interface SearchOffersRequest extends PageQuery {
+  userId: string;
+  query?: string;
+  priceScopeIds?: string[];
+}
+
+// --- Product group requests ------------------------------------------------
+
+export interface CreateProductGroupRequest {
+  userId: string;
+  name: LocalizedText;
+  slug: string;
+  referenceUnit: UnitOfMeasure;
+  synonyms?: LocalizedSynonyms;
+}
+
+export interface UpdateProductGroupRequest {
+  userId: string;
+  productGroupId: string;
+  name?: LocalizedText;
+  slug?: string;
+  referenceUnit?: UnitOfMeasure;
+  synonyms?: LocalizedSynonyms;
+}
+
+export interface ProductGroupIdRequest {
+  userId: string;
+  productGroupId: string;
+}
+
+export interface ListProductGroupsRequest extends PageQuery {
+  userId: string;
+  /** Free text over the group's own name and synonyms. Absent lists them all. */
+  query?: string;
 }
 
 // --- Supermarket item requests ---------------------------------------------
@@ -470,6 +729,99 @@ export interface ListPriceScopesRequest extends PageQuery {
   supermarketId?: string;
 }
 
+// --- Resolving a place into scopes (plan 0049, sections 1.1 and 3.1) --------
+
+/**
+ * "These postal codes, these chains, not those chains." Every field is optional
+ * and a request with nothing positive in it resolves to nothing, which the
+ * gateway never sends: an empty selector is `CATALOG_SCOPE_REQUIRED` (section 3),
+ * decided where the profile is known rather than here.
+ */
+export interface ResolvePriceScopesRequest {
+  userId: string;
+  /** Stored exactly as typed, resolved here, never stored resolved. */
+  postalCodes?: string[];
+  /** The chains the caller listed. Empty means every chain serving the codes. */
+  supermarketIds?: string[];
+  /** Chains to leave out, applied after the two above. */
+  excludedSupermarketIds?: string[];
+}
+
+/**
+ * How a scope was arrived at (plan 0049, section 3.1).
+ *
+ * A plain string union rather than an entry in `catalog.enums`, like
+ * {@link CATALOG_SUGGESTION_KINDS}: nothing stores it and no column has its type.
+ * It exists so a client can explain a price rather than merely show it.
+ */
+export const SCOPE_ORIGINS = [
+  /** A store of that chain sits in one of the caller's postal codes. */
+  'POSTAL_CODE',
+  /** The chain prices nationally, so location does not enter into it. */
+  'NATIONAL',
+  /** The owner set fallback. Approximate, and says so. */
+  'CHAIN_DEFAULT',
+] as const;
+export type ScopeOrigin = (typeof SCOPE_ORIGINS)[number];
+
+/** One resolved scope, and the reason it is in the answer. */
+export interface ResolvedScopeView {
+  priceScopeId: string;
+  supermarketId: string;
+  /** The caller's postal code that reached it, or null off the other rungs. */
+  postalCode: string | null;
+  origin: ScopeOrigin;
+  /** True exactly when `origin` is `CHAIN_DEFAULT`: prices are for elsewhere. */
+  approximate: boolean;
+}
+
+/**
+ * Whether we know of anybody serving one postal code (plan 0049, section 5).
+ *
+ * A code no chain serves is **accepted and flagged, never rejected**: coverage is
+ * a property of our data and not of the user's address, and refusing the code
+ * would tell somebody they live nowhere.
+ */
+export interface PostalCodeCoverageView {
+  postalCode: string;
+  served: boolean;
+}
+
+/** What a place resolves to today. */
+export interface ResolvedScopesView {
+  /** The union, ready to hand to a scoped read. Order is not significant. */
+  priceScopeIds: string[];
+  scopes: ResolvedScopeView[];
+  /** One entry per postal code asked about, in the order they were given. */
+  coverage: PostalCodeCoverageView[];
+  /** True when any scope came off the last rung. */
+  approximate: boolean;
+}
+
+/**
+ * What the gateway's `GET /v1/catalog/scope` answers (plan 0049, sections 3 and
+ * 5).
+ *
+ * A gateway shape written in `contracts` for the same reason
+ * {@link CatalogSuggestResponse} is: it is assembled from two services and the
+ * one place its halves can reference the same `ResolvedScopeView` is here.
+ *
+ * It exists because the flags have to reach a client and a page cannot carry
+ * them: `ItemPage` is bare by house rule, and wrapping it to hang two booleans
+ * off would change every catalog read's response shape. So the ladder's outcome
+ * is described once, here, and a client that wants to say "prices shown for
+ * Madrid" or "no chain we know reaches 12345" reads it beside its search.
+ */
+export interface CatalogScopeView extends ResolvedScopesView {
+  /** The profile that supplied the selector, or null when the caller stated one. */
+  profileId: string | null;
+  /**
+   * Whether the caller's own query decided the scopes. False means the default
+   * (or named) profile was resolved, which is what an unscoped read does.
+   */
+  explicit: boolean;
+}
+
 // --- Supermarket location item requests ------------------------------------
 
 export interface UpsertSupermarketLocationItemRequest {
@@ -501,10 +853,62 @@ export type SupermarketItemPage = Paginated<SupermarketItemView>;
 export type PriceScopePage = Paginated<PriceScopeView>;
 export type SupermarketLocationItemPage =
   Paginated<SupermarketLocationItemView>;
+export type ProductGroupPage = Paginated<ProductGroupView>;
+export type ProductGroupOfferPage = Paginated<ProductGroupOfferView>;
 
-/** Orders a caller may choose for the catalog collections (plan 0012). */
-export const ITEM_ORDERS = ['name', 'created', 'updated'] as const;
+// --- The composer's one call (plan 0048, section 3) -------------------------
+
+/**
+ * What a suggestion is (plan 0048, section 3).
+ *
+ * A plain string union rather than an entry in `catalog.enums`, like
+ * {@link ITEM_ORDERS} beside it: nothing stores this, no column has its type, and
+ * it exists only to tell two shapes apart in one response array.
+ */
+export const CATALOG_SUGGESTION_KINDS = ['group', 'item'] as const;
+export type CatalogSuggestionKind = (typeof CATALOG_SUGGESTION_KINDS)[number];
+
+/**
+ * One row of the composer's dropdown. Exactly one of `group` and `item` is set,
+ * and `kind` says which.
+ */
+export interface CatalogSuggestion {
+  kind: CatalogSuggestionKind;
+  group: ProductGroupOfferView | null;
+  item: ItemView | null;
+}
+
+/**
+ * The whole dropdown, in the order it is to be drawn (plan 0048, section 3).
+ *
+ * **One ordered array and not two lists**, because the rule it carries is an
+ * ordering: a group beats an item for a bare word, velista `0043` section 6
+ * states it from the client side and backlog `0004` section 1.2 states it as a
+ * hard one. Handing a client `{ groups, items }` would leave the rule to the
+ * client to reassemble, and a client that got it wrong would look right.
+ */
+export interface CatalogSuggestResponse {
+  suggestions: CatalogSuggestion[];
+}
+
+/**
+ * Orders a caller may choose for the catalog collections (plan 0012).
+ *
+ * `relevance` arrived with plan 0048 and is the **default when a query is
+ * given**, which is what makes the search a search. With no query there is
+ * nothing to be relevant to, so the default stays `name` and the admin surface's
+ * listing is unchanged.
+ */
+export const ITEM_ORDERS = ['relevance', 'name', 'created', 'updated'] as const;
 export type ItemOrder = (typeof ITEM_ORDERS)[number];
+
+export const PRODUCT_GROUP_ORDERS = [
+  'relevance',
+  'name',
+  'created',
+  'updated',
+] as const;
+export type ProductGroupOrder = (typeof PRODUCT_GROUP_ORDERS)[number];
 
 export const SUPERMARKET_ORDERS = ['name', 'created', 'updated'] as const;
 export type SupermarketOrder = (typeof SUPERMARKET_ORDERS)[number];

@@ -813,3 +813,57 @@ export class TrashIcon {
       import('./trash-icon.svg?raw')
   );
 }
+
+/**
+ * A shopping basket, drawn for two things that are both baskets.
+ *
+ * On a **group** in the composer's suggestions (plan 0043, section 6), it marks the
+ * row that adds several products at once, which is the one thing a person choosing
+ * between "Milk" and "Leche entera Pascual, 1 L" needs to tell apart at a glance. The
+ * badge beside it says the same thing in a word, because a glyph alone is not a
+ * distinction anybody has been taught yet.
+ *
+ * On a **generated shopping list** (plan 0045) it marks the thing everywhere it
+ * appears: the dashboard's primary action, the card above it, the history page's empty
+ * state. `ListLinesIcon` is the *zone* list's glyph and stays that, because the two are
+ * different objects and drawing them alike is exactly the confusion the naming note in
+ * `generated-list-view` is about: a zone list is a standing collection, a basket is one
+ * trip composed out of several of them.
+ *
+ * One component for both, because it is one picture of one idea. Splitting it would
+ * leave two files to keep in sync for a glyph nobody would draw differently.
+ */
+@Component({
+  selector: 'lib-basket-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class BasketIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./basket-icon.svg?raw')
+  );
+}
+
+/**
+ * A carton: the glyph on one catalog **product**, and on a product chip.
+ *
+ * Deliberately quieter than the basket beside it. A group ranks above an item and
+ * is the answer most people want, so the item rows are the ordinary weight and the
+ * group is the one that stands out.
+ */
+@Component({
+  selector: 'lib-product-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class ProductIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./product-icon.svg?raw')
+  );
+}

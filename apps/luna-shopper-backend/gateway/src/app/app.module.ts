@@ -27,6 +27,7 @@ import {
   gatewayConfiguration,
   gatewayValidationSchema,
 } from './config/app-config';
+import { GatewayGeneratedListsModule } from './generated-lists/generated-lists.module';
 import { GatewayHarvestModule } from './harvest/harvest.module';
 import { GatewayListsModule } from './lists/lists.module';
 import { GatewayMergeModule } from './merge/merge.module';
@@ -106,6 +107,8 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayMergeModule,
     // Account deletion endpoint (plan 0011).
     GatewayAccountModule,
+    // The basket a person carries around the shop (plan 0050).
+    GatewayGeneratedListsModule,
     // Catalog endpoints — items, supermarkets, per scope prices (plan 0012, and
     // plan 0038 for the scopes).
     GatewayCatalogModule,

@@ -19,6 +19,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   ASSISTANT_SERVICE,
+  CATALOG_SERVICE,
   GatewayError,
   LineStore,
   ListStore,
@@ -28,13 +29,18 @@ import {
   PresenceStore,
   REALTIME_CLIENT,
   SessionStore,
+  ShoppingProfileStore,
   ZoneStore,
   type AssistantServiceI,
+  type CatalogServiceI,
   type RealtimeClientI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   LINE_VOICE_MAX_SECONDS,
+  SUGGEST_DEBOUNCE_MS,
+  SUGGEST_MIN_CHARS,
+  type CatalogSuggestion,
   type ListGoneReason,
   type ListPageState,
   type ListViewerVm,
@@ -48,7 +54,9 @@ import {
   lineQueryOf,
   listIdOf,
   NOTIFICATION_TONE,
+  PageNavigation,
   RECORDING_LIMITS,
+  sheetSegments,
   StorageKeys,
   VoicePreferences,
   zoneIdOf,
@@ -161,6 +169,7 @@ export class ListPage {
   private readonly _session = inject(SessionStore);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _browser = inject(BrowserFacade);
   private readonly _translator = inject(RokuTranslatorService);
@@ -195,6 +204,8 @@ export class ListPage {
   readonly composerBusy = signal(false);
 
   private readonly _assistant = inject<AssistantServiceI>(ASSISTANT_SERVICE);
+  private readonly _catalog = inject<CatalogServiceI>(CATALOG_SERVICE);
+  private readonly _profiles = inject(ShoppingProfileStore);
   private readonly _tone = inject(NOTIFICATION_TONE);
   private readonly _voice = inject(VoicePreferences);
 
@@ -276,6 +287,12 @@ export class ListPage {
       linesComplete: lines.complete,
       writes: lines.writes,
       commentCounts: lines.commentCounts,
+      // Who is out buying what: read off the lines and moved by `line.claimChanged`
+      // on the zone room (backend plan 0052). Both halves matter and the read is the
+      // one that was missing: a phone that was asleep while somebody generated a
+      // basket draws the same row as one that was watching, where an event only
+      // client would be blank until the next thing happened.
+      claims: lines.claims,
       // The server's answer, straight through. No zone role, no inference from a refused
       // write, and nothing to reconcile between the two (plan 0030, section 3): staff
       // already arrive holding all four, and a list that has not landed yet answers the
@@ -586,7 +603,10 @@ export class ListPage {
     });
   }
 
-  /** Back to the group. A destination's back, not a sheet's dismiss. */
+  /**
+   * Back to wherever this list was opened from, which on the dashboard's own rows is
+   * the dashboard and not this list's group.
+   */
   async back(): Promise<void> {
     if (this.reordering()) {
       // Android's back ends the mode rather than leaving the page, which is what makes
@@ -595,7 +615,7 @@ export class ListPage {
       return;
     }
 
-    await this._router.navigateByUrl(
+    await this._pages.back(
       appPath(this._locale(), this._basePath, 'zones', this.zoneId())
     );
   }
@@ -659,34 +679,71 @@ export class ListPage {
   });
 
   /**
-   * Tick a line off, or put it back.
+   * A row was tapped, which opens what the app knows about the line.
    *
-   * The gesture the whole screen is built around, and it is `DECIDE` rather than `WRITE`
-   * since plan 0030 section 4: saying the tin is in the trolley is deciding, not adding.
+   * It used to tick the line off, and section 5.1 is the whole of the change: the tap
+   * is no longer a decision, so it no longer follows `DECIDE`. Anybody holding `READ`
+   * opens the sheet, because knowing is not deciding, and what the sheet offers inside
+   * it is decided there from the same abilities.
    *
-   * The guard below is belt on top of braces and is silent. `LineRowVm.interactive`
-   * already follows `canDecide`, so a caller who may not tick has rows that emit nothing
-   * on a tap, and the sentence explaining that is on screen from the moment the page
-   * draws rather than appearing on the first tap. That is the whole of the change: the
-   * page used to discover a reader from a refusal and say so once, and now it knows
-   * before anybody touches anything (section 3.2).
+   * A route rather than a template flag, like every other sheet over this page: rule E1
+   * from `0008`, so Android's back button dismisses it (`0012`, section 4.2).
    */
-  async toggle(lineId: string): Promise<void> {
-    const line = this._lines
-      .linesIn(this.listId())
-      .find((l) => l.id === lineId);
-    if (line === undefined) {
+  openLine(lineId: string): void {
+    if (this.reordering()) {
       return;
     }
 
+    void this._openSheet(['lines', lineId, 'detail']);
+  }
+
+  /**
+   * One settled adjustment of a line's quantity, as a signed delta.
+   *
+   * **The primary gesture of the page** (velista plan 0043, section 4). The reel has
+   * already snapped, already waited out its idle beat, and already collapsed however
+   * many drags happened inside that window into one number, so this is called once per
+   * adjustment rather than once per step.
+   *
+   * The guard is silent and is belt on top of braces: `LineRowVm.adjustable` follows
+   * `canDecide`, so a caller who may not change the number has a reel that does not
+   * move, and the sentence explaining that is on screen from the moment the page draws
+   * rather than appearing after a refusal (section 3.2).
+   */
+  async changeQuantity(event: {
+    lineId: string;
+    delta: number;
+  }): Promise<void> {
     const page = this.loaded();
     if (page !== null && !page.abilities.canDecide) {
       return;
     }
 
-    const next = line.status === 'READY' ? 'PENDING' : 'READY';
-    const outcome = await this._lines.setStatus(lineId, next);
-    this._afterWrite(outcome, lineId, 'lines.write');
+    const outcome = await this._lines.addQuantity(event.lineId, event.delta);
+    this._afterWrite(outcome, event.lineId, 'lines.write');
+
+    if (outcome === 'succeeded') {
+      // Announced **once**, as the settled result, and not per step of the drag
+      // (section 7). The reel's own `aria-valuenow` is what a keyboard user hears as
+      // they go; this is for the pointer path, where nothing else says out loud that
+      // the number moved.
+      const line = this._lines
+        .linesIn(this.listId())
+        .find((candidate) => candidate.id === event.lineId);
+      if (line !== undefined) {
+        this.announcement.set(
+          this._translator.t(
+            'list.line.quantityChanged',
+            undefined,
+            undefined,
+            {
+              name: line.content,
+              quantity: line.quantity,
+            }
+          )
+        );
+      }
+    }
   }
 
   /** Everything the row's overflow, decision buttons and grip emit. */
@@ -700,20 +757,6 @@ export class ListPage {
         return;
       case 'delete':
         void this._openSheet(['lines', event.lineId, 'confirm', 'delete']);
-        return;
-      case 'markNotAvailable':
-        this._afterWrite(
-          await this._lines.setStatus(event.lineId, 'NOT_AVAILABLE'),
-          event.lineId,
-          'lines.write'
-        );
-        return;
-      case 'markPending':
-        this._afterWrite(
-          await this._lines.setStatus(event.lineId, 'PENDING'),
-          event.lineId,
-          'lines.write'
-        );
         return;
       case 'approve':
         this._afterWrite(
@@ -755,7 +798,11 @@ export class ListPage {
    * row, it is an approve button flashing on somebody's own line for one frame, which is
    * the defect plan 0030 section 5 exists to remove.
    */
-  async add(entry: { content: string; quantity: number }): Promise<void> {
+  async add(entry: {
+    content: string;
+    quantity: number;
+    itemIds?: readonly string[];
+  }): Promise<void> {
     const current = this.loaded();
     this.composerBusy.set(true);
 
@@ -773,9 +820,15 @@ export class ListPage {
       {
         canDecide: current?.abilities.canDecide ?? false,
         autoApproveLines: current?.autoApproveLines ?? false,
-      }
+      },
+      // Whatever the composer attached: a group's whole set, one product, or nothing
+      // at all for free text, which stays first class (section 6).
+      entry.itemIds
     );
 
+    // The list the suggestions were for has been added. Clearing here rather than in
+    // the composer keeps the two from disagreeing about whether a dropdown is open.
+    this._suggestQuery.set('');
     this.composerBusy.set(false);
 
     if (outcome.state === 'failed') {
@@ -876,10 +929,97 @@ export class ListPage {
     this.voiceStrip.set(null);
   }
 
-  /** The inline failure notice was tapped. Retries the write that failed. */
-  async retry(lineId: string): Promise<void> {
+  /**
+   * What the composer offers, after three characters and a beat (section 6).
+   *
+   * The debounce is **here** rather than in the composer, because how often a request
+   * may be made is not a question a text field can answer, and a timer per component
+   * would become two the moment anything else wanted suggestions.
+   *
+   * Three characters, because one or two match most of a supermarket and the list that
+   * comes back is noise under a field somebody is still typing into.
+   */
+  readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
+
+  /** The last thing typed, which the effect below watches. */
+  private readonly _suggestQuery = signal('');
+
+  onComposerQuery(query: string): void {
+    this._suggestQuery.set(query);
+
+    // The profiles, read once and only when somebody actually starts typing a product.
+    // Not in the constructor: this page is opened far more often than the catalog is
+    // searched, and the profile is wanted only when it is. The store is app scoped, so
+    // a person who has opened the profiles page or the generation sheet pays nothing.
+    if (!this._profilesAsked && query.trim().length >= SUGGEST_MIN_CHARS) {
+      this._profilesAsked = true;
+      void this._profiles.load();
+    }
+  }
+
+  /** Whether this page has already asked for the profiles. See {@link onComposerQuery}. */
+  private _profilesAsked = false;
+
+  /**
+   * Ask the catalog, at most once per {@link SUGGEST_DEBOUNCE_MS} of quiet.
+   *
+   * The **sequence number** is what makes this correct rather than merely debounced:
+   * two requests can be in flight when somebody types through the beat, and they can
+   * answer out of order, so an older answer must not be allowed to replace a newer
+   * one. Comparing against the query the effect was started for is not enough, since
+   * the same text can be typed twice.
+   */
+  private _suggestSeq = 0;
+
+  private readonly _suggestEffect = effect((onCleanup) => {
+    const query = this._suggestQuery().trim();
+
+    if (query.length < SUGGEST_MIN_CHARS) {
+      // Cleared synchronously rather than after the debounce: a dropdown that lingered
+      // over a field somebody has just emptied is offering matches for nothing.
+      untracked(() => this.suggestions.set([]));
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const seq = (this._suggestSeq += 1);
+      // **Scoped to where you shop** (velista plan 0047, section 3). The rule was
+      // documented on `CatalogServiceI.suggest` and in plan 0043 section 6, implemented
+      // in `CatalogApi`, and passed by nobody, which is the worst of the three states
+      // to be in: a reader of either document concluded it worked.
+      //
+      // The active profile, from the same store the profiles page writes. Nothing when
+      // none resolves, which is the documented honest behaviour for somebody who has
+      // set no profile up and is what the server already expects.
+      const profileId = this._profiles.selected()?.id;
+      void this._catalog
+        .suggest(query, profileId === undefined ? undefined : { profileId })
+        .then((found) => {
+          if (seq === this._suggestSeq) {
+            this.suggestions.set(found);
+          }
+        });
+    }, SUGGEST_DEBOUNCE_MS);
+
+    onCleanup(() => clearTimeout(timer));
+  });
+
+  /**
+   * The inline failure notice was tapped.
+   *
+   * It **opens the line** rather than repeating the write, and that is a change of
+   * meaning rather than a change of target. The failed write used to be a tick, which
+   * is one gesture with one obvious repeat; it is now a quantity adjustment whose
+   * delta this page no longer holds, and re-sending a guessed one would move the number
+   * by an amount nobody asked for a second time.
+   *
+   * So the notice clears and the sheet opens, where the number is on screen and can be
+   * set deliberately. Tapping a failure to see what happened is the honest reading of
+   * the gesture anyway.
+   */
+  retry(lineId: string): void {
     this._lines.dismissNote(lineId);
-    await this.toggle(lineId);
+    this.openLine(lineId);
   }
 
   dismissNote(lineId: string): void {
@@ -1065,8 +1205,17 @@ export class ListPage {
     }
   }
 
+  /**
+   * Open one of this page's sheets, named by what it is about.
+   *
+   * The `sheet` marker is added here rather than by the five callers, which is the
+   * same argument the route table makes for adding it in `sheet()`: a rule that has to
+   * be remembered five times is a rule that will be missed once.
+   */
   private _openSheet(path: readonly string[]): Promise<boolean> {
-    return this._router.navigate([...path], { relativeTo: this._route });
+    return this._router.navigate(sheetSegments(...path), {
+      relativeTo: this._route,
+    });
   }
 }
 

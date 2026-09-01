@@ -217,13 +217,27 @@ describe('LineComposer, one slot and the empty field decides', () => {
    * send, bin to throw it away. Nothing happens on its own.
    */
   describe('the plain recorder, which is the default', () => {
-    it('offers a bin beside the stop', async () => {
+    it('puts the bin at the far end of the row, away from stop', async () => {
+      // Plan 0042, section 6. The two controls a recording can end with were a
+      // thumb's width apart, one of which throws the recording away. The distance is
+      // the safeguard, so it is asserted in the DOM order rather than left to a
+      // stylesheet somebody could tune down.
       const { fixture } = await render();
 
       await press(fixture);
 
-      expect(host(fixture).querySelector('.discard')).not.toBeNull();
-      expect(host(fixture).querySelector('.stop')).not.toBeNull();
+      const row = host(fixture).querySelector('.listening');
+      const order = [...(row?.children ?? [])].map((child) => child.className);
+
+      expect(order[0]).toContain('stop');
+      expect(order[1]).toContain('meter');
+      expect(order[order.length - 1]).toContain('discard');
+
+      // The reading order agrees with the visual order, so the bin is also the last
+      // control a keyboard reaches in the row.
+      const controls = row?.querySelectorAll('button');
+      expect(controls?.[0].className).toContain('stop');
+      expect(controls?.[controls.length - 1].className).toContain('discard');
     });
 
     it('does not send when the talking stops', async () => {

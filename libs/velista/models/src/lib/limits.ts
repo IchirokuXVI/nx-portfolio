@@ -40,9 +40,88 @@ export const USERNAME_MAX_LENGTH = 40;
 export const LINE_CONTENT_MAX_LENGTH = 400;
 export const LINE_CONTENT_COUNTER_FROM = 350;
 
-/** `AddLineDto.quantity`. The stepper simply cannot be driven past either end. */
-export const LINE_QUANTITY_MIN = 1;
+/**
+ * `AddLineDto.quantity`. The reel simply cannot be driven past either end.
+ *
+ * **The floor is zero**, and it moved there with the trip status (backend plan
+ * 0047). Zero is not an empty line waiting to be deleted, it is the household
+ * saying it is stocked: the line stays exactly where it is holding everything it
+ * knows about itself, and somebody drags it back up in a fortnight. A floor of
+ * one would make the ordinary end of the gesture impossible.
+ */
+export const LINE_QUANTITY_MIN = 0;
 export const LINE_QUANTITY_MAX = 100000;
+
+/**
+ * How far the thumb travels per unit on the quantity reel (velista plan 0043,
+ * section 4).
+ *
+ * The reel is **positional**: it follows the finger one to one, with no
+ * acceleration and no auto repeat, so this number is the whole of its feel. At
+ * 40px a 390px phone leaves roughly 280px of comfortable travel, which covers
+ * about seven units in one uninterrupted drag. That is what makes two to five a
+ * single gesture rather than three, which is the difference between a control
+ * somebody uses and one they avoid.
+ */
+export const QUANTITY_REEL_PX_PER_UNIT = 40;
+
+/**
+ * How long the reel's overlay stays up after the thumb lifts, in milliseconds.
+ *
+ * The gesture does not end at the release. The overlay lingers so a second drag
+ * continues from the snapped number, and **the close is what commits**: one
+ * signed delta for the whole adjustment, however many times the thumb went back
+ * for more inside the window (section 4.1). Long enough to reach for again,
+ * short enough not to sit over the row.
+ */
+export const QUANTITY_REEL_IDLE_MS = 1600;
+
+/** How far a page key moves the quantity, for the reel's keyboard equivalent. */
+export const QUANTITY_REEL_PAGE_STEP = 5;
+
+/**
+ * How far a pointer may wander and still count as a tap on the reel, in pixels.
+ *
+ * The reel answers two gestures at once: a drag that carries the number along, and
+ * a tap on one of the numbers on show that goes straight to it. Six pixels is
+ * about the tremor a thumb has while standing still, and it is far short of the
+ * forty a single unit of travel takes, so nothing that reads as a tap can also
+ * have moved the number under it.
+ */
+export const QUANTITY_REEL_TAP_SLOP_PX = 6;
+
+/**
+ * How long a press may last and still count as a tap on the reel, in milliseconds.
+ *
+ * A tap goes to the number under the finger. A hold does not, because a hold is
+ * how a drag begins, and somebody who pressed, thought better of it and lifted
+ * without moving did not ask for the number they happened to be resting on.
+ */
+export const QUANTITY_REEL_TAP_MAX_MS = 350;
+
+/**
+ * How long a line stays deaf to a tap after the reel closes on its own, in
+ * milliseconds.
+ *
+ * The overlay sits over the row it belongs to, so a finger already on its way down
+ * when {@link QUANTITY_REEL_IDLE_MS} runs out lands on a row that was covered a
+ * frame ago. For this beat the line behaves exactly as it does while the reel is
+ * up: the tap is swallowed rather than opening the detail sheet. It does not apply
+ * when somebody closed the reel themselves by tapping elsewhere on the line, since
+ * then they were aiming at the row and they get the row, minus that one tap.
+ */
+export const QUANTITY_REEL_CLICK_SHIELD_MS = 250;
+
+/**
+ * How many characters the composer waits for before asking the catalog, and how
+ * long it waits after the last one (velista plan 0043, section 6).
+ *
+ * Three, because one or two characters match most of a supermarket and the list
+ * that comes back is noise under the field somebody is still typing into. The
+ * debounce is what stops a request per keystroke on a phone in a shop.
+ */
+export const SUGGEST_MIN_CHARS = 3;
+export const SUGGEST_DEBOUNCE_MS = 200;
 
 /**
  * `AddCommentDto.body`.
@@ -201,3 +280,29 @@ export const ASSISTANT_AUDIO_MIME_TYPES: readonly string[] = [
  * this product is for (plan 0012, section 4.5).
  */
 export const LINES_PAGE_SIZE = 100;
+
+/**
+/**
+ * What a history section asks for in one request (velista plan 0043, section 5.3).
+ *
+ * Far smaller than a page of lines, and for the opposite reason. A list is read whole
+ * so it can be reordered; a history is read to be **looked at**, newest first, and
+ * nobody scrolls a year of shopping. Twenty is a screenful and a bit, so the section
+ * offers more only when there genuinely is more.
+ *
+ * The cross list section multiplies this by the number of products on the line, since
+ * it reads one page per product and merges them. That is another reason to keep it
+ * small: a line carrying six brands of milk would otherwise fetch six hundred rows to
+ * draw ten.
+ */
+export const SETTLEMENTS_PAGE_SIZE = 20;
+
+/**
+ * `CreateGeneratedListDto.name` and `UpdateGeneratedListDto.name`, which is
+ * `GENERATED_LIST_LIMITS.nameMaxLength` in the contracts (backend plan 0050).
+ *
+ * The field it guards is optional, unlike every other name in this file: an unnamed
+ * basket is displayed as its generation date, so the limit only ever applies to
+ * somebody who chose to type one.
+ */
+export const GENERATED_LIST_NAME_MAX_LENGTH = 120;

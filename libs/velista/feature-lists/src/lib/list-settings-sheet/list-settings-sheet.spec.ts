@@ -87,7 +87,7 @@ function list(
     autoApproveLines: false,
     sharedWithZone: false,
     lineCount: 0,
-    readyCount: 0,
+    wantedCount: 0,
     myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
     ...overrides,
   };

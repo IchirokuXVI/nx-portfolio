@@ -3,54 +3,69 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ITEM_PATTERNS,
   PRICE_SCOPE_PATTERNS,
+  PRODUCT_GROUP_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
-  type CreatePriceScopeRequest,
-  type FindItemByEanRequest,
-  type FindItemByEanResult,
-  type GetSupermarketLocationItemRequest,
-  type ListPriceScopesRequest,
-  type ListSupermarketItemsByScopeRequest,
-  type ListSupermarketLocationItemsRequest,
-  type PriceScopeIdRequest,
-  type PriceScopePage,
-  type PriceScopeView,
-  type SupermarketLocationItemPage,
-  type SupermarketLocationItemView,
-  type UpdatePriceScopeRequest,
-  type UpsertSupermarketItemBatchRequest,
-  type UpsertSupermarketItemBatchResult,
-  type UpsertSupermarketLocationItemRequest,
   type CreateItemRequest,
+  type CreatePriceScopeRequest,
+  type CreateProductGroupRequest,
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
+  type FindItemByEanRequest,
+  type FindItemByEanResult,
+  type GetItemsRequest,
+  type GetItemsResult,
   type GetSupermarketItemRequest,
+  type GetSupermarketLocationItemRequest,
   type ItemIdRequest,
   type ItemPage,
   type ItemView,
+  type ListPriceScopesRequest,
+  type ListProductGroupsRequest,
   type ListSupermarketItemsByItemRequest,
   type ListSupermarketItemsByLocationRequest,
+  type ListSupermarketItemsByScopeRequest,
+  type ListSupermarketLocationItemsRequest,
   type ListSupermarketLocationsRequest,
   type ListSupermarketsRequest,
+  type PriceScopeIdRequest,
+  type PriceScopePage,
+  type PriceScopeView,
+  type ProductGroupIdRequest,
+  type ProductGroupOfferPage,
+  type ProductGroupPage,
+  type ProductGroupView,
+  type ResolvedScopesView,
+  type ResolvePriceScopesRequest,
   type SearchItemsRequest,
+  type SearchOffersRequest,
   type SupermarketIdRequest,
   type SupermarketItemIdRequest,
   type SupermarketItemPage,
   type SupermarketItemView,
   type SupermarketLocationIdRequest,
+  type SupermarketLocationItemPage,
+  type SupermarketLocationItemView,
   type SupermarketLocationPage,
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
   type UpdateItemRequest,
+  type UpdatePriceScopeRequest,
+  type UpdateProductGroupRequest,
   type UpdateSupermarketLocationRequest,
   type UpdateSupermarketRequest,
+  type UpsertSupermarketItemBatchRequest,
+  type UpsertSupermarketItemBatchResult,
   type UpsertSupermarketItemRequest,
+  type UpsertSupermarketLocationItemRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { ItemService } from './item.service';
 import { PriceScopeService } from './price-scope.service';
+import { ProductGroupService } from './product-group.service';
+import { ScopeResolverService } from './scope-resolver.service';
 import { SupermarketItemService } from './supermarket-item.service';
 import { SupermarketLocationItemService } from './supermarket-location-item.service';
 import { SupermarketLocationService } from './supermarket-location.service';
@@ -70,7 +85,9 @@ export class CatalogController {
     private readonly items: ItemService,
     private readonly supermarketItems: SupermarketItemService,
     private readonly priceScopes: PriceScopeService,
-    private readonly locationItems: SupermarketLocationItemService
+    private readonly locationItems: SupermarketLocationItemService,
+    private readonly productGroups: ProductGroupService,
+    private readonly scopeResolver: ScopeResolverService
   ) {}
 
   // --- Supermarkets --------------------------------------------------------
@@ -169,9 +186,33 @@ export class CatalogController {
     return this.items.get(req);
   }
 
+  /**
+   * Several products by id, for the basket screen (plan 0051, section 6.1).
+   *
+   * The one catalog read that carries no `userId`, because a product's name is
+   * not private and a **guest** holding a shared basket has to be able to read
+   * the name of the thing they are being asked to buy.
+   */
+  @MessagePattern(ITEM_PATTERNS.getMany)
+  getItems(@Payload() req: GetItemsRequest): Promise<GetItemsResult> {
+    return this.items.getMany(req);
+  }
+
   @MessagePattern(ITEM_PATTERNS.search)
   searchItems(@Payload() req: SearchItemsRequest): Promise<ItemPage> {
     return this.items.search(req);
+  }
+
+  /**
+   * Ranked groups with their cheapest member (plan 0048, section 3). The read the
+   * list composer runs for a bare word, and the one that enforces "a group beats
+   * an item" by existing at all.
+   */
+  @MessagePattern(ITEM_PATTERNS.searchOffers)
+  searchOffers(
+    @Payload() req: SearchOffersRequest
+  ): Promise<ProductGroupOfferPage> {
+    return this.items.searchOffers(req);
   }
 
   @MessagePattern(ITEM_PATTERNS.findByEan)
@@ -179,6 +220,43 @@ export class CatalogController {
     @Payload() req: FindItemByEanRequest
   ): Promise<FindItemByEanResult> {
     return this.items.findByEan(req);
+  }
+
+  // --- Product groups (plan 0048, section 1) -------------------------------
+
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.create)
+  createProductGroup(
+    @Payload() req: CreateProductGroupRequest
+  ): Promise<ProductGroupView> {
+    return this.productGroups.create(req);
+  }
+
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.update)
+  updateProductGroup(
+    @Payload() req: UpdateProductGroupRequest
+  ): Promise<ProductGroupView> {
+    return this.productGroups.update(req);
+  }
+
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.delete)
+  deleteProductGroup(
+    @Payload() req: ProductGroupIdRequest
+  ): Promise<{ id: string }> {
+    return this.productGroups.delete(req);
+  }
+
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.get)
+  getProductGroup(
+    @Payload() req: ProductGroupIdRequest
+  ): Promise<ProductGroupView> {
+    return this.productGroups.get(req);
+  }
+
+  @MessagePattern(PRODUCT_GROUP_PATTERNS.list)
+  listProductGroups(
+    @Payload() req: ListProductGroupsRequest
+  ): Promise<ProductGroupPage> {
+    return this.productGroups.list(req);
   }
 
   // --- Price scopes (plan 0038) --------------------------------------------
@@ -209,6 +287,18 @@ export class CatalogController {
     @Payload() req: ListPriceScopesRequest
   ): Promise<PriceScopePage> {
     return this.priceScopes.list(req);
+  }
+
+  /**
+   * What a place resolves to today (plan 0049, sections 1.1 and 3.1). The
+   * gateway's second call before a scoped catalog read: core says what the user
+   * typed, this says what it means.
+   */
+  @MessagePattern(PRICE_SCOPE_PATTERNS.resolve)
+  resolvePriceScopes(
+    @Payload() req: ResolvePriceScopesRequest
+  ): Promise<ResolvedScopesView> {
+    return this.scopeResolver.resolve(req);
   }
 
   // --- Per store rows (plan 0038, section 5.2) -----------------------------

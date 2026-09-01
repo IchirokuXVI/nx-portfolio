@@ -109,6 +109,19 @@ export interface AuthConfig {
     kid: string;
     accessTokenTtl: string;
     refreshTokenTtl: string;
+    /**
+     * How long a participant's basket scoped socket token lives (plan 0051,
+     * section 9).
+     *
+     * Shorter than an access token, because it is the one token that cannot be
+     * revoked: revocation is carried by the participant row, which is read when
+     * the token is **refreshed** rather than when it is used. So its lifetime is
+     * the window in which a revoked guest's socket can still be open, and fifteen
+     * minutes is short enough for that to be a shopping trip's worth of slack
+     * rather than a hole. The eviction sweep closes the window immediately in the
+     * ordinary case; this is the backstop for a sweep that never ran.
+     */
+    participantTokenTtl: string;
   };
   google: {
     clientId: string;
@@ -163,6 +176,11 @@ export const authConfiguration = registerAs(
       kid: process.env.AUTH_JWT_KID as string,
       accessTokenTtl: process.env.ACCESS_TOKEN_TTL as string,
       refreshTokenTtl: process.env.REFRESH_TOKEN_TTL as string,
+      // Defaulted rather than required, unlike the two above: an existing
+      // deployment's env has never heard of it, and a service that refuses to
+      // boot for want of a value with an obvious right answer is a worse failure
+      // than the value being implicit (plan 0051, section 9).
+      participantTokenTtl: process.env.PARTICIPANT_TOKEN_TTL ?? '15m',
     },
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',

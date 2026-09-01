@@ -1,0 +1,66 @@
+<!--
+  One button and not a checkbox. A line is settled rather than ticked, and
+  settling asks how many, so the whole row opens the sheet (plan 0043 took the
+  checkbox off the list page; this screen never had one).
+
+  `aria-label` carries the whole row, because the quantity and the attribution
+  are separate lines visually and a reader moving by button would hear only the
+  content otherwise.
+-->
+<button
+  (click)="open.emit()"
+  [attr.aria-busy]="busy() ? 'true' : null"
+  [attr.aria-label]="label()"
+  [class.is-done]="state() === 'done'"
+  class="row"
+  type="button"
+>
+  <span class="body">
+    <span class="content">{{ line().content }}</span>
+
+    <!--
+      The picked product, named and never priced: the pick is the first option
+      added rather than the cheapest (backend 0050), so a "best price" badge
+      would be a claim nothing behind it computes.
+    -->
+    @if (productName(); as product) {
+      <span class="product">{{ product }}</span>
+    } @else if (line().optionIds.length > 0) {
+      <span class="product is-missing">{{ 'basket.product.none' | rokuT }}</span>
+    }
+
+    <!--
+      Who got the bread. Drawn on the row rather than behind a tap, because that
+      is the question in a shop where four people work one list.
+    -->
+    @if (touched(); as caption) {
+      <span class="touched">{{ caption }}</span>
+    }
+
+    <!--
+      Which household this came from. Drawn only when `origins` is present, which
+      it is not for a guest: the data decides, so there is no flag here to get
+      wrong (section 4.1).
+    -->
+    @if (from(); as origins) {
+      <span class="from">{{ origins }}</span>
+    }
+  </span>
+
+  <span class="numbers">
+    @if (state() === 'partly') {
+      <!--
+        Both numbers, so somebody can see what is left without arithmetic. A
+        partly settled line is the whole reason settling is cumulative.
+      -->
+      <span aria-hidden="true" class="outstanding">{{ outstanding() }}</span>
+      <span aria-hidden="true" class="progress">{{ quantity() }}</span>
+    } @else if (quantity()) {
+      <span aria-hidden="true" class="quantity">{{ quantity() }}</span>
+    }
+
+    @if (busy()) {
+      <span class="visually-hidden">{{ 'basket.line.busy' | rokuT }}</span>
+    }
+  </span>
+</button>

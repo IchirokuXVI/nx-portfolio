@@ -1,0 +1,77 @@
+:host {
+  display: block;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-4) var(--app-space-5);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The border is the second signal beside the word, never the only one.
+.is-active {
+  border-color: var(--app-status-success-border);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  flex: none;
+  padding: var(--app-space-hair) var(--app-space-3);
+  border: 1px solid var(--app-status-success-border);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-success-bg);
+  color: var(--app-status-success-fg);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.chevron {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}

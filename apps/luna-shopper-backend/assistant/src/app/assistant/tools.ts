@@ -3,20 +3,21 @@ import {
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
   LineApprovalStatus,
-  LineStatus,
   ListResolutionBranch,
+  SettlementOutcome,
   UsernamePropagation,
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
 import type { ModelToolDeclaration } from '../provider/model-provider';
 import { GatewayApiClient, GatewayApiError } from './gateway-api.client';
+import type { ChoiceCollector, ListLinkCollector } from './link-and-choices';
 import {
+  matchByName,
   normalize,
   resolveList,
   type ContextList,
   type ListResolution,
 } from './list-resolution';
-import type { ReferenceCollector } from './references';
 import type { KnownLine, TurnContext } from './turn-context';
 
 /**
@@ -41,8 +42,8 @@ import type { KnownLine, TurnContext } from './turn-context';
  *
  * - **It names things the way a person does, with one deliberate exception.**
  *   Arguments are product text and list names, results are shaped for a
- *   sentence, and the ids the client needs are emitted separately as references
- *   (rule A3). The exception is a **line id**, which `query_lists` returns and
+ *   sentence, and the ids the client needs are emitted separately, as a link
+ *   and as choices (rule A3, plan 0046). The exception is a **line id**, which `query_lists` returns and
  *   the two tools from plan 0043 take back: removing a line and settling one
  *   have to say which line, and a description would be a guess where an id is a
  *   fact. It is bounded rather than trusted — an id is accepted only if this
@@ -57,7 +58,17 @@ import type { KnownLine, TurnContext } from './turn-context';
 export interface ToolRuntime {
   context: TurnContext;
   api: GatewayApiClient;
-  references: ReferenceCollector;
+  /**
+   * The one list this answer may send somebody to, when the turn touches exactly
+   * one (plan 0046, section 2.4).
+   */
+  link: ListLinkCollector;
+  /**
+   * The answers to a question this turn asked, when it asked one (section 4).
+   * Separate from the link on purpose: candidates are lists the turn could not
+   * choose between, not lists it touched.
+   */
+  choices: ChoiceCollector;
   /** The conversation so far as plain text, for branch 2 of list resolution. */
   transcript: string[];
   /** Recorded when a write resolved a list, for section 10's turn record. */
@@ -79,6 +90,17 @@ export interface ToolRuntime {
 
 export interface AssistantTool {
   declaration: ModelToolDeclaration;
+  /**
+   * The same tool as a scoped turn sees it, when a scope changes what it can be
+   * asked (plan 0046, section 5.2). Defaults to {@link declaration}.
+   *
+   * A tool declares **per scope** so that an absent parameter is genuinely
+   * absent. Narrowing the catalog and leaving the declarations alone left a
+   * scoped turn reading a `list` parameter and a description about being told to
+   * ask, which is the model being taught the question in the same breath the
+   * context tells it there is only one list.
+   */
+  scopedDeclaration?: ModelToolDeclaration;
   execute(
     args: Record<string, unknown>,
     runtime: ToolRuntime
@@ -104,6 +126,46 @@ interface UpsertItem {
   quantity: number | undefined;
 }
 
+/**
+ * What to put on the list, which is the same question in both scopes (plan 0046,
+ * section 5.2).
+ *
+ * Hoisted so the open and the scoped declaration share it by reference. The only
+ * thing a scope changes about `upsert_lines` is whether there is a list to name,
+ * and two copies of this schema would drift on the first edit to a product's
+ * wording.
+ */
+const upsertItemsParameter = {
+  type: 'array',
+  minItems: 1,
+  maxItems: LINE_BATCH_MAX_ITEMS,
+  description: 'Everything they asked for, in the order they said it.',
+  items: {
+    type: 'object',
+    properties: {
+      product: {
+        type: 'string',
+        description:
+          "The thing to buy, in this person's own words, without the quantity.",
+      },
+      quantity: {
+        type: 'integer',
+        minimum: LINE_QUANTITY_MIN,
+        maximum: LINE_QUANTITY_MAX,
+        description:
+          'How many. Omit when they did not say. With mode "add" it is how many to add, and omitting it means one more.',
+      },
+      mode: {
+        type: 'string',
+        enum: ['set', 'add'],
+        description:
+          '"set" is the default and means the list should end up with this many. Send "add" when they asked for more of something on top of what is already there: "two more", "another", "a couple extra". Never work out the new total yourself.',
+      },
+    },
+    required: ['product'],
+  },
+};
+
 const upsertLines: AssistantTool = {
   declaration: {
     name: 'upsert_lines',
@@ -112,36 +174,7 @@ const upsertLines: AssistantTool = {
     parameters: {
       type: 'object',
       properties: {
-        items: {
-          type: 'array',
-          minItems: 1,
-          maxItems: LINE_BATCH_MAX_ITEMS,
-          description: 'Everything they asked for, in the order they said it.',
-          items: {
-            type: 'object',
-            properties: {
-              product: {
-                type: 'string',
-                description:
-                  "The thing to buy, in this person's own words, without the quantity.",
-              },
-              quantity: {
-                type: 'integer',
-                minimum: LINE_QUANTITY_MIN,
-                maximum: LINE_QUANTITY_MAX,
-                description:
-                  'How many. Omit when they did not say. With mode "add" it is how many to add, and omitting it means one more.',
-              },
-              mode: {
-                type: 'string',
-                enum: ['set', 'add'],
-                description:
-                  '"set" is the default and means the list should end up with this many. Send "add" when they asked for more of something on top of what is already there: "two more", "another", "a couple extra". Never work out the new total yourself.',
-              },
-            },
-            required: ['product'],
-          },
-        },
+        items: upsertItemsParameter,
         list: {
           type: 'string',
           description:
@@ -152,6 +185,30 @@ const upsertLines: AssistantTool = {
           description:
             'The name of the zone, when they named one and it narrows which list is meant.',
         },
+      },
+      required: ['items'],
+    },
+  },
+
+  /**
+   * Scoped, there is no list to name, so there is no `list` and no `zone` (plan
+   * 0046, section 5.2).
+   *
+   * The parameters are the argument. A `list` property says plainly that there is
+   * a choice of list to make, and the open description's closing sentence, "call
+   * this anyway with no list and you will be told to ask", teaches the question
+   * outright. Plan 0044 enforced the scope inside `execute` and the person was
+   * asked anyway, because the model asked **instead of** calling the tool and
+   * enforcement inside a tool cannot answer a question asked before reaching it.
+   */
+  scopedDeclaration: {
+    name: 'upsert_lines',
+    description:
+      'Put things on the list this person is looking at, or change how many of something is on it. Use it whenever they ask for something to be added. Pass every product they named in one call: ten things is one call with ten items, never ten calls. Give each product exactly as they said it, without the quantity. There is one list and it is the one they are looking at. Never ask which list they meant.',
+    parameters: {
+      type: 'object',
+      properties: {
+        items: upsertItemsParameter,
       },
       required: ['items'],
     },
@@ -193,14 +250,20 @@ const upsertLines: AssistantTool = {
     // with several lists, and the result says so plainly enough that the model
     // asks rather than apologizes.
     if (resolution.branch === ListResolutionBranch.ASKED) {
-      for (const candidate of resolution.candidates) {
-        runtime.references.list(candidate);
-      }
+      // The candidates are the answers to the question, not lists this turn
+      // touched (plan 0046, section 2.4). Sending them to the link collector
+      // would guarantee "several lists" on exactly the turn that most needs the
+      // person to pick one, and the link would come back null anyway.
+      runtime.choices.lists(resolution.candidates);
       return {
         ok: false,
         needsList: true,
         message:
           'Nothing was written. Ask which of these lists they meant, then call this tool again with that name.',
+        // The model's own copy, so it can ask the question in words naming
+        // real lists. The chips the person taps are the collector's above, and
+        // the two are deliberately not the same object: this one is prose the
+        // model rewrites, and that one is what comes back as the next turn.
         choices: resolution.candidates.map(describeList),
       };
     }
@@ -247,7 +310,7 @@ const upsertLines: AssistantTool = {
         // The batch answers in request order, which is what lets a line be put
         // back against the item that asked for it.
         added.forEach((line, position) => {
-          runtime.references.line(list, line.id, line.content);
+          runtime.link.list(list);
           results[fresh[position].index] = describeLine('added', line);
         });
       } catch (error) {
@@ -272,7 +335,7 @@ const upsertLines: AssistantTool = {
       // caller without `DECIDE` outright. Somebody mentioning milk a second time
       // was told they were not allowed to do something they never meant to do.
       if (mode === 'set' && quantity === undefined) {
-        runtime.references.line(list, existing.id, existing.content);
+        runtime.link.list(list);
         results[entry.index] = describeLine('unchanged', existing);
         continue;
       }
@@ -291,7 +354,7 @@ const upsertLines: AssistantTool = {
                 { content: product, quantity }
               );
         wrote = true;
-        runtime.references.line(list, line.id, line.content);
+        runtime.link.list(list);
         results[entry.index] = describeLine(
           mode === 'add' ? 'increased' : 'updated',
           line
@@ -362,6 +425,37 @@ const queryLists: AssistantTool = {
     },
   },
 
+  /**
+   * Scoped, there is one list to look at and it is not chosen (plan 0046,
+   * section 5.2).
+   *
+   * `list` and `zone` are gone for the same reason as on `upsert_lines`: a
+   * parameter offering a choice is a statement that there is one to make. What
+   * changes here is only the wording of the remaining two, because reading is not
+   * the operation a wrong guess damages.
+   */
+  scopedDeclaration: {
+    name: 'query_lists',
+    description:
+      'Look at what is actually on the list this person is looking at: whether something is on it, how much of it, what is still pending. Call it before answering any question about the contents of the list. Never answer such a question from memory.',
+    parameters: {
+      type: 'object',
+      properties: {
+        item: {
+          type: 'string',
+          description:
+            'The thing being asked about. Omit to report on the whole list.',
+        },
+        pendingOnly: {
+          type: 'boolean',
+          description:
+            'True when they asked what is still to buy, rather than what is on the list.',
+        },
+      },
+      required: [],
+    },
+  },
+
   async execute(args, runtime) {
     const item = readString(args['item']);
     const pendingOnly = args['pendingOnly'] === true;
@@ -388,13 +482,13 @@ const queryLists: AssistantTool = {
         const matching = lines.filter(
           (line) =>
             (!item || mentionsProduct(line, item)) &&
-            (!pendingOnly || line.status === LineStatus.PENDING)
+            // Wanted, since plan 0047: a line's quantity is the only thing
+            // that says whether the household still needs it, and a line at zero
+            // is one nobody has to go and get.
+            (!pendingOnly || line.quantity > 0)
         );
 
-        runtime.references.list(list);
-        for (const line of matching.slice(0, 20)) {
-          runtime.references.line(list, line.id, line.content);
-        }
+        runtime.link.list(list);
 
         lists.push({
           list: list.listName,
@@ -412,7 +506,6 @@ const queryLists: AssistantTool = {
             id: line.id,
             product: line.content,
             quantity: line.quantity,
-            status: line.status,
             approval: line.approvalStatus,
           })),
         });
@@ -618,7 +711,7 @@ const removeLines: AssistantTool = {
     // between. On a voice turn it is read back, which is the case this matters
     // most in.
     if (args['confirmed'] !== true) {
-      runtime.references.list(list);
+      runtime.link.list(list);
       return {
         ok: false,
         needsConfirmation: true,
@@ -643,12 +736,12 @@ const removeLines: AssistantTool = {
       try {
         await runtime.api.deleteLine(runtime.context.caller, known.line.id);
         removed.push(known.line.content);
-        // Gone, so nothing later in this turn can name it again, and no chip in
-        // the reply points at it (section 5). The second one matters even though
-        // this tool emits no line reference of its own: the `query_lists` that
-        // found the line a moment ago emitted one.
+        // Gone, so nothing later in this turn can name it again (plan 0043,
+        // section 3.1). There is no second half to this any more: the collector
+        // used to need telling as well, because the `query_lists` that found the
+        // line a moment ago had emitted a chip for it, and since plan 0046 the
+        // only thing a link can be is a list.
         runtime.context.forgetLine(known.line.id);
-        runtime.references.forgetLine(known.line.id);
       } catch (error) {
         failure = error;
         break;
@@ -657,11 +750,11 @@ const removeLines: AssistantTool = {
 
     if (removed.length > 0) {
       runtime.context.invalidate(list.listId);
-      // Rule A3, and section 5: the reference is the **list** they came off,
-      // never the lines. A reference is a link, the link opens a line, and that
-      // line is gone; the one guarantee rule A3 makes is that a reference cannot
-      // 404, and this is the only tool that could break it.
-      runtime.references.list(list);
+      // Rule A3, and plan 0043 section 5: the link is the **list** they came
+      // off. Since plan 0046 that is the only thing a link can ever be, so the
+      // deleted lines cannot be linked to and there is nothing to forget: the
+      // list surviving a deletion was the behaviour plan 0043 wanted all along.
+      runtime.link.list(list);
     }
 
     if (failure !== undefined) {
@@ -689,14 +782,27 @@ const removeLines: AssistantTool = {
 };
 
 // ---------------------------------------------------------------------------
-// 0043.4 set_line_status
+// 0047.4 settle_lines
 // ---------------------------------------------------------------------------
 
-const setLineStatus: AssistantTool = {
+/**
+ * The same sentence said out loud, mapped onto a settlement (plan 0047, section
+ * 2.4).
+ *
+ * It replaced `set_line_status`, whose subject went with the trip status a zone
+ * line no longer carries. The array shape and the resolution rule plan 0043 gave
+ * that tool are unaffected and are kept verbatim: ids from this turn or nothing
+ * is written, and every line they named goes in one call.
+ *
+ * The third value is gone with the state machine. "Put the bread back" is a
+ * quantity, not an outcome, and nothing here writes one: the person is looking at
+ * the screen that has the control on it.
+ */
+const settleLines: AssistantTool = {
   declaration: {
-    name: 'set_line_status',
+    name: 'settle_lines',
     description:
-      'Mark lines as bought, as not available in the shop, or as still needed. It works only with line ids that came back from query_lists in this same turn, so look the list up first and never write an id yourself. Pass every line they mentioned in one call: "we have got the milk and the bread" is one call with two ids. Do not ask them to confirm first, and do not ask afterwards either: it is reversible and they are looking at the screen it changes.',
+      'Record that lines were bought, or that the shop did not have them. It works only with line ids that came back from query_lists in this same turn, so look the list up first and never write an id yourself. Pass every line they mentioned in one call: "we have got the milk and the bread" is one call with two ids. Do not ask them to confirm first, and do not ask afterwards either: they are looking at the screen it changes.',
     parameters: {
       type: 'object',
       properties: {
@@ -708,21 +814,40 @@ const setLineStatus: AssistantTool = {
             'The ids of the lines to settle, exactly as query_lists gave them to you in this turn.',
           items: { type: 'string' },
         },
-        status: {
+        outcome: {
           type: 'string',
-          enum: Object.values(LineStatus),
+          enum: Object.values(SettlementOutcome),
           description:
-            'READY when they have it: "got the milk", "we have got the bread", "that is in the trolley". NOT_AVAILABLE when the shop did not have it: "they had no eggs", "there was none left". These two are not the same thing and must never be swapped: READY means that errand is done, NOT_AVAILABLE means somebody still has to go somewhere else for it. PENDING puts a line back to still being needed, for "no, put the bread back".',
+            'BOUGHT when they have it: "got the milk", "we have got the bread", "that is in the trolley". NOT_AVAILABLE when the shop did not have it: "they had no eggs", "there was none left". These two are not the same thing and must never be swapped: BOUGHT means that errand is done and takes the units off what is still wanted, NOT_AVAILABLE means somebody still has to go somewhere else for it and changes nothing about how many are needed.',
+        },
+        quantity: {
+          type: 'integer',
+          minimum: 1,
+          description:
+            'How many were bought, when they said a number: "I got two of the milk". Leave it out for "we got the milk", which is one. It has no meaning when the shop did not have it, so do not send it then.',
         },
       },
-      required: ['lineIds', 'status'],
+      required: ['lineIds', 'outcome'],
     },
   },
 
   async execute(args, runtime) {
-    const status = readStatus(args['status']);
-    if (status === undefined) {
-      return { ok: false, problem: 'that is not a status a line can have' };
+    const outcome = readOutcome(args['outcome']);
+    if (outcome === undefined) {
+      return {
+        ok: false,
+        problem: 'that is not something that can happen to a line',
+      };
+    }
+    const quantity = readQuantity(args['quantity']);
+    if (quantity !== undefined && outcome === SettlementOutcome.NOT_AVAILABLE) {
+      // Refused here rather than passed on, because core refuses it too and the
+      // model has plainly misread the two fields for each other.
+      return {
+        ok: false,
+        problem:
+          'a line the shop did not have carries no quantity. Say what happened, or say how many they bought, not both',
+      };
     }
 
     const ids = readIds(args['lineIds']);
@@ -758,25 +883,29 @@ const setLineStatus: AssistantTool = {
     }
 
     // **No confirmation**, and that is a decision rather than an omission: it is
-    // reversible, it is visible, and confirming a tick is nagging.
-    const results: StatusResult[] = [];
+    // visible, it is one tap to put right on the screen they are looking at, and
+    // confirming every "got it" is nagging.
+    const results: SettleResult[] = [];
     const touched = new Set<string>();
     let firstFailure: unknown;
 
     for (const known of resolved) {
       try {
-        const line = await runtime.api.setLineStatus(
+        const { line, settlement } = await runtime.api.settleLine(
           runtime.context.caller,
           known.line.id,
-          status
+          outcome,
+          quantity
         );
         touched.add(known.list.listId);
-        runtime.references.line(known.list, line.id, line.content);
+        runtime.link.list(known.list);
         results.push({
           product: line.content,
-          // The server's value, reported rather than assumed to be the one that
-          // was asked for.
-          status: line.status,
+          // The server's values, reported rather than assumed to be the ones
+          // that were asked for: how many it recorded, and how many are still
+          // wanted afterwards, which is what makes a partial settle sayable.
+          settled: settlement.quantity,
+          stillWanted: line.quantity,
           list: known.list.listName,
         });
       } catch (error) {
@@ -801,7 +930,7 @@ const setLineStatus: AssistantTool = {
       runtime.noteForRecord({ list: [...touched].join(',') });
     }
 
-    return { ok: true, status, lines: results };
+    return { ok: true, outcome, lines: results };
   },
 };
 
@@ -809,7 +938,7 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
   upsertLines,
   queryLists,
   removeLines,
-  setLineStatus,
+  settleLines,
   renameMe,
 ];
 
@@ -830,16 +959,16 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
  * refusal it has to be told how to handle.
  *
  * All four of the plan's tools are here now that plan 0043 has built
- * `remove_lines` and `set_line_status`. Both belong on this list for the reason
- * `rename_me` does not: they are operations on a list, and taking something off
- * the list in front of you or ticking it as bought is among the likeliest things
- * to be said into that microphone.
+ * `remove_lines` and the tool plan 0047 turned into `settle_lines`. Both belong
+ * on this list for the reason `rename_me` does not: they are operations on a
+ * list, and taking something off the list in front of you or saying you have got
+ * it is among the likeliest things to be said into that microphone.
  */
 export const SCOPED_TOOLS: AssistantTool[] = [
   upsertLines,
   queryLists,
   removeLines,
-  setLineStatus,
+  settleLines,
 ];
 
 export const TOOL_DECLARATIONS: ModelToolDeclaration[] = ASSISTANT_TOOLS.map(
@@ -847,7 +976,7 @@ export const TOOL_DECLARATIONS: ModelToolDeclaration[] = ASSISTANT_TOOLS.map(
 );
 
 export const SCOPED_TOOL_DECLARATIONS: ModelToolDeclaration[] =
-  SCOPED_TOOLS.map((tool) => tool.declaration);
+  SCOPED_TOOLS.map((tool) => tool.scopedDeclaration ?? tool.declaration);
 
 /** The catalog this turn was given, which is the only place a tool may be found. */
 export function catalogFor(scoped: boolean): AssistantTool[] {
@@ -864,9 +993,19 @@ export function findTool(
 /**
  * Whether a call named a list that is not the scoped one.
  *
- * Matching is the same normalization list resolution uses, so "the flat list"
- * and "Flat list" are one answer here and there. A call that named nothing is
- * not out of scope: it meant the list on the screen, which is the only one.
+ * Matching is the same {@link matchByName} list resolution uses, so a name that
+ * matches the scoped list loosely **is** the scoped list. Strict normalized
+ * equality was a second way to fail the promise this backstop exists to keep
+ * (plan 0046, section 5.3): a model writing "the shopping list" for a list called
+ * "Compra semanal" was told it was out of scope, and then told the person to go
+ * and find the other list, which is the very thing a scope is meant to prevent.
+ *
+ * A call that named nothing is not out of scope: it meant the list on the screen,
+ * which is the only one. And a call naming a genuinely different list is still
+ * refused, which is the whole job.
+ *
+ * It survives section 5.2's scoped declarations because a model can still put a
+ * `list` key in a call whose schema has no such property.
  */
 function namesAnotherList(
   args: Record<string, unknown>,
@@ -878,7 +1017,7 @@ function namesAnotherList(
     named !== null &&
     named !== undefined &&
     named.trim().length > 0 &&
-    normalize(named) !== normalize(scoped.listName)
+    matchByName([scoped], named).length === 0
   );
 }
 
@@ -1026,10 +1165,13 @@ function describeScope(propagation: UsernamePropagation): string {
   }
 }
 
-/** What one line of a `set_line_status` call ended up saying. */
-interface StatusResult {
+/** What one line of a `settle_lines` call ended up saying. */
+interface SettleResult {
   product: string;
-  status?: LineStatus;
+  /** Units recorded, and 0 when the shop did not have it. */
+  settled?: number;
+  /** What the line still asks for afterwards, which a partial settle leaves. */
+  stillWanted?: number;
   list?: string;
   refused?: true;
   reason?: string;
@@ -1070,16 +1212,16 @@ function readIds(value: unknown): string[] {
 }
 
 /**
- * The status asked for, or `undefined` for anything that is not one of the three.
+ * The outcome asked for, or `undefined` for anything that is not one of the two.
  *
- * Matched against the enum rather than lowercased and mapped, because the three
+ * Matched against the enum rather than lowercased and mapped, because the two
  * values are what the tool schema offers and what the gateway takes, and a
  * spelling this does not recognize is a call that should fail here rather than
- * be turned into whichever of the three looks closest.
+ * be turned into whichever of the two looks closest.
  */
-function readStatus(value: unknown): LineStatus | undefined {
+function readOutcome(value: unknown): SettlementOutcome | undefined {
   const wanted = readString(value);
-  return Object.values(LineStatus).find((status) => status === wanted);
+  return Object.values(SettlementOutcome).find((outcome) => outcome === wanted);
 }
 
 /** Lists to read: the named one, else the named zone's, else all of them. */
@@ -1131,6 +1273,14 @@ function readString(value: unknown): string | undefined {
     : undefined;
 }
 
+/**
+ * A count a tool argument carries, or `undefined` when it carries none.
+ *
+ * Shared by `upsert_lines` and `settle_lines`. Anything that is not a number at
+ * least one is dropped rather than refused, and the caller then uses its own
+ * default: a model that answered "a couple" has still said the thing was bought,
+ * and losing the count is a smaller error than losing the purchase.
+ */
 function readQuantity(value: unknown): number | undefined {
   const quantity = typeof value === 'number' ? Math.round(value) : Number.NaN;
   return Number.isFinite(quantity) && quantity >= 1 ? quantity : undefined;

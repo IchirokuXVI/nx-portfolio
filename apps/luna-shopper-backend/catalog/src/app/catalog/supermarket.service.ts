@@ -17,8 +17,9 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository, type SelectQueryBuilder } from 'typeorm';
 import { Supermarket } from '../entities';
-import { PlatformAdminService } from './platform-admin.service';
 import { toSupermarketView } from './catalog.mappers';
+import { PlatformAdminService } from './platform-admin.service';
+import { PriceScopeService } from './price-scope.service';
 
 interface SupermarketCursor {
   order: SupermarketOrder;
@@ -32,6 +33,7 @@ export class SupermarketService {
   constructor(
     @InjectRepository(Supermarket)
     private readonly supermarkets: Repository<Supermarket>,
+    private readonly priceScopes: PriceScopeService,
     private readonly admin: PlatformAdminService
   ) {}
 
@@ -43,6 +45,11 @@ export class SupermarketService {
         logoUrl: req.logoUrl ?? null,
         websiteUrl: req.websiteUrl ?? null,
         externalBrandKey: req.externalBrandKey ?? null,
+        // Never set on creation, and not because it was forgotten: a scope
+        // belongs to a chain, so a chain that does not exist yet has none to
+        // point at. It is set by `update`, after the scopes are (plan 0049,
+        // section 3.1).
+        defaultPriceScopeId: null,
       })
     );
     return toSupermarketView(saved);
@@ -65,6 +72,20 @@ export class SupermarketService {
     // owner wants, so discovery's guess is a default rather than an oracle.
     if (req.externalBrandKey !== undefined) {
       row.externalBrandKey = req.externalBrandKey;
+    }
+    // The last rung of the scope ladder (plan 0049, section 3.1). Checked to
+    // belong to this chain, because a default pointing at another chain's
+    // warehouse would quote a competitor's prices under this brand's name.
+    if (req.defaultPriceScopeId !== undefined) {
+      row.defaultPriceScopeId =
+        req.defaultPriceScopeId === null
+          ? null
+          : (
+              await this.priceScopes.requireScopeOf(
+                req.defaultPriceScopeId,
+                row.id
+              )
+            ).id;
     }
     return toSupermarketView(await this.supermarkets.save(row));
   }

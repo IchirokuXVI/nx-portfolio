@@ -23,39 +23,48 @@
 
   <div class="lines">
     @for (line of lines(); track line.content) {
+      <!--
+        No control at the head of the row any more, because there is none on the real
+        row either (velista plan 0043, section 1.1). What used to sit here was a tick,
+        a circle or a cross, which is a picture of a checkbox this product does not
+        have. The indicator sits under the content where the real row puts it, and the
+        quantity carries the state.
+      -->
       <div class="line">
-        @switch (line.status) {
-          @case ('READY') {
-            <lib-check-circle-icon class="status status-ready" />
-          }
-          @case ('NOT_AVAILABLE') {
-            <lib-x-circle-icon class="status status-missing" />
-          }
-          @default {
-            <lib-circle-icon class="status status-pending" />
-          }
-        }
-
         <div class="content">
-          <span [class.done]="line.status === 'READY'" class="text">{{
+          <span [class.settled]="line.indicator === 'bought'" class="text">{{
             line.content
           }}</span>
 
           <!--
-            The status is a text label as well as a colour and an icon. Plan 0002
-            section 11: colour is never the only carrier of meaning, which also covers
-            reading a red and green list with colour blindness.
-
-            Removed the status text for now because it was cluttering the UI and the icons are
-            already conveying the status. If we add more statuses in the future, we may
-            want to bring this back, but for now the icons are sufficient.
+            The indicator is a word as well as a colour and a glyph. Plan 0002 section
+            11: colour is never the only carrier of meaning, which also covers reading
+            a red and green list with colour blindness. It is a word here where the
+            status chip was commented out, because these two say something the number
+            beside them does not: a line at zero and a line at zero having been bought
+            look identical otherwise, and that is the distinction the whole plan turns
+            on.
           -->
-          <!-- @if (line.status === 'NOT_AVAILABLE') {
-            <span class="chip">{{ 'line.status.notAvailable' | rokuT }}</span>
-          } -->
+          @if (line.indicator === 'bought') {
+            <span class="mark mark-bought">
+              <lib-check-icon class="mark-glyph" />
+              {{ 'line.indicator.bought' | rokuT }}
+            </span>
+          } @else if (line.indicator === 'notAvailable') {
+            <span class="mark mark-missing">
+              <lib-x-circle-icon class="mark-glyph" />
+              {{ 'line.indicator.notAvailable' | rokuT }}
+            </span>
+          }
         </div>
 
-        <span class="quantity">{{ line.quantity }}</span>
+        <!--
+          Drawn on every line, zero included, exactly as the real row draws it. It
+          stopped being an annotation and became the thing the line says.
+        -->
+        <span [class.zero]="line.quantity === '0'" class="quantity">{{
+          line.quantity
+        }}</span>
 
         @if (line.by; as initial) {
           <span class="by">{{ initial }}</span>

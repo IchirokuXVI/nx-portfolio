@@ -1,0 +1,46 @@
+@let current = shown();
+
+<!--
+  The pill at rest, and the thing a thumb aims at. The host carries the role and the
+  focus, so this is decoration: everything a screen reader needs is announced from the
+  spinbutton above it and repeating the number here would read it out twice.
+-->
+<span [class.zero]="current === min" aria-hidden="true" class="pill">
+  {{ current }}
+</span>
+
+<!--
+  The overlay: the previous number, the current one, and the next.
+
+  `aria-hidden`, and that is section 7 rather than an omission. It is a picture of a
+  number the spinbutton is already announcing, and a screen reader reading three
+  numbers where the control has one value would be describing the drawing instead of
+  the control.
+-->
+@if (open()) {
+  <span aria-hidden="true" class="overlay">
+    <!--
+      Nothing to the left at zero. There is no minus one, and the gap is what tells a
+      thumb it has reached the end: no disabled control, no bounce, and nothing that
+      has to be read to be understood (section 4).
+
+      `data-reel-value` is what makes a number tappable as well as draggable. It is on
+      the element rather than in a handler because the component reads it off whatever
+      was pressed, at the moment it was pressed, and an empty neighbour at the end of
+      the range carries none: there is nothing there to tap to.
+    -->
+    <span [attr.data-reel-value]="previous()" class="neighbour">
+      @if (previous() !== null) {
+        {{ previous() }}
+      }
+    </span>
+
+    <span [attr.data-reel-value]="current" class="current">{{ current }}</span>
+
+    <span [attr.data-reel-value]="next()" class="neighbour">
+      @if (next() !== null) {
+        {{ next() }}
+      }
+    </span>
+  </span>
+}

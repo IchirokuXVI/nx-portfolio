@@ -1,0 +1,112 @@
+@use '../basket-shared' as shared;
+
+:host {
+  display: block;
+}
+
+.row {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+  padding: var(--app-space-3) var(--app-space-4);
+  border: none;
+  border-block-end: 1px solid var(--app-border-subtle);
+  background: transparent;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-surface-raised);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// A finished line is drawn **quietly**, not removed and not struck through: it
+// stays where it is, still tappable, because settling is cumulative and somebody
+// may want to look at what they bought (plan 0043, section 3.2).
+.is-done {
+  .content {
+    color: var(--app-text-muted);
+  }
+
+  .product,
+  .from {
+    opacity: 0.7;
+  }
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.content {
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.product {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+// A pick catalog no longer names. The line is still a line to buy, so this is
+// muted rather than an error treatment.
+.is-missing {
+  color: var(--app-text-muted);
+  font-style: italic;
+}
+
+.touched {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.from {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.numbers {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--app-space-1);
+  flex: none;
+}
+
+.quantity,
+.outstanding {
+  font-size: var(--app-text-lg);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+
+.outstanding {
+  font-weight: 600;
+  color: var(--app-action-quiet-fg);
+}
+
+.progress {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+  white-space: nowrap;
+}
+
+.visually-hidden {
+  @include shared.visually-hidden;
+}

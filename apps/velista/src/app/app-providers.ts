@@ -18,10 +18,16 @@ import {
   AssistantApi,
   AUTH_SERVICE,
   AuthApi,
+  BASKET_SERVICE,
+  BasketApi,
+  CATALOG_SERVICE,
+  CatalogApi,
   COMMENT_SERVICE,
   CommentApi,
   ConnectionRecovery,
   gatewayInterceptor,
+  GENERATED_LIST_SERVICE,
+  GeneratedListApi,
   LINE_SERVICE,
   LineApi,
   LIST_SERVICE,
@@ -30,6 +36,8 @@ import {
   MembershipApi,
   REALTIME_CLIENT,
   RealtimeSocket,
+  SHOPPING_PROFILE_SERVICE,
+  ShoppingProfileApi,
   VELISTA_DATA_ACCESS_PROVIDERS,
   ZONE_SERVICE,
   ZoneApi,
@@ -43,6 +51,7 @@ import {
   AppBrand,
 } from '@portfolio/velista/models';
 import {
+  AppHistory,
   AppUpdates,
   InstallStore,
   VELISTA_PLATFORM_PROVIDERS,
@@ -192,6 +201,30 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // and the `Accept-Language` the bot answers in.
   provideService(ASSISTANT_SERVICE, AssistantApi),
 
+  // Shopping profiles (plan 0046). A ninth time, and the only thing worth noting is
+  // that one service reaches two of the gateway's areas: the profile routes on
+  // `/v1/account` and the two catalog reads that fill a profile in. That is a fact
+  // about the screen rather than about the transport, and both are the same base URL
+  // through the same `HttpClient`.
+  provideService(SHOPPING_PROFILE_SERVICE, ShoppingProfileApi),
+
+  // The catalog search behind the composer's suggestions (plan 0043, section 6). A
+  // tenth time, and separate from the profile service beside it even though both
+  // touch `/v1/catalog`: that one reads the chains a profile is filled in from, and
+  // this one searches products while somebody types. They are bound apart because
+  // they fail apart, and this one fails softly by design — a search that does not
+  // answer must never be able to stop a line being added.
+  provideService(CATALOG_SERVICE, CatalogApi),
+
+  // Generated shopping lists (plan 0045). The note worth making is
+  // what is **not** on this service: it carries the owner's two calls, listing their
+  // own baskets and composing one, and nothing a participant does inside a basket.
+  // Those are authenticated by a participant session rather than by this account token,
+  // so they are a different service on a different credential and not a wider version
+  // of this one.
+  provideService(GENERATED_LIST_SERVICE, GeneratedListApi),
+  provideService(BASKET_SERVICE, BasketApi),
+
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches
   // `ApiUrl`, `TokenStore` and `SessionStore`, which exist only in this injector.
@@ -240,4 +273,12 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // `APP_INITIALIZER` is read once from the root injector at bootstrap, and nothing
   // asks a route injector for it, so under the shell it would never run at all.
   provideEnvironmentInitializer(() => void inject(InstallStore)),
+
+  // Start counting history entries, which is what every back control in the app asks
+  // before it pops rather than navigates. A listener again, and one with the same
+  // reason to be started here as `InstallStore`: nothing injects it until a back button
+  // is pressed, and by then every navigation it needed to watch has already happened.
+  // Unstarted it reports no entry behind and each button walks to its own fallback,
+  // which is safe but is not the behaviour these screens are written for.
+  provideEnvironmentInitializer(() => inject(AppHistory).watch()),
 ];

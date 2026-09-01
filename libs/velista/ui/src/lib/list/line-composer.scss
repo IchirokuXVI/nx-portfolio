@@ -78,10 +78,12 @@
 
 // While it listens, the whole row is this (plan 0038, section 4.1). Same height as
 // the row it replaced, so the list above does not jump when the mode changes.
-// Trash at one end, stop at the other, and the meter taking every pixel between them.
-// The distance is the safeguard, which is `RecordingRow`'s rule (plan 0032, section
-// 4.3): they are the only two controls on screen and confusing them costs the whole
-// recording, so it is not a gap somebody could tune down.
+//
+// Stop at the leading end, the bin at the trailing end, and the meter and its hint
+// taking every pixel between them (plan 0042, section 6). The distance is the
+// safeguard: they are the only two controls on screen and confusing them costs the
+// whole recording. It is the width of the row rather than a `gap`, so it is not a
+// value somebody can tune down.
 .listening {
   display: flex;
   align-items: center;
@@ -89,8 +91,8 @@
   min-block-size: var(--app-touch-target);
 }
 
-// The two controls of a running recording. Round, in the corner the microphone was,
-// and the same size as every other target in this row.
+// The two controls of a running recording. Round, and the same size as every other
+// target in this row.
 .discard,
 .stop {
   display: inline-flex;
@@ -113,7 +115,12 @@
 // it destroys, which is what coral means everywhere else in this app, and never colour
 // alone since it is also the only bin glyph on screen. The same treatment
 // `RecordingRow` gives its own trash, for the same reasons.
+//
+// Pushed to the trailing end of the row, which is the whole of section 6.2: the space
+// between it and stop is whatever the row is wide. A logical property, so right to
+// left keeps the relationship rather than the side.
 .discard {
+  margin-inline-start: auto;
   border: 1px solid var(--app-status-danger-border);
   background: transparent;
   color: var(--app-status-danger-fg);
@@ -167,3 +174,4 @@
   flex-shrink: 0;
   font-size: var(--app-icon-sm);
 }
+

@@ -61,9 +61,99 @@ describeIntegration('core schema (real Postgres)', () => {
       'line_comments',
       'comment_audio',
       'merge_requests',
+      // Plan 0048: a line holds a set of products.
+      'list_line_items',
+      // Plan 0047: what happened to a line on a trip.
+      'line_settlements',
     ]) {
       expect(names.has(table)).toBe(true);
     }
+  });
+
+  it('retired the trip status for a quantity (plan 0047, section 2)', async () => {
+    const columns = await dataSource.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'list_lines'`
+    );
+    const names = new Set(
+      columns.map((c: { column_name: string }) => c.column_name)
+    );
+    // Gone, and so is its type: nothing in core stores a `LineStatus` any more,
+    // and the enum survives in the contracts for the basket line plan 0051 puts
+    // it on.
+    expect(names.has('status')).toBe(false);
+    const types = await dataSource.query(
+      `SELECT typname FROM pg_type WHERE typname = 'line_status'`
+    );
+    expect(types).toEqual([]);
+  });
+
+  it('records a settlement, and cascades it with its line', async () => {
+    // The foreign key is the one thing that keeps deleting a line honest: it is
+    // the gesture that discards the history (plan 0047, section 2.2), so the
+    // rows have to go with it rather than outlive it as orphans.
+    const list = await dataSource.query(
+      `SELECT id FROM "shopping_lists" LIMIT 1`
+    );
+    if (list.length === 0) {
+      return;
+    }
+    const [line] = await dataSource.query(
+      `INSERT INTO "list_lines" ("listId", "content", "quantity", "position", "createdByUserId")
+       VALUES ($1, 'Settled milk', 2, 900, gen_random_uuid()) RETURNING id`,
+      [list[0].id]
+    );
+    await dataSource.query(
+      `INSERT INTO "line_settlements" ("lineId", "listId", "outcome", "quantity", "settledByUserId", "settledAt")
+       VALUES ($1, $2, 'BOUGHT', 2, gen_random_uuid(), now())`,
+      [line.id, list[0].id]
+    );
+
+    const before = await dataSource.query(
+      `SELECT count(*)::int AS n FROM "line_settlements" WHERE "lineId" = $1`,
+      [line.id]
+    );
+    expect(before[0].n).toBe(1);
+
+    await dataSource.query(`DELETE FROM "list_lines" WHERE id = $1`, [line.id]);
+
+    const after = await dataSource.query(
+      `SELECT count(*)::int AS n FROM "line_settlements" WHERE "lineId" = $1`,
+      [line.id]
+    );
+    expect(after[0].n).toBe(0);
+  });
+
+  it('retired the single line itemId for a set and a hash (plan 0048, section 1.1)', async () => {
+    const columns = await dataSource.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'list_lines'`
+    );
+    const names = new Set(
+      columns.map((c: { column_name: string }) => c.column_name)
+    );
+    expect(names.has('itemSetHash')).toBe(true);
+    // Gone, not merely unused. It was null on every line ever created, so
+    // nothing moved and nothing needs it.
+    expect(names.has('itemId')).toBe(false);
+  });
+
+  it('computes the same digest in SQL that the service computes in TypeScript', async () => {
+    // The migration backfills `itemSetHash` with `encode(sha256(...), 'hex')`
+    // over the sorted distinct ids joined with commas. `item-set-hash.spec.ts`
+    // pins the TypeScript half against the same two literals; this is the SQL
+    // half of the same pin, and the only place the two can be caught disagreeing.
+    const [{ hash }] = await dataSource.query(
+      `SELECT encode(
+         sha256(convert_to(string_agg(DISTINCT id, ',' ORDER BY id), 'UTF8')),
+         'hex'
+       ) AS "hash"
+       FROM (VALUES
+         ('22222222-2222-4222-8222-222222222222'),
+         ('11111111-1111-4111-8111-111111111111')
+       ) AS t(id)`
+    );
+    expect(hash).toBe(
+      'f1263a03cdb2be40b54df53df70602a0e9fcc7f8df4e1715891bbf0e92d83f4f'
+    );
   });
 
   it('round-trips a Zone through the enum column and jsonb config default', async () => {
@@ -247,7 +337,7 @@ describeIntegration('core schema (real Postgres)', () => {
           listId: list.id,
           content: 'Olive oil',
           quantity: 1,
-          itemId: null,
+          itemSetHash: null,
           position: 1,
           createdByUserId: randomUUID(),
         })

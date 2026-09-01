@@ -11,18 +11,27 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
+  CATALOG_SCHEMA_IDS,
   ITEM_PATTERNS,
   PRICE_SCOPE_PATTERNS,
+  PRODUCT_GROUP_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  type CatalogScopeView,
+  type CatalogSuggestResponse,
+  type GetItemsRequest,
+  type GetItemsResult,
   type ItemPage,
   type ItemView,
   type PriceScopePage,
   type PriceScopeView,
+  type ProductGroupOfferPage,
+  type ProductGroupPage,
+  type ProductGroupView,
   type SupermarketItemPage,
   type SupermarketItemView,
   type SupermarketLocationItemView,
@@ -34,22 +43,73 @@ import {
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
-import { ApiContractResponse, ApiProblemResponses } from '../docs';
+import {
+  ApiContractResponse,
+  ApiProblemResponses,
+  componentRef,
+  hoistContractSchema,
+} from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
   CatalogListQueryDto,
   CreateItemDto,
   CreatePriceScopeDto,
+  CreateProductGroupDto,
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
+  ListProductGroupsQueryDto,
+  LookupItemsDto,
+  PriceScopedQueryDto,
   SearchItemsQueryDto,
+  SearchOffersQueryDto,
+  SuggestQueryDto,
   UpdateItemDto,
   UpdatePriceScopeDto,
+  UpdateProductGroupDto,
   UpdateSupermarketDto,
   UpdateSupermarketLocationDto,
   UpsertSupermarketItemDto,
   UpsertSupermarketLocationItemDto,
 } from './catalog.dto';
+import {
+  ScopeResolutionService,
+  type ScopeQuery,
+} from './scope-resolution.service';
+
+/**
+ * Hoisted at module load, so the component exists before the document is built.
+ *
+ * The suggestion envelope is a contract schema like any other, even though no
+ * broker subject answers with it: the interleave is a gateway shape, and writing
+ * it in the contracts library is what keeps its two halves referencing the same
+ * `ProductGroupOfferView` and `ItemView` the messages already publish.
+ */
+const SUGGEST_SCHEMA = hoistContractSchema(
+  CATALOG_SCHEMA_IDS.catalogSuggestResponse
+);
+
+/**
+ * The ladder's outcome, for the one endpoint that describes it rather than uses
+ * it (plan 0049, sections 3.1 and 5).
+ */
+const SCOPE_SCHEMA = hoistContractSchema(CATALOG_SCHEMA_IDS.catalogScopeView);
+
+/**
+ * The three ways a query says where the caller shops (plan 0049, section 3),
+ * lifted off the DTO once so five routes cannot spell it four ways.
+ *
+ * The query parameters are singular because that is how a repeated parameter
+ * reads in a URL (`?postalCode=28001&postalCode=41001`); the service takes the
+ * plurals, because by then they are lists.
+ */
+function toScopeQuery(query: PriceScopedQueryDto): ScopeQuery {
+  return {
+    priceScopeIds: query.priceScopeId,
+    postalCodes: query.postalCode,
+    supermarketIds: query.supermarketId,
+    profileId: query.profileId,
+  };
+}
 
 /**
  * The catalog REST surface (plan 0012), proxying to the catalog service over
@@ -239,7 +299,10 @@ export class CatalogLocationsController {
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'catalog/items', version: '1' })
 export class CatalogItemsController {
-  constructor(private readonly nats: NatsClient) {}
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService
+  ) {}
 
   @Post()
   @ApiContractResponse(ITEM_PATTERNS.create, { status: HttpStatus.CREATED })
@@ -254,9 +317,19 @@ export class CatalogItemsController {
     });
   }
 
+  /**
+   * Ranked products (plan 0048, section 3), scoped to where the caller shops
+   * (plan 0049, section 3).
+   *
+   * **Sending no selector no longer means everything.** The caller's default (or
+   * named) profile is resolved for them, and a profile that holds neither a
+   * postal code nor a chain is answered with `catalog_scope_required` rather
+   * than with the whole catalog or with an empty page.
+   */
   @Get()
   @ApiContractResponse(ITEM_PATTERNS.search)
-  search(
+  @ApiProblemResponses({ scopeRequired: true })
+  async search(
     @AuthUser() user: CurrentUser,
     @Query() query: SearchItemsQueryDto
   ): Promise<ItemPage> {
@@ -264,12 +337,94 @@ export class CatalogItemsController {
       userId: user.userId,
       query: query.query,
       category: query.category,
+      productGroupId: query.productGroupId,
+      priceScopeIds: await this.scopes.forRead(
+        user.userId,
+        toScopeQuery(query)
+      ),
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
     });
   }
 
+  /**
+   * Ranked **groups**, each with its cheapest member (plan 0048, section 3).
+   *
+   * The read that answers "milk" rather than "Pascual Milk". A group with no
+   * priced member at the given scopes still comes back with its price fields
+   * null, because the composer is attaching identity rather than quoting a price.
+   */
+  @Get('offers')
+  @ApiContractResponse(ITEM_PATTERNS.searchOffers)
+  @ApiProblemResponses({ scopeRequired: true })
+  async searchOffers(
+    @AuthUser() user: CurrentUser,
+    @Query() query: SearchOffersQueryDto
+  ): Promise<ProductGroupOfferPage> {
+    return this.nats.send<ProductGroupOfferPage>(ITEM_PATTERNS.searchOffers, {
+      userId: user.userId,
+      query: query.query,
+      priceScopeIds: await this.scopes.forRead(
+        user.userId,
+        toScopeQuery(query)
+      ),
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  /**
+   * Several known products, in one round trip (plan 0053, section 1).
+   *
+   * A line carries a **set** of products (`0048`'s `itemSetHash` hashes that
+   * set), so resolving one line's names through `GET :id` is one request per
+   * product from a sheet that opens on a tap. That is what velista shipped a
+   * fixture instead of, and what this exists to replace.
+   *
+   * Three things about its shape:
+   *
+   * - **Unknown ids are omitted, not an error.** A line can outlive a product. A
+   *   sheet that fails to open because one of five products was withdrawn is a
+   *   worse failure than a sheet that names four, so the caller matches the
+   *   answer back by id and draws what it got.
+   * - **Unscoped**, exactly as reading one product is: a line may reference an
+   *   item nobody near the caller sells, and the product existing and the price
+   *   being absent are different answers.
+   * - **`POST` for a read**, which is the one uncomfortable thing here and is
+   *   forced by the cap. Five hundred UUIDs is roughly eighteen kilobytes of
+   *   query string, comfortably past Node's sixteen kilobyte header limit, so a
+   *   `GET` carrying repeated `id` parameters would answer 431 at exactly the
+   *   size the contract says is allowed. The ids go in the body instead.
+   *
+   * It therefore answers **201**, like every other POST in this gateway, and
+   * nothing is created. 200 would read better, and so would it on
+   * `POST /v1/assistant`; the whole surface follows Nest's default statuses with
+   * no `@HttpCode` anywhere and `openapi-document.spec.ts` enforces that as a
+   * house rule, so breaking it here to be tidier would cost a red test and a
+   * precedent.
+   *
+   * Account authenticated, and **not** the guest path. A basket's composition
+   * stays inside the participant authenticated surface where velista `0044` put
+   * it: a guest reaching a general catalog route is a wider hole than a guest
+   * reading the names in the basket they were invited to.
+   */
+  @Post('lookup')
+  @ApiContractResponse(ITEM_PATTERNS.getMany, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
+  lookup(@Body() dto: LookupItemsDto): Promise<GetItemsResult> {
+    const req: GetItemsRequest = { ids: dto.ids };
+    return this.nats.send<GetItemsResult>(ITEM_PATTERNS.getMany, req);
+  }
+
+  /**
+   * One known product, **unscoped and deliberately so** (plan 0049, section 3).
+   *
+   * This is how a list line renders its product, and a line can reference an
+   * item the user cannot currently buy anywhere near them. The item exists; its
+   * price at your scopes may be absent; those are different answers, and gating
+   * this read would collapse them into "no such product".
+   */
   @Get(':id')
   @ApiContractResponse(ITEM_PATTERNS.get)
   get(
@@ -309,6 +464,14 @@ export class CatalogItemsController {
     });
   }
 
+  /**
+   * Every price one known product has, across scopes.
+   *
+   * Unscoped for the same reason reading the product is (plan 0049, section 3):
+   * the request already names the one thing it is about, so it cannot return the
+   * catalog, and "what does this cost anywhere" is the question the price detail
+   * of a line asks.
+   */
   @Get(':id/offers')
   @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.listByItem)
   offers(
@@ -325,6 +488,244 @@ export class CatalogItemsController {
         limit: query.limit,
       }
     );
+  }
+}
+
+/**
+ * Product groups (plan 0048, section 1): "milk as a thing you can buy".
+ *
+ * The ordinary catalog admin surface, because that is what curating one is.
+ * Writes are platform admin gated inside the catalog service, reads are open to
+ * any authenticated user, and **nothing here assigns items to groups**: an item
+ * joins a group through `PATCH /v1/catalog/items/:id`, by a person.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/product-groups', version: '1' })
+export class CatalogProductGroupsController {
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService
+  ) {}
+
+  @Post()
+  @ApiContractResponse(PRODUCT_GROUP_PATTERNS.create, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
+  create(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: CreateProductGroupDto
+  ): Promise<ProductGroupView> {
+    return this.nats.send<ProductGroupView>(PRODUCT_GROUP_PATTERNS.create, {
+      userId: user.userId,
+      ...dto,
+    });
+  }
+
+  @Get()
+  @ApiContractResponse(PRODUCT_GROUP_PATTERNS.list)
+  list(
+    @AuthUser() user: CurrentUser,
+    @Query() query: ListProductGroupsQueryDto
+  ): Promise<ProductGroupPage> {
+    return this.nats.send<ProductGroupPage>(PRODUCT_GROUP_PATTERNS.list, {
+      userId: user.userId,
+      query: query.query,
+      cursor: query.cursor,
+      limit: query.limit,
+      order: query.order,
+    });
+  }
+
+  @Get(':id')
+  @ApiContractResponse(PRODUCT_GROUP_PATTERNS.get)
+  get(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string
+  ): Promise<ProductGroupView> {
+    return this.nats.send<ProductGroupView>(PRODUCT_GROUP_PATTERNS.get, {
+      userId: user.userId,
+      productGroupId: id,
+    });
+  }
+
+  @Patch(':id')
+  @ApiContractResponse(PRODUCT_GROUP_PATTERNS.update)
+  @ApiProblemResponses({ body: true, conflict: true })
+  update(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateProductGroupDto
+  ): Promise<ProductGroupView> {
+    return this.nats.send<ProductGroupView>(PRODUCT_GROUP_PATTERNS.update, {
+      userId: user.userId,
+      productGroupId: id,
+      ...dto,
+    });
+  }
+
+  /**
+   * Delete a group. Its members are kept and simply lose their group, which is
+   * the catalog service's rule and the database's: undoing a curation decision
+   * must not be blocked by the products it was about.
+   */
+  @Delete(':id')
+  @ApiContractResponse(PRODUCT_GROUP_PATTERNS.delete)
+  remove(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string
+  ): Promise<{ id: string }> {
+    return this.nats.send(PRODUCT_GROUP_PATTERNS.delete, {
+      userId: user.userId,
+      productGroupId: id,
+    });
+  }
+
+  /**
+   * The group's members, which is `item.search` with the group filter set, and
+   * therefore scoped exactly as that read is (plan 0049, section 3).
+   */
+  @Get(':id/items')
+  @ApiContractResponse(ITEM_PATTERNS.search)
+  @ApiProblemResponses({ scopeRequired: true })
+  async items(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Query() query: PriceScopedQueryDto
+  ): Promise<ItemPage> {
+    return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
+      userId: user.userId,
+      productGroupId: id,
+      priceScopeIds: await this.scopes.forRead(
+        user.userId,
+        toScopeQuery(query)
+      ),
+      cursor: query.cursor,
+      limit: query.limit,
+      order: query.order,
+    });
+  }
+}
+
+/**
+ * The list composer's one call (plan 0048, section 3).
+ *
+ * It performs the interleave itself, and that is the entire reason it exists as
+ * an endpoint rather than as two calls a client makes: **a group beats an item
+ * for a bare word**. velista `0043` section 6 states the rule from the client
+ * side and backlog `0004` section 1.2 states it as a hard one, so the server is
+ * where it is enforced, in one ordered array that a client cannot reassemble
+ * wrongly.
+ *
+ * The two reads run in parallel and neither is allowed to take the other down:
+ * a failure on one side answers with what the other found, because a dropdown
+ * that shows fewer suggestions is a worse dropdown and a dropdown that shows an
+ * error is a broken composer.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/suggest', version: '1' })
+export class CatalogSuggestController {
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly scopes: ScopeResolutionService
+  ) {}
+
+  @Get()
+  @ApiOkResponse({
+    description:
+      'The dropdown, in the order it is to be drawn: every matching group first, then the individual products. One ordered array and not two lists, because the rule it carries is an ordering.',
+    schema: componentRef(SUGGEST_SCHEMA),
+  })
+  @ApiProblemResponses({ scopeRequired: true })
+  async suggest(
+    @AuthUser() user: CurrentUser,
+    @Query() query: SuggestQueryDto
+  ): Promise<CatalogSuggestResponse> {
+    // Resolved once and passed to both halves, so the two reads cannot quote
+    // prices from different places, and so an empty profile refuses the whole
+    // dropdown rather than half of it.
+    const common = {
+      userId: user.userId,
+      query: query.q,
+      priceScopeIds: await this.scopes.forRead(
+        user.userId,
+        toScopeQuery(query)
+      ),
+      limit: query.limit,
+    };
+    const [groups, items] = await Promise.all([
+      this.nats
+        .send<ProductGroupOfferPage>(ITEM_PATTERNS.searchOffers, common)
+        .catch(
+          () => ({ items: [], nextCursor: null }) as ProductGroupOfferPage
+        ),
+      this.nats
+        .send<ItemPage>(ITEM_PATTERNS.search, common)
+        .catch(() => ({ items: [], nextCursor: null }) as ItemPage),
+    ]);
+
+    return {
+      suggestions: [
+        ...groups.items.map((group) => ({
+          kind: 'group' as const,
+          group,
+          item: null,
+        })),
+        ...items.items.map((item) => ({
+          kind: 'item' as const,
+          group: null,
+          item,
+        })),
+      ],
+    };
+  }
+}
+
+/**
+ * Where the caller is shopping, and why (plan 0049, sections 3.1 and 5).
+ *
+ * It exists because the flags have to reach a client and a page cannot carry
+ * them: every catalog page is bare by house rule, and wrapping `ItemPage` to
+ * hang two booleans off it would change the shape of every catalog read. So the
+ * resolution is described once, here, beside the searches it explains.
+ *
+ * Three things a client can only learn from it:
+ *
+ * - **which scopes** its results came from, and by which rung of the ladder, so
+ *   it can say "prices shown for Madrid" when `approximate` is set;
+ * - **which postal codes nobody serves**, which is what turns an empty search
+ *   into "no chain we know reaches 12345" rather than "there is nothing";
+ * - **which profile** answered, when the caller named none.
+ *
+ * It resolves exactly as a search does and shares its cache, so calling both is
+ * one resolution and not two.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/scope', version: '1' })
+export class CatalogScopeController {
+  constructor(private readonly scopes: ScopeResolutionService) {}
+
+  @Get()
+  @ApiOkResponse({
+    description:
+      'The scopes this caller shops at, the reason for each, and whether every postal code they gave is served by anybody we know.',
+    schema: componentRef(SCOPE_SCHEMA),
+  })
+  @ApiProblemResponses({ scopeRequired: true })
+  describe(
+    @AuthUser() user: CurrentUser,
+    @Query() query: PriceScopedQueryDto
+  ): Promise<CatalogScopeView> {
+    return this.scopes.describe(user.userId, toScopeQuery(query));
   }
 }
 
