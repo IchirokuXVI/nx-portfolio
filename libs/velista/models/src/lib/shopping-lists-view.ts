@@ -26,6 +26,19 @@ export interface ShoppingListCardVm {
   readonly name: string;
   readonly generatedAt: Date;
   readonly lineCount: number;
+  /**
+   * How many lines are **finished**, which is not the same as how many were bought.
+   *
+   * A `NOT_AVAILABLE` outcome closes a line exactly as a purchase does (backend `0051`
+   * section 6), so this number counts both and the listing gives no breakdown between
+   * them. That is why the copy beside it says "finished" rather than "got": a summary
+   * carrying numbers alone cannot tell "they had none" from "they got it", and the
+   * shorter word would be claiming a purchase that may never have happened.
+   *
+   * The mock's "3 of 4 got, 1 not available" needs the per line `lastOutcome` that
+   * `0044`'s basket view carries and this one does not. It belongs on a screen holding
+   * the lines, which is the basket, not on a card holding two integers.
+   */
   readonly settledLineCount: number;
   /**
    * How many other `ACTIVE` baskets there are besides this one.
@@ -44,6 +57,7 @@ export interface ShoppingListRowVm {
   readonly name: string;
   readonly generatedAt: Date;
   readonly lineCount: number;
+  /** Finished rather than bought, for the reason on {@link ShoppingListCardVm}. */
   readonly settledLineCount: number;
   /**
    * Whether this trip is the one being shopped now.
@@ -144,7 +158,10 @@ export function displayNames(
  *
  * `Intl.DateTimeFormat` rather than a hand written month table, so Spanish gets
  * "21 de agosto" and its own capitalization rather than an English shape with Spanish
- * words in it.
+ * words in it. **`Intl` and never `DatePipe`**, which is this app's convention rather
+ * than a preference here: `DatePipe` needs `registerLocaleData` per locale and a
+ * `LOCALE_ID`, and this app never sets one, because its language is runtime state
+ * rather than the shell's build-time locale.
  *
  * @param now Passed in rather than read from the clock, so the year rule is testable
  *   without pretending it is a different December.
@@ -154,11 +171,19 @@ export function formatGeneratedDate(
   locale: string,
   now: Date = new Date()
 ): string {
-  return new Intl.DateTimeFormat(locale, {
-    day: 'numeric',
-    month: 'long',
-    ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
-  }).format(date);
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      day: 'numeric',
+      month: 'long',
+      ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+    }).format(date);
+  } catch {
+    // An unrecognised tag, which `Intl` throws a `RangeError` for. The ISO date is ugly
+    // and correct, and it matters more here than in a single row: this feeds
+    // `displayNames`, so an uncaught throw would take out the whole dashboard card and
+    // every row of the history at once rather than spoiling one date.
+    return date.toISOString().slice(0, 10);
+  }
 }
 
 /**

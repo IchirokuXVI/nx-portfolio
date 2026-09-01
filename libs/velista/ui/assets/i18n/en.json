@@ -307,7 +307,7 @@
       "open": "{{name}}, {{count}} still to get",
       "more_one": "and {{count}} more",
       "more_other": "and {{count}} more",
-      "got": "{{settled}} of {{total}} got",
+      "progress": "{{settled}} of {{total}} finished",
       "generatedToday": "generated today",
       "generatedOn": "generated {{date}}"
     },
@@ -1016,7 +1016,7 @@
       "active": "Shopping now"
     },
     "row": {
-      "got": "{{settled}} of {{total}} got",
+      "progress": "{{settled}} of {{total}} finished",
       "loading": "Loading your shopping lists"
     },
     "empty": {

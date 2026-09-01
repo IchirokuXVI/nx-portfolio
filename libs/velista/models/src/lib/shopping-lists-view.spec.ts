@@ -144,6 +144,17 @@ describe('formatGeneratedDate', () => {
    * same day of the same month. Without the year they would be given one name and then
    * numbered against each other, as though they were two trips on one afternoon.
    */
+  /**
+   * `Intl` throws a `RangeError` for a tag it does not recognise, and this function
+   * feeds `displayNames`, so an uncaught one would take out the whole dashboard card
+   * and every row of the history at once rather than spoiling a single date.
+   */
+  it('falls back to an ISO date rather than throwing on a bad locale tag', () => {
+    expect(formatGeneratedDate(august, 'not a locale', august)).toBe(
+      '2026-08-21'
+    );
+  });
+
   it('adds the year once the trip is not from this year', () => {
     const nextYear = new Date('2027-02-02T10:00:00.000Z');
 
