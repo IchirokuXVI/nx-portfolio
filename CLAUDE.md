@@ -249,3 +249,10 @@ with each library's `capture-fixtures` target, never by hand.
 - **Wait for the PR checks.** Opening the PR is not the end of the task. Watch the run (`gh pr checks --watch`), and if it fails, fix the cause and push again rather than handing back a red PR.
 - **Post the PR link in the conversation**, every time one is created, so it is in the transcript beside the work it came from.
 - `main` is still off limits: never push to it, never force-push, never merge. A pull request into `dev` is the only way work lands.
+- **Title the PR `type(scope): summary`** (Conventional Commits, Angular types), optionally `!` before the colon for a breaking change and a trailing `(plan 0045)` when a plan drove it. The release notes are generated from these titles, so a title that cannot be parsed is work missing from a release; `.github/workflows/pr-title.yml` rejects one on every PR, including stacked ones. The types, the scope list and the reasoning are in `CONTRIBUTING.md`, and `tools/release/rules.mjs` is the authority both the check and the generator read. Validate one before opening the PR:
+
+  ```sh
+  node tools/release/release-notes.mjs --check "feat(velista): a card that holds the list (plan 0045)"
+  ```
+
+- **Release notes come from `tools/release/release-notes.mjs`**, not from hand. `node tools/release/release-notes.mjs --from v0.3.1 --to v0.3.2 --out notes.md` groups the merged PRs by section, skips the `dev` to `main` rollups so nothing is counted twice, and prints any title it could not read rather than dropping it. Add a new area of the workspace to `SCOPES` in `tools/release/rules.mjs` in the same PR that creates it.
