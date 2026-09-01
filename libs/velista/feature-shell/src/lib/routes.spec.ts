@@ -661,8 +661,20 @@ describe('AppShellRoutes', () => {
       }
     });
 
-    it('provides the store on the page, so two baskets are never open at once', () => {
-      expect(routeAt(basketPath)?.providers).toHaveLength(1);
+    it('provides the store and the socket on the page, not on the app', () => {
+      // Both scoped here, which is what makes the connection's lifetime the
+      // screen's: two baskets are never open at once, and presence answers "who is
+      // here" rather than "who has ever opened this" precisely because leaving the
+      // route destroys the socket (plan 0048, section 4).
+      //
+      // Asserted by name rather than by counting, because a count says nothing about
+      // *which* provider went missing, and the socket is the one whose absence would
+      // be invisible: the basket would simply stop updating itself.
+      const provided = (routeAt(basketPath)?.providers ?? []).map(
+        (provider) => (provider as { name?: string }).name
+      );
+
+      expect(provided).toEqual(['BasketSocket', 'BasketStore']);
     });
 
     it('keeps the page, the join screen and every sheet lazy', () => {

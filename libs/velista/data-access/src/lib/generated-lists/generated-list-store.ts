@@ -132,10 +132,18 @@ export class GeneratedListStore {
           this._upsert(event.list);
           break;
         case 'generatedList.lineSettled':
+        case 'generatedList.lineUpdated':
           // Only for a basket this client is actually holding. A settle on one that
           // was never read changes nothing on screen, and refetching for it would let
           // any basket in the account drive requests from a page that is not showing
           // it.
+          //
+          // `lineUpdated` joined it with velista `0048`, which is when this client
+          // learned the name at all. It is an edit rather than a settle, so it can
+          // move `lineCount` where a settle moves `settledLineCount`, and neither can
+          // be derived from one line: the summary says how many lines are finished,
+          // and knowing that one of them moved says nothing about whether it had
+          // already been counted. Both refetch, and the refetch is coalesced.
           if (this._lists().some((list) => list.id === event.generatedListId)) {
             this._scheduleRefresh();
           }

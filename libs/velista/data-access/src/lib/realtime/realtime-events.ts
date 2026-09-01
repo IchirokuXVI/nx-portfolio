@@ -1,4 +1,7 @@
 import type {
+  BasketLine,
+  BasketParticipant,
+  BasketPresenceEntry,
   Comment,
   GeneratedListSummary,
   Line,
@@ -273,8 +276,56 @@ export type RealtimeEvent =
        * says nothing about whether it had already been counted. So the id is what the
        * store needs and the line is the basket screen's business.
        */
-      readonly type: 'generatedList.lineSettled';
+      readonly type: 'generatedList.lineSettled' | 'generatedList.lineUpdated';
       readonly generatedListId: string;
+      /**
+       * The line that moved, or null when the payload did not carry a readable one.
+       *
+       * Kept since velista `0048`, and it used to be dropped here on the grounds that
+       * a **summary** cannot use it. That is true of `GeneratedListStore` and false of
+       * the basket screen, which holds the lines themselves and wants exactly this: it
+       * merges the line by id and one row moves, with no request at all.
+       *
+       * **Redacted to the least privileged reader in the room**, because a broadcast
+       * cannot be projected per socket. So a line arriving here carries no `origins`
+       * even for somebody entitled to them, and merging it naively would blank a field
+       * a privileged reader had legitimately fetched. `BasketStore.apply` merges by id
+       * and keeps what it holds, which is what makes that safe.
+       *
+       * Null rather than dropping the whole event, because the id is the half
+       * `GeneratedListStore` needs and it is still readable when the line is not.
+       */
+      readonly line: BasketLine | null;
+    }
+  | {
+      /**
+       * Somebody joined a shared basket, or was removed from it (backend `0051`,
+       * section 3), on the basket's own room.
+       *
+       * `participantLeft` is a **revocation and not a disconnection**: who is
+       * connected right now is presence, and these two are about who is allowed to
+       * be. A guest closing their browser emits neither.
+       *
+       * The payload is the bare participant view, with no basket id on it, and it
+       * needs none: it arrives only on a connection pinned to one basket.
+       */
+      readonly type:
+        | 'generatedList.participantJoined'
+        | 'generatedList.participantLeft';
+      readonly participant: BasketParticipant;
+    }
+  | {
+      /**
+       * Who is holding a connection to one basket right now (backend `0051`,
+       * section 7).
+       *
+       * The whole set on every change, like every other presence event here, because
+       * a diff would leave a client that missed one message permanently wrong about
+       * who is in a shop.
+       */
+      readonly type: 'presence.generatedListUpdated';
+      readonly generatedListId: string;
+      readonly present: readonly BasketPresenceEntry[];
     }
   | {
       /**
@@ -327,9 +378,13 @@ export const REALTIME_EVENT_NAMES = [
   'generatedList.created',
   'generatedList.updated',
   'generatedList.lineSettled',
+  'generatedList.lineUpdated',
+  'generatedList.participantJoined',
+  'generatedList.participantLeft',
   'generatedList.deleted',
   'presence.zoneUpdated',
   'presence.listUpdated',
+  'presence.generatedListUpdated',
 ] as const;
 
 /**

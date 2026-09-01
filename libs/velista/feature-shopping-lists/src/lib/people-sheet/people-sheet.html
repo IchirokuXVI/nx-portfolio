@@ -70,7 +70,7 @@
             type="button"
           >
             <span [class.is-guest-ring]="row.isGuest" class="avatar">
-              {{ initials(row.label) }}
+              {{ row.initials }}
             </span>
             <span class="person-name">
               {{ row.isMe ? ('basket.people.you' | rokuT) : row.label }}

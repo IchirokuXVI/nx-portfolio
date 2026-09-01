@@ -11,7 +11,7 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore } from '@portfolio/velista/data-access';
+import { BasketStore, SessionStore } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   type BasketParticipant,
@@ -21,7 +21,7 @@ import {
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
-import { participantName } from '../basket-labels';
+import { participantInitials, participantName } from '../basket-labels';
 import { basketPath } from '../basket-paths';
 
 /**
@@ -71,6 +71,8 @@ export class PeopleSheet {
   private readonly _generatedListId = generatedListIdOf(this._route);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
+  /** The account, for the owner's own row, which the basket carries unnamed. */
+  private readonly _session = inject(SessionStore);
 
   private readonly _openId = signal<string | null>(null);
   private readonly _busy = signal(false);
@@ -92,22 +94,42 @@ export class PeopleSheet {
    */
   protected readonly people = computed(() => {
     const meId = this._store.me()?.id ?? null;
-    return this._store.participants().map((person) => ({
-      person,
-      label: participantName(person, this._translator, this._locale()),
-      isGuest: person.kind === 'GUEST',
-      isMe: person.id === meId,
-      // Only a reader who passes the rule receives a device at all, so this is
-      // the honest test for "is there a detail pane worth opening".
-      inspectable: person.device !== undefined,
-    }));
+    const ownName = this._session.username();
+
+    return this._store.participants().map((person) => {
+      // Core keeps no `displayName` for an owner, so without their account name the
+      // person who made the basket was listed on it as "Guest", beside the actual
+      // guests, and every bubble on the sheet drew the same two letters.
+      const naming = { ownName: person.id === meId ? ownName : null };
+
+      return {
+        person,
+        label: participantName(
+          person,
+          this._translator,
+          this._locale(),
+          naming
+        ),
+        initials: participantInitials(
+          person,
+          this._translator,
+          this._locale(),
+          naming
+        ),
+        isGuest: person.kind === 'GUEST',
+        isMe: person.id === meId,
+        // Only a reader who passes the rule receives a device at all, so this is
+        // the honest test for "is there a detail pane worth opening".
+        inspectable: person.device !== undefined,
+      };
+    });
   });
 
   protected readonly openPerson = computed<BasketParticipant | null>(() => {
     const id = this._openId();
     return id === null
       ? null
-      : this._store.participants().find((person) => person.id === id) ?? null;
+      : (this._store.participants().find((person) => person.id === id) ?? null);
   });
 
   /**
@@ -140,11 +162,6 @@ export class PeopleSheet {
       return at.toISOString();
     }
   });
-
-  /** The first two initials of a name, for the avatar. Never a whole name. */
-  protected initials(label: string): string {
-    return label.slice(0, 2);
-  }
 
   protected inspect(person: BasketParticipant): void {
     if (person.device === undefined) {

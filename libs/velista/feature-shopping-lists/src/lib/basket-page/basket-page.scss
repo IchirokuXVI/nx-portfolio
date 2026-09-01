@@ -13,16 +13,22 @@
   padding-inline: 0;
 }
 
-.header {
+// The destination bar, laid out the way the history's is: the same padding, the
+// same rule underneath, so the two do not read as different furniture.
+.bar {
+  flex: none;
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
-  padding-inline: var(--app-space-4);
-  padding-block-start: var(--app-safe-top);
+  padding: var(--app-space-4) var(--app-space-4) var(--app-space-4)
+    var(--app-space-3);
+  padding-block-start: calc(var(--app-space-4) + var(--app-safe-top));
+  border-block-end: 1px solid var(--app-border-subtle);
 }
 
 .back,
-.share {
+.share,
+.people {
   @include shared.tap-target;
 
   display: flex;
@@ -32,7 +38,6 @@
   border: none;
   border-radius: var(--app-radius-full);
   background: transparent;
-  font-size: var(--app-text-lg);
   color: var(--app-text-secondary);
   cursor: pointer;
 
@@ -40,16 +45,34 @@
     background: var(--app-surface-raised);
     color: var(--app-text-primary);
   }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
 }
 
+.back-glyph,
+.share-glyph,
+.people-glyph {
+  font-size: var(--app-icon-md);
+}
+
+// The display face at the page title step (plan 0002, section 6), which is what
+// every other destination header in this app sets. This one set `lg`, a step
+// below even the `xl` the history records as the mistake: the words in the top
+// left shrank on the way in from the history, in the same face and the same
+// colour, for no visible reason.
 .title {
   flex: 1;
   min-inline-size: 0;
   margin: 0;
   font-family: var(--app-font-display);
   font-weight: 400;
-  font-size: var(--app-text-lg);
+  font-size: var(--app-text-2xl);
   line-height: var(--app-leading-heading);
+  // The mark's tracking comes with the mark's size, exactly as on the history.
+  letter-spacing: var(--app-tracking-wordmark);
   color: var(--app-text-primary);
   overflow-wrap: anywhere;
 }
@@ -186,4 +209,24 @@
 
 .visually-hidden {
   @include shared.visually-hidden;
+}
+
+// The basket is not updating itself: the socket was refused or dropped, or this
+// participant has been removed. Same treatment as the list page's, because it is
+// the same situation and a reader who has seen one should recognise the other.
+.stale {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin: 0 var(--app-space-4);
+  padding: var(--app-space-2) var(--app-space-3);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-status-attention-bg);
+  font-size: var(--app-text-xs);
+  color: var(--app-status-attention-fg);
+}
+
+.stale-glyph {
+  flex-shrink: 0;
+  font-size: var(--app-icon-sm);
 }

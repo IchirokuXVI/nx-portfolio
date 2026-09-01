@@ -10,10 +10,20 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore } from '@portfolio/velista/data-access';
+import { BasketStore, SessionStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, type BasketLine } from '@portfolio/velista/models';
-import { appPath, sheetSegments } from '@portfolio/velista/platform';
-import { participantName } from '../basket-labels';
+import {
+  appPath,
+  PageNavigation,
+  sheetSegments,
+} from '@portfolio/velista/platform';
+import {
+  ChevronLeftIcon,
+  OfflineIcon,
+  PersonIcon,
+  ShareIcon,
+} from '@portfolio/velista/ui';
+import { participantInitials } from '../basket-labels';
 import { BasketLineRow } from '../basket-line-row/basket-line-row';
 import { BASKET_PATHS } from '../basket-paths';
 
@@ -53,13 +63,24 @@ import { BASKET_PATHS } from '../basket-paths';
  * ## Coming back to it
  *
  * The screen refetches when the app is resumed (`0035`), which is the moment a
- * shopper's phone is most likely to be behind somebody else's. Live updates need
- * the basket's realtime room, which needs a socket a guest can open, and that is
- * the one part of section 6 not built yet.
+ * shopper's phone is most likely to be behind somebody else's. Since `0048` it is
+ * also live: `BasketSocket` holds a participant authenticated connection to this
+ * one basket, which is the connection a guest can open because it does not need an
+ * account. When it will not open the screen still works and **says so**, because a
+ * basket that is quietly not updating is indistinguishable from a shop where
+ * nobody is doing anything.
  */
 @Component({
   selector: 'lib-basket-page',
-  imports: [BasketLineRow, RokuTranslatorPipe, RouterOutlet],
+  imports: [
+    BasketLineRow,
+    ChevronLeftIcon,
+    OfflineIcon,
+    PersonIcon,
+    RokuTranslatorPipe,
+    RouterOutlet,
+    ShareIcon,
+  ],
   templateUrl: './basket-page.html',
   styleUrl: './basket-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -67,10 +88,17 @@ import { BASKET_PATHS } from '../basket-paths';
 export class BasketPage {
   private readonly _store = inject(BasketStore);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+  /**
+   * The account, for the one name the basket does not carry: the owner's own.
+   *
+   * Null for a guest, who has no account and whose own row the server does name.
+   */
+  private readonly _session = inject(SessionStore);
 
   private readonly _id =
     this._route.snapshot.paramMap.get('generatedListId') ?? '';
@@ -131,30 +159,69 @@ export class BasketPage {
   });
 
   /**
-   * The faces along the top, and how many there are.
+   * Whether the basket is live, so the screen can say when it is not (`0048`).
+   *
+   * A live basket and a refetching one look identical while nobody else is
+   * shopping, and completely different the moment somebody is.
+   */
+  protected readonly live = this._store.live;
+
+  /** Whether this participant has been removed while the phone was in their hand. */
+  protected readonly revoked = this._store.revoked;
+
+  /**
+   * The faces along the top: **who has this basket open right now**.
+   *
+   * `0048` section 4 is the change. This used to be built from the participant
+   * list, which answers a different question — who has ever joined — and the two
+   * diverge exactly when it matters, which is after a trip, when everybody has
+   * gone home and the basket still claims a crowd. The mock says "4 here now";
+   * the participant list said something closer to "4 have a link".
    *
    * **No sentence.** "Three anonymous users are shopping with you" was considered
    * and dropped for being a paragraph where a row does the job, and the word
    * anonymous appears nowhere in this product: they are guests (section 5.1).
+   *
+   * The initials come from {@link participantInitials} rather than from two sliced
+   * characters of the label, which is what drew the same bubble for everybody: an
+   * unnamed owner and every unnamed guest all resolved to a word beginning "Gu".
+   * The reader's own account name is handed in because core keeps none for an
+   * owner, so their own face is the one the basket alone cannot name.
    */
-  protected readonly faces = computed(() =>
-    this._store
-      .participants()
+  protected readonly faces = computed(() => {
+    const meId = this.meId();
+    const ownName = this._session.username();
+
+    return this._store
+      .present()
       .slice(0, 3)
       .map((person) => ({
-        id: person.id,
-        initials: participantName(
+        id: person.participantId,
+        initials: participantInitials(
           person,
           this._translator,
-          this._locale()
-        ).slice(0, 2),
+          this._locale(),
+          { ownName: person.participantId === meId ? ownName : null }
+        ),
         isGuest: person.kind === 'GUEST',
-      }))
+      }));
+  });
+
+  /**
+   * Whether there is anybody to read about in the people sheet.
+   *
+   * Not the same question as {@link faces}. Presence empties when the socket drops
+   * and when everybody has gone home, and in both cases the sheet still answers
+   * something worth knowing — everybody who *can* open this basket — so the way into
+   * it has to survive the face row going away.
+   */
+  protected readonly hasPeople = computed(
+    () => this._store.participants().length > 0
   );
 
   /** The overflow count, collapsing into a stacked chip like the price display. */
   protected readonly overflow = computed(() =>
-    Math.max(0, this._store.participants().length - 3)
+    Math.max(0, this._store.present().length - 3)
   );
 
   constructor() {
@@ -187,9 +254,20 @@ export class BasketPage {
     void this._store.refresh();
   }
 
-  /** Back to the history, which only somebody with an account has. */
+  /**
+   * Back to wherever this was opened from.
+   *
+   * `PageNavigation`, not a navigation of our own, which is what this used to do:
+   * it walked to the history whatever was behind it, so a basket opened from the
+   * dashboard card landed on a screen nobody had asked to see, and the back
+   * gesture and the button in the corner disagreed about where back is.
+   *
+   * The history is the **fallback**, for the arrival with nothing behind it — a
+   * reload, or a link opened cold — which is exactly the destination this button
+   * used to have unconditionally.
+   */
   protected back(): void {
-    void this._router.navigateByUrl(
+    void this._pages.back(
       appPath(this._locale(), this._basePath, BASKET_PATHS.list)
     );
   }

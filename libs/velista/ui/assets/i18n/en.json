@@ -873,6 +873,7 @@
     "retry": "Try again",
     "back": "Back",
     "unnamed": "Shopping list",
+    "notLive": "Not updating right now",
     "revoked": {
       "title": "You are no longer on this list",
       "body": "Whoever shared it has taken it back. If you still have the link, you can join again.",
@@ -940,6 +941,8 @@
       "more": "+{{count}}",
       "guest": "Guest",
       "guestNumbered": "Guest {{count}}",
+      "owner": "Owner",
+      "member": "Member",
       "you": "You",
       "joined": "Joined",
       "device": "Device",
