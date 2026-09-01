@@ -15,6 +15,6 @@ FROM node:24@sha256:be23f54a88d34e8824c741b19b91064094f92c1c97b194144bfc8b50d672
 WORKDIR /app
 # Copy only dependency files first to leverage Docker cache
 COPY --parents **/package*.json .
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 # Now copy the rest of the application code
 COPY . .

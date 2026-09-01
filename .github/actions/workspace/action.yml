@@ -52,4 +52,4 @@ runs:
           -v "$PWD":/w -w /w \
           -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
           "${{ inputs.build-image }}" \
-          npm ci --legacy-peer-deps
+          npm ci

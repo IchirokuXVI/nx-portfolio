@@ -12,7 +12,7 @@ name: Production release
 # environment where things go wrong at the worst time.
 #
 # Nothing compiles on the runner. Every `nx build` runs inside BUILD_IMAGE, a digest
-# pinned node:24, and the image builds pass --exclude-task-dependencies so they
+# pinned node:24-slim, and the image builds pass --exclude-task-dependencies so they
 # cannot quietly recompile outside it.
 
 on:
@@ -31,8 +31,11 @@ concurrency:
 env:
   # The one place the build environment is defined, for every job in this file.
   # Bump deliberately, in a commit, with:
-  #   docker buildx imagetools inspect node:24 --format '{{println .Manifest.Digest}}'
-  BUILD_IMAGE: node:24@sha256:be23f54a88d34e8824c741b19b91064094f92c1c97b194144bfc8b50d67258e2
+  #   docker buildx imagetools inspect node:24-slim --format '{{println .Manifest.Digest}}'
+  # Keep it equal to docker-ci.yml's and to the seven Luna Dockerfiles'. This file's
+  # own project listing needs no git, unlike the staging one: it lists everything at
+  # the release commit rather than what a diff touched.
+  BUILD_IMAGE: node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
   DOCKER_REGISTRY: ghcr.io/ichirokuxvi
   DOCKER_SKIP_LOGIN: true
   DOCKER_BUILD_CACHE: gha

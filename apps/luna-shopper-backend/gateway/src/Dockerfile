@@ -25,7 +25,7 @@ WORKDIR /app
 # from that lockfile. The `node` user (uid 1000) ships with the base image; the
 # process runs non root.
 COPY --chown=node:node . ./
-RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 USER node
 
