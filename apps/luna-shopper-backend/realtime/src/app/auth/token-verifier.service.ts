@@ -3,18 +3,9 @@ import { JwtService } from '@nestjs/jwt';
 import type {
   AccessTokenClaims,
   ParticipantKind,
-  ParticipantTokenClaims,
 } from '@portfolio/luna-shopper/contracts';
 import { UnauthorizedException } from '@portfolio/luna-shopper/platform';
 
-/**
- * Who a verified socket token says its holder is (plan 0051, section 9).
- *
- * Two kinds since sharing landed, and they are genuinely different rather than
- * one with an optional field. A `user` token names an account and admits its
- * holder to zone, list and user rooms. A `participant` token names **no user at
- * all** and admits its holder to exactly one basket's two rooms.
- */
 /**
  * A verified token before it is known which of the two kinds it is.
  *
@@ -28,6 +19,14 @@ interface VerifiedClaims {
   kind?: string;
 }
 
+/**
+ * Who a verified socket token says its holder is (plan 0051, section 9).
+ *
+ * Two kinds since sharing landed, and they are genuinely different rather than
+ * one with an optional field. A `user` token names an account and admits its
+ * holder to zone, list and user rooms. A `participant` token names **no user at
+ * all** and admits its holder to exactly one basket's two rooms.
+ */
 export type SocketIdentity =
   | { kind: 'user'; userId: string }
   | {
