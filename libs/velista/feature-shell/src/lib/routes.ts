@@ -668,11 +668,18 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-shopping-lists').then(
                 (m) => m.BasketPage
               ),
-            // Both scoped to this route, so the connection's lifetime is the
-            // screen's: entering the basket opens it and leaving closes it, which is
-            // also what makes presence answer "who is here" rather than "who has ever
-            // opened this" (plan 0048, section 4). `BasketSocket` is listed first for
-            // readability only; the injector resolves it on demand either way.
+            // Both scoped to this route, so no other screen can reach a basket's
+            // connection or its lines (plan 0048, section 4). `BasketSocket` is listed
+            // first for readability only; the injector resolves it on demand either
+            // way.
+            //
+            // **Scoping them here does not end them.** Angular caches a route's
+            // environment injector on the route config and destroys it only under
+            // `withExperimentalAutoCleanupInjectors()`, so both of these live as long
+            // as the page does and are handed back on the next visit. `BasketPage`
+            // closes the socket and clears the store from its own teardown, which is
+            // what makes presence answer "who is here" rather than "who has ever
+            // opened this".
             providers: [BasketSocket, BasketStore],
             children: [
               // Rule E1: each sheet covers the page without losing it, and Android's
