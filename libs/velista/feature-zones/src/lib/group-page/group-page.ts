@@ -32,6 +32,7 @@ import {
   appPath,
   BrowserFacade,
   PageNavigation,
+  sheetSegments,
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import {
@@ -416,7 +417,9 @@ export class GroupPage {
   }
 
   openSettings(): void {
-    void this._router.navigate(['settings'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('settings'), {
+      relativeTo: this._route,
+    });
   }
 
   /**
@@ -427,7 +430,9 @@ export class GroupPage {
    * (section 5.5).
    */
   newList(): void {
-    void this._router.navigate(['lists', 'new'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('lists', 'new'), {
+      relativeTo: this._route,
+    });
   }
 
   /**

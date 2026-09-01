@@ -34,6 +34,7 @@ import {
   BrowserFacade,
   InstallStore,
   PageNavigation,
+  sheetSegments,
   VoicePreferences,
 } from '@portfolio/velista/platform';
 import {
@@ -329,11 +330,13 @@ export class AccountPage {
 
   /** The two sheets, as children of this route (rule E1). */
   openRename(): void {
-    void this._router.navigate(['name'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('name'), {
+      relativeTo: this._route,
+    });
   }
 
   openDelete(): void {
-    void this._router.navigate(['confirm', 'delete'], {
+    void this._router.navigate(sheetSegments('confirm', 'delete'), {
       relativeTo: this._route,
     });
   }

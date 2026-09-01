@@ -271,7 +271,10 @@ describe('ShoppingListsPage', () => {
 
       (query(fixture, '.footer button') as HTMLElement).click();
 
-      expect(navigate).toHaveBeenCalledWith(['get'], expect.anything());
+      expect(navigate).toHaveBeenCalledWith(
+        ['sheet', 'get'],
+        expect.anything()
+      );
     });
 
     it('offers the same sheet from the empty state', async () => {
@@ -281,7 +284,10 @@ describe('ShoppingListsPage', () => {
 
       (query(fixture, 'lib-empty-state button') as HTMLElement).click();
 
-      expect(navigate).toHaveBeenCalledWith(['get'], expect.anything());
+      expect(navigate).toHaveBeenCalledWith(
+        ['sheet', 'get'],
+        expect.anything()
+      );
     });
 
     it('has an outlet for the sheet to render into', async () => {

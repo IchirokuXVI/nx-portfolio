@@ -489,7 +489,10 @@ describe('AccountPage', () => {
         .querySelector('button')
         ?.click();
 
-      expect(router.navigate).toHaveBeenCalledWith(['name'], expect.anything());
+      expect(router.navigate).toHaveBeenCalledWith(
+        ['sheet', 'name'],
+        expect.anything()
+      );
     });
 
     it('opens the delete confirm', async () => {
@@ -500,7 +503,7 @@ describe('AccountPage', () => {
         ?.click();
 
       expect(router.navigate).toHaveBeenCalledWith(
-        ['confirm', 'delete'],
+        ['sheet', 'confirm', 'delete'],
         expect.anything()
       );
     });

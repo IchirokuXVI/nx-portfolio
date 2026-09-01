@@ -494,7 +494,7 @@ describe('ProfilesPage', () => {
       query<HTMLButtonElement>(fixture, '.destructive')?.click();
 
       expect(router.navigate).toHaveBeenCalledWith(
-        ['confirm', 'delete'],
+        ['sheet', 'confirm', 'delete'],
         expect.anything()
       );
     });

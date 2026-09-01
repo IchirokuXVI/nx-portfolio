@@ -39,7 +39,7 @@ import {
   type MyZone,
   type PresenceUser,
 } from '@portfolio/velista/models';
-import { BrowserFacade } from '@portfolio/velista/platform';
+import { BrowserFacade, sheetSegments } from '@portfolio/velista/platform';
 import {
   AppBar,
   AskedNotice,
@@ -479,11 +479,15 @@ export class HomePage {
    * segment or the app's mount being written down here (extraction contract, item 5).
    */
   createZone(): void {
-    void this._router.navigate(['zones', 'new'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('zones', 'new'), {
+      relativeTo: this._route,
+    });
   }
 
   joinZone(): void {
-    void this._router.navigate(['zones', 'join'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('zones', 'join'), {
+      relativeTo: this._route,
+    });
   }
 
   /**
@@ -608,7 +612,9 @@ export class HomePage {
    * rather than closing the app (rule E1, plan 0008).
    */
   getShoppingList(): void {
-    void this._router.navigate(['get'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('get'), {
+      relativeTo: this._route,
+    });
   }
 
   /**

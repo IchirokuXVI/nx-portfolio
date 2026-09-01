@@ -1,4 +1,5 @@
 import type { Route } from '@angular/router';
+import { SHEET_SEGMENT } from '@portfolio/velista/platform';
 import { AppShellRoutes } from './routes';
 
 /**
@@ -52,8 +53,8 @@ describe('AppShellRoutes', () => {
       const front = pages.find((route) => route.path === '');
 
       expect(sheetsOf('').map((route) => route.path)).toEqual([
-        'zones/new',
-        'zones/join',
+        'sheet/zones/new',
+        'sheet/zones/join',
       ]);
       // The front door's own guard is `anonymousOnlyGuard`; neither sheet adds one,
       // because a person with no account is exactly who these two are for.
@@ -67,9 +68,9 @@ describe('AppShellRoutes', () => {
       // Both pages offer both entry actions, so those two copies come from one
       // function and cannot drift apart.
       expect(sheetsOf('home').map((route) => route.path)).toEqual([
-        'get',
-        'zones/new',
-        'zones/join',
+        'sheet/get',
+        'sheet/zones/new',
+        'sheet/zones/join',
       ]);
     });
 
@@ -83,7 +84,7 @@ describe('AppShellRoutes', () => {
      */
     it('draws Get shopping list over the history as well as the dashboard', () => {
       expect(sheetsOf('shopping-lists').map((route) => route.path)).toEqual([
-        'get',
+        'sheet/get',
       ]);
     });
 
@@ -279,13 +280,15 @@ describe('AppShellRoutes', () => {
     it('still leaves /zones/new to the front door', () => {
       // The half of rule G1 that `0008` predicted by name. The sheets stay children
       // of the pages they cover, and `''` stays last; the guard is what lets both.
-      expect(sheetsOf('').map((route) => route.path)).toContain('zones/new');
+      expect(sheetsOf('').map((route) => route.path)).toContain(
+        'sheet/zones/new'
+      );
     });
 
     it('offers the new list sheet and the settings sheet over the group', () => {
       expect(routeAt(groupPath)?.children?.map((route) => route.path)).toEqual([
-        'lists/new',
-        'settings',
+        'sheet/lists/new',
+        'sheet/settings',
       ]);
     });
 
@@ -331,7 +334,7 @@ describe('AppShellRoutes', () => {
       it('still leaves /zones/<uuid>/lists/new to the create sheet', () => {
         expect(
           routeAt(groupPath)?.children?.map((route) => route.path)
-        ).toContain('lists/new');
+        ).toContain('sheet/lists/new');
       });
 
       it('offers the five sheets over it, as routes rather than flags', () => {
@@ -342,11 +345,11 @@ describe('AppShellRoutes', () => {
             // What a tap opens (velista plan 0043, section 5.1). `/sheet`, because
             // `/detail` is the line page and neither of them is the bare
             // `lines/:lineId` any more.
-            'lines/:lineId/sheet',
-            'lines/:lineId/edit',
-            'lines/:lineId/comments',
-            'lines/:lineId/confirm/delete',
-            'settings',
+            'sheet/lines/:lineId/detail',
+            'sheet/lines/:lineId/edit',
+            'sheet/lines/:lineId/comments',
+            'sheet/lines/:lineId/confirm/delete',
+            'sheet/settings',
           ]
         );
       });
@@ -400,7 +403,7 @@ describe('AppShellRoutes', () => {
           (route) => route.path
         );
 
-        expect(sheets).toContain('lines/:lineId/sheet');
+        expect(sheets).toContain('sheet/lines/:lineId/detail');
         expect(sheets).not.toContain('lines/:lineId');
       });
 
@@ -413,7 +416,7 @@ describe('AppShellRoutes', () => {
         // Deleting is the one thing on either screen that discards a history, so it is
         // confirmed from here too, and its URL sits under this page's own.
         expect(routeAt(linePath)?.children?.map((route) => route.path)).toEqual(
-          ['confirm/delete']
+          ['sheet/confirm/delete']
         );
       });
     });
@@ -430,10 +433,10 @@ describe('AppShellRoutes', () => {
         'rename',
       ]);
       expect(confirms.map((route) => route.path)).toEqual([
-        ':membershipId/confirm/remove',
-        ':membershipId/confirm/ban',
-        ':membershipId/confirm/transfer',
-        ':membershipId/confirm/rename',
+        'sheet/:membershipId/confirm/remove',
+        'sheet/:membershipId/confirm/ban',
+        'sheet/:membershipId/confirm/transfer',
+        'sheet/:membershipId/confirm/rename',
       ]);
     });
 
@@ -517,8 +520,8 @@ describe('AppShellRoutes', () => {
       // Rule E1: children, so the screen underneath keeps its scroll and Android's
       // back button dismisses them.
       expect(account?.children?.map((route) => route.path)).toEqual([
-        'name',
-        'confirm/delete',
+        'sheet/name',
+        'sheet/confirm/delete',
       ]);
     });
 
@@ -572,7 +575,7 @@ describe('AppShellRoutes', () => {
 
     it('offers the delete confirm as a sheet over it', () => {
       expect(profiles?.children?.map((route) => route.path)).toEqual([
-        'confirm/delete',
+        'sheet/confirm/delete',
       ]);
     });
 
@@ -641,7 +644,7 @@ describe('AppShellRoutes', () => {
 
     it('offers the three sheets over the basket', () => {
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
-        ['lines/:lineId/settle', 'people', 'share']
+        ['sheet/lines/:lineId/settle', 'sheet/people', 'sheet/share']
       );
     });
 
@@ -737,37 +740,30 @@ describe('the sheets and their exit animation', () => {
 
   /**
    * A sheet is a route whose component draws itself in a `SheetShell`, which the table
-   * cannot be asked directly without loading every lazy chunk. So the paths are named,
-   * and `puts the guard on nothing else` is what keeps this list honest in the other
-   * direction.
+   * cannot be asked directly without loading every lazy chunk.
+   *
+   * It used to be answered by naming all eighteen paths here, a list that had to be
+   * edited in step with the table and whose whole purpose was to be forgotten. The URL
+   * convention answers it instead: a sheet is addressed under `SHEET_SEGMENT`, and
+   * `sheet()` is the only thing that writes that segment, so carrying it and carrying
+   * the fall guard are two consequences of the same call. The two assertions below now
+   * check that they never come apart, in either direction, which is strictly more than
+   * the list could say and needs no maintenance at all.
    */
-  const SHEET_PATHS = [
-    'get',
-    'zones/new',
-    'zones/join',
-    'lists/new',
-    'settings',
-    'lines/:lineId/edit',
-    'lines/:lineId/sheet',
-    'lines/:lineId/comments',
-    'lines/:lineId/confirm/delete',
-    'name',
-    'confirm/delete',
-    ':membershipId/confirm/remove',
-    ':membershipId/confirm/ban',
-    ':membershipId/confirm/transfer',
-    ':membershipId/confirm/rename',
-    // The basket's three (plan 0044). Every one is a child of the basket page, so
-    // the list underneath keeps its scroll and back dismisses the sheet.
-    'lines/:lineId/settle',
-    'people',
-    'share',
-  ];
+  const isSheet = (route: Route): boolean =>
+    (route.path ?? '').split('/')[0] === SHEET_SEGMENT;
 
   const all = everyRoute(AppShellRoutes);
-  const sheets = all.filter(({ route }) =>
-    SHEET_PATHS.includes(route.path ?? '')
-  );
+  const sheets = all.filter(({ route }) => isSheet(route));
+
+  it('addresses every sheet in the table, so none has quietly been lost', () => {
+    // Twenty four entries rather than eighteen sheets: the entry pair, Get shopping
+    // list and the three confirms are each declared over more than one page, because
+    // a sheet has to cover the page it was opened from. A count rather than a list of
+    // paths: it fails when a sheet is deleted or stops being addressed as one, and
+    // needs no edit here when a page gains a sheet it already had elsewhere.
+    expect(sheets).toHaveLength(24);
+  });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
     const missing = sheets
@@ -782,10 +778,22 @@ describe('the sheets and their exit animation', () => {
     // nothing on screen to explain it.
     const overreach = all
       .filter(({ route }) => (route.canDeactivate ?? []).length > 0)
-      .filter(({ route }) => !SHEET_PATHS.includes(route.path ?? ''))
+      .filter(({ route }) => !isSheet(route))
       .map(({ path }) => path);
 
     expect(overreach).toEqual([]);
+  });
+
+  it('gives no page a path that could be read as a sheet', () => {
+    // The other direction of the same rule, and the one that keeps the namespace
+    // partition real: if a page ever took a `sheet` segment, a sheet over it could
+    // collide with a sheet over its parent again.
+    const pretenders = all
+      .filter(({ route }) => (route.canDeactivate ?? []).length === 0)
+      .filter(({ path }) => path.split('/').includes(SHEET_SEGMENT))
+      .map(({ path }) => path);
+
+    expect(pretenders).toEqual([]);
   });
 });
 

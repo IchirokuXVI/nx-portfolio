@@ -38,6 +38,7 @@ import {
   lineIdOf,
   listIdOf,
   PageNavigation,
+  SHEET_SEGMENT,
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import { ChevronLeftIcon, SuggestionList } from '@portfolio/velista/ui';
@@ -442,7 +443,16 @@ export class LinePage {
     this.busy.set(false);
   }
 
-  /** Delete, behind a confirmation, which is the only thing that discards a history. */
+  /**
+   * Delete, behind a confirmation, which is the only thing that discards a history.
+   *
+   * The confirm is a sheet over **this** page, so the marker goes after this page's
+   * URL: `…/lines/:lineId/sheet/confirm/delete`. The list offers the same confirmation
+   * over itself at `…/lists/:listId/sheet/lines/:lineId/confirm/delete`, and the two
+   * being distinct is the point of the marker. They used to be the same URL, and the
+   * one declared first won, so deleting from a row on the list drew the confirmation
+   * over this page rather than over the list it was opened from.
+   */
   async confirmDelete(): Promise<void> {
     await this._router.navigateByUrl(
       appPath(
@@ -454,6 +464,7 @@ export class LinePage {
         this.listId(),
         'lines',
         this.lineId(),
+        SHEET_SEGMENT,
         'confirm',
         'delete'
       )

@@ -12,9 +12,9 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { BasketStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, type BasketLine } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
-import { BasketLineRow } from '../basket-line-row/basket-line-row';
+import { appPath, sheetSegments } from '@portfolio/velista/platform';
 import { participantName } from '../basket-labels';
+import { BasketLineRow } from '../basket-line-row/basket-line-row';
 import { BASKET_PATHS } from '../basket-paths';
 
 /**
@@ -166,17 +166,21 @@ export class BasketPage {
   }
 
   protected openLine(line: BasketLine): void {
-    void this._router.navigate(['lines', line.id, 'settle'], {
+    void this._router.navigate(sheetSegments('lines', line.id, 'settle'), {
       relativeTo: this._route,
     });
   }
 
   protected openPeople(): void {
-    void this._router.navigate(['people'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('people'), {
+      relativeTo: this._route,
+    });
   }
 
   protected openShare(): void {
-    void this._router.navigate(['share'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('share'), {
+      relativeTo: this._route,
+    });
   }
 
   protected retry(): void {

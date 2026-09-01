@@ -20,7 +20,11 @@ import {
   formatGeneratedDate,
   type ShoppingListsState,
 } from '@portfolio/velista/models';
-import { BrowserFacade, PageNavigation } from '@portfolio/velista/platform';
+import {
+  BrowserFacade,
+  PageNavigation,
+  sheetSegments,
+} from '@portfolio/velista/platform';
 import {
   BasketIcon,
   ChevronLeftIcon,
@@ -198,7 +202,9 @@ export class ShoppingListsPage {
    * here on the way out: the same sheet, opened over the wrong screen.
    */
   getList(): void {
-    void this._router.navigate(['get'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('get'), {
+      relativeTo: this._route,
+    });
   }
 
   /**

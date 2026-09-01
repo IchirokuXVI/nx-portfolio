@@ -7,7 +7,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
 import { BasketStore } from '@portfolio/velista/data-access';
-import { sheetFallGuard } from '@portfolio/velista/platform';
+import { SHEET_SEGMENT, sheetFallGuard } from '@portfolio/velista/platform';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import {
   anonymousOnlyGuard,
@@ -60,9 +60,29 @@ import {
  * is destroyed. Stamped by this helper rather than written out twelve times, so a sheet
  * added later cannot quietly be the one that skips it; `routes.spec.ts` asserts that
  * every route with a panel carries it.
+ *
+ * ## It also stamps the URL
+ *
+ * A sheet is addressed `<the covered page's URL>/sheet/<what it is about>`, and this
+ * is where the marker is put on, for the reason the guard is put on here: the rule is
+ * worth nothing if one route can be written without it. So the table below declares
+ * what a sheet is **about**, `lines/:lineId/edit`, and the path that reaches it is
+ * `sheet/lines/:lineId/edit`. `SHEET_SEGMENT` carries the argument for the rule, and
+ * `sheetSegments` is the other half of it, used by everything that opens one.
+ *
+ * The prefix is what stops a sheet and a page competing for one URL. Before it, the
+ * list page's line sheets sat below `lines/:lineId`, which is the line page's own URL,
+ * so the line page was offered all of them first and the delete confirm over the list
+ * resolved to the line page instead. See `SHEET_SEGMENT` for that account in full.
  */
 function sheet(route: Route): Route {
-  return { ...route, canDeactivate: [sheetFallGuard] };
+  const about = route.path ?? '';
+
+  return {
+    ...route,
+    path: about === '' ? SHEET_SEGMENT : `${SHEET_SEGMENT}/${about}`,
+    canDeactivate: [sheetFallGuard],
+  };
 }
 
 /**
@@ -186,24 +206,21 @@ function memberActionRoutes(): Route[] {
 function listSheetRoutes(): Route[] {
   return [
     sheet({
-      // What a tap on a row opens (velista plan 0043, section 5.1).
+      // What a tap on a row opens (velista plan 0043, section 5.1), reached at
+      // `…/lists/:listId/sheet/lines/:lineId/detail`.
       //
-      // `/sheet` rather than the bare `lines/:lineId`, and the segment is load bearing:
-      // the bare path belongs to the **line page**, which is a page of its own so it
-      // can be linked to and reached from a search later (section 5.3). Giving the
-      // sheet the short URL would have taken the linkable one away from the screen
-      // whose whole reason for being a page is that it can be linked to.
-      //
-      // `/sheet` and not `/detail`, which is what this was. Both screens say what the
-      // app knows about a line, so a word that describes them both told nobody which
-      // one they were reading, and the reader who wanted the page went looking for it
-      // at `/detail`. This segment names the shape instead: a panel over the list, for
-      // as long as recording a purchase takes.
+      // `detail` can be the leaf again because the marker in front of it is what says
+      // this is a panel. The word had to be given up for a while: the sheet was at
+      // `lines/:lineId/detail` and the line page at the bare `lines/:lineId`, so the
+      // one screen that exists to be linked to was the one no word named, and `detail`
+      // sat on the panel while reading as the details of the line. With the two in
+      // separate namespaces neither has to be renamed to stay out of the other's way,
+      // and each takes the word that describes it.
       //
       // No guard, like the others here: whether this caller may record a purchase is
       // decided inside it from the same abilities the page uses, and opening it to read
       // a history is something anybody holding `READ` may do.
-      path: 'lines/:lineId/sheet',
+      path: 'lines/:lineId/detail',
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then(
           (m) => m.LineDetailSheet
@@ -406,20 +423,20 @@ export const AppShellRoutes: Route[] = [
           /**
            * Everything about one line (velista plan 0043, section 5.3).
            *
-           * **Declared before `zones/:zoneId/lists/:listId`**, and that is necessity
-           * rather than habit, exactly as the list page itself is declared before
-           * `zones/:zoneId`: the list page's path is a prefix of this one and it
-           * carries children, so a URL ending in `lines/<uuid>` would be offered to
-           * that branch first. None of its sheet children matches a bare line id, so
-           * the branch would fail and the router would fall through to here anyway,
-           * which works and is exactly the kind of thing that stops working when
-           * somebody adds a sheet. Ordering makes it not depend on that.
+           * **Declared before `zones/:zoneId/lists/:listId`**, which is tidiness now
+           * and used to be load bearing. The list page's path is still a prefix of
+           * this one and it still carries children, so this URL is offered to that
+           * branch first and reaches here by the branch failing. What changed is that
+           * the failure is now guaranteed rather than observed: every child of the
+           * list page begins with `sheet`, so none of them can match a bare line id,
+           * and none added later can either. The order is kept because the specific
+           * before the general is what stays right as pages are added, and it no
+           * longer has anything resting on it.
            *
-           * A page rather than a deeper sheet because it can be linked to, and the
-           * line's own URL is the one it is linked to by. The panel over the list
-           * takes `/sheet`, which is what it is: a thing drawn over the list for as
-           * long as recording a purchase takes. It used to take `/detail`, which read
-           * as the details of the line and sent people looking for this page.
+           * A page rather than a deeper sheet because it can be linked to, and it
+           * holds the line's own URL, which is what a link to a line ought to be. The
+           * panel over the list is a sheet and is addressed as one, so the two no
+           * longer have to be told apart by a word.
            */
           {
             path: 'zones/:zoneId/lists/:listId/lines/:lineId',

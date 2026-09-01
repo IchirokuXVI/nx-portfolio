@@ -575,7 +575,7 @@ describe('GroupPage', () => {
       fixture.componentInstance.newList();
 
       expect(router.navigate).toHaveBeenCalledWith(
-        ['lists', 'new'],
+        ['sheet', 'lists', 'new'],
         expect.objectContaining({ relativeTo: expect.anything() })
       );
     });

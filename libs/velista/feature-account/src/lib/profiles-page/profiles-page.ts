@@ -25,7 +25,11 @@ import {
   PROFILE_LIMITS,
   type ShoppingProfile,
 } from '@portfolio/velista/models';
-import { appPath, PageNavigation } from '@portfolio/velista/platform';
+import {
+  appPath,
+  PageNavigation,
+  sheetSegments,
+} from '@portfolio/velista/platform';
 import { AppBar, ChevronLeftIcon } from '@portfolio/velista/ui';
 import { ChainPreferenceList } from '../chain-preference-list/chain-preference-list';
 import {
@@ -238,7 +242,7 @@ export class ProfilesPage {
 
   /** The confirm sheet, as a child of this route (rule E1). */
   openDelete(): void {
-    void this._router.navigate(['confirm', 'delete'], {
+    void this._router.navigate(sheetSegments('confirm', 'delete'), {
       relativeTo: this._route,
     });
   }
