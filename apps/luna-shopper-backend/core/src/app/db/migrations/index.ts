@@ -8,6 +8,7 @@ import { LineSettlements1756000800000 } from './1756000800000-LineSettlements';
 import { GeneratedLists1756001000000 } from './1756001000000-GeneratedLists';
 import { GeneratedListSharing1756001100000 } from './1756001100000-GeneratedListSharing';
 import { SettlementParticipants1756001200000 } from './1756001200000-SettlementParticipants';
+import { BasketLineAuthor1756001300000 } from './1756001300000-BasketLineAuthor';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -30,7 +31,11 @@ export const CORE_MIGRATIONS = [
   LineSettlements1756000800000,
   GeneratedLists1756001000000,
   GeneratedListSharing1756001100000,
-  // Last, because it alters plan 0047's table rather than creating one of its
-  // own, so it has to run after whichever migration did (plan 0051, section 10).
+  // Last of plan 0051's, because it alters plan 0047's table rather than
+  // creating one of its own, so it has to run after whichever migration did
+  // (plan 0051, section 10).
   SettlementParticipants1756001200000,
+  // Alters the table `GeneratedLists1756001000000` created, so it follows it
+  // (plan 0055, section 8).
+  BasketLineAuthor1756001300000,
 ];

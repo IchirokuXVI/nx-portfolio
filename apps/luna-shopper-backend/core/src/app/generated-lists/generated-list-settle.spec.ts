@@ -417,6 +417,107 @@ describe('settling from the basket (section 6)', () => {
   });
 });
 
+describe('a line with no origins can still finish (plan 0055, section 6)', () => {
+  /**
+   * The line plan 0055 section 3 creates by the dozen and that plan 0051 could
+   * not settle. `applied` is a sum over the origins the allocation reached, so a
+   * line reaching none left it at zero: the units never landed, the line stayed
+   * outstanding forever, and every settle on it wrote nothing at all.
+   *
+   * No such line existed before, because every line came from the run, which is
+   * why this was latent rather than reported.
+   */
+  it('advances the basket line by what the settle asked for', async () => {
+    const harness = build({ quantity: 2, origins: [] });
+    await settle(harness);
+    expect(harness.basketLine.settledQuantity).toBe(2);
+  });
+
+  it('writes no settlement, because there is no zone line to be a fact about', async () => {
+    // A settlement is a **zone fact** (plan 0047, section 3.1). Nothing enters
+    // any household's consumption history until plan 0058 binds the line.
+    const harness = build({ quantity: 2, origins: [] });
+    const result = await settle(harness);
+
+    expect(harness.settlements).toHaveLength(0);
+    expect(result.settlements).toEqual([]);
+    expect(result.skippedCount).toBe(0);
+  });
+
+  it('is still capped at what is outstanding', async () => {
+    const harness = build({ quantity: 2, settledQuantity: 1, origins: [] });
+    await settle(harness, { quantity: 99 });
+    expect(harness.basketLine.settledQuantity).toBe(2);
+  });
+
+  it('settles part of it when a smaller number is given', async () => {
+    const harness = build({ quantity: 3, origins: [] });
+    await settle(harness, { quantity: 1 });
+    expect(harness.basketLine.settledQuantity).toBe(1);
+  });
+
+  it('closes the whole amount for NOT_AVAILABLE, as it always did', async () => {
+    // The other branch needed no change: NOT_AVAILABLE is an outcome rather
+    // than a quantity and has closed the outstanding amount all along.
+    const harness = build({ quantity: 2, origins: [] });
+    await settle(harness, { outcome: SettlementOutcome.NOT_AVAILABLE });
+    expect(harness.basketLine.settledQuantity).toBe(2);
+  });
+
+  it('tells the shop and the owner, and tells no zone anything at all', async () => {
+    const harness = build({ quantity: 2, origins: [] });
+    await settle(harness);
+
+    const settled = harness.events.filter(
+      (entry) => entry.event === RealtimeEvent.GeneratedListLineSettled
+    );
+    // The basket's own room, so four people in a shop agree without a refetch.
+    expect(
+      settled.filter((entry) => entry.generatedListId === BASKET)
+    ).toHaveLength(1);
+    // And the owner's own sessions, who are usually not in that room.
+    expect(settled.filter((entry) => entry.userIds?.length)).toHaveLength(1);
+    // No zone heard anything, because no zone was touched. That is the whole
+    // reason an ADDED line is safe to hand to a guest.
+    expect(
+      harness.events.some((entry) => entry.event === RealtimeEvent.LineSettled)
+    ).toBe(false);
+  });
+
+  it('finishes a line whose every origin the owner may no longer write, and says so', async () => {
+    // The same branch, reached the other way: the line has an origin and the
+    // allocation reaches none of it. Before plan 0055 this line was stuck too,
+    // and for a worse reason, because the shopper had bought the thing and
+    // could do nothing about the access that moved last week.
+    //
+    // Plan 0051 section 6.4 already decided what to do about it: a partial
+    // settle is a real outcome and is reported rather than swallowed. So the
+    // units land on the basket line, no settlement is written, and the skip is
+    // what tells the shopper an origin was missed.
+    const harness = build({
+      quantity: 2,
+      origins: [
+        {
+          id: 'o-1',
+          lineId: 'zl-1',
+          listId: LIST_A,
+          zoneId: ZONE_A,
+          quantity: 2,
+          order: 1,
+        },
+      ],
+      ownerWritable: [],
+    });
+    const result = await settle(harness);
+
+    expect(harness.basketLine.settledQuantity).toBe(2);
+    expect(result.skippedCount).toBe(1);
+    expect(harness.settlements).toHaveLength(0);
+    // And the household's line is untouched, which is the point of the skip.
+    expect(harness.zoneLines.get('zl-1')?.quantity).toBe(5);
+  });
+});
+
 describe('a settle is authorized by the owner, never the actor (section 6.4)', () => {
   const twoOrigins: OriginSeed[] = [
     {

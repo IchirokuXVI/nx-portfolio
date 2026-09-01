@@ -112,6 +112,19 @@ export class CatalogScopeRequiredException extends DomainException {
 }
 
 /**
+ * The basket is over, and the write asked to change it (plan 0055, section 3.3).
+ *
+ * A `COMPLETED` or `ARCHIVED` basket takes no new lines. Kept apart from
+ * `conflict` and from `validation_failed` by its own code for the reason plan
+ * 0054 section 4 gives: a client that cannot tell a state it can explain from a
+ * bug it cannot will show the wrong sentence for both, and "this basket is
+ * finished" is a sentence the shopper can act on.
+ */
+export class GeneratedListFinishedException extends DomainException {
+  readonly code = ERROR_CODES.GENERATED_LIST_FINISHED;
+}
+
+/**
  * Too many attempts. Carries the wait so the client can count it down (plan 0021,
  * section 2.2). The seconds travel in {@link DomainException.details} under
  * {@link RETRY_AFTER_SECONDS_DETAIL}, and the exception filter lifts them onto the
