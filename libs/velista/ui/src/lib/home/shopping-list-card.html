@@ -56,11 +56,49 @@
         <div aria-hidden="true" class="track">
           <div [style.width.%]="percent" class="fill"></div>
         </div>
-        <span class="progress-label">{{
-          'home.shoppingList.progress'
-            | rokuT: { settled: vm.settledLineCount, total: vm.lineCount }
-        }}</span>
+        <!--
+          "3 of 4 got, 1 not available" once the summary carries the breakdown, and
+          "finished" until then (plan 0049, section 2). Same branch and same reasoning
+          as the history row, which is the screen this sentence really belongs to.
+        -->
+        <span class="progress-label">
+          @if (vm.breakdown; as outcome) {
+            {{
+              'home.shoppingList.got'
+                | rokuT: { bought: outcome.bought, total: vm.lineCount }
+            }}
+            @if (outcome.notAvailable > 0) {
+              {{
+                'home.shoppingList.unavailable'
+                  | rokuT: { count: outcome.notAvailable }
+              }}
+            }
+          } @else {
+            {{
+              'home.shoppingList.progress'
+                | rokuT: { settled: vm.settledLineCount, total: vm.lineCount }
+            }}
+          }
+        </span>
       </div>
+    }
+
+    <!--
+      Who has this basket open right now (plan 0049, section 4).
+
+      A count and no names: the summary carries the number and nothing else, and naming
+      people would need the participant surface, which answers who *may* open this
+      rather than who has. It is drawn inside the card's own button because it is a fact
+      about this basket rather than a second destination, unlike the "and N more" link
+      below, and it is `aria-hidden` because the button's stated label already says the
+      name and what is left, and section 7 asks for that label to be the whole of it.
+
+      Nothing at zero, which is the ordinary state of a basket nobody is carrying.
+    -->
+    @if (vm.presentCount > 0) {
+      <span aria-hidden="true" class="present">
+        {{ 'home.presence.hereCount' | rokuT: { count: vm.presentCount } }}
+      </span>
     }
   </button>
 

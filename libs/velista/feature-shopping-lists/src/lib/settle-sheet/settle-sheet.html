@@ -86,6 +86,22 @@
           {{ 'basket.settle.none' | rokuT }}
         </button>
       </div>
+
+      <!--
+        What happened to this line, for a reader entitled to it (plan 0049, section
+        1.1). Not drawn for a guest, who holds no account to authenticate the read
+        with, and not drawn for a participant who has lost WRITE: `canReadHistory`
+        follows `seesZoneData`, which is the server's answer on the last basket read.
+
+        Below the settle targets and outside the actions group, because it is a thing
+        to read rather than a thing to do, and the thumb reaching for the big button
+        must not find this one.
+      -->
+      @if (canReadHistory()) {
+        <button (click)="openPane('history')" class="link" type="button">
+          {{ 'basket.history.open' | rokuT }}
+        </button>
+      }
     }
 
     <!-- A number, and nothing about zones. -->
@@ -190,7 +206,9 @@
     -->
     @case ('allocate') {
       <p class="pane-title">
-        {{ 'basket.allocate.title' | rokuT: { name: title(), count: allocated() } }}
+        {{
+          'basket.allocate.title' | rokuT: { name: title(), count: allocated() }
+        }}
       </p>
       <p class="hint">{{ 'basket.allocate.hint' | rokuT }}</p>
 
@@ -213,7 +231,8 @@
             <input
               (input)="setAllocation(row.listId, +$any($event.target).value)"
               [attr.aria-label]="
-                row.name || ('basket.allocate.wanted' | rokuT: { count: row.wanted })
+                row.name ||
+                ('basket.allocate.wanted' | rokuT: { count: row.wanted })
               "
               [max]="row.wanted"
               [value]="allocation().get(row.listId) ?? 0"
@@ -253,6 +272,87 @@
           {{ 'basket.allocate.cancel' | rokuT }}
         </button>
       </div>
+    }
+
+    <!--
+      What happened to this line and in what order (plan 0049, section 1.1).
+
+      The row says who last touched it; this says what everybody did, which is the
+      question after a trip where two people bought against one line. Every row is this
+      one line by construction, across however many households it was composed from, so
+      no row names a list: the pane is about the line and not about where it came from.
+    -->
+    @case ('history') {
+      <p class="pane-title">{{ 'basket.history.title' | rokuT }}</p>
+
+      @switch (historyState()) {
+        @case ('failed') {
+          <p class="failed">{{ 'basket.history.failed' | rokuT }}</p>
+          <button (click)="retryHistory()" class="secondary" type="button">
+            {{ 'basket.history.retry' | rokuT }}
+          </button>
+        }
+
+        @case ('loaded') {
+          @if (history().length === 0) {
+            <p class="hint">{{ 'basket.history.empty' | rokuT }}</p>
+          } @else {
+            <ul class="history">
+              @for (row of history(); track row.id) {
+                <li class="history-row">
+                  <!--
+                    "They had none" is a different sentence from "got 2", not a
+                    quantity of zero: NOT_AVAILABLE closes the outstanding amount
+                    without buying anything, and a row that said "got 0" would be
+                    reporting a purchase that never happened.
+                  -->
+                  <span class="history-what">
+                    @if (row.outcome === 'BOUGHT') {
+                      {{
+                        'basket.history.bought'
+                          | rokuT
+                            : {
+                                who: row.mine
+                                  ? ('basket.history.you' | rokuT)
+                                  : row.who ||
+                                    ('basket.history.someone' | rokuT),
+                                count: row.quantity,
+                              }
+                      }}
+                    } @else {
+                      {{
+                        'basket.history.none'
+                          | rokuT
+                            : {
+                                who: row.mine
+                                  ? ('basket.history.you' | rokuT)
+                                  : row.who ||
+                                    ('basket.history.someone' | rokuT),
+                              }
+                      }}
+                    }
+                  </span>
+                  <span class="history-when">{{ row.when }}</span>
+                </li>
+              }
+            </ul>
+
+            @if (historyHasMore()) {
+              <button (click)="moreHistory()" class="quiet" type="button">
+                {{ 'basket.history.more' | rokuT }}
+              </button>
+            }
+          }
+        }
+
+        @default {
+          <p class="hint">{{ 'basket.history.loading' | rokuT }}</p>
+        }
+      }
+
+      <button (click)="openPane('settle')" class="quiet" type="button">
+        {{ 'basket.history.close' | rokuT }}
+      </button>
     }
   }
 

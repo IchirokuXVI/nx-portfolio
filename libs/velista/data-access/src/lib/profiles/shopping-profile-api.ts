@@ -2,6 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
   CatalogScope,
+  ProfileGenerationScope,
   ShoppingProfile,
   Supermarket,
   WriteShoppingProfileRequest,
@@ -12,6 +13,7 @@ import { operation } from '../auth/http-context';
 import {
   toCatalogScope,
   toPage,
+  toProfileGenerationScope,
   toShoppingProfile,
   toSupermarket,
 } from '../mapping/mappers';
@@ -68,6 +70,38 @@ export class ShoppingProfileApi implements ShoppingProfileServiceI {
       (body as { profiles?: unknown } | null)?.profiles,
       toShoppingProfile
     );
+  }
+
+  /**
+   * The generation scope of one profile (plan 0049, section 3).
+   *
+   * **A request of its own over the same route.** It reads the listing again rather
+   * than reaching into whatever `ShoppingProfileStore` happens to hold, because the
+   * whole property being bought here is that the profile object the page saves has
+   * never carried these two fields at all. Sharing a cache would mean sharing a parse,
+   * and one mapper answering both shapes is exactly the thing that eventually sends an
+   * empty `generationSources` back.
+   *
+   * It is paid once, when the generation sheet opens, by somebody who is about to
+   * generate a basket.
+   */
+  async readGenerationScope(
+    profileId: string
+  ): Promise<ProfileGenerationScope | null> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(this._profiles(), {
+        context: operation('profiles.generationScope'),
+      })
+    );
+
+    const scopes = mapArray(
+      (body as { profiles?: unknown } | null)?.profiles,
+      toProfileGenerationScope
+    );
+
+    // Null rather than a throw for a profile that is not there: it is a stale id, and
+    // the sheet's answer to "no stored scope" is already the right answer to it.
+    return scopes.find((scope) => scope.profileId === profileId) ?? null;
   }
 
   async createProfile(

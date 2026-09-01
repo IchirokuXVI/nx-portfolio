@@ -381,8 +381,10 @@ describe('toLine', () => {
   it('reads an outcome it has never heard of as the quiet one', () => {
     // `NOT_AVAILABLE` moves no quantity and counts as no purchase, so an unknown value
     // reports a trip that happened and claims nothing about what the household has.
-    expect(toLine({ ...valid, lastSettlementOutcome: 'REFUNDED' })
-      ?.lastSettlementOutcome).toBe('NOT_AVAILABLE');
+    expect(
+      toLine({ ...valid, lastSettlementOutcome: 'REFUNDED' })
+        ?.lastSettlementOutcome
+    ).toBe('NOT_AVAILABLE');
   });
 });
 
@@ -759,6 +761,9 @@ describe('toGeneratedListSummary', () => {
     generatedAt: '2026-08-21T10:00:00.000Z',
     lineCount: 12,
     settledLineCount: 4,
+    boughtLineCount: 3,
+    notAvailableLineCount: 1,
+    presentCount: 2,
   };
 
   it('maps the listing shape', () => {
@@ -769,7 +774,35 @@ describe('toGeneratedListSummary', () => {
       generatedAt: new Date('2026-08-21T10:00:00.000Z'),
       lineCount: 12,
       settledLineCount: 4,
+      boughtLineCount: 3,
+      notAvailableLineCount: 1,
+      presentCount: 2,
     });
+  });
+
+  /**
+   * A server older than backend `0053` sends none of the three, and the row has to
+   * survive it (velista plan 0049, section 2).
+   *
+   * Zero for all three, which is not a lucky default: it makes the two outcome counts
+   * fail to account for four finished lines, so `outcomeBreakdown` answers null and the
+   * screens say "finished" exactly as they did before the field existed. A fabricated
+   * breakdown would claim three purchases nobody made.
+   */
+  it('reads a summary with no breakdown as zeroes rather than dropping it', () => {
+    const mapped = toGeneratedListSummary({
+      id: 'gl1',
+      name: null,
+      status: 'ACTIVE',
+      generatedAt: '2026-08-21T10:00:00.000Z',
+      lineCount: 12,
+      settledLineCount: 4,
+    });
+
+    expect(mapped).not.toBeNull();
+    expect(mapped?.boughtLineCount).toBe(0);
+    expect(mapped?.notAvailableLineCount).toBe(0);
+    expect(mapped?.presentCount).toBe(0);
   });
 
   // Null is a basket nobody named, which the client displays as its generation date.

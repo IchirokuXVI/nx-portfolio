@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   CatalogScope,
+  ProfileGenerationScope,
   ShoppingProfile,
   Supermarket,
   WriteShoppingProfileRequest,
@@ -31,6 +32,24 @@ export interface ShoppingProfileServiceI {
    * app because there is no moment at which the list is empty.
    */
   listProfiles(): Promise<readonly ShoppingProfile[]>;
+
+  /**
+   * What one profile draws from, and **nothing else about it** (plan 0049, section 3).
+   *
+   * The same `GET /v1/account/shopping-profiles` the listing reads, mapped by a second
+   * mapper into a second type. That looks redundant and is the point: the profiles page
+   * holds a {@link ShoppingProfile} and saves it, `PATCH` treats a present collection
+   * as a full replacement, and a `generationSources` riding along on that object would
+   * one day be sent back empty and silently erase somebody's stored scope. Splitting
+   * the read is what makes that impossible rather than merely unlikely.
+   *
+   * Null for a profile the caller does not have, which is a stale id and not a failure:
+   * the generation sheet falls back to prechecking everything, which is what somebody
+   * who has never narrowed anything means anyway.
+   */
+  readGenerationScope(
+    profileId: string
+  ): Promise<ProfileGenerationScope | null>;
 
   /**
    * Mint a profile (`POST /v1/account/shopping-profiles`).

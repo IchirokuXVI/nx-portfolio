@@ -3,6 +3,7 @@ import {
   PROFILE_LIMITS,
   type CatalogScope,
   type ChainPreference,
+  type ProfileGenerationScope,
   type ProfilePostalCode,
   type ShoppingProfile,
   type Supermarket,
@@ -52,10 +53,43 @@ const UNSERVED_POSTAL_CODE = '05631';
 export class ShoppingProfileMemory implements ShoppingProfileServiceI {
   private _profiles: ShoppingProfile[] = [];
   private _nextId = 1;
+  /** Stored generation scopes, by profile id. Empty until a spec states one. */
+  private readonly _scopes = new Map<string, ProfileGenerationScope>();
 
   async listProfiles(): Promise<readonly ShoppingProfile[]> {
     this._ensureDefault();
     return this._profiles.map((profile) => ({ ...profile }));
+  }
+
+  /**
+   * What a profile draws from (plan 0049, section 3).
+   *
+   * `ALL` with no sources, because that is what a fresh profile stores on the real
+   * server and nothing in this app produces anything else: the generation sheet sends
+   * explicit sources per run and never writes a profile's stored scope. So the fake's
+   * honest answer is the one that makes the sheet precheck everything, which is what a
+   * person who has never narrowed anything means.
+   *
+   * A spec that wants the narrowed case states it with {@link setGenerationScope},
+   * rather than this pretending to remember one nothing ever wrote.
+   */
+  async readGenerationScope(
+    profileId: string
+  ): Promise<ProfileGenerationScope | null> {
+    this._ensureDefault();
+
+    return this._profiles.some((profile) => profile.id === profileId)
+      ? (this._scopes.get(profileId) ?? {
+          profileId,
+          scope: 'ALL',
+          sources: [],
+        })
+      : null;
+  }
+
+  /** State a stored scope, for a spec about the sheet prefilling from one. */
+  setGenerationScope(scope: ProfileGenerationScope): void {
+    this._scopes.set(scope.profileId, scope);
   }
 
   async createProfile(

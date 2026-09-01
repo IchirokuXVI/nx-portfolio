@@ -3,6 +3,8 @@ import {
   COMMENT_TRANSCRIPTIONS,
   GENERATED_LIST_STATUS_FALLBACK,
   GENERATED_LIST_STATUSES,
+  GENERATION_SCOPE_FALLBACK,
+  GENERATION_SCOPES,
   LINE_APPROVAL_STATUS_FALLBACK,
   LINE_APPROVAL_STATUSES,
   LIST_PERMISSIONS,
@@ -45,6 +47,7 @@ import {
   type PresenceEditor,
   type PresenceUser,
   type ProductGroup,
+  type ProfileGenerationScope,
   type ProfilePostalCode,
   type SessionTokens,
   type ShoppingList,
@@ -994,6 +997,49 @@ export function toShoppingProfile(raw: unknown): ShoppingProfile | null {
   };
 }
 
+/**
+ * From the same `ShoppingProfileView`, reading **only** the two generation fields
+ * (plan 0049, section 3).
+ *
+ * A second mapper over one response rather than two fields added to
+ * {@link toShoppingProfile}, and the split is the whole safety property: what the
+ * profiles page holds is what the profiles page saves, and it cannot hold this. A
+ * `PATCH` built from a `ShoppingProfile` therefore has no `generationSources` to send
+ * empty, whatever a later editor of that page does.
+ */
+export function toProfileGenerationScope(
+  raw: unknown
+): ProfileGenerationScope | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const profileId = str(raw['id']);
+  if (profileId === null) {
+    return null;
+  }
+
+  return {
+    profileId,
+    scope: oneOf(
+      raw['generationScope'],
+      GENERATION_SCOPES,
+      GENERATION_SCOPE_FALLBACK
+    ),
+    sources: mapArray(raw['generationSources'], (entry) => {
+      if (!isRecord(entry)) {
+        return null;
+      }
+      const zoneId = str(entry['zoneId']);
+      // A source with no zone is not a narrower scope, it is an entry this build
+      // cannot act on, and keeping it would tick nothing while counting as something.
+      return zoneId === null
+        ? null
+        : { zoneId, listId: nullableStr(entry['listId']) };
+    }),
+  };
+}
+
 /** From `PostalCodeCoverageView`. */
 function toPostalCodeCoverage(raw: unknown): PostalCodeCoverage | null {
   if (!isRecord(raw)) {
@@ -1060,6 +1106,13 @@ export function toGeneratedListSummary(
     generatedAt,
     lineCount: numOr(raw['lineCount'], 0),
     settledLineCount: numOr(raw['settledLineCount'], 0),
+    // Zero where the field is missing, which is a server older than backend `0053`.
+    // That is the right fallback rather than a lucky one: the screens draw the
+    // breakdown only when the two add up to the finished count, so a pair of zeroes
+    // reads as "no breakdown" and the copy falls back to "finished" on its own.
+    boughtLineCount: numOr(raw['boughtLineCount'], 0),
+    notAvailableLineCount: numOr(raw['notAvailableLineCount'], 0),
+    presentCount: numOr(raw['presentCount'], 0),
   };
 }
 

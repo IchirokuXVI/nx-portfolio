@@ -22,10 +22,31 @@
     <span class="meta">
       {{ generatedOn() }}
       <span aria-hidden="true"> &middot; </span>
-      {{
-        'history.row.progress'
-          | rokuT: { settled: vm.settledLineCount, total: vm.lineCount }
-      }}
+      <!--
+        What actually came home, once the summary can say it (plan 0049, section 2).
+        `breakdown` is null on a server that does not carry the two outcome counts, and
+        on any trip whose finished lines they do not account for, and the row then says
+        "finished" exactly as it did before: that word is the honest one for a number
+        merging a purchase with a shop that had none, and it is not to be improved into
+        a guess. The unavailable half is dropped at zero rather than saying "0 not
+        available", which is the ordinary trip.
+      -->
+      @if (vm.breakdown; as outcome) {
+        {{
+          'history.row.got'
+            | rokuT: { bought: outcome.bought, total: vm.lineCount }
+        }}
+        @if (outcome.notAvailable > 0) {
+          {{
+            'history.row.unavailable' | rokuT: { count: outcome.notAvailable }
+          }}
+        }
+      } @else {
+        {{
+          'history.row.progress'
+            | rokuT: { settled: vm.settledLineCount, total: vm.lineCount }
+        }}
+      }
     </span>
   </span>
 

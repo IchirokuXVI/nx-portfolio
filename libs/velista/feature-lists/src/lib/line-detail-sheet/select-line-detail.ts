@@ -1,16 +1,24 @@
-import { formatDay } from './format-day';
 import {
   ESTIMATE_MIN_PURCHASES,
   ESTIMATE_ROUGH_TO,
   inLocale,
+  toSettlementRow,
   type CatalogItem,
   type ConsumptionEstimateVm,
   type Line,
   type LineDetailVm,
   type LineIndicator,
   type LineSettlement,
-  type SettlementRowVm,
 } from '@portfolio/velista/models';
+
+/**
+ * Re-exported so the two screens in this library keep importing it from here.
+ *
+ * It **moved to `models`** with velista plan 0049 section 1.1, because the basket's own
+ * settlement history draws the same row and reaching into this library for it would be
+ * a feature library depending on a feature library. Nothing about the row changed.
+ */
+export { toSettlementRow };
 
 /**
  * What the detail sheet draws, as a pure function (velista plan 0043, section 5.1).
@@ -207,7 +215,8 @@ export function estimateFrom(
   const gaps: number[] = [];
   for (let i = 0; i < purchases.length - 1; i += 1) {
     const days =
-      (purchases[i].settledAt.getTime() - purchases[i + 1].settledAt.getTime()) /
+      (purchases[i].settledAt.getTime() -
+        purchases[i + 1].settledAt.getTime()) /
       86_400_000;
     gaps.push(days);
   }
@@ -215,7 +224,9 @@ export function estimateFrom(
   gaps.sort((a, b) => a - b);
   const middle = Math.floor(gaps.length / 2);
   const median =
-    gaps.length % 2 === 0 ? (gaps[middle - 1] + gaps[middle]) / 2 : gaps[middle];
+    gaps.length % 2 === 0
+      ? (gaps[middle - 1] + gaps[middle]) / 2
+      : gaps[middle];
 
   return {
     medianDays: Math.max(1, Math.round(median)),
@@ -224,43 +235,5 @@ export function estimateFrom(
     // 0047, section 5). Decided here rather than in each template, so the sheet and the
     // page cannot hedge differently about the same history.
     rough: purchases.length <= ESTIMATE_ROUGH_TO,
-  };
-}
-
-/**
- * One settlement, ready to draw.
- *
- * `who` collapses three cases into what a person reads: the reader, somebody named, or
- * nobody. The last covers a settlement with no user at all, which is a guest settling
- * from a shared basket (backend plan 0051), and a name that simply would not resolve.
- * Both draw the neutral phrase, because an id is not a person to somebody reading their
- * own buy history.
- */
-export function toSettlementRow(
-  settlement: LineSettlement,
-  input: {
-    nameOf: (userId: string) => string | null;
-    callerUserId: string | null;
-    locale: string;
-  },
-  listName: string | null
-): SettlementRowVm {
-  const mine =
-    settlement.settledByUserId !== null &&
-    settlement.settledByUserId === input.callerUserId;
-
-  return {
-    id: settlement.id,
-    outcome: settlement.outcome,
-    quantity: settlement.quantity,
-    who: mine
-      ? null
-      : settlement.settledByUserId === null
-        ? null
-        : input.nameOf(settlement.settledByUserId),
-    mine,
-    at: settlement.settledAt,
-    when: formatDay(settlement.settledAt, input.locale),
-    listName,
   };
 }

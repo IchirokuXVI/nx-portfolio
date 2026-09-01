@@ -20,15 +20,19 @@ import { ChevronRightIcon } from '../icons/icons';
  * merely glanced at. This card cannot show a stale thing at all: an `ACTIVE` generated
  * list either exists for this account or does not, and the server is the one saying so.
  *
- * ## What it deliberately does not draw
+ * ## Who else is shopping it, and what it cost to say so
  *
- * **Who else is shopping it.** The mock shows a presence row, and the data for it is
- * not in this screen's read: `generatedList.listMine` answers summaries, which carry a
- * name, a date and two counts and no participants. Drawing it would mean a request per
- * card on every dashboard load to render a row that is usually absent, which is the
- * cost plan 0022 refused for zone presence for the same reason. Section 3.2's state
- * table does not ask for it either. When `0044`'s participant surface lands it is one
- * field on the view model and one row here.
+ * The mock shows a presence row and plan 0045 refused it, naming the price: the
+ * listing carried no participants, so drawing it meant a request per card on every
+ * dashboard load to render something usually absent, which is the cost plan 0022
+ * refused for zone presence on the same argument. Velista `0049` section 4 held it
+ * back for the same reason and said what would change it — the field arriving on a
+ * summary the card already reads, rather than a request of its own.
+ *
+ * Backend `0053` put `presentCount` there, so the row is drawn now and it did indeed
+ * cost one field and one line of template. It is a **count and never names**: the
+ * summary carries a number, and `0044`'s participant surface answers a different
+ * question anyway, which is who may open this basket rather than who has it open.
  *
  * The card takes a **resolved** name. An unnamed basket displays as its localized
  * generation date with a same-day number appended, and that cannot be computed from one

@@ -1,11 +1,12 @@
-import type {
-  GeneratedListSummary,
-  HomeState,
-  Identity,
-  ListRowVm,
-  MyZone,
-  ShoppingListCardVm,
-  ZoneCardVm,
+import {
+  outcomeBreakdown,
+  type GeneratedListSummary,
+  type HomeState,
+  type Identity,
+  type ListRowVm,
+  type MyZone,
+  type ShoppingListCardVm,
+  type ZoneCardVm,
 } from '@portfolio/velista/models';
 
 /**
@@ -149,6 +150,8 @@ function selectShoppingList(
     generatedAt: newest.generatedAt,
     lineCount: newest.lineCount,
     settledLineCount: newest.settledLineCount,
+    breakdown: outcomeBreakdown(newest),
+    presentCount: newest.presentCount,
     otherActiveCount: active.length - 1,
   };
 }

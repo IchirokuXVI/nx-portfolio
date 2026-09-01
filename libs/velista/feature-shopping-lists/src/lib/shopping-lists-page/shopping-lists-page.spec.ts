@@ -32,6 +32,11 @@ function basket(overrides: Partial<GeneratedListSummary> = {}) {
     generatedAt: new Date('2026-08-21T10:00:00.000Z'),
     lineCount: 12,
     settledLineCount: 4,
+    // A breakdown that accounts for every finished line, so a row draws the sentence
+    // rather than the fallback unless a test deliberately breaks the arithmetic.
+    boughtLineCount: 3,
+    notAvailableLineCount: 1,
+    presentCount: 0,
     ...overrides,
   } as GeneratedListSummary;
 }
@@ -306,6 +311,123 @@ describe('ShoppingListsPage', () => {
       const live = all(fixture, '[aria-live]');
       expect(live).toHaveLength(1);
       expect(live[0]?.getAttribute('aria-live')).toBe('polite');
+    });
+
+    /**
+     * Once per **page of results**, not once per change to the count (plan 0049,
+     * section 6).
+     *
+     * The region used to render the row count straight, so it re-read the whole total
+     * every time the count moved, and the count moves on the quiet refetch a flatmate's
+     * settle triggers. Somebody standing in a shop heard their entire history
+     * re-announced each time anybody bought anything.
+     *
+     * The two cases are told apart by which of the store's signals moves: rows alone
+     * is a quiet refresh, rows plus `pagesLoaded` is a page arriving.
+     */
+    it('stays silent when a settle refresh changes the listing under it', async () => {
+      const store = fakeGeneratedListStore([basket(), basket({ id: 'b' })]);
+      const fixture = await render(store);
+
+      const spoken = fixture.componentInstance.announced();
+      expect(spoken).not.toBe('');
+
+      // A flatmate settles a line: the first page is re-read and merged, and no new
+      // page of results has arrived.
+      store.set([basket({ settledLineCount: 5 }), basket({ id: 'b' })]);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.announced()).toBe(spoken);
+    });
+
+    it('speaks again when a further page lands', async () => {
+      const store = fakeGeneratedListStore([basket()]);
+      const fixture = await render(store);
+
+      store.landPage([basket(), basket({ id: 'b' }), basket({ id: 'c' })]);
+      fixture.detectChanges();
+
+      // The count is interpolated, which the testing translator does not do, so what is
+      // asserted is that the region was written again rather than what it now says.
+      expect(fixture.componentInstance.announced()).toContain(
+        'history.announce.loaded'
+      );
+      expect(store.pagesLoaded()).toBe(2);
+    });
+
+    it('says nothing at all before any page has arrived', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([], { state: 'loading', pagesLoaded: 0 })
+      );
+
+      expect(fixture.componentInstance.announced()).toBe('');
+    });
+  });
+
+  /**
+   * What a finished trip came to (plan 0049, section 2).
+   *
+   * `0045` shipped "N of M finished" because the summary merged a purchase with a shop
+   * that had none of it, and "got" would have claimed a purchase that never happened.
+   * Backend `0053` put the breakdown on the summary, so the row can say the mock's
+   * sentence — and must still fall back to the vague word wherever the numbers cannot
+   * support it.
+   */
+  describe('what the rows say happened', () => {
+    it('says what was got and what was unavailable', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([
+          basket({
+            lineCount: 4,
+            settledLineCount: 4,
+            boughtLineCount: 3,
+            notAvailableLineCount: 1,
+          }),
+        ])
+      );
+
+      expect(text(fixture)).toContain('history.row.got');
+      expect(text(fixture)).toContain('history.row.unavailable');
+      expect(text(fixture)).not.toContain('history.row.progress');
+    });
+
+    // "0 not available" is furniture on the ordinary trip where the shop had everything.
+    it('drops the unavailable half when there was none', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([
+          basket({
+            lineCount: 4,
+            settledLineCount: 3,
+            boughtLineCount: 3,
+            notAvailableLineCount: 0,
+          }),
+        ])
+      );
+
+      expect(text(fixture)).toContain('history.row.got');
+      expect(text(fixture)).not.toContain('history.row.unavailable');
+    });
+
+    /**
+     * A server older than backend `0053` sends neither count, so they map to zero and
+     * fail to account for the finished lines. The row says "finished", which is what
+     * `0045` shipped and is still true; saying "0 of 4 got" over three purchases would
+     * not be.
+     */
+    it('says finished where the breakdown cannot account for the finished lines', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([
+          basket({
+            lineCount: 4,
+            settledLineCount: 3,
+            boughtLineCount: 0,
+            notAvailableLineCount: 0,
+          }),
+        ])
+      );
+
+      expect(text(fixture)).toContain('history.row.progress');
+      expect(text(fixture)).not.toContain('history.row.got');
     });
   });
 });

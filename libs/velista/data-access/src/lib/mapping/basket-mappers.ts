@@ -400,9 +400,18 @@ export function toBasketSettleResult(raw: unknown): BasketSettleResult | null {
         return null;
       }
       const listId = str(entry['listId']);
+      // The names come off the report and are never looked up (plan 0049,
+      // section 1.2). `str` answers null for an absent or non string field,
+      // which is the same answer the wire gives for a list deleted since the
+      // run, and the screen draws the bare count for both.
       return listId === null
         ? null
-        : { listId, reason: strOr(entry['reason'], 'ACCESS_GONE') };
+        : {
+            listId,
+            reason: strOr(entry['reason'], 'ACCESS_GONE'),
+            listName: str(entry['listName']),
+            zoneName: str(entry['zoneName']),
+          };
     }),
   };
 }

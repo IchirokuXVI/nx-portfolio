@@ -36,7 +36,39 @@ export interface GeneratedListSummary {
   /** When the run composed it. The history is ordered by this, newest first. */
   readonly generatedAt: Date;
   readonly lineCount: number;
+  /**
+   * How many lines are **finished**, which merges two different outcomes.
+   *
+   * Kept beside the breakdown rather than replaced by it, and it is not the sum of the
+   * two below: a line settled partly is neither bought nor unavailable yet, and a
+   * server that later counts a third outcome would still count it here. The screens
+   * draw the breakdown and fall back to this, which is what makes the fallback honest
+   * rather than arithmetic.
+   */
   readonly settledLineCount: number;
+  /**
+   * How many finished lines somebody actually came home with (backend `0053`,
+   * section 2).
+   *
+   * This is what "3 of 4 got" is counted from, and velista `0045` could not say it:
+   * `NOT_AVAILABLE` closes a line exactly as a purchase does, so a summary carrying
+   * `settledLineCount` alone could only honestly say "finished". Saying "got" for a
+   * shop that had none of it is worse than being vague, which is why the copy waited
+   * for this field rather than guessing from the one that was already here.
+   */
+  readonly boughtLineCount: number;
+  /** How many finished lines the shop simply did not have. The other half. */
+  readonly notAvailableLineCount: number;
+  /**
+   * How many people have this basket open right now (backend `0053`, section 2).
+   *
+   * On the summary rather than fetched, which is the only reason the dashboard card can
+   * draw it at all: velista `0045` refused a presence row because it would have cost a
+   * request per card on every dashboard load, and `0044`'s participant surface answers
+   * a different question anyway — who **may** open this, not who has. Zero is the
+   * ordinary answer and draws nothing.
+   */
+  readonly presentCount: number;
 }
 
 /**

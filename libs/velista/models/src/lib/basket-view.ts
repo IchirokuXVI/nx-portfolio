@@ -307,7 +307,32 @@ export interface BasketSettleResult {
   /** How many origins this act could not reach. Zero is the ordinary answer. */
   skippedCount: number;
   /** Which ones, and why. Absent for a reader who does not pass the rule. */
-  skipped?: readonly { listId: string; reason: string }[];
+  skipped?: readonly BasketSettleSkip[];
+}
+
+/**
+ * One origin a settle could not reach, **named** (plan 0049, section 1.2).
+ *
+ * The names arrive on the report rather than being looked up, and that is the
+ * whole of the design. The basket screen reaches no zone list store and must not
+ * grow one: a screen that can name a household is a screen a template mistake
+ * could show one to a guest. So the gateway composes the names for a reader
+ * entitled to them, in the same way it already composes the basket's own
+ * `listNames`, and a guest's report carries no `skipped` at all.
+ *
+ * {@link listName} is nullable **inside** that entitled report, and the two
+ * nulls are different questions. Absent `skipped` is "you may not have this";
+ * a null name is "there is no longer a name to give", which is a list deleted
+ * since the run. The screen falls back to the bare count for the second, because
+ * a count is at least true where an empty name would read as a missing word.
+ */
+export interface BasketSettleSkip {
+  listId: string;
+  reason: string;
+  /** The list's own name, or null where it no longer has one to give. */
+  listName: string | null;
+  /** The group it sits in, for the reader who has two lists called "Food". */
+  zoneName: string | null;
 }
 
 /** How the basket screen's one read has got on. */

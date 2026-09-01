@@ -247,3 +247,25 @@ export const GENERATED_LIST_STATUSES = [
 ] as const;
 export type GeneratedListStatus = (typeof GENERATED_LIST_STATUSES)[number];
 export const GENERATED_LIST_STATUS_FALLBACK: GeneratedListStatus = 'UNKNOWN';
+
+/**
+ * How much a shopping profile draws from when it generates a basket (backend `0049`,
+ * section 1).
+ *
+ * `ALL` is not "every list I can see today": it means every list the caller may write
+ * to, **including ones made later**, which is a different and better promise than
+ * naming today's ids. `SELECTED` is the explicit set beside it.
+ */
+export const GENERATION_SCOPES = ['ALL', 'SELECTED'] as const;
+export type GenerationScope = (typeof GENERATION_SCOPES)[number];
+
+/**
+ * What an unrecognised scope reads as, and it is the wide one.
+ *
+ * The scope only ever **prefills** a sheet somebody is about to look at, so being
+ * wrong costs a tick they untick. `ALL` is what a fresh profile stores and what
+ * somebody who has never narrowed anything means, and reading an unknown value as
+ * `SELECTED` would prefill from a `sources` list this build could not interpret
+ * either, which is a sheet that draws nothing ticked and a submit that refuses.
+ */
+export const GENERATION_SCOPE_FALLBACK: GenerationScope = 'ALL';

@@ -18,6 +18,8 @@ function card(overrides: Partial<ShoppingListCardVm> = {}): ShoppingListCardVm {
     generatedAt: new Date('2026-08-21T10:00:00.000Z'),
     lineCount: 12,
     settledLineCount: 4,
+    breakdown: { bought: 3, notAvailable: 1 },
+    presentCount: 0,
     otherActiveCount: 0,
     ...overrides,
   };
@@ -174,14 +176,95 @@ describe('ShoppingListCard', () => {
   });
 
   /**
-   * The mock draws a presence row and this does not, because the data is not in this
-   * screen's read: `generatedList.listMine` answers summaries, which carry no
-   * participants. Asserted rather than merely absent, so that adding it later is a
-   * decision about a request per card rather than something that slips in.
+   * Who is here now (velista plan 0049, section 4).
+   *
+   * `0045` refused this row and named its price: a request per card on every dashboard
+   * load, to draw something usually absent. Backend `0053` put `presentCount` on the
+   * summary the card already reads, so it now costs a field, which is exactly the
+   * condition that plan said would change the answer.
+   *
+   * It stays a **count and never names**: the summary carries a number, and `0044`'s
+   * participant surface answers who *may* open this basket rather than who has.
    */
-  it('draws nobody, because the listing carries no participants', async () => {
-    const fixture = await render();
+  describe('who is shopping it now', () => {
+    it('says how many are here when somebody is', async () => {
+      const fixture = await render(card({ presentCount: 2 }));
 
-    expect(element(fixture).querySelector('lib-presence-row')).toBeNull();
+      expect(element(fixture).textContent).toContain('home.presence.hereCount');
+    });
+
+    // "0 people here now" is furniture, and zero is the state of every basket nobody
+    // is carrying, which is most of them most of the time.
+    it('draws nothing at all when nobody is', async () => {
+      const fixture = await render(card({ presentCount: 0 }));
+
+      expect(element(fixture).querySelector('.present')).toBeNull();
+    });
+
+    /**
+     * The button already states its own accessible name, which section 7 asks to be
+     * the name plus what is left. A presence line inside it that a screen reader also
+     * read would make the card announce a third fact in the middle of that sentence.
+     */
+    it('keeps it out of the button s stated name', async () => {
+      const fixture = await render(card({ presentCount: 2 }));
+
+      expect(
+        element(fixture).querySelector('.present')?.getAttribute('aria-hidden')
+      ).toBe('true');
+    });
+
+    it('never names anybody, because the summary carries no participants', async () => {
+      const fixture = await render(card({ presentCount: 2 }));
+
+      expect(element(fixture).querySelector('lib-presence-row')).toBeNull();
+    });
+  });
+
+  /**
+   * What the trip came to (velista plan 0049, section 2).
+   *
+   * The card is read mid trip, where "finished" was already close enough, so this is
+   * consistency with the history row rather than the case the change exists for. The
+   * fallback matters just as much here: a server with no breakdown must not make the
+   * card claim purchases.
+   */
+  describe('what it says happened', () => {
+    it('says what was got and what was unavailable', async () => {
+      const fixture = await render(
+        card({
+          lineCount: 4,
+          settledLineCount: 4,
+          breakdown: { bought: 3, notAvailable: 1 },
+        })
+      );
+
+      expect(element(fixture).textContent).toContain('home.shoppingList.got');
+      expect(element(fixture).textContent).toContain(
+        'home.shoppingList.unavailable'
+      );
+    });
+
+    it('drops the unavailable half when there was none', async () => {
+      const fixture = await render(
+        card({ breakdown: { bought: 4, notAvailable: 0 } })
+      );
+
+      expect(element(fixture).textContent).toContain('home.shoppingList.got');
+      expect(element(fixture).textContent).not.toContain(
+        'home.shoppingList.unavailable'
+      );
+    });
+
+    it('says finished where there is no breakdown to draw', async () => {
+      const fixture = await render(card({ breakdown: null }));
+
+      expect(element(fixture).textContent).toContain(
+        'home.shoppingList.progress'
+      );
+      expect(element(fixture).textContent).not.toContain(
+        'home.shoppingList.got'
+      );
+    });
   });
 });

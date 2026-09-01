@@ -13,9 +13,11 @@ import {
 import {
   GeneratedListStore,
   LIST_SERVICE,
+  SHOPPING_PROFILE_SERVICE,
   ShoppingProfileStore,
   ZoneStore,
   type ListServiceI,
+  type ShoppingProfileServiceI,
 } from '@portfolio/velista/data-access';
 import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
 import {
@@ -23,6 +25,7 @@ import {
   formatGeneratedDate,
   GENERATED_LIST_NAME_MAX_LENGTH,
   type GeneratedListSource,
+  type ProfileGenerationScope,
 } from '@portfolio/velista/models';
 import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import {
@@ -55,6 +58,19 @@ interface LoadedLists {
   readonly lists: readonly { readonly id: string; readonly name: string }[];
 }
 
+/** How many lists one page asks for. The gateway's `MAX_PAGE_SIZE` is the ceiling. */
+const LIST_PAGE_SIZE = 100;
+
+/**
+ * A hard stop on the cursor loop, matching `listSupermarkets`' own.
+ *
+ * Ten thousand writable lists in one group is not a household, so reaching this means a
+ * server answering with the cursor it was handed rather than a person with a lot of
+ * lists. A tree that is short by a page is a better failure than a phone spinning
+ * requests forever while somebody waits to press Generate.
+ */
+const MAX_LIST_PAGES = 100;
+
 /**
  * Get shopping list: name it, say where it draws from, and generate it (plan 0045,
  * section 3.4).
@@ -75,19 +91,27 @@ interface LoadedLists {
  * answers `myPermissions` per list, which is what section 3.4's "only lists where the
  * caller holds `WRITE` appear at all" actually needs.
  *
- * ## The prechecked scope, and what this build cannot read
+ * ## The prechecked scope, and where it comes from
  *
  * Section 3.4 asks for the sources to be prechecked from the profile's stored generation
- * scope. **This build cannot read that scope**: plan 0046 deliberately keeps
- * `generationScope` and `generationSources` off `ShoppingProfile`, because `PATCH`
- * treats a present collection as a full replacement and a model carrying a field no
- * screen renders would eventually send back an empty one. So the tree precheckes every
- * group whole, which is what a profile's scope defaults to and the only scope anything
- * in this app can currently produce, and it sends **explicit** sources for whatever is
- * ticked rather than omitting them and letting the server fall back. What is on screen
- * is therefore what is used, which is the property worth keeping: a tree showing
- * everything ticked while the server quietly drew from three lists would be worse than
- * either behaviour on its own.
+ * scope, and velista `0049` section 3 is how that became possible without reintroducing
+ * the hazard plan 0046 was avoiding. The scope is **read through its own call and held
+ * on its own** (`readGenerationScope`), never merged into the `ShoppingProfile` the
+ * profiles page edits and saves: `PATCH` treats a present collection as a full
+ * replacement, so a field riding along on the object that page saves is a field that
+ * will one day be sent back empty and erase somebody's stored scope. Splitting the read
+ * makes that impossible rather than something to be careful about.
+ *
+ * Where the profile stores `SELECTED`, the tree opens on exactly those sources; where it
+ * stores `ALL`, or stores nothing, or the read fails, the tree prechecks every group
+ * whole, which is today's behaviour and the right default for somebody who has never
+ * narrowed anything. Changing the profile in the chooser re-reads it, because the ticks
+ * are that profile's and not the sheet's.
+ *
+ * Whatever it opens on, Generate sends **explicit** sources for what is ticked rather
+ * than omitting them and letting the server fall back to the same stored scope. What is
+ * on screen is what is used: a tree showing everything ticked while the server quietly
+ * drew from three lists would be worse than either behaviour on its own.
  */
 @Component({
   selector: 'lib-get-list-sheet',
@@ -107,6 +131,16 @@ export class GetListSheet {
   private readonly _zones = inject(ZoneStore);
   private readonly _generated = inject(GeneratedListStore);
   private readonly _profiles = inject(ShoppingProfileStore);
+  /**
+   * The profile service directly, for the generation scope and nothing else.
+   *
+   * Not through `ShoppingProfileStore`, deliberately (plan 0049, section 3). That store
+   * holds the `ShoppingProfile` the profiles page edits and saves, and the whole point
+   * of this read is that the scope never lands on that object.
+   */
+  private readonly _profileService = inject<ShoppingProfileServiceI>(
+    SHOPPING_PROFILE_SERVICE
+  );
   private readonly _lists = inject<ListServiceI>(LIST_SERVICE);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -158,6 +192,31 @@ export class GetListSheet {
     new Map()
   );
 
+  /**
+   * What a group with no entry in {@link _selection} means.
+   *
+   * `all` while nothing has narrowed the sheet, which is the sheet's whole default and
+   * the reason the first frame costs no list request: every group is ticked without a
+   * map entry per group. A stored `SELECTED` scope flips it to `none`, so the groups
+   * that scope did not mention contribute nothing.
+   *
+   * A **mode rather than an enumeration of the unmentioned groups**, because the prefill
+   * runs off the profile read and the zones arrive from a different one: enumerating
+   * them would miss whichever groups had not landed yet, and those would keep the `all`
+   * default and draw from a household the person had deliberately left out.
+   */
+  private readonly _unselectedMode = signal<'all' | 'none'>('all');
+
+  /** What a group with no explicit selection resolves to, as a selection. */
+  private _selectionOf(zoneId: string): ZoneSelection {
+    return (
+      this._selection().get(zoneId) ??
+      (this._unselectedMode() === 'all'
+        ? { mode: 'all' }
+        : { mode: 'some', listIds: new Set() })
+    );
+  }
+
   private readonly _loaded = signal<ReadonlyMap<string, LoadedLists>>(
     new Map()
   );
@@ -181,13 +240,41 @@ export class GetListSheet {
   /**
    * Whether there is anywhere at all to draw from.
    *
-   * Belonging to no group is the one case this screen can be sure of without a request
-   * per group. Somebody who is in groups but can write in none of them finds out one
-   * step further in: their groups expand to "nothing here you can edit" and the submit
-   * refuses, which is a worse answer than the sentence and the honest one available
-   * without four requests on open.
+   * Belonging to no group is the one case this screen can be sure of **on open**,
+   * without a `listLists` per group, and it stays the only one: section 3.4's sentence
+   * has to be there before anybody has expanded anything.
    */
   readonly noSources = computed(() => this.zones().length === 0);
+
+  /**
+   * Whether somebody in groups turns out to be able to write in none of them.
+   *
+   * The other half of "no sources" (plan 0049, section 4). This screen cannot know it
+   * up front: writability is per list and comes from `listLists`, so asking on open
+   * would be a request per group to answer a question that is almost always no. So the
+   * sheet **resolves it as it expands**, and the moment every group somebody has opened
+   * has come back with nothing writable in it, it says the same sentence it would have
+   * said up front rather than leaving them to infer it from an empty expansion.
+   *
+   * Deliberately not "some group is empty": one empty group among four is ordinary and
+   * says nothing about whether the run can draw from anywhere. This asks whether every
+   * group that has answered is empty, and requires at least one to have, so it is
+   * silent while the first is still loading.
+   */
+  readonly noWritableSources = computed(() => {
+    if (this.noSources()) {
+      // Already covered by the sentence above, and saying it twice is worse than once.
+      return false;
+    }
+
+    const loaded = [...this._loaded().values()].filter(
+      (group) => group.state === 'loaded'
+    );
+
+    return (
+      loaded.length > 0 && loaded.every((group) => group.lists.length === 0)
+    );
+  });
 
   readonly profiles = this._profiles.profiles;
 
@@ -205,11 +292,10 @@ export class GetListSheet {
 
   /** What Generate will send. Empty means nothing is ticked and the submit is off. */
   readonly sources = computed<readonly GeneratedListSource[]>(() => {
-    const selection = this._selection();
     const sources: GeneratedListSource[] = [];
 
     for (const zone of this.zones()) {
-      const chosen = selection.get(zone.id) ?? { mode: 'all' };
+      const chosen = this._selectionOf(zone.id);
       if (chosen.mode === 'all') {
         sources.push({ zoneId: zone.id, listId: null });
         continue;
@@ -243,13 +329,85 @@ export class GetListSheet {
         this.profiles()[0];
       if (this.selectedProfileId() === null && fallback !== undefined) {
         this.selectedProfileId.set(fallback.id);
+        void this._prefillFrom(fallback.id);
       }
     });
   }
 
+  /**
+   * Open the tree on what this profile stores (plan 0049, section 3).
+   *
+   * Its own read, through its own service method, into a type the profiles page never
+   * touches. See the class docs for why that separation is the feature rather than
+   * ceremony.
+   *
+   * **Anything other than a `SELECTED` scope leaves the tree alone**, which means every
+   * group ticked whole. `ALL`, a profile with no stored scope, a stale profile id and a
+   * read that failed all land there, and they should: the fallback is what somebody who
+   * has never narrowed anything means, so being wrong costs a tick they untick rather
+   * than a basket drawn from nothing.
+   *
+   * A `SELECTED` scope with a `null` list id is the **whole group including lists made
+   * later**, which is the `all` mode here and not an enumeration of today's ids. That
+   * distinction is the one thing a prefill could quietly destroy: reading it as a set of
+   * ticks would send today's lists and stop including new ones, from an interaction that
+   * looks like it restored what was stored.
+   */
+  private async _prefillFrom(profileId: string): Promise<void> {
+    let stored: ProfileGenerationScope | null = null;
+    try {
+      stored = await this._profileService.readGenerationScope(profileId);
+    } catch {
+      // Left null. The tree keeps every group ticked, which is the safe default.
+      return;
+    }
+
+    // A profile that has been changed underneath this call is not this answer's to
+    // fill in: somebody switched the chooser while it was in flight.
+    if (stored === null || this.selectedProfileId() !== profileId) {
+      return;
+    }
+
+    if (stored.scope !== 'SELECTED') {
+      this._unselectedMode.set('all');
+      this._selection.set(new Map());
+      return;
+    }
+
+    const selection = new Map<string, ZoneSelection>();
+    for (const source of stored.sources) {
+      if (source.listId === null) {
+        selection.set(source.zoneId, { mode: 'all' });
+        continue;
+      }
+
+      const held = selection.get(source.zoneId);
+      // A group already on `all` stays there: a stored scope naming both the whole
+      // group and one of its lists means the whole group, and the wider of the two is
+      // the one that keeps the "including lists made later" promise.
+      if (held?.mode === 'all') {
+        continue;
+      }
+
+      selection.set(source.zoneId, {
+        mode: 'some',
+        listIds: new Set([...(held?.listIds ?? []), source.listId]),
+      });
+    }
+
+    // A group the stored scope does not mention contributes **nothing**, so the
+    // fallback for a group with no entry flips with the prefill rather than the
+    // unmentioned groups being enumerated here. Enumerating them would race the zone
+    // read: this runs off the profile read, and a group that had not arrived yet would
+    // be missed and quietly keep the `all` default, drawing from a household the
+    // stored scope had left out.
+    this._unselectedMode.set('none');
+    this._selection.set(selection);
+  }
+
   /** How a group's own checkbox draws: ticked, empty, or the dash between them. */
   zoneState(zoneId: string): 'all' | 'none' | 'some' {
-    const chosen = this._selection().get(zoneId) ?? { mode: 'all' };
+    const chosen = this._selectionOf(zoneId);
     if (chosen.mode === 'all') {
       return 'all';
     }
@@ -257,7 +415,7 @@ export class GetListSheet {
   }
 
   listChecked(zoneId: string, listId: string): boolean {
-    const chosen = this._selection().get(zoneId) ?? { mode: 'all' };
+    const chosen = this._selectionOf(zoneId);
     return chosen.mode === 'all' ? true : chosen.listIds.has(listId);
   }
 
@@ -319,7 +477,7 @@ export class GetListSheet {
       return;
     }
 
-    const chosen = this._selection().get(zoneId) ?? { mode: 'all' };
+    const chosen = this._selectionOf(zoneId);
     const current =
       chosen.mode === 'all'
         ? new Set(loaded.lists.map((list) => list.id))
@@ -413,24 +571,64 @@ export class GetListSheet {
     this.name.set((event.target as HTMLInputElement).value);
   }
 
+  /**
+   * Change which profile the run uses, and re-read what it draws from.
+   *
+   * The ticks belong to the profile and not to the sheet, so switching has to reopen
+   * the tree on the new one's stored scope. Anything the person had already narrowed by
+   * hand is discarded with it, which is the honest reading of the gesture: they picked
+   * a different way of shopping, not a different name for this one.
+   */
   onProfileChange(event: Event): void {
-    this.selectedProfileId.set((event.target as HTMLSelectElement).value);
+    const profileId = (event.target as HTMLSelectElement).value;
+    this.selectedProfileId.set(profileId);
+    void this._prefillFrom(profileId);
   }
 
+  /**
+   * A group's writable lists, **all of them** (plan 0049, section 4).
+   *
+   * `listLists` is cursor paginated and this used to ask for one page of a hundred and
+   * stop, so a group with more than a hundred writable lists silently showed the first
+   * hundred: every tick correct, and a list simply not there to be found. Silence was
+   * the problem rather than the hundred, so it follows the cursor.
+   *
+   * {@link MAX_LIST_PAGES} is the stop, and it exists for the reason
+   * `listSupermarkets`' does: a server answering with the cursor it was handed would
+   * otherwise spin a phone forever, which is a worse failure than a listing that is
+   * short by a page.
+   */
   private async _loadLists(zoneId: string): Promise<void> {
     this._setLoaded(zoneId, { state: 'loading', lists: [] });
 
     try {
-      const page = await this._lists.listLists(zoneId, { limit: 100 });
-      this._setLoaded(zoneId, {
-        state: 'loaded',
+      const lists: { id: string; name: string }[] = [];
+      let cursor: string | null = null;
+
+      for (let page = 0; page < MAX_LIST_PAGES; page++) {
+        const answered = await this._lists.listLists(zoneId, {
+          limit: LIST_PAGE_SIZE,
+          ...(cursor === null ? {} : { cursor }),
+        });
+
         // `WRITE` and nothing weaker. A list the caller may only read cannot feed a
         // run at all (backend `0051` section 2), so offering it would be a tick that
-        // the server refuses on submit.
-        lists: page.items
-          .filter((list) => list.myPermissions.includes('WRITE'))
-          .map((list) => ({ id: list.id, name: list.name })),
-      });
+        // the server refuses on submit. Filtered per page rather than at the end, so
+        // a group of read only lists costs no more memory than a group of writable
+        // ones.
+        lists.push(
+          ...answered.items
+            .filter((list) => list.myPermissions.includes('WRITE'))
+            .map((list) => ({ id: list.id, name: list.name }))
+        );
+
+        cursor = answered.nextCursor;
+        if (cursor === null) {
+          break;
+        }
+      }
+
+      this._setLoaded(zoneId, { state: 'loaded', lists });
     } catch {
       this._setLoaded(zoneId, { state: 'failed', lists: [] });
     }
