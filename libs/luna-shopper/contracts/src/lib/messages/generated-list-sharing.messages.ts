@@ -1,6 +1,7 @@
 import type {
   GeneratedLineOrigin,
   GeneratedListStatus,
+  OriginUnavailableReason,
   ParticipantKind,
 } from '../enums/generated-list.enums';
 import type { SettlementOutcome } from '../enums/list.enums';
@@ -102,6 +103,35 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * exactly who wants another brand.
    */
   setPick: 'generatedList.setPick',
+  /**
+   * What a basket line is made of: the lists that contributed to it, and the
+   * lists holding the same thing that did not (plan 0057, section 3).
+   *
+   * The read the allocation sheet could never be: that one appears only while
+   * settling and can only say how many of the units **already bought** belong to
+   * each list. This one says what each household currently **wants**, which is a
+   * different number with a different meaning, and it is the only place the
+   * provenance rows plan 0050 wrote can be read back at all.
+   *
+   * Gated on plan 0051 section 5.2's all or nothing rule. A guest sees neither
+   * collection, and that is not a degraded experience: a guest must never have to
+   * know which household a tin of tomatoes belongs to.
+   */
+  lineOrigins: 'generatedList.lineOrigins',
+  /**
+   * Set one list's contribution to a basket line, editing an origin or adopting
+   * a new one (plan 0057, section 5).
+   *
+   * **This is not buying anything**, and that is the distinction the whole plan
+   * rests on. Lowering the number here is a household changing its mind, exactly
+   * as somebody editing the quantity on the list page would; lowering the number
+   * one screen up is a purchase. So nothing this writes is a `LineSettlement`,
+   * nothing here sets the bought indicator, and
+   * {@link SetGeneratedListOriginQuantityResult} carries no settlement refs and
+   * no skip report, so a client cannot draw "got it" from something the server
+   * never said.
+   */
+  setOriginQuantity: 'generatedList.setOriginQuantity',
 } as const;
 
 /**
@@ -786,6 +816,191 @@ export interface SetGeneratedListPickRequest {
   lineId: string;
   participantId: string;
   itemId: string;
+}
+
+// --- What a basket line is made of (plan 0057) -----------------------------
+
+/**
+ * Read one basket line's origins, and the lists that could become one.
+ *
+ * No `userId`, like every other request on this surface: the participant id is
+ * the whole of the identity, and the actor's own account is resolved from it in
+ * core, where section 4.1's intersection is computed.
+ */
+export interface GetGeneratedListLineOriginsRequest {
+  generatedListId: string;
+  /** The basket line, not a zone line. */
+  lineId: string;
+  participantId: string;
+}
+
+/**
+ * One list's contribution to a basket line (plan 0057, section 3.1).
+ *
+ * ## Why there are three numbers and not one
+ *
+ * They answer three different questions and they diverge the moment anybody
+ * edits either side of the snapshot:
+ *
+ * - {@link contributed} is what this list put **into the basket**, which is the
+ *   provenance row plan 0050 wrote and the number this sheet moves.
+ * - {@link listQuantity} is what the zone line asks for **now**. A basket is a
+ *   snapshot, and this is the one screen where the snapshot and the live list are
+ *   both in front of somebody; showing what the basket took without showing what
+ *   the list currently wants is how somebody sets a number that looks right and
+ *   is not.
+ * - {@link settledHere} is what this basket has already bought against this
+ *   origin, and it is the floor a contribution cannot be set below.
+ */
+export interface GeneratedListLineOriginDetail {
+  originId: string;
+  listId: string;
+  /** The zone line this origin points at. */
+  lineId: string;
+  zoneId: string;
+  /**
+   * The list's own name, composed here as `sourceNames` on the basket read
+   * already is. A reader with two lists called Food needs the zone beside it.
+   *
+   * Null when the list could not be read back, which is the ordinary way a
+   * basket outlives what it drew from rather than an error.
+   */
+  listName: string | null;
+  /** The zone the list belongs to. Null under the same rule as {@link listName}. */
+  zoneName: string | null;
+  /** What this list put into the basket line: the provenance row's quantity. */
+  contributed: number;
+  /** What the zone line asks for now, which is not the same number. */
+  listQuantity: number;
+  /** Units this basket has already settled against this origin (section 5.2). */
+  settledHere: number;
+  /**
+   * Whether the basket's **owner** still holds `WRITE` on the list, so the client
+   * can draw a row it cannot move.
+   *
+   * The owner's standing and not the reader's, because plan 0051 section 6.4
+   * makes the owner's access what authorizes every settle: an origin the owner
+   * can no longer write is one every subsequent settle skips and reports.
+   */
+  writable: boolean;
+}
+
+/**
+ * A list holding the same thing that is **not** already an origin of this line
+ * (plan 0057, section 3.2).
+ *
+ * The match is the run's own deduplication key, unchanged. That is not a
+ * convenience, it is the correctness argument for the whole collection: **the
+ * sheet must never offer a match the run would not have merged**, or the same
+ * product appears as one line in one basket and two in the next, and the
+ * household cannot tell which of the two the shopper was looking at.
+ */
+export interface GeneratedListOriginCandidate {
+  listId: string;
+  /** The zone line that would become an origin. */
+  lineId: string;
+  zoneId: string;
+  /** Null under the same rule as {@link GeneratedListLineOriginDetail.listName}. */
+  listName: string | null;
+  zoneName: string | null;
+  /** What the zone line asks for now, which is what adopting it would contribute. */
+  listQuantity: number;
+  /** The zone line's own text, so a text match can be read before it is confirmed. */
+  content: string;
+  /**
+   * Whether this candidate met the line on **normalized text** rather than on a
+   * product set (plan 0057, section 8).
+   *
+   * The run merges on text as its last resort and is deliberately conservative
+   * about it, so a sheet that silently offered to bind "milk" to "whole milk"
+   * would be that conservatism read backwards. It is offered, and it is flagged,
+   * so the client can draw it distinctly and the reader confirms a match the run
+   * would have made rather than one it guessed.
+   */
+  matchedOnText: boolean;
+  /**
+   * Why it cannot be adopted. **Absent** when it can, rather than null.
+   *
+   * Absence is the ordinary state and it is the one this collection is mostly
+   * made of, so a candidate that can simply be adopted says nothing about why it
+   * could not be. Served rather than filtered out when it is present, which is
+   * the whole of {@link OriginUnavailableReason}'s doc comment.
+   */
+  unavailable?: OriginUnavailableReason;
+}
+
+/** What a basket line is made of, and what else could go into it (section 3). */
+export interface GeneratedListLineOriginsResult {
+  generatedListId: string;
+  lineId: string;
+  /** One row per provenance row, oldest first, which is the settle's own order. */
+  origins: GeneratedListLineOriginDetail[];
+  /** Lists holding the same thing that are not origins yet. */
+  candidates: GeneratedListOriginCandidate[];
+}
+
+/**
+ * Set one list's contribution to a basket line (plan 0057, section 5).
+ *
+ * An upsert: an existing origin for that zone line is edited, and one that does
+ * not exist is adopted. The zone line moves by the difference, the basket line
+ * moves by the same difference, and the claim moves with it.
+ *
+ * The zone line is named by {@link sourceListId} and {@link sourceLineId} rather
+ * than by `listId` and `lineId`, because {@link lineId} on this surface has
+ * always meant the **basket** line and a message where it meant both would be a
+ * message somebody eventually reads the wrong way round.
+ */
+export interface SetGeneratedListOriginQuantityRequest {
+  generatedListId: string;
+  /** The basket line whose split is being edited. */
+  lineId: string;
+  participantId: string;
+  /** The zone list whose contribution is being set. */
+  sourceListId: string;
+  /** Its line: an existing origin of this basket line, or one being adopted. */
+  sourceLineId: string;
+  /** What this list should contribute. Zero drops the origin (section 5.3). */
+  quantity: number;
+  /**
+   * The contribution the client believed, which is 0 for an adoption.
+   *
+   * Refused on a mismatch rather than applied, for plan 0056 section 3.2's reason
+   * exactly: two people editing one split must not silently overwrite each
+   * other's arithmetic. The client refetches and shows the number as it now
+   * stands, which is the only honest answer.
+   */
+  from: number;
+}
+
+/**
+ * What setting a contribution did (plan 0057, section 6).
+ *
+ * ## The absences are the contract
+ *
+ * There are no settlement refs here and no skip report, and the events this
+ * write emits are `line.updated` and never `line.settled`. That is stated in the
+ * shape rather than left to copy, because the same control one screen up means
+ * "bought": a client that drew "got it" from this response would be drawing
+ * something the server never said. A second client, or the assistant, would look
+ * here for that warning, which is why it is here as well as on the sheet.
+ */
+export interface SetGeneratedListOriginQuantityResult {
+  /** The basket line as it now stands, redacted by section 5.2 like every other. */
+  line: GeneratedListBasketLineView;
+  /**
+   * The origin as it now stands, or null when the contribution was set to zero
+   * and the list was taken off the line (section 5.3).
+   */
+  origin: GeneratedListLineOriginDetail | null;
+  /**
+   * What the zone line asks for after the move, floored at zero.
+   *
+   * Carried so the sheet can redraw the row without a refetch, and because the
+   * floor means the zone line does not always move by the whole difference: a
+   * line already below what it contributed lands at zero rather than below it.
+   */
+  listQuantity: number;
 }
 
 // --- Presence --------------------------------------------------------------

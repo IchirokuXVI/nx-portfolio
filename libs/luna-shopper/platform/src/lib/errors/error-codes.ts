@@ -47,6 +47,28 @@ export const ERROR_CODES = {
    * is nothing" and is a different and false statement.
    */
   CATALOG_SCOPE_REQUIRED: 'catalog_scope_required',
+  /**
+   * The number this write was moving is not where the caller believed it started
+   * (plan 0057, section 5; plan 0056, section 3.2).
+   *
+   * Its own code and not a `conflict`, because the client's reaction is
+   * particular: refetch and redraw the control at the number as it now stands,
+   * rather than show a failure. Two phones in one shop dragging one line is the
+   * ordinary case this exists for, and a gesture whose meaning depends on where
+   * it started must be refused rather than reinterpreted.
+   */
+  STALE_QUANTITY: 'stale_quantity',
+  /**
+   * A contribution was set below what this basket has already bought against it
+   * (plan 0057, section 5.2).
+   *
+   * The message names the floor, so the client can say the number rather than
+   * only that it failed. Distinct from {@link STALE_QUANTITY} because nothing
+   * moved underneath the caller: the number they sent is simply lower than a
+   * purchase that has already happened, and two units of the flat's milk having
+   * been bought means the flat cannot retroactively have wanted one.
+   */
+  BELOW_SETTLED: 'below_settled',
   INTERNAL: 'internal',
 } as const;
 
@@ -91,5 +113,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // which is the whole reason the code exists: the client branches on it to open
   // the profile page rather than to show a field error.
   [ERROR_CODES.CATALOG_SCOPE_REQUIRED]: HttpStatus.BAD_REQUEST,
+  // Both are 409 rather than 400: the request was well formed, and what it
+  // conflicts with is state that moved or state that has already happened. They
+  // share a status and stay apart by code, which is what the client branches on.
+  [ERROR_CODES.STALE_QUANTITY]: HttpStatus.CONFLICT,
+  [ERROR_CODES.BELOW_SETTLED]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

@@ -79,6 +79,18 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   setPickRequest: schemaId('msg/generatedList.setPick/request'),
   /** What the basket's room hears when a line is settled or its pick swapped. */
   lineMovedEvent: schemaId('generated-list-sharing/LineMovedEvent'),
+  /** One list's contribution to a basket line (plan 0057, section 3.1). */
+  lineOriginDetail: schemaId('generated-list-sharing/LineOriginDetail'),
+  /** A list holding the same thing that is not an origin yet (section 3.2). */
+  originCandidate: schemaId('generated-list-sharing/OriginCandidate'),
+  lineOriginsRequest: schemaId('msg/generatedList.lineOrigins/request'),
+  lineOriginsResult: schemaId('msg/generatedList.lineOrigins/response'),
+  setOriginQuantityRequest: schemaId(
+    'msg/generatedList.setOriginQuantity/request'
+  ),
+  setOriginQuantityResult: schemaId(
+    'msg/generatedList.setOriginQuantity/response'
+  ),
 } as const;
 
 const shareLinkView = object(
@@ -408,6 +420,112 @@ const lineMovedEvent = object(
   ['generatedListId', 'line']
 );
 
+/**
+ * One list's contribution to a basket line (plan 0057, section 3.1).
+ *
+ * The three quantities are all required and all different: what this list put
+ * into the basket, what its own line asks for now, and what has already been
+ * bought against it. They diverge the moment anybody edits either side, and a
+ * sheet showing one of them without the others is how somebody sets a number
+ * that looks right and is not.
+ */
+const lineOriginDetail = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.lineOriginDetail,
+  {
+    originId: nonEmptyString(),
+    listId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    zoneId: nonEmptyString(),
+    // Null rather than absent: a basket outlives the lists it drew from, and a
+    // name nobody can supply is better null than invented.
+    listName: nullableString(),
+    zoneName: nullableString(),
+    contributed: integer({ minimum: 0 }),
+    listQuantity: integer({ minimum: 0 }),
+    settledHere: integer({ minimum: 0 }),
+    writable: boolean(),
+  },
+  [
+    'originId',
+    'listId',
+    'lineId',
+    'zoneId',
+    'listName',
+    'zoneName',
+    'contributed',
+    'listQuantity',
+    'settledHere',
+    'writable',
+  ]
+);
+
+/**
+ * A list holding the same thing that is not an origin yet (section 3.2).
+ *
+ * `unavailable` is **optional**, which is the whole of the redaction-free half
+ * of this shape: a candidate that can be adopted says nothing about why it could
+ * not be, and one that cannot is served with its reason rather than filtered out.
+ */
+const originCandidate = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.originCandidate,
+  {
+    listId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    zoneId: nonEmptyString(),
+    listName: nullableString(),
+    zoneName: nullableString(),
+    listQuantity: integer({ minimum: 0 }),
+    content: string(),
+    matchedOnText: boolean(),
+    unavailable: ref(ENUM_IDS.originUnavailableReason),
+  },
+  [
+    'listId',
+    'lineId',
+    'zoneId',
+    'listName',
+    'zoneName',
+    'listQuantity',
+    'content',
+    'matchedOnText',
+  ]
+);
+
+const lineOriginsResult = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.lineOriginsResult,
+  {
+    generatedListId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    origins: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.lineOriginDetail)),
+    candidates: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.originCandidate)),
+  },
+  ['generatedListId', 'lineId', 'origins', 'candidates']
+);
+
+/**
+ * What setting a contribution did (plan 0057, section 6).
+ *
+ * **No settlement refs and no skip report**, and that absence is the contract
+ * rather than an omission: the same control one screen up means "bought", and a
+ * client must not be able to draw "got it" from a response the server never made.
+ */
+const setOriginQuantityResult = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginQuantityResult,
+  {
+    line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
+    // Null when the contribution was set to zero and the list left the line
+    // (section 5.3), which is a state rather than a failure to answer.
+    origin: {
+      oneOf: [
+        ref(GENERATED_LIST_SHARING_SCHEMA_IDS.lineOriginDetail),
+        { type: 'null' },
+      ],
+    },
+    listQuantity: integer({ minimum: 0 }),
+  },
+  ['line', 'origin', 'listQuantity']
+);
+
 // --- Requests --------------------------------------------------------------
 
 const shareRequest = object(
@@ -531,6 +649,46 @@ const settleRequest = object(
   ['generatedListId', 'lineId', 'participantId', 'outcome']
 );
 
+const lineOriginsRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.lineOriginsRequest,
+  {
+    generatedListId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    participantId: nonEmptyString(),
+  },
+  ['generatedListId', 'lineId', 'participantId']
+);
+
+/**
+ * Set one list's contribution (plan 0057, section 5).
+ *
+ * `quantity` may be zero, which is what takes the list off the line, and `from`
+ * may be zero, which is what an adoption always sends. Neither is a floor
+ * expressed here: the real floor is per origin and per basket, and only the
+ * service can know it.
+ */
+const setOriginQuantityRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginQuantityRequest,
+  {
+    generatedListId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    sourceListId: nonEmptyString(),
+    sourceLineId: nonEmptyString(),
+    quantity: integer({ minimum: 0 }),
+    from: integer({ minimum: 0 }),
+  },
+  [
+    'generatedListId',
+    'lineId',
+    'participantId',
+    'sourceListId',
+    'sourceLineId',
+    'quantity',
+    'from',
+  ]
+);
+
 export const generatedListSharingSchemas: JsonSchema[] = [
   shareLinkView,
   shareLinkResult,
@@ -563,6 +721,12 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   lineMovedEvent,
   basketRequest,
   setPickRequest,
+  lineOriginDetail,
+  originCandidate,
+  lineOriginsRequest,
+  lineOriginsResult,
+  setOriginQuantityRequest,
+  setOriginQuantityResult,
 ];
 
 export const generatedListSharingMessageContracts: Record<
@@ -622,5 +786,15 @@ export const generatedListSharingMessageContracts: Record<
     // The same shape a settle answers with, and for the same reason: both move
     // one line, and the screen updates one row from either.
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.lineOrigins]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.lineOriginsRequest,
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.lineOriginsResult,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginQuantityRequest,
+    // Deliberately **not** the settle result (plan 0057, section 6): no
+    // settlement refs and no skip report, because this bought nothing.
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.setOriginQuantityResult,
   },
 };

@@ -23,6 +23,7 @@ import {
   type GeneratedListBasketView,
   type GeneratedListJoinCoreResult,
   type GeneratedListJoinResult,
+  type GeneratedListLineOriginsResult,
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
@@ -30,6 +31,7 @@ import {
   type GeneratedListShareLinkResult,
   type GeneratedListShareLinkView,
   type GetGeneratedListBasketRequest,
+  type GetGeneratedListLineOriginsRequest,
   type GetItemsRequest,
   type GetItemsResult,
   type ItemView,
@@ -37,6 +39,8 @@ import {
   type MintParticipantTokenRequest,
   type MintParticipantTokenResult,
   type ParticipantTokenResult,
+  type SetGeneratedListOriginQuantityRequest,
+  type SetGeneratedListOriginQuantityResult,
   type SetGeneratedListPickRequest,
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -54,6 +58,7 @@ import {
   EnsureShareLinkDto,
   JoinGeneratedListDto,
   RevokeShareLinkDto,
+  SetGeneratedListOriginQuantityDto,
   SetGeneratedListPickDto,
   SettleGeneratedListLineDto,
 } from './generated-list-sharing.dto';
@@ -198,9 +203,7 @@ export class ShareLinkController {
   @Get(':secret')
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.linkPreview)
   @ApiProblemResponses({})
-  preview(
-    @Param('secret') secret: string
-  ): Promise<GeneratedListLinkPreview> {
+  preview(@Param('secret') secret: string): Promise<GeneratedListLinkPreview> {
     return this.nats.send<GeneratedListLinkPreview>(
       GENERATED_LIST_SHARING_PATTERNS.linkPreview,
       { secret }
@@ -409,6 +412,96 @@ export class GeneratedListParticipantController {
       GENERATED_LIST_SHARING_PATTERNS.settleLine,
       req
     );
+  }
+
+  /**
+   * What a basket line is made of, and what else could go into it (plan 0057,
+   * section 3).
+   *
+   * Refused here for a participant who does not pass plan 0051 section 5.2, and
+   * refused again in core on the same question asked of its own tables. Unlike
+   * the basket read, there is no redacted projection to fall back to: every field
+   * of an origin and of a candidate names a zone or a list, so a guest gets
+   * nothing rather than less. That is not a degraded experience, it is section
+   * 6.1's sentence — a guest must never have to know which household a tin of
+   * tomatoes belongs to.
+   */
+  @Get(':id/lines/:lineId/origins')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.lineOrigins)
+  @ApiProblemResponses({ auth: true, notFound: true })
+  lineOrigins(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string
+  ): Promise<GeneratedListLineOriginsResult> {
+    this.requireZoneData(participant);
+    const req: GetGeneratedListLineOriginsRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+    };
+    return this.nats.send<GeneratedListLineOriginsResult>(
+      GENERATED_LIST_SHARING_PATTERNS.lineOrigins,
+      req
+    );
+  }
+
+  /**
+   * Set one list's contribution: edit an origin, or adopt a new one (plan 0057,
+   * section 5).
+   *
+   * **Nothing here is a purchase.** The reel on the row above means "bought" when
+   * it goes down; this number is what a household wants, and lowering it is that
+   * household changing its mind. So no settlement is written, no bought indicator
+   * moves, and the response deliberately has nowhere to put either.
+   *
+   * `POST` rather than `PUT` on a collection URL, because the write is an upsert
+   * addressed by the body rather than by the path: the same request adopts a list
+   * that was not in the run and edits one that was.
+   */
+  @Post(':id/lines/:lineId/origins')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, body: true, notFound: true })
+  setOriginQuantity(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+    @Body() dto: SetGeneratedListOriginQuantityDto
+  ): Promise<SetGeneratedListOriginQuantityResult> {
+    this.requireZoneData(participant);
+    const req: SetGeneratedListOriginQuantityRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+      // The body names the zone line and the path names the basket line, so the
+      // two `lineId`s are separated here rather than in a message where nothing
+      // sits beside them to say which is which.
+      sourceListId: dto.listId,
+      sourceLineId: dto.lineId,
+      quantity: dto.quantity,
+      from: dto.from,
+    };
+    return this.nats.send<SetGeneratedListOriginQuantityResult>(
+      GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity,
+      req
+    );
+  }
+
+  /**
+   * Plan 0051 section 5.2's all or nothing rule, at the gateway.
+   *
+   * Both origin routes are refused rather than answered with less, for the reason
+   * the allocation sheet is refused above: naming source lists is naming zone
+   * data, and here there is nothing else in the answer.
+   */
+  private requireZoneData(participant: GeneratedListParticipantContext): void {
+    if (!participant.seesZoneData) {
+      throw new ForbiddenException(
+        'Seeing where a line came from needs write access to every source list'
+      );
+    }
   }
 
   /** Who else is on this basket, for the shop screen. */

@@ -17,6 +17,7 @@ import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineService } from './generated-list-line.service';
+import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingController } from './generated-list-sharing.controller';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
@@ -74,6 +75,10 @@ import { LineClaimModule } from './line-claim.module';
     GeneratedListSharingService,
     GeneratedListSettleService,
     GeneratedListBasketService,
+    // Editing what each household asked for, which is deliberately not the
+    // settle service (plan 0057, section 1): it changes a zone list without
+    // buying anything.
+    GeneratedListOriginsService,
   ],
   // Exported so account deletion (plan 0011) can drop a departing user's baskets
   // without reaching into the repositories itself. The sharing service is
