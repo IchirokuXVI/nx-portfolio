@@ -33,9 +33,12 @@
 
     <!--
       Removing one participant touches nobody else, and their next request is
-      refused with no cache to wait out. Only the owner may.
+      refused with no cache to wait out. Only the owner may, and not on
+      themselves: handing a basket to somebody else is out of scope (section 9),
+      so an owner who removed their own row would be locking themselves out of a
+      basket nobody else can share.
     -->
-    @if (isOwner() && !person.userId) {
+    @if (isOwner() && person.kind !== 'OWNER') {
       <button
         (click)="remove(person.id)"
         [disabled]="busy()"
