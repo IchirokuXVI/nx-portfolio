@@ -689,8 +689,8 @@ describe('HomePage', () => {
       (query(fixture, '.empty-secondary') as HTMLButtonElement).click();
 
       expect(navigate.mock.calls.map(([commands]) => commands)).toEqual([
-        ['zones', 'new'],
-        ['zones', 'join'],
+        ['sheet', 'zones', 'new'],
+        ['sheet', 'zones', 'join'],
       ]);
       expect(navigate.mock.calls[0]?.[1]?.relativeTo).toBe(
         TestBed.inject(ActivatedRoute)

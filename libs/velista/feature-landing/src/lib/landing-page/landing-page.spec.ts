@@ -233,8 +233,8 @@ describe('LandingPage', () => {
       buttons[1]?.click();
 
       expect(router.navigate.mock.calls.map(([commands]) => commands)).toEqual([
-        ['zones', 'new'],
-        ['zones', 'join'],
+        ['sheet', 'zones', 'new'],
+        ['sheet', 'zones', 'join'],
       ]);
     });
 

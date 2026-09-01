@@ -28,7 +28,12 @@ import {
   type Membership,
   type MembersState,
 } from '@portfolio/velista/models';
-import { appPath, PageNavigation, zoneIdOf } from '@portfolio/velista/platform';
+import {
+  appPath,
+  PageNavigation,
+  sheetSegments,
+  zoneIdOf,
+} from '@portfolio/velista/platform';
 import {
   AppBar,
   ChevronLeftIcon,
@@ -360,10 +365,13 @@ export class MembersPage {
     // The name travels in router state so the sheet's title can say it without a
     // second request for something already on screen. A deep link carries none, and
     // the sheet is written to read correctly without it.
-    void this._router.navigate([event.membershipId, 'confirm', event.action], {
-      relativeTo: this._route,
-      state: { name: this._nameOf(event.membershipId) },
-    });
+    void this._router.navigate(
+      sheetSegments(event.membershipId, 'confirm', event.action),
+      {
+        relativeTo: this._route,
+        state: { name: this._nameOf(event.membershipId) },
+      }
+    );
   }
 
   /** Another page of members. Rare, and the screen still has to do it. */

@@ -56,6 +56,7 @@ import {
   NOTIFICATION_TONE,
   PageNavigation,
   RECORDING_LIMITS,
+  sheetSegments,
   StorageKeys,
   VoicePreferences,
   zoneIdOf,
@@ -731,10 +732,15 @@ export class ListPage {
         .find((candidate) => candidate.id === event.lineId);
       if (line !== undefined) {
         this.announcement.set(
-          this._translator.t('list.line.quantityChanged', undefined, undefined, {
-            name: line.content,
-            quantity: line.quantity,
-          })
+          this._translator.t(
+            'list.line.quantityChanged',
+            undefined,
+            undefined,
+            {
+              name: line.content,
+              quantity: line.quantity,
+            }
+          )
         );
       }
     }
@@ -1199,8 +1205,17 @@ export class ListPage {
     }
   }
 
+  /**
+   * Open one of this page's sheets, named by what it is about.
+   *
+   * The `sheet` marker is added here rather than by the five callers, which is the
+   * same argument the route table makes for adding it in `sheet()`: a rule that has to
+   * be remembered five times is a rule that will be missed once.
+   */
   private _openSheet(path: readonly string[]): Promise<boolean> {
-    return this._router.navigate([...path], { relativeTo: this._route });
+    return this._router.navigate(sheetSegments(...path), {
+      relativeTo: this._route,
+    });
   }
 }
 

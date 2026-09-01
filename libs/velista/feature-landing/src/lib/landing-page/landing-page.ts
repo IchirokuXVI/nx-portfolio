@@ -14,6 +14,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { AccountNotice } from '@portfolio/velista/data-access';
 import { APP_KEY, type PreviewLineVm } from '@portfolio/velista/models';
+import { sheetSegments } from '@portfolio/velista/platform';
 import {
   AppBar,
   AppVersion,
@@ -186,11 +187,15 @@ export class LandingPage {
    * anywhere in this file (extraction contract, item 5).
    */
   createZone(): void {
-    void this._router.navigate(['zones', 'new'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('zones', 'new'), {
+      relativeTo: this._route,
+    });
   }
 
   joinZone(): void {
-    void this._router.navigate(['zones', 'join'], { relativeTo: this._route });
+    void this._router.navigate(sheetSegments('zones', 'join'), {
+      relativeTo: this._route,
+    });
   }
 
   /**

@@ -170,9 +170,11 @@ export class LineDetailSheet {
       // The row's own indicators, from the row's own function, rather than the `[]`
       // this passed since 0043 (section 5). A row showing "bought" that opened a sheet
       // showing nothing was two answers to one question, a tap apart.
-      indicators:
-        line === undefined ? [] : indicatorsFor(line, claimedBy),
-      claimedBy: claimedBy === null ? null : this._names.nameOf(this.zoneId(), claimedBy),
+      indicators: line === undefined ? [] : indicatorsFor(line, claimedBy),
+      claimedBy:
+        claimedBy === null
+          ? null
+          : this._names.nameOf(this.zoneId(), claimedBy),
       busy: this.submitting(),
     });
   });
@@ -259,9 +261,21 @@ export class LineDetailSheet {
     this.errorKey.set(null);
   }
 
-  /** Through to everything else, which is a page rather than a deeper sheet. */
+  /**
+   * Through to everything else, which is a page rather than a deeper sheet.
+   *
+   * `leaveTo` and **not** `dismiss`, which is the whole of a defect worth naming.
+   * `dismiss` pops the history when the sheet was opened over a page, and it is right
+   * to: cancelling has to give back the screen underneath, whatever it was, rather
+   * than a URL this sheet guessed at. It ignores the URL it is handed to do that, so
+   * asking it to go somewhere new sent every reader who tapped through from the list
+   * straight back to the list, which is the one place they had just said they did not
+   * want to be. This is not a dismissal. It is a destination, so it replaces the
+   * sheet's entry with the page: back from there gives the list, and the spent sheet
+   * is not sitting between the two.
+   */
   async openPage(): Promise<void> {
-    await this._sheet.dismiss(
+    await this._sheet.leaveTo(
       appPath(
         this._localeStore.locale(),
         this._basePath,

@@ -125,6 +125,19 @@ Two consequences worth knowing before editing a route table:
 
 In the shell's `app.routes.ts`, **every mounted app comes before the empty-path `landingV2` entry**; an empty-path route with `loadChildren` is not terminal and would otherwise swallow its siblings. `app.routes.spec.ts` asserts it.
 
+### Sheets are addressed under a `sheet` segment (velista)
+
+**`<the covered page's URL>/sheet/<what the sheet is about>`.** A sheet in velista is a child route by rule E1, so it has a URL, and this is that URL's shape: `…/lists/:listId/sheet/lines/:lineId/edit`, `…/zones/:zoneId/sheet/lists/new`, `…/account/sheet/name`.
+
+The marker sits **immediately after the page being covered** and nowhere else. That placement is the rule, not a detail of it: a page's URL is unique, so stamping the marker straight after it gives every page a sheet namespace no other page can reach into. Moving it rightward, after the resource the sheet addresses, shifts two colliding URLs by the same amount and leaves them colliding.
+
+It exists because pages and sheets used to share one namespace. The list page's line sheets sit below `lines/:lineId`, which is also the **line page's** URL, so `lines/:lineId/confirm/delete` was declared over both screens, resolved to whichever route was declared first, and deleting a line from a row on the list drew the confirmation over the line page instead of the list. Its siblings worked only because the line page had no children by those names.
+
+Two rules follow from it:
+
+- **Never write the segment by hand.** `sheet()` in `libs/velista/feature-shell/src/lib/routes.ts` stamps it, along with `sheetFallGuard`, so the table declares what a sheet is *about* and cannot declare one that opts out. Callers opening a sheet use `sheetSegments()` from `@portfolio/velista/platform`; `SHEET_SEGMENT` is there too, for the rare absolute URL.
+- **No page may take a `sheet` segment**, or a sheet over it could collide with a sheet over its parent again. `routes.spec.ts` asserts both directions: every route carrying the fall guard is addressed under the marker, nothing else is, and no page's path contains it.
+
 ### Localization: RokuTranslator
 
 `libs/shared/localization/rokutranslator` is a hand-rolled i18next wrapper (the `RokuTranslator` **class**) — not a generic i18n library pulled from npm. **There is one instance per app, not one per page**: `provideRokuTranslator` creates it, binds it to the `ROKU_TRANSLATOR` token and provides the `RokuLocaleStore` beside it, so two apps reachable in one session hold independent locales. Resolving either from an injector with no `provideRokuTranslator` above it is an error, by design. Key points:

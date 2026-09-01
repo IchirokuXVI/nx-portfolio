@@ -452,7 +452,7 @@ describe('ListPage', () => {
 
       // The sheet, relative to the list page, exactly as every other sheet is opened.
       expect(router.navigate).toHaveBeenCalledWith(
-        ['lines', 'ln-1', 'detail'],
+        ['sheet', 'lines', 'ln-1', 'detail'],
         expect.anything()
       );
     });
@@ -680,11 +680,13 @@ describe('ListPage', () => {
       fixture.componentInstance.openSettings();
 
       const paths = router.navigate.mock.calls.map((call) => call[0]);
+      // Every one under the `sheet` marker, which `_openSheet` adds so the five
+      // callers cannot each be the one that forgets it.
       expect(paths).toEqual([
-        ['lines', 'ln-1', 'edit'],
-        ['lines', 'ln-1', 'comments'],
-        ['lines', 'ln-1', 'confirm', 'delete'],
-        ['settings'],
+        ['sheet', 'lines', 'ln-1', 'edit'],
+        ['sheet', 'lines', 'ln-1', 'comments'],
+        ['sheet', 'lines', 'ln-1', 'confirm', 'delete'],
+        ['sheet', 'settings'],
       ]);
     });
   });
