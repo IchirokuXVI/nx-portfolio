@@ -1,4 +1,6 @@
 import { CommentAudio } from './comment-audio.entity';
+import { GeneratedListParticipant } from './generated-list-participant.entity';
+import { GeneratedListShareLink } from './generated-list-share-link.entity';
 import { GeneratedListLineOption } from './generated-list-line-option.entity';
 import { GeneratedListLineOrigin } from './generated-list-line-origin.entity';
 import { GeneratedListLine } from './generated-list-line.entity';
@@ -19,6 +21,8 @@ import { Zone } from './zone.entity';
 
 export { BaseEntity } from './base.entity';
 export { CommentAudio } from './comment-audio.entity';
+export { GeneratedListParticipant } from './generated-list-participant.entity';
+export { GeneratedListShareLink } from './generated-list-share-link.entity';
 export { GeneratedListLineOption } from './generated-list-line-option.entity';
 export { GeneratedListLineOrigin } from './generated-list-line-origin.entity';
 export { GeneratedListLine } from './generated-list-line.entity';
@@ -61,4 +65,8 @@ export const CORE_ENTITIES = [
   GeneratedListLine,
   GeneratedListLineOrigin,
   GeneratedListLineOption,
+  // Sharing a basket with people who have no account (plan 0051). The link comes
+  // before the participants, which reference the link they arrived by.
+  GeneratedListShareLink,
+  GeneratedListParticipant,
 ];

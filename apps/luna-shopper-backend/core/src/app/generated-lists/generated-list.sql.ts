@@ -25,7 +25,7 @@
  * into a basket takes `WRITE`. The argument the original made still holds
  * against `DECIDE`, and `DECIDE` is not what is being asked for here.
  */
-const WRITABLE_LIST = `
+export const WRITABLE_LIST = `
   m.status = 'APPROVED'
   AND (
     m.role IN ('OWNER', 'ADMIN')

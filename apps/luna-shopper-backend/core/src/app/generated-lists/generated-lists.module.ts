@@ -5,11 +5,15 @@ import {
   GeneratedListLine,
   GeneratedListLineOption,
   GeneratedListLineOrigin,
+  GeneratedListParticipant,
+  GeneratedListShareLink,
 } from '../entities';
 import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListLineService } from './generated-list-line.service';
+import { GeneratedListSharingController } from './generated-list-sharing.controller';
+import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListController } from './generated-list.controller';
 import { GeneratedListService } from './generated-list.service';
 
@@ -38,15 +42,24 @@ import { GeneratedListService } from './generated-list.service';
       GeneratedListLine,
       GeneratedListLineOrigin,
       GeneratedListLineOption,
+      // Sharing (plan 0051): the link and the people who arrived by it.
+      GeneratedListShareLink,
+      GeneratedListParticipant,
     ]),
     ProfilesModule,
     ListsModule,
     ZonesModule,
   ],
-  controllers: [GeneratedListController],
-  providers: [GeneratedListService, GeneratedListLineService],
+  controllers: [GeneratedListController, GeneratedListSharingController],
+  providers: [
+    GeneratedListService,
+    GeneratedListLineService,
+    GeneratedListSharingService,
+  ],
   // Exported so account deletion (plan 0011) can drop a departing user's baskets
-  // without reaching into the repositories itself.
-  exports: [GeneratedListService],
+  // without reaching into the repositories itself. The sharing service is
+  // exported for the same reason plus one more: a settle (plan 0051, section 6)
+  // has to resolve the acting participant before it may write anything.
+  exports: [GeneratedListService, GeneratedListSharingService],
 })
 export class GeneratedListsModule {}

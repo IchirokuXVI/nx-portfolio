@@ -21,6 +21,7 @@ export * from './lib/enums/zone.enums';
 export * from './lib/messages/assistant.messages';
 export * from './lib/messages/auth.messages';
 export * from './lib/messages/catalog.messages';
+export * from './lib/messages/generated-list-sharing.messages';
 export * from './lib/messages/generated-list.messages';
 export * from './lib/messages/harvest.messages';
 export * from './lib/messages/list.messages';

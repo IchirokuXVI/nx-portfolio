@@ -86,6 +86,21 @@ export enum RealtimeEvent {
   // from {@link DOMAIN_EVENT_SUBJECTS} (nothing feeds them into JetStream).
   PresenceZoneUpdated = 'presence.zoneUpdated',
   PresenceListUpdated = 'presence.listUpdated',
+  /**
+   * Who is on a shared basket right now (plan 0051, section 7).
+   *
+   * The room is `generated:{id}:presence`, following plan 0032's rule that the
+   * room **is** the access control rather than a filter applied to a broadcast.
+   *
+   * Its entries are deliberately not `PresenceUser`, which is
+   * `{ userId, username }` and can describe none of this: an entry carries
+   * `participantId`, `kind`, the display name or the guest number, and `userId`
+   * only when there is one. One person on a phone and a laptop is two
+   * participants and appears twice, which is truthful, since it is two sessions,
+   * and deduplicating by typed name would be exactly the mistake section 3.5
+   * warns about.
+   */
+  PresenceGeneratedListUpdated = 'presence.generatedListUpdated',
 
   /**
    * A user's global username changed (plan 0030, section 4.3), addressed to that
@@ -137,6 +152,47 @@ export enum RealtimeEvent {
   /** One line of a basket moved: an edit, a pick switch, or a settle. */
   GeneratedListLineUpdated = 'generatedList.lineUpdated',
   GeneratedListDeleted = 'generatedList.deleted',
+
+  /**
+   * A basket line was settled (plan 0051, section 6), on the basket's own room so
+   * that four people working through one list in a shop agree without a refetch.
+   *
+   * Distinct from plan 0047's `line.settled`, which carries the **zone** line and
+   * goes to the list room. One settling act emits both: this one tells the people
+   * holding the basket that the bread is done, and that one tells the household
+   * that the bread was got. Neither payload tells the zone which basket it came
+   * from, which is the disclosure plan 0050 section 8 refused and this plan still
+   * refuses.
+   */
+  GeneratedListLineSettled = 'generatedList.lineSettled',
+
+  /**
+   * Somebody joined or left a shared basket (plan 0051, section 3), on the
+   * basket's own room.
+   *
+   * `participantLeft` is a **revocation**, not a disconnection: who is connected
+   * right now is presence, and these two are about who is allowed to be. A guest
+   * closing their browser emits neither.
+   */
+  GeneratedListParticipantJoined = 'generatedList.participantJoined',
+  GeneratedListParticipantLeft = 'generatedList.participantLeft',
+
+  /**
+   * A zone line is, or is no longer, in somebody's active basket (plan 0051,
+   * section 5.3), on the **zone** room.
+   *
+   * Plan 0050 section 8 said generated lists never emit zone events. They emit
+   * exactly this one, so that a zone line can show that somebody is out buying
+   * it, which is the third indicator plan 0047 section 5 lists and explicitly
+   * hands to this plan to decide.
+   *
+   * The payload says **that** a line is in an active basket and **whose**, and
+   * nothing else: not what else is in the basket, not where they are shopping,
+   * not what it costs. That is precisely the leak plan 0050 section 8 already
+   * declared acceptable when it noted that an admin can see a line was marked
+   * bought but not what basket it came from.
+   */
+  LineClaimChanged = 'line.claimChanged',
 }
 
 /**
@@ -181,6 +237,10 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.GeneratedListUpdated,
   RealtimeEvent.GeneratedListLineUpdated,
   RealtimeEvent.GeneratedListDeleted,
+  RealtimeEvent.GeneratedListLineSettled,
+  RealtimeEvent.GeneratedListParticipantJoined,
+  RealtimeEvent.GeneratedListParticipantLeft,
+  RealtimeEvent.LineClaimChanged,
 ] as const;
 
 /**
@@ -233,5 +293,20 @@ export interface DomainEvent<T = unknown> {
    * payload named a user for some other reason.
    */
   userIds?: readonly string[];
+  /**
+   * The `generated:{id}` room, when the event belongs to a shared basket (plan
+   * 0051, section 7).
+   *
+   * The fourth audience, and the first whose members are **participants** rather
+   * than users. It exists because a guest has no user id: plan 0050 addressed
+   * every basket event to `userIds: [ownerUserId]`, which reaches exactly the one
+   * person who may read an unshared basket and cannot reach anybody who arrived
+   * by a link.
+   *
+   * An event about a shared basket names this and not `userIds`. The owner is a
+   * participant too (section 3.2), so they are in the room like everybody else
+   * and do not need addressing twice.
+   */
+  generatedListId?: string;
   payload: T;
 }

@@ -60,6 +60,32 @@ export function listPresenceRoom(listId: string): string {
 }
 
 /**
+ * Builds the `generated:{generatedListId}` room name (plan 0051, section 7):
+ * everybody holding a live participant credential for one shared basket.
+ *
+ * The first room here whose members are **participants** rather than users, which
+ * is what makes a guest reachable at all: a guest has no user id, so
+ * {@link userRoom} could never address them and the owner's own room, which is
+ * where plan 0050 put every basket event, reaches exactly one person.
+ */
+export function generatedListRoom(generatedListId: string): string {
+  return `${RealtimeRoom.GeneratedList}:${generatedListId}`;
+}
+
+/**
+ * Builds the `generated:{generatedListId}:presence` room name (plan 0051,
+ * section 7).
+ *
+ * Split from {@link generatedListRoom} for the same reason
+ * {@link listPresenceRoom} is split from {@link listRoom}: that room carries
+ * every line edit and every settle, and a client that wants only to know who else
+ * is in the shop should not have to take the traffic to find out.
+ */
+export function generatedListPresenceRoom(generatedListId: string): string {
+  return `${generatedListRoom(generatedListId)}:presence`;
+}
+
+/**
  * What a room name refers to, once read back apart (plan 0031, section 4).
  *
  * The eviction sweep is handed the rooms a socket holds, as strings, and has to
@@ -72,7 +98,9 @@ export type ParsedRoom =
   | { kind: 'zone'; zoneId: string }
   | { kind: 'zoneStaff'; zoneId: string }
   | { kind: 'list'; listId: string }
-  | { kind: 'listPresence'; listId: string };
+  | { kind: 'listPresence'; listId: string }
+  | { kind: 'generatedList'; generatedListId: string }
+  | { kind: 'generatedListPresence'; generatedListId: string };
 
 /**
  * Read a room name back into the access question that gates it, or `undefined`
@@ -105,6 +133,18 @@ export function parseRoom(room: string): ParsedRoom | undefined {
       return { kind: 'listPresence', listId: parts[1] };
     }
   }
+  // Plan 0051, section 7. Both cases are parsed rather than left out like
+  // `userRoom`, because both are claims a revocation can take back: revoking a
+  // participant has to evict their socket, and section 3.3 promises there is no
+  // cache to wait out.
+  if (parts[0] === RealtimeRoom.GeneratedList) {
+    if (parts.length === 2) {
+      return { kind: 'generatedList', generatedListId: parts[1] };
+    }
+    if (parts.length === 3 && parts[2] === 'presence') {
+      return { kind: 'generatedListPresence', generatedListId: parts[1] };
+    }
+  }
   return undefined;
 }
 
@@ -124,6 +164,21 @@ export const REALTIME_ACCESS_PATTERNS = {
    */
   checkZoneStaff: 'realtime.checkZoneStaffAccess',
   checkList: 'realtime.checkListAccess',
+  /**
+   * Gates the two `generated:{id}` rooms (plan 0051, section 7), and it is the
+   * one access check here that names a **participant** rather than a user.
+   *
+   * Asked by participant id because that is what the socket's token carries: a
+   * guest has no user id, so none of the three checks above could be asked about
+   * them at all. Core answers from the participant row alone, reading `revokedAt`
+   * on it, which is section 3.3's one indexed lookup.
+   *
+   * **Never cached**, unlike the other three. Section 3.3 promises revocation
+   * bites immediately and that there is no cache to wait out, and a basket lives
+   * about as long as a shopping trip, so there is no traffic here worth trading
+   * that promise for.
+   */
+  checkParticipant: 'realtime.checkParticipantAccess',
 } as const;
 
 export interface CheckZoneAccessRequest {
@@ -134,6 +189,19 @@ export interface CheckZoneAccessRequest {
 export interface CheckListAccessRequest {
   userId: string;
   listId: string;
+}
+
+/**
+ * Whether this participant is still live on this basket (plan 0051, section 7).
+ *
+ * The basket is named as well as the participant, so a participant id for one
+ * basket can never admit a socket to another's room. The id alone would be enough
+ * to find the row, which is exactly why the room is checked against it rather
+ * than trusted from the token.
+ */
+export interface CheckParticipantAccessRequest {
+  participantId: string;
+  generatedListId: string;
 }
 
 /** Whether the caller may join the requested room. */

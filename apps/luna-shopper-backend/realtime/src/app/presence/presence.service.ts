@@ -4,11 +4,15 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import {
+  generatedListPresenceRoom,
+  generatedListRoom,
   listPresenceRoom,
   listRoom,
   RealtimeEvent,
   zoneRoom,
+  type GeneratedListPresence,
   type ListPresence,
+  type ParticipantPresenceEntry,
   type PresenceEditor,
   type PresenceUser,
   type ZonePresence,
@@ -19,19 +23,39 @@ import {
   PRESENCE_HEARTBEAT_MS,
   PRESENCE_KEY_TTL_SECONDS,
   PRESENCE_TTL_MS,
+  generatedListPresenceKey,
   listEditorsKey,
   listViewersKey,
   zonePresenceKey,
 } from '../realtime/constants';
 import { EventRelayService } from '../relay/event-relay.service';
 
-/** What one socket **held by this pod** is currently present on. */
+/**
+ * What one socket **held by this pod** is currently present on.
+ *
+ * `userId` is empty for a participant socket (plan 0051, section 9), which
+ * authenticates with a token naming no user at all. That is why the basket half
+ * below carries its own identity rather than reading this one: a guest has
+ * nothing here to read.
+ */
 interface SocketPresence {
   userId: string;
   zones: Set<string>;
   lists: Set<string>;
   /** listId to the line the socket is editing on that list (one at a time). */
   editing: Map<string, string>;
+  /**
+   * Who this socket is on a shared basket, when it is a participant socket
+   * (plan 0051, section 7). Absent on an ordinary account socket.
+   */
+  participant?: ParticipantPresenceEntry;
+  /** The baskets this socket is present in. In practice one. */
+  baskets: Set<string>;
+}
+
+/** A participant entry as it is stored, carrying its own liveness. */
+interface StoredParticipant extends ParticipantPresenceEntry {
+  seenAt: number;
 }
 
 /** An editor entry as it is stored, carrying its own liveness. */
@@ -141,7 +165,62 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
       zones: new Set(),
       lists: new Set(),
       editing: new Map(),
+      baskets: new Set(),
     });
+  }
+
+  /**
+   * Remember a socket that authenticated as a **participant** rather than a user
+   * (plan 0051, sections 7 and 9).
+   *
+   * `userId` is set to the participant's account when they have one and left
+   * empty for a guest, who has none. Nothing keys off it on this path: the basket
+   * rooms are keyed by participant throughout, which is what makes a guest
+   * addressable at all.
+   */
+  registerParticipant(
+    socketId: string,
+    participant: ParticipantPresenceEntry
+  ): void {
+    this.sockets.set(socketId, {
+      userId: participant.userId ?? '',
+      zones: new Set(),
+      lists: new Set(),
+      editing: new Map(),
+      participant,
+      baskets: new Set(),
+    });
+  }
+
+  /** Enter a shared basket, and tell the room (plan 0051, section 7). */
+  async joinGeneratedList(
+    socketId: string,
+    generatedListId: string
+  ): Promise<void> {
+    const socket = this.sockets.get(socketId);
+    if (!socket?.participant) {
+      return;
+    }
+    socket.baskets.add(generatedListId);
+    await this.writeParticipant(generatedListId, socketId, {
+      ...socket.participant,
+      seenAt: Date.now(),
+    });
+    await this.broadcastGeneratedList(generatedListId);
+  }
+
+  /** Leave one, on an unsubscribe or on a revocation sweep. */
+  async leaveGeneratedList(
+    socketId: string,
+    generatedListId: string
+  ): Promise<void> {
+    const socket = this.sockets.get(socketId);
+    if (!socket) {
+      return;
+    }
+    socket.baskets.delete(generatedListId);
+    await this.removeParticipant(generatedListId, socketId);
+    await this.broadcastGeneratedList(generatedListId);
   }
 
   async joinZone(socketId: string, zoneId: string): Promise<void> {
@@ -248,6 +327,10 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
       await this.removeEditor(listId, socketId);
       await this.broadcastList(listId);
     }
+    for (const generatedListId of socket.baskets) {
+      await this.removeParticipant(generatedListId, socketId);
+      await this.broadcastGeneratedList(generatedListId);
+    }
   }
 
   /**
@@ -263,6 +346,7 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
   private async runHeartbeat(): Promise<void> {
     const zones = new Set<string>();
     const lists = new Set<string>();
+    const baskets = new Set<string>();
 
     try {
       for (const [socketId, socket] of this.sockets) {
@@ -288,6 +372,16 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
             seenAt: Date.now(),
           });
         }
+        for (const generatedListId of socket.baskets) {
+          if (!socket.participant) {
+            continue;
+          }
+          baskets.add(generatedListId);
+          await this.writeParticipant(generatedListId, socketId, {
+            ...socket.participant,
+            seenAt: Date.now(),
+          });
+        }
       }
 
       for (const zoneId of zones) {
@@ -298,6 +392,11 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
       for (const listId of lists) {
         if (await this.pruneList(listId)) {
           await this.broadcastList(listId);
+        }
+      }
+      for (const generatedListId of baskets) {
+        if (await this.pruneGeneratedList(generatedListId)) {
+          await this.broadcastGeneratedList(generatedListId);
         }
       }
     } catch (err) {
@@ -339,6 +438,90 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
       (client) => client.hdel(listEditorsKey(listId), socketId),
       `presence unedit ${listId}`
     );
+  }
+
+  private async writeParticipant(
+    generatedListId: string,
+    socketId: string,
+    entry: StoredParticipant
+  ): Promise<void> {
+    await this.redis.tryCommand(async (client) => {
+      const key = generatedListPresenceKey(generatedListId);
+      await client.hset(key, socketId, JSON.stringify(entry));
+      await client.expire(key, PRESENCE_KEY_TTL_SECONDS);
+    }, `presence basket ${generatedListId}`);
+  }
+
+  private async removeParticipant(
+    generatedListId: string,
+    socketId: string
+  ): Promise<void> {
+    await this.redis.tryCommand(
+      (client) =>
+        client.hdel(generatedListPresenceKey(generatedListId), socketId),
+      `presence unbasket ${generatedListId}`
+    );
+  }
+
+  /** Drop entries last seen before the window. True when something was dropped. */
+  private async pruneGeneratedList(generatedListId: string): Promise<boolean> {
+    const cutoff = Date.now() - PRESENCE_TTL_MS;
+    const stale = await this.redis.tryCommand(async (client) => {
+      const key = generatedListPresenceKey(generatedListId);
+      const entries = await client.hgetall(key);
+      const expired = Object.entries(entries)
+        .filter(([, raw]) => {
+          const parsed = parseParticipant(raw);
+          return !parsed || parsed.seenAt <= cutoff;
+        })
+        .map(([socketId]) => socketId);
+      if (expired.length > 0) {
+        await client.hdel(key, ...expired);
+      }
+      return expired.length;
+    }, `presence prune basket ${generatedListId}`);
+    return (stale ?? 0) > 0;
+  }
+
+  /**
+   * Who is in the shop right now (plan 0051, section 7).
+   *
+   * **One entry per socket, not per person**, which is where this departs from
+   * {@link broadcastZone}'s "one entry per user however many sockets they hold".
+   * One person on a phone and a laptop is two participants and appears twice: it
+   * is truthful, since it is two sessions, and deduplicating by typed name would
+   * be exactly the mistake section 3.5 warns about.
+   */
+  private async broadcastGeneratedList(
+    generatedListId: string
+  ): Promise<void> {
+    await this.pruneGeneratedList(generatedListId);
+
+    const entries =
+      (await this.redis.tryCommand(
+        (client) =>
+          client.hgetall(generatedListPresenceKey(generatedListId)),
+        `presence read basket ${generatedListId}`
+      )) ?? {};
+
+    const present: ParticipantPresenceEntry[] = Object.values(entries)
+      .map((raw) => parseParticipant(raw))
+      .filter((entry): entry is StoredParticipant => entry !== undefined)
+      .map(({ seenAt: _seenAt, ...entry }) => entry);
+
+    const payload: GeneratedListPresence = { generatedListId, present };
+    this.relay.publish({
+      // Both rooms, for the reason the list pair splits: the basket room is where
+      // somebody working the list is, and the presence room is where a client
+      // that only wants to know who else is there subscribes without taking every
+      // line edit with it.
+      rooms: [
+        generatedListRoom(generatedListId),
+        generatedListPresenceRoom(generatedListId),
+      ],
+      event: RealtimeEvent.PresenceGeneratedListUpdated,
+      payload,
+    });
   }
 
   /** Drop members last seen before the window. True when something was dropped. */
@@ -468,6 +651,19 @@ function parseEditor(raw: string): StoredEditor | undefined {
   } catch {
     // Unreadable entries are treated as expired, so a bad write cannot pin a
     // phantom editor to a line forever.
+    return undefined;
+  }
+}
+
+/**
+ * Read one stored participant entry (plan 0051, section 7). Like
+ * {@link parseEditor}, an unreadable entry is treated as expired, so a bad write
+ * cannot pin a phantom shopper to a basket forever.
+ */
+function parseParticipant(raw: string): StoredParticipant | undefined {
+  try {
+    return JSON.parse(raw) as StoredParticipant;
+  } catch {
     return undefined;
   }
 }

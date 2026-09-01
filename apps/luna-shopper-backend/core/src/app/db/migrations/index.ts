@@ -5,6 +5,7 @@ import { VoiceComments1756000400000 } from './1756000400000-VoiceComments';
 import { LineProductSet1756000600000 } from './1756000600000-LineProductSet';
 import { ShoppingProfiles1756000700000 } from './1756000700000-ShoppingProfiles';
 import { GeneratedLists1756001000000 } from './1756001000000-GeneratedLists';
+import { GeneratedListSharing1756001100000 } from './1756001100000-GeneratedListSharing';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -23,4 +24,5 @@ export const CORE_MIGRATIONS = [
   LineProductSet1756000600000,
   ShoppingProfiles1756000700000,
   GeneratedLists1756001000000,
+  GeneratedListSharing1756001100000,
 ];

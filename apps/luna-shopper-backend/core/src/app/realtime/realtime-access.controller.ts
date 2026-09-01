@@ -4,12 +4,14 @@ import {
   REALTIME_ACCESS_PATTERNS,
   type AccessCheckResult,
   type CheckListAccessRequest,
+  type CheckParticipantAccessRequest,
   type CheckZoneAccessRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   DomainException,
   ForbiddenException,
 } from '@portfolio/luna-shopper/platform';
+import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { managesZone } from '../zones/zone.mappers';
@@ -28,7 +30,8 @@ import { managesZone } from '../zones/zone.mappers';
 export class RealtimeAccessController {
   constructor(
     private readonly zoneAuthz: ZoneAuthzService,
-    private readonly listAccess: ListAccessService
+    private readonly listAccess: ListAccessService,
+    private readonly sharing: GeneratedListSharingService
   ) {}
 
   /**
@@ -84,6 +87,26 @@ export class RealtimeAccessController {
     return this.check(() =>
       this.listAccess.requireRead(req.listId, req.userId)
     );
+  }
+
+  /**
+   * Gates the two `generated:{id}` rooms (plan 0051, section 7).
+   *
+   * The one check here that names a participant rather than a user, because a
+   * guest has no user id and none of the three above could be asked about them.
+   * It is a single indexed read of the participant row, and the basket is checked
+   * rather than trusted, so a participant id for one basket cannot admit a socket
+   * to another's room.
+   */
+  @MessagePattern(REALTIME_ACCESS_PATTERNS.checkParticipant)
+  async checkParticipant(
+    @Payload() req: CheckParticipantAccessRequest
+  ): Promise<AccessCheckResult> {
+    const alive = await this.sharing.isParticipantLive(
+      req.participantId,
+      req.generatedListId
+    );
+    return { allowed: alive };
   }
 
   private async check(fn: () => Promise<unknown>): Promise<AccessCheckResult> {

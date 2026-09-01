@@ -78,4 +78,26 @@ export class GeneratedListLine extends BaseEntity {
 
   @Column({ type: 'double precision', default: 0 })
   position!: number;
+
+  /**
+   * Who touched this line last, written by every edit and every settle (plan
+   * 0051, section 8).
+   *
+   * This is what answers "who got the bread" at a glance in a shop where four
+   * people are working through one list, and it is **one column rather than a
+   * join into an event log** because it is read on every row of the main screen.
+   *
+   * A participant rather than a user, for the reason section 3.2 gives: a guest
+   * has no user id, and the owner's participant row exists from generation time
+   * precisely so this can be a single foreign key rather than a nullable pair.
+   *
+   * Null on a line nobody has touched since the run composed it, which is every
+   * line of a basket that has not been shopped yet.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  lastEditedByParticipantId!: string | null;
+
+  /** When that happened. Null alongside a null participant, never on its own. */
+  @Column({ type: 'timestamptz', nullable: true })
+  lastEditedAt!: Date | null;
 }

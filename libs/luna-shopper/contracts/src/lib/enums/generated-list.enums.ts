@@ -39,3 +39,34 @@ export enum GeneratedLineOrigin {
   DERIVED = 'DERIVED',
   ADDED = 'ADDED',
 }
+
+/**
+ * What kind of person is acting on a shared basket (plan 0051, section 3).
+ *
+ * The split that makes the whole feature safe: **a link is an invitation and a
+ * participant is an identity**, so one link handed to three people mints three
+ * participants, and an edit made in the shop is attributed to a person rather
+ * than to a URL.
+ *
+ * `OWNER` is whoever generated the basket. They get a participant row at
+ * generation time even though they arrived by owning it rather than by a link,
+ * which costs one insert and buys a single foreign key for every attribution
+ * field in the plan (`lastEditedByParticipantId`, `createdByParticipantId`,
+ * `settledByParticipantId`, presence) instead of a nullable pair of a user id and
+ * a participant id, checked for exactly one being set, in five places
+ * (section 3.2).
+ *
+ * `REGISTERED` opened the link holding an account token. They are attached as
+ * themselves with no name prompt, and the unique index over (`generatedListId`,
+ * `userId`) makes a second link they open resolve to the same row (section 4).
+ *
+ * `GUEST` has no account and gets none through this route: opening a link must
+ * never create one (section 11). A guest holds a session secret, is shown by the
+ * name they typed or as "Guest N" when they skipped it, and **never** passes the
+ * zone visibility rule in section 5.2, having no account to hold access with.
+ */
+export enum ParticipantKind {
+  OWNER = 'OWNER',
+  REGISTERED = 'REGISTERED',
+  GUEST = 'GUEST',
+}
