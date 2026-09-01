@@ -14,6 +14,7 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { CommentService } from './comment.service';
 import { fakeLineItems } from './line-items.fake';
+import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 import { SettlementService } from './settlement.service';
@@ -166,16 +167,12 @@ function world(options: {
   // about products, but every write path now touches a set.
   const lineItems = fakeLineItems();
 
-  // What a settle writes (plan 0047). Nothing here reads it back: this file
-  // asks who may settle, and the history reads are their own spec.
-  const settlementRepo = {
-    create: (data: Record<string, unknown>) => data,
-    save: async (row: Record<string, unknown>) => ({
-      ...row,
-      id: 's1',
-      createdAt: new Date('2026-01-01T00:00:00.000Z'),
-    }),
-  };
+  // What a settle writes (plan 0047). This file asks who may settle rather than
+  // what the history says, but both services read the table back on their way
+  // out: one to count what it just wrote, one for the indicators every line
+  // carries. So it is the shared fake rather than a save-only stub.
+  const settlementRows = fakeLineSettlements();
+  const settlementRepo = settlementRows.repo;
 
   const dataSource = {
     transaction: async <T>(run: (m: unknown) => Promise<T>) =>
@@ -200,6 +197,7 @@ function world(options: {
     dataSource,
     lineRepo as never,
     lineItems.repo as never,
+    settlementRepo as never,
     listAccess,
     publisher
   );

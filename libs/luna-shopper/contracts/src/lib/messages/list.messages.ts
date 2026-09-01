@@ -225,11 +225,55 @@ export interface LineView {
   createdByUserId: string;
   approvedByUserId: string | null;
   version: number;
+  /**
+   * How many `BOUGHT` settlements this line has ever had (plan 0047, section 5).
+   *
+   * Here, on the line, because it is half of an indicator the list page draws on
+   * every row and neither half is computable from anything else the line carries.
+   * `quantity = 0` alone cannot tell a thing the household has just bought from a
+   * thing somebody typed and has never needed, and those two rows are drawn
+   * differently on purpose (velista `0043`, section 3.2). The alternative was a
+   * settlements read per row, which is a request per line to answer a question the
+   * page asks about all of them at once.
+   *
+   * A **count** rather than a boolean, because the two readings are the same width
+   * on the wire and the number is the one that survives the next question. It is
+   * cumulative and never resets: a line bought, run down to zero and bought again
+   * has two, and a settled line put back up to three still has them.
+   */
+  boughtCount: number;
+  /**
+   * The outcome of this line's most recent settlement, or null when it has none.
+   *
+   * The other half of the indicators, and the reason it is the **most recent** one
+   * rather than a flag: "they did not have it" is a fact about the last trip and
+   * expires the moment somebody does buy it, so it cannot be stored and has to be
+   * read off the top of the history (plan 0047, section 5).
+   */
+  lastSettlementOutcome: SettlementOutcome | null;
   /** ISO 8601 UTC (plan 0017, section 7). */
   createdAt: string;
   /** ISO 8601 UTC (plan 0017, section 7). */
   updatedAt: string;
 }
+
+/**
+ * What one line's settlements say about it, as the line read derives it.
+ *
+ * The two fields {@link LineView} carries, named together so the query that
+ * computes them for a whole page and the mapper that writes them onto one line
+ * agree by type rather than by argument order.
+ */
+export interface LineSettlementSummary {
+  boughtCount: number;
+  lastOutcome: SettlementOutcome | null;
+}
+
+/** A line with no settlements at all, which is every line the moment it is added. */
+export const NO_LINE_SETTLEMENTS: LineSettlementSummary = {
+  boughtCount: 0,
+  lastOutcome: null,
+};
 
 /**
  * What a recording on a comment weighs and how long it runs (plan 0045).

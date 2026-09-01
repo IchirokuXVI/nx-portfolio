@@ -12,6 +12,7 @@ import { ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineItems } from './line-items.fake';
+import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 
@@ -167,6 +168,9 @@ function build(options: {
     dataSource,
     lineRepo as never,
     lineItems.repo as never,
+    // No settlements on any line here: a delta is an edit, and the two
+    // indicators it carries back are whatever the history already said.
+    fakeLineSettlements().repo as never,
     listAccess,
     publisher
   );

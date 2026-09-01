@@ -1,3 +1,8 @@
+import {
+  NO_LINE_SETTLEMENTS,
+  type LineSettlementSummary,
+  type SettlementOutcome,
+} from '@portfolio/luna-shopper/contracts';
 import { READABLE_LIST } from '../zones/zone-summary.sql';
 
 /**
@@ -50,3 +55,69 @@ export const ITEM_SETTLEMENTS_SQL = `
   ORDER BY s."settledAt" DESC, s."id" DESC
   LIMIT $4
 `;
+
+/**
+ * Both of plan 0047 section 5's derived indicators, for a set of lines, in one
+ * pass over `ix_settlements_line`.
+ *
+ * `$1` is the line ids. Every column is quoted by hand because they are all
+ * camelCase and this is raw SQL, for the same reason {@link ITEM_SETTLEMENTS_SQL}
+ * above is written out rather than built.
+ *
+ * The most recent outcome is `(ARRAY_AGG(... ORDER BY ...))[1]` rather than a
+ * `DISTINCT ON` or a correlated subquery: the group is already being formed for
+ * the count, so taking its first element costs the sort it was going to do
+ * anyway, where either alternative is a second visit to the same index.
+ *
+ * A line with no settlements produces **no row at all**, which is what makes
+ * {@link NO_LINE_SETTLEMENTS} the default rather than a fallback: never bought,
+ * and nothing to report.
+ */
+export const LINE_SETTLEMENT_SUMMARY_SQL = `
+  SELECT s."lineId",
+         COUNT(*) FILTER (WHERE s."outcome" = 'BOUGHT') AS "boughtCount",
+         (ARRAY_AGG(s."outcome" ORDER BY s."settledAt" DESC, s."id" DESC))[1]
+           AS "lastOutcome"
+  FROM "line_settlements" s
+  WHERE s."lineId" = ANY($1::uuid[])
+  GROUP BY s."lineId"
+`;
+
+/** One row of {@link LINE_SETTLEMENT_SUMMARY_SQL}. A count comes back as text. */
+interface SettlementSummaryRow {
+  lineId: string;
+  boughtCount: string;
+  lastOutcome: SettlementOutcome;
+}
+
+/**
+ * Run {@link LINE_SETTLEMENT_SUMMARY_SQL} and shape it, defaulting every line
+ * that has no history at all.
+ *
+ * Takes the query function rather than a `DataSource` or an `EntityManager`, so
+ * the same code answers from outside a transaction (the list read) and from
+ * inside one (the settle, which has to count the row it has just written).
+ */
+export async function readLineSettlementSummaries(
+  query: (sql: string, parameters: unknown[]) => Promise<unknown>,
+  lineIds: readonly string[]
+): Promise<Map<string, LineSettlementSummary>> {
+  const summaries = new Map<string, LineSettlementSummary>(
+    lineIds.map((id) => [id, NO_LINE_SETTLEMENTS])
+  );
+  if (lineIds.length === 0) {
+    return summaries;
+  }
+
+  const rows = (await query(LINE_SETTLEMENT_SUMMARY_SQL, [
+    [...lineIds],
+  ])) as SettlementSummaryRow[];
+
+  for (const row of rows) {
+    summaries.set(row.lineId, {
+      boughtCount: Number(row.boughtCount),
+      lastOutcome: row.lastOutcome,
+    });
+  }
+  return summaries;
+}

@@ -17325,6 +17325,20 @@
           "version": {
             "type": "integer"
           },
+          "boughtCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastSettlementOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.SettlementOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -17346,6 +17360,8 @@
           "createdByUserId",
           "approvedByUserId",
           "version",
+          "boughtCount",
+          "lastSettlementOutcome",
           "createdAt",
           "updatedAt"
         ],

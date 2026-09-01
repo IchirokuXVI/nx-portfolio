@@ -264,6 +264,11 @@ describe('contract schemas', () => {
           createdByUserId: 'u',
           approvedByUserId: null,
           version: 1,
+          // A line that has just been added cannot have been bought, and both
+          // indicators say so explicitly rather than by being absent (plan 0047,
+          // section 5).
+          boughtCount: 0,
+          lastSettlementOutcome: null,
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
         }).valid
@@ -287,6 +292,12 @@ describe('contract schemas', () => {
             createdByUserId: 'u',
             approvedByUserId: 'u',
             version: 2,
+            // The settle is the one write that moves these, and it counts the
+            // row it just inserted: zero quantity plus a purchase on record is
+            // the bought indicator, which is exactly what tells this line apart
+            // from one somebody typed and never needed.
+            boughtCount: 1,
+            lastSettlementOutcome: 'BOUGHT',
             createdAt: '2026-01-01T00:00:00.000Z',
             updatedAt: '2026-01-01T00:00:00.000Z',
           },

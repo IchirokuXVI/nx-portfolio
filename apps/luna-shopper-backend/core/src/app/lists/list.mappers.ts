@@ -1,6 +1,8 @@
 import {
   ListPermission,
+  NO_LINE_SETTLEMENTS,
   type CommentView,
+  type LineSettlementSummary,
   type LineSettlementView,
   type LineView,
   type ListCounts,
@@ -70,10 +72,19 @@ const PERMISSION_ORDER: readonly ListPermission[] = [
  * line with two products as a free text line: a wrong answer that looks like a
  * right one. An argument the compiler insists on means every caller has to say
  * what the set is, and there is exactly one service that calls this.
+ *
+ * The settlement summary arrives the same way and for the same reasons, plus one
+ * of its own: it is what the two indicators in plan 0047 section 5 are drawn
+ * from, and a mapper that computed it would be an aggregate **per row of a page**
+ * over the largest table in core. {@link NO_LINE_SETTLEMENTS} is the honest answer
+ * on every path that has just written the line, because a line cannot acquire a
+ * settlement in the same breath as being created, and the settle path is the one
+ * place that has the real one to hand.
  */
 export function toLineView(
   line: ListLine,
-  itemIds: readonly string[]
+  itemIds: readonly string[],
+  settlements: LineSettlementSummary = NO_LINE_SETTLEMENTS
 ): LineView {
   return {
     id: line.id,
@@ -87,6 +98,8 @@ export function toLineView(
     createdByUserId: line.createdByUserId,
     approvedByUserId: line.approvedByUserId,
     version: line.version,
+    boughtCount: settlements.boughtCount,
+    lastSettlementOutcome: settlements.lastOutcome,
     createdAt: line.createdAt.toISOString(),
     updatedAt: line.updatedAt.toISOString(),
   };
