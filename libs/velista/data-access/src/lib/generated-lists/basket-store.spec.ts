@@ -549,6 +549,44 @@ describe('BasketStore', () => {
       expect(store.lines()[0].settled).toBe(held.settled);
     });
 
+    it('still settles and still refetches with no socket at all', async () => {
+      // Section 5: a connection that will not open must not turn the basket into a
+      // broken screen. It degrades to `0044`'s behaviour, which is a **working**
+      // screen, and the only difference is that the page says so. So this asserts
+      // the screen with `connected` never set, which is what a refused socket looks
+      // like from here.
+      let reads = 0;
+      const memory = new BasketMemory();
+      const { store, socket } = build({
+        getBasket: () => {
+          reads += 1;
+          return memory.getBasket();
+        },
+      });
+      await store.open('basket-saturday');
+
+      expect(store.live()).toBe(false);
+
+      const milk = store.lines().find((line) => line.content === 'Milk');
+      if (milk === undefined) {
+        throw new Error('the fixture basket lost its milk');
+      }
+      const result = await store.settle(milk.id, { outcome: 'BOUGHT' });
+
+      expect(result).not.toBeNull();
+      expect(store.lines().find((line) => line.id === milk.id)?.settled).toBe(
+        milk.quantity
+      );
+
+      // And the refetch `0035` makes on resume, which is the other half of what
+      // keeps a basket with no room current.
+      const before = reads;
+      await store.refresh();
+      expect(reads).toBe(before + 1);
+      expect(store.state()).toBe('ready');
+      expect(socket.opened).toEqual(['basket-saturday']);
+    });
+
     it('shows who is present only while the socket is up', async () => {
       const { store, socket } = build();
       await store.open('basket-saturday');

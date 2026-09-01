@@ -121,6 +121,29 @@ describe('AppShellRoutes', () => {
       );
     });
 
+    /**
+     * The basket's connection is the **screen's**, not the session's (plan 0048).
+     *
+     * Being in the basket's room is the intent to be present on it, and leaving the
+     * screen ends it, which is `0023`'s rule and the reason presence on this screen
+     * can be trusted at all. Route `providers` are what enforce it: the injector is
+     * created when the page is entered and destroyed when it is left, by a tap, by
+     * the back gesture, or by a sheet over it walking away, and `BasketSocket` closes
+     * itself on that destruction. Provided app wide instead, a socket would outlive
+     * the screen and keep a face in somebody else's row.
+     */
+    it('scopes the connection and the store to the basket route', () => {
+      const basket = pages.find(
+        (route) => route.path === 'shopping-lists/:generatedListId'
+      );
+      const provided = (basket?.providers ?? []).map((provider) =>
+        typeof provider === 'function' ? provider.name : String(provider)
+      );
+
+      expect(provided).toContain('BasketSocket');
+      expect(provided).toContain('BasketStore');
+    });
+
     it('keeps the shared link page public and full screen', () => {
       // A cold arrival from somebody else's message: no guard, and no parent page to
       // render over, which is why it is not a sheet (section 4.1).
