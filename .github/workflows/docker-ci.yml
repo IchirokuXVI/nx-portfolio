@@ -15,9 +15,9 @@ name: Staging deploy (main)
 #   already in the registry. It used to mean rebuilding ten images first.
 #
 # Nothing compiles on the runner. Every `nx build` runs inside BUILD_IMAGE, a digest
-# pinned node:24, which is what makes a build independent of whichever runner GitHub
-# hands out. The image builds afterwards pass --exclude-task-dependencies so they
-# cannot quietly recompile outside it.
+# pinned node:24-slim, which is what makes a build independent of whichever runner
+# GitHub hands out. The image builds afterwards pass --exclude-task-dependencies so
+# they cannot quietly recompile outside it.
 
 on:
   push:
@@ -44,9 +44,25 @@ concurrency:
 
 env:
   # The one place the build environment is defined, for every job in this file.
+  #
+  # The slim variant, and the same digest the seven Luna Dockerfiles already run on.
+  # It is the identical Node build (both tags are produced from one docker-node
+  # revision); what plain `node:24` adds is buildpack-deps, a C toolchain plus
+  # python, mercurial, subversion and imagemagick. Nothing here compiles against any
+  # of it, because every native dependency in this workspace ships a linux-x64-glibc
+  # prebuild, so the extra bytes only ever bought download and extraction time on
+  # every job that pulls it: 390 MB compressed against 77 MB, about 1.1 GB on disk
+  # against 230 MB.
+  #
+  # The one thing buildpack-deps carried that this workspace did use is `git`, which
+  # `nx --affected` shells out to. The setup job below runs that one command on the
+  # runner for that reason; see the comment there.
+  #
   # Bump deliberately, in a commit, with:
-  #   docker buildx imagetools inspect node:24 --format '{{println .Manifest.Digest}}'
-  BUILD_IMAGE: node:24@sha256:be23f54a88d34e8824c741b19b91064094f92c1c97b194144bfc8b50d67258e2
+  #   docker buildx imagetools inspect node:24-slim --format '{{println .Manifest.Digest}}'
+  # and move the seven Luna Dockerfiles to the same digest in the same commit, so the
+  # environment that builds a bundle and the one that runs it stay one decision.
+  BUILD_IMAGE: node:24-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
   DOCKER_REGISTRY: ghcr.io/ichirokuxvi
   DOCKER_SKIP_LOGIN: true
   # Use the GitHub Actions cache backend (type=gha) for every docker build, instead
@@ -109,6 +125,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Only to run `nx show projects` below. Nothing is compiled here and nothing
+      # is written: it reads the project graph and prints names, from the very
+      # node_modules the step below installs inside BUILD_IMAGE.
+      #
+      # It cannot run in BUILD_IMAGE, because `--affected --base --head` shells out
+      # to `git diff` and node:24-slim carries no git. The runner does, and `nx build`
+      # is untouched: it still happens in the image, in the jobs that do it.
+      #
+      # setup-node resolves 24 from the runner's tool cache, so it downloads nothing.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Restore the workspace
         uses: ./.github/actions/workspace
         with:
@@ -141,24 +171,17 @@ jobs:
             scope="--affected --base $base_sha --head ${{ github.sha }}"
           fi
 
-          # Nx runs in the pinned image here too, so this job needs no Node on the
-          # runner and reads the same project graph the build will. CI=true is not
-          # decoration: the container does not inherit the runner's environment, and
-          # without it Nx starts its file watching daemon inside a container that is
-          # about to be thrown away.
+          # On the runner rather than in BUILD_IMAGE, because the scope above is a
+          # git diff and the image has no git; see the Setup Node.js step. It reads
+          # the same project graph the build will, from the same node_modules, and
+          # produces nothing but a list of names.
           #
           # --json everywhere. `nx show projects` prints a JSON array when stdout is
           # not a TTY and one name per line when it is, and parsing the pretty form
           # silently finds nothing. Reading JSON and splitting it with jq is what
           # retires that whole class of bug.
           list() {
-            docker run --rm \
-              -u "$(id -u):$(id -g)" \
-              -v "$PWD":/w -w /w \
-              -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
-              "$BUILD_IMAGE" \
-              npx nx show projects $scope "$@" --json \
-              | jq -r 'join(",")'
+            npx nx show projects $scope "$@" --json | jq -r 'join(",")'
           }
 
           docker_apps=$(list --type app --projects tag:type:static-docker)
