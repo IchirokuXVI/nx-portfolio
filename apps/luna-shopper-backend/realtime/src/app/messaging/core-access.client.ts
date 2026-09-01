@@ -6,6 +6,7 @@ import {
   type CheckListAccessRequest,
   type CheckParticipantAccessRequest,
   type CheckZoneAccessRequest,
+  type ParticipantPresenceEntry,
 } from '@portfolio/luna-shopper/contracts';
 import {
   buildNatsHeaders,
@@ -213,15 +214,21 @@ export class CoreAccessClient {
    * for nothing: these fire on a subscribe and on a revocation sweep, over the
    * handful of sockets one basket has, and never on ordinary traffic.
    */
-  checkParticipant(
+  async checkParticipant(
     participantId: string,
     generatedListId: string
-  ): Promise<boolean> {
+  ): Promise<ParticipantPresenceEntry | undefined> {
     const req: CheckParticipantAccessRequest = {
       participantId,
       generatedListId,
     };
-    return this.check(REALTIME_ACCESS_PATTERNS.checkParticipant, req);
+    const answer = await this.send(
+      REALTIME_ACCESS_PATTERNS.checkParticipant,
+      req
+    );
+    // The entry rides back with the yes, so admitting a socket and seeding its
+    // presence are one round trip rather than two.
+    return answer.allowed ? answer.participant : undefined;
   }
 
   /**

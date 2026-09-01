@@ -1,4 +1,5 @@
 import { RealtimeRoom } from '../enums/realtime.enums';
+import type { ParticipantPresenceEntry } from './generated-list-sharing.messages';
 
 /**
  * Realtime message and payload contracts (plan 0009). Two kinds live here: the
@@ -217,6 +218,17 @@ export interface AccessCheckResult {
    * without opening a room per row.
    */
   listIds?: readonly string[];
+  /**
+   * On a participant check only: who this participant is, for presence (plan
+   * 0051, section 7).
+   *
+   * It rides on the liveness answer for the same reason `listIds` rides on the
+   * zone one: admitting a participant socket is already a round trip to core, and
+   * the alternative was putting the display name and guest number in the token,
+   * where a guest who renamed themselves would be pinned to the old name for the
+   * life of it. Read fresh on every admission, which is also every reconnection.
+   */
+  participant?: ParticipantPresenceEntry;
 }
 
 /** A user present in a zone or on a list. */

@@ -102,11 +102,14 @@ export class RealtimeAccessController {
   async checkParticipant(
     @Payload() req: CheckParticipantAccessRequest
   ): Promise<AccessCheckResult> {
-    const alive = await this.sharing.isParticipantLive(
+    const participant = await this.sharing.livePresenceEntry(
       req.participantId,
       req.generatedListId
     );
-    return { allowed: alive };
+    // The entry rides back with the answer so the realtime service can seed
+    // presence without a second call, and without the display name having been
+    // baked into a token minted before the guest renamed themselves.
+    return participant ? { allowed: true, participant } : { allowed: false };
   }
 
   private async check(fn: () => Promise<unknown>): Promise<AccessCheckResult> {

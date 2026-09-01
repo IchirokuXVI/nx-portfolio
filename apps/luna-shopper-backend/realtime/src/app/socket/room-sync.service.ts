@@ -266,11 +266,11 @@ export class RoomSyncService implements OnModuleInit {
       return this.memo(
         answers,
         `${participantId}|participant|${parsed.generatedListId}`,
-        () =>
-          this.coreAccess.checkParticipant(
+        async () =>
+          (await this.coreAccess.checkParticipant(
             participantId,
             parsed.generatedListId
-          )
+          )) !== undefined
       );
     }
 

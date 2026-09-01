@@ -15,6 +15,7 @@ import {
   type GeneratedListShareRequest,
   type JoinGeneratedListRequest,
   type ListParticipantsRequest,
+  type ParticipantPresenceEntry,
   type PreviewShareLinkRequest,
   type ResolveParticipantRequest,
   type RevokeParticipantRequest,
@@ -417,6 +418,39 @@ export class GeneratedListSharingService {
       where: { id: participantId, generatedListId, revokedAt: IsNull() },
     });
     return count > 0;
+  }
+
+  /**
+   * The same check, answering with who they are rather than merely whether they
+   * are (plan 0051, section 7).
+   *
+   * What the socket admission actually needs: one read decides both whether to
+   * let them in and what to put in the presence room for them. The name is read
+   * here rather than carried in the token because a guest can rename themselves
+   * and a token minted beforehand would pin the old name for its whole life.
+   *
+   * `userAgent` is deliberately not in this entry. Section 7 is explicit that the
+   * device string is not presence data: it is shown on tap, from the participant
+   * list, to readers who pass section 5.2, and a broadcast would hand it to every
+   * guest in the shop.
+   */
+  async livePresenceEntry(
+    participantId: string,
+    generatedListId: string
+  ): Promise<ParticipantPresenceEntry | null> {
+    const participant = await this.participants.findOne({
+      where: { id: participantId, generatedListId, revokedAt: IsNull() },
+    });
+    if (!participant) {
+      return null;
+    }
+    return {
+      participantId: participant.id,
+      kind: participant.kind,
+      displayName: participant.displayName,
+      guestNumber: participant.guestNumber,
+      userId: participant.userId,
+    };
   }
 
   /** The participant behind a presented credential, or null. Live rows only. */

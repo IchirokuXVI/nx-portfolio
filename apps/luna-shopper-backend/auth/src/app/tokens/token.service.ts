@@ -48,6 +48,56 @@ export class TokenService {
     );
   }
 
+  /**
+   * Sign a basket scoped socket token for a participant (plan 0051, section 9).
+   *
+   * The one token this service issues that **names no user**, and the reason plan
+   * 0035's rule becomes "a token that names neither a user nor a live
+   * participant". Three properties make that safe, and all three are here rather
+   * than in a comment somewhere else:
+   *
+   * - **No `sub`.** Deliberately absent rather than null or empty: a participant
+   *   is not a user, and a guard that reads `sub` and asks no further questions
+   *   must fail to find one rather than find something it will mistake for an
+   *   account.
+   * - **`aud` is the one basket**, so the token is worthless anywhere else, and a
+   *   socket presenting it is checked against the room it asks for.
+   * - **Short lived, and refreshed by presenting the participant credential**,
+   *   which is the database read that carries revocation. That is what keeps
+   *   section 3.3's promise honest: the token itself cannot be revoked, so it
+   *   does not live long enough to matter, and the thing that renews it can be.
+   *
+   * It is signed with the same key and `kid` as an access token, on purpose: the
+   * realtime service already verifies with that public key, so a guest's socket
+   * needs no second trust root.
+   */
+  async signParticipantToken(req: {
+    participantId: string;
+    generatedListId: string;
+    kind: string;
+  }): Promise<{ socketToken: string; socketTokenExpiresAt: string }> {
+    const ttl = this.config.jwt.participantTokenTtl;
+    const socketToken = await this.jwt.signAsync(
+      {
+        participantId: req.participantId,
+        kind: req.kind,
+      },
+      {
+        privateKey: this.config.jwt.privateKey,
+        algorithm: 'RS256',
+        keyid: this.config.jwt.kid,
+        audience: req.generatedListId,
+        expiresIn: ttl as JwtSignOptions['expiresIn'],
+      }
+    );
+    return {
+      socketToken,
+      socketTokenExpiresAt: new Date(
+        Date.now() + parseDurationMs(ttl)
+      ).toISOString(),
+    };
+  }
+
   private hash(raw: string): string {
     return createHash('sha256').update(raw).digest('hex');
   }

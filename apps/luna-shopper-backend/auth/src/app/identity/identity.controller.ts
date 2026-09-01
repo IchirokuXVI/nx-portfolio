@@ -14,6 +14,8 @@ import {
   type LoginRequest,
   type MintOAuthStateRequest,
   type MintOAuthStateResult,
+  type MintParticipantTokenRequest,
+  type MintParticipantTokenResult,
   type OAuthStatePayload,
   type RefreshRequest,
   type RegisterRequest,
@@ -26,6 +28,7 @@ import {
   type UserProfileView,
   type VerifyEmailRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { TokenService } from '../tokens/token.service';
 import { IdentityService } from './identity.service';
 import { StatsService } from './stats.service';
 
@@ -40,7 +43,8 @@ import { StatsService } from './stats.service';
 export class IdentityController {
   constructor(
     private readonly identity: IdentityService,
-    private readonly stats: StatsService
+    private readonly stats: StatsService,
+    private readonly tokens: TokenService
   ) {}
 
   /** Platform identity totals (plan 0017, section 8). Takes no argument. */
@@ -132,5 +136,21 @@ export class IdentityController {
   @MessagePattern(AUTH_PATTERNS.getProfile)
   getProfile(@Payload() req: GetProfileRequest): Promise<UserProfileView> {
     return this.identity.getProfile(req);
+  }
+
+  /**
+   * Sign a participant's basket scoped socket token (plan 0051, section 9).
+   *
+   * The one handler here that authorizes nothing. Core has already established
+   * that this participant is live on this basket, by the single indexed read
+   * section 3.3 specifies, and auth is called for the private key alone. Written
+   * as a pass through on purpose: giving it a rule of its own would mean two
+   * services deciding who may hold a basket, which is how they come to disagree.
+   */
+  @MessagePattern(AUTH_PATTERNS.mintParticipantToken)
+  mintParticipantToken(
+    @Payload() req: MintParticipantTokenRequest
+  ): Promise<MintParticipantTokenResult> {
+    return this.tokens.signParticipantToken(req);
   }
 }
