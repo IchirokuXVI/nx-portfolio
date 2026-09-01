@@ -23,16 +23,21 @@
       Nothing to the left at zero. There is no minus one, and the gap is what tells a
       thumb it has reached the end: no disabled control, no bounce, and nothing that
       has to be read to be understood (section 4).
+
+      `data-reel-value` is what makes a number tappable as well as draggable. It is on
+      the element rather than in a handler because the component reads it off whatever
+      was pressed, at the moment it was pressed, and an empty neighbour at the end of
+      the range carries none: there is nothing there to tap to.
     -->
-    <span class="neighbour">
+    <span [attr.data-reel-value]="previous()" class="neighbour">
       @if (previous() !== null) {
         {{ previous() }}
       }
     </span>
 
-    <span class="current">{{ current }}</span>
+    <span [attr.data-reel-value]="current" class="current">{{ current }}</span>
 
-    <span class="neighbour">
+    <span [attr.data-reel-value]="next()" class="neighbour">
       @if (next() !== null) {
         {{ next() }}
       }

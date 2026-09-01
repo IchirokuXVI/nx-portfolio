@@ -1,6 +1,10 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import type { LineRowVm } from '@portfolio/velista/models';
+import {
+  QUANTITY_REEL_CLICK_SHIELD_MS,
+  QUANTITY_REEL_IDLE_MS,
+  type LineRowVm,
+} from '@portfolio/velista/models';
 import { LineRow } from './line-row';
 
 /**
@@ -67,6 +71,49 @@ function reel(fixture: ComponentFixture<LineRow>): HTMLElement | null {
   return fixture.nativeElement.querySelector('lib-quantity-reel');
 }
 
+/**
+ * A pointer going down, as the reel reads it.
+ *
+ * jsdom has no `PointerEvent`, so this is a `MouseEvent` carrying the two fields the
+ * reel looks at, exactly as `quantity-reel.spec.ts` does it.
+ */
+function down(target: EventTarget): void {
+  const event = new MouseEvent('pointerdown', { bubbles: true, clientX: 0 });
+  Object.defineProperty(event, 'pointerId', { value: 1 });
+  Object.defineProperty(event, 'isPrimary', { value: true });
+  target.dispatchEvent(event);
+}
+
+function up(target: EventTarget): void {
+  const event = new MouseEvent('pointerup', { bubbles: true, clientX: 0 });
+  Object.defineProperty(event, 'pointerId', { value: 1 });
+  target.dispatchEvent(event);
+}
+
+/**
+ * A whole tap, press included.
+ *
+ * The press is the part that matters here: the row decides whether it is listening at
+ * `pointerdown`, because focus leaves the reel between the press and the click and the
+ * overlay the tap was dismissing is gone by then.
+ */
+function tap(target: HTMLElement): void {
+  down(target);
+  target.click();
+}
+
+/** Open the reel by tapping it, and leave it up. */
+function openReel(fixture: ComponentFixture<LineRow>): void {
+  const el = reel(fixture) as HTMLElement;
+  down(el);
+  up(el);
+  fixture.detectChanges();
+}
+
+function overlay(fixture: ComponentFixture<LineRow>): HTMLElement | null {
+  return fixture.nativeElement.querySelector('.overlay');
+}
+
 describe('LineRow', () => {
   /**
    * Section 1.1, and the reason this plan is a rewrite of the row rather than an edit
@@ -129,9 +176,7 @@ describe('LineRow', () => {
         })
       );
 
-      expect(row(fixture).getAttribute('aria-label')).toBe(
-        'Sourdough loaf, 0'
-      );
+      expect(row(fixture).getAttribute('aria-label')).toBe('Sourdough loaf, 0');
       // Both are descriptions instead, which is where a screen reader user can reach
       // them on demand rather than having them read out on every focus (section 7).
       const describedBy = row(fixture).getAttribute('aria-describedby') ?? '';
@@ -276,6 +321,111 @@ describe('LineRow', () => {
     });
   });
 
+  /**
+   * The overlay stands over the row it belongs to, so the tap that dismisses it lands
+   * on the row underneath. It closes the reel and stops there: it was aimed at the
+   * thing on top, and opening the detail sheet on the way out answers a question
+   * nobody asked.
+   */
+  describe('a tap on a line whose reel is up', () => {
+    it('closes the reel and does not open the line', async () => {
+      const fixture = await render(vm());
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      openReel(fixture);
+      expect(overlay(fixture)).not.toBeNull();
+
+      tap(row(fixture));
+      fixture.detectChanges();
+
+      expect(overlay(fixture)).toBeNull();
+      expect(opened).toEqual([]);
+    });
+
+    it('leaves the overflow menu alone rather than opening it', async () => {
+      const fixture = await render(vm());
+      const acted: string[] = [];
+      fixture.componentInstance.act.subscribe(({ action }) =>
+        acted.push(action)
+      );
+
+      openReel(fixture);
+      tap(fixture.nativeElement.querySelector('.trigger') as HTMLElement);
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.menu')).toBeNull();
+      expect(acted).toEqual([]);
+    });
+
+    it('hears the very next tap, which is the one that was meant for the row', async () => {
+      const fixture = await render(vm());
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      openReel(fixture);
+      tap(row(fixture));
+      fixture.detectChanges();
+      tap(row(fixture));
+
+      expect(opened).toEqual(['ln-1']);
+    });
+
+    it('still hears a tap on the reel itself', async () => {
+      // "Somewhere else on the line" is the rule. The reel is not somewhere else.
+      const fixture = await render(vm({ quantity: 2 }));
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      openReel(fixture);
+      const three = fixture.nativeElement.querySelector(
+        '[data-reel-value="3"]'
+      ) as HTMLElement;
+      down(three);
+      up(three);
+      fixture.detectChanges();
+
+      // The reel moved, the overlay is still up, and the row heard nothing.
+      expect(
+        (fixture.nativeElement.querySelector('.current') as HTMLElement)
+          .textContent
+      ).toContain('3');
+      expect(overlay(fixture)).not.toBeNull();
+      expect(opened).toEqual([]);
+    });
+  });
+
+  describe('the beat after the reel closes on its own', () => {
+    it('swallows a tap for a moment, then goes back to opening the line', async () => {
+      // A finger already falling towards a number does not stop when the thing it was
+      // falling towards disappears.
+      const fixture = await render(vm());
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      // Fake timers only from here: `render` awaits `whenStable`, which never
+      // resolves under them.
+      jest.useFakeTimers();
+      try {
+        openReel(fixture);
+        jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+        fixture.detectChanges();
+
+        // Closed by itself, and nobody spent a tap doing it.
+        expect(overlay(fixture)).toBeNull();
+
+        tap(row(fixture));
+        expect(opened).toEqual([]);
+
+        jest.advanceTimersByTime(QUANTITY_REEL_CLICK_SHIELD_MS + 1);
+        tap(row(fixture));
+        expect(opened).toEqual(['ln-1']);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
   describe('somebody else editing', () => {
     it('draws their initial and the word, and nothing when nobody is', async () => {
       const editing = await render(vm({ editor: 'Ana' }));
@@ -312,9 +462,7 @@ describe('LineRow', () => {
     it('stays out of the accessible name of the row', async () => {
       const fixture = await render(vm({ editor: 'Ana' }));
 
-      expect(row(fixture).getAttribute('aria-label')).toBe(
-        'Sourdough loaf, 1'
-      );
+      expect(row(fixture).getAttribute('aria-label')).toBe('Sourdough loaf, 1');
     });
   });
 
@@ -323,9 +471,7 @@ describe('LineRow', () => {
       const fixture = await render(vm({ write: 'pending' }));
 
       expect(row(fixture).getAttribute('aria-busy')).toBe('true');
-      expect(row(fixture).getAttribute('aria-label')).toBe(
-        'Sourdough loaf, 1'
-      );
+      expect(row(fixture).getAttribute('aria-label')).toBe('Sourdough loaf, 1');
     });
 
     it('is not busy when nothing is outstanding', async () => {
@@ -358,7 +504,8 @@ describe('LineRow', () => {
         vm({ write: 'overwritten', overwrittenBy: null })
       );
       expect(
-        anonymous.nativeElement.querySelector('.notice.overwritten')?.textContent
+        anonymous.nativeElement.querySelector('.notice.overwritten')
+          ?.textContent
       ).toContain('overwrittenBySomeone');
     });
   });
@@ -424,9 +571,9 @@ describe('LineRow', () => {
       const waiting = await render(
         vm({ approvalStatus: 'PENDING', decidable: true })
       );
-      expect(
-        waiting.nativeElement.querySelectorAll('.decision')
-      ).toHaveLength(2);
+      expect(waiting.nativeElement.querySelectorAll('.decision')).toHaveLength(
+        2
+      );
     });
 
     it('offers putting a turned down line back, to whoever decides', async () => {

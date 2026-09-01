@@ -86,7 +86,24 @@
   background: var(--app-surface-overlay);
   box-shadow: var(--app-sheet-shadow);
   font-variant-numeric: tabular-nums;
-  pointer-events: none;
+  // The overlay is part of the control, not a picture of it. It is wider than the pill
+  // it grew out of and it reaches over the row beside it, so a thumb that lands on the
+  // number it can see has to be able to drag from there and to tap it. Letting the
+  // pointer through instead put a hidden edge on the control and dropped every tap
+  // onto the row underneath.
+  touch-action: none;
+}
+
+// A number in the overlay is a target in its own right: tapping one goes to it. Each
+// takes the overlay's full height rather than the height of its digits, which is the
+// same reason the host takes the row's (section 7): a thumb walking down an aisle
+// cannot aim at the top half of a number.
+.neighbour,
+.current {
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  justify-content: center;
 }
 
 // The neighbours keep their width even when empty, so the current number does not

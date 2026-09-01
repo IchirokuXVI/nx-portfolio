@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   ElementRef,
   inject,
   input,
@@ -10,7 +11,11 @@ import {
   viewChild,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { LineAction, LineRowVm } from '@portfolio/velista/models';
+import {
+  QUANTITY_REEL_CLICK_SHIELD_MS,
+  type LineAction,
+  type LineRowVm,
+} from '@portfolio/velista/models';
 import {
   CheckIcon,
   CommentIcon,
@@ -67,6 +72,22 @@ export type LineRowAction = LineAction | 'approve' | 'reject' | 'restore';
  * control, and no change to what a tap does. The one thing it must not become is a
  * guard, because presence under reports and a guard built on it would refuse an edit
  * nobody is making.
+ *
+ * ## An open reel makes the rest of the line deaf
+ *
+ * The reel's overlay stands over the row it belongs to, so the tap that dismisses it
+ * lands on the row underneath. That tap **closes the reel and does nothing else**: it
+ * was aimed at the thing on top, and opening the detail sheet on the way out is the
+ * app answering a question nobody asked. The same holds for
+ * {@link QUANTITY_REEL_CLICK_SHIELD_MS} after the overlay times out on its own, since
+ * a finger already falling does not stop when what it was falling towards vanishes.
+ *
+ * It is decided at `pointerdown` and enforced at `click`, in the capture phase, and
+ * both halves are needed. The state has to be read at the press because focus leaves
+ * the reel between the press and the click, which closes it, so by click time there is
+ * nothing left to notice. Capture is what lets one listener cover the whole line: the
+ * overflow trigger, the decision buttons and the inline notices are all under a tap
+ * that was really about the reel, and each of them stops its own propagation.
  *
  * ## In reorder mode it stops being a button
  *
@@ -137,6 +158,89 @@ export class LineRow {
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly _trigger =
     viewChild<ElementRef<HTMLButtonElement>>('trigger');
+  private readonly _reel = viewChild(QuantityReel);
+  private readonly _reelEl = viewChild('reel', { read: ElementRef });
+
+  /** Until when a tap on this line is swallowed, after the reel closed by itself. */
+  private _deafUntil = 0;
+
+  /** Whether the click this press will produce belongs to the reel rather than the row. */
+  private _swallowClick = false;
+
+  constructor() {
+    const host = this._host.nativeElement;
+    const onPointerDown = (event: Event) => this._notePress(event);
+    const onClick = (event: Event) => this._swallowReelDismissal(event);
+
+    // Native listeners rather than host bindings, because both have to run in the
+    // capture phase and a host binding cannot ask for one. Capture is the point: these
+    // decide whether the line hears the tap at all, so they have to run before the
+    // handlers that would act on it.
+    host.addEventListener('pointerdown', onPointerDown, true);
+    host.addEventListener('click', onClick, true);
+
+    inject(DestroyRef).onDestroy(() => {
+      host.removeEventListener('pointerdown', onPointerDown, true);
+      host.removeEventListener('click', onClick, true);
+    });
+  }
+
+  /**
+   * At the press, work out whether this tap is really about the reel.
+   *
+   * Read here and not at the click because the press moves focus, the reel commits and
+   * closes on losing it, and by the time the click arrives the overlay that the tap was
+   * dismissing is gone.
+   */
+  private _notePress(event: Event): void {
+    if (this._withinReel(event.target)) {
+      this._swallowClick = false;
+      return;
+    }
+
+    const reel = this._reel();
+    const open = reel?.open() ?? false;
+    this._swallowClick = open || Date.now() < this._deafUntil;
+
+    // Closed here rather than left to the blur. A tap on a span that cannot take focus
+    // moves focus nowhere, which is the ordinary case on a touch screen, and the reel
+    // would sit there until its own timer ran out.
+    if (open) {
+      reel?.close();
+    }
+  }
+
+  private _swallowReelDismissal(event: Event): void {
+    if (!this._swallowClick || this._withinReel(event.target)) {
+      return;
+    }
+
+    this._swallowClick = false;
+    event.stopPropagation();
+    event.preventDefault();
+
+    // The swallowed click never reaches the document, so the listener that would have
+    // dismissed an open overflow menu never runs. Dismissing it here keeps a tap that
+    // was ignored from also leaving a menu stuck open behind it.
+    this.menuOpen.set(false);
+  }
+
+  private _withinReel(target: EventTarget | null): boolean {
+    const reel = this._reelEl()?.nativeElement as HTMLElement | undefined;
+    return (
+      target !== null && reel !== undefined && reel.contains(target as Node)
+    );
+  }
+
+  /**
+   * The reel timed out and closed on its own, which starts the deaf beat.
+   *
+   * Only this path. A reel closed by a tap elsewhere on the line has already cost that
+   * tap its effect, and charging the next one for it too would make the row feel stuck.
+   */
+  protected onReelAutoClosed(): void {
+    this._deafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
+  }
 
   /**
    * The accessible name: what it is, and how many.
