@@ -122,8 +122,11 @@
     }
   },
   "line": {
-    "status": {
-      "notAvailable": "NO DISPONIBLE"
+    "indicator": {
+      "bought": "Comprado",
+      "notAvailable": "No había la última vez",
+      "claimed": "Alguien lo está comprando",
+      "claimedBy": "{{name}} lo está comprando"
     }
   },
   "connection": {
@@ -382,7 +385,11 @@
       "notHeard": "No te he entendido",
       "voiceFailed": "Eso no se ha enviado. No se ha añadido nada, así que inténtalo otra vez o escríbelo",
       "voiceBusy": "Mucha gente está preguntando a la vez. Inténtalo dentro de {{count}} segundos",
-      "dismissHeard": "Cerrar"
+      "dismissHeard": "Cerrar",
+      "suggestions": "Productos que coinciden",
+      "groupAdds": "añade sus {{count}} productos",
+      "groupBadge": "GRUPO",
+      "asWritten": "Añadir “{{text}}” tal cual"
     },
     "empty": {
       "title": "Todavía no hay nada en esta lista",
@@ -398,12 +405,9 @@
     "line": {
       "awaitingApproval": "Esperando aprobación",
       "rejected": "Rechazado",
-      "notAvailable": "No estaba en la tienda",
       "approve": "Añadirlo",
       "reject": "Esto no",
       "restore": "Devolverlo a la lista",
-      "markNotAvailable": "Marcar como que no estaba",
-      "markPending": "Devolverlo a la lista",
       "edit": "Cambiar esto",
       "editing": "Editando",
       "comments": "Comentarios",
@@ -413,7 +417,9 @@
       "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
       "failed": "No se ha guardado. Toca para reintentar",
       "move": "Mover",
-      "movedTo": "Movido a la posición {{position}} de {{total}}"
+      "movedTo": "Movido a la posición {{position}} de {{total}}",
+      "quantityFor": "Cuántos de {{name}}",
+      "quantityChanged": "{{name}}, ahora {{quantity}}"
     },
     "reorder": {
       "enter": "Ponerlas en orden",
@@ -518,6 +524,57 @@
       "roleChanged": "Tu papel en este grupo ha cambiado",
       "tooFast": "Ve un poco más despacio e inténtalo de nuevo",
       "failed": "No ha funcionado. Inténtalo de nuevo en un momento"
+    },
+    "detail": {
+      "title": "Sobre esta línea",
+      "products": {
+        "none": "Sin producto asociado",
+        "one": "{{name}}",
+        "many": "{{count}} productos",
+        "lastBought": "{{count}} productos · la última vez {{name}}"
+      },
+      "lastBought": "Comprado por última vez",
+      "lastBoughtValue": "{{when}} · {{count}}",
+      "never": "Nunca comprado",
+      "rate": "Lo compras más o menos",
+      "rateValue": "cada {{days}} días",
+      "rateRough": "cada pocas semanas",
+      "bought": "Lo he comprado",
+      "notAvailable": "No lo tenían",
+      "everything": "Todo sobre esta línea",
+      "howMany": "¿Cuántos has cogido?",
+      "howManyNote": "Viene con todo lo que falta. Si compras menos, el resto sigue haciendo falta",
+      "whichOne": "¿Cuál has cogido?",
+      "record": "Guárdalo",
+      "cancel": "Cancelar",
+      "failed": "No se ha guardado. Inténtalo otra vez"
+    },
+    "page": {
+      "where": "en {{list}}, de {{zone}}",
+      "noProducts": "Aún sin productos",
+      "products": "PRODUCTOS DE ESTA LÍNEA",
+      "addProduct": "Añadir un producto",
+      "add": "Añadir",
+      "removeProduct": "Quitar {{name}}",
+      "thisList": "EN ESTA LISTA",
+      "everywhere": "DONDE SEA QUE COMPRES",
+      "alsoOn": "TAMBIÉN EN",
+      "noHistory": "Todavía no se ha comprado nada",
+      "more": "Ver más",
+      "prices": "Dónde comprarlo y por cuánto: aparecerá aquí cuando haya precios. Hasta entonces no se muestra nada.",
+      "delete": "Borrar esta línea",
+      "rate": "cada cuánto lo compras",
+      "lastBought": "última vez, {{count}}",
+      "boughtBy": "Comprado {{count}} · {{who}}",
+      "missingBy": "No había · {{who}}",
+      "you": "tú",
+      "someone": "alguien"
+    },
+    "confirmDelete": {
+      "title": "¿Borrar “{{name}}”?",
+      "body": "Su historial de compras se va con ella. Una línea a cero conserva su historial y no molesta; borrar es para lo que esta lista ya no debería saber.",
+      "confirm": "Borrar la línea",
+      "cancel": "Déjala"
     }
   },
   "account": {

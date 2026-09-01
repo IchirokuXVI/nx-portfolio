@@ -257,6 +257,16 @@ $app-content-max: 480px;
   --app-reel-unit: 40px;
   --app-reel-height: 56px;
   --app-reel-radius: 14px;
+  // Each number in the overlay keeps this width whether or not it has anything in it,
+  // so the current number does not slide sideways as the reel reaches zero and the
+  // neighbour to its left disappears.
+  --app-reel-digit-width: 28px;
+
+  // How tall the composer's suggestion list may grow before it scrolls (plan 0043,
+  // section 6). Four rows and a bit: enough to show that there is more without the
+  // dropdown becoming the page and pushing the field somebody is typing into off the
+  // top of the screen.
+  --app-suggestions-max-height: 240px;
 
   // The progress bar on the resume card.
   --app-progress-height: 6px;
