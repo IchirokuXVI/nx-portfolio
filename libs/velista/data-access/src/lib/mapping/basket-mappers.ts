@@ -127,6 +127,13 @@ export function toBasketLine(raw: unknown): BasketLine | null {
     position: numOr(raw['position'], 0),
     touchedBy: nullableStr(raw['lastEditedByParticipantId']),
     touchedAt: date(raw['lastEditedAt']),
+    // No fallback: null is a real value here, meaning nobody has settled this
+    // line yet, and guessing either outcome would put a sentence on the row
+    // about a purchase that has not happened.
+    lastOutcome:
+      raw['lastOutcome'] === 'BOUGHT' || raw['lastOutcome'] === 'NOT_AVAILABLE'
+        ? raw['lastOutcome']
+        : null,
   };
 
   return 'origins' in raw

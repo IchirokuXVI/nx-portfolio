@@ -5,6 +5,7 @@ import {
   GeneratedLineOrigin,
   GeneratedListStatus,
   RealtimeEvent,
+  SettlementOutcome,
   type CreateGeneratedListRequest,
   type GeneratedListBasketLineView,
   type GeneratedListIdRequest,
@@ -28,6 +29,7 @@ import {
   GeneratedListLine,
   GeneratedListLineOption,
   GeneratedListLineOrigin,
+  LineSettlement,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ProfileService } from '../profiles/profile.service';
@@ -115,6 +117,10 @@ export class GeneratedListService {
     private readonly origins: Repository<GeneratedListLineOrigin>,
     @InjectRepository(GeneratedListLineOption)
     private readonly options: Repository<GeneratedListLineOption>,
+    // Read only here, to answer "what did the last settle on this line say".
+    // The writes all belong to `GeneratedListSettleService`.
+    @InjectRepository(LineSettlement)
+    private readonly settlements: Repository<LineSettlement>,
     private readonly profiles: ProfileService,
     private readonly events: CoreEventsPublisher
   ) {}
@@ -685,7 +691,7 @@ export class GeneratedListService {
       return [];
     }
     const lineIds = lines.map((line) => line.id);
-    const [origins, options] = await Promise.all([
+    const [origins, options, outcomes] = await Promise.all([
       this.origins.find({
         where: { generatedListLineId: In(lineIds) },
         order: { createdAt: 'ASC' },
@@ -694,6 +700,7 @@ export class GeneratedListService {
         where: { generatedListLineId: In(lineIds) },
         order: { position: 'ASC', createdAt: 'ASC' },
       }),
+      this.lastOutcomes(lineIds),
     ]);
     return lines.map((line) =>
       toBasketLineView(
@@ -701,6 +708,7 @@ export class GeneratedListService {
         {
           origins: origins.filter((row) => row.generatedListLineId === line.id),
           options: options.filter((row) => row.generatedListLineId === line.id),
+          lastOutcome: outcomes.get(line.id) ?? null,
         },
         seesZoneData
       )
@@ -712,7 +720,7 @@ export class GeneratedListService {
     line: GeneratedListLine,
     seesZoneData: boolean
   ): Promise<GeneratedListBasketLineView> {
-    const [origins, options] = await Promise.all([
+    const [origins, options, outcomes] = await Promise.all([
       this.origins.find({
         where: { generatedListLineId: line.id },
         order: { createdAt: 'ASC' },
@@ -721,8 +729,49 @@ export class GeneratedListService {
         where: { generatedListLineId: line.id },
         order: { position: 'ASC', createdAt: 'ASC' },
       }),
+      this.lastOutcomes([line.id]),
     ]);
-    return toBasketLineView(line, { origins, options }, seesZoneData);
+    return toBasketLineView(
+      line,
+      { origins, options, lastOutcome: outcomes.get(line.id) ?? null },
+      seesZoneData
+    );
+  }
+
+  /**
+   * What the newest settle on each of these basket lines said.
+   *
+   * **Not derivable from the line itself**, which is the whole reason this query
+   * exists: `NOT_AVAILABLE` closes the outstanding amount exactly as a purchase
+   * does, so a screen reading `settledQuantity` alone would caption a shop that
+   * had none as somebody who bought it (velista `0044`, section 4.2).
+   *
+   * One query for the whole basket rather than one per line, ordered oldest
+   * first so the last write into the map wins. A settle writes one row per origin
+   * it touched, all with the same outcome, so reading the newest by `createdAt`
+   * answers "what did the last act on this line say" whichever of its rows comes
+   * last.
+   */
+  private async lastOutcomes(
+    lineIds: string[]
+  ): Promise<Map<string, SettlementOutcome>> {
+    if (lineIds.length === 0) {
+      return new Map();
+    }
+    const rows = await this.settlements.find({
+      where: { generatedListLineId: In(lineIds) },
+      order: { createdAt: 'ASC', id: 'ASC' },
+      // No `select` projection: TypeORM's typed form rejects a partial entity
+      // here, and the rows are small and bounded by one basket's settlements.
+    });
+
+    const newest = new Map<string, SettlementOutcome>();
+    for (const row of rows) {
+      if (row.generatedListLineId !== null) {
+        newest.set(row.generatedListLineId, row.outcome);
+      }
+    }
+    return newest;
   }
 }
 

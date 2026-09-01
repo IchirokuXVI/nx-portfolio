@@ -122,6 +122,16 @@ export interface BasketLine {
    */
   touchedBy: string | null;
   touchedAt: Date | null;
+  /**
+   * What the most recent settle on this line said, or null if there has been
+   * none.
+   *
+   * **The numbers cannot say this.** `NOT_AVAILABLE` closes the outstanding
+   * amount exactly as a purchase does, so a row without this would caption a
+   * shop that had none as somebody who bought it, which claims a purchase that
+   * never happened.
+   */
+  lastOutcome: SettlementOutcome | null;
   /** Absent for a reader who does not pass the rule, rather than empty. */
   origins?: readonly BasketLineOrigin[];
 }

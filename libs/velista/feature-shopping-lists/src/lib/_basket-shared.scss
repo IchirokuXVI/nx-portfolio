@@ -29,12 +29,13 @@
   min-block-size: 100%;
 }
 
-// Every tap target on these screens is 44 square at minimum (section 7). This is
-// stricter than the rest of the app on purpose: it is used one handed, in a shop,
-// by somebody who has never seen it.
+// Every tap target on these screens is at least `--app-touch-target` square
+// (section 7). The token is 44px and already exists for the list page's own
+// reason, which is the same one: a control tapped dozens of times per trip, one
+// handed, often while walking.
 @mixin tap-target {
-  min-block-size: 44px;
-  min-inline-size: 44px;
+  min-block-size: var(--app-touch-target);
+  min-inline-size: var(--app-touch-target);
 }
 
 @mixin primary-button {
@@ -125,7 +126,7 @@
 @mixin spinner {
   inline-size: var(--app-icon-md);
   block-size: var(--app-icon-md);
-  border: 2px solid var(--app-border-subtle);
+  border: var(--app-focus-ring-width) solid var(--app-border-subtle);
   border-block-start-color: var(--app-action-bg);
   border-radius: var(--app-radius-full);
   animation: basket-spin var(--app-motion-slow) linear infinite;

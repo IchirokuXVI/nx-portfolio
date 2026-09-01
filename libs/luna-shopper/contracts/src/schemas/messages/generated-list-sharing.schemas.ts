@@ -271,6 +271,9 @@ const basketLineView = object(
     // two guests can both type "Dani".
     lastEditedByParticipantId: nullableString(),
     lastEditedAt: nullableString(),
+    // Null until somebody settles. Without it a NOT_AVAILABLE line reads as a
+    // bought one, because both close the outstanding amount.
+    lastOutcome: { type: ['string', 'null'], enum: ['BOUGHT', 'NOT_AVAILABLE', null] },
     origins: array(ref(GENERATED_LIST_SCHEMA_IDS.lineOriginView)),
     targetListId: nullableString(),
     origin: ref(GENERATED_LIST_SCHEMA_IDS.generatedLineOrigin),
@@ -285,6 +288,7 @@ const basketLineView = object(
     'position',
     'lastEditedByParticipantId',
     'lastEditedAt',
+    'lastOutcome',
   ]
 );
 

@@ -108,6 +108,7 @@
           &minus;
         </button>
         <span
+          (keydown)="onKeydown($event)"
           [attr.aria-label]="'basket.settle.quantity' | rokuT"
           [attr.aria-valuemax]="outstanding()"
           [attr.aria-valuemin]="1"

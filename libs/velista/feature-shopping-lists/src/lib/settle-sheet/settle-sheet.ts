@@ -32,6 +32,24 @@ import { SheetShell } from '@portfolio/velista/ui';
 type Pane = 'settle' | 'quantity' | 'product' | 'allocate';
 
 /**
+ * How far each key moves the spinbutton, matching `QuantityReel`'s own table.
+ *
+ * `Home` and `End` carry a step of zero because they are absolute rather than
+ * relative; the handler reads the key for those two and this map only says that
+ * they are keys it handles at all.
+ */
+const STEP_FOR: Readonly<Record<string, number>> = {
+  ArrowUp: 1,
+  ArrowRight: 1,
+  ArrowDown: -1,
+  ArrowLeft: -1,
+  PageUp: 5,
+  PageDown: -5,
+  Home: 0,
+  End: 0,
+};
+
+/**
  * Settling one line: the whole amount, a number, or per household (plan 0044,
  * section 4.2).
  *
@@ -231,6 +249,41 @@ export class SettleSheet {
   protected step(by: number): void {
     const max = this.outstanding();
     this.typed.update((n) => Math.min(Math.max(1, n + by), Math.max(1, max)));
+  }
+
+  /**
+   * The keyboard half of the `spinbutton`, matching `QuantityReel`'s exactly.
+   *
+   * Plan 0044 section 7 asks for `0043`'s reel and spinbutton **unchanged**, and
+   * the spinbutton half is what this is: the same keys, the same directions, the
+   * same page step. The reel itself is deliberately not reused, because it is a
+   * different question. It reports a signed **delta** on the line's own quantity
+   * and is bounded by `LINE_QUANTITY_MIN..MAX`; this asks for an absolute number
+   * of things bought, bounded by what is outstanding. Making the reel serve both
+   * would have meant changing it, which is the one thing that section forbids.
+   *
+   * `ArrowUp` and `ArrowRight` increase, which is what the role requires and what
+   * every native spinbutton does, however much the reel's own left-to-right drag
+   * suggests otherwise.
+   */
+  protected onKeydown(event: KeyboardEvent): void {
+    const step = STEP_FOR[event.key];
+    if (step === undefined) {
+      return;
+    }
+    // The arrow keys scroll a sheet otherwise, which would move the control out
+    // from under the person using it.
+    event.preventDefault();
+
+    if (event.key === 'Home') {
+      this.typed.set(1);
+      return;
+    }
+    if (event.key === 'End') {
+      this.typed.set(Math.max(1, this.outstanding()));
+      return;
+    }
+    this.step(step);
   }
 
   protected close(): void {

@@ -1,4 +1,5 @@
 import type {
+  SettlementOutcome,
   GeneratedListBasketLineView,
   GeneratedListBasketView,
   GeneratedListLineOriginView,
@@ -78,6 +79,8 @@ export function toBasketLineView(
   children: {
     origins: GeneratedListLineOrigin[];
     options: GeneratedListLineOption[];
+    /** What the newest settle on this line said, or null if there has been none. */
+    lastOutcome?: SettlementOutcome | null;
   },
   seesZoneData: boolean
 ): GeneratedListBasketLineView {
@@ -91,6 +94,10 @@ export function toBasketLineView(
     position: row.position,
     lastEditedByParticipantId: row.lastEditedByParticipantId,
     lastEditedAt: row.lastEditedAt?.toISOString() ?? null,
+    // Not derivable from the numbers: NOT_AVAILABLE closes the outstanding
+    // amount exactly as a purchase does, so a row without this would caption a
+    // shop that had none as somebody who bought it.
+    lastOutcome: children.lastOutcome ?? null,
   };
 
   if (!seesZoneData) {

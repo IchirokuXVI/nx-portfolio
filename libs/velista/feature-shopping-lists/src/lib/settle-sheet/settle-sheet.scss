@@ -119,8 +119,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  inline-size: 48px;
-  block-size: 48px;
+  // Larger than the 44 minimum, because these two are the controls a thumb hunts
+  // for while the other hand is holding a trolley.
+  inline-size: var(--app-control-height);
+  block-size: var(--app-control-height);
   border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-radius-full);
   background: var(--app-surface-raised);

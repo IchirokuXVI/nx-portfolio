@@ -642,6 +642,18 @@ export interface GeneratedListBasketLineView {
   /** When {@link lastEditedByParticipantId} last touched it. Null with it. */
   lastEditedAt: string | null;
   /**
+   * What the most recent settle on this line said, or null if there has been
+   * none (velista `0044`, section 4.2).
+   *
+   * **Without it a `NOT_AVAILABLE` line is indistinguishable from a bought one.**
+   * That outcome closes the outstanding amount without buying anything, so
+   * `settledQuantity` reaches `quantity` exactly as a purchase would, and a row
+   * reading the numbers alone would caption "Marc got it" over a shop that did
+   * not have it. The analogue of `LineSettlementSummary.lastOutcome`, which plan
+   * 0047 section 5 put on a zone line for the same reason.
+   */
+  lastOutcome: SettlementOutcome | null;
+  /**
    * Where this line came from. **Absent** for a reader who does not pass
    * section 5.2, rather than empty: a tin of tomatoes never names its household.
    */

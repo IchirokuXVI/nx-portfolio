@@ -82,20 +82,26 @@ export function touchedCaption(
     return null;
   }
 
-  const state = basketLineState(line);
-  if (state === 'wanted') {
-    // Settled back to nothing, or edited rather than settled. There is no honest
-    // sentence about a purchase here, so there is none.
+  // **The outcome and not the numbers.** `NOT_AVAILABLE` closes the outstanding
+  // amount exactly as a purchase does, so `settled` reaches `quantity` either
+  // way and a caption derived from it would say "Marc got it" about a shop that
+  // had none, which claims a purchase that never happened.
+  if (line.lastOutcome === 'NOT_AVAILABLE') {
+    return translator.t('basket.touched.none', undefined, locale, { name });
+  }
+  if (line.lastOutcome === null) {
+    // Edited rather than settled: somebody changed the line without buying
+    // anything, so there is no honest sentence about a purchase and there is
+    // none.
     return null;
   }
 
-  if (line.settled === 0) {
-    return translator.t('basket.touched.none', undefined, locale, { name });
-  }
-  if (state === 'done') {
-    return translator.t('basket.touched.got', undefined, locale, { name });
-  }
-  return translator.t('basket.touched.gotSome', undefined, locale, { name, count: line.settled });
+  return basketLineState(line) === 'done'
+    ? translator.t('basket.touched.got', undefined, locale, { name })
+    : translator.t('basket.touched.gotSome', undefined, locale, {
+        name,
+        count: line.settled,
+      });
 }
 
 /**

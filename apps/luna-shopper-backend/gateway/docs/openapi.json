@@ -16046,6 +16046,17 @@
               "null"
             ]
           },
+          "lastOutcome": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "BOUGHT",
+              "NOT_AVAILABLE",
+              null
+            ]
+          },
           "origins": {
             "type": "array",
             "items": {
@@ -16071,7 +16082,8 @@
           "options",
           "position",
           "lastEditedByParticipantId",
-          "lastEditedAt"
+          "lastEditedAt",
+          "lastOutcome"
         ],
         "additionalProperties": false
       },

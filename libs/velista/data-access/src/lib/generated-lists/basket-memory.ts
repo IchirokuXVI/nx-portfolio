@@ -138,6 +138,7 @@ export class BasketMemory implements BasketServiceI {
       position: 0,
       touchedBy: null,
       touchedAt: null,
+      lastOutcome: null,
       origins: [
         {
           id: 'o-1',
@@ -165,6 +166,7 @@ export class BasketMemory implements BasketServiceI {
       position: 1,
       touchedBy: REGISTERED.id,
       touchedAt: new Date('2026-09-01T10:20:00.000Z'),
+      lastOutcome: 'BOUGHT',
       origins: [
         {
           id: 'o-3',
@@ -185,6 +187,8 @@ export class BasketMemory implements BasketServiceI {
       position: 2,
       touchedBy: GUEST.id,
       touchedAt: new Date('2026-09-01T10:45:00.000Z'),
+      // The shop had none: same numbers as a purchase, opposite meaning.
+      lastOutcome: 'NOT_AVAILABLE',
       origins: [
         {
           id: 'o-4',
@@ -318,6 +322,7 @@ export class BasketMemory implements BasketServiceI {
       pickId: body.itemId ?? line.pickId,
       touchedBy: this.me.id,
       touchedAt: new Date(),
+      lastOutcome: body.outcome,
     };
     this._lines = this._lines.map((row) => (row.id === lineId ? settled : row));
 

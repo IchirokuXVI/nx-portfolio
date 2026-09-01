@@ -77,7 +77,8 @@
   margin-inline-start: calc(var(--app-space-2) * -1);
   border-radius: var(--app-radius-full);
   background: var(--app-surface-sunken);
-  box-shadow: 0 0 0 2px var(--app-surface-ground);
+  // A ring in the page's own background, so overlapping faces stay separable.
+  box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-surface-ground);
   font-size: var(--app-text-2xs);
   text-transform: uppercase;
   color: var(--app-text-secondary);
