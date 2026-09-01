@@ -250,6 +250,26 @@ export type RealtimeEvent =
     }
   | {
       /**
+       * A line of one of the caller's baskets was settled (backend `0051` section 6).
+       *
+       * It reaches this client on the **owner's own sessions**, which is what makes it
+       * useful to a dashboard: the person watching the card is usually not the person
+       * in the shop. It also goes to the basket's own room, which this app cannot hold
+       * yet, since every socket here authenticates with an account token and a guest
+       * has none (`0044`'s participant connection).
+       *
+       * Only the id is kept. The payload carries the line, redacted to the least
+       * privileged reader in the room because a broadcast cannot be projected per
+       * socket, and **the counts this app draws cannot be derived from one line**: a
+       * summary holds how many lines are finished, and knowing that one of them moved
+       * says nothing about whether it had already been counted. So the id is what the
+       * store needs and the line is the basket screen's business.
+       */
+      readonly type: 'generatedList.lineSettled';
+      readonly generatedListId: string;
+    }
+  | {
+      /**
        * A generated shopping list of the caller's was deleted.
        *
        * No screen in this app deletes one (plan 0045, section 3.3), so this only ever
@@ -298,6 +318,7 @@ export const REALTIME_EVENT_NAMES = [
   'profiles.changed',
   'generatedList.created',
   'generatedList.updated',
+  'generatedList.lineSettled',
   'generatedList.deleted',
   'presence.zoneUpdated',
   'presence.listUpdated',

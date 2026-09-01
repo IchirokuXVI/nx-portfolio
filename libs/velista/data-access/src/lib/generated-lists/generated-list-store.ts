@@ -21,6 +21,15 @@ import {
 } from './generated-list-service';
 
 /**
+ * How long a burst of settles is allowed to gather before the listing is read again.
+ *
+ * Somebody at a checkout ticks things off seconds apart, so this is the window that
+ * turns a shop's worth of taps into one request. Long enough to swallow a burst, short
+ * enough that the card moves while its reader is still looking at it.
+ */
+const SETTLE_REFRESH_MS = 1500;
+
+/**
  * The caller's generated shopping lists: the card on the dashboard, the history page,
  * and the sheet that makes one (plan 0045, section 5).
  *
@@ -41,22 +50,21 @@ import {
  * cannot disagree about how many live baskets there are, which they would the moment
  * either kept its own copy.
  *
- * ## What keeps a second device current, and the one gap
+ * ## What keeps a second device current
  *
- * `generatedList.created`, `generatedList.updated` and `generatedList.deleted` are
- * addressed to the owner's own sessions, so generating a basket on a laptop puts the
- * card on a phone with no reload.
+ * All four events are addressed to the owner's **own sessions**, so they arrive on the
+ * ordinary account authenticated socket this app already holds. Generating a basket on
+ * a laptop puts the card on a phone with no reload, and somebody settling a line in the
+ * shop moves the count on the dashboard at home, which is the case the card exists for.
  *
- * **Settling does not reach here, and that is a real gap rather than an omission.**
- * Plan 0045 section 3.2 expects `generatedList.lineSettled` on the owner's room; core
- * publishes it with `emitToGeneratedList`, so it goes to the **basket's** room and
- * reaches whoever is holding that basket open. The owner walking round a shop is in
- * that room and sees their own progress move on the basket screen (`0044`); the owner
- * looking at the dashboard while somebody else shops is not, so the card's settled
- * count is as of the last read. It is stale by a number rather than wrong about which
- * basket is live, and {@link reload} is what the pages call to close it. Making it live
- * is a backend change (either a second emit to the owner, or the owner's room added to
- * that event's audience) and is recorded here rather than papered over with a poll.
+ * `created`, `updated` and `deleted` carry the whole basket, so they are applied
+ * directly. **A settle cannot be**, and the reason is worth stating because the obvious
+ * implementation is wrong: this store holds summaries, so what it would have to update
+ * is `settledLineCount`, and one line event cannot say whether that number should move.
+ * The payload carries the line that was settled, redacted, and knowing that a line is
+ * now finished says nothing about whether it was *already* finished and counted. So a
+ * settle triggers a refetch rather than an arithmetic apply. See {@link _scheduleRefresh}
+ * for why that is coalesced and why it is quiet.
  */
 // Provided by the app layer, never root: rule D5, plan 0004 section 9.
 @Injectable()
@@ -71,6 +79,9 @@ export class GeneratedListStore {
   private readonly _error = signal<unknown>(null);
   private readonly _cursor = signal<string | null>(null);
   private readonly _loadingMore = signal(false);
+
+  /** The pending coalesced refresh, or null. See {@link _scheduleRefresh}. */
+  private _refreshAt: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Whether the first page has ever been asked for.
@@ -120,6 +131,15 @@ export class GeneratedListStore {
         case 'generatedList.updated':
           this._upsert(event.list);
           break;
+        case 'generatedList.lineSettled':
+          // Only for a basket this client is actually holding. A settle on one that
+          // was never read changes nothing on screen, and refetching for it would let
+          // any basket in the account drive requests from a page that is not showing
+          // it.
+          if (this._lists().some((list) => list.id === event.generatedListId)) {
+            this._scheduleRefresh();
+          }
+          break;
         case 'generatedList.deleted':
           this._lists.update((lists) =>
             lists.filter((list) => list.id !== event.generatedListId)
@@ -130,7 +150,10 @@ export class GeneratedListStore {
       }
     });
 
-    inject(DestroyRef).onDestroy(() => subscription.unsubscribe());
+    inject(DestroyRef).onDestroy(() => {
+      subscription.unsubscribe();
+      this._cancelRefresh();
+    });
   }
 
   /** The first page, once per app run. Safe to call from every page that reads it. */
@@ -209,6 +232,72 @@ export class GeneratedListStore {
     const run = await this._service.create(request);
     this._upsert(run.list);
     return run;
+  }
+
+  /**
+   * Refetch the first page after a settle, once per burst.
+   *
+   * **Coalesced**, because a settle is not a lone event: four people working through
+   * one basket in a shop settle lines seconds apart, and a request each would be a
+   * request per tin of tomatoes. One timer, restarted by each arrival, turns a burst
+   * into a single read a moment after it stops.
+   *
+   * The window is short enough that the card moves while somebody is looking at it and
+   * long enough to swallow a checkout's worth of taps. It is not tuned finer than that,
+   * because the cost of being a second late is a number on a card being a second old.
+   */
+  private _scheduleRefresh(): void {
+    this._cancelRefresh();
+    this._refreshAt = setTimeout(() => {
+      this._refreshAt = null;
+      void this._refreshQuietly();
+    }, SETTLE_REFRESH_MS);
+  }
+
+  private _cancelRefresh(): void {
+    if (this._refreshAt !== null) {
+      clearTimeout(this._refreshAt);
+      this._refreshAt = null;
+    }
+  }
+
+  /**
+   * Read the first page again without touching the load state.
+   *
+   * **Quiet is the whole point.** {@link reload} moves the state to `loading`, which is
+   * right for a retry and would be wrong here: the pages render a skeleton for that
+   * state, so a live update would blank the very card it is updating every time
+   * somebody in the shop ticked something off. A failure is swallowed for the same
+   * reason `loadMore`'s is, and one step further: nobody asked for this read, so
+   * nobody is owed an error for it, and what is on screen is still the truth as of the
+   * last successful one.
+   */
+  private async _refreshQuietly(): Promise<void> {
+    if (this._state() !== 'loaded') {
+      return;
+    }
+
+    try {
+      const page = await this._service.listMine();
+      this._mergeFirstPage(page.items);
+    } catch {
+      // Deliberately swallowed. See above.
+    }
+  }
+
+  /**
+   * Lay a freshly read first page over what is held, keeping the pages behind it.
+   *
+   * Not `set`, which is what a first read does: somebody who has scrolled a year into
+   * their history would watch it collapse back to twenty rows because a flatmate
+   * settled a line. The page is authoritative for the rows it covers, including their
+   * disappearance, and everything below it keeps its place.
+   */
+  private _mergeFirstPage(items: readonly GeneratedListSummary[]): void {
+    this._lists.update((held) => {
+      const covered = new Set(items.map((item) => item.id));
+      return [...items, ...held.filter((list) => !covered.has(list.id))];
+    });
   }
 
   /**

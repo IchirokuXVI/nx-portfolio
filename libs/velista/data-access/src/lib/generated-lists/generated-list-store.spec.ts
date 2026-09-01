@@ -40,6 +40,12 @@ interface FakeOptions {
   readonly listRejectsWith?: unknown;
   /** Rejects only a **cursored** call, so the first page lands and the second fails. */
   readonly nextPageRejectsWith?: unknown;
+  /**
+   * What a **second and later** cursorless read answers, which is what a quiet refresh
+   * makes. Separate from `pages` so a test can say "the listing changed under us"
+   * without disturbing the cursor walk that `pages` describes.
+   */
+  readonly refreshPage?: Page<GeneratedListSummary>;
   readonly createRejectsWith?: unknown;
 }
 
@@ -48,6 +54,7 @@ function fakeService(options: FakeOptions = {}) {
   const calls: { method: string; cursor?: string }[] = [];
   const pages = options.pages ?? [{ items: [], nextCursor: null }];
   let served = 0;
+  let firstReads = 0;
 
   const service: GeneratedListServiceI = {
     listMine: async (cursor?: string) => {
@@ -63,8 +70,14 @@ function fakeService(options: FakeOptions = {}) {
       }
       // A cursor asks for the next page; no cursor is always the first one, so a
       // reload gets what a first read would rather than continuing the walk.
-      const at = cursor === undefined ? 0 : ++served;
-      return pages[at] ?? { items: [], nextCursor: null };
+      if (cursor === undefined) {
+        const isRefresh = firstReads++ > 0;
+        return (
+          (isRefresh ? options.refreshPage : undefined) ??
+          pages[0] ?? { items: [], nextCursor: null }
+        );
+      }
+      return pages[++served] ?? { items: [], nextCursor: null };
     },
     create: async (request: CreateGeneratedListRequest) => {
       calls.push({ method: 'create' });
@@ -310,6 +323,161 @@ describe('GeneratedListStore', () => {
 
       await expect(store.create({})).rejects.toBe(failure);
       expect(store.state()).not.toBe('failed');
+    });
+  });
+
+  /**
+   * Settling, which is the one event this store cannot apply arithmetically.
+   *
+   * It holds summaries, so what would have to move is `settledLineCount`, and one line
+   * event cannot say whether it should: knowing a line is now finished says nothing
+   * about whether it was already finished and counted. So a settle triggers a refetch,
+   * and these are the four properties that make a refetch safe to do on a broadcast.
+   */
+  describe('a line being settled', () => {
+    const settled = (generatedListId: string) => ({
+      generatedListId,
+      line: { id: 'line-1', content: 'Milk', quantity: 2, settledQuantity: 2 },
+    });
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('reads the listing again and moves the count', async () => {
+      const { store, realtime } = harness({
+        pages: [
+          {
+            items: [summary({ id: 'a', settledLineCount: 4 })],
+            nextCursor: null,
+          },
+        ],
+        refreshPage: {
+          items: [summary({ id: 'a', settledLineCount: 5 })],
+          nextCursor: null,
+        },
+      });
+      await store.load();
+      expect(store.lists()[0]?.settledLineCount).toBe(4);
+
+      realtime.emit('generatedList.lineSettled', settled('a'));
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(store.lists()[0]?.settledLineCount).toBe(5);
+    });
+
+    /**
+     * Four people working through one basket settle lines seconds apart, and a request
+     * each would be a request per tin of tomatoes.
+     */
+    it('collapses a burst into one read', async () => {
+      const { store, realtime, calls } = harness({
+        pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
+      });
+      await store.load();
+      const before = calls.filter((call) => call.method === 'listMine').length;
+
+      realtime.emit('generatedList.lineSettled', settled('a'));
+      jest.advanceTimersByTime(500);
+      realtime.emit('generatedList.lineSettled', settled('a'));
+      jest.advanceTimersByTime(500);
+      realtime.emit('generatedList.lineSettled', settled('a'));
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+
+      expect(
+        calls.filter((call) => call.method === 'listMine').length - before
+      ).toBe(1);
+    });
+
+    /**
+     * The pages render a skeleton for `loading`, so moving the state would blank the
+     * very card the update is about, every time somebody in the shop ticked something
+     * off. A live update must never do that.
+     */
+    it('never moves the load state, so the card does not blank', async () => {
+      const { store, realtime } = harness({
+        pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
+      });
+      await store.load();
+
+      realtime.emit('generatedList.lineSettled', settled('a'));
+      expect(store.state()).toBe('loaded');
+
+      jest.advanceTimersByTime(2000);
+      expect(store.state()).toBe('loaded');
+      await Promise.resolve();
+      expect(store.state()).toBe('loaded');
+    });
+
+    // Somebody who has scrolled a year into their history should not watch it collapse
+    // to twenty rows because a flatmate settled a line.
+    it('keeps the pages behind the first one', async () => {
+      const { store, realtime } = harness({
+        pages: [
+          { items: [summary({ id: 'a' })], nextCursor: 'c1' },
+          { items: [summary({ id: 'old' })], nextCursor: null },
+        ],
+        refreshPage: {
+          items: [summary({ id: 'a', settledLineCount: 9 })],
+          nextCursor: 'c1',
+        },
+      });
+      await store.load();
+      await store.loadMore();
+      expect(store.lists().map((list) => list.id)).toEqual(['a', 'old']);
+
+      realtime.emit('generatedList.lineSettled', settled('a'));
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(store.lists().map((list) => list.id)).toEqual(['a', 'old']);
+      // And the refresh did happen, rather than the rows surviving because nothing ran.
+      expect(store.lists()[0]?.settledLineCount).toBe(9);
+    });
+
+    // A settle on a basket that was never read changes nothing on screen, and letting
+    // it drive a request would let any basket in the account do so from a page that is
+    // not showing it.
+    it('ignores a settle on a basket it is not holding', async () => {
+      const { store, realtime, calls } = harness({
+        pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
+      });
+      await store.load();
+      const before = calls.filter((call) => call.method === 'listMine').length;
+
+      realtime.emit('generatedList.lineSettled', settled('somebody-elses'));
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+
+      expect(
+        calls.filter((call) => call.method === 'listMine').length - before
+      ).toBe(0);
+    });
+
+    // Rule D4 again: a payload with no basket id names nothing, so there is nothing to
+    // refresh and nothing to guess.
+    it('drops a payload with no basket id', async () => {
+      const { store, realtime, calls } = harness({
+        pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
+      });
+      await store.load();
+      const before = calls.filter((call) => call.method === 'listMine').length;
+
+      realtime.emit('generatedList.lineSettled', { line: { id: 'line-1' } });
+      jest.advanceTimersByTime(2000);
+      await Promise.resolve();
+
+      expect(
+        calls.filter((call) => call.method === 'listMine').length - before
+      ).toBe(0);
     });
   });
 

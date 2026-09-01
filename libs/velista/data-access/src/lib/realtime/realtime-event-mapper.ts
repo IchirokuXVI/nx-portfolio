@@ -281,6 +281,19 @@ export function toRealtimeEvent(
       return list === null ? null : { type: name, list };
     }
 
+    case 'generatedList.lineSettled': {
+      // `generatedListId` and not the line's own id: the line is redacted and the
+      // counts cannot be recomputed from it anyway, so what a listener needs is which
+      // basket moved.
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const settledIn = str(payload['generatedListId']);
+      return settledIn === null
+        ? null
+        : { type: name, generatedListId: settledIn };
+    }
+
     case 'generatedList.deleted': {
       if (!isRecord(payload)) {
         return null;
