@@ -685,7 +685,7 @@ export class ListPage {
       return;
     }
 
-    void this._openSheet(['lines', lineId]);
+    void this._openSheet(['lines', lineId, 'detail']);
   }
 
   /**

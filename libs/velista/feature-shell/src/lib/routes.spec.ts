@@ -288,11 +288,14 @@ describe('AppShellRoutes', () => {
         ).toContain('lists/new');
       });
 
-      it('offers the four sheets over it, as routes rather than flags', () => {
+      it('offers the five sheets over it, as routes rather than flags', () => {
         // Rule E1: each covers the page without losing it, and Android's back button
         // has to dismiss it. Ticking a line off is deliberately not among them.
         expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual(
           [
+            // What a tap opens (velista plan 0043, section 5.1). `/detail` rather
+            // than the bare `lines/:lineId`, which belongs to the line page.
+            'lines/:lineId/detail',
             'lines/:lineId/edit',
             'lines/:lineId/comments',
             'lines/:lineId/confirm/delete',
@@ -308,7 +311,7 @@ describe('AppShellRoutes', () => {
         // allowed, on every request.
         const sheets = routeAt(listPath)?.children ?? [];
 
-        expect(sheets).toHaveLength(4);
+        expect(sheets).toHaveLength(5);
         for (const sheet of sheets) {
           expect(sheet.canActivate).toBeUndefined();
         }
@@ -646,6 +649,7 @@ describe('the sheets and their exit animation', () => {
     'lists/new',
     'settings',
     'lines/:lineId/edit',
+    'lines/:lineId/detail',
     'lines/:lineId/comments',
     'lines/:lineId/confirm/delete',
     'name',

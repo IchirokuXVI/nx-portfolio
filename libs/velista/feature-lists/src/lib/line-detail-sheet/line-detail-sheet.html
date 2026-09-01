@@ -33,11 +33,7 @@
             <dd class="fact-value">
               {{
                 'list.detail.lastBoughtValue'
-                  | rokuT
-                    : {
-                        when: bought.at | date: 'mediumDate',
-                        count: bought.quantity,
-                      }
+                  | rokuT: { when: bought.when, count: bought.quantity }
               }}
             </dd>
           </div>

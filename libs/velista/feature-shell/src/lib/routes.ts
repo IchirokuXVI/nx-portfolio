@@ -128,14 +128,21 @@ function memberActionRoutes(): Route[] {
 }
 
 /**
- * The four sheets over the list page (plan 0012, section 4.2).
+ * The five sheets over the list page (plan 0012 section 4.2, velista 0043 section 5.1).
  *
  * Every one is a route and not a template flag, which is rule E1 from `0008`
  * unchanged: each covers the page without losing it, and Android's back button has to
  * dismiss it.
  *
- * Ticking a line off is deliberately not among them and never will be. It is one tap,
- * it is reversible by the same tap, and it is the thing the screen is for.
+ * **Changing a line's quantity is deliberately not among them and never will be.** It
+ * is the gesture the screen is built around, it happens under a thumb, and a sheet
+ * would put a navigation and a dismissal around a number somebody is dragging. What
+ * used to be said in this place about ticking off is the same rule about a different
+ * gesture: the primary act on this page is never a route.
+ *
+ * The detail sheet is new and is what a **tap** opens now. It earns a route twice over:
+ * it covers the page like the rest, and it is where a purchase is recorded, which is a
+ * deliberate act somebody should be able to back out of with the back button.
  *
  * No guards here. Which of these a caller may **use** is decided by the page from the
  * caller's own facts, and it cannot be decided by a guard at all: there is no
@@ -146,6 +153,24 @@ function memberActionRoutes(): Route[] {
  */
 function listSheetRoutes(): Route[] {
   return [
+    sheet({
+      // What a tap on a row opens (velista plan 0043, section 5.1).
+      //
+      // `lines/:lineId/detail` rather than the bare `lines/:lineId`, and the segment is
+      // load bearing: the bare path belongs to the **line page**, which is a page of
+      // its own so it can be linked to and reached from a search later (section 5.3).
+      // Giving the sheet the short URL would have taken the linkable one away from the
+      // screen whose whole reason for being a page is that it can be linked to.
+      //
+      // No guard, like the others here: whether this caller may record a purchase is
+      // decided inside it from the same abilities the page uses, and opening it to read
+      // a history is something anybody holding `READ` may do.
+      path: 'lines/:lineId/detail',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-lists').then(
+          (m) => m.LineDetailSheet
+        ),
+    }),
     sheet({
       path: 'lines/:lineId/edit',
       loadComponent: () =>
@@ -337,6 +362,41 @@ export const AppShellRoutes: Route[] = [
           // zone segment and `listIdGuard` is **rule L1**: it declines any list segment
           // that is not a UUID, so `/zones/<uuid>/lists/new` falls through to the group
           // page's own `lists/new` child instead of being swallowed by `:listId`.
+          /**
+           * Everything about one line (velista plan 0043, section 5.3).
+           *
+           * **Declared before `zones/:zoneId/lists/:listId`**, and that is necessity
+           * rather than habit, exactly as the list page itself is declared before
+           * `zones/:zoneId`: the list page's path is a prefix of this one and it
+           * carries children, so a URL ending in `lines/<uuid>` would be offered to
+           * that branch first. None of its sheet children matches a bare line id, so
+           * the branch would fail and the router would fall through to here anyway,
+           * which works and is exactly the kind of thing that stops working when
+           * somebody adds a sheet. Ordering makes it not depend on that.
+           *
+           * A page rather than a deeper sheet because it can be linked to, which is
+           * also why it holds the short URL and the detail sheet takes `/detail`.
+           */
+          {
+            path: 'zones/:zoneId/lists/:listId/lines/:lineId',
+            canMatch: [zoneIdGuard, listIdGuard],
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-lists').then(
+                (m) => m.LinePage
+              ),
+            children: [
+              sheet({
+                // The one thing on either screen that discards the history, so it is
+                // confirmed here as well as from the list (section 5.3).
+                path: 'confirm/delete',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-lists').then(
+                    (m) => m.DeleteLineSheet
+                  ),
+              }),
+            ],
+          },
           {
             path: 'zones/:zoneId/lists/:listId',
             canMatch: [zoneIdGuard, listIdGuard],

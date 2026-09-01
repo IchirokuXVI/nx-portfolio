@@ -1,3 +1,4 @@
+import { formatDay } from './format-day';
 import {
   ESTIMATE_MIN_PURCHASES,
   inLocale,
@@ -205,6 +206,7 @@ export function toSettlementRow(
   input: {
     nameOf: (userId: string) => string | null;
     callerUserId: string | null;
+    locale: string;
   },
   listName: string | null
 ): SettlementRowVm {
@@ -223,6 +225,7 @@ export function toSettlementRow(
         : input.nameOf(settlement.settledByUserId),
     mine,
     at: settlement.settledAt,
+    when: formatDay(settlement.settledAt, input.locale),
     listName,
   };
 }

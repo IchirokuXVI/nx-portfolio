@@ -7,7 +7,6 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
@@ -62,7 +61,7 @@ import { selectLinePage } from './select-line-page';
  */
 @Component({
   selector: 'lib-line-page',
-  imports: [RokuTranslatorPipe, DatePipe, ChevronLeftIcon],
+  imports: [RokuTranslatorPipe, ChevronLeftIcon],
   templateUrl: './line-page.html',
   styleUrl: './line-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -160,7 +159,7 @@ export class LinePage {
    * nothing rather than as an id.
    */
   private _listNameOf(listId: string): string | null {
-    for (const zone of this._zones.zones()) {
+    for (const zone of this._zones.myZones()) {
       const found = this._lists
         .listsIn(zone.id)
         .find((list) => list.id === listId);
@@ -193,7 +192,7 @@ export class LinePage {
     const wanted = new Set(line.itemIds);
     const found: string[] = [];
 
-    for (const zone of this._zones.zones()) {
+    for (const zone of this._zones.myZones()) {
       for (const list of this._lists.listsIn(zone.id)) {
         if (list.id === this.listId()) {
           continue;
