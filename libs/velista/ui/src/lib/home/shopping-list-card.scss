@@ -1,0 +1,155 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+// The label and the History link share a row, which is the shape the zone section
+// above already uses for its own label and New group. Two sections that read the same
+// way should be built the same way.
+.head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+}
+
+.section-label {
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+// Matching `.new-zone` on the dashboard, since it is the same kind of control in the
+// same position: a quiet action beside a section label.
+.history {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--app-button-radius);
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  width: 100%;
+  padding: var(--app-space-4);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+}
+
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  flex: 1;
+  min-width: 0;
+}
+
+.list-name {
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.chevron {
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.track {
+  height: var(--app-progress-height);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  overflow: hidden;
+}
+
+// A fill only has to clear 3:1, not 4.5:1, which is why the bright ramp is correct
+// here in both themes (plan 0002, layer 1 note). Success rather than the accent: this
+// bar measures a trip being finished, not something needing attention.
+.fill {
+  height: 100%;
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-success-fg);
+  transition: width var(--app-motion-base) var(--app-motion-ease);
+}
+
+.progress-label {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}
+
+// Quiet, and outside the card: it is the second destination on this section, and
+// making it look like part of the card would hide that it goes somewhere else.
+.more {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--app-button-radius);
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}

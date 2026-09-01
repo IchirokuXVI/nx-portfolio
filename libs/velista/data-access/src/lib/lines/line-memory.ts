@@ -1,11 +1,14 @@
 import { inject, Injectable, signal } from '@angular/core';
-import type {
-  Line,
-  LineApprovalStatus,
-  LineOrder,
-  LineStatus,
-  ListPermission,
-  Page,
+import {
+  LINE_QUANTITY_MAX,
+  LINE_QUANTITY_MIN,
+  type Line,
+  type LineApprovalStatus,
+  type LineOrder,
+  type LineSettlement,
+  type ListPermission,
+  type Page,
+  type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import { ListMemory } from '../lists/list-memory';
@@ -55,6 +58,19 @@ export class LineMemory implements LineServiceI {
   );
 
   /**
+   * Every settlement anybody has written in this session, newest first.
+   *
+   * **Seeded empty, on purpose.** The seeded lines carry a `boughtCount` and a last
+   * outcome, which is what draws their indicators, but no rows behind those numbers,
+   * so a line page opened cold shows its indicator and an empty history. That is not
+   * an oversight, it is exactly what the real migration did: backend plan 0047
+   * section 8 backfills no settlements, because there is nobody to attribute them to
+   * and no date to give them. A fixture that invented a plausible history would be
+   * the one thing the migration deliberately refused to do.
+   */
+  private _settlements: readonly LineSettlement[] = [];
+
+  /**
    * Set to refuse the next write with this code, so a spec can drive the failed and
    * read only paths without a network. Cleared once it has fired, because a failure
    * that stays armed makes the next assertion in the same spec fail for the wrong
@@ -92,13 +108,14 @@ export class LineMemory implements LineServiceI {
    * have been asked of, and adding the line is them giving it. Auto-approve is second and
    * leaves the approver **null**, which is the honest record that nobody decided.
    *
-   * `status` is `PENDING` in all three, because whether the group agreed to buy a thing
-   * and whether it is in the trolley are different questions.
+   * Nothing here has ever been bought, in all three, because a line cannot acquire a
+   * history in the same breath as being created.
    */
   async addLine(
     listId: string,
     content: string,
-    quantity?: number
+    quantity?: number,
+    itemIds?: readonly string[]
   ): Promise<Line> {
     const permissions = this._require(listId, 'WRITE');
     this._maybeFail();
@@ -113,12 +130,13 @@ export class LineMemory implements LineServiceI {
       listId,
       content,
       quantity: quantity ?? 1,
-      itemId: null,
+      itemIds: [...(itemIds ?? [])],
       // One past the highest, never `length`. Deletes leave gaps and a list whose
       // positions collide is the bug rule L4 is about.
       position: existing.reduce((top, l) => Math.max(top, l.position), 0) + 1,
       approvalStatus: decides || auto ? 'APPROVED' : 'PENDING',
-      status: 'PENDING',
+      boughtCount: 0,
+      lastSettlementOutcome: null,
       createdByUserId: caller,
       approvedByUserId: decides ? caller : null,
       version: 1,
@@ -138,14 +156,23 @@ export class LineMemory implements LineServiceI {
    * person in the aisle learns that the list did not know. `MANAGE` may change any field
    * of any line, because a governed thing needs somebody who can fix it.
    *
-   * Two further rules ride on the same call. Editing a `REJECTED` line puts it back to
+   * One further rule rides on the same call: editing a `REJECTED` line puts it back to
    * `PENDING` and clears the approver, on any edit and on any list, which is what makes a
-   * rejection a conversation rather than a dead end. And lowering the quantity of an
-   * `APPROVED` line splits off the remainder, unless the list auto-approves.
+   * rejection a conversation rather than a dead end.
+   *
+   * **Lowering the quantity no longer splits off a remainder.** Plan 0037 wrote the
+   * shortfall to a second `NOT_AVAILABLE` line; with no trip status that row would be an
+   * ordinary approved line at the shortfall quantity, which the list would immediately
+   * count as wanted again. What a shopper found is a settlement now, and lowering a
+   * quantity is the primary gesture on this page rather than a report from a shop.
    */
   async updateLine(
     lineId: string,
-    changes: { content?: string; quantity?: number }
+    changes: {
+      content?: string;
+      quantity?: number;
+      itemIds?: readonly string[];
+    }
   ): Promise<Line> {
     const line = this._lineOrThrow(lineId);
     const permissions = this._permissionsFor(line.listId);
@@ -161,23 +188,26 @@ export class LineMemory implements LineServiceI {
       }
     }
 
-    // A floor of 1. "None of it was there" is `NOT_AVAILABLE` on the whole line, which is
-    // a control the same caller already has (backend plan 0037, section 4.4).
-    if (changes.quantity !== undefined && changes.quantity < 1) {
+    // A floor of **zero**, which moved there with the trip status (backend plan
+    // 0047). Zero is the household saying it is stocked rather than an empty line
+    // waiting to be deleted, so it is the ordinary end of the reel and not a refusal.
+    if (
+      changes.quantity !== undefined &&
+      (changes.quantity < LINE_QUANTITY_MIN ||
+        changes.quantity > LINE_QUANTITY_MAX)
+    ) {
       throw memoryFailure('validation_failed', 400);
     }
 
     this._maybeFail();
 
-    const shortfall =
-      approved && changes.quantity !== undefined
-        ? line.quantity - changes.quantity
-        : 0;
-
-    const updated = this._patch(lineId, (current) => ({
+    return this._patch(lineId, (current) => ({
       ...current,
       content: changes.content ?? current.content,
       quantity: changes.quantity ?? current.quantity,
+      // Undefined leaves the set alone; an empty array clears it to free text.
+      itemIds:
+        changes.itemIds === undefined ? current.itemIds : [...changes.itemIds],
       ...(current.approvalStatus === 'REJECTED'
         ? {
             approvalStatus: 'PENDING' as LineApprovalStatus,
@@ -185,23 +215,159 @@ export class LineMemory implements LineServiceI {
           }
         : {}),
     }));
-
-    if (
-      shortfall > 0 &&
-      this._lists.listById(line.listId)?.autoApproveLines !== true
-    ) {
-      this._split(updated, shortfall, line.approvedByUserId);
-    }
-
-    return updated;
   }
 
-  /** Tick it off, put it back, or mark it as not in the shop. `DECIDE`. */
-  async setStatus(lineId: string, status: LineStatus): Promise<Line> {
+  /**
+   * Move the quantity by a signed delta. `DECIDE`.
+   *
+   * The reel's write. Applied to whatever the line currently holds rather than to a
+   * number the caller read a moment ago, which is the whole reason the route takes a
+   * delta: two adjustments in flight at once both land, where two absolute writes
+   * would have silently lost one.
+   */
+  async addQuantity(lineId: string, delta: number): Promise<Line> {
     const line = this._lineOrThrow(lineId);
     this._require(line.listId, 'DECIDE');
+
+    // Never zero, which the server refuses too. A gesture that ended where it
+    // started is not an adjustment to send.
+    if (delta === 0 || !Number.isInteger(delta)) {
+      throw memoryFailure('validation_failed', 400);
+    }
+
+    const next = line.quantity + delta;
+    if (next < LINE_QUANTITY_MIN || next > LINE_QUANTITY_MAX) {
+      throw memoryFailure('validation_failed', 400);
+    }
+
     this._maybeFail();
-    return this._patch(lineId, (current) => ({ ...current, status }));
+    return this._patch(lineId, (current) => ({
+      ...current,
+      quantity: current.quantity + delta,
+      version: current.version + 1,
+    }));
+  }
+
+  /**
+   * Say what happened to a line on a trip. `DECIDE`.
+   *
+   * Three properties worth reproducing faithfully, because every screen built on this
+   * fixture depends on them (backend plan 0047, section 4):
+   *
+   * - `BOUGHT` decrements by what was bought, **floored at zero**, and records what
+   *   was really bought even when that exceeds what was asked for.
+   * - `NOT_AVAILABLE` moves nothing and records a settlement of zero.
+   * - Nothing is terminal: a partial settle leaves the remainder wanted, and a second
+   *   settle finishes it.
+   */
+  async settle(
+    lineId: string,
+    outcome: SettlementOutcome,
+    options?: { quantity?: number; itemId?: string }
+  ): Promise<{ line: Line; settlement: LineSettlement }> {
+    const line = this._lineOrThrow(lineId);
+    this._require(line.listId, 'DECIDE');
+
+    if (outcome === 'NOT_AVAILABLE' && options?.quantity !== undefined) {
+      throw memoryFailure('validation_failed', 400);
+    }
+
+    const bought = outcome === 'BOUGHT' ? (options?.quantity ?? 1) : 0;
+    if (outcome === 'BOUGHT' && (bought < 1 || !Number.isInteger(bought))) {
+      throw memoryFailure('validation_failed', 400);
+    }
+
+    this._maybeFail();
+
+    const settlement: LineSettlement = {
+      id: newId(),
+      lineId,
+      listId: line.listId,
+      // The exact product, copied at settle time: the one named, or the line's only
+      // one, or none at all on a free text line.
+      itemId:
+        options?.itemId ??
+        (line.itemIds.length === 1 ? line.itemIds[0] : null),
+      outcome,
+      quantity: bought,
+      settledByUserId: this._lists.callerUserId(),
+      settledAt: new Date(),
+    };
+    this._settlements = [settlement, ...this._settlements];
+
+    const updated = this._patch(lineId, (current) => ({
+      ...current,
+      quantity:
+        outcome === 'BOUGHT'
+          ? Math.max(0, current.quantity - bought)
+          : current.quantity,
+      boughtCount: current.boughtCount + (outcome === 'BOUGHT' ? 1 : 0),
+      lastSettlementOutcome: outcome,
+      version: current.version + 1,
+    }));
+
+    return { line: updated, settlement };
+  }
+
+  /** One line's own history, newest first. `READ`, because it is a zone fact. */
+  async listSettlements(
+    lineId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<Page<LineSettlement>> {
+    const line = this._lineOrThrow(lineId);
+    this._require(line.listId, 'READ');
+    return this._pageOf(
+      this._settlements.filter((row) => row.lineId === lineId),
+      options
+    );
+  }
+
+  /**
+   * One product's history across every list this caller can read. `READ`.
+   *
+   * The access filter is the point of this read rather than a detail of it, so the
+   * fixture applies one: settlements on lists the caller cannot read are dropped,
+   * exactly as the server's `EXISTS` does it. A fixture that returned everything
+   * would make the one property worth testing here untestable.
+   */
+  async listItemSettlements(
+    itemId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<Page<LineSettlement>> {
+    const readable = this._settlements.filter(
+      (row) =>
+        row.itemId === itemId && this._permissionsFor(row.listId).includes('READ')
+    );
+    return this._pageOf(readable, options);
+  }
+
+  /**
+   * A page of settlements, newest first, cursored on the boundary row's own id.
+   *
+   * An id rather than a timestamp, for the reason the server's cursor is one: two
+   * settlements written in the same millisecond are separated by id, and a token
+   * carrying the time would repeat one of them or skip it.
+   */
+  private _pageOf(
+    rows: readonly LineSettlement[],
+    options?: { cursor?: string; limit?: number }
+  ): Page<LineSettlement> {
+    const sorted = [...rows].sort(
+      (a, b) => b.settledAt.getTime() - a.settledAt.getTime()
+    );
+    const from =
+      options?.cursor === undefined
+        ? 0
+        : sorted.findIndex((row) => row.id === options.cursor) + 1;
+    const limit = options?.limit ?? 20;
+    const page = sorted.slice(from, from + limit);
+    const last = page[page.length - 1];
+
+    return {
+      items: page,
+      nextCursor:
+        last !== undefined && from + limit < sorted.length ? last.id : null,
+    };
   }
 
   /** Approve, turn down, or put a turned down line back. `DECIDE`. */
@@ -328,49 +494,6 @@ export class LineMemory implements LineServiceI {
     }
 
     return line;
-  }
-
-  /**
-   * The remainder of a lowered approved quantity, written directly below the original.
-   *
-   * Its author is the **original line's** author and its approver is copied from it: the
-   * remainder is the unfilled part of that person's request, and attributing it to the
-   * shopper would put a line nobody asked for under the shopper's name (backend plan
-   * 0037, section 4.4).
-   *
-   * The position is the midpoint to the next line, or one past the original when it is
-   * last, so nothing else is renumbered and no concurrent reorder is invalidated. Two
-   * reductions leave two remainders and they are not merged: two trips found two
-   * shortfalls, and one row of four would say something that never happened.
-   */
-  private _split(
-    original: Line,
-    quantity: number,
-    approvedByUserId: string | null
-  ): void {
-    const lines = this._lines(original.listId);
-    const next = lines
-      .filter((line) => line.position > original.position)
-      .reduce<
-        number | null
-      >((lowest, line) => (lowest === null || line.position < lowest ? line.position : lowest), null);
-
-    const remainder: Line = {
-      id: newId(),
-      listId: original.listId,
-      content: original.content,
-      quantity,
-      itemId: original.itemId,
-      position:
-        next === null ? original.position + 1 : (original.position + next) / 2,
-      approvalStatus: 'APPROVED',
-      status: 'NOT_AVAILABLE',
-      createdByUserId: original.createdByUserId,
-      approvedByUserId,
-      version: 1,
-    };
-
-    this._write(original.listId, [...lines, remainder]);
   }
 
   private _maybeFail(): void {

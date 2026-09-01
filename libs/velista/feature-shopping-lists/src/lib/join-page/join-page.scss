@@ -1,0 +1,196 @@
+@use '../basket-shared' as shared;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.join {
+  @include shared.page;
+
+  justify-content: center;
+  gap: var(--app-space-3);
+  // Centred vertically, but never so far that the primary action falls below the
+  // fold on a small phone (section 7): the content is short enough that this
+  // stays a comfortable layout at 390 by 844 with the keyboard open.
+  max-inline-size: 26rem;
+  margin-inline: auto;
+  inline-size: 100%;
+}
+
+.brand {
+  margin: 0 0 var(--app-space-2);
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-lg);
+  color: var(--app-action-quiet-fg);
+  text-align: center;
+}
+
+.checking {
+  display: flex;
+  justify-content: center;
+  padding-block: var(--app-space-10);
+}
+
+.spinner {
+  @include shared.spinner;
+}
+
+.visually-hidden {
+  @include shared.visually-hidden;
+}
+
+// --- The offer --------------------------------------------------------------
+
+.offer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.invited {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.list-name {
+  margin: 0;
+  font-size: var(--app-text-2xl);
+  font-weight: 600;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  text-wrap: balance;
+}
+
+.people {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.name-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+// "Optional" sits **on the field**, beside its label, rather than in the hint
+// underneath (section 3). A hint is something you read after deciding the field
+// is required; this has to be visible in the same glance as the label.
+.name-optional {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.name-field {
+  @include shared.field;
+}
+
+.name-hint {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// The primary action of the page. Directly under the field, full width, and
+// nowhere near anything destructive, because there is nothing destructive here.
+.primary {
+  @include shared.primary-button;
+}
+
+.failed {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-status-danger-fg);
+}
+
+// Visibly secondary, and visibly *after*: register is offered because this is the
+// right moment to offer it, and it is never a step (section 3).
+.or {
+  margin: var(--app-space-5) 0 var(--app-space-2);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+  text-align: center;
+}
+
+.secondary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.secondary {
+  @include shared.secondary-button;
+}
+
+// Lowest of the four actions, and never a condition of anything (section 3.1).
+.install {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  margin-block-start: var(--app-space-6);
+  padding-block-start: var(--app-space-4);
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.install-copy {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.install-action {
+  @include shared.tap-target;
+
+  padding: var(--app-space-2) var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+// --- The dead link ----------------------------------------------------------
+
+// Says so plainly and offers nothing to try. It does not distinguish a link that
+// was revoked from one that never existed, because it cannot: they answer
+// identically, and that is the security property (backend 0051, section 3.1).
+.dead {
+  @include shared.card;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.dead-title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  text-wrap: balance;
+}
+
+.dead-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}

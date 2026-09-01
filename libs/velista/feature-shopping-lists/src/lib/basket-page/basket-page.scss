@@ -1,0 +1,189 @@
+@use '../basket-shared' as shared;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.page {
+  @include shared.page;
+
+  gap: var(--app-space-3);
+  padding-inline: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding-inline: var(--app-space-4);
+  padding-block-start: var(--app-safe-top);
+}
+
+.back,
+.share {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  font-size: var(--app-text-lg);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
+  }
+}
+
+.title {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-lg);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+// A row of faces and no sentence. The overflow collapses into a stacked chip,
+// which is the same "+X" pattern the price display uses.
+.faces {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding: 0 var(--app-space-1);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-avatar-sm);
+  block-size: var(--app-avatar-sm);
+  margin-inline-start: calc(var(--app-space-2) * -1);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  // A ring in the page's own background, so overlapping faces stay separable.
+  box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-surface-ground);
+  font-size: var(--app-text-2xs);
+  text-transform: uppercase;
+  color: var(--app-text-secondary);
+
+  &:first-child {
+    margin-inline-start: 0;
+  }
+}
+
+// A dashed ring marks a guest, never colour alone (section 7).
+.is-guest {
+  @include shared.guest-ring;
+}
+
+.is-overflow {
+  background: var(--app-status-neutral-bg);
+  color: var(--app-status-neutral-fg);
+  font-size: var(--app-text-2xs);
+}
+
+.progress {
+  margin: 0;
+  padding-inline: var(--app-space-4);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// Quieter than the count beside it: it is a fact about the trip rather than
+// progress through it, and it must not read as more of the same number.
+.progress-unavailable {
+  color: var(--app-action-quiet-fg);
+}
+
+.lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// --- The states -------------------------------------------------------------
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding-inline: var(--app-space-4);
+}
+
+.skeleton-row {
+  block-size: var(--app-line-row-height);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+}
+
+.notice {
+  @include shared.card;
+
+  margin-inline: var(--app-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.notice-title {
+  margin: 0;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+  text-wrap: balance;
+}
+
+.notice-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+.notice-action {
+  @include shared.secondary-button;
+
+  margin-block-start: var(--app-space-2);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding: var(--app-space-10) var(--app-space-4);
+  text-align: center;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+}
+
+.empty-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+}
+
+.visually-hidden {
+  @include shared.visually-hidden;
+}

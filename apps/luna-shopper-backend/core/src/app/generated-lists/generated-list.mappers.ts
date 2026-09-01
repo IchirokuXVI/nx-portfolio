@@ -1,6 +1,11 @@
 import type {
+  SettlementOutcome,
+  GeneratedListBasketLineView,
+  GeneratedListBasketView,
   GeneratedListLineOriginView,
   GeneratedListLineView,
+  GeneratedListParticipantView,
+  GeneratedListSourceName,
   GeneratedListSummaryView,
   GeneratedListView,
 } from '@portfolio/luna-shopper/contracts';
@@ -53,6 +58,96 @@ export function toGeneratedLineView(
     position: row.position,
     origins: children.origins.map(toOriginView),
   };
+}
+
+/**
+ * One line as a **participant** reads it (plan 0051, section 5).
+ *
+ * `seesZoneData` decides by **omission**, not by nulling: `origins`,
+ * `targetListId` and `origin` all name a zone or a list, so for a reader who does
+ * not pass section 5.2 they are absent from the object entirely. That is what
+ * makes the redaction hold even if a template somewhere forgets to hide a field,
+ * and it is why this is a separate mapper rather than a flag on
+ * {@link toGeneratedLineView}.
+ *
+ * The attribution is always present, for everybody. "Who got the bread" is the
+ * question in a shop where four people are working one list (velista `0044`,
+ * section 4.3), and a participant id names a person on this basket without
+ * naming anything outside it.
+ */
+export function toBasketLineView(
+  row: GeneratedListLine,
+  children: {
+    origins: GeneratedListLineOrigin[];
+    options: GeneratedListLineOption[];
+    /** What the newest settle on this line said, or null if there has been none. */
+    lastOutcome?: SettlementOutcome | null;
+  },
+  seesZoneData: boolean
+): GeneratedListBasketLineView {
+  const line: GeneratedListBasketLineView = {
+    id: row.id,
+    content: row.content,
+    quantity: row.quantity,
+    settledQuantity: row.settledQuantity,
+    itemId: row.itemId,
+    options: children.options.map((option) => option.itemId),
+    position: row.position,
+    lastEditedByParticipantId: row.lastEditedByParticipantId,
+    lastEditedAt: row.lastEditedAt?.toISOString() ?? null,
+    // Not derivable from the numbers: NOT_AVAILABLE closes the outstanding
+    // amount exactly as a purchase does, so a row without this would caption a
+    // shop that had none as somebody who bought it.
+    lastOutcome: children.lastOutcome ?? null,
+  };
+
+  if (!seesZoneData) {
+    return line;
+  }
+
+  return {
+    ...line,
+    origins: children.origins.map(toOriginView),
+    targetListId: row.targetListId,
+    origin: row.origin,
+  };
+}
+
+/**
+ * The basket, its people and the reader's own row, in one view (velista `0044`,
+ * section 4).
+ *
+ * One shape rather than three reads because the screen cannot draw a single row
+ * without all of it: a line's attribution is a participant id, so the people are
+ * this screen's vocabulary rather than a second screen's data.
+ */
+export function toBasketView(
+  row: GeneratedList,
+  lines: GeneratedListBasketLineView[],
+  people: {
+    participants: GeneratedListParticipantView[];
+    me: GeneratedListParticipantView;
+  },
+  seesZoneData: boolean,
+  sourceNames: GeneratedListSourceName[] = []
+): GeneratedListBasketView {
+  const view: GeneratedListBasketView = {
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    generatedAt: row.generatedAt.toISOString(),
+    lines,
+    participants: people.participants,
+    me: people.me,
+    seesZoneData,
+  };
+
+  // What the run drew from is a list of (zone, list) pairs, and the names behind
+  // them are the plainest zone data there is. Both go under the same rule as the
+  // line's three fields.
+  return seesZoneData
+    ? { ...view, sourceSnapshot: row.sourceSnapshot, sourceNames }
+    : view;
 }
 
 export function toGeneratedListView(

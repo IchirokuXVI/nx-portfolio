@@ -4,9 +4,11 @@ import {
   RealtimeEvent,
   SettlementOutcome,
   type GeneratedListAllocationEntry,
+  type GeneratedListLineMovedEvent,
   type GeneratedListSettleResult,
   type GeneratedListSettleSkip,
   type GeneratedListSettlementRef,
+  type LineSettlementSummary,
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -220,6 +222,21 @@ export class GeneratedListSettleService {
           // an argument precisely so a line with two products is never reported
           // as a free text line.
           itemIds: await this.zoneLineItemIds(manager, zoneLine.id),
+          // And the two indicators, for the same reason and with more force
+          // (plan 0047, section 5). This is the path a purchase normally takes,
+          // so announcing the zero summary here would take the bought indicator
+          // off the household's line at the exact moment somebody bought it.
+          //
+          // Counted inside the transaction, after the insert, so it includes the
+          // row just written; the most recent outcome needs no query, being that
+          // row by construction. One settlement per zone line per call, because
+          // each origin is settled once.
+          settlementSummary: {
+            boughtCount: await settlements.count({
+              where: { lineId: zoneLine.id, outcome: SettlementOutcome.BOUGHT },
+            }),
+            lastOutcome: req.outcome,
+          },
         });
       }
 
@@ -249,22 +266,74 @@ export class GeneratedListSettleService {
         RealtimeEvent.LineSettled,
         announcement.zoneId,
         {
-          line: toLineView(announcement.line, announcement.itemIds),
+          line: toLineView(
+            announcement.line,
+            announcement.itemIds,
+            announcement.settlementSummary
+          ),
           settlement: toLineSettlementView(announcement.settlement),
         },
         announcement.listId
       );
     }
 
-    const view = await this.generated.lineViewFor(line);
+    // Section 5.2, on the way out as well as on the way in. This route is on the
+    // participant surface, so a guest reaches it, and every field of a
+    // settlement ref, of a skip and of a line's origins names a zone or a list.
+    const seesZoneData = await this.seesZoneData(req.participantId, list.id);
+
     // The basket's own room, so four people working through one list in a shop
-    // agree without a refetch (section 10).
+    // agree without a refetch (section 10). Redacted to the least privileged
+    // reader in the room, because a broadcast cannot be projected per socket,
+    // and carrying no settlements at all: those are the acting participant's own
+    // feedback and belong in their response, not in a broadcast to the shop.
+    const announcement: GeneratedListLineMovedEvent = {
+      generatedListId: list.id,
+      line: await this.generated.basketLineViewFor(line, false),
+    };
     this.events.emitToGeneratedList(
       RealtimeEvent.GeneratedListLineSettled,
       list.id,
-      { line: view, settlements: written, skipped }
+      announcement
     );
-    return { line: view, settlements: written, skipped };
+    // And the owner's own sessions, which is a different audience and not a
+    // duplicate of the room: the owner is usually **not** in the basket's room.
+    // They are at home looking at the dashboard while somebody else shops, and
+    // velista 0045's card counts settled lines, so without this it is stale until
+    // they open the basket. An owner who happens to be in both hears it twice,
+    // which costs nothing: the client merges one line by id, idempotently.
+    this.events.emitToUsers(
+      RealtimeEvent.GeneratedListLineSettled,
+      [list.ownerUserId],
+      announcement
+    );
+
+    const view = await this.generated.basketLineViewFor(line, seesZoneData);
+    // The count survives the redaction and the names do not (section 6.4): a
+    // shopper who reached two households out of three has to be told, and only
+    // whose the third was is gated.
+    return seesZoneData
+      ? { line: view, skippedCount: skipped.length, settlements: written, skipped }
+      : { line: view, skippedCount: skipped.length };
+  }
+
+  /**
+   * Whether this actor may be told which lists their settle touched.
+   *
+   * Asked of core's own access tables at request time (section 5.2), never taken
+   * from the request: the gateway computes the same value for its own guard, but
+   * a value that travelled through a message is a value a future caller could
+   * send.
+   */
+  private async seesZoneData(
+    participantId: string,
+    generatedListId: string
+  ): Promise<boolean> {
+    const participant = await this.sharing.liveParticipantById(
+      participantId,
+      generatedListId
+    );
+    return participant ? await this.sharing.seesZoneData(participant) : false;
   }
 
   /** A zone line's product set, in attachment order (plan 0048, section 1.1). */
@@ -388,6 +457,16 @@ interface ZoneAnnouncement {
   line: ListLine;
   settlement: LineSettlement;
   itemIds: string[];
+  /**
+   * The zone line's two indicators as this settle leaves them (plan 0047,
+   * section 5).
+   *
+   * Captured inside the transaction rather than recomputed out here, for the
+   * same reason `itemIds` is: the announcement carries a whole `LineView` and a
+   * client reconciles off it, so a summary read after the commit would be a
+   * second query answering a question this loop already knew.
+   */
+  settlementSummary: LineSettlementSummary;
 }
 
 /**

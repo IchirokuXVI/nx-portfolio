@@ -27,18 +27,10 @@
   }
 }
 
-// The primary action and the line it shows when tapped, stacked, so the answer sits
-// under the button instead of competing with it in the row. The gap is inside the
-// column, so the row's height is the button's until there is something to say.
-.primary-slot {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--app-space-2);
-}
-
+// The wrapping column that used to hold the button and a **Coming soon** line beneath
+// it is gone with the line (plan 0045). The button takes the row's spare width itself.
 .primary {
+  flex: 1;
   border: none;
   background: var(--app-action-bg);
   color: var(--app-action-fg);
@@ -52,12 +44,6 @@
   &:active {
     background: var(--app-action-bg-pressed);
   }
-}
-
-.soon {
-  text-align: center;
-  font-size: var(--app-text-xs);
-  color: var(--app-text-secondary);
 }
 
 .secondary {

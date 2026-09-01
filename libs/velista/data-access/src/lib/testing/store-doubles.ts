@@ -1,10 +1,11 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
   Comment,
+  GeneratedListSummary,
   Identity,
   Line,
   LineApprovalStatus,
-  LineStatus,
+  LineSettlement,
   Membership,
   MembershipStatus,
   MyZone,
@@ -12,6 +13,8 @@ import type {
   PresenceUser,
   ProfileLoad,
   SessionTokens,
+  SettlementOutcome,
+  ShoppingListsLoad,
   ShoppingListSummary,
   ShoppingProfile,
   Supermarket,
@@ -29,6 +32,7 @@ import {
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
+import { GeneratedListStore } from '../generated-lists/generated-list-store';
 import { LineStore, type LineLoadState } from '../lines/line-store';
 import { ListStore, type ListLoadState } from '../lists/list-store';
 import { MemberNames } from '../memberships/member-names';
@@ -564,7 +568,7 @@ export function fakeListStore(options: FakeListStateOptions = {}) {
         name,
         createdByUserId: 'u1',
         lineCount: 0,
-        readyCount: 0,
+        wantedCount: 0,
         autoApproveLines: false,
         sharedWithZone: shareWithZone,
         // All four, because the person who just created a list holds all four on it
@@ -600,6 +604,17 @@ export interface FakeLineStateOptions {
   readonly complete?: boolean;
   /** What the next write answers, so a spec can drive the failure paths. */
   readonly writeOutcome?: 'succeeded' | 'failed' | 'overwritten';
+  /**
+   * Seeded histories, keyed by line id.
+   *
+   * A record rather than a map because a spec writes it as a literal, and **absent
+   * means unread** rather than empty, which is the distinction the sheet draws a
+   * skeleton from.
+   */
+  readonly settlements?: Readonly<Record<string, readonly LineSettlement[]>>;
+  readonly itemSettlements?: Readonly<Record<string, readonly LineSettlement[]>>;
+  /** Seeded claims, keyed by line id, valued by the user id doing the buying. */
+  readonly claims?: Readonly<Record<string, string>>;
 }
 
 /** One write a page asked for, so a spec can assert what was sent and in what order. */
@@ -608,11 +623,35 @@ export type LineWriteCall =
       readonly kind: 'add';
       readonly content: string;
       readonly quantity: number;
+      /**
+       * The products the composer attached, or undefined for a free text line.
+       *
+       * Recorded because "choosing a group attaches all of its products" is an
+       * acceptance criterion in its own right (velista plan 0043, section 8), and
+       * the only place it can be observed is the arguments of this call.
+       */
+      readonly itemIds?: readonly string[];
     }
+  /**
+   * A quantity adjustment, as the **delta** that was sent.
+   *
+   * The delta rather than the resulting number, because that is what the page is
+   * responsible for computing and therefore the thing worth asserting: a reel that
+   * sent two increments where it should have sent one settled adjustment is a defect
+   * a recorded end state would hide (velista plan 0043, section 4.1).
+   */
   | {
-      readonly kind: 'status';
+      readonly kind: 'quantity';
       readonly lineId: string;
-      readonly status: LineStatus;
+      readonly delta: number;
+    }
+  /** A settle, with what it claimed happened. */
+  | {
+      readonly kind: 'settle';
+      readonly lineId: string;
+      readonly outcome: SettlementOutcome;
+      readonly quantity?: number;
+      readonly itemId?: string;
     }
   | {
       readonly kind: 'approval';
@@ -653,6 +692,18 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   const commentCounts = signal<ReadonlyMap<string, number>>(new Map());
   /** Newest first, the wire's order, which is the order the real store keeps. */
   const comments = signal<ReadonlyMap<string, readonly Comment[]>>(new Map());
+  /** One line's own history, for the sheet and the page that draw it. */
+  const settlements = signal<ReadonlyMap<string, readonly LineSettlement[]>>(
+    new Map(Object.entries(options.settlements ?? {}))
+  );
+  /** The cross list history, keyed by line as the real store keys it. */
+  const itemSettlements = signal<
+    ReadonlyMap<string, readonly LineSettlement[]>
+  >(new Map(Object.entries(options.itemSettlements ?? {})));
+  /** Who is out buying what, which arrives on a zone event and never on a read. */
+  const claims = signal<ReadonlyMap<string, string>>(
+    new Map(Object.entries(options.claims ?? {}))
+  );
   const loads = signal(0);
 
   const calls: LineWriteCall[] = [];
@@ -679,6 +730,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         complete: complete(),
         writes: writes(),
         commentCounts: commentCounts(),
+        claims: claims(),
       })),
 
     load: async () => {
@@ -692,9 +744,11 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       listId: string,
       content: string,
       quantity: number,
-      createdByUserId: string
+      createdByUserId: string,
+      _approval: unknown,
+      itemIds?: readonly string[]
     ) => {
-      calls.push({ kind: 'add', content, quantity });
+      calls.push({ kind: 'add', content, quantity, itemIds });
 
       if (outcome === 'failed') {
         return { state: 'failed' as const, error: new Error('add failed') };
@@ -705,10 +759,11 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         listId,
         content,
         quantity,
-        itemId: null,
+        itemIds: [...(itemIds ?? [])],
         position: lines().length + 1,
         approvalStatus: addedApproval,
-        status: 'PENDING',
+        boughtCount: 0,
+        lastSettlementOutcome: null,
         createdByUserId,
         approvedByUserId: null,
         version: 1,
@@ -722,15 +777,75 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       return outcome;
     },
 
-    setStatus: async (lineId: string, status: LineStatus) => {
-      calls.push({ kind: 'status', lineId, status });
+    addQuantity: async (lineId: string, delta: number) => {
+      calls.push({ kind: 'quantity', lineId, delta });
       if (outcome === 'succeeded') {
         lines.update((current) =>
-          current.map((l) => (l.id === lineId ? { ...l, status } : l))
+          current.map((l) =>
+            l.id === lineId
+              ? { ...l, quantity: Math.max(0, l.quantity + delta) }
+              : l
+          )
         );
       }
       return outcome;
     },
+
+    settle: async (
+      lineId: string,
+      settleOutcome: SettlementOutcome,
+      settleOptions?: { quantity?: number; itemId?: string }
+    ) => {
+      calls.push({
+        kind: 'settle',
+        lineId,
+        outcome: settleOutcome,
+        ...settleOptions,
+      });
+      if (outcome === 'failed') {
+        return { state: 'failed' as const, error: new Error('settle failed') };
+      }
+
+      const bought =
+        settleOutcome === 'BOUGHT' ? (settleOptions?.quantity ?? 1) : 0;
+      let settled: Line | null = null;
+      lines.update((current) =>
+        current.map((l) => {
+          if (l.id !== lineId) {
+            return l;
+          }
+          settled = {
+            ...l,
+            quantity: Math.max(0, l.quantity - bought),
+            boughtCount: l.boughtCount + (settleOutcome === 'BOUGHT' ? 1 : 0),
+            lastSettlementOutcome: settleOutcome,
+          };
+          return settled;
+        })
+      );
+      return settled === null
+        ? { state: 'failed' as const, error: new Error('no such line') }
+        : { state: 'settled' as const, line: settled };
+    },
+
+    loadSettlements: async () => undefined,
+    loadItemSettlements: async () => undefined,
+    settlementsOf: (lineId: string) => settlements().get(lineId),
+    itemSettlementsOf: (lineId: string) => itemSettlements().get(lineId),
+    claimOf: (lineId: string) => claims().get(lineId) ?? null,
+    claims: () => claims(),
+    setClaim: (lineId: string, claimedByUserId: string | null) => {
+      claims.update((current) => {
+        const next = new Map(current);
+        if (claimedByUserId === null) {
+          next.delete(lineId);
+        } else {
+          next.set(lineId, claimedByUserId);
+        }
+        return next;
+      });
+    },
+    recordSettlement: () => undefined,
 
     setApproval: async (lineId: string, status: LineApprovalStatus) => {
       calls.push({ kind: 'approval', lineId, status });
@@ -1433,4 +1548,74 @@ export function provideFakeShoppingProfileStore(
   store: FakeShoppingProfileStore = fakeShoppingProfileStore()
 ): Provider {
   return { provide: ShoppingProfileStore, useValue: store };
+}
+
+/**
+ * A `GeneratedListStore` holding a fixed listing (plan 0045).
+ *
+ * A double rather than the real store over a fake service, for `fakeZoneStore`'s
+ * reason: a page spec wants to state "there is one active basket" as a fact about the
+ * world, not to drive a request and wait for it. The real store's own behaviour, which
+ * is the paging, the merge on a further page and the realtime upsert, is covered
+ * against the real thing in its own spec.
+ */
+export function fakeGeneratedListStore(
+  initial: readonly GeneratedListSummary[] = [],
+  options: {
+    state?: ShoppingListsLoad;
+    error?: unknown;
+    hasMore?: boolean;
+  } = {}
+) {
+  const lists = signal<readonly GeneratedListSummary[]>(initial);
+  const state = signal<ShoppingListsLoad>(options.state ?? 'loaded');
+  const error = signal<unknown>(options.error ?? null);
+  const loadingMore = signal(false);
+  const hasMore = signal(options.hasMore ?? false);
+
+  /** What the page asked for, so a spec can assert the read happened at all. */
+  const calls: string[] = [];
+
+  return {
+    lists: lists.asReadonly(),
+    state: state.asReadonly(),
+    error: error.asReadonly(),
+    loadingMore: loadingMore.asReadonly(),
+    hasMore: hasMore.asReadonly(),
+    active: computed(() => lists().filter((list) => list.status === 'ACTIVE')),
+
+    load: async () => {
+      calls.push('load');
+    },
+    reload: async () => {
+      calls.push('reload');
+    },
+    loadMore: async () => {
+      calls.push('loadMore');
+    },
+    create: async () => {
+      calls.push('create');
+      throw new Error('fakeGeneratedListStore.create is not configured');
+    },
+
+    calls: calls as readonly string[],
+
+    /** Move the store while a fixture is mounted, to test a live update. */
+    set: (next: readonly GeneratedListSummary[]) => lists.set(next),
+    setState: (next: ShoppingListsLoad, cause: unknown = null) => {
+      state.set(next);
+      error.set(cause);
+    },
+    setLoadingMore: (next: boolean) => loadingMore.set(next),
+    setHasMore: (next: boolean) => hasMore.set(next),
+  };
+}
+
+export type FakeGeneratedListStore = ReturnType<typeof fakeGeneratedListStore>;
+
+/** {@link fakeGeneratedListStore} bound to the real token. */
+export function provideFakeGeneratedListStore(
+  store: FakeGeneratedListStore = fakeGeneratedListStore()
+): Provider {
+  return { provide: GeneratedListStore, useValue: store };
 }

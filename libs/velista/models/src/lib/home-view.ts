@@ -1,4 +1,5 @@
-import type { LineStatus, MembershipStatus, ZoneRole } from './enums';
+import type { MembershipStatus, ZoneRole } from './enums';
+import type { ShoppingListCardVm } from './shopping-lists-view';
 
 /**
  * The view models the home page hands to its components.
@@ -15,13 +16,13 @@ import type { LineStatus, MembershipStatus, ZoneRole } from './enums';
  * version that survives the counts landing.
  */
 
-/** One list row inside a zone card, and inside the resume card. */
+/** One list row inside a zone card. */
 export interface ListRowVm {
   readonly id: string;
   readonly name: string;
   /** Absent until the backend serves counts. Render the row without it. */
   readonly lineCount?: number;
-  readonly readyCount?: number;
+  readonly wantedCount?: number;
   /**
    * Who is shopping from this list right now, named and without the reader.
    *
@@ -83,30 +84,49 @@ export interface ZoneCardVm {
   readonly waitingOn?: string;
 }
 
-/** The resume card: the fastest path back into the list someone was using. */
-export interface ResumeListVm {
-  readonly listId: string;
-  /**
-   * The zone the list is in, because the list page is `zones/:zoneId/lists/:listId`.
-   *
-   * There is no `GET /v1/lists/:id`, so an id on its own resolves nothing: not the
-   * name, not the zone, not the caller's role in it. Rule L1 puts the zone in the URL
-   * and this card is one of the places that has to supply it (plan 0012, section 4.1).
-   */
-  readonly zoneId: string;
-  readonly listName: string;
-  readonly zoneName: string;
-  readonly lineCount?: number;
-  readonly readyCount?: number;
-  /** Who is in that list right now. Advisory only (plan 0004, section 6.7). */
-  readonly shoppers: readonly string[];
-}
+/**
+ * `ResumeListVm` used to be here, and its removal is plan 0045's, not a tidy up.
+ *
+ * The resume card answered "what was I doing" from a list id **this device** happened
+ * to remember, which meant it had to be talked out of showing a list the reader had
+ * been removed from, one written by a build that stored a different shape, or one they
+ * merely glanced at once. `ShoppingListCardVm` in `shopping-lists-view.ts` answers the
+ * same question from the server: an `ACTIVE` generated list exists for this account or
+ * it does not, so there is no stale case left to defend against.
+ *
+ * The **write** of `StorageKeys.lastList` survives, because the list page still records
+ * it and removing that is a separate decision about a shipped screen. Nothing reads it.
+ */
 
-/** One line in the illustrative preview on the anonymous screen. */
+/**
+ * One line in the illustrative preview on the anonymous screen.
+ *
+ * It **advertised a checkbox** until velista plan 0043: a `LineStatus` per line, drawn
+ * as a tick, a circle or a cross. The product has no ticks any more, so a front door
+ * showing them would be a picture of a different app, and the first thing a visitor
+ * did after signing up would be to look for a control that does not exist.
+ *
+ * What it shows instead is what the product actually is: a quantity per line, one of
+ * them at zero because it has been bought, and one the shop did not have.
+ */
 export interface PreviewLineVm {
   readonly content: string;
+  /**
+   * The number, as a **string**, because this is decoration rather than data.
+   *
+   * It stays a string so the card can show "0" and "2" without anything downstream
+   * treating them as a quantity it could add to.
+   */
   readonly quantity: string;
-  readonly status: LineStatus;
+  /**
+   * What to draw beside it, or null for an ordinary wanted line.
+   *
+   * The same two words the real row uses, so the picture and the product agree. The
+   * third indicator, somebody out buying it, is deliberately absent: it is a live fact
+   * about a real basket and an invented one would be the only thing on this card
+   * pretending to be current.
+   */
+  readonly indicator: 'bought' | 'notAvailable' | null;
   /** The initial in the little avatar, or null for a line nobody has touched. */
   readonly by: string | null;
 }
@@ -133,7 +153,15 @@ export type HomeState =
   | { readonly kind: 'empty'; readonly guest: boolean }
   | {
       readonly kind: 'populated';
-      readonly resume: ResumeListVm | null;
+      /**
+       * The basket being shopped now, or null when there is no `ACTIVE` one.
+       *
+       * Null draws **nothing at all**: no header, no empty card, no gap (plan 0045,
+       * section 3.1). A person who has never generated a list is not shown a slot
+       * where one would go, because the bottom bar's primary action already says the
+       * feature exists and an empty card would say it twice.
+       */
+      readonly shoppingList: ShoppingListCardVm | null;
       readonly zones: readonly ZoneCardVm[];
       readonly guest: boolean;
     }

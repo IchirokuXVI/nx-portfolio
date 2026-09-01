@@ -121,8 +121,19 @@
           />
         }
 
-        @if (page.resume; as resume) {
-          <lib-resume-list-card (open)="openList($event)" [list]="resume" />
+        <!--
+          The basket being shopped now (plan 0045). Absent entirely when there is no
+          `ACTIVE` one: no header, no empty card, no gap, because the bottom bar's
+          primary action already says the feature is there.
+        -->
+        @if (page.shoppingList; as shoppingList) {
+          <lib-shopping-list-card
+            (open)="openShoppingList($event)"
+            (openHistory)="openShoppingLists()"
+            [generatedOn]="generatedOn(shoppingList.generatedAt)"
+            [generatedToday]="generatedToday(shoppingList.generatedAt)"
+            [list]="shoppingList"
+          />
         }
 
         <section class="zones">
@@ -144,7 +155,10 @@
         </section>
       </div>
 
-      <lib-bottom-action-bar (joinZone)="joinZone()" />
+      <lib-bottom-action-bar
+        (getList)="getShoppingList()"
+        (joinZone)="joinZone()"
+      />
     }
   }
 </div>

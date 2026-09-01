@@ -230,6 +230,44 @@ $app-content-max: 480px;
   // itself per row would shift under the finger between one row and the next.
   --app-menu-min-width: 200px;
 
+  // ------------------------------------------------- The quantity, and its reel
+  //
+  // Velista plan 0043. The quantity stopped being an annotation on a line and became
+  // the thing the line says, so it gets geometry of its own rather than borrowing a
+  // chip's.
+  //
+  // The pill is sized for a thumb rather than for its digits: it is the resting state
+  // of a control whose target is the row's full height, and it has to stay the same
+  // width from "0" to "12" or a column of them ripples as the numbers move.
+  --app-quantity-width: 52px;
+  --app-quantity-height: 40px;
+  // Narrower inside a preview row, which is 38px tall and is a picture rather than a
+  // control.
+  --app-preview-quantity-width: 34px;
+
+  // **The one number that decides how the reel feels.** It is positional, one to one
+  // with the finger, so this is the distance a thumb travels per unit. 40px leaves
+  // roughly seven units in the ~280px of comfortable travel on a 390px phone, which
+  // is what makes two to five a single gesture rather than three.
+  //
+  // It is duplicated in `@portfolio/velista/models` as `QUANTITY_REEL_PX_PER_UNIT`,
+  // which is the copy the gesture arithmetic reads; this one only draws the tape.
+  // They have to agree, and the component asserts nothing about it: a drift shows up
+  // as a reel whose highlighted number is not the one under the thumb.
+  --app-reel-unit: 40px;
+  --app-reel-height: 56px;
+  --app-reel-radius: 14px;
+  // Each number in the overlay keeps this width whether or not it has anything in it,
+  // so the current number does not slide sideways as the reel reaches zero and the
+  // neighbour to its left disappears.
+  --app-reel-digit-width: 28px;
+
+  // How tall the composer's suggestion list may grow before it scrolls (plan 0043,
+  // section 6). Four rows and a bit: enough to show that there is more without the
+  // dropdown becoming the page and pushing the field somebody is typing into off the
+  // top of the screen.
+  --app-suggestions-max-height: 240px;
+
   // The progress bar on the resume card.
   --app-progress-height: 6px;
 

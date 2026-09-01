@@ -120,6 +120,18 @@ $app-status-line: 26%;
   --app-action-fg: var(--app-ink-950);
   --app-action-quiet-fg: var(--app-amber-500);
 
+  // The accent as a **surface** rather than as text (velista plan 0043, section 6).
+  // The composer's group suggestion is tinted with it, because a group is the answer
+  // most people want and it has to be the row that stands out.
+  //
+  // Built from `--app-amber-500-rgb` at the same two strengths the status fills use,
+  // so an accent tint and a status tint carry the same visual weight and nobody has
+  // to guess a third opacity. It is identical in both themes: the fill is faint
+  // enough that the ground under it does the adapting, exactly as the action fill
+  // above is the same in both.
+  --app-action-quiet-bg: rgb(var(--app-amber-500-rgb) / #{$app-status-fill});
+  --app-action-quiet-border: rgb(var(--app-amber-500-rgb) / #{$app-status-line});
+
   // Depth on a dark ground is a lighter surface, not a shadow: a shadow over near
   // black is invisible. The surface ramp does most of that work already, so what
   // is left for these tokens is the top edge highlight that separates a raised
@@ -201,6 +213,18 @@ $app-status-line: 26%;
   --app-action-bg-pressed: var(--app-amber-600);
   --app-action-fg: var(--app-ink-950);
   --app-action-quiet-fg: var(--app-amber-800);
+
+  // The accent as a **surface** rather than as text (velista plan 0043, section 6).
+  // The composer's group suggestion is tinted with it, because a group is the answer
+  // most people want and it has to be the row that stands out.
+  //
+  // Built from `--app-amber-500-rgb` at the same two strengths the status fills use,
+  // so an accent tint and a status tint carry the same visual weight and nobody has
+  // to guess a third opacity. It is identical in both themes: the fill is faint
+  // enough that the ground under it does the adapting, exactly as the action fill
+  // above is the same in both.
+  --app-action-quiet-bg: rgb(var(--app-amber-500-rgb) / #{$app-status-fill});
+  --app-action-quiet-border: rgb(var(--app-amber-500-rgb) / #{$app-status-line});
 
   --app-elevation-1:
     0 1px 2px rgb(var(--app-ink-900-rgb) / 4%),

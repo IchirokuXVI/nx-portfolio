@@ -1,0 +1,126 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+// The bar and the footer are fixed in the column and only the middle scrolls, so the
+// title stays put and the action stays under the thumb while a long history moves.
+.page {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-block-size: 0;
+  background: var(--app-surface-base);
+}
+
+.bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: var(--app-space-3) var(--app-space-2) 0;
+}
+
+.back {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  border: none;
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.content {
+  flex: 1;
+  min-block-size: 0;
+  padding: var(--app-space-4) var(--app-space-5) 0;
+}
+
+.scroller {
+  overflow-y: auto;
+  // Momentum scrolling on iOS, and it also stops the page behind a bottom sheet from
+  // scrolling with it.
+  overscroll-behavior: contain;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding-block-end: var(--app-space-4);
+}
+
+.footer {
+  flex: none;
+  padding: var(--app-space-3) var(--app-space-5)
+    calc(var(--app-space-6) + env(safe-area-inset-bottom));
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.primary {
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-3);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:active {
+    background: var(--app-action-bg-pressed);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// Visually hidden, and never `display: none`: a region that is not rendered is not
+// announced.
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

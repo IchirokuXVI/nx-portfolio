@@ -1,0 +1,269 @@
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { provideRouter, Router } from '@angular/router';
+import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import {
+  fakeGeneratedListStore,
+  GatewayError,
+  provideFakeGeneratedListStore,
+  type FakeGeneratedListStore,
+} from '@portfolio/velista/data-access';
+import type { GeneratedListSummary } from '@portfolio/velista/models';
+import {
+  provideFakeBrowserFacade,
+  provideVelistaTesting,
+} from '@portfolio/velista/platform';
+import { ErrorState } from '@portfolio/velista/ui';
+import { ShoppingListsPage } from './shopping-lists-page';
+
+/**
+ * The history (plan 0045, section 3.3).
+ *
+ * The page is given a store **already** in the state under test rather than a data
+ * layer wired up to arrive there, which is what makes every test below a page test: it
+ * changes one thing about the world and asserts on the DOM.
+ */
+
+function basket(overrides: Partial<GeneratedListSummary> = {}) {
+  return {
+    id: 'gl1',
+    name: 'Saturday big shop',
+    status: 'ACTIVE',
+    generatedAt: new Date('2026-08-21T10:00:00.000Z'),
+    lineCount: 12,
+    settledLineCount: 4,
+    ...overrides,
+  } as GeneratedListSummary;
+}
+
+async function render(
+  store: FakeGeneratedListStore = fakeGeneratedListStore()
+): Promise<ComponentFixture<ShoppingListsPage>> {
+  TestBed.resetTestingModule();
+
+  await TestBed.configureTestingModule({
+    imports: [ShoppingListsPage, RokuTranslatorTestingModule.forTesting()],
+    providers: [
+      provideRouter([]),
+      provideVelistaTesting(),
+      provideFakeBrowserFacade(),
+      provideFakeGeneratedListStore(store),
+    ],
+  }).compileComponents();
+
+  const fixture = TestBed.createComponent(ShoppingListsPage);
+  fixture.detectChanges();
+  return fixture;
+}
+
+const text = (fixture: ComponentFixture<ShoppingListsPage>) =>
+  (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+const query = (
+  fixture: ComponentFixture<ShoppingListsPage>,
+  selector: string
+) => (fixture.nativeElement as HTMLElement).querySelector(selector);
+
+const all = (fixture: ComponentFixture<ShoppingListsPage>, selector: string) =>
+  (fixture.nativeElement as HTMLElement).querySelectorAll(selector);
+
+describe('ShoppingListsPage', () => {
+  describe('the states', () => {
+    it('shows skeleton rows while the listing is on its way', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([], { state: 'loading' })
+      );
+
+      expect(query(fixture, 'lib-row-skeleton')).not.toBeNull();
+      expect(query(fixture, 'lib-shopping-list-row')).toBeNull();
+    });
+
+    // Idle counts as loading: the page's constructor starts the read, so idle is the
+    // instant before it happens and drawing the empty state there would flash "no
+    // shopping lists yet" at somebody who has a hundred.
+    it('treats idle as loading rather than as empty', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([], { state: 'idle' })
+      );
+
+      expect(query(fixture, 'lib-row-skeleton')).not.toBeNull();
+      expect(text(fixture)).not.toContain('history.empty.title');
+    });
+
+    it('offers one sentence and one action when there is nothing yet', async () => {
+      const fixture = await render();
+
+      expect(text(fixture)).toContain('history.empty.title');
+      expect(query(fixture, 'lib-empty-state')).not.toBeNull();
+      // The only thing that can put anything on this page.
+      expect(text(fixture)).toContain('getList.title');
+    });
+
+    it('offers a retry with the support reference when the read failed', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([], {
+          state: 'failed',
+          error: new GatewayError({
+            code: 'internal',
+            status: 500,
+            correlationId: 'ref-9',
+          }),
+        })
+      );
+
+      // Read off the panel's input rather than out of the DOM: the testing translator
+      // returns the key without interpolating it, so the reference never reaches the
+      // rendered sentence whatever the container computed. The input is the boundary
+      // that matters, and the panel's own rendering is tested where it lives.
+      expect(
+        fixture.debugElement
+          .query(By.directive(ErrorState))
+          ?.componentInstance.correlationId()
+      ).toBe('ref-9');
+    });
+
+    it('asks the store for the listing when it is created', async () => {
+      const store = fakeGeneratedListStore();
+
+      await render(store);
+
+      expect(store.calls).toContain('load');
+    });
+  });
+
+  describe('the rows', () => {
+    it('draws one per trip, in the order the listing gave them', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([
+          basket({ id: 'a', name: 'Newest' }),
+          basket({ id: 'b', name: 'Older', status: 'COMPLETED' }),
+        ])
+      );
+
+      const rows = all(fixture, 'lib-shopping-list-row');
+      expect(rows).toHaveLength(2);
+      expect(rows[0]?.textContent).toContain('Newest');
+      expect(rows[1]?.textContent).toContain('Older');
+    });
+
+    // Never colour alone (section 7): the word is what says it.
+    it('marks an active trip with the word, not only a colour', async () => {
+      const fixture = await render(fakeGeneratedListStore([basket()]));
+
+      expect(text(fixture)).toContain('history.status.active');
+    });
+
+    it('says nothing about being shopped now on a finished trip', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([basket({ status: 'COMPLETED' })])
+      );
+
+      expect(text(fixture)).not.toContain('history.status.active');
+    });
+
+    it('titles an unnamed trip with its date rather than leaving it blank', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([basket({ name: null })])
+      );
+
+      const row = query(fixture, 'lib-shopping-list-row');
+      expect(row?.textContent?.trim()).not.toBe('');
+      expect(row?.textContent).not.toContain('gl1');
+    });
+  });
+
+  /**
+   * Backend `0050` section 7 keeps deletion in the API and no screen offers it. A
+   * history that cannot lose entries is the point of keeping one, so this is asserted
+   * rather than merely not implemented: a swipe action added later would otherwise
+   * arrive silently.
+   */
+  describe('what it refuses to offer', () => {
+    it('gives no way to delete or archive anything', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([basket(), basket({ id: 'b' })])
+      );
+
+      const html = (fixture.nativeElement as HTMLElement).innerHTML;
+      expect(html).not.toContain('delete');
+      expect(html).not.toContain('archive');
+      expect(query(fixture, 'lib-trash-icon')).toBeNull();
+    });
+
+    it('gives each row exactly one control, which is opening it', async () => {
+      const fixture = await render(fakeGeneratedListStore([basket()]));
+
+      const row = query(fixture, 'lib-shopping-list-row');
+      expect(row?.querySelectorAll('button')).toHaveLength(1);
+    });
+  });
+
+  describe('paging', () => {
+    it('draws a skeleton at the bottom while a further page is on its way', async () => {
+      const store = fakeGeneratedListStore([basket()]);
+      store.setLoadingMore(true);
+      const fixture = await render(store);
+
+      expect(query(fixture, 'lib-row-skeleton')).not.toBeNull();
+      // And the rows it already has are still there, rather than being replaced.
+      expect(query(fixture, 'lib-shopping-list-row')).not.toBeNull();
+    });
+
+    it('asks for the next page when the scroller nears the bottom', async () => {
+      const store = fakeGeneratedListStore([basket()], { hasMore: true });
+      const fixture = await render(store);
+
+      const scroller = query(fixture, '.scroller') as HTMLElement;
+      Object.defineProperty(scroller, 'scrollHeight', { value: 1000 });
+      Object.defineProperty(scroller, 'clientHeight', { value: 800 });
+      Object.defineProperty(scroller, 'scrollTop', {
+        value: 190,
+        writable: true,
+      });
+      scroller.dispatchEvent(new Event('scroll'));
+
+      expect(store.calls).toContain('loadMore');
+    });
+
+    it('leaves it alone while there is still a screenful to read', async () => {
+      const store = fakeGeneratedListStore([basket()], { hasMore: true });
+      const fixture = await render(store);
+
+      const scroller = query(fixture, '.scroller') as HTMLElement;
+      Object.defineProperty(scroller, 'scrollHeight', { value: 1000 });
+      Object.defineProperty(scroller, 'clientHeight', { value: 300 });
+      Object.defineProperty(scroller, 'scrollTop', {
+        value: 0,
+        writable: true,
+      });
+      scroller.dispatchEvent(new Event('scroll'));
+
+      expect(store.calls).not.toContain('loadMore');
+    });
+  });
+
+  describe('where it goes', () => {
+    it('opens the basket a row names', async () => {
+      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const router = TestBed.inject(Router);
+      const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+
+      (query(fixture, 'lib-shopping-list-row button') as HTMLElement).click();
+
+      expect(navigate).toHaveBeenCalledWith(
+        ['..', 'shopping-lists', 'gl1'],
+        expect.anything()
+      );
+    });
+
+    it('announces how many rows there are, once, rather than one per row', async () => {
+      const fixture = await render(
+        fakeGeneratedListStore([basket(), basket({ id: 'b' })])
+      );
+
+      const live = all(fixture, '[aria-live]');
+      expect(live).toHaveLength(1);
+      expect(live[0]?.getAttribute('aria-live')).toBe('polite');
+    });
+  });
+});

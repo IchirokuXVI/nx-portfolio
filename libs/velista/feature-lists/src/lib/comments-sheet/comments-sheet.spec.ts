@@ -88,7 +88,7 @@ function list(permissions: readonly ListPermission[]): ShoppingListSummary {
     createdByUserId: 'user-1',
     autoApproveLines: false,
     lineCount: 1,
-    readyCount: 0,
+    wantedCount: 0,
     myPermissions: permissions,
   };
 }

@@ -304,12 +304,13 @@ describe('LineMemory refuses what the server would refuse', () => {
       expect(line.content).toBe('Chorizo');
     });
 
-    it('may not tick one off, which is DECIDE now', async () => {
+    it('may not move a quantity, which is what DECIDE is for now', async () => {
       const { lines } = await build();
 
-      expect(await codeOf(lines.setStatus('ln-p-01', 'READY'))).toBe(
-        'forbidden'
-      );
+      // The reel's write and the settle, which are the two things that say what the
+      // household now has. Adding a line is `WRITE`; saying it was bought is not.
+      expect(await codeOf(lines.addQuantity('ln-p-01', 1))).toBe('forbidden');
+      expect(await codeOf(lines.settle('ln-p-01', 'BOUGHT'))).toBe('forbidden');
     });
 
     it('may not approve anything', async () => {
@@ -363,10 +364,13 @@ describe('LineMemory refuses what the server would refuse', () => {
       );
     });
 
-    it('may tick one off, approve, and turn one down', async () => {
+    it('may move a quantity, settle a line, approve, and turn one down', async () => {
       const { lines } = await build();
 
-      expect((await lines.setStatus('ln-m-02', 'READY')).status).toBe('READY');
+      expect((await lines.addQuantity('ln-m-01', 2)).quantity).toBe(5);
+      expect(
+        (await lines.settle('ln-m-01', 'BOUGHT', { quantity: 5 })).line.quantity
+      ).toBe(0);
       expect(
         (await lines.setApproval('ln-m-03', 'APPROVED')).approvalStatus
       ).toBe('APPROVED');
@@ -394,25 +398,25 @@ describe('LineMemory refuses what the server would refuse', () => {
       );
     });
 
-    it('leaves the remainder behind when it lowers an approved quantity', async () => {
-      // Backend plan 0037 section 4: the quantity a list asked for is not lost when a
-      // shopper comes back with less. The remainder is the original author's request,
-      // so it keeps their name, and it sits directly below rather than at the end.
+    it('writes one row when it lowers an approved quantity, and no remainder', async () => {
+      // **Plan 0037's remainder split is retired** (backend plan 0047). It used to
+      // write the shortfall to a second `NOT_AVAILABLE` line; with no trip status that
+      // row would be an ordinary approved line at the shortfall quantity, which the
+      // list would immediately count as wanted again. What a shopper found is a
+      // settlement now, and lowering a quantity is the primary gesture on the page
+      // rather than a report from a shop.
       const { lines } = await build();
 
       await lines.updateLine('ln-m-01', { quantity: 1 });
       const page = await lines.listLines(DECIDE_ONLY);
-      const ids = page.items.map((row) => row.id);
-      const remainder = page.items[ids.indexOf('ln-m-01') + 1];
 
-      expect(remainder.content).toBe('Tinned tomatoes');
-      expect(remainder.quantity).toBe(2);
-      expect(remainder.approvalStatus).toBe('APPROVED');
-      expect(remainder.status).toBe('NOT_AVAILABLE');
-      expect(remainder.createdByUserId).toBe('user-dad');
+      expect(page.items).toHaveLength(4);
+      expect(
+        page.items.find((row) => row.id === 'ln-m-01')?.quantity
+      ).toBe(1);
     });
 
-    it('does not split when the quantity went up', async () => {
+    it('does not split when the quantity went up either', async () => {
       const { lines } = await build();
 
       await lines.updateLine('ln-m-01', { quantity: 5 });
@@ -421,12 +425,23 @@ describe('LineMemory refuses what the server would refuse', () => {
       expect(page.items).toHaveLength(4);
     });
 
-    it('refuses a quantity of zero, which is what NOT_AVAILABLE is for', async () => {
+    it('accepts a quantity of zero, which is stocked rather than refused', async () => {
+      // The floor moved to zero with the trip status (backend plan 0047). Zero is the
+      // household saying it is stocked, not an empty line waiting to be deleted, so it
+      // is the ordinary end of the reel and no longer a validation failure.
       const { lines } = await build();
 
-      expect(await codeOf(lines.updateLine('ln-m-01', { quantity: 0 }))).toBe(
-        'validation_failed'
+      expect((await lines.updateLine('ln-m-01', { quantity: 0 })).quantity).toBe(
+        0
       );
+    });
+
+    it('still refuses a quantity past the ceiling', async () => {
+      const { lines } = await build();
+
+      expect(
+        await codeOf(lines.updateLine('ln-m-01', { quantity: 100_001 }))
+      ).toBe('validation_failed');
     });
   });
 
@@ -443,9 +458,8 @@ describe('LineMemory refuses what the server would refuse', () => {
       expect(await codeOf(lines.addLine(READ_ONLY, 'Mint', 1))).toBe(
         'forbidden'
       );
-      expect(await codeOf(lines.setStatus('ln-s-03', 'READY'))).toBe(
-        'forbidden'
-      );
+      expect(await codeOf(lines.addQuantity('ln-s-03', 1))).toBe('forbidden');
+      expect(await codeOf(lines.settle('ln-s-03', 'BOUGHT'))).toBe('forbidden');
       expect(await codeOf(lines.deleteLine('ln-s-03'))).toBe('forbidden');
       expect(await codeOf(lines.reorder(READ_ONLY, ['ln-s-03']))).toBe(
         'forbidden'

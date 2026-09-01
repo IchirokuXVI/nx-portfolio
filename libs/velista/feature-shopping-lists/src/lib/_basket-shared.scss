@@ -1,0 +1,143 @@
+// Shared pieces of the basket screens, so the page and its five sheets cannot
+// drift apart on the things a person reads as "the same control".
+//
+// Rule T1: every value here is a semantic token. Nothing hand mixes a colour, and
+// nothing reaches for a primitive. The one thing worth knowing before editing:
+// `--app-status-attention-*` is violet despite its name, and the amber this app
+// actually reads as "quiet accent" is `--app-action-quiet-fg`.
+
+// Visually hidden, and never `display: none`: a region that is not rendered is
+// not announced either.
+@mixin visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@mixin page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  padding: var(--app-space-4);
+  padding-block-end: calc(var(--app-space-10) + var(--app-safe-bottom));
+  background: var(--app-surface-ground);
+  min-block-size: 100%;
+}
+
+// Every tap target on these screens is at least `--app-touch-target` square
+// (section 7). The token is 44px and already exists for the list page's own
+// reason, which is the same one: a control tapped dozens of times per trip, one
+// handed, often while walking.
+@mixin tap-target {
+  min-block-size: var(--app-touch-target);
+  min-inline-size: var(--app-touch-target);
+}
+
+@mixin primary-button {
+  @include tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  padding: var(--app-space-3) var(--app-space-4);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  font-family: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-text-on-action);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:active {
+    background: var(--app-action-bg-pressed);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+@mixin secondary-button {
+  @include tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  padding: var(--app-space-3) var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-button-radius);
+  background: var(--app-surface-raised);
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--app-border-strong);
+    color: var(--app-text-primary);
+  }
+}
+
+@mixin field {
+  @include tap-target;
+
+  inline-size: 100%;
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+  font-family: inherit;
+  font-size: var(--app-field-font-size);
+  color: var(--app-text-primary);
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+@mixin card {
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+// A guest is marked by a **dashed ring**, never by colour alone (section 7).
+// Anybody reading this screen in a bright aisle, or not distinguishing the two
+// hues, still sees which of two people called Dani is unverified.
+@mixin guest-ring {
+  border: 1px dashed var(--app-border-strong);
+}
+
+@mixin spinner {
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  border: var(--app-focus-ring-width) solid var(--app-border-subtle);
+  border-block-start-color: var(--app-action-bg);
+  border-radius: var(--app-radius-full);
+  animation: basket-spin var(--app-motion-slow) linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes basket-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

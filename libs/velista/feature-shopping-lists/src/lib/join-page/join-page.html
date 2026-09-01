@@ -1,0 +1,116 @@
+<!--
+  A full screen page and not a sheet: this is a cold arrival from somebody else's
+  message, so there is no page underneath to render over (plan 0008, section 4.1).
+-->
+<main class="join">
+  <p class="brand">{{ 'app-title' | rokuT }}</p>
+
+  @switch (state()) {
+    @case ('checking') {
+      <div aria-live="polite" class="checking" role="status">
+        <span aria-hidden="true" class="spinner"></span>
+        <span class="visually-hidden">{{ 'basket.join.checking' | rokuT }}</span>
+      </div>
+    }
+
+    @case ('joining') {
+      <div aria-live="polite" class="checking" role="status">
+        <span aria-hidden="true" class="spinner"></span>
+        <span class="visually-hidden">{{ 'basket.join.joining' | rokuT }}</span>
+      </div>
+    }
+
+    @case ('dead') {
+      <!--
+        One sentence for four causes, and it offers nothing to try. A revoked
+        link, an expired one, a finished basket and a link that never existed
+        answer identically on purpose (backend 0051, section 3.1), so a screen
+        that named which had happened would be guessing and would leak.
+      -->
+      <section class="dead">
+        <h1 class="dead-title">{{ 'basket.join.dead' | rokuT }}</h1>
+        <p class="dead-body">{{ 'basket.join.deadBody' | rokuT }}</p>
+      </section>
+    }
+
+    @default {
+      <section class="offer">
+        <h1 class="invited">{{ 'basket.join.invited' | rokuT }}</h1>
+
+        <!--
+          The whole of what a link discloses before anybody joins: the name, and
+          how many people are on it. No lines, no groups, no members.
+        -->
+        <p class="list-name">
+          {{ preview().name || ('basket.unnamed' | rokuT) }}
+        </p>
+        @if (peopleCount() > 0) {
+          <p class="people">
+            {{ 'basket.join.people' | rokuT: { count: peopleCount() } }}
+          </p>
+        }
+
+        <!--
+          Optional, and it looks it: the word is on the field rather than in a
+          hint somebody has to read to discover the field can be skipped.
+        -->
+        <label class="name-label" for="join-name">
+          <span class="name-text">{{ 'basket.join.nameLabel' | rokuT }}</span>
+          <span class="name-optional">{{ 'basket.join.optional' | rokuT }}</span>
+        </label>
+        <input
+          (input)="name.set($any($event.target).value)"
+          [value]="name()"
+          autocomplete="nickname"
+          class="name-field"
+          id="join-name"
+          maxlength="40"
+          type="text"
+        />
+        <p class="name-hint" id="join-name-hint">
+          {{ 'basket.join.nameHint' | rokuT }}
+        </p>
+
+        <!--
+          The primary action of the page, directly under the field and reachable
+          with a thumb (section 7). Register is offered below it and is never a
+          step: a join screen that reads as a signup wall turns a favour into a
+          chore, in a shop, on somebody else's phone.
+        -->
+        <button (click)="join()" class="primary" type="button">
+          {{ 'basket.join.continue' | rokuT }}
+        </button>
+
+        @if (state() === 'failed') {
+          <p aria-live="assertive" class="failed" role="alert">
+            {{ 'basket.join.failed' | rokuT }}
+          </p>
+        }
+
+        <p class="or">{{ 'basket.join.or' | rokuT }}</p>
+        <div class="secondary-actions">
+          <button (click)="register()" class="secondary" type="button">
+            {{ 'basket.join.google' | rokuT }}
+          </button>
+          <button (click)="signIn()" class="secondary" type="button">
+            {{ 'basket.join.email' | rokuT }}
+          </button>
+        </div>
+
+        <!--
+          Lowest of the four actions and never a condition of anything (section
+          3.1). Drawn only where the browser can actually honour it, so nobody is
+          offered a button that does nothing.
+        -->
+        @if (canInstall()) {
+          <div class="install">
+            <p class="install-copy">{{ 'basket.join.install' | rokuT }}</p>
+            <button (click)="install()" class="install-action" type="button">
+              {{ 'basket.join.installAction' | rokuT }}
+            </button>
+          </div>
+        }
+      </section>
+    }
+  }
+</main>

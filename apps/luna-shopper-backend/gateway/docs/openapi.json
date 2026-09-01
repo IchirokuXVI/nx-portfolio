@@ -6786,6 +6786,174 @@
         ]
       }
     },
+    "/v1/generated-lists/{id}/basket": {
+      "get": {
+        "operationId": "GeneratedListParticipantController_getBasket_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Composed by the gateway from more than one service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.BasketResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/lines/{lineId}/pick": {
+      "post": {
+        "operationId": "GeneratedListParticipantController_setPick_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGeneratedListPickDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `generatedList.setPick` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
     "/v1/generated-lists/{id}/lines/{lineId}/settle": {
       "post": {
         "operationId": "GeneratedListParticipantController_settle_v1",
@@ -13755,6 +13923,19 @@
           }
         }
       },
+      "SetGeneratedListPickDto": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The product to buy instead. Must be one of the line’s own options, which the service checks: the options are the line’s set rather than the whole catalog."
+          }
+        },
+        "required": [
+          "itemId"
+        ]
+      },
       "SettlementOutcome": {
         "type": "string",
         "enum": [
@@ -15818,6 +15999,161 @@
           "MARKED_FOR_DELETION"
         ]
       },
+      "generated-list-sharing.BasketLineView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledQuantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastEditedByParticipantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastEditedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastOutcome": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "BOUGHT",
+              "NOT_AVAILABLE",
+              null
+            ]
+          },
+          "origins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list.GeneratedListLineOriginView"
+            }
+          },
+          "targetListId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/enums.GeneratedLineOrigin"
+          }
+        },
+        "required": [
+          "id",
+          "content",
+          "quantity",
+          "settledQuantity",
+          "itemId",
+          "options",
+          "position",
+          "lastEditedByParticipantId",
+          "lastEditedAt",
+          "lastOutcome"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.BasketResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.GeneratedListStatus"
+          },
+          "generatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+            }
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
+            }
+          },
+          "me": {
+            "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
+          },
+          "seesZoneData": {
+            "type": "boolean"
+          },
+          "sourceSnapshot": {
+            "$ref": "#/components/schemas/generated-list.GeneratedListSourceSnapshot"
+          },
+          "sourceNames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.SourceName"
+            }
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemView"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "generatedAt",
+          "lines",
+          "participants",
+          "me",
+          "seesZoneData",
+          "products"
+        ],
+        "additionalProperties": false
+      },
       "generated-list-sharing.JoinResult": {
         "type": "object",
         "properties": {
@@ -16004,7 +16340,11 @@
         "type": "object",
         "properties": {
           "line": {
-            "$ref": "#/components/schemas/generated-list.GeneratedListLineView"
+            "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+          },
+          "skippedCount": {
+            "type": "integer",
+            "minimum": 0
           },
           "settlements": {
             "type": "array",
@@ -16021,8 +16361,7 @@
         },
         "required": [
           "line",
-          "settlements",
-          "skipped"
+          "skippedCount"
         ],
         "additionalProperties": false
       },
@@ -16104,6 +16443,30 @@
           "createdAt",
           "expiresAt",
           "participantCount"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.SourceName": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "zoneName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "listId",
+          "name",
+          "zoneName"
         ],
         "additionalProperties": false
       },
@@ -17325,6 +17688,20 @@
           "version": {
             "type": "integer"
           },
+          "boughtCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastSettlementOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.SettlementOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -17346,6 +17723,8 @@
           "createdByUserId",
           "approvedByUserId",
           "version",
+          "boughtCount",
+          "lastSettlementOutcome",
           "createdAt",
           "updatedAt"
         ],

@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  ITEM_LOOKUP_LIMITS,
   type CreateItemRequest,
   type FindItemByEanRequest,
   type FindItemByEanResult,
+  type GetItemsRequest,
+  type GetItemsResult,
   type ItemIdRequest,
   type ItemOfferView,
   type ItemOrder,
@@ -182,6 +185,29 @@ export class ItemService {
 
   async get(req: ItemIdRequest): Promise<ItemView> {
     return toItemView(await this.load(req.itemId));
+  }
+
+  /**
+   * Several products by id, in one query (plan 0051, section 6.1).
+   *
+   * A **lookup rather than a search**, in the same sense {@link findByEan} is
+   * one, and the two consequences follow from that: an id naming nothing is
+   * absent from the answer instead of raising a 404, and no ordering is promised
+   * because the caller is matching by id rather than reading a list.
+   *
+   * It exists so the basket screen can name every line's pick and every option
+   * behind it in one round trip. Without it, twenty lines with three options each
+   * would be sixty {@link get} calls to draw one page.
+   */
+  async getMany(req: GetItemsRequest): Promise<GetItemsResult> {
+    const ids = [...new Set(req.ids)].slice(0, ITEM_LOOKUP_LIMITS.maxIds);
+    if (ids.length === 0) {
+      return { items: [] };
+    }
+    const rows = await this.items.find({ where: { id: In(ids) } });
+    // An arrow rather than a bare reference: `map` passes the index as the
+    // second argument, which `toItemView` reads as `bestOffer`.
+    return { items: rows.map((row) => toItemView(row)) };
   }
 
   /**

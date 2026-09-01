@@ -56,7 +56,7 @@ const LIST_CREATED = {
   zoneId: ZONE_ID,
   name: 'Probe List',
   createdByUserId: 'd54a5df1-31f3-4514-b75f-85ec9879bb62',
-  counts: { lineCount: 0, readyCount: 0 },
+  counts: { lineCount: 0, wantedCount: 0 },
   createdAt: '2026-08-28T01:35:05.050Z',
   updatedAt: '2026-08-28T01:35:05.050Z',
 };

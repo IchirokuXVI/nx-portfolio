@@ -1,0 +1,33 @@
+@let vm = row();
+
+<button
+  (click)="open.emit(vm.id)"
+  [class.is-active]="vm.active"
+  class="row"
+  type="button"
+>
+  <span class="text">
+    <span class="head">
+      <span class="name">{{ vm.name }}</span>
+
+      <!--
+        The word, never colour alone (section 7). The green border beside it is a second
+        signal for people who read at a glance, and it says nothing this does not.
+      -->
+      @if (vm.active) {
+        <span class="badge">{{ 'history.status.active' | rokuT }}</span>
+      }
+    </span>
+
+    <span class="meta">
+      {{ generatedOn() }}
+      <span aria-hidden="true"> &middot; </span>
+      {{
+        'history.row.progress'
+          | rokuT: { settled: vm.settledLineCount, total: vm.lineCount }
+      }}
+    </span>
+  </span>
+
+  <lib-chevron-right-icon class="chevron" />
+</button>

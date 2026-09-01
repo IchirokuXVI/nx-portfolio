@@ -1,13 +1,15 @@
 import {
   COMMENT_TRANSCRIPTION_FALLBACK,
   COMMENT_TRANSCRIPTIONS,
+  GENERATED_LIST_STATUS_FALLBACK,
+  GENERATED_LIST_STATUSES,
   LINE_APPROVAL_STATUS_FALLBACK,
   LINE_APPROVAL_STATUSES,
-  LINE_STATUS_FALLBACK,
-  LINE_STATUSES,
   LIST_PERMISSIONS,
   MEMBERSHIP_STATUS_FALLBACK,
   MEMBERSHIP_STATUSES,
+  SETTLEMENT_OUTCOME_FALLBACK,
+  SETTLEMENT_OUTCOMES,
   USER_KIND_FALLBACK,
   USER_KINDS,
   ZONE_ROLE_FALLBACK,
@@ -17,12 +19,18 @@ import {
   type AssistantChoice,
   type AssistantListLink,
   type AssistantReply,
+  type CatalogItem,
   type CatalogScope,
+  type CatalogSuggestion,
   type ChainPreference,
   type Comment,
   type CommentRecording,
   type CommentTranscription,
+  type GeneratedListRun,
+  type GeneratedListSkippedLine,
+  type GeneratedListSummary,
   type Line,
+  type LineSettlement,
   type ListAccessEntry,
   type ListPermission,
   type ListPresence,
@@ -35,6 +43,7 @@ import {
   type PostalCodeCoverage,
   type PresenceEditor,
   type PresenceUser,
+  type ProductGroup,
   type ProfilePostalCode,
   type SessionTokens,
   type ShoppingList,
@@ -155,27 +164,35 @@ function toZoneCounts(raw: unknown): ZoneCounts {
 /**
  * The line totals, from either of the two shapes that carry them.
  *
- * `ZoneListPreview` (inside `MyZoneView`) puts `lineCount` and `readyCount` at the top
+ * `ZoneListPreview` (inside `MyZoneView`) puts `lineCount` and `wantedCount` at the top
  * level; `ListView` (from `GET /v1/zones/:id/lists`) nests the same two names under
  * `counts`. The **names** match deliberately so that one client shape serves both
  * (backend plan 0017, section 3.4), and this is the one function that has to know where
  * they sit. Everything above it reads a list the same way whichever call it came from.
+ *
+ * The second number is `wantedCount` now, and the rename is a change of subject rather
+ * than of wording (backend plan 0047, section 2.3). It used to be `readyCount`, counting
+ * lines somebody had ticked on some trip; it counts lines the household currently wants.
+ * Reading the old name off the current wire is what made every card in the app say zero,
+ * which is why there is deliberately no fallback to it here: a card reporting a
+ * confident zero is worse than one reporting a stale number, and there is no stale
+ * number to report.
  */
 function readListCounts(raw: Record<string, unknown>): {
   lineCount: number;
-  readyCount: number;
+  wantedCount: number;
 } {
   const nested = raw['counts'];
   const source = isRecord(nested) ? nested : raw;
 
   const lineCount = numOr(source['lineCount'], 0);
-  const readyCount = numOr(source['readyCount'], 0);
+  const wantedCount = numOr(source['wantedCount'], 0);
 
   return {
     lineCount,
-    // "7 of 5 ready" is worse than a slightly wrong number: it reads as a bug and
+    // "7 of 5 needed" is worse than a slightly wrong number: it reads as a bug and
     // costs the user their trust in every other count on the page.
-    readyCount: Math.min(readyCount, lineCount),
+    wantedCount: Math.min(wantedCount, lineCount),
   };
 }
 
@@ -328,20 +345,164 @@ export function toLine(raw: unknown): Line | null {
     listId,
     content: strOr(raw['content'], ''),
     quantity: numOr(raw['quantity'], 1),
-    itemId: nullableStr(raw['itemId']),
+    // A set now, where this read a single nullable `itemId` (backend plan 0048,
+    // section 1.1). Ids that are not strings are dropped rather than kept as
+    // holes: a product reference nobody can resolve is not a product.
+    itemIds: mapArray(raw['itemIds'], str),
     position: numOr(raw['position'], 0),
     approvalStatus: oneOf(
       raw['approvalStatus'],
       LINE_APPROVAL_STATUSES,
       LINE_APPROVAL_STATUS_FALLBACK
     ),
-    status: oneOf(raw['status'], LINE_STATUSES, LINE_STATUS_FALLBACK),
+    // Both default to "nothing has ever happened to this line", which is the safe
+    // direction in the one way that matters: it draws no indicator. Defaulting the
+    // other way would put a bought mark on a line over an absent field.
+    boughtCount: numOr(raw['boughtCount'], 0),
+    lastSettlementOutcome:
+      raw['lastSettlementOutcome'] === null ||
+      raw['lastSettlementOutcome'] === undefined
+        ? null
+        : oneOf(
+            raw['lastSettlementOutcome'],
+            SETTLEMENT_OUTCOMES,
+            SETTLEMENT_OUTCOME_FALLBACK
+          ),
     createdByUserId: strOr(raw['createdByUserId'], ''),
     approvedByUserId: nullableStr(raw['approvedByUserId']),
     // A missing version defaults to 0, which loses every reconciliation race rather
     // than winning one it should not. Overwriting somebody else's edit because a
     // field was absent is the one outcome worth defaulting against.
     version: numOr(raw['version'], 0),
+  };
+}
+
+/**
+ * From `LineSettlementView` (backend plan 0047, section 3).
+ *
+ * One thing that happened on one trip, written once and never edited, which is
+ * why there is no reconciliation anywhere near it: a history does not race.
+ *
+ * `settledByUserId` keeps its null rather than being defaulted to an empty
+ * string, and that null is load bearing. It does not mean nobody: it means the
+ * settle came off a shared basket, where the person holding it may be a guest
+ * with no account at all (backend plan 0051, section 3.3). The row draws a
+ * neutral phrase for it, exactly as it does for a name it could not resolve.
+ *
+ * A settlement with no readable `settledAt` is dropped. It is a point in a
+ * history and an undated one cannot be ordered, which is the one thing every
+ * screen that reads these does with them.
+ */
+export function toLineSettlement(raw: unknown): LineSettlement | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  const lineId = str(raw['lineId']);
+  const settledAt = date(raw['settledAt']);
+  if (id === null || lineId === null || settledAt === null) {
+    return null;
+  }
+
+  return {
+    id,
+    lineId,
+    listId: strOr(raw['listId'], ''),
+    itemId: nullableStr(raw['itemId']),
+    outcome: oneOf(
+      raw['outcome'],
+      SETTLEMENT_OUTCOMES,
+      SETTLEMENT_OUTCOME_FALLBACK
+    ),
+    quantity: numOr(raw['quantity'], 0),
+    settledByUserId: nullableStr(raw['settledByUserId']),
+    settledAt,
+  };
+}
+
+/**
+ * From `catalog.ItemView` (backend plan 0048).
+ *
+ * Deliberately narrow: an id, a name, a brand and the group it belongs to.
+ * Everything about price is out of scope until the backend's backlog `0004`
+ * exists (velista plan 0043, section 9), and carrying fields nothing renders
+ * would be a promise the screen cannot keep.
+ */
+export function toCatalogItem(raw: unknown): CatalogItem | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  if (id === null) {
+    return null;
+  }
+
+  return {
+    id,
+    name: toLocalizedName(raw['name']),
+    brand: nullableStr(raw['brand']),
+    productGroupId: nullableStr(raw['productGroupId']),
+  };
+}
+
+/**
+ * From `catalog.CatalogSuggestion` (backend plan 0048, section 3).
+ *
+ * The wire shape is `{ kind, group, item }` with both halves nullable, which
+ * makes "a group suggestion carrying no group" representable. This is where that
+ * stops being representable: a suggestion whose own half is missing is **dropped**
+ * rather than rendered as an empty row, so nothing downstream has to consider it.
+ *
+ * The order is the server's and is never re-sorted here. A group ranks above an
+ * item for a bare word, and that ranking is `item.searchOffers`'s to make: a
+ * client that re-sorted would be a second opinion about relevance formed without
+ * the prices, the scopes or the synonyms that produced the first one (velista
+ * plan 0043, section 6).
+ */
+export function toCatalogSuggestion(raw: unknown): CatalogSuggestion | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  if (raw['kind'] === 'group') {
+    const offer = raw['group'];
+    if (!isRecord(offer)) {
+      return null;
+    }
+    const group = toProductGroup(offer['group']);
+    return group === null
+      ? null
+      : {
+          kind: 'group',
+          group,
+          // The products choosing it attaches, whole (section 6). An offer that
+          // names none is still a legitimate suggestion: it adds a line with the
+          // group's name and no set, which the line page can fill in later.
+          itemIds: mapArray(offer['itemIds'], str),
+        };
+  }
+
+  const item = toCatalogItem(raw['item']);
+  return item === null ? null : { kind: 'item', item };
+}
+
+/** From `catalog.ProductGroupView`. What "milk" means before it means a brand. */
+export function toProductGroup(raw: unknown): ProductGroup | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  if (id === null) {
+    return null;
+  }
+
+  return {
+    id,
+    name: toLocalizedName(raw['name']),
+    itemCount: numOr(raw['itemCount'], 0),
   };
 }
 
@@ -717,7 +878,7 @@ function toAssistantChoice(raw: unknown): AssistantChoice | null {
  * English, and an empty English name renders as an empty row rather than as no row,
  * which is the honest report of what the catalog holds.
  */
-function toLocalizedName(raw: unknown): LocalizedName {
+export function toLocalizedName(raw: unknown): LocalizedName {
   return isRecord(raw)
     ? { en: strOr(raw['en'], ''), es: strOr(raw['es'], '') }
     : { en: '', es: '' };
@@ -827,4 +988,119 @@ export function toCatalogScope(raw: unknown): CatalogScope | null {
     coverage: mapArray(raw['coverage'], toPostalCodeCoverage),
     approximate: raw['approximate'] === true,
   };
+}
+
+/**
+ * From `GeneratedListSummaryView` (backend `0050` section 7).
+ *
+ * `name` is `nullableStr` for `toShoppingProfile`'s reason: null is a basket nobody
+ * named, which this client displays as its localized generation date, and collapsing it
+ * to an empty string would erase the difference between unnamed and named nothing.
+ *
+ * A summary with no readable `generatedAt` is **dropped**, and that is the one strict
+ * field here. The date is not decoration on this object: the history is ordered by it
+ * and an unnamed basket's whole display name is built from it, so a row that kept a
+ * fabricated `new Date()` would sort itself to the top of somebody's history and title
+ * itself today. Dropping it costs one row and is counted, per rule D4.
+ */
+export function toGeneratedListSummary(
+  raw: unknown
+): GeneratedListSummary | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  const generatedAt = date(raw['generatedAt']);
+  if (id === null || generatedAt === null) {
+    return null;
+  }
+
+  return {
+    id,
+    name: nullableStr(raw['name']),
+    status: oneOf(
+      raw['status'],
+      GENERATED_LIST_STATUSES,
+      GENERATED_LIST_STATUS_FALLBACK
+    ),
+    generatedAt,
+    lineCount: numOr(raw['lineCount'], 0),
+    settledLineCount: numOr(raw['settledLineCount'], 0),
+  };
+}
+
+/** From `GeneratedListSkippedLineView`. */
+function toGeneratedListSkippedLine(
+  raw: unknown
+): GeneratedListSkippedLine | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const listId = str(raw['listId']);
+  return listId === null
+    ? null
+    : { listId, content: strOr(raw['content'], '') };
+}
+
+/**
+ * From `GeneratedListRunResult` (backend `0050` section 4), keeping the summary alone.
+ *
+ * The create answers the whole basket, lines and origins and options included, and this
+ * client reads a summary out of it. That is deliberate: the sheet's next act is to
+ * navigate to the basket screen, which fetches what it needs for itself, so holding the
+ * lines here would be caching a copy that the basket screen immediately supersedes.
+ *
+ * The response carries no `lineCount`, having sent the lines themselves, so the counts
+ * are taken from the array. `settledLineCount` is zero on a basket composed a moment
+ * ago, and is read rather than assumed for the idempotent replay: the same key returns
+ * the **first** run, which by then may have been half shopped.
+ */
+export function toGeneratedListRun(raw: unknown): GeneratedListRun | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const list = toGeneratedListFromView(raw['list']);
+  return list === null
+    ? null
+    : { list, skipped: mapArray(raw['skipped'], toGeneratedListSkippedLine) };
+}
+
+/**
+ * From `GeneratedListView`, the **whole** basket, keeping only what a summary holds.
+ *
+ * The create answers one of these and so do the two owner realtime events, none of
+ * which carry the two counts the summary listing serves, having sent the lines
+ * themselves. So the counts are derived here, in one place, rather than at each of the
+ * three call sites where they would eventually disagree.
+ *
+ * A line counts as settled when its settled quantity has caught up with what was asked
+ * for. That is the same arithmetic the row draws, and it is why a `NOT_AVAILABLE`
+ * outcome counts too: it closes the outstanding amount without claiming anything was
+ * bought (backend `0051` section 6), so the line is done and the card should say so.
+ *
+ * A line asking for nothing is not counted as settled, because zero is not an amount
+ * somebody worked through, and counting it would let an empty basket report itself
+ * finished.
+ */
+export function toGeneratedListFromView(
+  raw: unknown
+): GeneratedListSummary | null {
+  const summary = toGeneratedListSummary(raw);
+  if (summary === null || !isRecord(raw)) {
+    return null;
+  }
+
+  const lines = Array.isArray(raw['lines']) ? raw['lines'] : [];
+  const settled = lines.filter((line) => {
+    if (!isRecord(line)) {
+      return false;
+    }
+    const wanted = numOr(line['quantity'], 0);
+    return wanted > 0 && numOr(line['settledQuantity'], 0) >= wanted;
+  }).length;
+
+  return { ...summary, lineCount: lines.length, settledLineCount: settled };
 }

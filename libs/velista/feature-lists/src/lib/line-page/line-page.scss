@@ -1,0 +1,223 @@
+// A full page rather than a sheet, so it owns the column and the scroll. The list page
+// beside it is laid out the same way and for the same reason.
+.page {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100%;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: var(--app-space-4) var(--app-space-3) 0;
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  border: none;
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.title {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font-size: var(--app-text-xl);
+  font-weight: 650;
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scroll {
+  flex: 1;
+  padding: var(--app-space-2) var(--app-space-6) var(--app-space-6);
+}
+
+.where {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// The two numbers worth having at a glance, side by side. Each is absent rather than
+// vague when it cannot be said, so this row is one tile wide as often as two.
+.tiles {
+  display: flex;
+  gap: var(--app-space-3);
+  margin-block-start: var(--app-space-5);
+}
+
+.tile {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+.tile-value {
+  font-size: var(--app-text-lg);
+  font-weight: 700;
+  color: var(--app-text-primary);
+}
+
+.tile-label {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+.section {
+  margin-block-start: var(--app-space-6);
+}
+
+.section-title {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  color: var(--app-text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-chip-height);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+}
+
+// A line with no products yet. Dashed, because it is a place for something rather than
+// a thing: the composer's search is what fills it (section 6).
+.chip.empty {
+  border-style: dashed;
+  background: transparent;
+  color: var(--app-text-muted);
+}
+
+.chip-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  margin-inline-end: calc(var(--app-space-3) * -1);
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-base);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  }
+}
+
+.history {
+  margin: 0;
+  padding: 0 var(--app-space-5);
+  list-style: none;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+.history-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4) 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+
+  & + & {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+}
+
+// A trip that found nothing. Coral, and never coral alone: the row says so in words.
+.missing {
+  color: var(--app-status-danger-fg);
+}
+
+.history-when {
+  flex-shrink: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.muted {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// The prices region, which exists and draws nothing until backend backlog 0004 does
+// (section 9). Dashed and quiet: it is a promise about later rather than a thing that
+// failed to load.
+.pending {
+  margin-block-start: var(--app-space-6);
+  padding: var(--app-space-4);
+  border: 1px dashed var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.foot {
+  padding: var(--app-space-4) var(--app-space-6) var(--app-space-7);
+}
+
+// The only thing on either screen that discards the history, which is why it is the
+// one control here drawn as a danger and why it is behind a confirmation.
+.delete {
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  border: 1px solid var(--app-status-danger-border);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-status-danger-fg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}

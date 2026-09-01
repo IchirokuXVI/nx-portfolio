@@ -1,6 +1,8 @@
 import {
   toComment,
+  toGeneratedListFromView,
   toLine,
+  toLineSettlement,
   toListPermissions,
   toListPresence,
   toMembership,
@@ -171,6 +173,41 @@ export function toRealtimeEvent(
       return line === null ? null : { type: name, line };
     }
 
+    case 'line.settled': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      // Both halves or neither. Half a settle is not something any consumer can act
+      // on: a line with no settlement leaves a history stale, and a settlement with
+      // no line leaves the row showing a quantity that has moved.
+      const line = toLine(payload['line']);
+      const settlement = toLineSettlement(payload['settlement']);
+      return line === null || settlement === null
+        ? null
+        : { type: name, line, settlement };
+    }
+
+    case 'line.claimChanged': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const lineId = str(payload['lineId']);
+      const claimListId = str(payload['listId']);
+      if (lineId === null || claimListId === null) {
+        return null;
+      }
+      // Null is a **release** rather than a missing value, which is what lets one
+      // event serve both directions. An absent field reads the same way, and that is
+      // the safe direction: an indicator that says somebody is shopping when nobody
+      // is would be read as the line having been dealt with.
+      return {
+        type: name,
+        lineId,
+        listId: claimListId,
+        claimedByUserId: nullableStr(payload['claimedByUserId']),
+      };
+    }
+
     case 'line.reordered': {
       if (!isRecord(payload)) {
         return null;
@@ -232,6 +269,37 @@ export function toRealtimeEvent(
       // build could not read.
       const profiles = mapArray(payload['profiles'], toShoppingProfile);
       return profiles.length === 0 ? null : { type: name, profiles };
+    }
+
+    case 'generatedList.created':
+    case 'generatedList.updated': {
+      // The payload is the whole basket and only its summary is kept. A body this
+      // build cannot read is dropped and counted rather than applied, which for these
+      // two means the card keeps whatever the last read said instead of losing its
+      // counts to an unreadable event.
+      const list = toGeneratedListFromView(payload);
+      return list === null ? null : { type: name, list };
+    }
+
+    case 'generatedList.lineSettled': {
+      // `generatedListId` and not the line's own id: the line is redacted and the
+      // counts cannot be recomputed from it anyway, so what a listener needs is which
+      // basket moved.
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const settledIn = str(payload['generatedListId']);
+      return settledIn === null
+        ? null
+        : { type: name, generatedListId: settledIn };
+    }
+
+    case 'generatedList.deleted': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const generatedListId = str(payload['id']);
+      return generatedListId === null ? null : { type: name, generatedListId };
     }
 
     case 'presence.zoneUpdated': {

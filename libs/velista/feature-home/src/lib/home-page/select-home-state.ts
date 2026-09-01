@@ -1,9 +1,10 @@
 import type {
+  GeneratedListSummary,
   HomeState,
   Identity,
   ListRowVm,
   MyZone,
-  ResumeListVm,
+  ShoppingListCardVm,
   ZoneCardVm,
 } from '@portfolio/velista/models';
 
@@ -32,23 +33,29 @@ export function selectHomeState(input: {
   zones: readonly MyZone[];
   loadState: 'idle' | 'loading' | 'loaded' | 'failed';
   correlationId: string | null;
-  resumeListId: string | null;
   /**
-   * Who else is looking at the resume list right now, already named and already
-   * without the reader (plan 0017, section 7).
+   * The caller's `ACTIVE` baskets, newest first (plan 0045, section 3.2).
    *
-   * Names rather than ids, and resolved by the container: a presence payload carries a
-   * user id and nothing else, and the only place the API pairs an id with a name is a
-   * membership, which makes a name a fact about a **zone** rather than about a person.
-   * Resolving it here would need this function to know about `MemberNames`, and it is
-   * pure precisely so it does not know about anything.
+   * Already filtered to `ACTIVE` by the container, because "which of the four statuses
+   * belongs on the dashboard" is a question about the data and this function's job is
+   * choosing what to draw. Empty is the ordinary answer and the section is absent.
    */
-  resumeShoppers: readonly string[];
+  activeShoppingLists: readonly GeneratedListSummary[];
+  /**
+   * The display name per basket id, from `displayNames`.
+   *
+   * Resolved by the container and handed down, for `zoneOnline`'s reason exactly: an
+   * unnamed basket shows its **localized** generation date, so naming one needs a
+   * locale and a formatter, and this function is pure precisely so it needs neither.
+   * It also cannot be done per row, since a second unnamed basket on the same day is
+   * numbered against the first.
+   */
+  shoppingListNames: ReadonlyMap<string, string>;
   /**
    * Who is online in a zone, already named and already without the reader.
    *
    * A function rather than a map, as `selectListState` takes `nameOf`: the container
-   * resolves it, for `resumeShoppers`' reason exactly, and this function stays pure and
+   * resolves it, for `shoppingListNames`' reason exactly, and this function stays pure and
    * stays testable without a fixture.
    *
    * Zone presence costs nothing to have. The server computes it from who holds the zone
@@ -71,7 +78,7 @@ export function selectHomeState(input: {
   /** Whether the guest has dismissed the banner in this session. */
   guestBannerDismissed: boolean;
 }): HomeState {
-  const { identity, zones, loadState, correlationId, resumeListId } = input;
+  const { identity, zones, loadState, correlationId } = input;
 
   // There used to be an anonymous branch here, checked first so that a stale load state
   // from a previous session could never show a signed-in shape to somebody who is not
@@ -97,7 +104,10 @@ export function selectHomeState(input: {
 
   return {
     kind: 'populated',
-    resume: selectResume(zones, resumeListId, input.resumeShoppers),
+    shoppingList: selectShoppingList(
+      input.activeShoppingLists,
+      input.shoppingListNames
+    ),
     zones: zones.map((zone) =>
       toZoneCard(zone, input.zoneOnline, input.listViewers)
     ),
@@ -106,61 +116,41 @@ export function selectHomeState(input: {
 }
 
 /**
- * The resume card, resolved from a list id the **device** remembered.
+ * The basket on the dashboard, which is the most recently generated `ACTIVE` one.
  *
- * Plan 0003 section 5.2 chose this over server-side "most recent" state: it works
- * without a round trip, and it is per device, which is arguably more correct than a
- * server value that would fight between somebody's phone and their tablet.
+ * Plan 0045 section 3.2. Several can be `ACTIVE` at once, which happens when somebody
+ * generates a second run before finishing the first, and the card shows the newest with
+ * a quiet count of the others. It does not try to guess which one the person means: the
+ * "and N more" line goes to the history, where all of them are, and picking is a tap
+ * rather than a heuristic that would be wrong for somebody.
  *
- * Returns null when the remembered list is not in any zone the caller still belongs
- * to, which happens after being removed from a group. Offering a card that leads to a
- * 403 is worse than offering none.
+ * Returns null for an empty list, and null is drawn as **nothing at all** rather than
+ * as an empty card. That is the difference this card has over the resume card it
+ * replaced: there is no stale case to defend against, so there is no card to suppress.
+ *
+ * The names arrive resolved. See {@link displayNames} for why they cannot be built here
+ * one at a time.
  */
-function selectResume(
-  zones: readonly MyZone[],
-  resumeListId: string | null,
-  shoppers: readonly string[]
-): ResumeListVm | null {
-  if (resumeListId === null) {
+function selectShoppingList(
+  active: readonly GeneratedListSummary[],
+  names: ReadonlyMap<string, string>
+): ShoppingListCardVm | null {
+  const newest = active[0];
+  if (newest === undefined) {
     return null;
   }
 
-  // `zoneId/listId` since plan 0012, because the list route needs both and there is no
-  // `GET /v1/lists/:id` to resolve an id on its own (section 4.1). A value with no
-  // separator was written by a build before that change: it is a list id with no zone,
-  // and rather than guessing one, the card simply does not render. That is a missing
-  // card once, on one device, and it is replaced the next time a list is opened.
-  const separator = resumeListId.indexOf('/');
-  if (separator < 0) {
-    return null;
-  }
-
-  const zoneId = resumeListId.slice(0, separator);
-  const listId = resumeListId.slice(separator + 1);
-
-  for (const zone of zones) {
-    if (zone.id !== zoneId) {
-      continue;
-    }
-
-    const list = zone.lists.find((entry) => entry.id === listId);
-    if (list !== undefined) {
-      return {
-        listId: list.id,
-        zoneId: zone.id,
-        listName: list.name,
-        zoneName: zone.name,
-        lineCount: list.lineCount,
-        readyCount: list.readyCount,
-        // Advisory, and it may be empty for two different reasons that render the
-        // same: nobody else is there, or nobody's name resolved (plan 0004, section
-        // 6.7). The card simply omits the row, which is the right answer to both.
-        shoppers,
-      };
-    }
-  }
-
-  return null;
+  return {
+    id: newest.id,
+    // The map is built from the same listing, so a miss means the container filtered
+    // and named two different sets. The id is a poor name and a visible one, which is
+    // the right failure: silently drawing an empty title would hide it.
+    name: names.get(newest.id) ?? newest.id,
+    generatedAt: newest.generatedAt,
+    lineCount: newest.lineCount,
+    settledLineCount: newest.settledLineCount,
+    otherActiveCount: active.length - 1,
+  };
 }
 
 function toZoneCard(
@@ -218,7 +208,7 @@ function toListRow(
     id: string;
     name: string;
     lineCount?: number;
-    readyCount?: number;
+    wantedCount?: number;
   },
   viewers: readonly string[]
 ): ListRowVm {
@@ -226,7 +216,7 @@ function toListRow(
     id: list.id,
     name: list.name,
     lineCount: list.lineCount,
-    readyCount: list.readyCount,
+    wantedCount: list.wantedCount,
     viewers,
   };
 }

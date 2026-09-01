@@ -168,8 +168,24 @@ export class SettlementService {
         })
       );
 
+      // The two indicators, as they now stand (plan 0047, section 5). This is the
+      // one path that moves either of them, and the event below is what moves
+      // them on every other phone looking at the list; announcing the summary as
+      // it stood a moment ago would leave a line that has just been bought
+      // looking untouched until the next cold load.
+      //
+      // Only the count is read, and it is read **after** the insert so it
+      // includes it. The most recent outcome needs no query at all: the row just
+      // written is the newest settlement this line has, by construction.
+      const boughtCount = await repo.count({
+        where: { lineId: line.id, outcome: SettlementOutcome.BOUGHT },
+      });
+
       return {
-        line: toLineView(line, itemIds),
+        line: toLineView(line, itemIds, {
+          boughtCount,
+          lastOutcome: req.outcome,
+        }),
         settlement: toLineSettlementView(settlement),
       };
     });

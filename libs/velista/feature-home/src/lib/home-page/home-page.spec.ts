@@ -4,31 +4,31 @@ import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   AccountNotice,
+  fakeGeneratedListStore,
   fakeMemberNames,
   fakePresenceStore,
   fakeZoneStore,
   provideAccountNotice,
   provideFakeAuthService,
+  provideFakeGeneratedListStore,
   provideFakeMemberNames,
   provideFakePresenceStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
-  REALTIME_CLIENT,
   VERIFY_RESEND_AVAILABLE,
   ZoneStore,
+  type FakeGeneratedListStore,
   type FakeIdentity,
   type FakePresenceOptions,
   type FakeZoneStore,
-  type RealtimeMemory,
   type ZoneEntry,
 } from '@portfolio/velista/data-access';
-import type { MyZone } from '@portfolio/velista/models';
+import type { GeneratedListSummary, MyZone } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
-  StorageKeys,
 } from '@portfolio/velista/platform';
-import { ResumeListCard, ZoneCard } from '@portfolio/velista/ui';
+import { ShoppingListCard, ZoneCard } from '@portfolio/velista/ui';
 import { HomePage } from './home-page';
 
 function zone(overrides: Partial<MyZone> = {}): MyZone {
@@ -46,7 +46,7 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
       pendingRequestCount: 0,
       firstPendingRequesterName: null,
     },
-    lists: [{ id: 'l1', name: 'Weekly shop', lineCount: 12, readyCount: 7 }],
+    lists: [{ id: 'l1', name: 'Weekly shop', lineCount: 12, wantedCount: 7 }],
     ...overrides,
   };
 }
@@ -60,8 +60,10 @@ interface Options {
   lastEntry?: ZoneEntry | null;
   /** What just happened to the account, which this page reports once (plan 0009). */
   accountNotice?: { kind: 'registered' | 'upgraded'; email: string };
-  /** Who the server says is present, which the resume card renders (plan 0017). */
+  /** Who the server says is present, which the zone cards render (plan 0017). */
   presence?: FakePresenceOptions;
+  /** The caller's generated shopping lists, for the dashboard card (plan 0045). */
+  generated?: FakeGeneratedListStore;
   /** User id to the name they go by in the zone, since presence carries ids alone. */
   names?: Readonly<Record<string, string>>;
 }
@@ -112,6 +114,11 @@ async function render(
       provideVelistaTesting(),
       provideFakeBrowserFacade(options.storage),
       provideFakeZoneStore(store),
+      // Plan 0045: the dashboard's shopping list card reads the listing. A double, so
+      // a spec states "there is one active basket" rather than driving a request.
+      provideFakeGeneratedListStore(
+        options.generated ?? fakeGeneratedListStore()
+      ),
       provideFakeSessionStore(options.identity ?? 'REGISTERED'),
       // Both arrived with plan 0009: the page reports what just happened to the
       // account, and offers another confirmation email once there is an endpoint.
@@ -424,101 +431,110 @@ describe('HomePage', () => {
     });
   });
 
-  describe('the resume card', () => {
-    it('appears for a list this device remembered', async () => {
-      // `zoneId/listId` since plan 0012: the list route needs both, and there is no
-      // `GET /v1/lists/:id` for an id on its own to be resolved through (rule L1).
-      const storage = new Map([[StorageKeys.lastList, 'z1/l1']]);
-
-      const fixture = await render({ storage });
-
-      expect(query(fixture, 'lib-resume-list-card')).not.toBeNull();
-      expect(text(fixture)).toContain('Weekly shop');
+  // Plan 0045. The resume card is gone and this is what took its place. The block is
+  // rewritten rather than added beside it, because the dashboard has one card in that
+  // slot and it now comes from the server rather than from what the device remembered.
+  //
+  // The old block's whole "who is shopping it" section is gone with it and has no
+  // replacement here: `generatedList.listMine` answers summaries, which carry no
+  // participants, so there is no presence on this card to test. `0044`'s basket screen
+  // is where the people on a basket are drawn.
+  describe('the shopping list card', () => {
+    const basket = (
+      overrides: Partial<GeneratedListSummary> = {}
+    ): GeneratedListSummary => ({
+      id: 'gl1',
+      name: 'Saturday big shop',
+      status: 'ACTIVE',
+      generatedAt: new Date('2026-08-21T10:00:00.000Z'),
+      lineCount: 12,
+      settledLineCount: 4,
+      ...overrides,
     });
 
-    it('stays away when nothing was remembered', async () => {
+    it('appears for an active basket, and names it', async () => {
+      const fixture = await render({
+        generated: fakeGeneratedListStore([basket()]),
+      });
+
+      expect(query(fixture, 'lib-shopping-list-card')).not.toBeNull();
+      expect(text(fixture)).toContain('Saturday big shop');
+    });
+
+    // Absent entirely: no header, no empty card, no gap (section 3.1). A person who has
+    // never generated one is not shown a slot where one would go, because the bottom
+    // bar's primary action already says the feature is there.
+    it('stays away when there is no active basket, leaving no empty section', async () => {
       const fixture = await render();
 
-      expect(query(fixture, 'lib-resume-list-card')).toBeNull();
+      expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
+      expect(text(fixture)).not.toContain('home.section.shoppingList');
     });
 
-    // A device that last opened a list before plan 0012 holds a bare id. It is read as
-    // a list with no zone and the card does not render, which costs one missing card
-    // on one device rather than a navigation to a route that cannot resolve.
-    it('stays away for a value stored before the zone was part of it', async () => {
-      const storage = new Map([[StorageKeys.lastList, 'l1']]);
+    // A finished trip is history, not something to pick back up, so it belongs on the
+    // history page and not on the dashboard.
+    it('stays away for a basket that is no longer active', async () => {
+      const fixture = await render({
+        generated: fakeGeneratedListStore([basket({ status: 'COMPLETED' })]),
+      });
 
-      const fixture = await render({ storage });
-
-      expect(query(fixture, 'lib-resume-list-card')).toBeNull();
+      expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
     });
 
-    // Plan 0017, section 7. Three joins on one row, and each of the three is a way
-    // this can be quietly wrong, so each gets a test.
-    describe('who is shopping it', () => {
-      const storage = () => new Map([[StorageKeys.lastList, 'z1/l1']]);
+    it('asks the store for the listing when the page is created', async () => {
+      const store = fakeGeneratedListStore([basket()]);
 
-      /**
-       * Read off the card's input rather than out of the DOM, and deliberately: the
-       * testing translator returns the key without interpolating it, so the rendered
-       * sentence never contains a name whatever the container computed. The input is
-       * the boundary that matters anyway. The container resolves who is shopping; the
-       * card is a component that renders a list of names and is tested where it lives.
-       */
-      const shoppers = (fixture: ComponentFixture<HomePage>) =>
-        fixture.debugElement
-          .query(By.directive(ResumeListCard))
-          ?.componentInstance.list().shoppers;
+      await render({ generated: store });
 
-      it('names the other people looking at the list', async () => {
-        const fixture = await render({
-          storage: storage(),
-          presence: { viewers: { l1: ['u2'] } },
-          names: { u2: 'Ana' },
-        });
+      expect(store.calls).toContain('load');
+    });
 
-        expect(shoppers(fixture)).toEqual(['Ana']);
+    // Generating one on a laptop puts the card on a phone with no reload, which is what
+    // the owner's own realtime room is for. Driven through the store here, since the
+    // container's job is to render whatever the store holds at the time.
+    it('appears without a reload when one arrives while the page is open', async () => {
+      const store = fakeGeneratedListStore([]);
+      const fixture = await render({ generated: store });
+
+      expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
+
+      store.set([basket()]);
+      fixture.detectChanges();
+
+      expect(query(fixture, 'lib-shopping-list-card')).not.toBeNull();
+    });
+
+    /**
+     * Read off the card's input rather than out of the DOM, for the reason the resume
+     * card's presence row was: the testing translator returns the key without
+     * interpolating it, so a rendered count never reaches the markup. The input is the
+     * boundary that matters anyway.
+     */
+    const card = (fixture: ComponentFixture<HomePage>) =>
+      fixture.debugElement.query(By.directive(ShoppingListCard))
+        ?.componentInstance;
+
+    it('shows the newest and counts the others rather than guessing between them', async () => {
+      const fixture = await render({
+        generated: fakeGeneratedListStore([
+          basket({ id: 'gl1' }),
+          basket({ id: 'gl2', name: 'Corner shop' }),
+        ]),
       });
 
-      // The reader is in the server's viewers only when they have the list open, and
-      // they do not here; the point is that the card would never count them anyway.
-      // A card that says you are shopping is wrong about the only thing it says.
-      it('leaves the reader out of it', async () => {
-        const fixture = await render({
-          storage: storage(),
-          presence: { viewers: { l1: ['u1', 'u2'] } },
-          names: { u1: 'Me', u2: 'Ana' },
-        });
+      expect(card(fixture).list().id).toBe('gl1');
+      expect(card(fixture).list().otherActiveCount).toBe(1);
+    });
 
-        expect(shoppers(fixture)).toEqual(['Ana']);
+    // An unnamed basket is titled with its date, resolved by the container because it
+    // needs a locale and cannot be computed from one basket in isolation.
+    it('titles an unnamed basket with its generation date', async () => {
+      const fixture = await render({
+        generated: fakeGeneratedListStore([basket({ name: null })]),
       });
 
-      it('says nothing rather than showing an id it could not resolve', async () => {
-        const fixture = await render({
-          storage: storage(),
-          presence: { viewers: { l1: ['u2'] } },
-          names: {},
-        });
-
-        expect(shoppers(fixture)).toEqual([]);
-      });
-
-      it('holds the list room so the presence broadcast reaches it', async () => {
-        // `presence.listUpdated` is published to `list:{id}` and to no zone room, so
-        // this subscription is the only reason the row can ever be filled. Plan 0016
-        // says not to subscribe to a list for updates the zone already carries; this
-        // is the update it does not carry.
-        const fixture = await render({ storage: storage() });
-        const realtime = TestBed.inject(REALTIME_CLIENT) as RealtimeMemory;
-
-        expect(realtime.rooms).toContain('list:l1');
-
-        // Observing, not announcing: a dashboard is not a shop.
-        expect(realtime.viewedLists.has('l1')).toBe(false);
-
-        fixture.destroy();
-        expect(realtime.rooms).not.toContain('list:l1');
-      });
+      expect(card(fixture).list().name).not.toBe('');
+      expect(card(fixture).list().name).not.toBe('gl1');
     });
   });
 

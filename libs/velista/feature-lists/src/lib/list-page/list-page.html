@@ -91,15 +91,16 @@
       A read-only caller sees everything and can press nothing, so the page says why
       once, at the top, instead of letting each control refuse in turn.
 
-      A `WRITE`-only caller has a full composer and rows that do not answer a tap,
-      because ticking off is `DECIDE` now. Without a sentence naming who does the
-      ticking, a screen that takes a new line and ignores a tap on it reads as broken
-      (section 7). Never both: read only is the absence of `WRITE`.
+      A `WRITE`-only caller has a full composer, rows that open, and **a number that
+      does not move**, because changing the quantity is `DECIDE`. Without a sentence
+      naming who does the buying, a screen that takes a new line and then ignores a
+      drag on it reads as broken (velista plan 0043, section 7). Never both: read only
+      is the absence of `WRITE`.
     -->
     @if (current.abilities.readOnly) {
       <lib-list-notice messageKey="list.readOnly.banner" />
     } @else if (current.abilities.canWrite && !current.abilities.canDecide) {
-      <lib-list-notice messageKey="list.ticking.notMine" />
+      <lib-list-notice messageKey="list.buying.notMine" />
     }
 
     @if (current.empty) {
@@ -111,9 +112,10 @@
       <lib-line-list
         (act)="act($event)"
         (dismiss)="dismissNote($event)"
+        (opened)="openLine($event)"
+        (quantityChanged)="changeQuantity($event)"
         (reorderTo)="moveTo($event)"
         (retry)="retry($event)"
-        (ticked)="toggle($event)"
         [announcement]="announcement()"
         [lines]="current.lines"
         [markedId]="markedLine()"
@@ -194,10 +196,12 @@
         happens on its own (`VoicePreferences`).
       -->
       <lib-line-composer
+        (queryChanged)="onComposerQuery($event)"
         (recordingFailed)="onRecordingFailed()"
         (spoke)="addAloud($event)"
         (submitted)="add($event)"
         [busy]="composerBusy()"
+        [suggestions]="suggestions()"
         [keepListening]="keepListening()"
         [sendOnSilence]="sendOnSilence()"
         [takeFocus]="page.empty"

@@ -63,10 +63,13 @@ describe('AppShellRoutes', () => {
       ).toBe(true);
     });
 
-    it('offers the same two over the dashboard', () => {
-      // Both pages offer both actions, so the two copies come from one function and
-      // cannot drift apart.
+    it('offers the same two over the dashboard, beside its own', () => {
+      // Both pages offer both entry actions, so those two copies come from one
+      // function and cannot drift apart. `get` is the dashboard's alone (plan 0045):
+      // Get shopping list is the primary action of this page and of no other, so it is
+      // written here rather than added to `entrySheetRoutes`.
       expect(sheetsOf('home').map((route) => route.path)).toEqual([
+        'get',
         'zones/new',
         'zones/join',
       ]);
@@ -79,8 +82,10 @@ describe('AppShellRoutes', () => {
         'landing',
         'landing',
       ]);
+      // `get` carries no `returnTo`: it is offered over the dashboard and nowhere
+      // else, so where Cancel goes is not a question it has to be told the answer to.
       expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual(
-        ['home', 'home']
+        [undefined, 'home', 'home']
       );
     });
 
@@ -288,11 +293,14 @@ describe('AppShellRoutes', () => {
         ).toContain('lists/new');
       });
 
-      it('offers the four sheets over it, as routes rather than flags', () => {
+      it('offers the five sheets over it, as routes rather than flags', () => {
         // Rule E1: each covers the page without losing it, and Android's back button
         // has to dismiss it. Ticking a line off is deliberately not among them.
         expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual(
           [
+            // What a tap opens (velista plan 0043, section 5.1). `/detail` rather
+            // than the bare `lines/:lineId`, which belongs to the line page.
+            'lines/:lineId/detail',
             'lines/:lineId/edit',
             'lines/:lineId/comments',
             'lines/:lineId/confirm/delete',
@@ -308,7 +316,7 @@ describe('AppShellRoutes', () => {
         // allowed, on every request.
         const sheets = routeAt(listPath)?.children ?? [];
 
-        expect(sheets).toHaveLength(4);
+        expect(sheets).toHaveLength(5);
         for (const sheet of sheets) {
           expect(sheet.canActivate).toBeUndefined();
         }
@@ -482,6 +490,98 @@ describe('AppShellRoutes', () => {
     });
   });
 
+  /**
+   * The shared basket and its join screen (plan 0044).
+   *
+   * The assertions worth having here are the two that are easy to break and
+   * impossible to see: that the basket page carries **no** authentication guard,
+   * and that the join screen sits at the top level rather than under the listing.
+   */
+  describe('the basket', () => {
+    const basketPath = 'shopping-lists/:generatedListId';
+    const joinPath = 's/:secret';
+
+    function routeAt(path: string): Route | undefined {
+      return pages.find((route) => route.path === path);
+    }
+
+    it('declares both, before the empty front door', () => {
+      const paths = pages.map((route) => route.path);
+
+      expect(paths).toContain(basketPath);
+      expect(paths).toContain(joinPath);
+      expect(paths.indexOf(basketPath)).toBeLessThan(paths.indexOf(''));
+      expect(paths.indexOf(joinPath)).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('lets a guest reach the basket, which is the whole feature', () => {
+      // **No `authenticatedGuard`.** What authorizes a guest is their participant
+      // session, checked by the server on every request; a guard here would refuse
+      // exactly the reader plan 0044 exists for. An absent guard reads as an
+      // oversight, so it is asserted rather than left to the table to imply.
+      expect(routeAt(basketPath)?.canActivate).toBeUndefined();
+    });
+
+    it('declines a non UUID basket segment with canMatch', () => {
+      // Rule G1, added before the collision exists: plan 0045 owns
+      // `shopping-lists` as a listing, and the first thing anybody adds beside it
+      // is a `shopping-lists/new` this route would otherwise swallow.
+      expect(routeAt(basketPath)?.canMatch).toHaveLength(1);
+    });
+
+    it('keeps the join screen public and full screen', () => {
+      // A cold arrival from somebody else's message: no guard, and no parent page
+      // to render over, which is why it is not a sheet.
+      expect(routeAt(joinPath)?.canActivate).toBeUndefined();
+      expect(routeAt(joinPath)?.canMatch).toBeUndefined();
+      expect(routeAt(joinPath)?.children).toBeUndefined();
+    });
+
+    it('keeps the join screen out from under the listing', () => {
+      // `s/:secret` and not `shopping-lists/join/:secret`: a stranger holding this
+      // link has no shopping lists, and every segment is another way for a link
+      // pasted into a group chat to arrive broken.
+      expect(joinPath.startsWith('shopping-lists')).toBe(false);
+    });
+
+    it('offers the three sheets over the basket', () => {
+      expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual([
+        'lines/:lineId/settle',
+        'people',
+        'share',
+      ]);
+    });
+
+    it('guards none of the sheets, because what a reader may do is not a route', () => {
+      // Which of them a caller may **use** is decided by the page from the
+      // caller's own facts, and the server refuses the rest regardless of what is
+      // drawn. The share sheet is the owner's alone and is not drawn for anybody
+      // else, which is a property of the page rather than of the route.
+      const sheets = routeAt(basketPath)?.children ?? [];
+
+      expect(sheets).toHaveLength(3);
+      for (const entry of sheets) {
+        expect(entry.canActivate).toBeUndefined();
+      }
+    });
+
+    it('provides the store on the page, so two baskets are never open at once', () => {
+      expect(routeAt(basketPath)?.providers).toHaveLength(1);
+    });
+
+    it('keeps the page, the join screen and every sheet lazy', () => {
+      const added = [
+        routeAt(basketPath),
+        routeAt(joinPath),
+        ...(routeAt(basketPath)?.children ?? []),
+      ];
+
+      expect(added.every((route) => route?.loadComponent !== undefined)).toBe(
+        true
+      );
+    });
+  });
+
   describe('the assistant', () => {
     const assistant = pages.find((route) => route.path === 'assistant');
 
@@ -549,11 +649,13 @@ describe('the sheets and their exit animation', () => {
    * direction.
    */
   const SHEET_PATHS = [
+    'get',
     'zones/new',
     'zones/join',
     'lists/new',
     'settings',
     'lines/:lineId/edit',
+    'lines/:lineId/detail',
     'lines/:lineId/comments',
     'lines/:lineId/confirm/delete',
     'name',
@@ -562,6 +664,11 @@ describe('the sheets and their exit animation', () => {
     ':membershipId/confirm/ban',
     ':membershipId/confirm/transfer',
     ':membershipId/confirm/rename',
+    // The basket's three (plan 0044). Every one is a child of the basket page, so
+    // the list underneath keeps its scroll and back dismisses the sheet.
+    'lines/:lineId/settle',
+    'people',
+    'share',
   ];
 
   const all = everyRoute(AppShellRoutes);
@@ -586,5 +693,50 @@ describe('the sheets and their exit animation', () => {
       .map(({ path }) => path);
 
     expect(overreach).toEqual([]);
+  });
+});
+
+/**
+ * The basket routes (plans 0044 and 0045).
+ *
+ * The paths are written out here rather than compared against `BASKET_PATHS`, which the
+ * links are built from, and that is forced rather than sloppy: this library **lazy
+ * loads** `feature-shopping-lists`, so a static import of it is an eslint error even in
+ * a spec, and it would be a real problem rather than a pedantic one, since naming the
+ * constant here pulls those pages into the shell's initial payload.
+ *
+ * So the two are tied by these assertions instead: if somebody renames the constant,
+ * the links move and these fail; if somebody renames the route, these fail. Either way
+ * a rename cannot land half done, which is what matters, because a route path is the
+ * one string that fails at neither compile time nor run time. A `routerLink` to a path
+ * that does not exist simply does nothing when tapped, on a phone, in a shop.
+ */
+describe('the basket routes', () => {
+  const paths = pages.map((route) => route.path);
+
+  it('declares the history at the path the links are built from', () => {
+    expect(paths).toContain('shopping-lists');
+  });
+
+  // Every non empty path comes before the front door, which the table-wide assertion
+  // above already covers; this names it, so removing it is a failure rather than a
+  // shorter list that still happens to be ordered.
+  it('declares it before the front door', () => {
+    expect(paths.indexOf('shopping-lists')).toBeLessThan(paths.indexOf(''));
+  });
+
+  // A basket is private and the listing resolves from the caller's own token. The
+  // **basket** screen is the one that must not carry this guard, since a guest with no
+  // account has to reach it by link; that route is `0044`'s.
+  it('keeps the history behind the authenticated guard', () => {
+    expect(
+      pages.find((route) => route.path === 'shopping-lists')?.canActivate
+    ).toHaveLength(1);
+  });
+
+  it('keeps it lazy, like every other page', () => {
+    expect(
+      pages.find((route) => route.path === 'shopping-lists')?.loadComponent
+    ).toBeDefined();
   });
 });

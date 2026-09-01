@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
   CORE_ENTITIES,
+  LineSettlement,
   ListAccess,
   ListLine,
   ListLineItem,
@@ -70,6 +71,7 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
       dataSource,
       dataSource.getRepository(ListLine),
       dataSource.getRepository(ListLineItem),
+      dataSource.getRepository(LineSettlement),
       listAccess,
       { emit: jest.fn() } as never
     );

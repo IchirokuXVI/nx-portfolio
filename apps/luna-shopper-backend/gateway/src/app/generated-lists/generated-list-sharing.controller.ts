@@ -16,7 +16,11 @@ import {
   AUTH_PATTERNS,
   GENERATED_LIST_SHARING_PATTERNS,
   GENERATED_LIST_SHARING_SCHEMA_IDS,
+  ITEM_PATTERNS,
   type EnsureShareLinkRequest,
+  type GeneratedListBasketLineView,
+  type GeneratedListBasketResult,
+  type GeneratedListBasketView,
   type GeneratedListJoinCoreResult,
   type GeneratedListJoinResult,
   type GeneratedListLinkPreview,
@@ -25,10 +29,15 @@ import {
   type GeneratedListSettleResult,
   type GeneratedListShareLinkResult,
   type GeneratedListShareLinkView,
+  type GetGeneratedListBasketRequest,
+  type GetItemsRequest,
+  type GetItemsResult,
+  type ItemView,
   type JoinGeneratedListRequest,
   type MintParticipantTokenRequest,
   type MintParticipantTokenResult,
   type ParticipantTokenResult,
+  type SetGeneratedListPickRequest,
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { ForbiddenException } from '@portfolio/luna-shopper/platform';
@@ -45,6 +54,7 @@ import {
   EnsureShareLinkDto,
   JoinGeneratedListDto,
   RevokeShareLinkDto,
+  SetGeneratedListPickDto,
   SettleGeneratedListLineDto,
 } from './generated-list-sharing.dto';
 import { Participant, ParticipantGuard } from './participant.guard';
@@ -262,6 +272,104 @@ export class ShareLinkController {
 @Controller({ path: 'generated-lists', version: '1' })
 export class GeneratedListParticipantController {
   constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * The basket itself, as this participant may see it (section 5).
+   *
+   * The route the whole screen is built on, and the one plan 0050 could not
+   * provide: `GET /v1/generated-lists/:id` resolves a basket by its owner's id,
+   * so a guest holding a link gets a 404 from it however valid their session is.
+   * This one resolves nothing by user, and core redacts the answer per reader.
+   */
+  @Get(':id/basket')
+  @ApiComposedResponse(GENERATED_LIST_SHARING_SCHEMA_IDS.basketResult)
+  @ApiProblemResponses({ auth: true, notFound: true })
+  async getBasket(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string
+  ): Promise<GeneratedListBasketResult> {
+    const req: GetGeneratedListBasketRequest = {
+      generatedListId: id,
+      participantId: participant.participantId,
+    };
+    const basket = await this.nats.send<GeneratedListBasketView>(
+      GENERATED_LIST_SHARING_PATTERNS.basketGet,
+      req
+    );
+
+    return { ...basket, products: await this.productsOf(basket) };
+  }
+
+  /**
+   * The products every line names, in one catalog round trip.
+   *
+   * Composed here rather than fetched by the client because every catalog route
+   * needs an account token and the reader may be a guest who has none. Section
+   * 6.1 says a line's options are catalog products and never zone data, so a
+   * guest is entitled to the names; this is how they get them without opening a
+   * second public catalog surface.
+   *
+   * A catalog that is unreachable costs the captions and not the screen: the
+   * lines, their quantities and what is outstanding are the basket, and a shopper
+   * standing in an aisle is better served by a list with unnamed picks than by an
+   * error page.
+   */
+  private async productsOf(
+    basket: GeneratedListBasketView
+  ): Promise<ItemView[]> {
+    const ids = [
+      ...new Set(
+        basket.lines.flatMap((line) =>
+          line.itemId ? [line.itemId, ...line.options] : line.options
+        )
+      ),
+    ];
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const req: GetItemsRequest = { ids };
+    try {
+      const found = await this.nats.send<GetItemsResult>(
+        ITEM_PATTERNS.getMany,
+        req
+      );
+      return found.items;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Swap a line's pick to another of its options (section 6.1).
+   *
+   * **No `seesZoneData` check**, unlike the allocation sheet below it. The
+   * options are catalog products and never zone data, so a guest at the shelf may
+   * prefer another brand and say so; the settlement that follows records whatever
+   * is actually in the trolley.
+   */
+  @Post(':id/lines/:lineId/pick')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setPick, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ auth: true, body: true, notFound: true })
+  setPick(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+    @Body() dto: SetGeneratedListPickDto
+  ): Promise<GeneratedListBasketLineView> {
+    const req: SetGeneratedListPickRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+      itemId: dto.itemId,
+    };
+    return this.nats.send<GeneratedListBasketLineView>(
+      GENERATED_LIST_SHARING_PATTERNS.setPick,
+      req
+    );
+  }
 
   /**
    * Settle a line: the whole outstanding amount, a number, or an allocation.

@@ -15,6 +15,8 @@ import {
   type CreateSupermarketRequest,
   type FindItemByEanRequest,
   type FindItemByEanResult,
+  type GetItemsRequest,
+  type GetItemsResult,
   type GetSupermarketItemRequest,
   type GetSupermarketLocationItemRequest,
   type ItemIdRequest,
@@ -182,6 +184,18 @@ export class CatalogController {
   @MessagePattern(ITEM_PATTERNS.get)
   getItem(@Payload() req: ItemIdRequest): Promise<ItemView> {
     return this.items.get(req);
+  }
+
+  /**
+   * Several products by id, for the basket screen (plan 0051, section 6.1).
+   *
+   * The one catalog read that carries no `userId`, because a product's name is
+   * not private and a **guest** holding a shared basket has to be able to read
+   * the name of the thing they are being asked to buy.
+   */
+  @MessagePattern(ITEM_PATTERNS.getMany)
+  getItems(@Payload() req: GetItemsRequest): Promise<GetItemsResult> {
+    return this.items.getMany(req);
   }
 
   @MessagePattern(ITEM_PATTERNS.search)

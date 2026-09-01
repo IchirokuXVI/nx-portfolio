@@ -9,6 +9,8 @@ import { SessionStore } from './auth/session-store';
 import { TokenStore } from './auth/token-store';
 import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
+import { GeneratedListMemory } from './generated-lists/generated-list-memory';
+import { GeneratedListStore } from './generated-lists/generated-list-store';
 import { LineMemory } from './lines/line-memory';
 import { LineStore } from './lines/line-store';
 import { ListMemory } from './lists/list-memory';
@@ -103,6 +105,15 @@ import { ZoneStore } from './zones/zone-store';
  * `ShoppingProfileMemory` joins for `AccountMemory`'s reason exactly, and
  * `ShoppingProfileApi` stays out like every other real transport.
  *
+ * `GeneratedListStore` (plan 0045) joins for `ZoneStore`'s reason a sixth time: it
+ * resolves `GENERATED_LIST_SERVICE` and `REALTIME_CLIENT`, so at the root it would list
+ * fixture baskets beside a real account and would apply the owner's own basket events
+ * from a socket nobody was connected to. It is app scoped rather than page scoped for
+ * `ShoppingProfileStore`'s second reason: the dashboard card and the history page are
+ * two routes reading one listing, and a page owned store would refetch it on every move
+ * between them. `GeneratedListMemory` joins for `AccountMemory`'s reason exactly, and
+ * `GeneratedListApi` stays out like every other real transport.
+ *
  * `AssistantMemory` (plan 0032) joins for `CommentMemory`'s reason and no stronger one:
  * it injects nothing, so root scope would work for it, and it is listed here anyway so
  * that every fake in this library is installed in one place rather than two. It is no
@@ -133,4 +144,6 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   PresenceStore,
   ShoppingProfileMemory,
   ShoppingProfileStore,
+  GeneratedListMemory,
+  GeneratedListStore,
 ];

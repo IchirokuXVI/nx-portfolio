@@ -570,7 +570,7 @@ describe('ZoneStore', () => {
    */
   describe('the list preview on a zone card', () => {
     function preview(id: string, name: string): ListPreview {
-      return { id, name, lineCount: 4, readyCount: 1 };
+      return { id, name, lineCount: 4, wantedCount: 1 };
     }
 
     /** The rows the first zone is showing, after loading it with `lists`. */
@@ -599,7 +599,7 @@ describe('ZoneStore', () => {
         id: 'l9',
         name: 'Party',
         lineCount: 0,
-        readyCount: 0,
+        wantedCount: 0,
       });
       expect(store.myZones()[0].counts.listCount).toBe(3);
     });
@@ -759,7 +759,7 @@ describe('ZoneStore', () => {
         zone({
           myRole: 'MEMBER',
           myStatus: 'APPROVED',
-          lists: [{ id: 'l1', name: 'Weekly', lineCount: 4, readyCount: 1 }],
+          lists: [{ id: 'l1', name: 'Weekly', lineCount: 4, wantedCount: 1 }],
         }),
       ];
       realtime.emit('member.approved', {
