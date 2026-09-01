@@ -32,7 +32,7 @@ CI/CD pipeline and the chart internals see the [root README](../README.md).
 - **Docker Buildx** (bundled with Docker Desktop) — the build executor uses
   `docker buildx build --load`.
 - **Helm** 3.x and **kubectl**.
-- **Node 22** and the workspace dependencies installed (`npm ci --legacy-peer-deps`).
+- **Node 24** and the workspace dependencies installed (`npm ci`).
 - For e2e: **Cypress** and **Playwright** browsers (`npx playwright install chromium`).
 - **Kubernetes 1.31 or newer** if you use a mode that routes through the gateway.
   Gateway API v1.5+ CRDs use CEL functions (`isIP`, `format.dns1123Label`) that older

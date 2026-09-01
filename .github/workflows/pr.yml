@@ -41,7 +41,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       # The base is the branch receiving the PR (main or dev), not a fixed branch,
       # so a PR into dev is diffed against dev and a PR into main against main.
@@ -82,7 +82,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       # Everything below is guarded on this. A pull request that touches no Luna
       # Shopper project does no Docker work, installs no browsers, and finishes in
