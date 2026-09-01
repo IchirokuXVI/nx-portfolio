@@ -1013,7 +1013,8 @@
       "none": "{{who}} dice que no tenían",
       "someone": "Alguien",
       "you": "Tú",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "reverted": "Deshecho"
     },
     "error": {
       "alreadyFinished": "Alguien ya ha terminado esta línea",

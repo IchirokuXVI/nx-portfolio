@@ -297,12 +297,15 @@ export class LineMemory implements LineServiceI {
       // The exact product, copied at settle time: the one named, or the line's only
       // one, or none at all on a free text line.
       itemId:
-        options?.itemId ??
-        (line.itemIds.length === 1 ? line.itemIds[0] : null),
+        options?.itemId ?? (line.itemIds.length === 1 ? line.itemIds[0] : null),
       outcome,
       quantity: bought,
       settledByUserId: this._lists.callerUserId(),
       settledAt: new Date(),
+      // A settle that has just happened has not been taken back. Reopening is a
+      // basket act (luna `0054`, section 3) and this fake is the zone list surface,
+      // which has no route that would set this.
+      revertedAt: null,
     };
     this._settlements = [settlement, ...this._settlements];
 
@@ -347,7 +350,8 @@ export class LineMemory implements LineServiceI {
   ): Promise<Page<LineSettlement>> {
     const readable = this._settlements.filter(
       (row) =>
-        row.itemId === itemId && this._permissionsFor(row.listId).includes('READ')
+        row.itemId === itemId &&
+        this._permissionsFor(row.listId).includes('READ')
     );
     return this._pageOf(readable, options);
   }

@@ -307,6 +307,16 @@
   cursor: pointer;
 }
 
+// "Taken back", beside the sentence it qualifies. Muted rather than struck
+// through: the settle happened, and somebody undid it, which is a different fact
+// from it never having happened (plan 0052, section 8).
+.history-reverted {
+  font-size: var(--app-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-text-muted);
+}
+
 .history {
   display: flex;
   flex-direction: column;

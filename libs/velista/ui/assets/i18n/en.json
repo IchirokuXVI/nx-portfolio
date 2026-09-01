@@ -1013,7 +1013,8 @@
       "none": "{{who}} says they had none",
       "someone": "Someone",
       "you": "You",
-      "close": "Close"
+      "close": "Close",
+      "reverted": "Taken back"
     },
     "error": {
       "alreadyFinished": "Somebody already finished this line",

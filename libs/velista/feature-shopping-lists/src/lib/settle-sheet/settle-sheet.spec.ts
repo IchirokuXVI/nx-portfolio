@@ -96,6 +96,7 @@ function settlement(overrides: Partial<LineSettlement> = {}): LineSettlement {
     quantity: 2,
     settledByUserId: 'u-marc',
     settledAt: new Date('2026-08-21T10:00:00.000Z'),
+    revertedAt: null,
     ...overrides,
   };
 }
@@ -740,6 +741,69 @@ describe('SettleSheet: what a failure says', () => {
 
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('.failed')
+    ).toBeNull();
+  });
+});
+
+/**
+ * Plan 0052, section 8: a reverted settlement stays in the history, marked.
+ *
+ * Luna `0054` does not delete the settlements a reopen undoes, because a settlement is
+ * an append (`0047` section 3). It marks them and keeps serving them, and the whole
+ * reason to open this pane is to reconcile two people's trips: a purchase that was
+ * taken back is part of that, and a gap where one was is not.
+ */
+describe('SettleSheet: a settlement that was taken back', () => {
+  async function history(rows: readonly LineSettlement[]) {
+    const { fixture } = await render({
+      settlements: { zl1: rows, zl2: [] },
+    });
+
+    fixture.componentInstance['openPane']('history');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('keeps the row rather than dropping it', async () => {
+    const fixture = await history([
+      settlement({
+        id: 's1',
+        revertedAt: new Date('2026-08-21T11:00:00.000Z'),
+      }),
+    ]);
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.history-row')
+    ).toHaveLength(1);
+  });
+
+  it('qualifies it quietly, and still says what happened', async () => {
+    // Never a strikethrough: that reads as deleted, and this settle was not deleted.
+    // It happened, and somebody undid it, which is a different fact.
+    const fixture = await history([
+      settlement({
+        id: 's1',
+        revertedAt: new Date('2026-08-21T11:00:00.000Z'),
+      }),
+    ]);
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector(
+      '.history-row'
+    );
+    expect(row?.querySelector('.history-reverted')?.textContent).toContain(
+      'basket.history.reverted'
+    );
+    expect(row?.querySelector('.history-what')?.textContent).toContain(
+      'basket.history.bought'
+    );
+  });
+
+  it('leaves a settlement that still stands unmarked', async () => {
+    const fixture = await history([settlement({ id: 's1' })]);
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.history-reverted')
     ).toBeNull();
   });
 });

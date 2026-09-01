@@ -188,9 +188,11 @@ export interface BasketServiceI {
  * a different hat. The settle direction works in full either way, and it is most of
  * the value.
  *
- * Flipping it to `true` is the whole of the frontend work when the route ships.
+ * **Turned on**: luna `0054` shipped `POST .../lines/:lineId/reopen`, so a finished
+ * row's glyph is a control again. What the constant is still worth is the record of
+ * what it gates, and the one line to change if the route is ever withdrawn.
  */
-export const BASKET_REOPEN_AVAILABLE = false;
+export const BASKET_REOPEN_AVAILABLE = true;
 
 /**
  * Inject this, typed as the interface, never a concrete class.

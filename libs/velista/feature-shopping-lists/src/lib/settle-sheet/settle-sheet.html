@@ -377,6 +377,20 @@
                       }}
                     }
                   </span>
+                  <!--
+                    A reverted settlement **stays in the history, marked** (plan
+                    0052, section 8). It does not disappear: the whole reason to
+                    open this pane is to reconcile two people's trips, and a
+                    purchase that was taken back is part of that.
+
+                    A quiet qualifier and never a strikethrough, which reads as
+                    deleted rather than as reversed.
+                  -->
+                  @if (row.reverted) {
+                    <span class="history-reverted">
+                      {{ 'basket.history.reverted' | rokuT }}
+                    </span>
+                  }
                   <span class="history-when">{{ row.when }}</span>
                 </li>
               }
