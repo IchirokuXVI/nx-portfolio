@@ -5,6 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -110,6 +111,37 @@ export class GetListSheet {
   private readonly _sheet = inject(SheetNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+  private readonly _route = inject(ActivatedRoute);
+
+  /**
+   * The page this sheet is drawn over, named by the route rather than worked out from
+   * the URL.
+   *
+   * This sheet exists twice, once over the dashboard and once over the history, and
+   * after dismissal somebody belongs back on whichever they opened it from. Route data
+   * makes that a declaration in the one table instead of string surgery on a URL, and
+   * it is also right for a deep link, where there is no history entry to go back to.
+   * Read from the snapshot because a sheet is created when its route activates and
+   * destroyed when it deactivates, so there is no later value to miss.
+   *
+   * The default matches the route that has always existed, so a sheet route added
+   * without the data behaves as the dashboard's rather than throwing.
+   */
+  private readonly _returnTo: 'home' | 'shopping-lists' =
+    this._route.snapshot.data['returnTo'] === 'shopping-lists'
+      ? 'shopping-lists'
+      : 'home';
+
+  /**
+   * Whether to offer the way to the history.
+   *
+   * Section 3.1 puts it here because the dashboard's own History link lives in the
+   * shopping list card, which goes away when every basket is finished; without this
+   * one such a person would have no route to their history at all. None of that
+   * applies when the history is the page underneath, and a control that leads to the
+   * screen it is already on is worse than no control.
+   */
+  readonly showHistory = this._returnTo !== 'shopping-lists';
 
   readonly maxLength = GENERATED_LIST_NAME_MAX_LENGTH;
 
@@ -364,9 +396,17 @@ export class GetListSheet {
     );
   }
 
-  /** Cancel, Escape, the scrim, and the back button all arrive here. */
+  /**
+   * Cancel, Escape, the scrim, and the back button all arrive here.
+   *
+   * The fallback is the page this sheet was declared over, which is only reached on a
+   * cold arrival at the sheet's own URL: with a page behind it in the stack `dismiss`
+   * pops, and popping lands on whichever page that was regardless of what is passed.
+   */
   async dismiss(): Promise<void> {
-    await this._sheet.dismiss(appPath(this._locale(), this._basePath, 'home'));
+    await this._sheet.dismiss(
+      appPath(this._locale(), this._basePath, this._returnTo)
+    );
   }
 
   onNameInput(event: Event): void {

@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -65,6 +65,7 @@ import { ShoppingListRow } from '../shopping-list-row/shopping-list-row';
     ChevronLeftIcon,
     EmptyState,
     ErrorState,
+    RouterOutlet,
     RowSkeleton,
     ShoppingListRow,
   ],
@@ -188,11 +189,16 @@ export class ShoppingListsPage {
     });
   }
 
-  /** Open the generation sheet, which lives over the dashboard (plan 0045). */
+  /**
+   * Open the generation sheet, over **this** page (plan 0045, section 3.4).
+   *
+   * A child of this route, so the sheet covers the history and dismissing it leaves
+   * the history exactly where it was. It used to open the dashboard's copy at
+   * `home/get`, which replaced the page underneath on the way in and then returned
+   * here on the way out: the same sheet, opened over the wrong screen.
+   */
   getList(): void {
-    void this._router.navigate(['..', 'home', 'get'], {
-      relativeTo: this._route,
-    });
+    void this._router.navigate(['get'], { relativeTo: this._route });
   }
 
   /**

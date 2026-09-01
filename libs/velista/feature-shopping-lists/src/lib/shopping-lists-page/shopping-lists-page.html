@@ -1,6 +1,12 @@
 @let page = state();
 
 <div class="page">
+  <!--
+    The destination header every screen without an app bar draws: a back control, then
+    the page's title in the display face at the page title step. Written the same way
+    the assistant's is, down to the glyph's class name, because the two are the same
+    bar and a reader moving between them must not see it change size or weight.
+  -->
   <header class="bar">
     <button
       (click)="back()"
@@ -8,7 +14,7 @@
       class="back"
       type="button"
     >
-      <lib-chevron-left-icon class="glyph" />
+      <lib-chevron-left-icon class="back-glyph" />
     </button>
     <h1 class="title">{{ 'history.title' | rokuT }}</h1>
   </header>
@@ -85,3 +91,10 @@
     }
   }
 </div>
+
+<!--
+  Where Get shopping list renders (plan 0008, rule E1). Outside `.page`, so the sheet
+  is not laid out between the fixed bar and the fixed footer: it covers both, and the
+  history keeps its scroll underneath it.
+-->
+<router-outlet />

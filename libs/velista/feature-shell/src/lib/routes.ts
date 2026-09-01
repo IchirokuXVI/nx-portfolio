@@ -100,6 +100,38 @@ function entrySheetRoutes(returnTo: 'landing' | 'home'): Route[] {
 }
 
 /**
+ * Get shopping list, as a child of whichever page offered it (plan 0045, section 3.4).
+ *
+ * A sheet by rule E1, for the two entry sheets' reason exactly: it covers the page
+ * without losing its scroll, and Android's back button dismisses it rather than
+ * closing the app.
+ *
+ * It exists **twice**, once over the dashboard and once over the history, because both
+ * screens offer the action and a sheet has to cover the page it was opened from. When
+ * it lived only under `home`, pressing Get shopping list on the history swapped the
+ * page underneath for the dashboard on the way in and dropped somebody back on the
+ * history on the way out, which reads as the app losing its place.
+ *
+ * One function called twice rather than two entries written out, for
+ * `entrySheetRoutes`' reason: the two copies must not be able to drift, and the only
+ * thing that differs between them is where Cancel goes back to.
+ *
+ * No guard beyond the page's own. Whether the caller may generate anything is decided
+ * by what they hold `WRITE` on (backend `0051` section 2), which is not knowable
+ * before the sources are read, so the sheet is where it is answered and not the route.
+ */
+function getListSheetRoutes(returnTo: 'home' | 'shopping-lists'): Route[] {
+  return [
+    sheet({
+      path: 'get',
+      data: { returnTo },
+      loadComponent: () =>
+        import('@portfolio/velista/feature-home').then((m) => m.GetListSheet),
+    }),
+  ];
+}
+
+/**
  * The four confirm sheets over a member's row (plan 0010, section 4.2).
  *
  * One component and four entries rather than four components: everything except the
@@ -287,22 +319,7 @@ export const AppShellRoutes: Route[] = [
             loadComponent: () =>
               import('@portfolio/velista/feature-home').then((m) => m.HomePage),
             children: [
-              sheet({
-                // Get shopping list (plan 0045, section 3.4). A child of the dashboard
-                // and so a sheet by rule E1, for the two entry sheets' reason exactly:
-                // it covers the page without losing its scroll, and Android's back
-                // button dismisses it rather than closing the app.
-                //
-                // No guard beyond the dashboard's own. Whether the caller may generate
-                // anything is decided by what they hold `WRITE` on (backend `0051`
-                // section 2), which is not knowable before the sources are read, so the
-                // sheet is where it is answered and not the route.
-                path: 'get',
-                loadComponent: () =>
-                  import('@portfolio/velista/feature-home').then(
-                    (m) => m.GetListSheet
-                  ),
-              }),
+              ...getListSheetRoutes('home'),
               ...entrySheetRoutes('home'),
             ],
           },
@@ -465,35 +482,6 @@ export const AppShellRoutes: Route[] = [
                   ),
               }),
             ],
-          },
-          {
-            // The history of generated shopping lists (plan 0045, section 3.3).
-            //
-            // The path is written out rather than taken from `BASKET_PATHS`, which the
-            // three screens that link here build their links from: naming that constant
-            // is a static import of `feature-shopping-lists`, which this file lazy
-            // loads, so it would pull those pages into the shell's initial payload.
-            // `routes.spec.ts` asserts the two still agree.
-            //
-            // Declared **before** `account` and before the front door, like every other
-            // non empty path, and it will also need to come before `0044`'s
-            // `shopping-lists/:generatedListId` once that lands: the two are siblings
-            // rather than parent and child, because the basket screen is its own
-            // destination and not something drawn over this page. `:generatedListId`
-            // carries a `canMatch` UUID guard for `zoneIdGuard`'s reason, so the two
-            // cannot swallow one another whichever way round they sit.
-            //
-            // `authenticatedGuard` and nothing more. A basket is private and the
-            // listing resolves from the caller's own token, so there is nothing here to
-            // authorize that the gateway does not already. The **basket** screen is the
-            // one that must not carry this guard, since a guest with no account has to
-            // reach it by link.
-            path: 'shopping-lists',
-            canActivate: [authenticatedGuard],
-            loadComponent: () =>
-              import('@portfolio/velista/feature-shopping-lists').then(
-                (m) => m.ShoppingListsPage
-              ),
           },
           {
             // Shopping profiles (plan 0046). A page of its own and **not a child of
@@ -682,6 +670,46 @@ export const AppShellRoutes: Route[] = [
                   ),
               }),
             ],
+          },
+          {
+            // The history of generated shopping lists (plan 0045, section 3.3).
+            //
+            // The path is written out rather than taken from `BASKET_PATHS`, which the
+            // three screens that link here build their links from: naming that constant
+            // is a static import of `feature-shopping-lists`, which this file lazy
+            // loads, so it would pull those pages into the shell's initial payload.
+            // `routes.spec.ts` asserts the two still agree.
+            //
+            // Declared **after** `shopping-lists/:generatedListId`, which is the one
+            // ordering constraint on it, and it moved here the moment this route grew
+            // a child. The two are siblings rather than parent and child, because the
+            // basket screen is its own destination and not something drawn over this
+            // page; but a parent only matches when one of its children matches the
+            // remainder, so with `get` below it this route now declines
+            // `shopping-lists/<uuid>` and the basket would be reached only by the
+            // router backtracking to a later sibling. Putting the more specific path
+            // first makes the match a decision rather than a piece of luck about how
+            // backtracking works, exactly as `zones/:zoneId/lists/:listId` sits before
+            // `zones/:zoneId`. The `canMatch` UUID guard on the basket is what keeps
+            // the pair unambiguous the other way, so `shopping-lists/get` cannot be
+            // read as a basket id (rule G1).
+            //
+            // Everything else about its position is unchanged: still before the front
+            // door, like every other non empty path. Sitting after `account` costs
+            // nothing, since neither path is a prefix of the other.
+            //
+            // `authenticatedGuard` and nothing more. A basket is private and the
+            // listing resolves from the caller's own token, so there is nothing here to
+            // authorize that the gateway does not already. The **basket** screen is the
+            // one that must not carry this guard, since a guest with no account has to
+            // reach it by link.
+            path: 'shopping-lists',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shopping-lists').then(
+                (m) => m.ShoppingListsPage
+              ),
+            children: [...getListSheetRoutes('shopping-lists')],
           },
           {
             /**

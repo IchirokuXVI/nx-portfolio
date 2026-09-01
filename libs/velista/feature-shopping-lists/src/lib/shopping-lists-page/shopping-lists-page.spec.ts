@@ -256,6 +256,42 @@ describe('ShoppingListsPage', () => {
       );
     });
 
+    /**
+     * Get shopping list opens over **this** page, not over the dashboard.
+     *
+     * It used to navigate to `../home/get`, so the sheet arrived with the dashboard
+     * drawn underneath and closing it dropped the reader back here: the same sheet,
+     * opened over the wrong screen. `['get']` is the child route of this page, which
+     * is what keeps the history underneath and its scroll intact.
+     */
+    it('opens the generation sheet over the history, not over the dashboard', async () => {
+      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const router = TestBed.inject(Router);
+      const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+
+      (query(fixture, '.footer button') as HTMLElement).click();
+
+      expect(navigate).toHaveBeenCalledWith(['get'], expect.anything());
+    });
+
+    it('offers the same sheet from the empty state', async () => {
+      const fixture = await render(fakeGeneratedListStore([]));
+      const router = TestBed.inject(Router);
+      const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+
+      (query(fixture, 'lib-empty-state button') as HTMLElement).click();
+
+      expect(navigate).toHaveBeenCalledWith(['get'], expect.anything());
+    });
+
+    it('has an outlet for the sheet to render into', async () => {
+      // Rule E1 makes the sheet a child route, and a child route with no outlet to
+      // render into is a navigation that changes the URL and draws nothing.
+      const fixture = await render(fakeGeneratedListStore([basket()]));
+
+      expect(query(fixture, 'router-outlet')).not.toBeNull();
+    });
+
     it('announces how many rows there are, once, rather than one per row', async () => {
       const fixture = await render(
         fakeGeneratedListStore([basket(), basket({ id: 'b' })])
