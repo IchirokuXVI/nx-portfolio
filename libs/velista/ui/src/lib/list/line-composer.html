@@ -94,9 +94,18 @@
     >
       @for (suggestion of suggestions(); track $index) {
         <li role="none">
+          <!--
+            `aria-selected="false"` on every row, always. Nothing here is ever
+            selected: choosing a suggestion **adds the line** rather than picking a
+            value that stays picked, so there is no selected state for the list to
+            have. The attribute is still required, and it is not a formality: without
+            it a screen reader announces a list of options with no way to say which
+            one it is on.
+          -->
           <button
             (click)="choose(suggestion)"
             [class.group]="suggestion.kind === 'group'"
+            aria-selected="false"
             class="suggestion"
             role="option"
             type="button"
@@ -148,6 +157,7 @@
       <li role="none">
         <button
           (click)="submit()"
+          aria-selected="false"
           class="suggestion plain"
           role="option"
           type="button"

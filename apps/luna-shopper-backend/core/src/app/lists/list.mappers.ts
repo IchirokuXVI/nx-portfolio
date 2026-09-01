@@ -1,6 +1,5 @@
 import {
   ListPermission,
-  NO_LINE_SETTLEMENTS,
   type CommentView,
   type LineSettlementSummary,
   type LineSettlementView,
