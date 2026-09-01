@@ -2,7 +2,6 @@ import {
   inLocale,
   type CatalogItem,
   type HistorySectionVm,
-  type Line,
   type LinePageVm,
   type LineSettlement,
   type ShoppingListSummary,
