@@ -14,12 +14,17 @@
   background: var(--app-surface-base);
 }
 
+// The destination header, set exactly as the assistant's is. This screen draws no app
+// bar, so its bar is the one the wordmark would otherwise be in, and a bar that is the
+// same bar has to be the same size, spacing and rule.
 .bar {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
-  padding: var(--app-space-3) var(--app-space-2) 0;
+  padding: var(--app-space-4) var(--app-space-4) var(--app-space-4)
+    var(--app-space-3);
+  border-block-end: 1px solid var(--app-border-subtle);
 }
 
 .back {
@@ -27,8 +32,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
+  min-inline-size: var(--app-touch-target);
+  min-block-size: var(--app-touch-target);
   border: none;
   background: transparent;
   color: var(--app-text-secondary);
@@ -37,21 +42,32 @@
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
+    border-radius: var(--app-radius-md);
   }
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
 }
 
 .glyph {
   font-size: var(--app-icon-md);
 }
 
+// The display face at the page title step (plan 0002, section 6). `xl` is what this
+// screen used to set, and it is the same mistake the assistant page records: the words
+// in the top left shrank on the way in from the dashboard, in the same face and the
+// same colour, for no visible reason.
 .title {
   flex: 1;
   min-width: 0;
   margin: 0;
   font-family: var(--app-font-display);
   font-weight: 400;
-  font-size: var(--app-text-xl);
+  font-size: var(--app-text-2xl);
   line-height: var(--app-leading-heading);
+  // The mark's tracking comes with the mark's size, exactly as on the assistant.
+  letter-spacing: var(--app-tracking-wordmark);
   color: var(--app-text-primary);
 }
 

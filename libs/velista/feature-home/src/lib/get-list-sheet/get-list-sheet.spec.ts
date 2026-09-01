@@ -1,5 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   fakeZoneStore,
@@ -19,6 +19,7 @@ import type {
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
+  SheetNavigation,
 } from '@portfolio/velista/platform';
 import { GetListSheet } from './get-list-sheet';
 
@@ -73,6 +74,13 @@ interface Options {
   readonly zones?: readonly MyZone[];
   readonly lists?: Readonly<Record<string, readonly ShoppingListSummary[]>>;
   readonly createRejects?: boolean;
+  /**
+   * The page the sheet is declared over, as its route states it.
+   *
+   * Left out it is the dashboard's copy, which is what an absent `returnTo` means and
+   * what the route table said before the history gained a copy of its own.
+   */
+  readonly returnTo?: 'home' | 'shopping-lists';
 }
 
 /** Records what the sheet asked the store to compose. */
@@ -127,6 +135,19 @@ async function render(
       // The real store's own behaviour is covered by its spec; here it is a recorder,
       // so what is under test is what the sheet decides to send.
       { provide: GeneratedListStore, useValue: generated },
+      // After `provideRouter`, so this wins: the sheet reads which page it covers from
+      // its own route's data, and `provideRouter([])` has no route carrying any.
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          snapshot: {
+            data:
+              options.returnTo === undefined
+                ? {}
+                : { returnTo: options.returnTo },
+          },
+        },
+      },
     ],
   }).compileComponents();
 
@@ -347,6 +368,48 @@ describe('GetListSheet', () => {
 
       expect(fixture.componentInstance.noSources()).toBe(true);
       expect(query(fixture, '.history')).not.toBeNull();
+    });
+
+    it('is absent over the history itself, which is where it would lead', async () => {
+      // The whole reason for the link is that somebody with no card has no other route
+      // to the history. Over the history that reason is gone, and a control leading to
+      // the screen it is on is worse than no control.
+      const fixture = await render({ returnTo: 'shopping-lists' });
+
+      expect(fixture.componentInstance.showHistory).toBe(false);
+      expect(query(fixture, '.history')).toBeNull();
+    });
+  });
+
+  /**
+   * Where Cancel, Escape, the scrim and the back button leave to.
+   *
+   * Only reached on a cold arrival at the sheet's own URL: with a page behind it in the
+   * stack `SheetNavigation.dismiss` pops instead, and popping lands on whichever page
+   * that was. The fallback still has to be right, because a shared or reloaded URL is
+   * exactly when there is nothing to pop.
+   */
+  describe('the page it falls back to', () => {
+    it('is the dashboard for the dashboard copy', async () => {
+      const fixture = await render();
+      const sheet = TestBed.inject(SheetNavigation);
+      const dismiss = jest.spyOn(sheet, 'dismiss').mockResolvedValue(undefined);
+
+      await fixture.componentInstance.dismiss();
+
+      expect(dismiss).toHaveBeenCalledWith(expect.stringContaining('/home'));
+    });
+
+    it('is the history for the history copy', async () => {
+      const fixture = await render({ returnTo: 'shopping-lists' });
+      const sheet = TestBed.inject(SheetNavigation);
+      const dismiss = jest.spyOn(sheet, 'dismiss').mockResolvedValue(undefined);
+
+      await fixture.componentInstance.dismiss();
+
+      expect(dismiss).toHaveBeenCalledWith(
+        expect.stringContaining('/shopping-lists')
+      );
     });
   });
 
