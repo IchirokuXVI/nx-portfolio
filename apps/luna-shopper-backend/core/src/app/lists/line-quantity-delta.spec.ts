@@ -8,7 +8,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
-import { ListLineItem } from '../entities';
+import { LineSettlement, ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineItems } from './line-items.fake';
@@ -150,12 +150,24 @@ function build(options: {
   // Plan 0048: the line's product set. Nothing in this file is about the set,
   // but every write path now touches one, so it has to work.
   const lineItems = fakeLineItems();
+  const settlements = fakeLineSettlements();
 
   const dataSource = {
     transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
       run({
-        getRepository: (entity: unknown) =>
-          entity === ListLineItem ? lineItems.repo : lineRepo,
+        getRepository: (entity: unknown) => {
+          if (entity === ListLineItem) {
+            return lineItems.repo;
+          }
+          // Answered from the **manager**, which is the point rather than a detail:
+          // a write inside a transaction reads its line's settlement summary through
+          // the connection it already holds, because taking a second one from the
+          // pool is what deadlocked ten concurrent deltas.
+          if (entity === LineSettlement) {
+            return settlements.repo;
+          }
+          return lineRepo;
+        },
       } as unknown as EntityManager),
   } as unknown as DataSource;
 
@@ -170,7 +182,7 @@ function build(options: {
     lineItems.repo as never,
     // No settlements on any line here: a delta is an edit, and the two
     // indicators it carries back are whatever the history already said.
-    fakeLineSettlements().repo as never,
+    settlements.repo as never,
     listAccess,
     publisher
   );
