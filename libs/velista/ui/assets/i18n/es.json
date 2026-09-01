@@ -850,6 +850,8 @@
     "title": "Lista de la compra",
     "loading": "Cargando la lista",
     "progress": "{{done}} de {{total}} conseguidos",
+    "progressUnavailable_one": "· {{count}} sin existencias",
+    "progressUnavailable_other": "· {{count}} sin existencias",
     "empty": "No hay nada en esta lista",
     "emptyHint": "Quien la ha hecho todavía no ha puesto nada.",
     "failed": "Esta lista no se ha podido cargar",

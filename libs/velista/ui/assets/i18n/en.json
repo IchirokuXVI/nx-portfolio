@@ -850,6 +850,8 @@
     "title": "Shopping list",
     "loading": "Loading the list",
     "progress": "{{done}} of {{total}} got",
+    "progressUnavailable_one": "· {{count}} not available",
+    "progressUnavailable_other": "· {{count}} not available",
     "empty": "Nothing on this list",
     "emptyHint": "Whoever made it has not put anything on it yet.",
     "failed": "This list would not load",

@@ -1,5 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import type { BasketLine, BasketSession } from '@portfolio/velista/models';
+import {
+  outstanding,
+  type BasketLine,
+  type BasketSession,
+} from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import { BasketMemory } from './basket-memory';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
@@ -107,6 +111,28 @@ describe('BasketStore', () => {
       expect(store.state()).toBe('ready');
       expect(store.lines().length).toBeGreaterThan(0);
       expect(store.me()).not.toBeNull();
+    });
+
+    it('does not count a line the shop had none of as one somebody got', async () => {
+      // The header says "got", and got means bought. A NOT_AVAILABLE settle
+      // closes a line's outstanding amount without buying anything, so counting
+      // every finished line as one somebody got would claim a purchase that
+      // never happened — the same claim the row's caption is careful to avoid.
+      const { store } = build();
+      await store.open('basket-saturday');
+
+      const bread = store
+        .lines()
+        .find((line) => line.lastOutcome === 'NOT_AVAILABLE');
+      expect(bread).toBeDefined();
+      expect(outstanding(bread as BasketLine)).toBe(0);
+
+      expect(store.progress().unavailable).toBe(1);
+      // Finished, and deliberately absent from `done`.
+      const finished = store
+        .lines()
+        .filter((line) => outstanding(line) === 0).length;
+      expect(store.progress().done).toBe(finished - 1);
     });
 
     it('counts progress in lines rather than in units', async () => {

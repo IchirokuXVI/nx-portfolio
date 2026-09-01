@@ -107,11 +107,24 @@
           <p class="empty-body">{{ 'basket.emptyHint' | rokuT }}</p>
         </div>
       } @else {
+        <!--
+          "got" means bought. A line closed because the shop had none is counted
+          separately rather than folded in, because folding it in would claim a
+          purchase that never happened.
+        -->
         <p class="progress">
           {{
             'basket.progress'
               | rokuT: { done: progress().done, total: progress().total }
           }}
+          @if (progress().unavailable > 0) {
+            <span class="progress-unavailable">
+              {{
+                'basket.progressUnavailable'
+                  | rokuT: { count: progress().unavailable }
+              }}
+            </span>
+          }
         </p>
 
         <ul class="lines">

@@ -134,8 +134,22 @@ export class BasketStore {
    */
   readonly progress = computed(() => {
     const lines = this.lines();
+    const finished = lines.filter((line) => outstanding(line) === 0);
+
+    // **`got` is not `finished`.** A `NOT_AVAILABLE` settle closes a line's
+    // outstanding amount without buying anything, so counting every finished
+    // line as one somebody got would report a shop that had none as a purchase
+    // — the same claim the row's caption is careful not to make.
+    //
+    // A summary view could not tell these apart, because the distinction is per
+    // line. This one can, so it does.
+    const unavailable = finished.filter(
+      (line) => line.lastOutcome === 'NOT_AVAILABLE'
+    ).length;
+
     return {
-      done: lines.filter((line) => outstanding(line) === 0).length,
+      done: finished.length - unavailable,
+      unavailable,
       total: lines.length,
     };
   });
