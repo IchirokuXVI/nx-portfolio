@@ -85,9 +85,47 @@ export const MEMBERSHIP_STATUS_FALLBACK: MembershipStatus = 'PENDING';
 export const LIST_PERMISSIONS = ['READ', 'WRITE', 'DECIDE', 'MANAGE'] as const;
 export type ListPermission = (typeof LIST_PERMISSIONS)[number];
 
-/** Where a line has got to on the shopping trip. Unknown reads as not yet done. */
-export const LINE_STATUSES = ['PENDING', 'READY', 'NOT_AVAILABLE'] as const;
-export type LineStatus = (typeof LINE_STATUSES)[number];
+/**
+ * What one settling act said happened (backend plan 0047, section 3).
+ *
+ * It replaced `LineStatus`, and the replacement is not a rename. `READY` was a
+ * fact about **one shopping trip** written onto a record that outlives every
+ * trip, which is why a shared list filled up with ticked lines nobody could get
+ * rid of except by deleting what they knew about the thing. This is a fact about
+ * a moment, recorded once and never edited, and the line's own state is its
+ * quantity (velista plan 0043, section 1).
+ *
+ * There is no fallback, and there is deliberately no `SKIPPED` member. "I decided
+ * not to buy this today" writes nothing at all, because it has to leave the line
+ * exactly as it was and must not look like it was dealt with, so it is the
+ * absence of a settlement rather than a third kind of one.
+ */
+export const SETTLEMENT_OUTCOMES = ['BOUGHT', 'NOT_AVAILABLE'] as const;
+export type SettlementOutcome = (typeof SETTLEMENT_OUTCOMES)[number];
+
+/**
+ * What an unrecognised outcome reads as, and it is the quiet one.
+ *
+ * `NOT_AVAILABLE` moves no quantity and counts as no purchase, so a value this
+ * build has never heard of reports a trip that happened and claims nothing about
+ * what the household now has. Reading it as `BOUGHT` would put a bought indicator
+ * on a line over an outcome nobody here understands.
+ */
+export const SETTLEMENT_OUTCOME_FALLBACK: SettlementOutcome = 'NOT_AVAILABLE';
+
+/**
+ * Whether a catalog suggestion offers a group of products or one of them
+ * (backend plan 0048, section 3).
+ *
+ * A group beats an item and the ranking is the **server's**, not a rule restated
+ * here: somebody typing "milk" is offered the group rather than one brand of it,
+ * and `item.searchOffers` already orders them that way (velista plan 0043,
+ * section 6). Unknown falls back to `item`, which attaches one product instead of
+ * several, and is the smaller thing to have to undo.
+ */
+export const CATALOG_SUGGESTION_KINDS = ['group', 'item'] as const;
+export type CatalogSuggestionKind = (typeof CATALOG_SUGGESTION_KINDS)[number];
+export const CATALOG_SUGGESTION_KIND_FALLBACK: CatalogSuggestionKind = 'item';
 
 /**
  * How far a voice comment's transcript got (backend plan 0045, section 4.2).
@@ -110,7 +148,6 @@ export const COMMENT_TRANSCRIPTIONS = [
 ] as const;
 export type CommentTranscription = (typeof COMMENT_TRANSCRIPTIONS)[number];
 export const COMMENT_TRANSCRIPTION_FALLBACK: CommentTranscription = 'FAILED';
-export const LINE_STATUS_FALLBACK: LineStatus = 'PENDING';
 
 /** Whether a suggested line has been accepted. Unknown reads as still awaiting. */
 export const LINE_APPROVAL_STATUSES = [

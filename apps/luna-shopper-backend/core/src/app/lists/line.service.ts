@@ -318,8 +318,16 @@ export class LineService {
             return line;
           });
 
-    this.emit(RealtimeEvent.LineAdded, list.zoneId, saved, itemIds, NO_LINE_SETTLEMENTS);
-    return toLineView(saved, itemIds);
+    // A line cannot have been bought in the same breath as being added, so the
+    // zero summary is the truth here rather than a stand in for an unread one.
+    this.emit(
+      RealtimeEvent.LineAdded,
+      list.zoneId,
+      saved,
+      itemIds,
+      NO_LINE_SETTLEMENTS
+    );
+    return toLineView(saved, itemIds, NO_LINE_SETTLEMENTS);
   }
 
   /**
@@ -402,9 +410,17 @@ export class LineService {
     // a correct list. The burst is exactly the fan out the N separate requests it
     // replaces would have produced anyway.
     for (const [index, row] of saved.entries()) {
-      this.emit(RealtimeEvent.LineAdded, list.zoneId, row, itemSets[index], NO_LINE_SETTLEMENTS);
+      this.emit(
+        RealtimeEvent.LineAdded,
+        list.zoneId,
+        row,
+        itemSets[index],
+        NO_LINE_SETTLEMENTS
+      );
     }
-    return saved.map((row, index) => toLineView(row, itemSets[index]));
+    return saved.map((row, index) =>
+      toLineView(row, itemSets[index], NO_LINE_SETTLEMENTS)
+    );
   }
 
   /**

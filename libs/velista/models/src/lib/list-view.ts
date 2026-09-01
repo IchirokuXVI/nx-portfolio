@@ -27,21 +27,25 @@ import type {
 export type LineWriteState = 'none' | 'pending' | 'failed' | 'overwritten';
 
 /**
- * Everything a row can be asked to do, other than being ticked off.
+ * Everything a row can be asked to do, other than change its quantity.
  *
- * Ticking off is deliberately not in here. It is one tap, it is reversible by the same
- * tap, and it is the thing this screen is for, so it is the row's own gesture rather
- * than an entry in a menu (section 4.2).
+ * Changing the quantity is deliberately not in here. It is the gesture the whole
+ * screen is built around now, so it is the row's own control rather than an entry
+ * in a menu (velista plan 0043, section 4).
  *
- * The two move actions are the grip's **keyboard** equivalent and are not drawn in the
- * overflow. They exist as actions rather than as an internal detail of a drag because
- * the container owns the order and a component that reordered its own siblings would
- * be deciding something it cannot see (section 7).
+ * **`markNotAvailable` and `markPending` are gone**, and their absence is section
+ * 1.1 rather than an omission. Saying the shop did not have something is a thing
+ * you say afterwards, deliberately, from the detail sheet, not something a thumb
+ * flicks past in an aisle; and there is no pending trip state left to put a line
+ * back to.
+ *
+ * The two move actions are the grip's **keyboard** equivalent and are not drawn in
+ * the overflow. They exist as actions rather than as an internal detail of a drag
+ * because the container owns the order and a component that reordered its own
+ * siblings would be deciding something it cannot see (section 7).
  */
 export type LineAction =
   | 'edit'
-  | 'markNotAvailable'
-  | 'markPending'
   | 'comments'
   | 'delete'
   | 'moveUp'
@@ -63,122 +67,175 @@ export type LineAction =
  */
 export type LineEditScope = 'full' | 'quantity';
 
+/**
+ * The three indicators a row can carry (velista plan 0043, section 3.3).
+ *
+ * `bought` and `notAvailable` come off the line itself, derived by the server
+ * from its settlements. `claimed` arrives on a **zone event** and is the only one
+ * that comes from outside the list: it is presence shaped rather than state
+ * shaped, appearing and disappearing while the page is open, and the one thing it
+ * must never be mistaken for is the line having been dealt with.
+ *
+ * A row can carry more than one at once. A loaf that was missing last week, is
+ * wanted again, and is in somebody's basket right now shows two of them, which is
+ * why this is a list and not a single value.
+ */
+export type LineIndicator = 'bought' | 'notAvailable' | 'claimed';
+
 /** One line, ready to draw. */
 export interface LineRowVm {
   /**
    * The server's id, or the client key an optimistic add is held under until the
-   * response returns (section 5.2). Either way it is what `trackBy` follows, so a row
-   * is never destroyed and rebuilt on the frame its real id arrives.
+   * response returns (section 5.2). Either way it is what `trackBy` follows, so a
+   * row is never destroyed and rebuilt on the frame its real id arrives.
    */
   readonly id: string;
   readonly content: string;
+  /**
+   * How many are wanted, which is the row's state and the reel's value.
+   *
+   * Drawn on **every** row now, zero included, where `0012` drew it only above
+   * one. It stopped being an annotation on a line and became the thing the line
+   * says, and a control that is only sometimes there is not a control anybody
+   * learns to reach for.
+   */
   readonly quantity: number;
-  readonly status: LineStatus;
   readonly approvalStatus: LineApprovalStatus;
   /**
-   * Whether the row draws as done: struck through, muted.
+   * Whether this line is settled: at zero with a purchase on record.
    *
-   * Derived rather than compared in a template, because three unrelated things produce
-   * it (READY, NOT_AVAILABLE and REJECTED) and only one of them is a tick.
+   * Drawn quietly, still present, still tappable, and **never struck through**.
+   * `struck` is gone with the tick it drew: there is nothing done about a line
+   * saying the household is stocked, and striking it out would say the record
+   * itself was finished with (section 3.2).
    */
-  readonly struck: boolean;
+  readonly settled: boolean;
+  /**
+   * The indicators this row carries, in the order they are drawn.
+   *
+   * Derived by the container rather than compared in a template, for the reason
+   * `struck` was: three unrelated facts produce them, one of them arrives on a
+   * socket, and a row deciding "bought when the quantity is zero, unless nothing
+   * was ever bought" is the kind of rule that ends up written twice and
+   * differently.
+   *
+   * Empty on an ordinary row, and empty on a line at zero that has never been
+   * bought, which is the never wanted case: somebody typed it, it has not been
+   * needed yet, and there is nothing to report.
+   */
+  readonly indicators: readonly LineIndicator[];
+  /**
+   * Who is out buying this, for the `claimed` indicator. Null when nobody is.
+   *
+   * A name and not an id, resolved by the container exactly as {@link editor} is,
+   * and null when it cannot be resolved. The row then draws no claim at all
+   * rather than naming a stranger.
+   */
+  readonly claimedBy: string | null;
   /**
    * The caption under the row, as a translation key, or null for an ordinary row.
    *
-   * Exactly three produce one, per section 4.7, and an ordinary row never grows a
-   * second line.
+   * Approval and the read-only note, and nothing else. The three indicators are
+   * not captions: they have their own treatments in section 3.3, and a row can
+   * carry two of them at once, which one line of text cannot.
    */
   readonly captionKey: string | null;
   /** How a write in flight on this row is going. Drives the 70% and the notices. */
   readonly write: LineWriteState;
   /**
-   * Who overwrote this row, for the notice. Null unless `write` is `overwritten`, and
-   * null even then when the name cannot be resolved (section 5.4).
+   * Who overwrote this row, for the notice. Null unless `write` is `overwritten`,
+   * and null even then when the name cannot be resolved (section 5.4).
    */
   readonly overwrittenBy: string | null;
   /**
    * How many comments this line has, as far as the client has **seen**.
    *
    * Undefined rather than zero when nothing has been observed, and the row draws
-   * nothing in both cases. There is no comment count anywhere on the wire: `LineView`
-   * does not carry one, so the only honest sources are a comment page this session
-   * loaded and the `comment.added` events it has watched go by. Rendering a confident
-   * zero for a line with nine comments on it would be worse than rendering nothing.
+   * nothing in both cases. There is no comment count anywhere on the wire:
+   * `LineView` does not carry one, so the only honest sources are a comment page
+   * this session loaded and the `comment.added` events it has watched go by.
+   * Rendering a confident zero for a line with nine comments on it would be worse
+   * than rendering nothing.
    */
   readonly commentCount?: number;
   /**
-   * Whether the row responds to a tap at all. False without `DECIDE`, and in reorder
-   * mode.
+   * Whether a tap opens the detail sheet.
    *
-   * It follows `canDecide` and no longer `canWrite`, because the tap **is** ticking off
-   * and ticking off is `DECIDE` now (section 4). So a `WRITE`-only caller has a full
-   * composer and rows that do not answer a tap, which is correct and is the one case on
-   * this screen that needs a caption to say who does the ticking, or it reads as broken.
+   * True for anybody holding `READ`, which is everybody who can see the row at
+   * all, and that is the change (section 5.1). The tap used to **be** the tick, so
+   * it followed `DECIDE` and a reader's rows sat there not answering; it opens
+   * what the app knows about the thing now, and knowing is not a permission. False
+   * only in reorder mode, where every row is a thing being dragged rather than a
+   * thing being read.
    */
   readonly interactive: boolean;
+  /**
+   * Whether the quantity may actually be changed on this row.
+   *
+   * `DECIDE`, and separate from {@link interactive} for the first time, because
+   * the tap and the drag stopped being one gesture. A `READ` caller gets a row
+   * that opens and a reel that does not move, which is honest in both directions;
+   * a `WRITE` only caller gets the same, and the page says once who does the
+   * buying rather than letting each row refuse in turn.
+   */
+  readonly adjustable: boolean;
   /**
    * The overflow's contents, decided by the container from the caller's own facts.
    *
    * An **empty list means no overflow button**, not a disabled one, exactly as
-   * `MemberRowVm.actions` does it: a disabled control says "you could do this, later"
-   * about something that will never be permitted.
+   * `MemberRowVm.actions` does it: a disabled control says "you could do this,
+   * later" about something that will never be permitted.
    *
-   * A read-only caller's rows keep exactly `['comments']`, and that survives plan 0030
-   * for a reason worth stating, because the plan can be read both ways. Commenting does
-   * now follow `WRITE` or `DECIDE`, so a reader may not say anything; what they may
-   * still do is **read** the conversation, and section 3.1 asks for exactly that, with
-   * the sheet opening for everybody who holds `READ` and the read-only note standing
-   * where the composer would be. The overflow is the only way into that sheet, so an
-   * empty list here would take away the reading as well as the writing. Acceptance item
-   * 1's "no overflow on any row" is the checklist disagreeing with the passage that
-   * reasoned it out, and the passage is the one that was thought about.
+   * A read-only caller's rows keep exactly `['comments']`. Commenting follows
+   * `WRITE` or `DECIDE`, so a reader may not say anything; what they may still do
+   * is **read** the conversation, and section 3.1 asks for exactly that. The
+   * overflow is the only way into that sheet, so an empty list here would take
+   * away the reading along with the writing.
    */
   readonly actions: readonly LineAction[];
   /**
-   * Which fields the edit sheet may make live on this row, or null when it may not be
-   * opened at all.
+   * Which fields the edit sheet may make live on this row, or null when it may not
+   * be opened at all.
    *
    * The mode is a function of the caller's permissions **and** the line's approval
-   * together (section 4), so it cannot be a fact about the person: a `MANAGE` holder
-   * gets the full sheet on every row, while a caller holding only `DECIDE` gets no edit
-   * on a pending row and the quantity stepper on an approved one. Deriving it per row is
-   * what keeps those two answers from being written down separately.
+   * together (plan 0030, section 4), so it cannot be a fact about the person: a
+   * `MANAGE` holder gets the full sheet on every row, while a caller holding only
+   * `DECIDE` gets no edit on a pending row and the quantity field on an approved
+   * one. Deriving it per row is what keeps those two answers from being written
+   * down separately.
    *
-   * Nullable, and that null is the **same decision** as `actions` not containing `edit`.
-   * The container derives both from one expression, so they cannot disagree; two fields
-   * exist because they are read by two different components and neither should have to
-   * search a menu array to find out what a sheet is for. The invariant to preserve when
-   * either is changed: `editScope` is non-null exactly when `actions` includes `edit`.
+   * Nullable, and that null is the **same decision** as `actions` not containing
+   * `edit`. The container derives both from one expression, so they cannot
+   * disagree; two fields exist because they are read by two different components
+   * and neither should have to search a menu array to find out what a sheet is
+   * for. The invariant to preserve when either is changed: `editScope` is non-null
+   * exactly when `actions` includes `edit`.
    */
   readonly editScope: LineEditScope | null;
   /**
    * Whether to draw the two decision buttons on this row.
    *
-   * Inline rather than in the overflow, because deciding is the whole reason somebody is
-   * looking at a pending line and burying it one tap deeper would make the queue
-   * tedious. True for `canDecide`, and only on a line that is actually waiting.
-   *
-   * It used to read "true only for staff", which was the client re-deriving an
-   * authorization rule from a zone role. `DECIDE` is a list permission the server sends,
-   * and group staff hold it on every list in the zone anyway, so there is nothing left
-   * to special-case here (plan 0030, section 4).
+   * Inline rather than in the overflow, because deciding is the whole reason
+   * somebody is looking at a pending line and burying it one tap deeper would make
+   * the queue tedious. True for `canDecide`, and only on a line actually waiting.
    */
   readonly decidable: boolean;
   /**
-   * Whether to offer putting a turned down line back. `canDecide`, on a REJECTED line.
+   * Whether to offer putting a turned down line back. `canDecide`, on a REJECTED
+   * line.
    *
-   * Restoring is the third outcome of the same decision the two buttons above make, so
-   * it follows the same permission and, for the same reason as `decidable`, no longer
-   * mentions staff.
+   * Restoring is the third outcome of the same decision the two buttons above
+   * make, so it follows the same permission.
    */
   readonly restorable: boolean;
   /**
    * Who is editing this line right now, or null. Never the reader themselves.
    *
-   * Advisory and nothing more (plan 0022, section 3): the row stays tappable, the edit
-   * sheet still opens over it, and a simultaneous edit resolves exactly as `0012` says
-   * it does. Null when nobody is editing and null when the editor's name could not be
-   * resolved, because an id is not a person to the one reading the row.
+   * Advisory and nothing more (plan 0022, section 3): the row stays tappable, the
+   * edit sheet still opens over it, and a simultaneous edit resolves exactly as
+   * `0012` says it does. Null when nobody is editing and null when the editor's
+   * name could not be resolved, because an id is not a person to the one reading
+   * the row.
    */
   readonly editor: string | null;
 }
