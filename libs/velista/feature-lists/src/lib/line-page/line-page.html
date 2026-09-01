@@ -281,12 +281,28 @@
         not information anybody came here for, but that is a different absence.
       -->
       @if (line.alsoOn; as alsoOn) {
-        @if (alsoOn.length > 0) {
+        @if (alsoOn.places.length > 0) {
           <section class="section">
             <h2 class="section-title">{{ 'list.page.alsoOn' | rokuT }}</h2>
             <div class="chips">
-              @for (where of alsoOn; track where) {
-                <span class="chip">{{ where }}</span>
+              @for (where of alsoOn.places; track where.listId) {
+                <span class="chip">
+                  {{
+                    'list.page.alsoOnPlace'
+                      | rokuT: { list: where.listName, zone: where.zoneName }
+                  }}
+                </span>
+              }
+
+              <!--
+                The server caps the answer rather than paging it, because this is a
+                caption and not a listing. Saying so is the difference between a short
+                answer and a wrong one.
+              -->
+              @if (alsoOn.hasMore) {
+                <span class="chip more-places">
+                  {{ 'list.page.alsoOnMore' | rokuT }}
+                </span>
               }
             </div>
           </section>

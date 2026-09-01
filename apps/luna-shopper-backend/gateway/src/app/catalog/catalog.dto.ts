@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  ITEM_LOOKUP_LIMITS,
   ItemCategory,
   PriceScopeKind,
   UnitOfMeasure,
@@ -623,33 +622,6 @@ export class SuggestQueryDto extends PriceScopedQueryDto {
   @IsString()
   @MaxLength(120)
   q?: string;
-}
-
-/**
- * The ids a batch product read names (plan 0053, section 1).
- *
- * A **body** rather than a query string, and the cap is why rather than taste:
- * {@link ITEM_LOOKUP_LIMITS.maxIds} identifiers written into a URL is around
- * nineteen kilobytes, well past what a proxy in front of this carries, so a
- * caller at the documented ceiling would be refused by something that has never
- * heard of the ceiling. In a body, the limit this route enforces is the only
- * limit there is.
- *
- * Duplicates are harmless and are not rejected: a caller unioning two lines'
- * product sets should not have to deduplicate before it may ask.
- */
-export class LookupItemsDto {
-  @ApiProperty({
-    type: [String],
-    format: 'uuid',
-    maxItems: ITEM_LOOKUP_LIMITS.maxIds,
-    description:
-      'The products to name. An id matching nothing is omitted from the answer rather than failing it: a line can outlive a product.',
-  })
-  @IsArray()
-  @ArrayMaxSize(ITEM_LOOKUP_LIMITS.maxIds)
-  @IsUUID(undefined, { each: true })
-  ids!: string[];
 }
 
 export class CreateProductGroupDto {

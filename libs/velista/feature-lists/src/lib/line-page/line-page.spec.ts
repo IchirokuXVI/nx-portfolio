@@ -8,6 +8,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   CATALOG_SERVICE,
+  LINE_SERVICE,
   fakeItemNames,
   fakeLineStore,
   fakeListStore,
@@ -23,12 +24,14 @@ import {
   provideFakeZoneStore,
   type FakeItemNames,
   type FakeLineStore,
+  type CatalogServiceI,
   type FakeShoppingProfileStore,
+  type LineServiceI,
 } from '@portfolio/velista/data-access';
 import {
   SUGGEST_DEBOUNCE_MS,
+  type AlsoOnVm,
   type CatalogItem,
-  type CatalogServiceI,
   type CatalogSuggestion,
   type Line,
   type LineSettlement,
@@ -138,9 +141,37 @@ function catalogOffering(
   };
 }
 
+/**
+ * The `also on` read (backend plan 0053, section 3), per product.
+ *
+ * A stub over the one method this page calls rather than a whole `LineMemory`: the page
+ * reaches `LINE_SERVICE` directly for it, and what the specs below are about is how
+ * several products' answers are merged and what happens when one does not come back.
+ */
+function alsoOnService(
+  answers: Readonly<Record<string, AlsoOnVm | Error>> = {}
+): Pick<LineServiceI, 'listsHoldingItem'> & {
+  readonly asked: { itemId: string; excludeListId?: string }[];
+} {
+  const asked: { itemId: string; excludeListId?: string }[] = [];
+
+  return {
+    asked,
+    listsHoldingItem: async (itemId, options) => {
+      asked.push({ itemId, excludeListId: options?.excludeListId });
+      const answer = answers[itemId];
+      if (answer instanceof Error) {
+        throw answer;
+      }
+      return answer ?? { places: [], hasMore: false };
+    },
+  };
+}
+
 interface Options {
   readonly lines?: readonly Line[];
   readonly list?: ShoppingListSummary;
+  readonly alsoOn?: Readonly<Record<string, AlsoOnVm | Error>>;
   readonly itemNames?: FakeItemNames;
   readonly settlements?: Readonly<Record<string, readonly LineSettlement[]>>;
   readonly itemSettlements?: Readonly<Record<string, readonly LineSettlement[]>>;
@@ -156,6 +187,7 @@ async function render(options: Options = {}): Promise<{
   lines: FakeLineStore;
   catalog: CatalogServiceI;
   profiles: FakeShoppingProfileStore;
+  holding: ReturnType<typeof alsoOnService>;
 }> {
   TestBed.resetTestingModule();
 
@@ -168,6 +200,7 @@ async function render(options: Options = {}): Promise<{
     moreItemSettlements: options.moreItemSettlements,
   });
   const catalog = options.catalog ?? catalogOffering([]);
+  const holding = alsoOnService(options.alsoOn);
   const profiles = fakeShoppingProfileStore();
   const map = convertToParamMap({
     zoneId: ZONE_ID,
@@ -191,6 +224,7 @@ async function render(options: Options = {}): Promise<{
       provideFakeShoppingProfileStore(profiles),
       provideFakeSessionStore('REGISTERED'),
       { provide: CATALOG_SERVICE, useValue: catalog },
+      { provide: LINE_SERVICE, useValue: holding },
       {
         provide: Router,
         useValue: {
@@ -213,9 +247,17 @@ async function render(options: Options = {}): Promise<{
   const fixture = TestBed.createComponent(LinePage);
   fixture.detectChanges();
   await fixture.whenStable();
+
+  // The "also on" read resolves through a `Promise.all` that `whenStable` does not
+  // wait for in a zoneless test, so the microtask queue is drained by hand. Microtasks
+  // rather than a `setTimeout`, because one spec here installs fake timers before it
+  // renders and a macrotask would never fire.
+  for (let tick = 0; tick < 5; tick += 1) {
+    await Promise.resolve();
+  }
   fixture.detectChanges();
 
-  return { fixture, lines, catalog, profiles };
+  return { fixture, lines, catalog, profiles, holding };
 }
 
 const textOf = (fixture: ComponentFixture<LinePage>): string =>
@@ -399,12 +441,118 @@ describe('LinePage', () => {
     });
   });
 
-  it('omits alsoOn entirely while nothing can answer it', async () => {
-    // Omitted rather than drawn empty (section 5). Drawn empty, "no other list has
-    // this" and "nobody asked" are the same picture.
-    const { fixture } = await render();
+  describe('where else it is wanted', () => {
+    it('asks per product, excluding the list being asked from', async () => {
+      // Per product because the server answers for an item and refuses a group, and
+      // excluding this list because "also on" means somewhere else.
+      const { holding } = await render({
+        lines: [line({ itemIds: ['item-milk-a', 'item-oat'] })],
+      });
 
-    expect(fixture.componentInstance.page()?.alsoOn).toBeNull();
-    expect(textOf(fixture)).not.toContain('list.page.alsoOn');
+      expect(holding.asked).toEqual([
+        { itemId: 'item-milk-a', excludeListId: LIST_ID },
+        { itemId: 'item-oat', excludeListId: LIST_ID },
+      ]);
+    });
+
+    it('never asks for a line with no products', async () => {
+      // The server refuses that read rather than answering empty, because there is no
+      // question to ask. Asking anyway would turn a legitimate absence into an error.
+      const { fixture, holding } = await render({
+        lines: [line({ itemIds: [] })],
+      });
+
+      expect(holding.asked).toEqual([]);
+      expect(fixture.componentInstance.page()?.alsoOn).toBeNull();
+    });
+
+    it('merges the products answers, counting one list once', async () => {
+      // A list wanting two of this line's products is one place, not two.
+      const { fixture } = await render({
+        lines: [line({ itemIds: ['item-milk-a', 'item-oat'] })],
+        alsoOn: {
+          'item-milk-a': {
+            places: [
+              { listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' },
+            ],
+            hasMore: false,
+          },
+          'item-oat': {
+            places: [
+              { listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' },
+              { listId: 'list-3', listName: 'Office', zoneName: 'Work' },
+            ],
+            hasMore: false,
+          },
+        },
+      });
+
+      expect(fixture.componentInstance.page()?.alsoOn?.places).toEqual([
+        { listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' },
+        { listId: 'list-3', listName: 'Office', zoneName: 'Work' },
+      ]);
+      expect(textOf(fixture)).toContain('list.page.alsoOn');
+    });
+
+    it('draws nothing for an empty answer, and does not call it a failure', async () => {
+      // Asked, and nothing else wants it. The section is not drawn, but the answer is
+      // a real one: this is the case that used to be indistinguishable from not asking.
+      const { fixture } = await render({
+        alsoOn: { 'item-milk-a': { places: [], hasMore: false } },
+      });
+
+      expect(fixture.componentInstance.page()?.alsoOn).toEqual({
+        places: [],
+        hasMore: false,
+      });
+      expect(textOf(fixture)).not.toContain('list.page.alsoOn');
+    });
+
+    it('says there are more when the server capped the answer', async () => {
+      const { fixture } = await render({
+        alsoOn: {
+          'item-milk-a': {
+            places: [
+              { listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' },
+            ],
+            hasMore: true,
+          },
+        },
+      });
+
+      expect(textOf(fixture)).toContain('list.page.alsoOnMore');
+    });
+
+    it('keeps the products that answered when one request fails', async () => {
+      // An indicator, so a partial answer beats none. It says there is more rather
+      // than presenting the half it has as the whole.
+      const { fixture } = await render({
+        lines: [line({ itemIds: ['item-milk-a', 'item-oat'] })],
+        alsoOn: {
+          'item-milk-a': {
+            places: [
+              { listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' },
+            ],
+            hasMore: false,
+          },
+          'item-oat': new Error('gateway down'),
+        },
+      });
+
+      const alsoOn = fixture.componentInstance.page()?.alsoOn;
+      expect(alsoOn?.places).toHaveLength(1);
+      expect(alsoOn?.hasMore).toBe(true);
+    });
+
+    it('is null when nothing came back at all', async () => {
+      // Every request failed, so as far as the reader is concerned nobody asked, and
+      // the section is omitted rather than claiming no other list wants this.
+      const { fixture } = await render({
+        alsoOn: { 'item-milk-a': new Error('gateway down') },
+      });
+
+      expect(fixture.componentInstance.page()?.alsoOn).toBeNull();
+      expect(textOf(fixture)).not.toContain('list.page.alsoOn');
+    });
   });
 });

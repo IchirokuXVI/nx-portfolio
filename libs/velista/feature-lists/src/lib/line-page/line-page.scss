@@ -144,6 +144,14 @@
   font-size: var(--app-text-xs);
 }
 
+// The server's cap was reached. Muted and unbordered: it is not another place, it is
+// the sentence saying there are more of them.
+.chip.more-places {
+  border: 0;
+  background: transparent;
+  color: var(--app-text-muted);
+}
+
 // Add one. Dashed, because it is a place for something rather than a thing, and a
 // **button**, because since plan 0047 section 2 it actually does something: it was a
 // static chip that drew the affordance and then declined the gesture.

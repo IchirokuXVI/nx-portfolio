@@ -15,6 +15,7 @@ import {
 import {
   CATALOG_SERVICE,
   ItemNames,
+  LINE_SERVICE,
   LineStore,
   ListStore,
   MemberNames,
@@ -22,11 +23,14 @@ import {
   ShoppingProfileStore,
   ZoneStore,
   type CatalogServiceI,
+  type LineServiceI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
+  type AlsoOnPlaceVm,
+  type AlsoOnVm,
   type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import {
@@ -81,6 +85,16 @@ export class LinePage {
   private readonly _names = inject(MemberNames);
   private readonly _itemNames = inject(ItemNames);
   private readonly _catalog = inject<CatalogServiceI>(CATALOG_SERVICE);
+  /**
+   * The transport, for the one read that is this page's alone.
+   *
+   * Directly rather than through `LineStore`, which the sheet and the page share:
+   * "where else is this wanted" is asked by this screen, answered per visit, and held
+   * by nothing. Putting it in the store would give every other screen a cache of an
+   * answer none of them draws, and this page is the only thing that would invalidate
+   * it. `GetListSheet` reaches `LIST_SERVICE` the same way and for the same reason.
+   */
+  private readonly _lineService = inject<LineServiceI>(LINE_SERVICE);
   private readonly _profiles = inject(ShoppingProfileStore);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
@@ -158,12 +172,11 @@ export class LinePage {
       listNameOf: (listId) => this._listNameOf(listId),
       callerUserId: this._session.userId(),
       locale: this._localeStore.locale(),
-      // **Null, and not a derivation** (section 5). There is no endpoint that answers
-      // "which of my lists carry this item", and the answer this page used to compute
-      // from whatever the session had loaded under reported by construction, so an
-      // empty one read as "no other list has this" when the truth was "nobody asked".
-      // Backend plan 0053 section 3 adds the query; this is null until it lands.
-      alsoOn: null,
+      // From the server, and null until it has answered (section 5). It was derived
+      // from whatever lists the session happened to hold, which under reported by
+      // construction, so an empty answer read as "no other list has this" when the
+      // truth was "nobody asked". Backend plan 0053 section 3 is the query behind it.
+      alsoOn: this.alsoOn(),
       hasMoreSettlements: this._lines.hasMoreSettlements(this.lineId()),
       hasMoreItemSettlements: this._lines.hasMoreItemSettlements(this.lineId()),
       // `WRITE` on an unapproved line, `MANAGE` on anything, which is the same rule
@@ -203,6 +216,88 @@ export class LinePage {
     }
     return null;
   }
+
+  /**
+   * Where else this line's products are still wanted (backend plan 0053, section 3).
+   *
+   * **Null until an answer arrives**, and null again if none does: the section is
+   * omitted rather than drawn empty, because "nobody asked" and "no other list wants
+   * this" are opposite answers and drawing them the same way is the thing plan 0047
+   * section 5 set out to stop.
+   *
+   * One request **per product**, merged and deduplicated by list, because the server
+   * answers for one item and refuses a group: a line references no group once the
+   * composer has copied its members. A list wanting two of this line's products is one
+   * place, not two.
+   */
+  readonly alsoOn = signal<AlsoOnVm | null>(null);
+
+  private readonly _loadAlsoOn = effect(() => {
+    const line = this._line();
+    const listId = this.listId();
+
+    untracked(() => {
+      // A line with no product has no question to ask, and the server refuses it
+      // rather than answering empty. Asking anyway would turn a legitimate absence
+      // into an error in the console.
+      if (line === undefined || line.itemIds.length === 0) {
+        this.alsoOn.set(null);
+        return;
+      }
+
+      void this._resolveAlsoOn(line.itemIds, listId);
+    });
+  });
+
+  private async _resolveAlsoOn(
+    itemIds: readonly string[],
+    listId: string
+  ): Promise<void> {
+    const seq = (this._alsoOnSeq += 1);
+
+    // Every product at once, and a failure on one is not allowed to lose the others:
+    // this is an indicator, and a partial answer is more useful than none. What it must
+    // never do is become null-because-it-failed on top of an answer it already has.
+    const answers = await Promise.all(
+      itemIds.map((itemId) =>
+        this._lineService
+          .listsHoldingItem(itemId, { excludeListId: listId })
+          .catch(() => null)
+      )
+    );
+
+    if (seq !== this._alsoOnSeq) {
+      return;
+    }
+
+    const answered = answers.filter(
+      (answer): answer is AlsoOnVm => answer !== null
+    );
+    if (answered.length === 0) {
+      // Nothing came back at all, so nobody asked as far as the reader is concerned.
+      this.alsoOn.set(null);
+      return;
+    }
+
+    const byList = new Map<string, AlsoOnPlaceVm>();
+    for (const answer of answered) {
+      for (const place of answer.places) {
+        byList.set(place.listId, place);
+      }
+    }
+
+    this.alsoOn.set({
+      places: [...byList.values()],
+      // True if any product's answer was cut short, and true as well when a product's
+      // request failed outright: in both cases there is more than what is drawn, and
+      // the caption is the one honest thing to say about it.
+      hasMore:
+        answered.some((answer) => answer.hasMore) ||
+        answered.length !== itemIds.length,
+    });
+  }
+
+  private _alsoOnSeq = 0;
 
   /**
    * The next page of one history, appended (section 4).

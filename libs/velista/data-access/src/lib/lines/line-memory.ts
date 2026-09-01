@@ -1,7 +1,10 @@
 import { inject, Injectable, signal } from '@angular/core';
 import {
+  ALSO_ON_MAX_LISTS,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  type AlsoOnPlaceVm,
+  type AlsoOnVm,
   type Line,
   type LineApprovalStatus,
   type LineOrder,
@@ -12,6 +15,7 @@ import {
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import { ListMemory } from '../lists/list-memory';
+import { ZoneMemory } from '../zones/zone-memory';
 import type { LineServiceI } from './line-service';
 import { SEED_LINES } from './static-line-data';
 
@@ -52,6 +56,9 @@ import { SEED_LINES } from './static-line-data';
 @Injectable()
 export class LineMemory implements LineServiceI {
   private readonly _lists = inject(ListMemory);
+  // For the one read that names a zone as well as a list (plan 0053, section 3). The
+  // real gateway composes both names itself; here they live in two fakes.
+  private readonly _zones = inject(ZoneMemory);
 
   private readonly _byList = signal<ReadonlyMap<string, readonly Line[]>>(
     new Map(Object.entries(SEED_LINES))
@@ -346,6 +353,65 @@ export class LineMemory implements LineServiceI {
   }
 
   /**
+   * Which other lists still want a product (backend plan 0053, section 3).
+   *
+   * The fake reproduces the three rules the screen depends on, because each of them is
+   * a distinction the screen draws and a fake that blurred one would make the wrong
+   * branch unreachable in development:
+   *
+   * - **A line with no product is refused**, not answered empty. "There was nothing to
+   *   look for" and "no other list has this" are different answers.
+   * - **Only lists this caller may read**, the same filter the settlement history
+   *   applies, and applied on every call rather than remembered.
+   * - **Only lines still wanted.** A line settled down to zero has stopped asking for
+   *   the product, and reporting it would make the indicator say a household wants
+   *   something it has just bought.
+   */
+  async listsHoldingItem(
+    itemId: string,
+    options?: { excludeListId?: string }
+  ): Promise<AlsoOnVm> {
+    if (itemId === '') {
+      throw memoryFailure('validation_failed', 400);
+    }
+
+    const places: AlsoOnPlaceVm[] = [];
+
+    for (const [listId, lines] of this._allLines()) {
+      if (listId === options?.excludeListId) {
+        continue;
+      }
+      if (!this._permissionsFor(listId).includes('READ')) {
+        continue;
+      }
+      const wants = lines.some(
+        (line) => line.quantity > 0 && line.itemIds.includes(itemId)
+      );
+      if (!wants) {
+        continue;
+      }
+
+      const list = this._lists.listById(listId);
+      const zone =
+        list === null
+          ? undefined
+          : this._zones.zones().find((entry) => entry.id === list.zoneId);
+      if (list === undefined || list === null || zone === undefined) {
+        continue;
+      }
+
+      places.push({ listId, listName: list.name, zoneName: zone.name });
+    }
+
+    // Capped exactly as the server caps it, so a development run can reach the "and
+    // more" caption rather than only ever seeing the short answer.
+    return {
+      places: places.slice(0, ALSO_ON_MAX_LISTS),
+      hasMore: places.length > ALSO_ON_MAX_LISTS,
+    };
+  }
+
+  /**
    * A page of settlements, newest first, cursored on the boundary row's own id.
    *
    * An id rather than a timestamp, for the reason the server's cursor is one: two
@@ -535,6 +601,11 @@ export class LineMemory implements LineServiceI {
 
   private _lines(listId: string): readonly Line[] {
     return this._byList().get(listId) ?? [];
+  }
+
+  /** Every list this fake holds lines for, for the reads that span lists. */
+  private _allLines(): ReadonlyMap<string, readonly Line[]> {
+    return this._byList();
   }
 
   private _listOf(lineId: string): string | null {

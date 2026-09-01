@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import type {
   AddLineQuantityRequest,
   AddLineRequest,
+  AlsoOnVm,
   Line,
   LineApprovalStatus,
   LineOrder,
@@ -18,11 +19,13 @@ import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
 import {
+  toAlsoOnPlace,
   toDeletedId,
   toLine,
   toLineSettlement,
   toPage,
 } from '../mapping/mappers';
+import { isRecord, mapArray } from '../mapping/primitives';
 import { required } from '../mapping/required';
 import type { LineServiceI } from './line-service';
 
@@ -191,6 +194,37 @@ export class LineApi implements LineServiceI {
       'lines.itemSettlements',
       options
     );
+  }
+
+  /**
+   * Which other lists still want a product (backend plan 0053, section 3).
+   *
+   * Mapped from `unknown` like every other read here (rule D4), and the mapping is
+   * where `hasMore` stops being optional: the server sends it, and a client that let
+   * it be undefined would silently never draw the "and more" it exists for.
+   */
+  async listsHoldingItem(
+    itemId: string,
+    options?: { excludeListId?: string }
+  ): Promise<AlsoOnVm> {
+    let params = new HttpParams();
+    if (options?.excludeListId !== undefined) {
+      params = params.set('excludeListId', options.excludeListId);
+    }
+
+    const body = await firstValueFrom(
+      this._http.get<unknown>(
+        this._urls.gateway(`/v1/items/${itemId}/lists`),
+        { params, context: operation('lines.holdingLists') }
+      )
+    );
+
+    return isRecord(body)
+      ? {
+          places: mapArray(body['lists'], toAlsoOnPlace),
+          hasMore: body['hasMore'] === true,
+        }
+      : { places: [], hasMore: false };
   }
 
   /**

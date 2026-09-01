@@ -569,6 +569,8 @@
       "thisList": "EN ESTA LISTA",
       "everywhere": "DONDE SEA QUE COMPRES",
       "alsoOn": "TAMBIÉN EN",
+      "alsoOnPlace": "{{zone}} · {{list}}",
+      "alsoOnMore": "y más",
       "noHistory": "Todavía no se ha comprado nada",
       "more": "Ver más",
       "prices": "Dónde comprarlo y por cuánto: aparecerá aquí cuando haya precios. Hasta entonces no se muestra nada.",

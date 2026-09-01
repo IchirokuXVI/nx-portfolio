@@ -162,16 +162,29 @@ describe('selectLinePage', () => {
   });
 
   describe('alsoOn', () => {
-    it('is null while nothing can answer the question', () => {
+    it('is null while nobody has asked', () => {
       // Null rather than empty (plan 0047, section 5), so the page omits the section
       // rather than saying "no other list has this" on behalf of a query nobody made.
       expect(select()?.alsoOn).toBeNull();
     });
 
-    it('is carried through once something can', () => {
-      expect(select({ alsoOn: ['Flat 3B · Cabin'] })?.alsoOn).toEqual([
-        'Flat 3B · Cabin',
-      ]);
+    it('keeps an empty answer distinct from no answer', () => {
+      // The distinction backend plan 0053 section 3 exists to make possible: this one
+      // means "asked, and nothing else wants it", which the page draws as nothing but
+      // is not the same fact as null.
+      expect(select({ alsoOn: { places: [], hasMore: false } })?.alsoOn).toEqual({
+        places: [],
+        hasMore: false,
+      });
+    });
+
+    it('carries the places and the capped flag through', () => {
+      const alsoOn = {
+        places: [{ listId: 'list-2', listName: 'Cabin', zoneName: 'Flat 3B' }],
+        hasMore: true,
+      };
+
+      expect(select({ alsoOn })?.alsoOn).toEqual(alsoOn);
     });
   });
 

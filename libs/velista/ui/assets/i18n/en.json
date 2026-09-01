@@ -569,6 +569,8 @@
       "thisList": "ON THIS LIST",
       "everywhere": "EVERYWHERE YOU SHOP",
       "alsoOn": "ALSO ON",
+      "alsoOnPlace": "{{zone}} · {{list}}",
+      "alsoOnMore": "and more",
       "noHistory": "Nothing bought yet",
       "more": "Show more",
       "prices": "Where to buy it, and for how much: drawn here once prices exist. Nothing is shown until then.",

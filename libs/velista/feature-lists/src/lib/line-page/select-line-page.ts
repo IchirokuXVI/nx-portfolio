@@ -1,5 +1,6 @@
 import {
   inLocale,
+  type AlsoOnVm,
   type CatalogItem,
   type HistorySectionVm,
   type LinePageVm,
@@ -57,15 +58,16 @@ export interface LinePageInput
    */
   readonly listNameOf: (listId: string) => string | null;
   /**
-   * The reader's other lists carrying this line's products, or null when nobody has
-   * asked (velista plan 0047, section 5).
+   * The reader's other lists still wanting this line's products, or null when nobody
+   * has asked (velista plan 0047, section 5).
    *
-   * Null until backend plan 0053 section 3 answers the question. There is no endpoint
-   * for it, and the derivation this page used to make from whatever the session had
-   * loaded under reported by construction, so an empty answer read as "no other list
-   * has this" when the truth was "nobody asked".
+   * Answered by backend plan 0053 section 3, one request per product, merged by the
+   * container. Null is a line with no product, or an answer that has not arrived or did
+   * not come back; an empty `places` is the real answer that nothing else wants it. The
+   * derivation this page used to make from whatever the session had loaded could not
+   * tell those apart, which is what the query exists to fix.
    */
-  readonly alsoOn: readonly string[] | null;
+  readonly alsoOn: AlsoOnVm | null;
   /** Whether the line's own history has a further page to fetch. */
   readonly hasMoreSettlements: boolean;
   /** Whether the cross list history has a further page to fetch. */
