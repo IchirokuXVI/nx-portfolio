@@ -198,7 +198,7 @@ export class ListStore {
           // the list.
           ...(existing ?? {
             lineCount: 0,
-            readyCount: 0,
+            wantedCount: 0,
             myPermissions: [],
             sharedWithZone: false,
           }),
@@ -270,10 +270,10 @@ export class ListStore {
       case 'comment.added':
       case 'comment.updated':
         // The line counts on a row would move for these, and the events do not carry
-        // enough to recompute one: `line.updated` fires for status changes too, so
-        // `readyCount` cannot be derived from it without knowing the line's previous
-        // status. The counts refresh with the zone rather than being guessed at, and
-        // the shopping list plan owns lines properly.
+        // enough to recompute one: `wantedCount` counts lines above zero, so an
+        // updated line only moves it if its **previous** quantity is known, and an
+        // event carrying the line as it now stands cannot say what it was. The counts
+        // refresh with the zone rather than being guessed at.
         break;
 
       default:

@@ -1,3 +1,4 @@
+import type { LocalizedName } from './shopping-profile';
 import type {
   CommentTranscription,
   LineApprovalStatus,
@@ -322,8 +323,16 @@ export interface LineSettlement {
  */
 export interface CatalogItem {
   readonly id: string;
-  /** Already resolved to the reader's locale by the mapper, never a bag of them. */
-  readonly name: string;
+  /**
+   * The pair, resolved with `inLocale` where it is drawn.
+   *
+   * Not flattened in the mapper, which is the convention every other catalog name in
+   * this app follows (`Supermarket`, `ProductGroup` beside it). The mapper has no
+   * locale and should not be given one: it runs once per response, the reader can
+   * change language without a refetch, and a name flattened at parse time would then
+   * be the old language until something evicted the cache.
+   */
+  readonly name: LocalizedName;
   readonly brand: string | null;
   readonly productGroupId: string | null;
 }
@@ -331,7 +340,7 @@ export interface CatalogItem {
 /** One catalog group: the thing "milk" means before it means a brand of it. */
 export interface ProductGroup {
   readonly id: string;
-  readonly name: string;
+  readonly name: LocalizedName;
   /** How many products it carries, which is what the composer row says it adds. */
   readonly itemCount: number;
 }

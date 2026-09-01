@@ -56,7 +56,7 @@ function list(
     createdByUserId: ME,
     autoApproveLines: false,
     lineCount: 12,
-    readyCount: 7,
+    wantedCount: 7,
     myPermissions: ADMIN,
     ...overrides,
   };
@@ -165,7 +165,7 @@ describe('selectListState', () => {
       const state = select({ linesState: 'loading' });
 
       expect(state.kind === 'loading' && state.header).toMatchObject({
-        readyCount: 7,
+        wantedCount: 7,
         lineCount: 12,
       });
     });
@@ -181,7 +181,7 @@ describe('selectListState', () => {
       });
 
       expect(loaded(state).header).toMatchObject({
-        readyCount: 1,
+        wantedCount: 1,
         lineCount: 2,
       });
     });

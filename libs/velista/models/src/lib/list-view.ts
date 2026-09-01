@@ -1,7 +1,6 @@
 import type {
   CommentTranscription,
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
   ZoneRole,
 } from './enums';
@@ -330,7 +329,7 @@ export interface ListHeaderVm {
   /** Null while a cold arrival is still finding the name (rule L2). */
   readonly listName: string | null;
   readonly zoneName: string | null;
-  readonly readyCount: number;
+  readonly wantedCount: number;
   readonly lineCount: number;
   /**
    * Who else has this list open right now, named and without the reader.

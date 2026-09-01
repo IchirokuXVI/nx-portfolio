@@ -1,6 +1,7 @@
 import {
   toComment,
   toLine,
+  toLineSettlement,
   toListPermissions,
   toListPresence,
   toMembership,
@@ -169,6 +170,41 @@ export function toRealtimeEvent(
     case 'line.updated': {
       const line = toLine(payload);
       return line === null ? null : { type: name, line };
+    }
+
+    case 'line.settled': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      // Both halves or neither. Half a settle is not something any consumer can act
+      // on: a line with no settlement leaves a history stale, and a settlement with
+      // no line leaves the row showing a quantity that has moved.
+      const line = toLine(payload['line']);
+      const settlement = toLineSettlement(payload['settlement']);
+      return line === null || settlement === null
+        ? null
+        : { type: name, line, settlement };
+    }
+
+    case 'line.claimChanged': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const lineId = str(payload['lineId']);
+      const claimListId = str(payload['listId']);
+      if (lineId === null || claimListId === null) {
+        return null;
+      }
+      // Null is a **release** rather than a missing value, which is what lets one
+      // event serve both directions. An absent field reads the same way, and that is
+      // the safe direction: an indicator that says somebody is shopping when nobody
+      // is would be read as the line having been dealt with.
+      return {
+        type: name,
+        lineId,
+        listId: claimListId,
+        claimedByUserId: nullableStr(payload['claimedByUserId']),
+      };
     }
 
     case 'line.reordered': {

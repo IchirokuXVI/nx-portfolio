@@ -1,4 +1,4 @@
-import type { LineStatus, MembershipStatus, ZoneRole } from './enums';
+import type { MembershipStatus, ZoneRole } from './enums';
 
 /**
  * The view models the home page hands to its components.
@@ -21,7 +21,7 @@ export interface ListRowVm {
   readonly name: string;
   /** Absent until the backend serves counts. Render the row without it. */
   readonly lineCount?: number;
-  readonly readyCount?: number;
+  readonly wantedCount?: number;
   /**
    * Who is shopping from this list right now, named and without the reader.
    *
@@ -97,16 +97,40 @@ export interface ResumeListVm {
   readonly listName: string;
   readonly zoneName: string;
   readonly lineCount?: number;
-  readonly readyCount?: number;
+  readonly wantedCount?: number;
   /** Who is in that list right now. Advisory only (plan 0004, section 6.7). */
   readonly shoppers: readonly string[];
 }
 
-/** One line in the illustrative preview on the anonymous screen. */
+/**
+ * One line in the illustrative preview on the anonymous screen.
+ *
+ * It **advertised a checkbox** until velista plan 0043: a `LineStatus` per line, drawn
+ * as a tick, a circle or a cross. The product has no ticks any more, so a front door
+ * showing them would be a picture of a different app, and the first thing a visitor
+ * did after signing up would be to look for a control that does not exist.
+ *
+ * What it shows instead is what the product actually is: a quantity per line, one of
+ * them at zero because it has been bought, and one the shop did not have.
+ */
 export interface PreviewLineVm {
   readonly content: string;
+  /**
+   * The number, as a **string**, because this is decoration rather than data.
+   *
+   * It stays a string so the card can show "0" and "2" without anything downstream
+   * treating them as a quantity it could add to.
+   */
   readonly quantity: string;
-  readonly status: LineStatus;
+  /**
+   * What to draw beside it, or null for an ordinary wanted line.
+   *
+   * The same two words the real row uses, so the picture and the product agree. The
+   * third indicator, somebody out buying it, is deliberately absent: it is a live fact
+   * about a real basket and an invented one would be the only thing on this card
+   * pretending to be current.
+   */
+  readonly indicator: 'bought' | 'notAvailable' | null;
   /** The initial in the little avatar, or null for a line nobody has touched. */
   readonly by: string | null;
 }

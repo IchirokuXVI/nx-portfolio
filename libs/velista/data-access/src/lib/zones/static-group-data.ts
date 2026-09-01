@@ -254,7 +254,7 @@ function list(
   name: string,
   createdByUserId: string,
   lineCount: number,
-  readyCount: number,
+  wantedCount: number,
   overrides: Partial<ShoppingListSummary> = {}
 ): ShoppingListSummary {
   return {
@@ -263,7 +263,7 @@ function list(
     name,
     createdByUserId,
     lineCount,
-    readyCount,
+    wantedCount,
     autoApproveLines: false,
     // Shared with the group, which is what every list a household makes together is,
     // and what the settings sheet's switch draws on (velista plan 0036, section 7).

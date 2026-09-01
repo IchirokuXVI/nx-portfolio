@@ -37,11 +37,11 @@ import { PresenceRow } from '../presence/presence-row';
         @if (list().lineCount === 0) {
           <span class="meta">{{ 'list.empty.short' | rokuT }}</span>
         } @else if (
-          list().readyCount !== undefined && list().lineCount !== undefined
+          list().wantedCount !== undefined && list().lineCount !== undefined
         ) {
           <span class="meta">{{
             'home.progress.ready'
-              | rokuT: { ready: list().readyCount, total: list().lineCount }
+              | rokuT: { ready: list().wantedCount, total: list().lineCount }
           }}</span>
         } @else if (list().lineCount !== undefined) {
           <span class="meta">{{

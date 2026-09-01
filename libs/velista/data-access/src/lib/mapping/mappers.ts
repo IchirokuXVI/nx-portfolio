@@ -3,11 +3,11 @@ import {
   COMMENT_TRANSCRIPTIONS,
   LINE_APPROVAL_STATUS_FALLBACK,
   LINE_APPROVAL_STATUSES,
-  LINE_STATUS_FALLBACK,
-  LINE_STATUSES,
   LIST_PERMISSIONS,
   MEMBERSHIP_STATUS_FALLBACK,
   MEMBERSHIP_STATUSES,
+  SETTLEMENT_OUTCOME_FALLBACK,
+  SETTLEMENT_OUTCOMES,
   USER_KIND_FALLBACK,
   USER_KINDS,
   ZONE_ROLE_FALLBACK,
@@ -17,12 +17,15 @@ import {
   type AssistantChoice,
   type AssistantListLink,
   type AssistantReply,
+  type CatalogItem,
   type CatalogScope,
+  type CatalogSuggestion,
   type ChainPreference,
   type Comment,
   type CommentRecording,
   type CommentTranscription,
   type Line,
+  type LineSettlement,
   type ListAccessEntry,
   type ListPermission,
   type ListPresence,
@@ -35,6 +38,7 @@ import {
   type PostalCodeCoverage,
   type PresenceEditor,
   type PresenceUser,
+  type ProductGroup,
   type ProfilePostalCode,
   type SessionTokens,
   type ShoppingList,
@@ -155,27 +159,35 @@ function toZoneCounts(raw: unknown): ZoneCounts {
 /**
  * The line totals, from either of the two shapes that carry them.
  *
- * `ZoneListPreview` (inside `MyZoneView`) puts `lineCount` and `readyCount` at the top
+ * `ZoneListPreview` (inside `MyZoneView`) puts `lineCount` and `wantedCount` at the top
  * level; `ListView` (from `GET /v1/zones/:id/lists`) nests the same two names under
  * `counts`. The **names** match deliberately so that one client shape serves both
  * (backend plan 0017, section 3.4), and this is the one function that has to know where
  * they sit. Everything above it reads a list the same way whichever call it came from.
+ *
+ * The second number is `wantedCount` now, and the rename is a change of subject rather
+ * than of wording (backend plan 0047, section 2.3). It used to be `readyCount`, counting
+ * lines somebody had ticked on some trip; it counts lines the household currently wants.
+ * Reading the old name off the current wire is what made every card in the app say zero,
+ * which is why there is deliberately no fallback to it here: a card reporting a
+ * confident zero is worse than one reporting a stale number, and there is no stale
+ * number to report.
  */
 function readListCounts(raw: Record<string, unknown>): {
   lineCount: number;
-  readyCount: number;
+  wantedCount: number;
 } {
   const nested = raw['counts'];
   const source = isRecord(nested) ? nested : raw;
 
   const lineCount = numOr(source['lineCount'], 0);
-  const readyCount = numOr(source['readyCount'], 0);
+  const wantedCount = numOr(source['wantedCount'], 0);
 
   return {
     lineCount,
-    // "7 of 5 ready" is worse than a slightly wrong number: it reads as a bug and
+    // "7 of 5 needed" is worse than a slightly wrong number: it reads as a bug and
     // costs the user their trust in every other count on the page.
-    readyCount: Math.min(readyCount, lineCount),
+    wantedCount: Math.min(wantedCount, lineCount),
   };
 }
 
@@ -328,20 +340,164 @@ export function toLine(raw: unknown): Line | null {
     listId,
     content: strOr(raw['content'], ''),
     quantity: numOr(raw['quantity'], 1),
-    itemId: nullableStr(raw['itemId']),
+    // A set now, where this read a single nullable `itemId` (backend plan 0048,
+    // section 1.1). Ids that are not strings are dropped rather than kept as
+    // holes: a product reference nobody can resolve is not a product.
+    itemIds: mapArray(raw['itemIds'], str),
     position: numOr(raw['position'], 0),
     approvalStatus: oneOf(
       raw['approvalStatus'],
       LINE_APPROVAL_STATUSES,
       LINE_APPROVAL_STATUS_FALLBACK
     ),
-    status: oneOf(raw['status'], LINE_STATUSES, LINE_STATUS_FALLBACK),
+    // Both default to "nothing has ever happened to this line", which is the safe
+    // direction in the one way that matters: it draws no indicator. Defaulting the
+    // other way would put a bought mark on a line over an absent field.
+    boughtCount: numOr(raw['boughtCount'], 0),
+    lastSettlementOutcome:
+      raw['lastSettlementOutcome'] === null ||
+      raw['lastSettlementOutcome'] === undefined
+        ? null
+        : oneOf(
+            raw['lastSettlementOutcome'],
+            SETTLEMENT_OUTCOMES,
+            SETTLEMENT_OUTCOME_FALLBACK
+          ),
     createdByUserId: strOr(raw['createdByUserId'], ''),
     approvedByUserId: nullableStr(raw['approvedByUserId']),
     // A missing version defaults to 0, which loses every reconciliation race rather
     // than winning one it should not. Overwriting somebody else's edit because a
     // field was absent is the one outcome worth defaulting against.
     version: numOr(raw['version'], 0),
+  };
+}
+
+/**
+ * From `LineSettlementView` (backend plan 0047, section 3).
+ *
+ * One thing that happened on one trip, written once and never edited, which is
+ * why there is no reconciliation anywhere near it: a history does not race.
+ *
+ * `settledByUserId` keeps its null rather than being defaulted to an empty
+ * string, and that null is load bearing. It does not mean nobody: it means the
+ * settle came off a shared basket, where the person holding it may be a guest
+ * with no account at all (backend plan 0051, section 3.3). The row draws a
+ * neutral phrase for it, exactly as it does for a name it could not resolve.
+ *
+ * A settlement with no readable `settledAt` is dropped. It is a point in a
+ * history and an undated one cannot be ordered, which is the one thing every
+ * screen that reads these does with them.
+ */
+export function toLineSettlement(raw: unknown): LineSettlement | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  const lineId = str(raw['lineId']);
+  const settledAt = date(raw['settledAt']);
+  if (id === null || lineId === null || settledAt === null) {
+    return null;
+  }
+
+  return {
+    id,
+    lineId,
+    listId: strOr(raw['listId'], ''),
+    itemId: nullableStr(raw['itemId']),
+    outcome: oneOf(
+      raw['outcome'],
+      SETTLEMENT_OUTCOMES,
+      SETTLEMENT_OUTCOME_FALLBACK
+    ),
+    quantity: numOr(raw['quantity'], 0),
+    settledByUserId: nullableStr(raw['settledByUserId']),
+    settledAt,
+  };
+}
+
+/**
+ * From `catalog.ItemView` (backend plan 0048).
+ *
+ * Deliberately narrow: an id, a name, a brand and the group it belongs to.
+ * Everything about price is out of scope until the backend's backlog `0004`
+ * exists (velista plan 0043, section 9), and carrying fields nothing renders
+ * would be a promise the screen cannot keep.
+ */
+export function toCatalogItem(raw: unknown): CatalogItem | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  if (id === null) {
+    return null;
+  }
+
+  return {
+    id,
+    name: toLocalizedName(raw['name']),
+    brand: nullableStr(raw['brand']),
+    productGroupId: nullableStr(raw['productGroupId']),
+  };
+}
+
+/**
+ * From `catalog.CatalogSuggestion` (backend plan 0048, section 3).
+ *
+ * The wire shape is `{ kind, group, item }` with both halves nullable, which
+ * makes "a group suggestion carrying no group" representable. This is where that
+ * stops being representable: a suggestion whose own half is missing is **dropped**
+ * rather than rendered as an empty row, so nothing downstream has to consider it.
+ *
+ * The order is the server's and is never re-sorted here. A group ranks above an
+ * item for a bare word, and that ranking is `item.searchOffers`'s to make: a
+ * client that re-sorted would be a second opinion about relevance formed without
+ * the prices, the scopes or the synonyms that produced the first one (velista
+ * plan 0043, section 6).
+ */
+export function toCatalogSuggestion(raw: unknown): CatalogSuggestion | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  if (raw['kind'] === 'group') {
+    const offer = raw['group'];
+    if (!isRecord(offer)) {
+      return null;
+    }
+    const group = toProductGroup(offer['group']);
+    return group === null
+      ? null
+      : {
+          kind: 'group',
+          group,
+          // The products choosing it attaches, whole (section 6). An offer that
+          // names none is still a legitimate suggestion: it adds a line with the
+          // group's name and no set, which the line page can fill in later.
+          itemIds: mapArray(offer['itemIds'], str),
+        };
+  }
+
+  const item = toCatalogItem(raw['item']);
+  return item === null ? null : { kind: 'item', item };
+}
+
+/** From `catalog.ProductGroupView`. What "milk" means before it means a brand. */
+export function toProductGroup(raw: unknown): ProductGroup | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  if (id === null) {
+    return null;
+  }
+
+  return {
+    id,
+    name: toLocalizedName(raw['name']),
+    itemCount: numOr(raw['itemCount'], 0),
   };
 }
 

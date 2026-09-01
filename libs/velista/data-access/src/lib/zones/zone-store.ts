@@ -835,7 +835,7 @@ export class ZoneStore {
             name: event.list.name,
             // Facts, not guesses: a list created this instant has no lines in it.
             lineCount: 0,
-            readyCount: 0,
+            wantedCount: 0,
           })
         );
         break;

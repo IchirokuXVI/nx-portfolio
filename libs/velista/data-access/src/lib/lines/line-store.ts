@@ -6,13 +6,16 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import type {
-  Comment,
-  Line,
-  LineApprovalStatus,
-  LineStatus,
+import {
+  LINE_QUANTITY_MIN,
+  LINES_PAGE_SIZE,
+  SETTLEMENTS_PAGE_SIZE,
+  type Comment,
+  type Line,
+  type LineApprovalStatus,
+  type LineSettlement,
+  type SettlementOutcome,
 } from '@portfolio/velista/models';
-import { LINES_PAGE_SIZE } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import { Mutations, overlayKey, type Overlay } from '../mutations';
 import {
@@ -116,6 +119,43 @@ export class LineStore {
   );
 
   /**
+   * One line's own settlements, newest first, for the lines whose sheet or page has
+   * been opened.
+   *
+   * Keyed by line, like the comments above it and for the same reason: that is the
+   * unit a sheet opens on and the unit an event names. Undefined means nobody has
+   * asked, which a section draws as a skeleton; an empty array means the line has no
+   * history, which it draws as a sentence. Collapsing the two would make every line
+   * look freshly loaded forever.
+   */
+  private readonly _settlements = signal<
+    ReadonlyMap<string, readonly LineSettlement[]>
+  >(new Map());
+
+  /**
+   * The cross list history, unioned over a line's whole product set and keyed by the
+   * **line** rather than by the item.
+   *
+   * By line because the union is the answer the page draws, and re-merging three
+   * products' histories on every render would be a sort per keystroke elsewhere on
+   * the screen. A line with no products never gets an entry at all, which is what
+   * makes that section absent rather than empty (velista plan 0043, section 5.3).
+   */
+  private readonly _itemSettlements = signal<
+    ReadonlyMap<string, readonly LineSettlement[]>
+  >(new Map());
+
+  /**
+   * Which lines are in somebody's active basket right now, and whose.
+   *
+   * **Presence, not state** (velista plan 0043, section 3.3). It is held beside the
+   * lines rather than on them precisely so it cannot be mistaken for one: it never
+   * survives a reconnect, nothing derived from it is written back, and a line being
+   * carried around a shop is not a line that has been dealt with.
+   */
+  private readonly _claims = signal<ReadonlyMap<string, string>>(new Map());
+
+  /**
    * Server ids this store minted itself, so their own echo is not drawn twice.
    *
    * A plain `Set` rather than a signal: nothing renders from it, and it exists purely
@@ -173,6 +213,32 @@ export class LineStore {
     return this._comments().get(lineId);
   }
 
+  /**
+   * One line's own history, or undefined when it has never been read.
+   *
+   * The same undefined-versus-empty rule as {@link commentsOf}, and it decides more
+   * here: a settled line with an unread history and a settled line with a history of
+   * one look identical to anything testing for length.
+   */
+  settlementsOf(lineId: string): readonly LineSettlement[] | undefined {
+    return this._settlements().get(lineId);
+  }
+
+  /** The cross list history for a line's products, or undefined when unread. */
+  itemSettlementsOf(lineId: string): readonly LineSettlement[] | undefined {
+    return this._itemSettlements().get(lineId);
+  }
+
+  /** Who is out buying this line right now, as a user id, or null. */
+  claimOf(lineId: string): string | null {
+    return this._claims().get(lineId) ?? null;
+  }
+
+  /** Every current claim, for a container deriving a whole page of rows at once. */
+  claims(): ReadonlyMap<string, string> {
+    return this._claims();
+  }
+
   /** A signal view of one list, for a container that reads it in a computed. */
   forList(listId: string) {
     return computed(() => ({
@@ -182,6 +248,7 @@ export class LineStore {
       complete: (this._cursor().get(listId) ?? null) === null,
       writes: this._writes(),
       commentCounts: this._commentCounts(),
+      claims: this._claims(),
     }));
   }
 
@@ -282,7 +349,8 @@ export class LineStore {
     approval: {
       readonly canDecide: boolean;
       readonly autoApproveLines: boolean;
-    }
+    },
+    itemIds?: readonly string[]
   ): Promise<
     | { readonly state: 'added'; readonly line: Line }
     | { readonly state: 'failed'; readonly error: unknown }
@@ -293,7 +361,7 @@ export class LineStore {
       listId,
       content,
       quantity,
-      itemId: null,
+      itemIds: [...(itemIds ?? [])],
       position: this._nextPosition(listId),
       approvalStatus:
         approval.canDecide || approval.autoApproveLines
@@ -303,7 +371,10 @@ export class LineStore {
       // An auto-approved line has **no** approver, because nobody decided: the list is
       // configured not to ask, and a null here is the honest record of that.
       approvedByUserId: approval.canDecide ? createdByUserId : null,
-      status: 'PENDING',
+      // Nothing has ever happened to a line that does not exist yet, so both
+      // indicators start off, and the server's answer cannot disagree.
+      boughtCount: 0,
+      lastSettlementOutcome: null,
       createdByUserId,
       version: 0,
     };
@@ -312,7 +383,7 @@ export class LineStore {
     this._note(clientKey, { outcome: 'pending', byUserId: null });
 
     const outcome = await this._mutations.run(null, () =>
-      this._lines.addLine(listId, content, quantity)
+      this._lines.addLine(listId, content, quantity, itemIds)
     );
 
     this._clearNote(clientKey);
@@ -335,7 +406,11 @@ export class LineStore {
   /** Change what a line says, or how many. Optimistic, per field. */
   async updateLine(
     lineId: string,
-    changes: { content?: string; quantity?: number }
+    changes: {
+      content?: string;
+      quantity?: number;
+      itemIds?: readonly string[];
+    }
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
     const before = this._lineById(lineId);
     if (before === null) {
@@ -343,7 +418,8 @@ export class LineStore {
     }
 
     const fields = Object.keys(changes).filter(
-      (field) => changes[field as 'content' | 'quantity'] !== undefined
+      (field) =>
+        changes[field as 'content' | 'quantity' | 'itemIds'] !== undefined
     );
 
     return this._write(
@@ -356,30 +432,205 @@ export class LineStore {
   }
 
   /**
-   * Tick it off, or put it back, or mark it as not in the shop.
+   * Move a line's quantity by a signed delta (velista plan 0043, section 4.1).
    *
    * The gesture this whole screen is built around, so it is optimistic without
-   * qualification: the row changes on the frame the thumb lifts. A row with a write
-   * already in flight stays tappable and the second tap simply supersedes the first,
-   * because blocking it would make the app feel slow on exactly the connection it was
-   * designed for (section 3.3).
+   * qualification: the row shows the snapped number on the frame the thumb lifts. A
+   * row with a write already in flight stays live and the next adjustment simply
+   * supersedes it, because blocking would make the app feel slow on exactly the
+   * connection it was designed for (`0012`, section 3.3).
+   *
+   * ## Why the overlay applies to `quantity` and the request carries a delta
+   *
+   * These are two different problems and the split matters. The **overlay** claims
+   * `quantity` so a realtime echo of the old number cannot overwrite what the thumb
+   * is doing, which is `0004` section 7.2 case 3 unchanged. The **request** is a
+   * delta so two people adjusting the same line both land: an absolute write from a
+   * moving control races, and the loser silently wins.
+   *
+   * The snap back on failure therefore restores the number the line held **before**
+   * this adjustment, which is what `_write` already does with `before`. It is not the
+   * negation of the delta: by the time a failure returns, somebody else's delta may
+   * have landed, and subtracting ours from their result would invent a third number
+   * nobody asked for.
    */
-  async setStatus(
+  async addQuantity(
     lineId: string,
-    status: LineStatus
+    delta: number
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
     const before = this._lineById(lineId);
-    if (before === null) {
+    if (before === null || delta === 0) {
       return 'failed';
     }
 
     return this._write(
       lineId,
       before,
-      ['status'],
-      (line) => ({ ...line, status }),
-      () => this._lines.setStatus(lineId, status)
+      ['quantity'],
+      (line) => ({
+        ...line,
+        quantity: Math.max(LINE_QUANTITY_MIN, line.quantity + delta),
+      }),
+      () => this._lines.addQuantity(lineId, delta)
     );
+  }
+
+  /**
+   * Say what happened to a line on a trip (velista plan 0043, section 5.2).
+   *
+   * **Not optimistic, and that is the one deliberate difference from every other
+   * write on this screen.** Everything else here is a gesture whose result the person
+   * already knows: they dragged a number, so the number moves. This one is two taps
+   * behind a deliberate open and its result is a *derivation* the server performs,
+   * over history the client does not hold: how far the quantity falls depends on what
+   * was outstanding, and whether the bought indicator appears depends on a count only
+   * the server can take. Guessing all of that to save one round trip on a gesture
+   * somebody makes standing still, once per shop, would be optimism spent in the
+   * wrong place.
+   *
+   * The settlement it answers with is recorded, so a history already on screen gains
+   * the row without a refetch.
+   */
+  async settle(
+    lineId: string,
+    outcome: SettlementOutcome,
+    options?: { quantity?: number; itemId?: string }
+  ): Promise<
+    | { readonly state: 'settled'; readonly line: Line }
+    | { readonly state: 'failed'; readonly error: unknown }
+  > {
+    const before = this._lineById(lineId);
+    if (before === null) {
+      return { state: 'failed', error: null };
+    }
+
+    this._note(lineId, { outcome: 'pending', byUserId: null });
+
+    const result = await this._mutations.run(null, () =>
+      this._lines.settle(lineId, outcome, options)
+    );
+
+    if (result.state === 'failed') {
+      this._note(lineId, { outcome: 'failed', byUserId: null });
+      return { state: 'failed', error: result.error };
+    }
+
+    this._clearNote(lineId);
+    this.recordSettlement(result.value.settlement);
+    this._patch(before.listId, lineId, () => result.value.line);
+    return { state: 'settled', line: result.value.line };
+  }
+
+  /**
+   * One line's history, read once and held.
+   *
+   * A cache rather than a fetch per open, because the sheet and the page both want it
+   * and the second is usually opened from the first. Undefined means nobody has
+   * asked, which is what lets a section draw a skeleton rather than an empty state:
+   * the same distinction `commentCount` makes, and for the same reason.
+   */
+  async loadSettlements(lineId: string): Promise<void> {
+    if (this._settlements().has(lineId)) {
+      return;
+    }
+
+    try {
+      const page = await this._lines.listSettlements(lineId, {
+        limit: SETTLEMENTS_PAGE_SIZE,
+      });
+      this._settlements.update((current) =>
+        new Map(current).set(lineId, page.items)
+      );
+    } catch {
+      // Deliberately quiet, exactly as `refresh` is. The sheet's own numbers came off
+      // the line and are already drawn; a history that did not arrive costs a section
+      // and not the screen.
+    }
+  }
+
+  /**
+   * The cross list history for a line's products, unioned over its whole set.
+   *
+   * Keyed by **line** rather than by item, even though the read is per item, because
+   * the union is the answer the screen wants and recomputing it per render would
+   * re-merge and re-sort on every keystroke elsewhere on the page. A line with no
+   * products is left absent rather than stored empty, which is what makes the section
+   * absent rather than empty (section 5.3).
+   */
+  async loadItemSettlements(line: Line): Promise<void> {
+    if (line.itemIds.length === 0 || this._itemSettlements().has(line.id)) {
+      return;
+    }
+
+    try {
+      const pages = await Promise.all(
+        line.itemIds.map((itemId) =>
+          this._lines.listItemSettlements(itemId, {
+            limit: SETTLEMENTS_PAGE_SIZE,
+          })
+        )
+      );
+      // Merged and re-sorted, because each product answered in its own order and a
+      // list concatenated from three of them is three histories printed one after
+      // another rather than one history.
+      const merged = pages
+        .flatMap((page) => page.items)
+        .sort((a, b) => b.settledAt.getTime() - a.settledAt.getTime());
+
+      this._itemSettlements.update((current) =>
+        new Map(current).set(line.id, merged)
+      );
+    } catch {
+      // As above: a section, not the screen.
+    }
+  }
+
+  /**
+   * Put one settlement at the top of a line's history, once.
+   *
+   * An upsert like `addComment`, and for the same reason: a settle the reader
+   * performs arrives twice, as the response and again as `line.settled` on the
+   * socket. A line whose history was never loaded is left alone, because starting one
+   * from an event would show a line with nine purchases as having one.
+   */
+  recordSettlement(settlement: LineSettlement): void {
+    const current = this._settlements().get(settlement.lineId);
+    if (current === undefined) {
+      return;
+    }
+    if (current.some((row) => row.id === settlement.id)) {
+      return;
+    }
+
+    this._settlements.update((map) =>
+      new Map(map).set(settlement.lineId, [settlement, ...current])
+    );
+  }
+
+  /**
+   * Record that a line is, or is no longer, in somebody's active basket.
+   *
+   * Presence shaped rather than state shaped (velista plan 0043, section 3.3): it is
+   * held beside the lines rather than on them, it never survives a reconnect, and
+   * nothing derived from it is ever written back. The name is resolved by the page,
+   * because this store holds lines and not people.
+   *
+   * Fed by `line.claimChanged` on the zone room. **Nothing publishes that event
+   * yet**: backend plan 0051 section 5.3 specifies it and the enum member exists,
+   * with no payload contract and no publisher, so this path is wired and dormant. It
+   * is here rather than waiting because the alternative is a view model with a field
+   * nothing can ever set, which is the kind of gap that gets filled by guessing.
+   */
+  setClaim(lineId: string, claimedByUserId: string | null): void {
+    this._claims.update((current) => {
+      const next = new Map(current);
+      if (claimedByUserId === null) {
+        next.delete(lineId);
+      } else {
+        next.set(lineId, claimedByUserId);
+      }
+      return next;
+    });
   }
 
   /** Approve a suggested line, turn it down, or put a turned down one back. */
@@ -540,11 +791,19 @@ export class LineStore {
 
   /** Drop one list's cache, so the next visit is a cold load rather than stale rows. */
   forget(listId: string): void {
+    const lineIds = (this._byList().get(listId) ?? []).map((line) => line.id);
+
     this._byList.update((current) => {
       const next = new Map(current);
       next.delete(listId);
       return next;
     });
+    // The histories go with the lines they belong to. They are keyed by line rather
+    // than by list, so nothing else would ever evict them and a session that walked
+    // through twenty lists would hold every settlement it had ever read.
+    this._settlements.update((current) => without(current, lineIds));
+    this._itemSettlements.update((current) => without(current, lineIds));
+    this._claims.update((current) => without(current, lineIds));
     this._setState(listId, 'idle');
   }
 
@@ -682,6 +941,26 @@ export class LineStore {
         break;
       }
 
+      case 'line.settled': {
+        // Both halves, and both are needed. The line carries its new quantity and
+        // its moved indicators, which is what stops a phone in the shop and a phone
+        // at home disagreeing without a refetch (backend plan 0047, section 8); the
+        // settlement is a row an open history should grow.
+        const { line, settlement } = event;
+        if (this._lineById(line.id) !== null) {
+          this._patch(line.listId, line.id, (current) =>
+            this._reconcile(current, line)
+          );
+        }
+        this.recordSettlement(settlement);
+        break;
+      }
+
+      case 'line.claimChanged': {
+        this.setClaim(event.lineId, event.claimedByUserId);
+        break;
+      }
+
       case 'line.deleted': {
         this._removeLine(event.lineId);
         break;
@@ -772,10 +1051,14 @@ export class LineStore {
       ...incoming,
       content: claims('content') ? local.content : incoming.content,
       quantity: claims('quantity') ? local.quantity : incoming.quantity,
-      status: claims('status') ? local.status : incoming.status,
       approvalStatus: claims('approvalStatus')
         ? local.approvalStatus
         : incoming.approvalStatus,
+      // The two indicators are **never** claimed, and there is nothing to claim them
+      // with: no overlay on this screen writes a settlement, so the server's answer
+      // is always the newer one. Taking the incoming values by way of the spread is
+      // therefore correct, and stating it here is what stops somebody "fixing" it
+      // into the pattern above the next time a field is added.
     };
   }
 
@@ -920,4 +1203,20 @@ export class LineStore {
 /** Whether a failure is the gateway refusing a write for lack of access. */
 export function isForbidden(error: unknown): boolean {
   return error instanceof GatewayError && error.code === 'forbidden';
+}
+
+/** A copy of `map` with `keys` removed, or `map` itself when it holds none of them. */
+function without<T>(
+  map: ReadonlyMap<string, T>,
+  keys: readonly string[]
+): ReadonlyMap<string, T> {
+  if (!keys.some((key) => map.has(key))) {
+    return map;
+  }
+
+  const next = new Map(map);
+  for (const key of keys) {
+    next.delete(key);
+  }
+  return next;
 }

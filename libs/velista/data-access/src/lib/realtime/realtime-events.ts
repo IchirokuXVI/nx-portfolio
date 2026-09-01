@@ -1,6 +1,7 @@
 import type {
   Comment,
   Line,
+  LineSettlement,
   ListPermission,
   ListPresence,
   Membership,
@@ -23,8 +24,9 @@ import type {
  *
  * - `member.rejected` carries `{ id, userId }`, **not** a membership.
  * - `line.reordered` carries a permutation, not a set of rows.
- * - `line.updated` also fires for approval and status changes, so there is no separate
- *   "status changed" event to listen for.
+ * - `line.updated` also fires for an approval decision, so there is no separate
+ *   "approval changed" event to listen for. It no longer fires for a trip status,
+ *   because there is no longer one: what a shopper found is `line.settled`.
  */
 export type RealtimeEvent =
   | {
@@ -138,6 +140,48 @@ export type RealtimeEvent =
       readonly permissions: readonly ListPermission[];
     }
   | { readonly type: 'line.added' | 'line.updated'; readonly line: Line }
+  /**
+   * A line was settled: bought, or found missing from the shop (backend plan 0047,
+   * section 8).
+   *
+   * It carries **both halves**, and both are needed. The line has a new quantity and
+   * two moved indicators on it, so a phone in the shop and a phone at home agree
+   * without a refetch; the settlement carries an id and a time nothing else can
+   * produce, which is the row an open history should grow.
+   *
+   * Distinct from `line.updated` on purpose, though the line inside it did change.
+   * "Somebody bought two of these" is a different sentence from "the number moved",
+   * which a quantity edit says too, and only one of them belongs in a history.
+   */
+  | {
+      readonly type: 'line.settled';
+      readonly line: Line;
+      readonly settlement: LineSettlement;
+    }
+  /**
+   * A line is, or is no longer, in somebody's active basket (backend plan 0051,
+   * section 5.3), on the **zone** room.
+   *
+   * The one zone event a generated list emits, so a line can show that somebody is out
+   * buying it. The payload says **that** a line is claimed and **whose**, and nothing
+   * else: not what else is in the basket, not where they are shopping, not what it
+   * costs.
+   *
+   * `claimedByUserId` is null when the claim is released, which is what makes this one
+   * event serve both directions rather than needing a second one to undo it.
+   *
+   * **Nothing publishes this yet.** The subject is in the contracts and the enum
+   * member exists; no payload schema and no publisher do (backend plan 0051 specifies
+   * it, velista `0044` is the screen that will want it). It is declared here because
+   * the alternative is an indicator with no way in, and the mapper below refuses a
+   * payload it does not recognise rather than guessing one.
+   */
+  | {
+      readonly type: 'line.claimChanged';
+      readonly lineId: string;
+      readonly listId: string;
+      readonly claimedByUserId: string | null;
+    }
   | {
       readonly type: 'line.reordered';
       readonly listId: string;
@@ -212,6 +256,8 @@ export const REALTIME_EVENT_NAMES = [
   'list.myAccessChanged',
   'line.added',
   'line.updated',
+  'line.settled',
+  'line.claimChanged',
   'line.reordered',
   'line.deleted',
   'comment.added',

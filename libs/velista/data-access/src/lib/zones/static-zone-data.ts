@@ -43,9 +43,14 @@ export const SEED_ZONES: readonly MyZone[] = [
         id: 'list-weekly',
         name: 'Weekly shop',
         lineCount: 12,
-        readyCount: 7,
+        // Six of the twelve are still wanted; the rest are stocked or have never
+        // been needed. Counted off `SEED_LINES`, which is what makes the header
+        // stop correcting itself between the cached summary and the loaded lines.
+        wantedCount: 6,
       },
-      { id: 'list-cleaning', name: 'Cleaning', lineCount: 4, readyCount: 4 },
+      // Nothing wanted: fully stocked, which is the state with no empty message
+      // and no work left.
+      { id: 'list-cleaning', name: 'Cleaning', lineCount: 4, wantedCount: 0 },
     ],
   },
   {
@@ -74,14 +79,14 @@ export const SEED_ZONES: readonly MyZone[] = [
         id: 'list-sunday',
         name: 'Sunday lunch',
         lineCount: 9,
-        readyCount: 2,
+        wantedCount: 7,
       },
-      { id: 'list-pantry', name: 'Pantry top up', lineCount: 4, readyCount: 1 },
+      { id: 'list-pantry', name: 'Pantry top up', lineCount: 4, wantedCount: 3 },
       {
         id: 'list-market',
         name: 'Saturday market',
         lineCount: 4,
-        readyCount: 1,
+        wantedCount: 3,
       },
     ],
   },
