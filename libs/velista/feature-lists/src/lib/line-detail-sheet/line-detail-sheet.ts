@@ -284,8 +284,7 @@ export class LineDetailSheet {
         'lists',
         this.listId(),
         'lines',
-        this.lineId(),
-        'detail'
+        this.lineId()
       )
     );
   }

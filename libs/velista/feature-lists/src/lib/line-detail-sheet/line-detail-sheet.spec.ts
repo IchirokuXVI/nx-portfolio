@@ -253,7 +253,7 @@ describe('LineDetailSheet', () => {
       await fixture.componentInstance.openPage();
 
       expect(sheets.leaveTo).toHaveBeenCalledWith(
-        `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}/lines/${LINE_ID}/detail`
+        `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}/lines/${LINE_ID}`
       );
       expect(sheets.dismiss).not.toHaveBeenCalled();
     });

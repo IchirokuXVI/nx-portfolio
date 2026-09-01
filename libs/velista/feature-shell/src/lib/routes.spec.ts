@@ -327,35 +327,40 @@ describe('AppShellRoutes', () => {
     /**
      * The line page (velista plan 0043, section 5.3).
      *
-     * Every screen below a line ends in a segment that says which screen it is, and
-     * that is what these assert. The bare `lines/:lineId` used to be the page, so the
-     * page was the one thing under a line that no URL named, and the sheet over the
-     * list carried `/detail` while not being the details of anything. Reading the two
-     * back was a coin toss for anybody who had not written them.
+     * It holds the line's own URL, which is the point of it being a page: it is the
+     * screen a link, and later a search result, addresses. The sheet over the list is
+     * the one that carries a segment, and the segment says what it is rather than what
+     * it is about. It used to say `/detail`, which described both screens equally and
+     * so told a reader nothing about which of them they had.
      */
     describe('the line page', () => {
-      const linePath = 'zones/:zoneId/lists/:listId/lines/:lineId/detail';
+      const linePath = 'zones/:zoneId/lists/:listId/lines/:lineId';
       const coveredPath = 'zones/:zoneId/lists/:listId';
 
-      it('answers to /detail, and nothing answers to the bare line', () => {
+      it('holds the URL of the line itself, with no segment after it', () => {
+        expect(pages.map((route) => route.path)).toContain(linePath);
+      });
+
+      it('is declared before the list page, whose prefix it shares', () => {
+        // The list page's path is a prefix of this one and it carries children, so
+        // this URL is offered to that branch first. It falls through today because no
+        // sheet under the list matches a bare line id, which is exactly the kind of
+        // thing that stops being true when somebody adds a sheet. The order is what
+        // makes it not depend on that.
         const paths = pages.map((route) => route.path);
 
-        expect(paths).toContain(linePath);
-        expect(paths).not.toContain(
-          'zones/:zoneId/lists/:listId/lines/:lineId'
+        expect(paths.indexOf(linePath)).toBeLessThan(
+          paths.indexOf(coveredPath)
         );
       });
 
-      it('does not collide with the sheets over the list page', () => {
-        // The list page's path is a prefix of this one, so this URL is offered to that
-        // branch first. It gets there because no sheet under the list answers to
-        // `detail`, which is a fact worth asserting rather than assuming.
+      it('leaves the sheet over the list on its own segment', () => {
         const sheets = routeAt(coveredPath)?.children?.map(
           (route) => route.path
         );
 
-        expect(sheets).not.toContain('lines/:lineId/detail');
         expect(sheets).toContain('lines/:lineId/sheet');
+        expect(sheets).not.toContain('lines/:lineId');
       });
 
       it('checks both ids with canMatch and demands an account', () => {

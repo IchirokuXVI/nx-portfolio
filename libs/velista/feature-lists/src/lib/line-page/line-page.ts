@@ -452,7 +452,6 @@ export class LinePage {
         this.listId(),
         'lines',
         this.lineId(),
-        'detail',
         'confirm',
         'delete'
       )
