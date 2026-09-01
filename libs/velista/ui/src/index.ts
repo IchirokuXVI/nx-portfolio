@@ -49,6 +49,7 @@ export * from './lib/list/list-notice';
 export * from './lib/list/quantity-reel';
 export * from './lib/list/quantity-stepper';
 export * from './lib/list/share-row';
+export * from './lib/list/suggestion-list';
 export * from './lib/presence/list-viewers';
 export * from './lib/presence/presence-row';
 export * from './lib/recording/recording-elapsed';

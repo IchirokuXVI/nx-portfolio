@@ -16,6 +16,7 @@ import {
   ZONE_ROLES,
   ZONE_STATUS_FALLBACK,
   ZONE_STATUSES,
+  type AlsoOnPlaceVm,
   type AssistantChoice,
   type AssistantListLink,
   type AssistantReply,
@@ -398,6 +399,33 @@ export function toLine(raw: unknown): Line | null {
  * history and an undated one cannot be ordered, which is the one thing every
  * screen that reads these does with them.
  */
+/**
+ * From `ListHoldingItemView` (backend plan 0053, section 3).
+ *
+ * A row missing either name is **dropped** rather than rendered with a blank half: the
+ * indicator reads "Flat 3B · Weekly shop", and half of that is not a place. The server
+ * has already filtered these to lists the caller may read, so a row it could not name
+ * is a row the client has nothing to say about.
+ *
+ * `quantity` is deliberately not carried. The view model says *where* the product is
+ * also wanted, not how many are wanted there, and a number nobody draws is a field that
+ * goes stale unnoticed.
+ */
+export function toAlsoOnPlace(raw: unknown): AlsoOnPlaceVm | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const listId = str(raw['listId']);
+  const listName = str(raw['name']);
+  const zoneName = str(raw['zoneName']);
+  if (listId === null || listName === null || zoneName === null) {
+    return null;
+  }
+
+  return { listId, listName, zoneName };
+}
+
 export function toLineSettlement(raw: unknown): LineSettlement | null {
   if (!isRecord(raw)) {
     return null;

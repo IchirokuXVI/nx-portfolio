@@ -82,6 +82,24 @@ export class CatalogMemory implements CatalogServiceI {
 
     return [...groups, ...items];
   }
+
+  /**
+   * The fixture's answer to a set of ids, with the unknown ones **omitted**.
+   *
+   * Omitted rather than filled in, because that is what the real catalog does and it is
+   * the case the screens have to survive: a line outlives a product, and a fake that
+   * invented a name for every id asked of it would make the one branch that matters
+   * unreachable in development.
+   *
+   * Never null. A fake has no transport to fail, and returning a failure here would be
+   * inventing one; the failure branch is exercised by a stub in the specs that want it.
+   */
+  async itemsByIds(
+    itemIds: readonly string[]
+  ): Promise<readonly CatalogItem[] | null> {
+    const wanted = new Set(itemIds);
+    return ITEMS.filter((row) => wanted.has(row.id));
+  }
 }
 
 /** The products of one group, for a composer choosing it whole. */

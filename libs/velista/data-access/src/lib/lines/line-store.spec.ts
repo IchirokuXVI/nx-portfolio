@@ -130,6 +130,8 @@ function service(seed: readonly Line[]) {
     },
     listSettlements: async () => ({ items: [], nextCursor: null }),
     listItemSettlements: async () => ({ items: [], nextCursor: null }),
+    // Nothing in this file draws the "also on" indicator; the store does not hold it.
+    listsHoldingItem: async () => ({ places: [], hasMore: false }),
     setApproval: async (lineId, approvalStatus) =>
       answer(line(lineId, { approvalStatus, version: 2 })),
     reorder: async () => {

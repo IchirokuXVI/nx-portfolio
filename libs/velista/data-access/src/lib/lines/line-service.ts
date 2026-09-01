@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
+  AlsoOnVm,
   Line,
   LineApprovalStatus,
   LineOrder,
@@ -134,6 +135,34 @@ export interface LineServiceI {
    * Filtered by read access **at request time**, so it can never widen with a
    * stale grant.
    */
+  /**
+   * Which of the caller's other lists still want a product
+   * (`GET /v1/items/:id/lists`, backend plan 0053 section 3).
+   *
+   * The read behind the line page's "also on" indicator, which velista plan 0047
+   * section 5 could previously only guess at from whatever lists the session happened
+   * to hold. Filtered by the caller's read access **at request time**, the same rule
+   * {@link listItemSettlements} follows and the same privacy question.
+   *
+   * Three things the caller must respect:
+   *
+   * - **Items only, never groups.** A line references no group once the composer has
+   *   copied its members, so a line carrying several products asks once per product
+   *   and merges the answers.
+   * - **A line with no product must not ask.** The server refuses rather than
+   *   answering empty, because "there was nothing to look for" and "no other list has
+   *   this" are different and the page draws them differently.
+   * - **Capped, not paged.** The answer is a caption. `hasMore` says the cap cut it
+   *   short; there is no cursor and asking for one would make this a listing of every
+   *   readable list that happens to want milk.
+   *
+   * `excludeListId` is the list being asked *from*, left out of the answer.
+   */
+  listsHoldingItem(
+    itemId: string,
+    options?: { excludeListId?: string }
+  ): Promise<AlsoOnVm>;
+
   listItemSettlements(
     itemId: string,
     options?: { cursor?: string; limit?: number }

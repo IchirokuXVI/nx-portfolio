@@ -13,7 +13,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  catalogItemById,
+  ItemNames,
   LineStore,
   ListStore,
   MemberNames,
@@ -33,6 +33,7 @@ import {
 } from '@portfolio/velista/platform';
 import { QuantityStepper, SheetShell } from '@portfolio/velista/ui';
 import { listErrorKey } from '../list-error-copy';
+import { indicatorsFor } from '../select-list-state';
 import { selectLineDetail } from './select-line-detail';
 
 /** Which of the sheet's two faces is showing. */
@@ -75,6 +76,7 @@ export class LineDetailSheet {
   private readonly _lines = inject(LineStore);
   private readonly _lists = inject(ListStore);
   private readonly _names = inject(MemberNames);
+  private readonly _itemNames = inject(ItemNames);
   private readonly _session = inject(SessionStore);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
@@ -110,6 +112,22 @@ export class LineDetailSheet {
     untracked(() => void this._lines.loadSettlements(lineId));
   });
 
+  /**
+   * The product names, from the catalog (velista plan 0047, section 1).
+   *
+   * Its own effect rather than part of the one above, because it depends on the line's
+   * product set and not on the id: a set edited while the sheet is open resolves the
+   * new product without the history being read again.
+   *
+   * Nothing waits for it. The chips draw with no names until it lands, and if it never
+   * does, the sheet says the names could not be loaded and stays entirely usable: the
+   * quantity, both buttons and the history are all off the line.
+   */
+  private readonly _loadNames = effect(() => {
+    const itemIds = this._line()?.itemIds ?? [];
+    untracked(() => void this._itemNames.ensure(itemIds));
+  });
+
   private readonly _line = computed(() =>
     this._lines.linesIn(this.listId()).find((line) => line.id === this.lineId())
   );
@@ -123,19 +141,41 @@ export class LineDetailSheet {
     ).includes('DECIDE')
   );
 
-  readonly detail = computed(() =>
-    selectLineDetail({
-      line: this._line(),
+  /**
+   * Who is out buying this line, as a name.
+   *
+   * The claim comes off the line, exactly as the row's does (backend plan 0052,
+   * section 4), so the header and the row it opened from cannot disagree about it.
+   */
+  private readonly _claimedByUserId = computed(() =>
+    this._lines.claimOf(this.lineId())
+  );
+
+  readonly detail = computed(() => {
+    const line = this._line();
+    const claimedBy = this._claimedByUserId();
+
+    return selectLineDetail({
+      line,
       settlements: this._lines.settlementsOf(this.lineId()),
-      itemNameOf: (itemId) => catalogItemById(itemId),
+      // The catalog, through `ItemNames`, and never the fixture in `catalog-memory`
+      // this used to read (section 1). Against a real catalog every one of its ids
+      // missed, and this sheet told the reader their line had no products.
+      itemNameOf: (itemId) => this._itemNames.nameOf(itemId),
+      namesUnavailable: this._itemNames.anyFailed(line?.itemIds ?? []),
       nameOf: (userId) => this._names.nameOf(this.zoneId(), userId),
       callerUserId: this._session.userId(),
       locale: this._localeStore.locale(),
       canSettle: this._canSettle(),
-      indicators: [],
+      // The row's own indicators, from the row's own function, rather than the `[]`
+      // this passed since 0043 (section 5). A row showing "bought" that opened a sheet
+      // showing nothing was two answers to one question, a tap apart.
+      indicators:
+        line === undefined ? [] : indicatorsFor(line, claimedBy),
+      claimedBy: claimedBy === null ? null : this._names.nameOf(this.zoneId(), claimedBy),
       busy: this.submitting(),
-    })
-  );
+    });
+  });
 
   /**
    * Open the how many step, prefilled.

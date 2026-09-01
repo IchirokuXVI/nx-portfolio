@@ -29,6 +29,16 @@
       </p>
 
       <!--
+        The names could not be read, which is **not** the line being empty (plan 0047,
+        section 1.2). The line above still says where the line lives and never says it
+        has no products, because it has some: what failed is the request for their
+        names, and that is a different sentence.
+      -->
+      @if (line.namesUnavailable) {
+        <p class="names-failed">{{ 'list.detail.namesFailed' | rokuT }}</p>
+      }
+
+      <!--
         The two numbers worth having at a glance, and each is absent rather than vague
         when it cannot be said. The rate needs three purchases (backend plan 0047,
         section 6.3) and the last buy needs one.
@@ -37,10 +47,20 @@
         <div class="tiles">
           @if (line.estimate; as estimate) {
             <div class="tile">
+              <!--
+                Three to six purchases give the phrase, seven and up give the number
+                (plan 0047, section 5). The same flag the sheet reads, off the same
+                selector, so the two screens cannot hedge differently about one history.
+              -->
               <span class="tile-value">
-                {{
-                  'list.detail.rateValue' | rokuT: { days: estimate.medianDays }
-                }}
+                @if (estimate.rough) {
+                  {{ 'list.detail.rateRough' | rokuT }}
+                } @else {
+                  {{
+                    'list.detail.rateValue'
+                      | rokuT: { days: estimate.medianDays }
+                  }}
+                }
               </span>
               <span class="tile-label">{{ 'list.page.rate' | rokuT }}</span>
             </div>
@@ -68,8 +88,14 @@
         <div class="chips">
           @for (product of line.products; track product.itemId) {
             <span class="chip">
+              <!--
+                A product with no name is drawn as **unnamed**, never as "No products
+                yet" (plan 0047, section 1.2). It is a product this line carries, on
+                screen, with a remove button beside it; saying the line has none of them
+                on the chip for one of them was the defect this plan is about.
+              -->
               <span class="chip-name">{{
-                product.name ?? ('list.page.noProducts' | rokuT)
+                product.name ?? ('list.detail.unnamedProduct' | rokuT)
               }}</span>
 
               @if (product.removable) {
@@ -89,18 +115,54 @@
           }
 
           <!--
-            Adding one is the composer's search, and it is **not built here**: the
-            dropdown lives on the list page where somebody is already typing, and a
-            second copy of it on this screen would be a second place for the ranking
-            rules to drift. Section 6 is where a product gets attached; this is where
-            one gets removed, which needs no search at all.
+            **A control, not a decoration** (plan 0047, section 2). It was a static chip
+            that drew the affordance and then did nothing, which is the one shape a
+            screen must not have: either the gesture is offered or it is not.
+
+            It opens the composer's own suggestion list rather than a second one, so the
+            ranking rules have one place to live. Drawn whatever the line already
+            carries, because a line with two products is exactly the line somebody is
+            most likely to be adding a third to.
           -->
-          @if (line.products.length === 0) {
-            <span class="chip empty">
+          @if (line.canEdit && !searching()) {
+            <button
+              (click)="startAdding()"
+              class="chip add"
+              type="button"
+            >
               {{ 'list.page.addProduct' | rokuT }}
-            </span>
+            </button>
           }
         </div>
+
+        @if (searching()) {
+          <div class="search">
+            <input
+              (input)="onQuery($event)"
+              [attr.aria-label]="'list.page.searchProduct' | rokuT"
+              [placeholder]="'list.page.searchProduct' | rokuT"
+              autocomplete="off"
+              class="search-field"
+              type="text"
+            />
+
+            <button (click)="stopAdding()" class="search-cancel" type="button">
+              {{ 'list.detail.cancel' | rokuT }}
+            </button>
+          </div>
+
+          <!--
+            No free text row: this attaches a **catalog** product to a line that already
+            exists, and there is no such thing as attaching a product the catalog has
+            never heard of. The composer offers it, because a line is free text first;
+            this is the other half of that same rule, not an exception to it.
+          -->
+          <lib-suggestion-list
+            (chose)="addProduct($event)"
+            [label]="'list.page.searchProduct'"
+            [suggestions]="suggestions()"
+          />
+        }
       </section>
 
       <!-- On this list: one household's consumption. -->
@@ -143,6 +205,18 @@
               </li>
             }
           </ul>
+
+          <!--
+            **Appending, never replacing** (plan 0047, section 4). A history redrawn
+            from page two would lose the recent rows, which are the ones the question is
+            about. `hasMore` comes off the cursor the store holds, where it was a
+            literal `false` and the whole control was unreachable.
+          -->
+          @if (line.thisList.hasMore) {
+            <button (click)="moreThisList()" class="more" type="button">
+              {{ 'list.page.more' | rokuT }}
+            </button>
+          }
         }
       </section>
 
@@ -177,24 +251,62 @@
                 </li>
               }
             </ul>
+
+            <!--
+              The same control, and one rule more: **the filter is applied per page**.
+              Backend plan 0047's rule is that the cross list item history is filtered by
+              the caller's read access at request time, so page two is filtered against
+              access as it is when page two is asked for, not as it was when page one
+              was. That falls out of asking again rather than paging a snapshot.
+            -->
+            @if (everywhere.hasMore) {
+              <button (click)="moreEverywhere()" class="more" type="button">
+                {{ 'list.page.more' | rokuT }}
+              </button>
+            }
           }
         </section>
       }
 
       <!--
         Which of the reader's other lists carry this. An indicator rather than a link,
-        per section 5.3, and nothing at all when there are none: "no other list has
-        this" is not information anybody came here for.
+        per section 5.3.
+
+        **Omitted, not drawn empty, when nobody has asked** (plan 0047, section 5). It
+        is null today: no endpoint answers the question, and the derivation this page
+        used to make from whatever the session had loaded under reported by
+        construction, so an empty answer read as "no other list has this" when the truth
+        was that nobody had asked. Backend plan 0053 section 3 adds the query. Once it
+        has, an empty answer still draws nothing, because "no other list has this" is
+        not information anybody came here for, but that is a different absence.
       -->
-      @if (line.alsoOn.length > 0) {
-        <section class="section">
-          <h2 class="section-title">{{ 'list.page.alsoOn' | rokuT }}</h2>
-          <div class="chips">
-            @for (where of line.alsoOn; track where) {
-              <span class="chip">{{ where }}</span>
-            }
-          </div>
-        </section>
+      @if (line.alsoOn; as alsoOn) {
+        @if (alsoOn.places.length > 0) {
+          <section class="section">
+            <h2 class="section-title">{{ 'list.page.alsoOn' | rokuT }}</h2>
+            <div class="chips">
+              @for (where of alsoOn.places; track where.listId) {
+                <span class="chip">
+                  {{
+                    'list.page.alsoOnPlace'
+                      | rokuT: { list: where.listName, zone: where.zoneName }
+                  }}
+                </span>
+              }
+
+              <!--
+                The server caps the answer rather than paging it, because this is a
+                caption and not a listing. Saying so is the difference between a short
+                answer and a wrong one.
+              -->
+              @if (alsoOn.hasMore) {
+                <span class="chip more-places">
+                  {{ 'list.page.alsoOnMore' | rokuT }}
+                </span>
+              }
+            </div>
+          </section>
+        }
       }
 
       <!--

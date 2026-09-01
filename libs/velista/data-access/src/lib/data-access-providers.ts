@@ -7,6 +7,7 @@ import { AccountNotice } from './auth/account-notice';
 import { AuthMemory } from './auth/auth-memory';
 import { SessionStore } from './auth/session-store';
 import { TokenStore } from './auth/token-store';
+import { ItemNames } from './catalog/item-names';
 import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
 import { GeneratedListMemory } from './generated-lists/generated-list-memory';
@@ -114,6 +115,12 @@ import { ZoneStore } from './zones/zone-store';
  * between them. `GeneratedListMemory` joins for `AccountMemory`'s reason exactly, and
  * `GeneratedListApi` stays out like every other real transport.
  *
+ * `ItemNames` (plan 0047) joins for `MemberNames`' reason exactly: it resolves
+ * `CATALOG_SERVICE`, so at the root it would name products from whatever that token's
+ * default resolved to rather than from the catalog the app bound. It is app scoped
+ * rather than page scoped because the line detail sheet and the line page ask the same
+ * question about the same products, and the second is usually opened from the first.
+ *
  * `AssistantMemory` (plan 0032) joins for `CommentMemory`'s reason and no stronger one:
  * it injects nothing, so root scope would work for it, and it is listed here anyway so
  * that every fake in this library is installed in one place rather than two. It is no
@@ -139,6 +146,7 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   LineMemory,
   LineStore,
   CommentMemory,
+  ItemNames,
   MemberNames,
   MembershipStore,
   PresenceStore,

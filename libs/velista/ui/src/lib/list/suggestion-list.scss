@@ -1,0 +1,119 @@
+// ------------------------------------------------------ The suggestions (0043, §6)
+//
+// A list rather than a popover over the page. Where it goes relative to its field is
+// the **caller's**, not this component's: the composer is pinned to the bottom with the
+// keyboard under it, so its list grows upward, and the line page's sits under the field
+// where there is nothing in the way. Both get the same rows.
+:host {
+  display: contents;
+}
+
+.suggestions {
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-4) 0;
+  list-style: none;
+  // Bounded, because a long list would push the field off the top of the screen. Four
+  // rows and a bit, which is enough to show that there is more without becoming the
+  // page.
+  max-height: var(--app-suggestions-max-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  width: 100%;
+  min-height: var(--app-touch-target);
+  padding: var(--app-space-3);
+  border: 0;
+  border-top: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// The first row has nothing above it to be separated from.
+.suggestions li:first-child .suggestion {
+  border-top: 0;
+}
+
+// A group is the answer most people want, so it is the one that stands out: tinted,
+// badged, and at the top where the server put it.
+.suggestion.group {
+  background: var(--app-action-quiet-bg);
+}
+
+.suggestion-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--app-avatar-sm);
+  height: var(--app-avatar-sm);
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--app-border-subtle);
+  color: var(--app-text-muted);
+  font-size: var(--app-icon-sm);
+}
+
+.suggestion.group .suggestion-glyph {
+  border-color: var(--app-action-quiet-border);
+  color: var(--app-action-quiet-fg);
+}
+
+.suggestion-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  flex: 1;
+  min-width: 0;
+}
+
+// One line and truncated. Real product names run to "Leche semidesnatada Hacendado,
+// 6 x 1 L", and a row that wrapped to three lines would push the rest off screen.
+.suggestion-name {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-note {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-badge {
+  flex-shrink: 0;
+  padding: var(--app-chip-padding-block) var(--app-space-3);
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-radius-full);
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+// The free text row. No tint and no badge: it is the ordinary thing to do, and
+// dressing it up would suggest it were a fallback.
+.suggestion.plain .suggestion-glyph {
+  border: 0;
+}
+
+.suggestion.plain .suggestion-name {
+  color: var(--app-text-muted);
+}

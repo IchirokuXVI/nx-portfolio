@@ -1,5 +1,6 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
+  CatalogItem,
   Comment,
   GeneratedListSummary,
   Identity,
@@ -25,6 +26,7 @@ import type {
 } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
+import { ItemNames } from '../catalog/item-names';
 import {
   AUTH_SERVICE,
   type AuthServiceI,
@@ -613,6 +615,16 @@ export interface FakeLineStateOptions {
    */
   readonly settlements?: Readonly<Record<string, readonly LineSettlement[]>>;
   readonly itemSettlements?: Readonly<Record<string, readonly LineSettlement[]>>;
+  /**
+   * A further page of either history, keyed by line id (plan 0047, section 4).
+   *
+   * Present means `hasMore` is true and one press will append these rows; absent means
+   * the store holds the whole history and the control is not drawn.
+   */
+  readonly moreSettlements?: Readonly<Record<string, readonly LineSettlement[]>>;
+  readonly moreItemSettlements?: Readonly<
+    Record<string, readonly LineSettlement[]>
+  >;
   /** Seeded claims, keyed by line id, valued by the user id doing the buying. */
   readonly claims?: Readonly<Record<string, string>>;
 }
@@ -658,9 +670,31 @@ export type LineWriteCall =
       readonly lineId: string;
       readonly status: LineApprovalStatus;
     }
-  | { readonly kind: 'update'; readonly lineId: string }
+  /**
+   * An edit, with whatever it changed.
+   *
+   * `itemIds` is recorded for the `add` call's reason one screen further in: the line
+   * page attaches a product by rewriting the whole set (velista plan 0047, section 2),
+   * and "the chosen product was unioned onto the set rather than replacing it" is only
+   * observable in the arguments.
+   */
+  | {
+      readonly kind: 'update';
+      readonly lineId: string;
+      readonly content?: string;
+      readonly itemIds?: readonly string[];
+    }
   | { readonly kind: 'delete'; readonly lineId: string }
-  | { readonly kind: 'reorder'; readonly orderedLineIds: readonly string[] };
+  | { readonly kind: 'reorder'; readonly orderedLineIds: readonly string[] }
+  /**
+   * A further page of a history, asked for by a "show more" (plan 0047, section 4).
+   *
+   * Recorded because the rule under test is that the second page is **asked for**
+   * rather than sliced off something already held: the cross list history is refiltered
+   * by the caller's read access at request time, which only a fresh request can do.
+   */
+  | { readonly kind: 'moreSettlements'; readonly lineId: string }
+  | { readonly kind: 'moreItemSettlements'; readonly lineId: string };
 
 /**
  * A `LineStore` that is simply in the state you asked for.
@@ -695,6 +729,19 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   /** One line's own history, for the sheet and the page that draw it. */
   const settlements = signal<ReadonlyMap<string, readonly LineSettlement[]>>(
     new Map(Object.entries(options.settlements ?? {}))
+  );
+  /**
+   * The page a "show more" would fetch, per line, consumed once (plan 0047, section 4).
+   *
+   * Plain maps rather than signals: nothing reads them, they only decide what the next
+   * press appends, and deleting the entry as it is handed over is what makes `hasMore`
+   * go false at the end of the history exactly as a spent cursor does.
+   */
+  const moreSettlements = new Map<string, readonly LineSettlement[]>(
+    Object.entries(options.moreSettlements ?? {})
+  );
+  const moreItemSettlements = new Map<string, readonly LineSettlement[]>(
+    Object.entries(options.moreItemSettlements ?? {})
   );
   /** The cross list history, keyed by line as the real store keys it. */
   const itemSettlements = signal<
@@ -774,8 +821,38 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       return { state: 'added' as const, line: added };
     },
 
-    updateLine: async (lineId: string) => {
-      calls.push({ kind: 'update', lineId });
+    /**
+     * An edit, **applied** rather than only recorded.
+     *
+     * `addQuantity` below has always applied its change, and this did not, which was
+     * fine while every caller only removed a product and checked the call. Velista plan
+     * 0047 section 2 made the page add one, and the rule worth asserting there is what
+     * the resulting set **is**: unioned onto what the line already carries, with a
+     * product that was already on it a no-op rather than a duplicate. A double that
+     * dropped the patch could not state that.
+     */
+    updateLine: async (
+      lineId: string,
+      patch?: { content?: string; itemIds?: readonly string[] }
+    ) => {
+      calls.push({ kind: 'update', lineId, ...patch });
+      if (outcome === 'succeeded' && patch !== undefined) {
+        lines.update((current) =>
+          current.map((l) =>
+            l.id === lineId
+              ? {
+                  ...l,
+                  ...(patch.content === undefined
+                    ? {}
+                    : { content: patch.content }),
+                  ...(patch.itemIds === undefined
+                    ? {}
+                    : { itemIds: patch.itemIds }),
+                }
+              : l
+          )
+        );
+      }
       return outcome;
     },
 
@@ -834,6 +911,45 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     loadItemSettlements: async () => undefined,
     settlementsOf: (lineId: string) => settlements().get(lineId),
     itemSettlementsOf: (lineId: string) => itemSettlements().get(lineId),
+
+    /**
+     * The paging half (velista plan 0047, section 4).
+     *
+     * `hasMore` is stated as a fact about the fixture rather than derived from a
+     * cursor, because a page spec wants to say "there is another page" and press the
+     * button, not to drive two requests and a merge. The real cursor arithmetic is
+     * covered against the real store in its own spec.
+     *
+     * A further page **appends** what the options seeded as `morePage`, which is what
+     * lets a spec assert the rule that matters: page two joins page one rather than
+     * replacing it.
+     */
+    hasMoreSettlements: (lineId: string) =>
+      (moreSettlements.get(lineId)?.length ?? 0) > 0,
+    hasMoreItemSettlements: (lineId: string) =>
+      (moreItemSettlements.get(lineId)?.length ?? 0) > 0,
+    loadMoreSettlements: async (lineId: string) => {
+      calls.push({ kind: 'moreSettlements', lineId });
+      const next = moreSettlements.get(lineId) ?? [];
+      moreSettlements.delete(lineId);
+      settlements.update((current) =>
+        new Map(current).set(lineId, [
+          ...(current.get(lineId) ?? []),
+          ...next,
+        ])
+      );
+    },
+    loadMoreItemSettlements: async (line: Line) => {
+      calls.push({ kind: 'moreItemSettlements', lineId: line.id });
+      const next = moreItemSettlements.get(line.id) ?? [];
+      moreItemSettlements.delete(line.id);
+      itemSettlements.update((current) =>
+        new Map(current).set(line.id, [
+          ...(current.get(line.id) ?? []),
+          ...next,
+        ])
+      );
+    },
     claimOf: (lineId: string) => claims().get(lineId) ?? null,
     claims: () => claims(),
     setClaim: (lineId: string, claimedByUserId: string | null) => {
@@ -973,6 +1089,56 @@ export function provideFakeMemberNames(
   store: ReturnType<typeof fakeMemberNames>
 ): Provider {
   return { provide: MemberNames, useValue: store };
+}
+
+/** What a fake catalog says a product is called, and whether it says anything at all. */
+export interface FakeItemNamesOptions {
+  /** The products it can name, by id. Anything else answers null. */
+  readonly items?: readonly CatalogItem[];
+  /**
+   * Ids whose lookup **failed**, as opposed to answering with nothing.
+   *
+   * The one distinction this double exists to make (velista plan 0047, section 1.2):
+   * a screen draws a failed lookup and a withdrawn product differently, and a fake
+   * that could only be empty could not tell a spec which one it was showing.
+   */
+  readonly failed?: readonly string[];
+}
+
+/**
+ * An `ItemNames` that simply knows what you told it.
+ *
+ * A double rather than the real holder over a fake catalog, for `fakeZoneStore`'s
+ * reason: a screen spec wants to state "this product is called Whole milk and that one
+ * could not be read" as a fact about the world, not to drive a request and await it.
+ * The real holder's own behaviour, which is asking once per id and clearing a failure
+ * when a later answer arrives, is covered against the real thing in its own spec.
+ */
+export function fakeItemNames(options: FakeItemNamesOptions = {}) {
+  const items = options.items ?? [];
+  const failed = new Set(options.failed ?? []);
+  const asked: string[][] = [];
+
+  return {
+    nameOf: (itemId: string) =>
+      items.find((row) => row.id === itemId) ?? null,
+    anyFailed: (itemIds: readonly string[]) =>
+      itemIds.some((itemId) => failed.has(itemId)),
+    ensure: async (itemIds: readonly string[]) => {
+      asked.push([...itemIds]);
+    },
+    prime: () => undefined,
+    /** Every set that was asked for, in order, so a spec can assert one request. */
+    asked,
+  };
+}
+
+export type FakeItemNames = ReturnType<typeof fakeItemNames>;
+
+export function provideFakeItemNames(
+  store: FakeItemNames = fakeItemNames()
+): Provider {
+  return { provide: ItemNames, useValue: store };
 }
 
 /** Who a fake says is present, per zone and per list (plan 0017). */
