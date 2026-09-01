@@ -4,6 +4,7 @@ import {
   computed,
   DestroyRef,
   effect,
+  ElementRef,
   inject,
   input,
   output,
@@ -16,6 +17,8 @@ import {
   QUANTITY_REEL_IDLE_MS,
   QUANTITY_REEL_PAGE_STEP,
   QUANTITY_REEL_PX_PER_UNIT,
+  QUANTITY_REEL_TAP_MAX_MS,
+  QUANTITY_REEL_TAP_SLOP_PX,
 } from '@portfolio/velista/models';
 
 /**
@@ -38,6 +41,22 @@ import {
  * how it feels: at 40px, the ~280px of comfortable travel on a 390px phone covers about
  * seven units in one drag, which is what makes two to five a single gesture rather than
  * three presses.
+ *
+ * ## Two gestures, and the whole overlay answers both
+ *
+ * A drag starts **anywhere inside the reel**, the open overlay included, not only on
+ * the pill it grew out of. The overlay is wider than the pill and sits over the row
+ * beside it, so a thumb that lands on the number it can see and pulls is doing the
+ * ordinary thing; refusing that and only listening under the pill made the control
+ * feel like it had a hidden edge.
+ *
+ * A **tap** on one of the numbers goes straight to it, which is the short way to
+ * ±1 without travelling {@link QUANTITY_REEL_PX_PER_UNIT} for it. A tap is a press
+ * that neither wandered ({@link QUANTITY_REEL_TAP_SLOP_PX}) nor lingered
+ * ({@link QUANTITY_REEL_TAP_MAX_MS}): a hold is how a drag begins, so a hold that
+ * ends where it started changes nothing. The number is read off the element that was
+ * pressed at the moment it was pressed, not at the moment it was released, because
+ * by then the tape may have moved under the finger.
  *
  * ## Which way it goes, and why the keys disagree
  *
@@ -128,7 +147,18 @@ export class QuantityReel {
    */
   readonly committed = output<number>();
 
+  /**
+   * The overlay closed on its own, having waited out {@link QUANTITY_REEL_IDLE_MS}.
+   *
+   * Only that case. A close that came from somewhere else, a blur or the row asking
+   * for it, is somebody's own doing and needs no announcement. `LineRow` uses this to
+   * stay deaf for a beat, because a finger already falling towards a number does not
+   * stop when the thing under it disappears.
+   */
+  readonly autoClosed = output<void>();
+
   private readonly _destroyRef = inject(DestroyRef);
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   /** What the control is showing, which is the settled value unless a gesture is on. */
   private readonly _pending = signal<number | null>(null);
@@ -140,6 +170,11 @@ export class QuantityReel {
   private _originX = 0;
   private _originValue = 0;
   private _pointerId: number | null = null;
+
+  /** When the press began, and the number it landed on, for telling a tap from a drag. */
+  private _pressedAt = 0;
+  private _pressedValue: number | null = null;
+  private _wandered = false;
 
   private _idleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -211,13 +246,24 @@ export class QuantityReel {
     this._originX = event.clientX;
     this._originValue = from;
     this._pointerId = event.pointerId;
+    this._pressedAt = Date.now();
+    // Read now rather than on release: the tape moves under the finger, so the number
+    // that was pressed and the number that ends up in that spot are two different
+    // things, and the one somebody aimed at is this one.
+    this._pressedValue = this._numberUnder(event.target);
+    this._wandered = false;
     this.dragging.set(true);
     this._pending.set(from);
 
     // The row is inside a scroller and the list itself answers a drag on the grip, so
     // the gesture has to be claimed explicitly or a horizontal drag becomes a scroll
     // the moment the finger wanders vertically.
-    (event.target as Element | null)?.setPointerCapture?.(event.pointerId);
+    //
+    // Captured on the **host** rather than on whatever was pressed, because a drag can
+    // now begin on a number inside the overlay and that element is redrawn as the
+    // number changes. The host outlives the gesture; the span under the finger does
+    // not have to.
+    this._host.nativeElement.setPointerCapture?.(event.pointerId);
   }
 
   onPointerMove(event: PointerEvent): void {
@@ -231,6 +277,10 @@ export class QuantityReel {
     const travelled = this._originX - event.clientX;
     const moved = Math.round(travelled / QUANTITY_REEL_PX_PER_UNIT);
 
+    if (Math.abs(travelled) > QUANTITY_REEL_TAP_SLOP_PX) {
+      this._wandered = true;
+    }
+
     this._pending.set(this._clamp(this._originValue + moved));
   }
 
@@ -239,6 +289,19 @@ export class QuantityReel {
       return;
     }
 
+    // A tap on a number, which is the other half of the gesture: it goes there rather
+    // than making somebody drag the whole unit for it. A press that wandered was a
+    // drag and has already said what it wants; one that lingered was a hold, which is
+    // how a drag begins and not a request for the number it happened to rest on.
+    if (
+      this._pressedValue !== null &&
+      !this._wandered &&
+      Date.now() - this._pressedAt <= QUANTITY_REEL_TAP_MAX_MS
+    ) {
+      this._pending.set(this._clamp(this._pressedValue));
+    }
+
+    this._pressedValue = null;
     this.dragging.set(false);
     this._pointerId = null;
     // Already whole: the pending value has been rounded on every move, so the snap is
@@ -250,8 +313,28 @@ export class QuantityReel {
 
   onPointerCancel(event: PointerEvent): void {
     // A cancel is the system taking the gesture away, not the person abandoning it, so
-    // what was reached still stands and still commits after the usual beat.
+    // what was reached still stands and still commits after the usual beat. It is not
+    // a tap, though: nobody lifted their finger, so there is no press to complete.
+    this._pressedValue = null;
     this.onPointerUp(event);
+  }
+
+  /**
+   * The number the pressed element stands for, or null if it was not one.
+   *
+   * Read off the DOM rather than bound per span, because the three numbers are drawn
+   * by one template each and the component would otherwise need a handler apiece for
+   * a value it can simply be told.
+   */
+  private _numberUnder(target: EventTarget | null): number | null {
+    const element = (target as Element | null)?.closest?.('[data-reel-value]');
+    const raw = element?.getAttribute('data-reel-value');
+    if (raw === null || raw === undefined) {
+      return null;
+    }
+
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
   }
 
   // ----------------------------------------------------------------- keyboard
@@ -297,6 +380,21 @@ export class QuantityReel {
     }
   }
 
+  /**
+   * Shut it now and send what it is holding.
+   *
+   * For the row above, which closes the reel when a tap lands elsewhere on the same
+   * line. Doing it here rather than leaving it to the blur is what makes the rule hold
+   * on a touch screen, where a tap on a span that cannot take focus moves focus
+   * nowhere and the blur that would have closed it never fires.
+   */
+  close(): void {
+    this._clearTimer();
+    this._pointerId = null;
+    this._pressedValue = null;
+    this._flush();
+  }
+
   private _stepFor(key: string): number | null {
     switch (key) {
       case 'ArrowUp':
@@ -320,7 +418,11 @@ export class QuantityReel {
     this._clearTimer();
     this._idleTimer = setTimeout(() => {
       this._idleTimer = null;
+      const wasOpen = this._pending() !== null;
       this._flush();
+      if (wasOpen) {
+        this.autoClosed.emit();
+      }
     }, QUANTITY_REEL_IDLE_MS);
   }
 

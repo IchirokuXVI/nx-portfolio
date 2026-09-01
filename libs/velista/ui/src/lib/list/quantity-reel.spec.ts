@@ -2,6 +2,7 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import {
   QUANTITY_REEL_IDLE_MS,
   QUANTITY_REEL_PX_PER_UNIT,
+  QUANTITY_REEL_TAP_MAX_MS,
 } from '@portfolio/velista/models';
 import { QuantityReel } from './quantity-reel';
 
@@ -62,8 +63,21 @@ function drag(host: HTMLElement, units: number): void {
   host.dispatchEvent(pointer('pointerup', -units * QUANTITY_REEL_PX_PER_UNIT));
 }
 
+/** A press and a lift in the same place, which is what a tap is. */
+function tap(target: EventTarget, clientX = 0): void {
+  target.dispatchEvent(pointer('pointerdown', clientX));
+  target.dispatchEvent(pointer('pointerup', clientX));
+}
+
+/** The element in the open overlay standing for `value`. Absent past the range. */
+function number(host: HTMLElement, value: number): HTMLElement {
+  return host.querySelector(`[data-reel-value="${value}"]`) as HTMLElement;
+}
+
 function key(host: HTMLElement, name: string): void {
-  host.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
+  host.dispatchEvent(
+    new KeyboardEvent('keydown', { key: name, bubbles: true })
+  );
 }
 
 describe('QuantityReel', () => {
@@ -289,6 +303,208 @@ describe('QuantityReel', () => {
 
       expect(fixture.componentInstance.previous()).toBeNull();
       expect(fixture.componentInstance.next()).toBe(1);
+    });
+  });
+
+  /**
+   * The second gesture. A drag is the whole point of the control, but ±1 through forty
+   * pixels of travel is the one case where the gesture is more work than the thing it
+   * replaced, and the numbers are already on screen being pointed at.
+   */
+  describe('tapping a number', () => {
+    it('goes to the one that was tapped', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      // A tap on the pill opens it; nothing has changed yet.
+      tap(host);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.open()).toBe(true);
+      expect(fixture.componentInstance.shown()).toBe(2);
+
+      tap(number(host, 3));
+      fixture.detectChanges();
+      expect(fixture.componentInstance.shown()).toBe(3);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([1]);
+    });
+
+    it('goes down as readily as up', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      tap(host);
+      fixture.detectChanges();
+      tap(number(host, 1));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(1);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([-1]);
+    });
+
+    it('adds up over several taps into one delta, like the drag does', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      tap(host);
+      for (const target of [3, 4, 5]) {
+        fixture.detectChanges();
+        tap(number(host, target));
+      }
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(5);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([3]);
+    });
+
+    it('is a tap and not a hold: a press that lingers changes nothing', async () => {
+      // A hold is how a drag begins. Somebody who pressed, thought better of it and
+      // lifted without moving did not ask for the number they were resting on.
+      const { fixture, host, deltas } = await render(2);
+
+      tap(host);
+      fixture.detectChanges();
+
+      const target = number(host, 3);
+      target.dispatchEvent(pointer('pointerdown', 0));
+      jest.advanceTimersByTime(QUANTITY_REEL_TAP_MAX_MS + 50);
+      target.dispatchEvent(pointer('pointerup', 0));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(2);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([]);
+    });
+
+    it('does not fire at the end of a drag that began on a number', async () => {
+      // The drag has already said where it wants to be. Reading the release as a tap
+      // as well would drag the reel to five and then snap it back to three.
+      const { fixture, host, deltas } = await render(2);
+
+      tap(host);
+      fixture.detectChanges();
+
+      const target = number(host, 3);
+      target.dispatchEvent(pointer('pointerdown', 0));
+      target.dispatchEvent(
+        pointer('pointermove', -3 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      target.dispatchEvent(
+        pointer('pointerup', -3 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(5);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([3]);
+    });
+
+    it('has nothing to tap past the end of the range', async () => {
+      const { fixture, host } = await render(0);
+
+      tap(host);
+      fixture.detectChanges();
+
+      // The empty neighbour carries no value, so there is no minus one to land on.
+      expect(number(host, -1)).toBeNull();
+      expect(number(host, 1)).not.toBeNull();
+    });
+
+    it('does not move for a caller who may not change it', async () => {
+      const { fixture, host, deltas } = await render(3, { readonly: true });
+
+      tap(host);
+      fixture.detectChanges();
+
+      // The overlay never opened, so there is nothing to tap in the first place.
+      expect(fixture.componentInstance.open()).toBe(false);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([]);
+    });
+  });
+
+  /**
+   * The overlay is wider than the pill and reaches over the row beside it, so the thing
+   * somebody is looking at when they decide to drag is often not the thing that used to
+   * be listening.
+   */
+  describe('where a drag may start', () => {
+    it('starts on a number inside the open overlay, not only on the pill', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      tap(host);
+      fixture.detectChanges();
+
+      const target = number(host, 2);
+      target.dispatchEvent(pointer('pointerdown', 0));
+      target.dispatchEvent(
+        pointer('pointermove', -2 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      fixture.detectChanges();
+      expect(fixture.componentInstance.shown()).toBe(4);
+
+      target.dispatchEvent(
+        pointer('pointerup', -2 * QUANTITY_REEL_PX_PER_UNIT)
+      );
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([2]);
+    });
+
+    it('starts anywhere in the overlay, number or not', async () => {
+      const { fixture, host, deltas } = await render(1);
+
+      tap(host);
+      fixture.detectChanges();
+
+      const overlay = host.querySelector('.overlay') as HTMLElement;
+      overlay.dispatchEvent(pointer('pointerdown', 0));
+      overlay.dispatchEvent(pointer('pointermove', -QUANTITY_REEL_PX_PER_UNIT));
+      overlay.dispatchEvent(pointer('pointerup', -QUANTITY_REEL_PX_PER_UNIT));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.shown()).toBe(2);
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([1]);
+    });
+  });
+
+  describe('saying that it closed by itself', () => {
+    it('announces the timeout, so the row can stay deaf for a beat', async () => {
+      const { fixture, host } = await render(2);
+      const closes: number[] = [];
+      fixture.componentInstance.autoClosed.subscribe(() => closes.push(1));
+
+      drag(host, 1);
+      expect(closes).toEqual([]);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(closes).toEqual([1]);
+    });
+
+    it('says nothing when somebody closed it themselves', async () => {
+      // A blur, or the row asking for it. Both are somebody's own doing, and the tap
+      // they cost has already been spent.
+      const { fixture, host } = await render(2);
+      const closes: number[] = [];
+      fixture.componentInstance.autoClosed.subscribe(() => closes.push(1));
+
+      drag(host, 1);
+      host.dispatchEvent(new FocusEvent('blur'));
+      fixture.componentInstance.close();
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(closes).toEqual([]);
+    });
+
+    it('commits what it was holding when the row closes it', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      drag(host, 2);
+      fixture.componentInstance.close();
+      fixture.detectChanges();
+
+      expect(deltas).toEqual([2]);
+      expect(fixture.componentInstance.open()).toBe(false);
     });
   });
 
