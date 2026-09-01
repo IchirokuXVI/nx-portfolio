@@ -223,15 +223,3 @@ export const PARTICIPANT_KINDS = [
 export type ParticipantKind = (typeof PARTICIPANT_KINDS)[number];
 export const PARTICIPANT_KIND_FALLBACK: ParticipantKind = 'UNKNOWN';
 
-/**
- * What one settling act said about one line (backend plan 0047, section 3).
- *
- * Two values and not three: **skipping writes nothing at all**. "I decided not to
- * buy this today" leaves the line exactly as it was, so it is the absence of a
- * call rather than an outcome, and there is nothing for this union to name.
- *
- * There is **no fallback**, because nothing maps into this type. It only ever
- * goes out, chosen by the two buttons on the settle sheet.
- */
-export const SETTLEMENT_OUTCOMES = ['BOUGHT', 'NOT_AVAILABLE'] as const;
-export type SettlementOutcome = (typeof SETTLEMENT_OUTCOMES)[number];
