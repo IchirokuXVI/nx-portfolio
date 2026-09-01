@@ -17,7 +17,6 @@ import type {
   AuthProvider,
   ItemCategory,
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
   LocalizedSynonyms,
   LocalizedText,
@@ -131,7 +130,6 @@ export interface SeedLine {
   itemSetHash: string | null;
   position: number;
   approvalStatus: LineApprovalStatus;
-  status: LineStatus;
   createdByUserId: string;
   approvedByUserId: string | null;
   version: number;

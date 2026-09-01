@@ -35,16 +35,18 @@ import { COMMON_IDS } from '../common.schemas';
 export const GENERATED_LIST_SCHEMA_IDS = {
   generatedListStatus: schemaId('enums/GeneratedListStatus'),
   generatedLineOrigin: schemaId('enums/GeneratedLineOrigin'),
-  lineOriginView: schemaId('generatedList/GeneratedListLineOriginView'),
-  lineView: schemaId('generatedList/GeneratedListLineView'),
-  sourceSnapshot: schemaId('generatedList/GeneratedListSourceSnapshot'),
-  listView: schemaId('generatedList/GeneratedListView'),
-  summaryView: schemaId('generatedList/GeneratedListSummaryView'),
-  skippedLineView: schemaId('generatedList/GeneratedListSkippedLineView'),
-  runResult: schemaId('generatedList/GeneratedListRunResult'),
-  settleResult: schemaId('generatedList/GeneratedListSettleResult'),
-  page: schemaId('generatedList/GeneratedListPage'),
-  sourceInput: schemaId('generatedList/GeneratedListSourceInput'),
+  lineOriginView: schemaId('generated-list/GeneratedListLineOriginView'),
+  lineView: schemaId('generated-list/GeneratedListLineView'),
+  sourceSnapshotEntry: schemaId(
+    'generated-list/GeneratedListSourceSnapshotEntry'
+  ),
+  sourceSnapshot: schemaId('generated-list/GeneratedListSourceSnapshot'),
+  listView: schemaId('generated-list/GeneratedListView'),
+  summaryView: schemaId('generated-list/GeneratedListSummaryView'),
+  skippedLineView: schemaId('generated-list/GeneratedListSkippedLineView'),
+  runResult: schemaId('generated-list/GeneratedListRunResult'),
+  page: schemaId('generated-list/GeneratedListPage'),
+  sourceInput: schemaId('generated-list/GeneratedListSourceInput'),
   createRequest: schemaId('msg/generatedList.create/request'),
   idRequest: schemaId('msg/generatedList.id/request'),
   listMineRequest: schemaId('msg/generatedList.listMine/request'),
@@ -53,7 +55,6 @@ export const GENERATED_LIST_SCHEMA_IDS = {
   updateLineRequest: schemaId('msg/generatedList.updateLine/request'),
   lineIdRequest: schemaId('msg/generatedList.lineId/request'),
   reorderRequest: schemaId('msg/generatedList.reorderLines/request'),
-  settleRequest: schemaId('msg/generatedList.settleLine/request'),
 } as const;
 
 const lineOriginView = object(
@@ -99,17 +100,27 @@ const lineView = object(
   ]
 );
 
+/**
+ * One (zone, list) pair a run actually read.
+ *
+ * A registered schema of its own rather than an object inlined into the snapshot
+ * below, and that is a rule of this file rather than a preference: a nested
+ * `$id` opens a new resolution scope inside its parent, which leaves the sibling
+ * schemas registered after it unreachable and turns every `$ref` to them into
+ * "can't resolve reference" at compile time. Every schema here is top level and
+ * referenced by id.
+ */
+const sourceSnapshotEntry = object(
+  GENERATED_LIST_SCHEMA_IDS.sourceSnapshotEntry,
+  { zoneId: nonEmptyString(), listId: nonEmptyString() },
+  ['zoneId', 'listId']
+);
+
 const sourceSnapshot = object(
   GENERATED_LIST_SCHEMA_IDS.sourceSnapshot,
   {
     profileId: nullableString(),
-    sources: array(
-      object(
-        schemaId('generatedList/GeneratedListSourceSnapshotEntry'),
-        { zoneId: nonEmptyString(), listId: nonEmptyString() },
-        ['zoneId', 'listId']
-      )
-    ),
+    sources: array(ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshotEntry)),
   },
   ['profileId', 'sources']
 );
@@ -161,37 +172,6 @@ const runResult = object(
     skipped: array(ref(GENERATED_LIST_SCHEMA_IDS.skippedLineView)),
   },
   ['list', 'skipped']
-);
-
-const settleResult = object(
-  GENERATED_LIST_SCHEMA_IDS.settleResult,
-  {
-    line: ref(GENERATED_LIST_SCHEMA_IDS.lineView),
-    settlements: array(
-      object(
-        schemaId('generatedList/GeneratedListSettlementRef'),
-        {
-          lineId: nonEmptyString(),
-          listId: nonEmptyString(),
-          quantity: integer({ minimum: 0 }),
-          settlementId: nonEmptyString(),
-        },
-        ['lineId', 'listId', 'quantity', 'settlementId']
-      )
-    ),
-    skipped: array(
-      object(
-        schemaId('generatedList/GeneratedListSettleSkip'),
-        {
-          lineId: nonEmptyString(),
-          listId: nonEmptyString(),
-          reason: nonEmptyString(),
-        },
-        ['lineId', 'listId', 'reason']
-      )
-    ),
-  },
-  ['line', 'settlements', 'skipped']
 );
 
 const sourceInput = object(
@@ -257,7 +237,10 @@ const addLineRequest = object(
     content: nonEmptyString({
       maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
     }),
-    quantity: integer({ minimum: 1, maximum: GENERATED_LIST_LIMITS.maxQuantity }),
+    quantity: integer({
+      minimum: 1,
+      maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    }),
     itemId: nullableString(),
     options: array(nonEmptyString()),
     targetListId: nullableString(),
@@ -274,7 +257,10 @@ const updateLineRequest = object(
     content: nonEmptyString({
       maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
     }),
-    quantity: integer({ minimum: 0, maximum: GENERATED_LIST_LIMITS.maxQuantity }),
+    quantity: integer({
+      minimum: 0,
+      maximum: GENERATED_LIST_LIMITS.maxQuantity,
+    }),
     itemId: nullableString(),
     targetListId: nullableString(),
   },
@@ -301,25 +287,6 @@ const reorderRequest = object(
   ['userId', 'generatedListId', 'lineIds']
 );
 
-const settleRequest = object(
-  GENERATED_LIST_SCHEMA_IDS.settleRequest,
-  {
-    userId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
-    lineId: nonEmptyString(),
-    outcome: nonEmptyString(),
-    quantity: integer({ minimum: 0, maximum: GENERATED_LIST_LIMITS.maxQuantity }),
-    allocation: array(
-      object(
-        schemaId('generatedList/GeneratedListAllocationEntry'),
-        { lineId: nonEmptyString(), quantity: integer({ minimum: 0 }) },
-        ['lineId', 'quantity']
-      )
-    ),
-  },
-  ['userId', 'generatedListId', 'lineId', 'outcome']
-);
-
 export const generatedListSchemas: JsonSchema[] = [
   enumOf(
     GENERATED_LIST_SCHEMA_IDS.generatedListStatus,
@@ -331,13 +298,16 @@ export const generatedListSchemas: JsonSchema[] = [
   ),
   lineOriginView,
   lineView,
+  sourceSnapshotEntry,
   sourceSnapshot,
   listView,
   summaryView,
   skippedLineView,
   runResult,
-  settleResult,
-  paginated(GENERATED_LIST_SCHEMA_IDS.page, GENERATED_LIST_SCHEMA_IDS.summaryView),
+  paginated(
+    GENERATED_LIST_SCHEMA_IDS.page,
+    GENERATED_LIST_SCHEMA_IDS.summaryView
+  ),
   sourceInput,
   createRequest,
   idRequest,
@@ -347,7 +317,6 @@ export const generatedListSchemas: JsonSchema[] = [
   updateLineRequest,
   lineIdRequest,
   reorderRequest,
-  settleRequest,
 ];
 
 export const generatedListMessageContracts: Record<
@@ -389,9 +358,5 @@ export const generatedListMessageContracts: Record<
   [GENERATED_LIST_PATTERNS.reorderLines]: {
     request: GENERATED_LIST_SCHEMA_IDS.reorderRequest,
     response: GENERATED_LIST_SCHEMA_IDS.listView,
-  },
-  [GENERATED_LIST_PATTERNS.settleLine]: {
-    request: GENERATED_LIST_SCHEMA_IDS.settleRequest,
-    response: GENERATED_LIST_SCHEMA_IDS.settleResult,
   },
 };

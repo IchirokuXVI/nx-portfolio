@@ -1,8 +1,8 @@
-import type { Paginated } from '../pagination';
 import type {
   GeneratedLineOrigin,
   GeneratedListStatus,
 } from '../enums/generated-list.enums';
+import type { Paginated } from '../pagination';
 
 /**
  * Generated shopping list contracts (plan 0050): the basket a person actually
@@ -52,13 +52,6 @@ export const GENERATED_LIST_PATTERNS = {
   deleteLine: 'generatedList.deleteLine',
   /** Reorder the basket, which is a local edit like every other one here. */
   reorderLines: 'generatedList.reorderLines',
-  /**
-   * Say what was bought, or that the shop did not have it (`0047` section 4).
-   *
-   * The replacement for `0050` section 6's `applyStatuses`, and the one gesture
-   * here that reaches a zone list at all.
-   */
-  settleLine: 'generatedList.settleLine',
 } as const;
 
 /**
@@ -211,28 +204,6 @@ export interface GeneratedListRunResult {
   skipped: GeneratedListSkippedLineView[];
 }
 
-/**
- * What a settle did (`0047` section 4, allocated by `0051` section 6.2).
- *
- * The skipped origins are the surviving half of `0050` section 6: an origin whose
- * list the owner may no longer write is passed over and named, rather than
- * failing the whole call. A person in a shop has already bought the thing, and
- * refusing to record it because one of three lists moved underneath them is the
- * wrong answer.
- */
-export interface GeneratedListSettleResult {
-  line: GeneratedListLineView;
-  /** One per origin that received units, in the order they were allocated. */
-  settlements: {
-    lineId: string;
-    listId: string;
-    quantity: number;
-    settlementId: string;
-  }[];
-  /** Origins passed over, with the reason a person can act on. */
-  skipped: { lineId: string; listId: string; reason: string }[];
-}
-
 // --- Requests --------------------------------------------------------------
 
 /** One zone, or one list inside it, that a run should draw from. */
@@ -354,23 +325,19 @@ export interface ReorderGeneratedListLinesRequest {
   lineIds: string[];
 }
 
-/**
- * Say what was bought (`0047` section 4).
+/*
+ * Settling a basket line is deliberately absent, and it is the one thing a reader
+ * of `0050` will look for here.
  *
- * `quantity` settles that many units of the outstanding amount and is ignored for
- * a `NOT_AVAILABLE` outcome, which closes the outstanding amount and decrements
- * nothing. Omitting it settles the whole outstanding amount, which is the one
- * tap gesture.
+ * `0050` section 6 wrote a trip status back onto every origin and reconciled the
+ * versions when one had moved. `0047` deleted that status, which turned a settle
+ * into an append rather than a contested update, and `0051` section 1 records
+ * that its own section 6 replaces the whole apparatus: the allocation across
+ * several origins, the override sheet, and the rule that a settle is authorized
+ * by the basket **owner's** access rather than the actor's, because a guest has
+ * none of their own.
  *
- * `allocation` overrides the default oldest origin first split (`0051` section
- * 6.2) and is what says "two for us, one for my parents" correctly. It must sum
- * to the settled quantity.
+ * So the subject, its request and its result belong to `0051` and are defined
+ * there, beside the participant that performs it. What this plan owes that one is
+ * `GeneratedListLineView.settledQuantity`, which is already here.
  */
-export interface SettleGeneratedListLineRequest {
-  userId: string;
-  generatedListId: string;
-  lineId: string;
-  outcome: string;
-  quantity?: number;
-  allocation?: { lineId: string; quantity: number }[];
-}

@@ -36,7 +36,7 @@ interface SummaryZone {
     pendingRequestCount: number | null;
     firstPendingRequesterName: string | null;
   };
-  lists: { id: string; name: string; lineCount: number; readyCount: number }[];
+  lists: { id: string; name: string; lineCount: number; wantedCount: number }[];
 }
 
 function rows<T = { id: string; name?: string }>(body: unknown): T[] {
@@ -121,11 +121,11 @@ test.describe('Luna Shopper seeded demo world', () => {
     expect(weekly?.counts.listCount).toBe(weekly?.lists.length);
     // "Ines and 2 more want to join": Alice owns the zone, so she sees it.
     expect(weekly?.counts.pendingRequestCount).not.toBeNull();
-    // "12 items", "7 of 12 ready".
+    // "12 items", "4 things needed" (plan 0047, section 2.3).
     const groceries = weekly?.lists.find((l) => l.id === LIST_GROCERIES_ID);
     expect(groceries?.name).toBe('Groceries');
     expect(groceries?.lineCount).toBeGreaterThan(0);
-    expect(groceries?.readyCount).toBeLessThanOrEqual(
+    expect(groceries?.wantedCount).toBeLessThanOrEqual(
       groceries?.lineCount ?? 0
     );
     // Section 7: a sortable field is now a readable one.

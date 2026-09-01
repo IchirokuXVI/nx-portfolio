@@ -1,6 +1,5 @@
 import {
   LineApprovalStatus,
-  LineStatus,
   MembershipStatus,
   ZoneRole,
   ZoneStatus,
@@ -118,7 +117,7 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
     await dataSource.getRepository(ListLine).delete({ listId: ids.list });
   });
 
-  /** One `PENDING` line, so a positive delta is a plain edit with no split. */
+  /** One `PENDING` line, which is what every case here starts from. */
   async function seedLine(quantity: number): Promise<ListLine> {
     const repo = dataSource.getRepository(ListLine);
     return repo.save(
@@ -128,7 +127,6 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
         quantity,
         position: 1,
         approvalStatus: LineApprovalStatus.PENDING,
-        status: LineStatus.PENDING,
         createdByUserId: ids.owner,
         version: 1,
       })
@@ -242,10 +240,10 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
           { content: 'two' },
           { content: 'three' },
           { content: 'four' },
-          { content: 'five', quantity: 0 },
+          { content: 'five', quantity: -1 },
         ],
       })
-    ).rejects.toThrow(/at least 1/);
+    ).rejects.toThrow(/at least 0/);
 
     expect(
       await dataSource.getRepository(ListLine).count({

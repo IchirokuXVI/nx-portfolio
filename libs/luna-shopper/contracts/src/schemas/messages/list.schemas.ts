@@ -30,6 +30,9 @@ export const LIST_SCHEMA_IDS = {
   listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
   lineViewList: schemaId('list/LineViewList'),
+  lineSettlementView: schemaId('list/LineSettlementView'),
+  lineSettlementResult: schemaId('list/LineSettlementResult'),
+  lineSettlementPage: schemaId('list/LineSettlementPage'),
   commentView: schemaId('list/CommentView'),
   commentRecording: schemaId('list/CommentRecording'),
   commentAudioView: schemaId('list/CommentAudioView'),
@@ -48,7 +51,9 @@ export const LIST_SCHEMA_IDS = {
   addLineQuantityRequest: schemaId('msg/line.addQuantity/request'),
   updateLineRequest: schemaId('msg/line.update/request'),
   setApprovalRequest: schemaId('msg/line.setApproval/request'),
-  setStatusRequest: schemaId('msg/line.setStatus/request'),
+  settleLineRequest: schemaId('msg/line.settle/request'),
+  lineSettlementsRequest: schemaId('msg/line.settlements/request'),
+  itemSettlementsRequest: schemaId('msg/line.itemSettlements/request'),
   reorderRequest: schemaId('msg/line.reorder/request'),
   deleteLineRequest: schemaId('msg/line.delete/request'),
   listLinesRequest: schemaId('msg/line.list/request'),
@@ -72,9 +77,9 @@ const listCounts = object(
   LIST_SCHEMA_IDS.listCounts,
   {
     lineCount: integer({ minimum: 0 }),
-    readyCount: integer({ minimum: 0 }),
+    wantedCount: integer({ minimum: 0 }),
   },
-  ['lineCount', 'readyCount']
+  ['lineCount', 'wantedCount']
 );
 
 const listView = object(
@@ -137,7 +142,6 @@ const lineView = object(
     itemSetHash: nullableString(),
     position: integer(),
     approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
-    status: ref(ENUM_IDS.lineStatus),
     createdByUserId: nonEmptyString(),
     approvedByUserId: nullableString(),
     version: integer(),
@@ -152,12 +156,53 @@ const lineView = object(
     'itemSetHash',
     'position',
     'approvalStatus',
-    'status',
     'createdByUserId',
     'approvedByUserId',
     'version',
     ...timestampKeys,
   ]
+);
+
+// One origin line touched by one settling act (plan 0047, section 3).
+// `generatedListLineId` is deliberately absent: it is stored and never served, so
+// a reader learns that something was bought and not which basket it came out of
+// (section 3.1).
+const lineSettlementView = object(
+  LIST_SCHEMA_IDS.lineSettlementView,
+  {
+    id: nonEmptyString(),
+    lineId: nonEmptyString(),
+    listId: nonEmptyString(),
+    itemId: nullableString(),
+    outcome: ref(ENUM_IDS.settlementOutcome),
+    // Zero for `NOT_AVAILABLE`, and unbounded above by the line's own demand:
+    // buying more than was asked for is recorded as it happened (section 4.2).
+    quantity: integer({ minimum: 0 }),
+    settledByUserId: nonEmptyString(),
+    settledAt: string({ format: 'date-time' }),
+  },
+  [
+    'id',
+    'lineId',
+    'listId',
+    'itemId',
+    'outcome',
+    'quantity',
+    'settledByUserId',
+    'settledAt',
+  ]
+);
+
+// Both halves of what a settle did, because neither is derivable from the other
+// (plan 0047, section 8). It answers the write and it is the `line.settled`
+// payload, so a client applies one shape from either direction.
+const lineSettlementResult = object(
+  LIST_SCHEMA_IDS.lineSettlementResult,
+  {
+    line: ref(LIST_SCHEMA_IDS.lineView),
+    settlement: ref(LIST_SCHEMA_IDS.lineSettlementView),
+  },
+  ['line', 'settlement']
 );
 
 const commentRecording = object(
@@ -228,6 +273,10 @@ const lineViewList: JsonSchema = {
 };
 
 const listPage = paginated(LIST_SCHEMA_IDS.listPage, LIST_SCHEMA_IDS.listView);
+const lineSettlementPage = paginated(
+  LIST_SCHEMA_IDS.lineSettlementPage,
+  LIST_SCHEMA_IDS.lineSettlementView
+);
 const linePage = paginated(LIST_SCHEMA_IDS.linePage, LIST_SCHEMA_IDS.lineView);
 const commentPage = paginated(
   LIST_SCHEMA_IDS.commentPage,
@@ -362,14 +411,41 @@ const setApprovalRequest = object(
   },
   ['userId', 'lineId', 'approvalStatus']
 );
-const setStatusRequest = object(
-  LIST_SCHEMA_IDS.setStatusRequest,
+// `quantity` is optional here and conditional in the service: required for
+// `BOUGHT`, refused for `NOT_AVAILABLE`. A JSON Schema `if`/`then` pair could say
+// it, and it would say it to nobody: the refusal a caller reads comes from the
+// DTO and from core, and a third statement of the rule is a third place for it to
+// drift (plan 0047, section 4).
+const settleLineRequest = object(
+  LIST_SCHEMA_IDS.settleLineRequest,
   {
     userId: nonEmptyString(),
     lineId: nonEmptyString(),
-    status: ref(ENUM_IDS.lineStatus),
+    outcome: ref(ENUM_IDS.settlementOutcome),
+    quantity: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
+    itemId: nonEmptyString(),
   },
-  ['userId', 'lineId', 'status']
+  ['userId', 'lineId', 'outcome']
+);
+const lineSettlementsRequest = object(
+  LIST_SCHEMA_IDS.lineSettlementsRequest,
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'lineId']
+);
+const itemSettlementsRequest = object(
+  LIST_SCHEMA_IDS.itemSettlementsRequest,
+  {
+    userId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'itemId']
 );
 const reorderRequest = object(
   LIST_SCHEMA_IDS.reorderRequest,
@@ -454,11 +530,14 @@ export const listSchemas: JsonSchema[] = [
   listAccessView,
   lineView,
   lineViewList,
+  lineSettlementView,
+  lineSettlementResult,
   commentRecording,
   commentView,
   commentAudioView,
   listPage,
   linePage,
+  lineSettlementPage,
   commentPage,
   createListRequest,
   setAccessRequest,
@@ -472,7 +551,9 @@ export const listSchemas: JsonSchema[] = [
   addLineQuantityRequest,
   updateLineRequest,
   setApprovalRequest,
-  setStatusRequest,
+  settleLineRequest,
+  lineSettlementsRequest,
+  itemSettlementsRequest,
   reorderRequest,
   deleteLineRequest,
   listLinesRequest,
@@ -531,9 +612,17 @@ export const listMessageContracts: Record<
     request: LIST_SCHEMA_IDS.setApprovalRequest,
     response: LIST_SCHEMA_IDS.lineView,
   },
-  [LINE_PATTERNS.setStatus]: {
-    request: LIST_SCHEMA_IDS.setStatusRequest,
-    response: LIST_SCHEMA_IDS.lineView,
+  [LINE_PATTERNS.settle]: {
+    request: LIST_SCHEMA_IDS.settleLineRequest,
+    response: LIST_SCHEMA_IDS.lineSettlementResult,
+  },
+  [LINE_PATTERNS.settlements]: {
+    request: LIST_SCHEMA_IDS.lineSettlementsRequest,
+    response: LIST_SCHEMA_IDS.lineSettlementPage,
+  },
+  [LINE_PATTERNS.itemSettlements]: {
+    request: LIST_SCHEMA_IDS.itemSettlementsRequest,
+    response: LIST_SCHEMA_IDS.lineSettlementPage,
   },
   [LINE_PATTERNS.reorder]: {
     request: LIST_SCHEMA_IDS.reorderRequest,

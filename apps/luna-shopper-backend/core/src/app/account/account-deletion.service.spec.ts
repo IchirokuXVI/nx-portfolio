@@ -43,20 +43,65 @@ function build(opts: {
     emitZoneCounts: jest.fn(async (_zoneId: string) => undefined),
   };
 
+  // A departing account's baskets go with it (plan 0050, section 7), and they go
+  // first: a generated list belongs to a person rather than to a zone, so
+  // somebody who left every group still has one and the membership loop below
+  // would never reach it.
+  const generatedLists = { deleteForUser: jest.fn().mockResolvedValue(0) };
   const svc = new AccountDeletionService(
     zonesRepo as never,
     membershipsRepo as never,
     events as never,
     zoneCounts as never,
-    store as never
+    store as never,
+    generatedLists as never
   );
-  return { svc, zonesRepo, membershipsRepo, events, store, zoneCounts };
+  return {
+    svc,
+    zonesRepo,
+    membershipsRepo,
+    events,
+    store,
+    zoneCounts,
+    generatedLists,
+  };
 }
 
 describe('AccountDeletionService.handleUserDeleted', () => {
+  it('deletes the departing account’s baskets (plan 0050, section 7)', async () => {
+    const { svc, generatedLists } = build({
+      memberships: [
+        { id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
+      ],
+      zones: {
+        z1: {
+          id: 'z1',
+          ownerUserId: 'someone-else',
+          status: ZoneStatus.ACTIVE,
+        },
+      },
+    });
+
+    await svc.handleUserDeleted('u1');
+
+    expect(generatedLists.deleteForUser).toHaveBeenCalledWith('u1');
+  });
+
+  it('deletes them even for a user who held no membership at all', async () => {
+    // The case the membership loop cannot reach, and the reason the call sits
+    // outside it: a basket belongs to a person rather than to a zone.
+    const { svc, generatedLists } = build({ memberships: [], zones: {} });
+
+    await svc.handleUserDeleted('u-nomad');
+
+    expect(generatedLists.deleteForUser).toHaveBeenCalledWith('u-nomad');
+  });
+
   it('owner path: marks the owned zone for deletion and retires the membership', async () => {
     const { svc, zonesRepo, events } = build({
-      memberships: [{ id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' }],
+      memberships: [
+        { id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
+      ],
       zones: { z1: { id: 'z1', ownerUserId: 'u1', status: ZoneStatus.ACTIVE } },
     });
 
@@ -79,7 +124,13 @@ describe('AccountDeletionService.handleUserDeleted', () => {
   it('non-owner path: leaves the zone untouched, still retires + anonymizes', async () => {
     const { svc, zonesRepo, membershipsRepo, events } = build({
       memberships: [{ id: 'm2', zoneId: 'z2', userId: 'u2', username: 'Bob' }],
-      zones: { z2: { id: 'z2', ownerUserId: 'someone-else', status: ZoneStatus.ACTIVE } },
+      zones: {
+        z2: {
+          id: 'z2',
+          ownerUserId: 'someone-else',
+          status: ZoneStatus.ACTIVE,
+        },
+      },
     });
 
     await svc.handleUserDeleted('u2');
@@ -161,7 +212,8 @@ describe('AccountDeletionService.usersWithoutMemberships', () => {
       membershipsRepo as never,
       { emit: jest.fn() } as never,
       { emitZoneCounts: jest.fn() } as never,
-      { firstSeen: jest.fn() } as never
+      { firstSeen: jest.fn() } as never,
+      { deleteForUser: jest.fn() } as never
     );
     return svc;
   }
@@ -173,8 +225,8 @@ describe('AccountDeletionService.usersWithoutMemberships', () => {
 
   it('filters out ids that have a membership row', async () => {
     const svc = withMembershipRows([{ userId: 'b' }]);
-    await expect(
-      svc.usersWithoutMemberships(['a', 'b', 'c'])
-    ).resolves.toEqual(['a', 'c']);
+    await expect(svc.usersWithoutMemberships(['a', 'b', 'c'])).resolves.toEqual(
+      ['a', 'c']
+    );
   });
 });

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   CommentAudio,
   LineComment,
+  LineSettlement,
   ListAccess,
   ListLine,
   ListLineItem,
@@ -15,6 +16,7 @@ import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 import { ListController } from './list.controller';
 import { ListService } from './list.service';
+import { SettlementService } from './settlement.service';
 import { SharedListGrantModule } from './shared-list-grant.module';
 
 /**
@@ -30,6 +32,7 @@ import { SharedListGrantModule } from './shared-list-grant.module';
       ListLine,
       ListLineItem,
       LineComment,
+      LineSettlement,
       CommentAudio,
       ZoneMembership,
     ]),
@@ -37,9 +40,20 @@ import { SharedListGrantModule } from './shared-list-grant.module';
     SharedListGrantModule,
   ],
   controllers: [ListController],
-  providers: [ListService, LineService, CommentService, ListAccessService],
-  // Exported so the realtime access checks (plan 0009) can reuse list-access
-  // resolution rather than re-implementing it.
-  exports: [ListAccessService],
+  providers: [
+    ListService,
+    LineService,
+    CommentService,
+    SettlementService,
+    ListAccessService,
+  ],
+  // `ListAccessService` is exported so the realtime access checks (plan 0009)
+  // can reuse list-access resolution rather than re-implementing it.
+  //
+  // `LineService` is exported for the basket write back (plan 0050, section 5):
+  // an added line with a target list is created through `add` rather than by an
+  // insert of its own, so the ordinary access check, the ordinary approval rules
+  // and the ordinary `line.added` event all apply to it.
+  exports: [ListAccessService, LineService],
 })
 export class ListsModule {}

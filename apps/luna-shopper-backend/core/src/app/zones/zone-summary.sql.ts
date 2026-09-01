@@ -59,11 +59,12 @@ export const ZONE_LIST_PREVIEW_LIMIT = 3;
  * containment check on a row already located by `uq_list_access`, evaluated after
  * the index lookup on one row, which is why no GIN index is added (section 3.2).
  *
- * It is written once and interpolated into both the count and the preview, which
- * is what stops a card reading "3 lists" above a preview showing one. A PENDING
+ * It is written once and interpolated into the count, the preview and the item
+ * settlement history (plan 0047, section 6.2), which is what stops a card reading
+ * "3 lists" above a preview showing one. A PENDING
  * applicant fails the first clause, so they see no lists and a count of zero.
  */
-const READABLE_LIST = `
+export const READABLE_LIST = `
   m.status = 'APPROVED'
   AND (
     m.role IN ('OWNER', 'ADMIN')
@@ -169,12 +170,12 @@ const ZONE_LISTS_PREVIEW_SQL = `(
       sl.id AS "id",
       sl.name AS "name",
       lc.line_count AS "lineCount",
-      lc.ready_count AS "readyCount"
+      lc.wanted_count AS "wantedCount"
     FROM "shopping_lists" sl
     LEFT JOIN LATERAL (
       SELECT
         count(*) AS line_count,
-        count(*) FILTER (WHERE ll.status = 'READY') AS ready_count
+        count(*) FILTER (WHERE ll."quantity" > 0) AS wanted_count
       FROM "list_lines" ll
       WHERE ll."listId" = sl.id
     ) lc ON true
@@ -213,11 +214,16 @@ export function selectZoneSummary(
  * The line totals for one list (plan 0017, section 4.2), the same aggregate the
  * preview uses, attached to a list query aliased `l`. `ListView.counts` and
  * `ZoneListPreview` are therefore produced from one definition.
+ *
+ * The second number counts lines the household **wants** rather than lines
+ * somebody ticked (plan 0047, section 2.3): a line at zero is stocked, and "four
+ * things needed" is the figure a card has always wanted to show. Lines and not
+ * units, per that section.
  */
 export const LIST_COUNTS_SQL = `(
   SELECT json_build_object(
     'lineCount', count(*),
-    'readyCount', count(*) FILTER (WHERE ll.status = 'READY')
+    'wantedCount', count(*) FILTER (WHERE ll."quantity" > 0)
   )
   FROM "list_lines" ll
   WHERE ll."listId" = l.id

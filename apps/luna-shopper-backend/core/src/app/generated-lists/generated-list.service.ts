@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  GENERATED_LIST_LIMITS,
   GeneratedLineOrigin,
   GeneratedListStatus,
-  GENERATED_LIST_LIMITS,
   RealtimeEvent,
   type CreateGeneratedListRequest,
   type GeneratedListIdRequest,
@@ -130,7 +130,9 @@ export class GeneratedListService {
    * Regeneration produces a **new** basket rather than mutating an old one, which
    * is what makes the history in section 7 an actual history.
    */
-  async create(req: CreateGeneratedListRequest): Promise<GeneratedListRunResult> {
+  async create(
+    req: CreateGeneratedListRequest
+  ): Promise<GeneratedListRunResult> {
     if (req.idempotencyKey) {
       const existing = await this.lists.findOne({
         where: { ownerUserId: req.userId, idempotencyKey: req.idempotencyKey },
@@ -178,7 +180,11 @@ export class GeneratedListService {
 
     const saved = await this.write(req, snapshot, composed);
     const view = await this.viewFor(saved);
-    this.events.emitToUsers(RealtimeEvent.GeneratedListCreated, [req.userId], view);
+    this.events.emitToUsers(
+      RealtimeEvent.GeneratedListCreated,
+      [req.userId],
+      view
+    );
     return { list: view, skipped };
   }
 
@@ -237,19 +243,24 @@ export class GeneratedListService {
     userId: string,
     candidates: CandidateLineRow[],
     zoneOf: Map<string, string>
-  ): Promise<{ kept: CandidateLineRow[]; skipped: GeneratedListSkippedLineView[] }> {
+  ): Promise<{
+    kept: CandidateLineRow[];
+    skipped: GeneratedListSkippedLineView[];
+  }> {
     if (candidates.length === 0) {
       return { kept: [], skipped: [] };
     }
-    const rows = await this.lists.query<ActiveOverlapRow[]>(ACTIVE_OVERLAP_SQL, [
-      userId,
-      candidates.map((line) => line.id),
-    ]);
+    const rows = await this.lists.query<ActiveOverlapRow[]>(
+      ACTIVE_OVERLAP_SQL,
+      [userId, candidates.map((line) => line.id)]
+    );
     if (rows.length === 0) {
       return { kept: candidates, skipped: [] };
     }
 
-    const carriedBy = new Map(rows.map((row) => [row.lineId, row.generatedListId]));
+    const carriedBy = new Map(
+      rows.map((row) => [row.lineId, row.generatedListId])
+    );
     const kept: CandidateLineRow[] = [];
     const skipped: GeneratedListSkippedLineView[] = [];
     for (const line of candidates) {
@@ -436,7 +447,10 @@ export class GeneratedListService {
       // both, which is what the key was for.
       if (isUniqueViolation(error) && req.idempotencyKey) {
         const winner = await this.lists.findOne({
-          where: { ownerUserId: req.userId, idempotencyKey: req.idempotencyKey },
+          where: {
+            ownerUserId: req.userId,
+            idempotencyKey: req.idempotencyKey,
+          },
         });
         if (winner) {
           return winner;
@@ -478,10 +492,7 @@ export class GeneratedListService {
       // Keyset rather than an offset, and on the pair rather than the timestamp
       // alone: two baskets generated in the same millisecond would otherwise
       // repeat or skip a row across the page boundary.
-      qb.andWhere(
-        '(gl."generatedAt", gl.id) < (:generatedAt, :id)',
-        cursor
-      );
+      qb.andWhere('(gl."generatedAt", gl.id) < (:generatedAt, :id)', cursor);
     }
 
     const rows = await qb.getMany();
@@ -552,7 +563,11 @@ export class GeneratedListService {
     }
     const saved = await this.lists.save(list);
     const view = await this.viewFor(saved);
-    this.events.emitToUsers(RealtimeEvent.GeneratedListUpdated, [req.userId], view);
+    this.events.emitToUsers(
+      RealtimeEvent.GeneratedListUpdated,
+      [req.userId],
+      view
+    );
     return view;
   }
 
