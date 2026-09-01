@@ -693,6 +693,31 @@ export interface GeneratedListBasketView {
   seesZoneData: boolean;
   /** What the run drew from. Zone data, so absent unless {@link seesZoneData}. */
   sourceSnapshot?: GeneratedListSourceSnapshot;
+  /**
+   * The names behind those ids, so a row can say "from Weekly shop" rather than
+   * "from 0f3a…" (velista `0044`, section 4.1).
+   *
+   * Composed here rather than fetched by the client, because the client that
+   * would fetch them is the one this plan is about: a registered participant who
+   * passes the rule is not necessarily a member of anything the basket drew from
+   * in a way that has loaded a zone store, and an owner would otherwise need
+   * every source list on screen to caption one row.
+   *
+   * **Absent under exactly the same rule as {@link sourceSnapshot}**, and that is
+   * the whole of its access control: a household's list name is the plainest
+   * zone data there is, and it is the one field on this view whose leaking would
+   * be legible to the person it leaked to.
+   */
+  sourceNames?: GeneratedListSourceName[];
+}
+
+/** One source list, named, for the "from" caption on a row. */
+export interface GeneratedListSourceName {
+  listId: string;
+  /** The list's own name, e.g. "Weekly shop". */
+  name: string;
+  /** The zone it belongs to, e.g. "Flat 3B". Null when it could not be read. */
+  zoneName: string | null;
 }
 
 /**

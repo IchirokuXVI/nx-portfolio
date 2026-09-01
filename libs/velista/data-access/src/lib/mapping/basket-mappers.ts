@@ -201,6 +201,25 @@ export function toBasketView(raw: unknown): BasketView | null {
         product,
       ])
     ),
+    // Empty rather than absent, because a Map has no third state and the caption
+    // is already gated by the line's own `origins` being absent. A reader who may
+    // not see origins never reaches a lookup in here.
+    listNames: new Map(
+      mapArray(raw['sourceNames'], (entry) => {
+        if (!isRecord(entry)) {
+          return null;
+        }
+        const listId = str(entry['listId']);
+        const name = str(entry['name']);
+        if (listId === null || name === null) {
+          return null;
+        }
+        const zoneName = nullableStr(entry['zoneName']);
+        // "Weekly shop · Flat 3B", which is what the mock draws: the list alone
+        // is ambiguous when two households both keep one called "Groceries".
+        return [listId, zoneName ? `${name} · ${zoneName}` : name] as const;
+      })
+    ),
   };
 
   const snapshot = raw['sourceSnapshot'];

@@ -80,6 +80,7 @@ export class BasketPage {
   protected readonly progress = this._store.progress;
   protected readonly busyLines = this._store.busyLines;
   protected readonly participantsById = this._store.participantsById;
+  protected readonly listNames = this._store.listNames;
   protected readonly seesZoneData = this._store.seesZoneData;
 
   /** Only the owner is offered the share control, and only they can use it. */

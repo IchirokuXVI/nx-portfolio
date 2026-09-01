@@ -5,6 +5,7 @@ import {
   type GeneratedListBasketLineView,
   type GeneratedListBasketView,
   type GeneratedListLineMovedEvent,
+  type GeneratedListSourceName,
   type GetGeneratedListBasketRequest,
   type SetGeneratedListPickRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -13,11 +14,12 @@ import {
   UnauthorizedException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   GeneratedList,
   GeneratedListLine,
   GeneratedListLineOption,
+  ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { toBasketView } from './generated-list.mappers';
@@ -56,6 +58,11 @@ export class GeneratedListBasketService {
     private readonly lines: Repository<GeneratedListLine>,
     @InjectRepository(GeneratedListLineOption)
     private readonly options: Repository<GeneratedListLineOption>,
+    // Read only, and only to name a source list for a reader who passes the
+    // rule. Nothing here writes a zone list; that is the settle service's job
+    // and it goes through the owner's access.
+    @InjectRepository(ShoppingList)
+    private readonly shoppingLists: Repository<ShoppingList>,
     private readonly generated: GeneratedListService,
     private readonly sharing: GeneratedListSharingService,
     private readonly events: CoreEventsPublisher
@@ -73,12 +80,16 @@ export class GeneratedListBasketService {
   ): Promise<GeneratedListBasketView> {
     const { list, seesZoneData } = await this.resolve(req);
 
-    const [lines, people] = await Promise.all([
+    const [lines, people, sourceNames] = await Promise.all([
       this.generated.basketLineViewsFor(list.id, seesZoneData),
       this.sharing.listParticipants({
         generatedListId: list.id,
         asParticipantId: req.participantId,
       }),
+      // Only asked for when it may be answered. A reader who does not pass the
+      // rule costs no query here rather than costing one and having the result
+      // thrown away, which is the difference between a rule and a filter.
+      seesZoneData ? this.sourceNames(list) : Promise.resolve([]),
     ]);
 
     const me = people.participants.find((row) => row.id === req.participantId);
@@ -92,8 +103,45 @@ export class GeneratedListBasketService {
       list,
       lines,
       { participants: people.participants, me },
-      seesZoneData
+      seesZoneData,
+      sourceNames
     );
+  }
+
+  /**
+   * The names behind the (zone, list) pairs the run drew from.
+   *
+   * So a row can say "from Weekly shop" rather than "from 0f3a…". Read from the
+   * snapshot rather than from the lines' origins, because the snapshot is what
+   * the run actually drew from and is the thing a three week old basket can
+   * still be explained by (plan 0050, section 4).
+   *
+   * A list that has since been deleted simply drops out: a basket outlives the
+   * lists it came from, and a caption naming fewer households is a better answer
+   * than an error or a raw id.
+   */
+  private async sourceNames(
+    list: GeneratedList
+  ): Promise<GeneratedListSourceName[]> {
+    const listIds = [
+      ...new Set(list.sourceSnapshot.sources.map((source) => source.listId)),
+    ];
+    if (listIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.shoppingLists.find({
+      where: { id: In(listIds) },
+      relations: { zone: true },
+    });
+
+    return rows.map((row) => ({
+      listId: row.id,
+      name: row.name,
+      // Null rather than absent: the list is nameable and its zone was simply
+      // not loaded, which is a different thing from "you may not see this".
+      zoneName: row.zone?.name ?? null,
+    }));
   }
 
   /**

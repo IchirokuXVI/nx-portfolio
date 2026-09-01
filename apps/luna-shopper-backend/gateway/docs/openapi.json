@@ -16128,6 +16128,12 @@
           "sourceSnapshot": {
             "$ref": "#/components/schemas/generated-list.GeneratedListSourceSnapshot"
           },
+          "sourceNames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.SourceName"
+            }
+          },
           "products": {
             "type": "array",
             "items": {
@@ -16437,6 +16443,30 @@
           "createdAt",
           "expiresAt",
           "participantCount"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.SourceName": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "zoneName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "listId",
+          "name",
+          "zoneName"
         ],
         "additionalProperties": false
       },

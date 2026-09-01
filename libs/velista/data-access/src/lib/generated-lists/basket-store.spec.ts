@@ -74,7 +74,7 @@ function build(
   const service: BasketServiceI = {
     previewLink: (secret) => memory.previewLink(secret),
     join: (secret, name) => memory.join(secret, name),
-    getBasket: (id) => memory.getBasket(),
+    getBasket: () => memory.getBasket(),
     settle: (id, lineId, body) => memory.settle(id, lineId, body),
     setPick: (id, lineId, itemId) => memory.setPick(id, lineId, itemId),
     listParticipants: () => memory.listParticipants(),
@@ -239,10 +239,13 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
 
       const milk = store.lines().find((line) => line.content === 'Milk');
-      await store.settle(milk!.id, { outcome: 'BOUGHT' });
+      if (milk === undefined) {
+        throw new Error('the fixture basket lost its milk');
+      }
+      await store.settle(milk.id, { outcome: 'BOUGHT' });
 
-      const after = store.lines().find((line) => line.id === milk!.id);
-      expect(after?.settled).toBe(milk!.quantity);
+      const after = store.lines().find((line) => line.id === milk.id);
+      expect(after?.settled).toBe(milk.quantity);
     });
 
     it('reports a partial settle rather than swallowing it', async () => {
@@ -303,19 +306,18 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
 
       const held = store.lines().find((line) => line.origins !== undefined);
-      expect(held).toBeDefined();
+      if (held === undefined) {
+        throw new Error('the fixture basket has no line with origins');
+      }
 
-      const redacted: BasketLine = {
-        ...(held as BasketLine),
-        settled: 1,
-      };
+      const redacted: BasketLine = { ...held, settled: 1 };
       delete (redacted as { origins?: unknown }).origins;
 
       store.apply(redacted);
 
-      const after = store.lines().find((line) => line.id === held!.id);
+      const after = store.lines().find((line) => line.id === held.id);
       expect(after?.settled).toBe(1);
-      expect(after?.origins).toEqual(held!.origins);
+      expect(after?.origins).toEqual(held.origins);
     });
 
     it('takes newer origins when the line actually carries them', async () => {
@@ -323,10 +325,13 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
 
       const held = store.lines().find((line) => line.origins !== undefined);
-      store.apply({ ...(held as BasketLine), origins: [] });
+      if (held === undefined) {
+        throw new Error('the fixture basket has no line with origins');
+      }
+      store.apply({ ...held, origins: [] });
 
       expect(
-        store.lines().find((line) => line.id === held!.id)?.origins
+        store.lines().find((line) => line.id === held.id)?.origins
       ).toEqual([]);
     });
 

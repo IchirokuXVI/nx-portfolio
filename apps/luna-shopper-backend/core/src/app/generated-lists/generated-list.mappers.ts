@@ -5,6 +5,7 @@ import type {
   GeneratedListLineOriginView,
   GeneratedListLineView,
   GeneratedListParticipantView,
+  GeneratedListSourceName,
   GeneratedListSummaryView,
   GeneratedListView,
 } from '@portfolio/luna-shopper/contracts';
@@ -127,7 +128,8 @@ export function toBasketView(
     participants: GeneratedListParticipantView[];
     me: GeneratedListParticipantView;
   },
-  seesZoneData: boolean
+  seesZoneData: boolean,
+  sourceNames: GeneratedListSourceName[] = []
 ): GeneratedListBasketView {
   const view: GeneratedListBasketView = {
     id: row.id,
@@ -140,9 +142,12 @@ export function toBasketView(
     seesZoneData,
   };
 
-  // What the run drew from is a list of (zone, list) pairs, so it is zone data
-  // and goes under the same rule as the line's three fields.
-  return seesZoneData ? { ...view, sourceSnapshot: row.sourceSnapshot } : view;
+  // What the run drew from is a list of (zone, list) pairs, and the names behind
+  // them are the plainest zone data there is. Both go under the same rule as the
+  // line's three fields.
+  return seesZoneData
+    ? { ...view, sourceSnapshot: row.sourceSnapshot, sourceNames }
+    : view;
 }
 
 export function toGeneratedListView(

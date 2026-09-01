@@ -10,6 +10,7 @@ import {
   LineSettlement,
   ListLine,
   ListLineItem,
+  ShoppingList,
 } from '../entities';
 import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
@@ -55,6 +56,8 @@ import { GeneratedListService } from './generated-list.service';
       ListLine,
       ListLineItem,
       LineSettlement,
+      // Read only, to name a source list for a reader who passes section 5.2.
+      ShoppingList,
     ]),
     ProfilesModule,
     ListsModule,

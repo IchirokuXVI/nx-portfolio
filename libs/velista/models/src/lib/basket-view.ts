@@ -196,6 +196,14 @@ export interface BasketView {
   products: ReadonlyMap<string, BasketProduct>;
   /** Which lists the run drew from. Absent unless {@link seesZoneData}. */
   sources?: readonly { zoneId: string; listId: string }[];
+  /**
+   * Those lists by name, keyed by list id, for the row's "from" caption.
+   *
+   * Empty for a reader who may not have them, which is the same reader for whom
+   * every line's `origins` is absent, so the caption has nothing to draw from on
+   * both sides at once.
+   */
+  listNames: ReadonlyMap<string, string>;
 }
 
 /**

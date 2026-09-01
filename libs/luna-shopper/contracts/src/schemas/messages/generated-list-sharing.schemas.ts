@@ -69,6 +69,8 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   basketView: schemaId('generated-list-sharing/BasketView'),
   /** The gateway's composed body: core's basket plus the products it names. */
   basketResult: schemaId('generated-list-sharing/BasketResult'),
+  /** One source list, named, for the "from" caption on a row. */
+  sourceName: schemaId('generated-list-sharing/SourceName'),
   basketRequest: schemaId('msg/generatedList.basket.get/request'),
   setPickRequest: schemaId('msg/generatedList.setPick/request'),
   /** What the basket's room hears when a line is settled or its pick swapped. */
@@ -292,6 +294,16 @@ const basketLineView = object(
   ]
 );
 
+const sourceName = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.sourceName,
+  {
+    listId: nonEmptyString(),
+    name: string(),
+    zoneName: nullableString(),
+  },
+  ['listId', 'name', 'zoneName']
+);
+
 const basketView = object(
   GENERATED_LIST_SHARING_SCHEMA_IDS.basketView,
   {
@@ -307,6 +319,7 @@ const basketView = object(
     seesZoneData: boolean(),
     // Zone data, so absent under section 5.2 like the line's three fields.
     sourceSnapshot: ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshot),
+    sourceNames: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.sourceName)),
   },
   [
     'id',
@@ -363,6 +376,7 @@ const basketResult = object(
     me: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
     seesZoneData: boolean(),
     sourceSnapshot: ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshot),
+    sourceNames: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.sourceName)),
     products: array(ref(CATALOG_SCHEMA_IDS.itemView)),
   },
   [
@@ -542,6 +556,7 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   basketLineView,
   basketView,
   basketResult,
+  sourceName,
   lineMovedEvent,
   basketRequest,
   setPickRequest,

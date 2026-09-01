@@ -273,6 +273,12 @@ export class BasketMemory implements BasketServiceI {
       me: this.me,
       seesZoneData: this.seesZoneData,
       products: new Map(PRODUCTS.map((product) => [product.id, product])),
+      listNames: this.seesZoneData
+        ? new Map([
+            ['list-weekly', 'Weekly shop · Flat 3B'],
+            ['list-groceries', 'Groceries · Parents’ house'],
+          ])
+        : new Map(),
       ...(this.seesZoneData
         ? {
             sources: [

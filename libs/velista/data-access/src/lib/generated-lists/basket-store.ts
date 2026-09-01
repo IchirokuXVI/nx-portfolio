@@ -99,6 +99,17 @@ export class BasketStore {
    */
   readonly seesZoneData = computed(() => this._basket()?.seesZoneData === true);
 
+  /**
+   * The source lists by name, for the row's "from" caption.
+   *
+   * Empty for a reader who may not see origins, which is the same reader whose
+   * lines carry no `origins` at all: the caption is gated on both sides at once,
+   * so neither alone has to be got right.
+   */
+  readonly listNames = computed<ReadonlyMap<string, string>>(
+    () => this._basket()?.listNames ?? new Map()
+  );
+
   /** Everybody on the basket, for the presence row and for attribution. */
   readonly participants = computed<readonly BasketParticipant[]>(
     () => this._basket()?.participants ?? []
