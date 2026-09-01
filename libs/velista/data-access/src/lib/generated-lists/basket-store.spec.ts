@@ -1,13 +1,17 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   outstanding,
   type BasketLine,
   type BasketSession,
 } from '@portfolio/velista/models';
+import { Subject } from 'rxjs';
 import { GatewayError } from '../errors';
+import type { RealtimeEvent } from '../realtime/realtime-events';
 import { BasketMemory } from './basket-memory';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
+import { BasketSocket } from './basket-socket';
 import { BasketStore } from './basket-store';
 
 /**
@@ -64,6 +68,30 @@ function unauthorized(): GatewayError {
 }
 
 /**
+ * A socket that opens nothing and that the spec drives by hand.
+ *
+ * The real one reaches `ApiUrl` and `SOCKET_FACTORY` and owns a backoff and two
+ * timers, none of which any assertion here is about: what these tests care about is
+ * what the **store** does with an event, so the connection is a `Subject` and going
+ * live is a signal somebody sets.
+ */
+class FakeSocket {
+  readonly events = new Subject<RealtimeEvent>();
+  readonly connected = signal(false);
+  readonly revoked = signal(false);
+
+  readonly opened: string[] = [];
+
+  open(generatedListId: string): void {
+    this.opened.push(generatedListId);
+  }
+
+  close(): void {
+    this.connected.set(false);
+  }
+}
+
+/**
  * A service that delegates to {@link BasketMemory}, with named overrides on top.
  *
  * Written out rather than spread from the instance: the methods live on the
@@ -72,8 +100,9 @@ function unauthorized(): GatewayError {
  */
 function build(
   overrides: Partial<BasketServiceI> = {},
-  sessions: FakeSessions = new FakeSessions()
-): { store: BasketStore; sessions: FakeSessions } {
+  sessions: FakeSessions = new FakeSessions(),
+  socket: FakeSocket = new FakeSocket()
+): { store: BasketStore; sessions: FakeSessions; socket: FakeSocket } {
   const memory = new BasketMemory();
   const service: BasketServiceI = {
     previewLink: (secret) => memory.previewLink(secret),
@@ -96,10 +125,11 @@ function build(
       BasketStore,
       { provide: BasketSessionStore, useValue: sessions },
       { provide: BASKET_SERVICE, useValue: service },
+      { provide: BasketSocket, useValue: socket },
     ],
   });
 
-  return { store: TestBed.inject(BasketStore), sessions };
+  return { store: TestBed.inject(BasketStore), sessions, socket };
 }
 
 describe('BasketStore', () => {
@@ -393,7 +423,9 @@ describe('BasketStore', () => {
       });
       await store.open('basket-saturday');
 
-      expect(await store.loadShareLink().then(() => store.shareLink())).toBeNull();
+      expect(
+        await store.loadShareLink().then(() => store.shareLink())
+      ).toBeNull();
       await store.share();
       expect(store.shareLink()).not.toBeNull();
     });
@@ -432,6 +464,116 @@ describe('BasketStore', () => {
       await store.revokeLink(true);
 
       expect(store.participants().length).toBeLessThan(before);
+    });
+  });
+
+  /**
+   * The live basket (plan 0048).
+   *
+   * These are the store's half of the plan and deliberately not the socket's: the
+   * connection, its backoff and its token refresh are `BasketSocket`'s business, and
+   * what matters here is that an event off the room moves the screen **without a
+   * request**. A request per settle is what four people in a shop would generate, and
+   * stopping that is what a live basket is for.
+   */
+  describe('the live basket', () => {
+    it('holds a connection to the basket it was opened for', async () => {
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+
+      expect(socket.opened).toEqual(['basket-saturday']);
+    });
+
+    it('merges a settled line off the room with no refetch', async () => {
+      let reads = 0;
+      const memory = new BasketMemory();
+      const { store, socket } = build({
+        getBasket: () => {
+          reads += 1;
+          return memory.getBasket();
+        },
+      });
+      await store.open('basket-saturday');
+      const readsAfterOpen = reads;
+
+      const held = store.lines()[0];
+      socket.events.next({
+        type: 'generatedList.lineSettled',
+        generatedListId: 'basket-saturday',
+        line: { ...held, settled: held.settled + 1 },
+      });
+
+      expect(store.lines()[0].settled).toBe(held.settled + 1);
+      // The whole point: one row moved and nothing was asked of the server.
+      expect(reads).toBe(readsAfterOpen);
+    });
+
+    it('keeps the origins it holds when the line off the room is redacted', async () => {
+      // `apply` is tested for this directly; this asserts it on the path a redacted
+      // line actually arrives on. A broadcast cannot be projected per socket, so it
+      // carries the least privileged reader's view of the line, and a privileged
+      // reader must not lose their "from" captions when somebody else settles.
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+
+      const held = store.lines().find((line) => line.origins !== undefined);
+      if (held === undefined) {
+        throw new Error('the fixture basket has no line with origins');
+      }
+
+      const redacted: BasketLine = { ...held, settled: 1 };
+      delete (redacted as { origins?: unknown }).origins;
+
+      socket.events.next({
+        type: 'generatedList.lineSettled',
+        generatedListId: 'basket-saturday',
+        line: redacted,
+      });
+
+      const after = store.lines().find((line) => line.id === held.id);
+      expect(after?.settled).toBe(1);
+      expect(after?.origins).toEqual(held.origins);
+    });
+
+    it('ignores an event about a different basket', async () => {
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+
+      const held = store.lines()[0];
+      socket.events.next({
+        type: 'generatedList.lineUpdated',
+        generatedListId: 'somebody-elses-basket',
+        line: { ...held, settled: held.settled + 5 },
+      });
+
+      expect(store.lines()[0].settled).toBe(held.settled);
+    });
+
+    it('shows who is present only while the socket is up', async () => {
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+      socket.connected.set(true);
+
+      socket.events.next({
+        type: 'presence.generatedListUpdated',
+        generatedListId: 'basket-saturday',
+        present: [
+          {
+            participantId: 'p-1',
+            kind: 'GUEST',
+            displayName: null,
+            guestNumber: 2,
+            userId: null,
+          },
+        ],
+      });
+
+      expect(store.present()).toHaveLength(1);
+
+      // Empty rather than frozen at its last known value: a stale face row is a
+      // claim about the present tense that nothing is checking.
+      socket.connected.set(false);
+      expect(store.present()).toEqual([]);
     });
   });
 });

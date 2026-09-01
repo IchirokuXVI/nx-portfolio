@@ -1,7 +1,14 @@
 <main class="page">
-  <header class="header">
+  <!--
+    The destination header every screen without an app bar draws, written the same
+    way the history's is down to the glyph's class name: the two are the same bar,
+    and a reader moving between them must not see it change size or weight. It
+    used to be a hand drawn one, with a `&larr;` entity where the chevron goes and
+    the title a step small, which is the mistake `0002` section 6 records.
+  -->
+  <header class="bar">
     <!--
-      No back arrow for a guest: there is nowhere back to go. They arrived on a
+      No back control for a guest: there is nowhere back to go. They arrived on a
       link and this screen is the whole app to them (section 4.1).
     -->
     @if (isOwner()) {
@@ -11,34 +18,57 @@
         class="back"
         type="button"
       >
-        &larr;
+        <lib-chevron-left-icon class="back-glyph" />
       </button>
     }
 
     <h1 class="title">{{ title() }}</h1>
 
     <!--
-      Guests and registered people in one row, guests marked by a dashed ring.
+      Who is holding this basket open **right now**, guests marked by a dashed ring.
       No sentence: a row of faces does the job, and the word "anonymous" appears
       nowhere in this product (section 5.1).
+
+      Nothing at all for nobody, which is `ListViewers`' rule and matters more here:
+      presence empties the moment the socket drops, and a zero drawn where a crowd
+      was would be a claim about the shop rather than about the connection. The
+      people sheet is still reachable from the header when there is somebody, and
+      it answers the other question — everybody who *can* open this basket.
     -->
-    <button
-      (click)="openPeople()"
-      [attr.aria-label]="'basket.people.open' | rokuT"
-      class="faces"
-      type="button"
-    >
-      @for (face of faces(); track face.id) {
-        <span [class.is-guest]="face.isGuest" class="face">
-          {{ face.initials }}
-        </span>
-      }
-      @if (overflow() > 0) {
-        <span class="face is-overflow">
-          {{ 'basket.people.more' | rokuT: { count: overflow() } }}
-        </span>
-      }
-    </button>
+    @if (faces().length > 0) {
+      <button
+        (click)="openPeople()"
+        [attr.aria-label]="'basket.people.open' | rokuT"
+        class="faces"
+        type="button"
+      >
+        @for (face of faces(); track face.id) {
+          <span [class.is-guest]="face.isGuest" class="face">
+            {{ face.initials }}
+          </span>
+        }
+        @if (overflow() > 0) {
+          <span class="face is-overflow">
+            {{ 'basket.people.more' | rokuT: { count: overflow() } }}
+          </span>
+        }
+      </button>
+    } @else if (hasPeople()) {
+      <!--
+        Nobody is connected, or the socket is not up. The sheet still has an answer
+        worth reading — everybody who *can* open this basket — so the way into it
+        stays, drawn as a plain control that claims nothing about who is here. The
+        faces above are the claim; this is the door.
+      -->
+      <button
+        (click)="openPeople()"
+        [attr.aria-label]="'basket.people.open' | rokuT"
+        class="people"
+        type="button"
+      >
+        <lib-person-icon class="people-glyph" />
+      </button>
+    }
 
     <!--
       The one thing that stays the owner's, even for a registered participant who
@@ -51,10 +81,33 @@
         class="share"
         type="button"
       >
-        &#8599;
+        <lib-share-icon class="share-glyph" />
       </button>
     }
   </header>
+
+  <!--
+    Which of the two screens this is. A live basket and a refetching one look
+    identical while nobody else is shopping and completely different the moment
+    somebody is, so the difference is said rather than left to be discovered
+    (plan 0048, section 5). Drawn exactly as `0010` draws it on a group and `0022`
+    on a list, because the situation is the same one.
+
+    The removal is the sharper case and comes first: the screen does not close
+    under somebody standing in a shop with a trolley, it tells them, and what is
+    already on it stays readable (section 7).
+  -->
+  @if (revoked()) {
+    <p class="stale" role="status">
+      <lib-offline-icon class="stale-glyph" />
+      <span>{{ 'basket.revoked.title' | rokuT }}</span>
+    </p>
+  } @else if (!live()) {
+    <p class="stale" role="status">
+      <lib-offline-icon class="stale-glyph" />
+      <span>{{ 'basket.notLive' | rokuT }}</span>
+    </p>
+  }
 
   @switch (state()) {
     @case ('loading') {

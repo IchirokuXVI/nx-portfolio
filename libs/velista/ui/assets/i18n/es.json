@@ -873,6 +873,7 @@
     "retry": "Inténtalo de nuevo",
     "back": "Atrás",
     "unnamed": "Lista de la compra",
+    "notLive": "No se está actualizando ahora",
     "revoked": {
       "title": "Ya no estás en esta lista",
       "body": "Quien la compartió ha retirado el acceso. Si aún tienes el enlace, puedes volver a unirte.",
@@ -940,6 +941,8 @@
       "more": "+{{count}}",
       "guest": "Invitado",
       "guestNumbered": "Invitado {{count}}",
+      "owner": "Dueño",
+      "member": "Miembro",
       "you": "Tú",
       "joined": "Se unió",
       "device": "Dispositivo",

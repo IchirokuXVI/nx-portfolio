@@ -56,6 +56,29 @@ export interface BasketParticipant {
 }
 
 /**
+ * One participant **connected to the basket right now** (backend `0051`, section 7).
+ *
+ * Deliberately not a {@link BasketParticipant}, and the difference is the whole point
+ * of the type. A participant is somebody who *may* open this basket; an entry here is
+ * somebody who has it open. Those diverge exactly when it matters, which is after a
+ * trip, when everybody has gone home and the basket still has four participants.
+ *
+ * One person on a phone and a laptop is two participants and appears twice, which is
+ * truthful: it is two sessions. Nothing here is deduplicated by name, because a typed
+ * name is not an identity (section 3.5).
+ *
+ * It carries **no device and no join time**. Presence says somebody is here; it does
+ * not say what they are holding, and no guest learns another guest's device.
+ */
+export interface BasketPresenceEntry {
+  participantId: string;
+  kind: ParticipantKind;
+  displayName: string | null;
+  guestNumber: number | null;
+  userId: string | null;
+}
+
+/**
  * Where one basket line came from: a zone list that wanted some of it.
  *
  * Zone data, so it reaches only a reader who passes the rule. A tin of tomatoes

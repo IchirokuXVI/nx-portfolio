@@ -6,7 +6,7 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
-import { BasketStore } from '@portfolio/velista/data-access';
+import { BasketSocket, BasketStore } from '@portfolio/velista/data-access';
 import { SHEET_SEGMENT, sheetFallGuard } from '@portfolio/velista/platform';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import {
@@ -668,7 +668,12 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-shopping-lists').then(
                 (m) => m.BasketPage
               ),
-            providers: [BasketStore],
+            // Both scoped to this route, so the connection's lifetime is the
+            // screen's: entering the basket opens it and leaving closes it, which is
+            // also what makes presence answer "who is here" rather than "who has ever
+            // opened this" (plan 0048, section 4). `BasketSocket` is listed first for
+            // readability only; the injector resolves it on demand either way.
+            providers: [BasketSocket, BasketStore],
             children: [
               // Rule E1: each sheet covers the page without losing it, and Android's
               // back button dismisses it. None is guarded, because which of them a

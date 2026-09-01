@@ -1,17 +1,35 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import {
+  computed,
+  DestroyRef,
+  inject,
+  Injectable,
+  signal,
+} from '@angular/core';
 import {
   outstanding,
   type BasketLine,
   type BasketLoad,
   type BasketParticipant,
+  type BasketPresenceEntry,
   type BasketSettleRequest,
   type BasketSettleResult,
   type BasketShareLink,
   type BasketView,
 } from '@portfolio/velista/models';
 import { hasResponse } from '../errors';
-import { BasketSessionStore } from './basket-session-store';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
+import { BasketSessionStore } from './basket-session-store';
+import { BasketSocket } from './basket-socket';
+
+/**
+ * How long a refetch waits, so a burst of events costs one request.
+ *
+ * Four people in a shop settling lines produce a stream of broadcasts, and the two
+ * events that cannot be applied without asking (a participant moving, the basket
+ * itself changing) would otherwise be one request each. `GeneratedListStore` coalesces
+ * on the same reasoning and the same order of delay.
+ */
+const REFRESH_DEBOUNCE_MS = 1500;
 
 /**
  * One shared basket, as the screen in a shop reads and changes it (plan 0044).
@@ -26,18 +44,22 @@ import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
  *
  * ## What keeps it current
  *
- * Refetching, and deliberately so for now. The basket's own realtime room exists
- * on the server (backend `0051`, section 10) but the client cannot join it: every
- * socket in this app authenticates with an account token and a **guest has
- * none**, so a live basket needs a second, participant authenticated connection
- * that plan 0044 section 6 names and nothing in `libs/velista/data-access/realtime`
- * supports yet. Until that lands, this store reloads after each of its own writes
- * and on demand from the page (`0035`'s resume), which keeps one person's own
- * screen exactly right and leaves a second person's stale until they act or come
- * back to the app.
+ * {@link BasketSocket}, since plan `0048`: a second connection, authenticated as the
+ * **participant** rather than as an account, so a guest holding a link has one too.
+ * The server joins it to the basket's room on connect, so two people working through
+ * one list in a shop see each other's settles with no reload and no request.
  *
- * The shape here does not depend on that: {@link apply} takes one line and folds
- * it in, which is precisely what a `generatedList.lineSettled` handler will call.
+ * `0044` shipped this screen refetching, on its own writes and on resume, and that is
+ * still what happens when the socket will not open: it is a working screen and the
+ * page says it is not live rather than pretending. Refetching also remains the answer
+ * for an event that arrives without a readable line, and for the two events that say
+ * something moved without saying what.
+ *
+ * **A line off the room is redacted to the least privileged reader in it**, because a
+ * broadcast cannot be projected per socket, so it carries no `origins` even for
+ * somebody entitled to them. {@link apply} merges by id and keeps what it holds, which
+ * is what stops a redacted event downgrading a privileged reader's view. It was
+ * written that way by `0044` so that this plan is a call rather than a redesign.
  *
  * ## Revocation is learned, never predicted
  *
@@ -54,15 +76,77 @@ import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 export class BasketStore {
   private readonly _service = inject<BasketServiceI>(BASKET_SERVICE);
   private readonly _sessions = inject(BasketSessionStore);
+  private readonly _socket = inject(BasketSocket);
 
   private readonly _basket = signal<BasketView | null>(null);
   private readonly _state = signal<BasketLoad>('loading');
   private readonly _error = signal<unknown>(null);
   private readonly _link = signal<BasketShareLink | null>(null);
   private readonly _busyLines = signal<ReadonlySet<string>>(new Set());
+  private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
 
   /** Which basket this store is about, once it has been told. */
   private _id: string | null = null;
+
+  /** The pending coalesced refresh, or null. See {@link _scheduleRefresh}. */
+  private _refreshAt: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    // By hand, not `takeUntilDestroyed`: `@angular/core/rxjs-interop` is a secondary
+    // entry point module federation does not dedupe, and a service several remotes
+    // provide throws `NG0203` from it with a perfectly correct DI graph. Every other
+    // store in this library says the same thing.
+    const subscription = this._socket.events.subscribe((event) => {
+      switch (event.type) {
+        case 'generatedList.lineSettled':
+        case 'generatedList.lineUpdated':
+          if (event.generatedListId !== this._id) {
+            // The socket is pinned to one basket, so this cannot normally happen. It
+            // is checked anyway, because the alternative to a cheap comparison is a
+            // row from another basket appearing in this one.
+            return;
+          }
+          if (event.line === null) {
+            // The event said which basket moved and not what moved, so the only honest
+            // answer is to go and look.
+            this._scheduleRefresh();
+            return;
+          }
+          this.apply(event.line);
+          return;
+
+        case 'generatedList.participantJoined':
+        case 'generatedList.participantLeft':
+          // The participant list is redacted per reader and carries a device for some
+          // of them, so it is refetched rather than assembled from a broadcast that
+          // was redacted to somebody else.
+          this._scheduleRefresh();
+          return;
+
+        case 'generatedList.updated':
+          // The name or the status moved. The payload is a summary and this store
+          // holds the whole basket, so there is nothing here to merge.
+          if (event.list.id === this._id) {
+            this._scheduleRefresh();
+          }
+          return;
+
+        case 'presence.generatedListUpdated':
+          if (event.generatedListId === this._id) {
+            this._present.set(event.present);
+          }
+          return;
+
+        default:
+          return;
+      }
+    });
+
+    inject(DestroyRef).onDestroy(() => {
+      subscription.unsubscribe();
+      this._cancelRefresh();
+    });
+  }
 
   /** The basket, or null before the first read completes. */
   readonly basket = this._basket.asReadonly();
@@ -83,6 +167,40 @@ export class BasketStore {
 
   /** Lines with a write in flight, so a row can show it without blocking a tap. */
   readonly busyLines = this._busyLines.asReadonly();
+
+  /**
+   * Whether this basket is live, which the screen says out loud.
+   *
+   * A live basket and a refetching one look identical while nobody else is shopping,
+   * and completely different the moment somebody is, so "nothing is moving" has to be
+   * distinguishable from "nothing is happening" (plan 0048, section 5).
+   */
+  readonly live = this._socket.connected;
+
+  /**
+   * Whether the server has refused to renew this participant, meaning removed.
+   *
+   * Distinct from {@link state} being `revoked`, which is the same fact learned from a
+   * write. The socket learns it sooner, at the refresh, which is the point of holding
+   * one.
+   */
+  readonly revoked = this._socket.revoked;
+
+  /**
+   * Who has this basket **open right now**, newest broadcast wins.
+   *
+   * Not the participants, and the difference is why it is a separate signal rather
+   * than a filter over one list. A participant is somebody who may open this basket;
+   * an entry here is somebody who has. Those diverge exactly when it matters, which is
+   * after a trip, when everybody has gone home and the basket still has four
+   * participants.
+   *
+   * Empty when the socket is down rather than frozen at its last known value: a stale
+   * face row is a claim about the present tense that nothing is checking.
+   */
+  readonly present = computed<readonly BasketPresenceEntry[]>(() =>
+    this._socket.connected() ? this._present() : []
+  );
 
   /** The lines, in the order the basket holds them. */
   readonly lines = computed<readonly BasketLine[]>(
@@ -165,6 +283,12 @@ export class BasketStore {
     this._id = generatedListId;
     this._state.set('loading');
     this._error.set(null);
+    this._present.set([]);
+    // Started beside the read rather than after it. The connection costs a token
+    // request of its own, so waiting for the basket would delay going live by a whole
+    // round trip on the screen where being live is the point; and the socket needs
+    // nothing the read produces, since the credential it presents is already held.
+    this._socket.open(generatedListId);
     await this.refresh();
   }
 
@@ -341,6 +465,28 @@ export class BasketStore {
         next.delete(lineId);
         return next;
       });
+    }
+  }
+
+  /**
+   * Re-read the basket shortly, once, however many events asked for it.
+   *
+   * Quiet: it never moves {@link state} to `loading`, so a shop full of people
+   * settling lines does not replace a readable screen with a skeleton every second.
+   * A failure leaves what is on screen alone, for {@link _fail}'s reason.
+   */
+  private _scheduleRefresh(): void {
+    this._cancelRefresh();
+    this._refreshAt = setTimeout(() => {
+      this._refreshAt = null;
+      void this.refresh();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  private _cancelRefresh(): void {
+    if (this._refreshAt !== null) {
+      clearTimeout(this._refreshAt);
+      this._refreshAt = null;
     }
   }
 

@@ -1,4 +1,9 @@
 import {
+  toBasketLine,
+  toBasketParticipant,
+  toBasketPresenceEntry,
+} from '../mapping/basket-mappers';
+import {
   toComment,
   toGeneratedListFromView,
   toLine,
@@ -293,17 +298,36 @@ export function toRealtimeEvent(
       return list === null ? null : { type: name, list };
     }
 
-    case 'generatedList.lineSettled': {
-      // `generatedListId` and not the line's own id: the line is redacted and the
-      // counts cannot be recomputed from it anyway, so what a listener needs is which
-      // basket moved.
+    case 'generatedList.lineSettled':
+    case 'generatedList.lineUpdated': {
+      // **Both halves, because there are two listeners with different needs.** The
+      // basket id is what `GeneratedListStore` wants: it holds summaries, and a
+      // settled line cannot say whether `settledLineCount` should move, so it refetches.
+      // The line is what the basket screen wants: it holds the lines, so one merge by
+      // id moves one row with no request at all.
+      //
+      // A line this build cannot read is null rather than fatal to the event. The id is
+      // still readable, so the store that only wanted the id is unaffected, and the one
+      // that wanted the line falls back to its refetch.
       if (!isRecord(payload)) {
         return null;
       }
-      const settledIn = str(payload['generatedListId']);
-      return settledIn === null
+      const movedIn = str(payload['generatedListId']);
+      return movedIn === null
         ? null
-        : { type: name, generatedListId: settledIn };
+        : {
+            type: name,
+            generatedListId: movedIn,
+            line: toBasketLine(payload['line']),
+          };
+    }
+
+    case 'generatedList.participantJoined':
+    case 'generatedList.participantLeft': {
+      // The bare participant view, with no basket id on it, and it needs none: it
+      // arrives only on a connection pinned to one basket.
+      const participant = toBasketParticipant(payload);
+      return participant === null ? null : { type: name, participant };
     }
 
     case 'generatedList.deleted': {
@@ -312,6 +336,25 @@ export function toRealtimeEvent(
       }
       const generatedListId = str(payload['id']);
       return generatedListId === null ? null : { type: name, generatedListId };
+    }
+
+    case 'presence.generatedListUpdated': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const presentIn = str(payload['generatedListId']);
+      if (presentIn === null) {
+        return null;
+      }
+      // `mapArray` drops an entry this build cannot read rather than the whole set:
+      // presence already under reports by design, so one unreadable face is the same
+      // kind of wrong it is already allowed to be, and losing the message would empty
+      // a shop that is full.
+      return {
+        type: name,
+        generatedListId: presentIn,
+        present: mapArray(payload['present'], toBasketPresenceEntry),
+      };
     }
 
     case 'presence.zoneUpdated': {

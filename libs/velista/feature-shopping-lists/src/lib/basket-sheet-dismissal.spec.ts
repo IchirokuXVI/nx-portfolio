@@ -6,7 +6,7 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore } from '@portfolio/velista/data-access';
+import { BasketStore, SessionStore } from '@portfolio/velista/data-access';
 import {
   provideVelistaTesting,
   SheetNavigation,
@@ -124,6 +124,10 @@ async function render(
     providers: [
       provideVelistaTesting({ basePath }),
       { provide: BasketStore, useValue: storeDouble() },
+      // The people sheet names the reader's own row from the account, because core
+      // keeps no `displayName` for an owner. These tests are about the URL a sheet
+      // leaves on, so the emptiest session there is keeps them about it.
+      { provide: SessionStore, useValue: { username: signal(null) } },
       { provide: SheetNavigation, useValue: sheets },
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },

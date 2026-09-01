@@ -5,6 +5,7 @@ import {
   type BasketLineOrigin,
   type BasketLinkPreview,
   type BasketParticipant,
+  type BasketPresenceEntry,
   type BasketProduct,
   type BasketSession,
   type BasketSettleResult,
@@ -82,6 +83,40 @@ export function toBasketParticipant(raw: unknown): BasketParticipant | null {
   return 'userAgent' in raw
     ? { ...participant, device: nullableStr(raw['userAgent']) }
     : participant;
+}
+
+/**
+ * From `ParticipantPresenceEntry`: one person **connected right now**.
+ *
+ * Not {@link toBasketParticipant} with fewer fields, though it looks like it. The key
+ * is `participantId` rather than `id`, and there is deliberately no device and no join
+ * time on the wire at all: presence says somebody is here and never what they are
+ * holding (backend `0051`, section 7).
+ *
+ * The id is the only thing required. A kind this build does not know falls back rather
+ * than dropping the entry, because a face missing from a shop is a worse answer than a
+ * face whose badge is wrong.
+ */
+export function toBasketPresenceEntry(
+  raw: unknown
+): BasketPresenceEntry | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const participantId = str(raw['participantId']);
+  if (participantId === null) {
+    return null;
+  }
+
+  return {
+    participantId,
+    kind: oneOf(raw['kind'], PARTICIPANT_KINDS, PARTICIPANT_KIND_FALLBACK),
+    displayName: nullableStr(raw['displayName']),
+    guestNumber:
+      typeof raw['guestNumber'] === 'number' ? raw['guestNumber'] : null,
+    userId: nullableStr(raw['userId']),
+  };
 }
 
 /**

@@ -1,10 +1,8 @@
 import type { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
-import type {
-  BasketLine,
-  BasketParticipant,
-} from '@portfolio/velista/models';
+import type { BasketLine, BasketParticipant } from '@portfolio/velista/models';
 import {
   originsCaption,
+  participantInitials,
   participantName,
   quantityCaption,
   touchedCaption,
@@ -35,6 +33,25 @@ function person(over: Partial<BasketParticipant> = {}): BasketParticipant {
     shareLinkId: 'link-1',
     ...over,
   };
+}
+
+/**
+ * The owner's participant row, exactly as core creates it.
+ *
+ * No display name and no guest number, which is not an oversight in the fixture: it
+ * is what `generated-list-sharing.service.ts` writes, and it is the shape that made
+ * the whole face row draw one repeated bubble.
+ */
+function owner(over: Partial<BasketParticipant> = {}): BasketParticipant {
+  return person({
+    id: 'p-owner',
+    kind: 'OWNER',
+    displayName: null,
+    guestNumber: null,
+    userId: 'u-1',
+    shareLinkId: null,
+    ...over,
+  });
 }
 
 function line(over: Partial<BasketLine> = {}): BasketLine {
@@ -94,6 +111,77 @@ describe('participantName', () => {
     // touched by somebody since removed. An empty name is what stops the caller
     // drawing "  got it".
     expect(participantName(undefined, translator, 'en')).toBe('');
+  });
+
+  it('does not call the owner a guest', () => {
+    // Core creates the owner's participant row with no display name and no guest
+    // number, so the fallback that ends at "Guest" described exactly one person:
+    // whoever made the basket, on their own basket.
+    expect(participantName(owner(), translator, 'en')).toBe(
+      'basket.people.owner'
+    );
+  });
+
+  it('names the reader from their account where the basket cannot', () => {
+    // The other half of the same absence. Only the reader's own name is available,
+    // because nobody else's username is on this screen at all.
+    expect(
+      participantName(owner(), translator, 'en', { ownName: 'Daniel' })
+    ).toBe('Daniel');
+  });
+});
+
+/**
+ * The bubbles on the face row.
+ *
+ * The bug these exist for: the header sliced two characters off the label, and every
+ * label began with the same word, so an owner and three guests drew four identical
+ * faces. The fix has to be asserted as **difference**, not as any particular letter.
+ */
+describe('participantInitials', () => {
+  it('tells two unnamed guests apart', () => {
+    const one = participantInitials(
+      person({ guestNumber: 1 }),
+      translator,
+      'en'
+    );
+    const two = participantInitials(
+      person({ guestNumber: 2 }),
+      translator,
+      'en'
+    );
+
+    expect(one).not.toBe(two);
+  });
+
+  it('tells the owner apart from a guest', () => {
+    expect(participantInitials(owner(), translator, 'en')).not.toBe(
+      participantInitials(person(), translator, 'en')
+    );
+  });
+
+  it('uses the initial of a name somebody typed, and not their number', () => {
+    // A guest who typed "Dani" is `D`. Appending the number they also happen to
+    // have would label them with a fact the screen never shows them by.
+    expect(
+      participantInitials(
+        person({ displayName: 'dani', guestNumber: 2 }),
+        translator,
+        'en'
+      )
+    ).toBe('D');
+  });
+
+  it('does not cut a surrogate pair in half', () => {
+    // `slice(0, 2)` on an emoji name drew the replacement character. Code points,
+    // which is `ListViewers`' rule and `accountInitial`'s.
+    const initials = participantInitials(
+      person({ displayName: '🐟 Dani' }),
+      translator,
+      'en'
+    );
+
+    expect(initials).toBe('🐟');
   });
 });
 
