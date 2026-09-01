@@ -135,8 +135,17 @@ It exists because pages and sheets used to share one namespace. The list page's 
 
 Two rules follow from it:
 
-- **Never write the segment by hand.** `sheet()` in `libs/velista/feature-shell/src/lib/routes.ts` stamps it, along with `sheetFallGuard`, so the table declares what a sheet is *about* and cannot declare one that opts out. Callers opening a sheet use `sheetSegments()` from `@portfolio/velista/platform`; `SHEET_SEGMENT` is there too, for the rare absolute URL.
+- **Never write the segment by hand.** `sheet()` in `libs/velista/feature-shell/src/lib/routes.ts` stamps it, along with `sheetFallGuard`, so the table declares what a sheet is _about_ and cannot declare one that opts out. Callers opening a sheet use `sheetSegments()` from `@portfolio/velista/platform`; `SHEET_SEGMENT` is there too, for the rare absolute URL.
 - **No page may take a `sheet` segment**, or a sheet over it could collide with a sheet over its parent again. `routes.spec.ts` asserts both directions: every route carrying the fall guard is addressed under the marker, nothing else is, and no page's path contains it.
+
+### Going back never leaves the app (velista)
+
+**A back control pops the history, and every one of them names a fallback URL it navigates to instead when popping would not be safe.** `PageNavigation.back(fallbackUrl)` for a page's top left chevron, `SheetNavigation.dismiss(fallbackUrl)` for a sheet's cancel, its scrim and Escape. Both arguments are required, and nothing else in velista may call `Location.back()`: `no-unguarded-history-back.spec.ts` scans the whole scope and the app for a `.back()` with no arguments and names any file that has one.
+
+Popping is only safe onto an entry **this document pushed**. Below the entry a tab loaded on sits whichever site sent the link, so a raw pop from a shared link or a reload leaves velista entirely, from a chevron that promises one screen up. `AppHistory` (`libs/velista/platform`) is what answers that question, and `app-providers.ts` starts it with `watch()` in an environment initializer, because nothing injects it until a back button is pressed and by then every navigation it needed to see has happened.
+
+- **The history state cannot answer it, and used to be asked.** The check was `navigationId > 1`, and a navigation that _replaces_ bumps that id without adding an entry. The replacing navigations are exactly the ones a cold arrival makes: a guard redirect inherits `replaceUrl` from the initial navigation, so the locale guard correcting `/zones/z1` produces id 2 on the first and only entry, and so does a sheet opened from a link and submitted through `leaveTo`. Both read as history and popped off the site.
+- **Under-counting is the safe way to be wrong.** An entry this app cannot account for is treated as none, which costs a back button that walks to its fallback instead of popping. Over-counting sends somebody out of the app, so anything unknown answers no: an unstarted `AppHistory`, a navigation whose start it was created too late to see, a popstate onto an entry it did not write.
 
 ### Localization: RokuTranslator
 
@@ -218,11 +227,11 @@ stack. The chart still describes it fully, so the files do not drift.
 There are **three** switches, and they are three because they are three different
 decisions:
 
-| Switch | Decides |
-| --- | --- |
-| `lunaShopperBackend.harvester.enabled` (Helm) | whether the service exists in a cluster at all |
-| `HARVEST_ENABLED` | whether a pod that exists may start any run |
-| `MERCADONA_ENABLED` | whether that one storefront specifically may be fetched |
+| Switch                                        | Decides                                                 |
+| --------------------------------------------- | ------------------------------------------------------- |
+| `lunaShopperBackend.harvester.enabled` (Helm) | whether the service exists in a cluster at all          |
+| `HARVEST_ENABLED`                             | whether a pod that exists may start any run             |
+| `MERCADONA_ENABLED`                           | whether that one storefront specifically may be fetched |
 
 All three default to false, including in the `.env` that `luna-slot.sh` writes.
 Bringing the service up and letting it fetch from a third party are not the same
@@ -235,7 +244,7 @@ Two rules that are easy to break by accident:
   whose only purpose is comparison.
 - **An automated fetch never overwrites a price a person typed in** (plan 0038,
   section 6.5). It reports the disagreement instead. When `ItemPrice` and
-  `PricePolicy` arrive that rule is *deleted*, not extended.
+  `PricePolicy` arrive that rule is _deleted_, not extended.
 
 `@portfolio/luna-shopper/mercadona` and `@portfolio/luna-shopper/osm-places` are
 framework free by hard constraint: no TypeORM, no Nest, no database, and every

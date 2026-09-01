@@ -1,7 +1,7 @@
 import { Location } from '@angular/common';
 import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
-import { hasEntryBehind } from './history-entries';
+import { AppHistory } from './app-history';
 
 /**
  * What the back button in a page's top left corner does.
@@ -17,19 +17,27 @@ import { hasEntryBehind } from './history-entries';
  * The chevron and the gesture agree, and a person who reached a screen by three
  * different routes gets the one answer that is right in all three.
  *
- * `fallbackUrl` is for the arrival that has nothing behind it: a shared link opened
- * cold, a reload. The button cannot be inert there, so it walks up to the parent
- * instead, which is exactly the destination it used to have. That navigation pushes,
- * because it genuinely is a step forward to a screen this session has not seen; only a
- * sheet, whose URL has to stop existing, replaces (see `SheetNavigation`).
+ * `fallbackUrl` is not optional, and it is not only for the arrival that has nothing
+ * behind it at all: a shared link opened cold, a reload. It is also what keeps the
+ * button inside velista. The entry below the one a tab loaded on belongs to whoever
+ * linked here, so popping onto it would hand the reader another site from a control
+ * whose whole promise is one screen back inside this one. `AppHistory` is what tells
+ * the two arrivals apart, and it says no unless the entry behind is one this document
+ * pushed.
+ *
+ * So the button walks up to the parent instead, which is exactly the destination it
+ * used to have. That navigation pushes, because it genuinely is a step forward to a
+ * screen this session has not seen; only a sheet, whose URL has to stop existing,
+ * replaces (see `SheetNavigation`).
  */
 @Injectable({ providedIn: 'root' })
 export class PageNavigation {
   private readonly _router = inject(Router);
   private readonly _location = inject(Location);
+  private readonly _history = inject(AppHistory);
 
   async back(fallbackUrl: string): Promise<void> {
-    if (hasEntryBehind(this._location)) {
+    if (this._history.hasEntryBehind()) {
       this._location.back();
       return;
     }

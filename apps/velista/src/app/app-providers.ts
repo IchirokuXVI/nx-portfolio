@@ -51,6 +51,7 @@ import {
   AppBrand,
 } from '@portfolio/velista/models';
 import {
+  AppHistory,
   AppUpdates,
   InstallStore,
   VELISTA_PLATFORM_PROVIDERS,
@@ -272,4 +273,12 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // `APP_INITIALIZER` is read once from the root injector at bootstrap, and nothing
   // asks a route injector for it, so under the shell it would never run at all.
   provideEnvironmentInitializer(() => void inject(InstallStore)),
+
+  // Start counting history entries, which is what every back control in the app asks
+  // before it pops rather than navigates. A listener again, and one with the same
+  // reason to be started here as `InstallStore`: nothing injects it until a back button
+  // is pressed, and by then every navigation it needed to watch has already happened.
+  // Unstarted it reports no entry behind and each button walks to its own fallback,
+  // which is safe but is not the behaviour these screens are written for.
+  provideEnvironmentInitializer(() => inject(AppHistory).watch()),
 ];
