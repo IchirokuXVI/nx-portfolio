@@ -7,6 +7,7 @@ export * from './lib/app-standalone-origin';
 export * from './lib/app-theme';
 export * from './lib/app-version';
 export * from './lib/assistant';
+export * from './lib/basket-view';
 export * from './lib/domain';
 export * from './lib/enums';
 export * from './lib/home-view';

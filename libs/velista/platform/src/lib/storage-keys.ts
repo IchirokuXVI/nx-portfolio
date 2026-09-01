@@ -49,3 +49,27 @@ export const StorageKeys = {
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];
+
+/**
+ * Where one shared basket's participant credential is kept (plan 0044).
+ *
+ * A function rather than a member of {@link StorageKeys} because there is one per
+ * basket rather than one per app: somebody can be a guest on their flatmate's
+ * shop and a registered participant on their mother's at the same time, and the
+ * two credentials are unrelated.
+ *
+ * It is in `localStorage` for the same reason the token pair is (plan 0004,
+ * section 5.3), and the reason is stronger here: for a guest this secret **is**
+ * their identity on that basket, returned exactly once at join and stored hashed
+ * on the server. Losing it does not merely sign them out, it makes them a
+ * different person on their next visit, with a new `Guest N` and none of their
+ * attributions. `sessionStorage` would do that every time they closed the tab,
+ * in the middle of a shop.
+ *
+ * The cost is the same one recorded on the session key and is bounded the same
+ * way: it is scoped to one basket, it expires with the trip, and the owner can
+ * revoke the participant it names at any time.
+ */
+export function basketSessionKey(generatedListId: string): string {
+  return `basket-session:${APP_KEY}:${generatedListId}`;
+}

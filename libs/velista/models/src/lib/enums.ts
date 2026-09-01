@@ -162,3 +162,39 @@ export type UsernameScope = (typeof USERNAME_SCOPES)[number];
  * happens if it is asked for, which is why the client always sends it explicitly.
  */
 export const USERNAME_SCOPE_DEFAULT: UsernameScope = 'MY_GROUPS_TOO';
+
+/**
+ * What kind of person is acting on a shared basket (plan 0051, section 3).
+ *
+ * `UNKNOWN` is a member rather than a fallback onto one of the three, and it is
+ * the safe direction for the same reason `ZONE_STATUSES` has one: every rule this
+ * enum drives is about **widening** what somebody may see, and a kind this build
+ * has never heard of must not be read as the owner. It renders like a guest,
+ * which is the least the screen can offer anybody.
+ *
+ * Falling back to `GUEST` outright was the alternative and is worse: it would
+ * claim a person is unverified when the server may have said the opposite, and
+ * `0044` section 4.3 requires a guest to be *visibly* a guest. Saying that of
+ * somebody who is not is the mistake in the direction that matters.
+ */
+export const PARTICIPANT_KINDS = [
+  'OWNER',
+  'REGISTERED',
+  'GUEST',
+  'UNKNOWN',
+] as const;
+export type ParticipantKind = (typeof PARTICIPANT_KINDS)[number];
+export const PARTICIPANT_KIND_FALLBACK: ParticipantKind = 'UNKNOWN';
+
+/**
+ * What one settling act said about one line (backend plan 0047, section 3).
+ *
+ * Two values and not three: **skipping writes nothing at all**. "I decided not to
+ * buy this today" leaves the line exactly as it was, so it is the absence of a
+ * call rather than an outcome, and there is nothing for this union to name.
+ *
+ * There is **no fallback**, because nothing maps into this type. It only ever
+ * goes out, chosen by the two buttons on the settle sheet.
+ */
+export const SETTLEMENT_OUTCOMES = ['BOUGHT', 'NOT_AVAILABLE'] as const;
+export type SettlementOutcome = (typeof SETTLEMENT_OUTCOMES)[number];

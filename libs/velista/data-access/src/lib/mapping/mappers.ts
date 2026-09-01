@@ -717,7 +717,7 @@ function toAssistantChoice(raw: unknown): AssistantChoice | null {
  * English, and an empty English name renders as an empty row rather than as no row,
  * which is the honest report of what the catalog holds.
  */
-function toLocalizedName(raw: unknown): LocalizedName {
+export function toLocalizedName(raw: unknown): LocalizedName {
   return isRecord(raw)
     ? { en: strOr(raw['en'], ''), es: strOr(raw['es'], '') }
     : { en: '', es: '' };
