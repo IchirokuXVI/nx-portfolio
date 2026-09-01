@@ -1,0 +1,67 @@
+name: PR title
+
+# Every pull request title is read by tools/release/release-notes.mjs when a
+# release is cut, so a title that does not follow the convention is a change
+# that goes missing from the notes of the release that shipped it. This job is
+# the moment that costs nothing to fix: it validates the title against the same
+# rules module the notes are generated from, so the check and the generator can
+# never disagree.
+#
+# It is deliberately separate from pr.yml. `edited` has to be in the trigger, or
+# a retitle would never be rechecked, and firing pr.yml's lint, test and Luna
+# stack jobs every time somebody adjusts a word of the title would be absurd.
+# There is no branch filter either: a stacked pull request based on another
+# feature branch still ends up in the release notes, so its title still counts.
+#
+# The job installs nothing. The script is plain Node with no dependencies, which
+# is also what lets a release be cut from a bare checkout.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # The rules are code, so they are tested like code. Twenty two assertions
+      # over the parser and the grouping, in well under a second.
+      - name: Test the rules
+        run: node --test tools/release/release-notes.test.mjs
+
+      # The title reaches the script through the environment rather than through
+      # the command line: it is text a contributor wrote, and interpolating it
+      # into a shell would be an injection waiting for the right title.
+      - name: Check the title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if node tools/release/release-notes.mjs --check 2> title-check.log; then
+            echo "\`$PR_TITLE\`" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          cat title-check.log
+          {
+            echo "### This pull request needs a different title"
+            echo
+            echo '```'
+            cat title-check.log
+            echo '```'
+            echo
+            echo "The convention is in [CONTRIBUTING.md](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.event.pull_request.base.ref }}/CONTRIBUTING.md#pull-request-titles)."
+            echo "Editing the title reruns this check."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
