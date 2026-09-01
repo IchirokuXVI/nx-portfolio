@@ -48,9 +48,7 @@
 
           @if (line.lastPurchase; as bought) {
             <div class="tile">
-              <span class="tile-value">{{
-                bought.at | date: 'mediumDate'
-              }}</span>
+              <span class="tile-value">{{ bought.when }}</span>
               <span class="tile-label">
                 {{ 'list.page.lastBought' | rokuT: { count: bought.quantity } }}
               </span>
@@ -141,9 +139,7 @@
                     }}
                   }
                 </span>
-                <span class="history-when">{{
-                  row.at | date: 'mediumDate'
-                }}</span>
+                <span class="history-when">{{ row.when }}</span>
               </li>
             }
           </ul>
@@ -177,9 +173,7 @@
                             }
                     }}
                   </span>
-                  <span class="history-when">{{
-                    row.at | date: 'mediumDate'
-                  }}</span>
+                  <span class="history-when">{{ row.when }}</span>
                 </li>
               }
             </ul>

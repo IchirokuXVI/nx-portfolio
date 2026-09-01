@@ -35,10 +35,11 @@ function line(overrides: Partial<Line> = {}): Line {
     listId: LIST_ID,
     content: 'Sourdough loaf',
     quantity: 1,
-    itemId: null,
+    itemIds: [],
     position: 1,
     approvalStatus: 'APPROVED',
-    status: 'PENDING',
+    boughtCount: 0,
+    lastSettlementOutcome: null,
     createdByUserId: ME,
     approvedByUserId: ME,
     version: 1,
@@ -76,6 +77,7 @@ function select(overrides: Partial<ListStateInput> = {}): ListPageState {
     linesComplete: true,
     writes: new Map(),
     commentCounts: new Map(),
+    claims: new Map(),
     caller: { permissions: ADMIN },
     nameOf: () => null,
     reordering: false,
@@ -170,58 +172,132 @@ describe('selectListState', () => {
       });
     });
 
-    it('counts from the lines themselves once they are here', () => {
+    it('counts what is still wanted, from the lines themselves once they are here', () => {
       // The lines are optimistic, so the counter has to move with the thumb rather
-      // than lag a tap behind it.
+      // than lag a drag behind it. It counts `quantity > 0` (backend plan 0047,
+      // section 2.3): "two things needed" is the figure a header should show.
       const state = select({
         lines: [
-          line({ id: 'a', status: 'READY' }),
-          line({ id: 'b', status: 'PENDING', position: 2 }),
+          line({ id: 'a', quantity: 0, boughtCount: 1 }),
+          line({ id: 'b', quantity: 2, position: 2 }),
+          line({ id: 'c', quantity: 1, position: 3 }),
         ],
       });
 
       expect(loaded(state).header).toMatchObject({
-        wantedCount: 1,
-        lineCount: 2,
+        wantedCount: 2,
+        lineCount: 3,
       });
     });
   });
 
-  describe('the two state machines in one row (section 3.4)', () => {
-    it('draws an approved pending line as the ordinary row', () => {
+  /**
+   * The quantity and the history, which replaced the two state machines `0012` had
+   * (velista plan 0043, section 3.2).
+   *
+   * The distinction this whole block exists for is between a line at zero that has
+   * been bought and a line at zero that never has. They are the same quantity and they
+   * are drawn differently, and `boughtCount` is the only thing that separates them,
+   * which is why backend plan 0047 section 5 says "at least once" rather than testing
+   * the quantity alone.
+   */
+  describe('what a quantity and a history say about a row (section 3.2)', () => {
+    it('draws an ordinary wanted line with no indicator and no caption', () => {
       const row = loaded(select()).lines[0];
 
-      expect(row).toMatchObject({ struck: false, captionKey: null });
-    });
-
-    it('strikes a ready line through and gives it no caption', () => {
-      const state = select({ lines: [line({ status: 'READY' })] });
-
-      expect(loaded(state).lines[0]).toMatchObject({
-        struck: true,
+      expect(row).toMatchObject({
+        settled: false,
+        indicators: [],
         captionKey: null,
       });
     });
 
-    it('captions a line the shop did not have', () => {
-      const state = select({ lines: [line({ status: 'NOT_AVAILABLE' })] });
+    it('marks a line at zero that has been bought, and never strikes it through', () => {
+      const state = select({
+        lines: [line({ quantity: 0, boughtCount: 2, lastSettlementOutcome: 'BOUGHT' })],
+      });
 
       expect(loaded(state).lines[0]).toMatchObject({
-        struck: true,
-        captionKey: 'list.line.notAvailable',
+        settled: true,
+        indicators: ['bought'],
+        captionKey: null,
       });
     });
 
-    it('captions a line waiting for approval, whatever its item status', () => {
+    it('says nothing at all about a line at zero that has never been bought', () => {
+      // The never wanted case: somebody typed it and it has not been needed yet. It is
+      // the same quantity as the row above and it reports nothing, which is the whole
+      // reason the count is on the wire.
+      const state = select({ lines: [line({ quantity: 0, boughtCount: 0 })] });
+
+      expect(loaded(state).lines[0]).toMatchObject({
+        settled: false,
+        indicators: [],
+      });
+    });
+
+    it('marks a line the shop did not have, and leaves it wanted', () => {
       const state = select({
-        lines: [line({ approvalStatus: 'PENDING', status: 'READY' })],
+        lines: [line({ quantity: 2, lastSettlementOutcome: 'NOT_AVAILABLE' })],
       });
 
-      // Approval wins the caption: a line nobody has agreed to is a more urgent thing
-      // to say than a shop not having it, and a row only ever grows one second line.
-      expect(loaded(state).lines[0].captionKey).toBe(
-        'list.line.awaitingApproval'
-      );
+      // Not having found something is not the same as no longer needing it, so the
+      // quantity is untouched and the indicator is not a caption.
+      expect(loaded(state).lines[0]).toMatchObject({
+        quantity: 2,
+        settled: false,
+        indicators: ['notAvailable'],
+        captionKey: null,
+      });
+    });
+
+    it('carries two indicators at once, which is the case a single value could not', () => {
+      // Missing last trip, wanted again, and somebody is out getting it now. This is
+      // the ordinary combined row rather than a corner (section 3.3).
+      const state = select({
+        lines: [line({ quantity: 1, lastSettlementOutcome: 'NOT_AVAILABLE' })],
+        claims: new Map([['ln-1', 'user-ana']]),
+        nameOf: () => 'Ana',
+      });
+
+      expect(loaded(state).lines[0]).toMatchObject({
+        indicators: ['notAvailable', 'claimed'],
+        claimedBy: 'Ana',
+      });
+    });
+
+    it('says somebody is buying it without naming a stranger', () => {
+      const state = select({
+        lines: [line()],
+        claims: new Map([['ln-1', 'user-ana']]),
+        nameOf: () => null,
+      });
+
+      expect(loaded(state).lines[0]).toMatchObject({
+        indicators: ['claimed'],
+        claimedBy: null,
+      });
+    });
+
+    it('captions a line waiting for approval, whatever its history says', () => {
+      const state = select({
+        lines: [
+          line({
+            approvalStatus: 'PENDING',
+            quantity: 0,
+            boughtCount: 1,
+            lastSettlementOutcome: 'BOUGHT',
+          }),
+        ],
+      });
+
+      // Approval wins the caption, and the indicator is drawn beside it rather than
+      // instead of it: they are two different things now, which is what lets a row say
+      // both (section 3.3).
+      expect(loaded(state).lines[0]).toMatchObject({
+        captionKey: 'list.line.awaitingApproval',
+        indicators: ['bought'],
+      });
     });
 
     it('keeps a turned down line on the list, quiet and last', () => {
@@ -235,7 +311,6 @@ describe('selectListState', () => {
       const ids = loaded(state).lines.map((row) => row.id);
       expect(ids).toEqual(['ordinary', 'rejected']);
       expect(loaded(state).lines[1]).toMatchObject({
-        struck: true,
         captionKey: 'list.line.rejected',
       });
     });
@@ -347,7 +422,7 @@ describe('selectListState', () => {
   describe('what a row offers, per permission (section 4)', () => {
     const pending = line({ approvalStatus: 'PENDING' });
     const rejected = line({ approvalStatus: 'REJECTED' });
-    const missing = line({ status: 'NOT_AVAILABLE' });
+    const missing = line({ lastSettlementOutcome: 'NOT_AVAILABLE' });
 
     function row(
       permissions: readonly ListPermission[],
@@ -361,7 +436,13 @@ describe('selectListState', () => {
       // comments sheet, and a reader keeps reading it. What they lose is the composer
       // inside it, which is the sheet's business rather than the row's.
       expect(row(READ_ONLY)).toMatchObject({
-        interactive: false,
+        // **A reader's row opens**, which is the change (velista plan 0043, section
+        // 5.1). The tap used to be the tick, so it followed `DECIDE` and a reader's
+        // rows sat there not answering; it opens what the app knows about the thing
+        // now, and knowing is not a permission.
+        interactive: true,
+        // What they still may not do is move the number.
+        adjustable: false,
         actions: ['comments'],
         editScope: null,
         decidable: false,
@@ -369,9 +450,12 @@ describe('selectListState', () => {
       });
     });
 
-    it('gives a writer a pending line to edit and delete, and no tick', () => {
+    it('gives a writer a pending line to edit and delete, and no reel', () => {
+      // The two halves come apart here for the first time: the row opens, and the
+      // number does not move. That is the caller the page's one notice is for.
       expect(row(WRITER, [pending])).toMatchObject({
-        interactive: false,
+        interactive: true,
+        adjustable: false,
         actions: ['edit', 'comments', 'delete'],
         editScope: 'full',
         decidable: false,
@@ -394,10 +478,13 @@ describe('selectListState', () => {
       });
     });
 
-    it('gives a decider the tick, the decisions, and no edit on a pending row', () => {
+    it('gives a decider the reel, the decisions, and no edit on a pending row', () => {
       expect(row(DECIDER, [pending])).toMatchObject({
         interactive: true,
-        actions: ['markNotAvailable', 'comments'],
+        adjustable: true,
+        // No marking control of any kind, which is section 1.1: saying the shop did
+        // not have something is a thing you say afterwards, from the detail sheet.
+        actions: ['comments'],
         editScope: null,
         decidable: true,
       });
@@ -405,7 +492,7 @@ describe('selectListState', () => {
 
     it('gives a decider the quantity and nothing else on an approved row', () => {
       expect(row(DECIDER)).toMatchObject({
-        actions: ['edit', 'markNotAvailable', 'comments'],
+        actions: ['edit', 'comments'],
         editScope: 'quantity',
       });
     });
@@ -418,20 +505,29 @@ describe('selectListState', () => {
     it('gives a list admin every field of every line, and the delete', () => {
       expect(row(ADMIN)).toMatchObject({
         interactive: true,
-        actions: ['edit', 'markNotAvailable', 'comments', 'delete'],
+        adjustable: true,
+        actions: ['edit', 'comments', 'delete'],
         editScope: 'full',
       });
       expect(row(ADMIN, [pending]).editScope).toBe('full');
     });
 
-    it('offers putting a line back once it is marked as missing', () => {
-      expect(row(BOTH, [missing]).actions).toContain('markPending');
-      expect(row(BOTH, [missing]).actions).not.toContain('markNotAvailable');
-    });
-
-    it('offers marking it missing to nobody without DECIDE', () => {
-      // Saying what the shop had is deciding rather than writing (section 4).
-      expect(row(WRITER, [pending]).actions).not.toContain('markNotAvailable');
+    /**
+     * Section 1.1, asserted as an absence.
+     *
+     * The row has **no marking control of any kind**, for anybody, on any line. It is
+     * the distinction the whole plan draws: recording what a shop had is a deliberate
+     * act from the detail sheet, never something a thumb does in passing, and the way
+     * that stays true is for the overflow to have no entry that could become one.
+     */
+    it('offers no marking control to anybody, on any line', () => {
+      for (const permissions of [READ_ONLY, WRITER, DECIDER, BOTH, ADMIN]) {
+        for (const candidate of [line(), pending, rejected, missing]) {
+          const actions = row(permissions, [candidate]).actions;
+          expect(actions).not.toContain('markNotAvailable');
+          expect(actions).not.toContain('markPending');
+        }
+      }
     });
 
     it('keeps editScope and the edit entry in step, on every combination', () => {

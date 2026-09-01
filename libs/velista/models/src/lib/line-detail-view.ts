@@ -44,6 +44,18 @@ export interface SettlementRowVm {
   readonly mine: boolean;
   readonly at: Date;
   /**
+   * The same instant as words, in the reader's language.
+   *
+   * Formatted in the selector rather than by a pipe in the template, which is this
+   * app's convention for every date it draws: Angular's `DatePipe` needs
+   * `registerLocaleData` per locale and a `LOCALE_ID` this app does not set, because
+   * the language is runtime state rather than the shell's build time locale.
+   *
+   * {@link at} stays beside it, because ordering and grouping are done on the instant
+   * and a formatted string sorts alphabetically.
+   */
+  readonly when: string;
+  /**
    * Which list this settlement was on, for the cross list section. Null on the
    * per line one.
    */
