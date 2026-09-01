@@ -16,6 +16,7 @@ import {
   ZoneStore,
   type ListServiceI,
 } from '@portfolio/velista/data-access';
+import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
 import {
   APP_BASE_PATH,
   formatGeneratedDate,
@@ -346,6 +347,21 @@ export class GetListSheet {
       this.submitting.set(false);
       this.errorKey.set('getList.error');
     }
+  }
+
+  /**
+   * The history, reached from this sheet's header (plan 0045, section 3.1).
+   *
+   * `leaveTo` and not `dismiss`: this is a navigation to somewhere else rather than a
+   * way out of the sheet, so the sheet's own fall animation would be playing while the
+   * page underneath was already being replaced. It also replaces this entry rather than
+   * pushing, so the back button from the history returns to the dashboard rather than
+   * reopening a half filled sheet.
+   */
+  async openHistory(): Promise<void> {
+    await this._sheet.leaveTo(
+      appPath(this._locale(), this._basePath, BASKET_PATHS.list)
+    );
   }
 
   /** Cancel, Escape, the scrim, and the back button all arrive here. */

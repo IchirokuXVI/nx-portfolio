@@ -3,7 +3,21 @@
   [dismissible]="!submitting()"
   labelledBy="get-list-title"
 >
-  <h2 class="title" id="get-list-title">{{ 'getList.title' | rokuT }}</h2>
+  <!--
+    The title and the way to the history share a row, and that is section 3.1 rather
+    than decoration. The dashboard's History link lives in the shopping list card's
+    header, so it goes away with the card: somebody whose baskets are all finished has
+    no card, and without this they would have no route to their own history at all
+    short of typing the URL. This is the screen the plan names for that case, and it is
+    the right one, because it is where somebody who is thinking about shopping lists
+    already is.
+  -->
+  <div class="head-row">
+    <h2 class="title" id="get-list-title">{{ 'getList.title' | rokuT }}</h2>
+    <button (click)="openHistory()" class="history" type="button">
+      {{ 'home.action.history' | rokuT }}
+    </button>
+  </div>
   <p class="body">{{ 'getList.body' | rokuT }}</p>
 
   <label class="label" for="get-list-name">
