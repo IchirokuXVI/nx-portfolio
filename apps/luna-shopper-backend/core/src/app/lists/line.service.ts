@@ -196,17 +196,39 @@ export class LineService {
    * twenty lines at once; for one line it is two index lookups on
    * `ix_settlements_line`, which is cheaper to read here and needs no raw SQL on
    * a path that is already an edit rather than a report.
+   *
+   * **A caller inside a transaction must pass its manager**, and this is the trap
+   * {@link addQuantity} already documents at length: this service's own repository
+   * draws its own connection from the pool, so reading through it from inside a
+   * transaction means one request holding two connections at once. Ten concurrent
+   * deltas is then ten transactions each waiting on a connection that will never
+   * come free, which is a deadlock that only shows up under load and which the
+   * integration suite caught rather than any unit test.
+   *
+   * Reading through the caller's manager is not a compromise either. This service
+   * never writes `line_settlements`, so the transaction has nothing uncommitted
+   * there and both routes see exactly the same rows.
    */
-  private async settlementsOf(lineId: string): Promise<LineSettlementSummary> {
-    const [boughtCount, latest] = await Promise.all([
-      this.settlements.count({
-        where: { lineId, outcome: SettlementOutcome.BOUGHT },
-      }),
-      this.settlements.findOne({
-        where: { lineId },
-        order: { settledAt: 'DESC', id: 'DESC' },
-      }),
-    ]);
+  private async settlementsOf(
+    lineId: string,
+    manager?: EntityManager
+  ): Promise<LineSettlementSummary> {
+    const repo = manager
+      ? manager.getRepository(LineSettlement)
+      : this.settlements;
+
+    // Sequential rather than `Promise.all`, for the same reason. One manager is one
+    // connection, so two queries issued at once on it are serialised by the driver
+    // anyway; on the pooled path the pair is two connections briefly held, which is
+    // exactly what the paragraph above is about.
+    const boughtCount = await repo.count({
+      where: { lineId, outcome: SettlementOutcome.BOUGHT },
+    });
+    const latest = await repo.findOne({
+      where: { lineId },
+      order: { settledAt: 'DESC', id: 'DESC' },
+    });
+
     return { boughtCount, lastOutcome: latest?.outcome ?? null };
   }
 
@@ -581,12 +603,20 @@ export class LineService {
       // now that a delta exists beside it (plan 0040, section 3.4): an absolute
       // write is a last-writer-wins race over a value somebody deliberately
       // chose, and there is nothing to lock it against.
+      // No transaction on this path (see above), so the pooled repositories are
+      // free to answer in parallel.
       const saved = await this.lines.save(line);
       const [itemIds, settlements] = await Promise.all([
         this.itemIdsOf(saved.id),
         this.settlementsOf(saved.id),
       ]);
-      this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved, itemIds, settlements);
+      this.emit(
+        RealtimeEvent.LineUpdated,
+        list.zoneId,
+        saved,
+        itemIds,
+        settlements
+      );
       return toLineView(saved, itemIds, settlements);
     }
 
@@ -742,12 +772,12 @@ export class LineService {
     // Whatever the line now holds: the set that was just written, or the one it
     // already had when this edit did not touch it.
     const itemIds = nextItemIds ?? (await this.itemIdsOf(line.id, manager));
-    // Read outside the caller's manager on purpose. It is the settlement history
-    // as it stood before this transaction and this edit cannot have changed it:
-    // the only thing that writes a settlement is `SettlementService`, and an edit
-    // that took the summary from inside a lock it holds would be reading its own
-    // uncommitted view of a table it never touched.
-    const settlements = await this.settlementsOf(line.id);
+    // **Through the caller's manager**, like the product set above it. Reading
+    // through this service's own repository would take a second connection while
+    // this transaction holds one, and `addQuantity` is exactly the concurrent path
+    // where that deadlocks the pool. There is nothing to gain from the other route:
+    // this service never writes settlements, so both see the same rows.
+    const settlements = await this.settlementsOf(line.id, manager);
 
     const saved = await repo.save(line);
     return {
@@ -829,7 +859,13 @@ export class LineService {
       this.itemIdsOf(saved.id),
       this.settlementsOf(saved.id),
     ]);
-    this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved, itemIds, settlements);
+    this.emit(
+      RealtimeEvent.LineUpdated,
+      list.zoneId,
+      saved,
+      itemIds,
+      settlements
+    );
     return toLineView(saved, itemIds, settlements);
   }
 
