@@ -1,6 +1,7 @@
 import { formatDay } from './format-day';
 import {
   ESTIMATE_MIN_PURCHASES,
+  ESTIMATE_ROUGH_TO,
   inLocale,
   type CatalogItem,
   type ConsumptionEstimateVm,
@@ -29,8 +30,28 @@ export interface LineDetailInput {
    * line look freshly loaded forever.
    */
   readonly settlements: readonly LineSettlement[] | undefined;
-  /** Resolves a product id to what the catalog calls it, or null while unknown. */
+  /**
+   * Resolves a product id to what the catalog calls it, or null while unknown.
+   *
+   * The catalog, through `ItemNames`, and **never a fixture**. It was
+   * `catalogItemById` from `catalog-memory.ts` until velista plan 0047 section 1: a
+   * hand written set of a few Spanish products that every id missed against a real
+   * catalog, so this screen told the reader their line had no products when it had
+   * some. The rule that broke is worth stating rather than only fixing: a `*Memory`
+   * module is imported by its own token binding and by specs, never by a feature
+   * library.
+   */
   readonly itemNameOf: (itemId: string) => CatalogItem | null;
+  /**
+   * Whether the name lookup failed, as opposed to answering with nothing.
+   *
+   * The two are different sentences and neither may be drawn as the other (section
+   * 1.2). A failure is a fact about the request; an empty set is a fact about the
+   * line.
+   */
+  readonly namesUnavailable: boolean;
+  /** Who is out buying this, already resolved to a name, or null. */
+  readonly claimedBy: string | null;
   /** Resolves a user id to a name in this zone, or null. */
   readonly nameOf: (userId: string) => string | null;
   readonly callerUserId: string | null;
@@ -69,6 +90,7 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
     content: line.content,
     quantity: line.quantity,
     ...productsPhrase(line, input, purchases),
+    namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,
     lastPurchase: rows.find((row) => row.outcome === 'BOUGHT') ?? null,
     estimate: estimateFrom(purchases),
     // Nothing to ask on a free text line, and nothing to ask on a line with one
@@ -77,6 +99,7 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
     preselectedItemId: preselectedFrom(line, purchases),
     canSettle: input.canSettle,
     indicators: input.indicators,
+    claimedBy: input.claimedBy,
     busy: input.busy,
   };
 }
@@ -105,12 +128,20 @@ function productsPhrase(
 
   if (line.itemIds.length === 1) {
     const only = input.itemNameOf(line.itemIds[0]);
-    return {
-      productsKey: 'list.detail.products.one',
-      productsArgs: {
-        name: only === null ? '' : inLocale(only.name, input.locale),
-      },
-    };
+    // A product that cannot be named falls back to the **count**, never to the name
+    // phrase with an empty name (section 1.2). It reaches this either because the
+    // lookup failed or because the catalog no longer has that product, and the reader
+    // is owed the same sentence in both cases: there is one product here and we cannot
+    // tell you what it is called. Which of the two it was is the failure line's to say.
+    return only === null
+      ? {
+          productsKey: 'list.detail.products.unnamed',
+          productsArgs: { count: 1 },
+        }
+      : {
+          productsKey: 'list.detail.products.one',
+          productsArgs: { name: inLocale(only.name, input.locale) },
+        };
   }
 
   // With several, the count is the useful thing, and the one last bought is what turns
@@ -189,6 +220,10 @@ export function estimateFrom(
   return {
     medianDays: Math.max(1, Math.round(median)),
     fromPurchases: purchases.length,
+    // Three to six say "every few weeks"; seven and up give the days (velista plan
+    // 0047, section 5). Decided here rather than in each template, so the sheet and the
+    // page cannot hedge differently about the same history.
+    rough: purchases.length <= ESTIMATE_ROUGH_TO,
   };
 }
 

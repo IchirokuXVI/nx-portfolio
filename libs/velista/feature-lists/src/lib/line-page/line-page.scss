@@ -57,6 +57,32 @@
   color: var(--app-text-muted);
 }
 
+// The names could not be read. Amber rather than coral: nothing is broken about the
+// line and the page below is entirely usable. It is missing text, not a failed write
+// (plan 0047, section 1.2).
+.names-failed {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--app-action-quiet-fg);
+}
+
+// Another page of a history. A quiet link under the rows rather than a button beside
+// them: it continues what is already on screen, and pressing it appends.
+.more {
+  margin-block-start: var(--app-space-3);
+  padding: var(--app-space-2) var(--app-space-4);
+  border: 0;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  }
+}
+
 // The two numbers worth having at a glance, side by side. Each is absent rather than
 // vague when it cannot be said, so this row is one tile wide as often as two.
 .tiles {
@@ -118,12 +144,61 @@
   font-size: var(--app-text-xs);
 }
 
-// A line with no products yet. Dashed, because it is a place for something rather than
-// a thing: the composer's search is what fills it (section 6).
-.chip.empty {
+// Add one. Dashed, because it is a place for something rather than a thing, and a
+// **button**, because since plan 0047 section 2 it actually does something: it was a
+// static chip that drew the affordance and then declined the gesture.
+.chip.add {
   border-style: dashed;
   background: transparent;
   color: var(--app-text-muted);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  }
+}
+
+// The search, under the chips rather than over the page. Nothing is in the way here,
+// unlike the composer, which is pinned to the bottom with a keyboard under it and grows
+// its list upward: same rows, different direction, and the direction is the caller's.
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin-block-start: var(--app-space-4);
+}
+
+.search-field {
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  }
+}
+
+.search-cancel {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--app-text-muted);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  }
 }
 
 .chip-remove {

@@ -22,13 +22,24 @@ import {
  *   keyed on the line's product set, so a free text line cannot have one; drawing it
  *   empty would say the reader has never bought this anywhere, when in fact nobody has
  *   said what "this" is. That is the argument for the composer's suggestions.
- * - **`alsoOn` empty draws nothing.** "No other list has this" is not information
- *   anybody came here for.
+ * - **`alsoOn` is null until something can answer it, and is then drawn only when it
+ *   is complete.** It was derived from whatever lists the session happened to hold,
+ *   which under reported by construction and drew nothing when empty, so "nobody
+ *   asked" and "no other list has this" were one picture (velista plan 0047, section
+ *   5). Backend plan 0053 section 3 adds the query. Empty still draws nothing once
+ *   there is one, because "no other list has this" is not information anybody came
+ *   here for, but that is a different absence and the two must not be collapsed again.
  */
 export interface LinePageInput
   extends Pick<
     LineDetailInput,
-    'line' | 'settlements' | 'itemNameOf' | 'nameOf' | 'callerUserId' | 'locale'
+    | 'line'
+    | 'settlements'
+    | 'itemNameOf'
+    | 'namesUnavailable'
+    | 'nameOf'
+    | 'callerUserId'
+    | 'locale'
   > {
   readonly list: ShoppingListSummary | undefined;
   readonly zoneName: string | null;
@@ -45,8 +56,20 @@ export interface LinePageInput
    * the name of, which the row draws as nothing rather than as an id.
    */
   readonly listNameOf: (listId: string) => string | null;
-  /** The reader's other lists carrying this line's products, already resolved. */
-  readonly alsoOn: readonly string[];
+  /**
+   * The reader's other lists carrying this line's products, or null when nobody has
+   * asked (velista plan 0047, section 5).
+   *
+   * Null until backend plan 0053 section 3 answers the question. There is no endpoint
+   * for it, and the derivation this page used to make from whatever the session had
+   * loaded under reported by construction, so an empty answer read as "no other list
+   * has this" when the truth was "nobody asked".
+   */
+  readonly alsoOn: readonly string[] | null;
+  /** Whether the line's own history has a further page to fetch. */
+  readonly hasMoreSettlements: boolean;
+  /** Whether the cross list history has a further page to fetch. */
+  readonly hasMoreItemSettlements: boolean;
   readonly canEdit: boolean;
   readonly canDelete: boolean;
   /** Whether a product is being added or removed right now. */
@@ -68,7 +91,10 @@ export function selectLinePage(input: LinePageInput): LinePageVm | null {
       toSettlementRow(settlement, input, null)
     ),
     loading: input.settlements === undefined,
-    hasMore: false,
+    // From the page the store actually holds, rather than the literal `false` that
+    // made the whole control unreachable (velista plan 0047, section 4). `Show more`
+    // exists in both locales and was read by nothing.
+    hasMore: input.hasMoreSettlements,
   };
 
   const everywhere: HistorySectionVm | null =
@@ -84,7 +110,7 @@ export function selectLinePage(input: LinePageInput): LinePageVm | null {
             )
           ),
           loading: input.itemSettlements === undefined,
-          hasMore: false,
+          hasMore: input.hasMoreItemSettlements,
         };
 
   const purchases = (input.settlements ?? []).filter(
@@ -106,6 +132,7 @@ export function selectLinePage(input: LinePageInput): LinePageVm | null {
         removable: input.canEdit && !input.busy,
       };
     }),
+    namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,
     // The sheet's own function, imported rather than reimplemented. Both screens
     // compute this from the same history and must give the same answer: a sheet
     // saying "every 11 days" over a page saying "every 12" would cost the number the

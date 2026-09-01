@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   HttpStatus,
   Param,
   Patch,
@@ -23,6 +24,8 @@ import {
   SUPERMARKET_PATTERNS,
   type CatalogScopeView,
   type CatalogSuggestResponse,
+  type GetItemsRequest,
+  type GetItemsResult,
   type ItemPage,
   type ItemView,
   type PriceScopePage,
@@ -56,6 +59,7 @@ import {
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
   ListProductGroupsQueryDto,
+  LookupItemsDto,
   PriceScopedQueryDto,
   SearchItemsQueryDto,
   SearchOffersQueryDto,
@@ -369,6 +373,46 @@ export class CatalogItemsController {
       cursor: query.cursor,
       limit: query.limit,
     });
+  }
+
+  /**
+   * A **set** of known products, by id (plan 0053, section 1).
+   *
+   * The read a line makes. A line carries a set of products rather than one, so
+   * naming them through `GET :id` is one request per product fired from a sheet
+   * that opens on a tap; this is that read in one call, in front of the
+   * `item.getMany` pattern that already existed with only a guest caller.
+   *
+   * Three properties, and each of them is load bearing:
+   *
+   * - **Unknown ids are omitted, never an error.** A line outlives a product, and
+   *   a sheet that fails to open because one of five products was withdrawn is a
+   *   worse failure than a sheet that names four.
+   * - **The cap is enforced here**, by {@link LookupItemsDto}, and not merely
+   *   documented on the pattern. A batch read with no ceiling is a listing, and
+   *   plan 0049 section 3 deliberately stopped the catalog being listable.
+   * - **Account authenticated, and not the guest path.** A guest reads the names
+   *   in the basket they were invited to, through the participant authenticated
+   *   surface where velista 0044 put it. A guest reaching a general catalog route
+   *   is a wider hole than that.
+   *
+   * Unscoped, exactly as reading one product is and for that section's reason: the
+   * request already names the things it is about, so it cannot return the catalog,
+   * and a line may reference a product nobody near the reader currently sells.
+   *
+   * `POST` for a read, which is the one thing here that looks wrong and is not:
+   * the identifiers are the request, and at the cap they do not fit in a URL.
+   */
+  @Post('lookup')
+  @ApiContractResponse(ITEM_PATTERNS.getMany, { status: HttpStatus.OK })
+  @ApiProblemResponses({ body: true })
+  @HttpCode(HttpStatus.OK)
+  lookup(@Body() dto: LookupItemsDto): Promise<GetItemsResult> {
+    // No `userId`, which is the pattern's own shape and stated on
+    // `GetItemsRequest`: a product's name is not private, and the guard above
+    // has already established that this caller is somebody.
+    const request: GetItemsRequest = { ids: dto.ids };
+    return this.nats.send<GetItemsResult>(ITEM_PATTERNS.getMany, request);
   }
 
   /**

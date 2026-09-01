@@ -14,6 +14,44 @@
           <p class="products">
             {{ line.productsKey | rokuT: line.productsArgs }}
           </p>
+
+          <!--
+            The names could not be read, which is **not** the line being empty (section
+            1.2). The phrase above still gives the count, because the count is a fact
+            about the line and is known; this is a fact about the request.
+          -->
+          @if (line.namesUnavailable) {
+            <p class="names-failed">{{ 'list.detail.namesFailed' | rokuT }}</p>
+          }
+
+          <!--
+            The same indicators the row carries, from the same function (section 5).
+            The sheet opens from that row, and a row showing "bought" over a header
+            showing nothing is two answers to one question a tap apart.
+          -->
+          @if (line.indicators.length > 0) {
+            <p class="indicators">
+              @for (indicator of line.indicators; track indicator) {
+                <span [class]="'indicator indicator-' + indicator">
+                  @switch (indicator) {
+                    @case ('bought') {
+                      {{ 'line.indicator.bought' | rokuT }}
+                    }
+                    @case ('notAvailable') {
+                      {{ 'line.indicator.notAvailable' | rokuT }}
+                    }
+                    @case ('claimed') {
+                      @if (line.claimedBy; as who) {
+                        {{ 'line.indicator.claimedBy' | rokuT: { name: who } }}
+                      } @else {
+                        {{ 'line.indicator.claimed' | rokuT }}
+                      }
+                    }
+                  }
+                </span>
+              }
+            </p>
+          }
         </div>
 
         <span aria-hidden="true" class="quantity">{{ line.quantity }}</span>
@@ -42,10 +80,20 @@
         @if (line.estimate; as estimate) {
           <div class="fact">
             <dt class="fact-label">{{ 'list.detail.rate' | rokuT }}</dt>
+            <!--
+              Three to six purchases give the phrase, seven and up give the number
+              (section 5). A median over three intervals is a number with no business
+              being one, and the copy for saying so already existed and was read by
+              nothing.
+            -->
             <dd class="fact-value">
-              {{
-                'list.detail.rateValue' | rokuT: { days: estimate.medianDays }
-              }}
+              @if (estimate.rough) {
+                {{ 'list.detail.rateRough' | rokuT }}
+              } @else {
+                {{
+                  'list.detail.rateValue' | rokuT: { days: estimate.medianDays }
+                }}
+              }
             </dd>
           </div>
         }
@@ -136,8 +184,14 @@
                 role="radio"
                 type="button"
               >
+                <!--
+                  A product with no name is drawn as **unnamed**, never as "No products
+                  yet" (section 1.2): it is one of the products this line carries, it is
+                  on screen being offered as a choice, and saying the line has none of
+                  them under a row that is one of them is the defect this plan is about.
+                -->
                 <span class="choice-name">{{
-                  choice.name ?? ('list.page.noProducts' | rokuT)
+                  choice.name ?? ('list.detail.unnamedProduct' | rokuT)
                 }}</span>
                 @if (choice.brand) {
                   <span class="choice-brand">{{ choice.brand }}</span>

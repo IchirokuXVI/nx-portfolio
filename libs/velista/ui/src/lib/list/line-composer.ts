@@ -29,15 +29,14 @@ import {
   type SilenceWatch,
 } from '@portfolio/velista/platform';
 import {
-  BasketIcon,
   MicIcon,
   PlusIcon,
   SpinnerIcon,
-  ProductIcon,
   StopIcon,
   TrashIcon,
 } from '../icons/icons';
 import { QuantityStepper } from './quantity-stepper';
+import { SuggestionList } from './suggestion-list';
 
 /** What the one button at the end of the row is for. */
 export type LineComposerButton = 'add' | 'record';
@@ -126,14 +125,13 @@ export type LineComposerButton = 'add' | 'record';
   selector: 'lib-line-composer',
   imports: [
     RokuTranslatorPipe,
-    BasketIcon,
     PlusIcon,
     MicIcon,
-    ProductIcon,
     StopIcon,
     TrashIcon,
     SpinnerIcon,
     QuantityStepper,
+    SuggestionList,
   ],
   templateUrl: './line-composer.html',
   styleUrl: './line-composer.scss',
@@ -339,23 +337,6 @@ export class LineComposer {
       suggestion.kind === 'group' ? suggestion.itemIds : [suggestion.item.id];
 
     this._send(content, itemIds);
-  }
-
-  /** What a group row says it will do, so choosing it is not a surprise. */
-  groupSummaryArgs(suggestion: CatalogSuggestion): { count: number } {
-    return {
-      count:
-        suggestion.kind === 'group'
-          ? (suggestion.itemIds.length || suggestion.group.itemCount)
-          : 0,
-    };
-  }
-
-  /** One suggestion's name, in the reader's language. */
-  nameOf(suggestion: CatalogSuggestion): string {
-    return suggestion.kind === 'group'
-      ? inLocale(suggestion.group.name, this._locale())
-      : inLocale(suggestion.item.name, this._locale());
   }
 
   /** The one button, pressed. */

@@ -29,6 +29,7 @@ import {
   PresenceStore,
   REALTIME_CLIENT,
   SessionStore,
+  ShoppingProfileStore,
   ZoneStore,
   type AssistantServiceI,
   type CatalogServiceI,
@@ -201,6 +202,7 @@ export class ListPage {
 
   private readonly _assistant = inject<AssistantServiceI>(ASSISTANT_SERVICE);
   private readonly _catalog = inject<CatalogServiceI>(CATALOG_SERVICE);
+  private readonly _profiles = inject(ShoppingProfileStore);
   private readonly _tone = inject(NOTIFICATION_TONE);
   private readonly _voice = inject(VoicePreferences);
 
@@ -933,7 +935,19 @@ export class ListPage {
 
   onComposerQuery(query: string): void {
     this._suggestQuery.set(query);
+
+    // The profiles, read once and only when somebody actually starts typing a product.
+    // Not in the constructor: this page is opened far more often than the catalog is
+    // searched, and the profile is wanted only when it is. The store is app scoped, so
+    // a person who has opened the profiles page or the generation sheet pays nothing.
+    if (!this._profilesAsked && query.trim().length >= SUGGEST_MIN_CHARS) {
+      this._profilesAsked = true;
+      void this._profiles.load();
+    }
   }
+
+  /** Whether this page has already asked for the profiles. See {@link onComposerQuery}. */
+  private _profilesAsked = false;
 
   /**
    * Ask the catalog, at most once per {@link SUGGEST_DEBOUNCE_MS} of quiet.
@@ -958,11 +972,22 @@ export class ListPage {
 
     const timer = setTimeout(() => {
       const seq = (this._suggestSeq += 1);
-      void this._catalog.suggest(query).then((found) => {
-        if (seq === this._suggestSeq) {
-          this.suggestions.set(found);
-        }
-      });
+      // **Scoped to where you shop** (velista plan 0047, section 3). The rule was
+      // documented on `CatalogServiceI.suggest` and in plan 0043 section 6, implemented
+      // in `CatalogApi`, and passed by nobody, which is the worst of the three states
+      // to be in: a reader of either document concluded it worked.
+      //
+      // The active profile, from the same store the profiles page writes. Nothing when
+      // none resolves, which is the documented honest behaviour for somebody who has
+      // set no profile up and is what the server already expects.
+      const profileId = this._profiles.selected()?.id;
+      void this._catalog
+        .suggest(query, profileId === undefined ? undefined : { profileId })
+        .then((found) => {
+          if (seq === this._suggestSeq) {
+            this.suggestions.set(found);
+          }
+        });
     }, SUGGEST_DEBOUNCE_MS);
 
     onCleanup(() => clearTimeout(timer));

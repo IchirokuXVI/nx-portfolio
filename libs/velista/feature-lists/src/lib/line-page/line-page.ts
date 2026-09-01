@@ -13,21 +13,29 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  catalogItemById,
+  CATALOG_SERVICE,
+  ItemNames,
   LineStore,
   ListStore,
   MemberNames,
   SessionStore,
+  ShoppingProfileStore,
   ZoneStore,
+  type CatalogServiceI,
 } from '@portfolio/velista/data-access';
-import { APP_BASE_PATH } from '@portfolio/velista/models';
+import {
+  APP_BASE_PATH,
+  SUGGEST_DEBOUNCE_MS,
+  SUGGEST_MIN_CHARS,
+  type CatalogSuggestion,
+} from '@portfolio/velista/models';
 import {
   appPath,
   lineIdOf,
   listIdOf,
   zoneIdOf,
 } from '@portfolio/velista/platform';
-import { ChevronLeftIcon } from '@portfolio/velista/ui';
+import { ChevronLeftIcon, SuggestionList } from '@portfolio/velista/ui';
 import { selectLinePage } from './select-line-page';
 
 /**
@@ -61,7 +69,7 @@ import { selectLinePage } from './select-line-page';
  */
 @Component({
   selector: 'lib-line-page',
-  imports: [RokuTranslatorPipe, ChevronLeftIcon],
+  imports: [RokuTranslatorPipe, ChevronLeftIcon, SuggestionList],
   templateUrl: './line-page.html',
   styleUrl: './line-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,6 +79,9 @@ export class LinePage {
   private readonly _lists = inject(ListStore);
   private readonly _zones = inject(ZoneStore);
   private readonly _names = inject(MemberNames);
+  private readonly _itemNames = inject(ItemNames);
+  private readonly _catalog = inject<CatalogServiceI>(CATALOG_SERVICE);
+  private readonly _profiles = inject(ShoppingProfileStore);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
@@ -103,6 +114,18 @@ export class LinePage {
     }
   });
 
+  /**
+   * The product names, from the catalog (velista plan 0047, section 1).
+   *
+   * A third effect, keyed on the product set rather than on the line id, so a product
+   * added or removed while the page is open resolves without either history being read
+   * again. Nothing waits for it: the chips draw with no names until it lands.
+   */
+  private readonly _loadNames = effect(() => {
+    const itemIds = this._line()?.itemIds ?? [];
+    untracked(() => void this._itemNames.ensure(itemIds));
+  });
+
   private readonly _line = computed(() =>
     this._lines.linesIn(this.listId()).find((line) => line.id === this.lineId())
   );
@@ -126,12 +149,23 @@ export class LinePage {
       zoneName: this._zones.zoneById(zoneId)?.name ?? null,
       settlements: this._lines.settlementsOf(this.lineId()),
       itemSettlements: this._lines.itemSettlementsOf(this.lineId()),
-      itemNameOf: (itemId) => catalogItemById(itemId),
+      // The catalog, through `ItemNames`, and never the fixture in `catalog-memory`
+      // this used to read (section 1). Every one of its ids missed against a real
+      // catalog, so this page said a line carrying products carried none.
+      itemNameOf: (itemId) => this._itemNames.nameOf(itemId),
+      namesUnavailable: this._itemNames.anyFailed(line?.itemIds ?? []),
       nameOf: (userId) => this._names.nameOf(zoneId, userId),
       listNameOf: (listId) => this._listNameOf(listId),
       callerUserId: this._session.userId(),
       locale: this._localeStore.locale(),
-      alsoOn: this._alsoOn(),
+      // **Null, and not a derivation** (section 5). There is no endpoint that answers
+      // "which of my lists carry this item", and the answer this page used to compute
+      // from whatever the session had loaded under reported by construction, so an
+      // empty one read as "no other list has this" when the truth was "nobody asked".
+      // Backend plan 0053 section 3 adds the query; this is null until it lands.
+      alsoOn: null,
+      hasMoreSettlements: this._lines.hasMoreSettlements(this.lineId()),
+      hasMoreItemSettlements: this._lines.hasMoreItemSettlements(this.lineId()),
       // `WRITE` on an unapproved line, `MANAGE` on anything, which is the same rule
       // the edit sheet follows: a writer whose line has been agreed to cannot quietly
       // change what was agreed to (backend plan 0036, section 4.1).
@@ -171,42 +205,130 @@ export class LinePage {
   }
 
   /**
-   * The reader's other lists carrying this line's products.
+   * The next page of one history, appended (section 4).
    *
-   * Computed from what the client already holds rather than from a request, and that
-   * is the honest scope of it: there is no endpoint that answers "which of my lists
-   * carry this item", so this reports the lists whose lines this session has actually
-   * loaded. It **under reports** by design, exactly as presence does, which is why the
-   * section draws nothing when it is empty rather than claiming there are none
-   * (section 5.3).
-   *
-   * Matched on the product set, so it finds a line carrying the same thing under a
-   * different name, which is the whole reason a line has products at all.
+   * Two methods rather than one taking a scope, because they are two different reads:
+   * the first is one line's, the second is a union over the line's products with a
+   * cursor each. The store holds both, and each is refiltered by the caller's read
+   * access at the moment it is asked for.
    */
-  private _alsoOn(): readonly string[] {
+  async moreThisList(): Promise<void> {
+    await this._lines.loadMoreSettlements(this.lineId());
+  }
+
+  async moreEverywhere(): Promise<void> {
     const line = this._line();
-    if (line === undefined || line.itemIds.length === 0) {
-      return [];
+    if (line !== undefined) {
+      await this._lines.loadMoreItemSettlements(line);
+    }
+  }
+
+  /**
+   * The search that attaches a product to this line (section 2).
+   *
+   * `0043` section 5.3 asked for it and the page shipped a static chip instead, which
+   * drew the affordance and then declined the gesture. A line reached from this page is
+   * frequently a line somebody is correcting, and sending them back to the list page's
+   * composer to add a product to a line they are looking at is the long way round.
+   *
+   * The **composer's own list component**, not a second one, so the ranking rules have
+   * one place to live. What differs is the free text row: the composer offers it,
+   * because a line is free text first, and this does not, because attaching a catalog
+   * product that is not in the catalog is not a thing.
+   */
+  readonly searching = signal(false);
+  readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
+
+  private readonly _query = signal('');
+
+  onQuery(event: Event): void {
+    this._query.set((event.target as HTMLInputElement).value);
+  }
+
+  /**
+   * Ask the catalog, at most once per {@link SUGGEST_DEBOUNCE_MS} of quiet.
+   *
+   * The debounce and the sequence number are the list page's, for its reasons: two
+   * requests can be in flight when somebody types through the beat and they can answer
+   * out of order, so an older answer must not replace a newer one, and comparing the
+   * query is not enough because the same text can be typed twice.
+   */
+  private _seq = 0;
+
+  private readonly _suggestEffect = effect((onCleanup) => {
+    const query = this._query().trim();
+
+    if (query.length < SUGGEST_MIN_CHARS) {
+      untracked(() => this.suggestions.set([]));
+      return;
     }
 
-    const wanted = new Set(line.itemIds);
-    const found: string[] = [];
+    const timer = setTimeout(() => {
+      const seq = (this._seq += 1);
+      // Scoped to where the reader shops (section 3), from the same store the profiles
+      // page writes. Nothing passed when no profile has resolved, which is the
+      // documented behaviour for somebody who has set none up.
+      const profileId = this._profiles.selected()?.id;
+      void this._catalog
+        .suggest(query, profileId === undefined ? undefined : { profileId })
+        .then((found) => {
+          if (seq === this._seq) {
+            this.suggestions.set(found);
+          }
+        });
+    }, SUGGEST_DEBOUNCE_MS);
 
-    for (const zone of this._zones.myZones()) {
-      for (const list of this._lists.listsIn(zone.id)) {
-        if (list.id === this.listId()) {
-          continue;
-        }
-        const carries = this._lines
-          .linesIn(list.id)
-          .some((other) => other.itemIds.some((id) => wanted.has(id)));
-        if (carries) {
-          found.push(`${zone.name} · ${list.name}`);
-        }
-      }
+    onCleanup(() => clearTimeout(timer));
+  });
+
+  /**
+   * Open the search, and make sure a profile has been read.
+   *
+   * Loaded here rather than in the constructor, because this page is opened far more
+   * often than a product is added to a line, and the profile is only wanted when one
+   * is. The store is app scoped, so somebody who has already opened the profiles page
+   * or the generation sheet pays nothing.
+   */
+  startAdding(): void {
+    this.searching.set(true);
+    void this._profiles.load();
+  }
+
+  /** Close it, and clear the words, so reopening does not offer yesterday's matches. */
+  stopAdding(): void {
+    this.searching.set(false);
+    this._query.set('');
+    this.suggestions.set([]);
+  }
+
+  /**
+   * Attach what was chosen.
+   *
+   * A group attaches its members, an item attaches the one, which is exactly what the
+   * composer does with the same row: choosing "milk" gives the household every milk to
+   * trim down, and that trimming is what this page's chips are for.
+   *
+   * The set is **unioned** rather than replaced, and a product already on the line is a
+   * no-op rather than a duplicate: the line's set is a set.
+   */
+  async addProduct(suggestion: CatalogSuggestion): Promise<void> {
+    const line = this._line();
+    if (line === undefined || this.busy()) {
+      return;
     }
 
-    return found;
+    const chosen =
+      suggestion.kind === 'group' ? suggestion.itemIds : [suggestion.item.id];
+    const merged = [...new Set([...line.itemIds, ...chosen])];
+    if (merged.length === line.itemIds.length) {
+      this.stopAdding();
+      return;
+    }
+
+    this.busy.set(true);
+    await this._lines.updateLine(line.id, { itemIds: merged });
+    this.busy.set(false);
+    this.stopAdding();
   }
 
   /** Take one product off the line. An ordinary edit: the set is rewritten whole. */

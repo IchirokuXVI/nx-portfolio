@@ -16,6 +16,16 @@ import type { SettlementOutcome } from './enums';
 export const ESTIMATE_MIN_PURCHASES = 3;
 
 /**
+ * The last purchase count that still reads as a phrase rather than a number
+ * (velista plan 0047, section 5).
+ *
+ * Three to six inclusive gives "every few weeks"; seven and above gives the days. The
+ * floor at {@link ESTIMATE_MIN_PURCHASES} says when there is anything to say at all,
+ * and this says when what there is to say is precise enough to be a number.
+ */
+export const ESTIMATE_ROUGH_TO = 6;
+
+/**
  * One row of either history section (section 5.3).
  *
  * The two sections draw the same row and differ only in what they are a history
@@ -98,6 +108,21 @@ export interface ConsumptionEstimateVm {
   readonly medianDays: number;
   /** How many purchases it was computed from, so the copy can hedge below six. */
   readonly fromPurchases: number;
+  /**
+   * Whether to give the phrase rather than the number (velista plan 0047, section 5).
+   *
+   * True from three purchases up to and including {@link ESTIMATE_ROUGH_TO}, where the
+   * copy reads "every few weeks" rather than "every 11 days". Plan `0043` section 9
+   * and backend `0047` section 9 both left this as a leaning; it is decided here, in
+   * favour of the phrase, because a median computed from three intervals is a number
+   * with no business being one.
+   *
+   * On the view model rather than compared in a template, so the sheet and the page
+   * cannot answer it differently: they draw the same estimate, and one saying "every
+   * 11 days" over the other saying "every few weeks" would cost the number the only
+   * thing it has, which is that somebody trusts it.
+   */
+  readonly rough: boolean;
 }
 
 /**
@@ -120,6 +145,16 @@ export interface LineDetailVm {
    */
   readonly productsKey: string;
   readonly productsArgs: Readonly<Record<string, string | number>>;
+  /**
+   * Whether the product names could not be read (velista plan 0047, section 1.2).
+   *
+   * Separate from having no products, and the separation is the defect this field was
+   * added to fix: a screen that drew "No products yet" because a lookup failed was
+   * telling the reader the opposite of the truth about their own data. A failure draws
+   * the count with no names and says the names could not be loaded; it never says the
+   * line is empty.
+   */
+  readonly namesUnavailable: boolean;
   /**
    * The most recent purchase, or null when there has never been one.
    *
@@ -149,8 +184,23 @@ export interface LineDetailVm {
    * button, which is the honest shape: knowing is not deciding.
    */
   readonly canSettle: boolean;
-  /** The indicators, so the sheet's header agrees with the row it opened from. */
+  /**
+   * The indicators, so the sheet's header agrees with the row it opened from.
+   *
+   * Drawn since velista plan `0047` section 5. It was modelled and passed `[]`, which
+   * made a row showing "bought" open a sheet showing nothing: two answers to one
+   * question, on two surfaces a tap apart.
+   */
   readonly indicators: readonly LineIndicator[];
+  /**
+   * Who is out buying this, for the `claimed` indicator, or null when nobody is.
+   *
+   * A name and not an id, resolved by the container exactly as `LineRowVm.claimedBy`
+   * is and for the header's sake: the row names the person, so a header drawing the
+   * anonymous phrase beside it would be the disagreement {@link indicators} was drawn
+   * to end, one word further in.
+   */
+  readonly claimedBy: string | null;
   /** Whether a settle is in flight, which disables both buttons and says so. */
   readonly busy: boolean;
 }
@@ -188,6 +238,8 @@ export interface LinePageVm {
   readonly listName: string | null;
   readonly zoneName: string | null;
   readonly products: readonly LineItemChipVm[];
+  /** Whether the product names could not be read, per `LineDetailVm.namesUnavailable`. */
+  readonly namesUnavailable: boolean;
   readonly estimate: ConsumptionEstimateVm | null;
   readonly lastPurchase: SettlementRowVm | null;
   readonly thisList: HistorySectionVm;
@@ -202,13 +254,24 @@ export interface LinePageVm {
    */
   readonly everywhere: HistorySectionVm | null;
   /**
-   * The reader's other lists that carry this item, or something close enough.
+   * The reader's other lists that carry this item, or **null when nobody has asked**.
    *
    * An indicator rather than a link, per section 5.3, and filtered to lists the
-   * reader may actually read. Empty draws nothing at all: "no other list has this"
-   * is not information anybody came here for.
+   * reader may actually read.
+   *
+   * Null is the state this field spends its whole life in today, and that is the point
+   * of it (velista plan 0047, section 5). It used to be computed from whatever lists
+   * the session happened to have loaded, which under reported by construction and drew
+   * nothing when it came back empty, so "this is on no other list" and "nobody asked"
+   * were the same picture. **Drawn only when the answer is known to be complete**, and
+   * omitted rather than drawn empty when it is not; backend plan `0053` section 3 adds
+   * the query that can answer it, and until it lands the honest answer is null.
+   *
+   * An empty array, once there is a query behind it, still draws nothing: "no other
+   * list has this" is not information anybody came here for. That is a different
+   * absence from this one and the two must not be collapsed again.
    */
-  readonly alsoOn: readonly string[];
+  readonly alsoOn: readonly string[] | null;
   /** Whether this caller may edit the product set and delete the line. */
   readonly canEdit: boolean;
   readonly canDelete: boolean;

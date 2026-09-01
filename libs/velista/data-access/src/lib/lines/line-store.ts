@@ -14,6 +14,7 @@ import {
   type Line,
   type LineApprovalStatus,
   type LineSettlement,
+  type Page,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
@@ -155,6 +156,30 @@ export class LineStore {
    */
   private readonly _itemSettlements = signal<
     ReadonlyMap<string, readonly LineSettlement[]>
+  >(new Map());
+
+  /**
+   * Where the next page of one line's own history starts, or null when there is none.
+   *
+   * Held so the section can offer "show more" rather than assume there is nothing
+   * (velista plan 0047, section 4): `hasMore` was modelled from the start and passed a
+   * literal `false`, so the whole control was present except the value that would make
+   * it appear.
+   */
+  private readonly _settlementCursor = signal<
+    ReadonlyMap<string, string | null>
+  >(new Map());
+
+  /**
+   * Where the next page of the cross list history starts, **per product**, per line.
+   *
+   * A cursor each because the read is per product and they run out at different times:
+   * one product with ten pages of history beside one with none is the ordinary case for
+   * a line carrying a group, and a single cursor could only ever be right about one of
+   * them.
+   */
+  private readonly _itemCursors = signal<
+    ReadonlyMap<string, ReadonlyMap<string, string | null>>
   >(new Map());
 
   /**
@@ -576,10 +601,47 @@ export class LineStore {
       this._settlements.update((current) =>
         new Map(current).set(lineId, page.items)
       );
+      this._settlementCursor.update((current) =>
+        new Map(current).set(lineId, page.nextCursor)
+      );
     } catch {
       // Deliberately quiet, exactly as `refresh` is. The sheet's own numbers came off
       // the line and are already drawn; a history that did not arrive costs a section
       // and not the screen.
+    }
+  }
+
+  /**
+   * The next page of one line's history, **appended** (velista plan 0047, section 4).
+   *
+   * Appended and never replacing, which is the rule that makes a "show more" on a
+   * history correct rather than merely present: a section that redrew from page two
+   * would drop the recent rows, and those are the ones somebody opened a history to
+   * see.
+   *
+   * Quiet on failure like the first page, and the cursor is left where it was, so the
+   * button stays and pressing it again retries.
+   */
+  async loadMoreSettlements(lineId: string): Promise<void> {
+    const cursor = this._settlementCursor().get(lineId) ?? null;
+    const held = this._settlements().get(lineId);
+    if (cursor === null || held === undefined) {
+      return;
+    }
+
+    try {
+      const page = await this._lines.listSettlements(lineId, {
+        cursor,
+        limit: SETTLEMENTS_PAGE_SIZE,
+      });
+      this._settlements.update((current) =>
+        new Map(current).set(lineId, [...held, ...page.items])
+      );
+      this._settlementCursor.update((current) =>
+        new Map(current).set(lineId, page.nextCursor)
+      );
+    } catch {
+      // As above: a page, not the screen.
     }
   }
 
@@ -615,9 +677,101 @@ export class LineStore {
       this._itemSettlements.update((current) =>
         new Map(current).set(line.id, merged)
       );
+      this._itemCursors.update((current) =>
+        new Map(current).set(line.id, cursorsFrom(line.itemIds, pages))
+      );
     } catch {
       // As above: a section, not the screen.
     }
+  }
+
+  /**
+   * The next page of the cross list history, **appended** (velista plan 0047, section
+   * 4).
+   *
+   * A cursor **per product**, because the read is per product and they exhaust at
+   * different times: a line carrying milk bought weekly and olive oil bought twice a
+   * year has one product with ten pages and one with none, and a single cursor could
+   * only be right about one of them. Only the products that still have one are asked.
+   *
+   * **The filter is applied per page, not once.** Backend plan 0047's rule is that the
+   * cross list item history is filtered by the caller's read access at request time, so
+   * page two is filtered against access as it is when page two is asked for. That falls
+   * out of asking again rather than paging a snapshot, which is the reason this is a
+   * request and not a slice of something already held.
+   *
+   * Re-sorted over the whole set after appending, for the reason the first page is
+   * merged at all: three products' second pages concatenated onto one list is three
+   * histories printed one after another.
+   */
+  async loadMoreItemSettlements(line: Line): Promise<void> {
+    const cursors = this._itemCursors().get(line.id);
+    const held = this._itemSettlements().get(line.id);
+    if (cursors === undefined || held === undefined) {
+      return;
+    }
+
+    // Only the products that have more, and only ones still on the line: a product
+    // taken off between the two pages has no business contributing a second one.
+    const asking = line.itemIds.filter(
+      (itemId) => (cursors.get(itemId) ?? null) !== null
+    );
+    if (asking.length === 0) {
+      return;
+    }
+
+    try {
+      const pages = await Promise.all(
+        asking.map((itemId) =>
+          this._lines.listItemSettlements(itemId, {
+            cursor: cursors.get(itemId) ?? undefined,
+            limit: SETTLEMENTS_PAGE_SIZE,
+          })
+        )
+      );
+
+      const merged = [...held, ...pages.flatMap((page) => page.items)].sort(
+        (a, b) => b.settledAt.getTime() - a.settledAt.getTime()
+      );
+
+      this._itemSettlements.update((current) =>
+        new Map(current).set(line.id, merged)
+      );
+      this._itemCursors.update((current) => {
+        const next = new Map(cursors);
+        asking.forEach((itemId, index) => {
+          next.set(itemId, pages[index].nextCursor);
+        });
+        return new Map(current).set(line.id, next);
+      });
+    } catch {
+      // As above: a page, not the screen.
+    }
+  }
+
+  /** Whether one line's own history has a further page. */
+  hasMoreSettlements(lineId: string): boolean {
+    return (this._settlementCursor().get(lineId) ?? null) !== null;
+  }
+
+  /**
+   * Whether the cross list history has a further page, from **any** of the products.
+   *
+   * Any rather than all: the section is one merged history, so it has more to show
+   * while a single product does, and a control that waited for every product to be
+   * exhausted would hide rows that exist.
+   */
+  hasMoreItemSettlements(lineId: string): boolean {
+    const cursors = this._itemCursors().get(lineId);
+    if (cursors === undefined) {
+      return false;
+    }
+    for (const cursor of cursors.values()) {
+      if (cursor !== null) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -836,6 +990,11 @@ export class LineStore {
     // through twenty lists would hold every settlement it had ever read.
     this._settlements.update((current) => without(current, lineIds));
     this._itemSettlements.update((current) => without(current, lineIds));
+    // And their cursors, which are the same cache by another name: a cursor kept past
+    // the rows it points into would offer a second page of a history that has been
+    // dropped, and the append would land on nothing.
+    this._settlementCursor.update((current) => without(current, lineIds));
+    this._itemCursors.update((current) => without(current, lineIds));
     // The claims need no eviction of their own any more: they are derived from the
     // lines, and the lines have just gone.
     this._setState(listId, 'idle');
@@ -1244,6 +1403,24 @@ export class LineStore {
 /** Whether a failure is the gateway refusing a write for lack of access. */
 export function isForbidden(error: unknown): boolean {
   return error instanceof GatewayError && error.code === 'forbidden';
+}
+
+/**
+ * The next cursor of each product's page, keyed by product.
+ *
+ * Positional, because the pages were fetched with `Promise.all` over the same array
+ * and the two therefore line up. Written as its own function so that the pairing is
+ * stated once rather than assumed at both call sites.
+ */
+function cursorsFrom(
+  itemIds: readonly string[],
+  pages: readonly Page<LineSettlement>[]
+): ReadonlyMap<string, string | null> {
+  const cursors = new Map<string, string | null>();
+  itemIds.forEach((itemId, index) => {
+    cursors.set(itemId, pages[index]?.nextCursor ?? null);
+  });
+  return cursors;
 }
 
 /** A copy of `map` with `keys` removed, or `map` itself when it holds none of them. */

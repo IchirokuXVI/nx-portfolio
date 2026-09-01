@@ -26,6 +26,48 @@
   color: var(--app-text-muted);
 }
 
+// The names could not be read. Amber rather than coral: nothing is broken about the
+// line, and the sheet below this is entirely usable. It is a piece of missing text,
+// not a failure to record something (plan 0047, section 1.2).
+.names-failed {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-2xs);
+  color: var(--app-action-quiet-fg);
+}
+
+// The row's indicators, drawn under the products phrase and in the row's own colours.
+// Smaller than the row's, because here they are agreeing with something the reader has
+// just tapped rather than announcing it (section 5).
+.indicators {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2) var(--app-space-4);
+  margin: var(--app-space-2) 0 0;
+}
+
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  font-size: var(--app-text-2xs);
+  white-space: nowrap;
+}
+
+.indicator-bought {
+  color: var(--app-status-success-fg);
+}
+
+.indicator-notAvailable {
+  color: var(--app-status-danger-fg);
+}
+
+// Somebody is out buying this: a thing happening now that will stop happening, and
+// never a sign that the line has been dealt with.
+.indicator-claimed {
+  color: var(--app-status-info-fg);
+}
+
 // The same pill the reel rests in, and deliberately **not** the reel: this sheet is
 // where you report what happened, and a second control for the same number two taps
 // deeper would be two ways to say different things about one line.

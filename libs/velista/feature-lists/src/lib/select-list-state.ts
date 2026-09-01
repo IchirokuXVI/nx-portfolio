@@ -318,8 +318,14 @@ function isSettled(line: Line): boolean {
  * The order is bought, then missing, then claimed: two facts about the record and then
  * the one live thing, so a row reads as history followed by news rather than the other
  * way round.
+ *
+ * **Exported since velista plan 0047 section 5**, for the detail sheet's header. The
+ * sheet opens from a row and has to agree with it, and the only way two surfaces agree
+ * about a rule made of three unrelated facts is by calling the same function: a header
+ * that recomputed "bought when the quantity is zero, unless nothing was ever bought"
+ * would be the second copy this comment already warns about.
  */
-function indicatorsFor(
+export function indicatorsFor(
   line: Line,
   claimedByUserId: string | null
 ): readonly LineIndicator[] {

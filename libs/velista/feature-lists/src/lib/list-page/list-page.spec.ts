@@ -15,18 +15,21 @@ import {
   fakeListStore,
   fakeMemberNames,
   fakePresenceStore,
+  fakeShoppingProfileStore,
   fakeZoneStore,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
   provideFakePresenceStore,
   provideFakeSessionStore,
+  provideFakeShoppingProfileStore,
   provideFakeZoneStore,
   REALTIME_CLIENT,
   RealtimeMemory,
   type FakeLineStore,
   type FakeListStore,
   type FakePresenceOptions,
+  type FakeShoppingProfileStore,
 } from '@portfolio/velista/data-access';
 import type {
   Line,
@@ -166,6 +169,7 @@ async function render(options: Options = {}): Promise<{
   storage: Map<string, string>;
   router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
   tone: { play: jest.Mock };
+  profiles: FakeShoppingProfileStore;
 }> {
   TestBed.resetTestingModule();
 
@@ -187,6 +191,7 @@ async function render(options: Options = {}): Promise<{
     complete: options.complete ?? true,
   });
   const realtime = new RealtimeMemory();
+  const profiles = fakeShoppingProfileStore();
   const storage = options.storage ?? new Map<string, string>();
   const router = {
     navigate: jest.fn().mockResolvedValue(true),
@@ -224,6 +229,10 @@ async function render(options: Options = {}): Promise<{
       // typed path, and a real implementation nobody calls is cheaper to keep honest
       // than a mock that has to be re-taught what a suggestion looks like.
       { provide: CATALOG_SERVICE, useClass: CatalogMemory },
+      // The scope those suggestions are narrowed to (plan 0047, section 3): the
+      // composer passes the active profile's id, so the store has to be here even
+      // for the specs that never open the dropdown.
+      provideFakeShoppingProfileStore(profiles),
       // The blip that says a recording left the device. A fake, so a spec can ask
       // whether it was played without a browser and without making a noise.
       { provide: NOTIFICATION_TONE, useValue: tone },
@@ -235,7 +244,7 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, lines, lists, realtime, storage, router, tone };
+  return { fixture, lines, lists, realtime, storage, router, tone, profiles };
 }
 
 /**

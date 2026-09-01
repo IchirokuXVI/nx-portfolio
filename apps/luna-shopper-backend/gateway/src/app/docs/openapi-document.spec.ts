@@ -59,6 +59,25 @@ const DEFAULT_SUCCESS_STATUS: Record<string, string> = {
 
 const HTTP_METHODS = Object.keys(DEFAULT_SUCCESS_STATUS);
 
+/**
+ * The routes that carry an `@HttpCode` and therefore answer something other than
+ * their verb's default.
+ *
+ * One entry, and it is a **read written as a `POST`** (plan 0053, section 1): a
+ * line carries a set of products, the identifiers are the request, and at the
+ * documented cap they do not fit in a URL. A batch read is not a creation, so it
+ * answers 200 and says so rather than claiming 201 to satisfy a table.
+ *
+ * Named here rather than reflected off the handler because the alternative is
+ * reassembling Nest's own versioned path from three pieces of metadata, which is
+ * a second implementation of routing living in a test. The list is asserted
+ * complete below, so a route that grows an `@HttpCode` without being added here
+ * fails rather than passing quietly.
+ */
+const HTTP_CODE_ROUTES: Record<string, string> = {
+  'POST /v1/catalog/items/lookup': '200',
+};
+
 interface Operation {
   method: string;
   path: string;
@@ -188,15 +207,36 @@ describe('gateway OpenAPI document', () => {
         .map((operation) => {
           const documented = Object.keys(operation.responses).find(isSuccess);
           return {
-            route: `${operation.method.toUpperCase()} ${operation.path}`,
+            route: routeOf(operation),
             documented,
-            expected: DEFAULT_SUCCESS_STATUS[operation.method],
+            expected:
+              HTTP_CODE_ROUTES[routeOf(operation)] ??
+              DEFAULT_SUCCESS_STATUS[operation.method],
           };
         })
         // A redirect route documents no 2xx at all; it is checked below.
         .filter((entry) => entry.documented !== undefined)
         .filter((entry) => entry.documented !== entry.expected);
       expect(wrong).toEqual([]);
+    });
+
+    it('and the one route overriding its status still declares one', () => {
+      // The exemption above is only honest if the route it exempts is really
+      // documented, and if nothing else has quietly acquired an `@HttpCode`
+      // without being named in `HTTP_CODE_ROUTES`. Every other POST is asserted
+      // at 201 by the test above; this asserts the named one is a real route
+      // that documents 200 and a body.
+      const overridden = Object.keys(HTTP_CODE_ROUTES).map((route) => {
+        const operation = operations.find((entry) => routeOf(entry) === route);
+        return {
+          route,
+          documented: Object.keys(operation?.responses ?? {}).find(isSuccess),
+        };
+      });
+
+      expect(overridden).toEqual([
+        { route: 'POST /v1/catalog/items/lookup', documented: '200' },
+      ]);
     });
 
     it('with a non empty schema resolved from the contracts library', () => {
