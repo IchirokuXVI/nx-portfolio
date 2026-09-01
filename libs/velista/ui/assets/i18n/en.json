@@ -399,9 +399,6 @@
     "readOnly": {
       "banner": "You can read this list, not change it"
     },
-    "ticking": {
-      "notMine": "Add anything you need. Ticking things off is for whoever does the shop"
-    },
     "line": {
       "awaitingApproval": "Waiting for approval",
       "rejected": "Turned down",
@@ -575,6 +572,9 @@
       "body": "Its buy history goes with it. A line at zero keeps its history and costs nothing; deleting is for things this list should not know about any more.",
       "confirm": "Delete the line",
       "cancel": "Keep it"
+    },
+    "buying": {
+      "notMine": "Anybody can add to this list. Buying is for whoever does the shopping"
     }
   },
   "account": {
