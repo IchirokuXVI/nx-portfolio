@@ -1,4 +1,5 @@
 export * from './lib/access-token-expiry';
+export * from './lib/app-history';
 export * from './lib/app-path';
 export * from './lib/app-resumed';
 export * from './lib/app-updates';
@@ -6,7 +7,6 @@ export * from './lib/audio-capture';
 export * from './lib/audio-recorder';
 export * from './lib/browser-facade';
 export * from './lib/connection-state';
-export * from './lib/history-entries';
 export * from './lib/install-state';
 export * from './lib/install-store';
 export * from './lib/notification-tone';

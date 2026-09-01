@@ -1,6 +1,7 @@
 import { Location } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
+import { AppHistory } from './app-history';
 import { PageNavigation } from './page-navigation';
 
 /**
@@ -10,8 +11,14 @@ import { PageNavigation } from './page-navigation';
  * to a fixed parent fails, which is the defect this service exists to fix: a list
  * opened from the dashboard used to send its reader to a group screen they had never
  * asked to see.
+ *
+ * The other direction is the reason `fallbackUrl` is required rather than optional. A
+ * back button with nothing of ours behind it may not pop, because what is behind it is
+ * another site. Which arrivals leave nothing of ours behind is `AppHistory`'s subject,
+ * and `app-history.spec.ts` works through them; this spec only cares that a no sends
+ * the reader to the URL the screen named.
  */
-function setUp(state: unknown): {
+function setUp(entryBehind: boolean): {
   pages: PageNavigation;
   back: jest.Mock;
   navigateByUrl: jest.Mock;
@@ -24,7 +31,8 @@ function setUp(state: unknown): {
   TestBed.configureTestingModule({
     providers: [
       { provide: Router, useValue: { navigateByUrl } },
-      { provide: Location, useValue: { back, getState: () => state } },
+      { provide: Location, useValue: { back } },
+      { provide: AppHistory, useValue: { hasEntryBehind: () => entryBehind } },
     ],
   });
 
@@ -33,7 +41,7 @@ function setUp(state: unknown): {
 
 describe('PageNavigation', () => {
   it('pops the entry behind this one, whatever page that is', async () => {
-    const { pages, back, navigateByUrl } = setUp({ navigationId: 4 });
+    const { pages, back, navigateByUrl } = setUp(true);
 
     await pages.back('/velista/en/zones/z1');
 
@@ -41,10 +49,11 @@ describe('PageNavigation', () => {
     expect(navigateByUrl).not.toHaveBeenCalled();
   });
 
-  it('walks to the parent when the session began on this page', async () => {
-    // A shared link opened cold. Nothing of this app's is behind it, so popping would
-    // leave the app, and an inert button is not an option either.
-    const { pages, back, navigateByUrl } = setUp({ navigationId: 1 });
+  it('walks to the fallback when nothing of this app is behind the page', async () => {
+    // A shared link opened cold, and every arrival that only looks deeper than it is.
+    // Popping would leave the app for whichever site linked the reader here, and an
+    // inert button is not an option either.
+    const { pages, back, navigateByUrl } = setUp(false);
 
     await pages.back('/velista/en/zones/z1');
 
@@ -53,14 +62,5 @@ describe('PageNavigation', () => {
     // a step forward and gets an entry. Only a sheet, whose URL has to stop existing,
     // replaces its own.
     expect(navigateByUrl).toHaveBeenCalledWith('/velista/en/zones/z1');
-  });
-
-  it('walks to the parent when the history says nothing at all', async () => {
-    const { pages, back, navigateByUrl } = setUp(null);
-
-    await pages.back('/velista/en/home');
-
-    expect(back).not.toHaveBeenCalled();
-    expect(navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
   });
 });

@@ -1,7 +1,7 @@
 import { Location } from '@angular/common';
 import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
-import { hasEntryBehind } from './history-entries';
+import { AppHistory } from './app-history';
 
 /**
  * How a sheet leaves the screen, so the back button never brings it back.
@@ -21,15 +21,17 @@ import { hasEntryBehind } from './history-entries';
 export class SheetNavigation {
   private readonly _router = inject(Router);
   private readonly _location = inject(Location);
+  private readonly _history = inject(AppHistory);
 
   /**
    * Cancel, Escape, the scrim, the back button itself, and a save that returns to the
    * page the sheet was covering.
    *
-   * `fallbackUrl` is that page, and it is used only when this sheet is the first thing
-   * the document navigated to: its URL was opened directly, or the tab was reloaded
-   * with the sheet on screen. There is nothing to pop in that case, so the sheet's
-   * entry is replaced instead, which keeps it out of the stack there too.
+   * `fallbackUrl` is that page, and it is used when this sheet's entry is the one the
+   * document loaded on: its URL was opened directly, or the tab was reloaded with the
+   * sheet on screen. Nothing this app wrote is behind it, and what is behind it is
+   * another site, so the sheet's entry is replaced instead. That keeps the sheet out
+   * of the stack there too and keeps the exit inside velista.
    */
   async dismiss(fallbackUrl: string): Promise<void> {
     if (this._openedOverAPage()) {
@@ -60,6 +62,6 @@ export class SheetNavigation {
    * wrong the other way would send somebody out of the app.
    */
   private _openedOverAPage(): boolean {
-    return hasEntryBehind(this._location);
+    return this._history.hasEntryBehind();
   }
 }
