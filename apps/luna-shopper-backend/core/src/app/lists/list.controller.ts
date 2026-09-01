@@ -28,6 +28,8 @@ import {
   type ListLinesRequest,
   type ListListsRequest,
   type ListPage,
+  type ListsHoldingItemRequest,
+  type ListsHoldingItemResult,
   type ListView,
   type ReorderLinesRequest,
   type SetCommentTranscriptionRequest,
@@ -83,6 +85,13 @@ export class ListController {
   @MessagePattern(LIST_PATTERNS.list)
   listLists(@Payload() req: ListListsRequest): Promise<ListPage> {
     return this.lists.list(req);
+  }
+
+  @MessagePattern(LIST_PATTERNS.holdingItem)
+  holdingItem(
+    @Payload() req: ListsHoldingItemRequest
+  ): Promise<ListsHoldingItemResult> {
+    return this.lists.holdingItem(req);
   }
 
   @MessagePattern(LINE_PATTERNS.add)

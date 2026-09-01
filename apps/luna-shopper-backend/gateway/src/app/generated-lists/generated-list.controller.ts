@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
+import { BasketPresenceService } from './basket-presence.service';
 import {
   AddGeneratedListLineDto,
   CreateGeneratedListDto,
@@ -52,7 +53,10 @@ import {
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'generated-lists', version: '1' })
 export class GeneratedListController {
-  constructor(private readonly nats: NatsClient) {}
+  constructor(
+    private readonly nats: NatsClient,
+    private readonly presence: BasketPresenceService
+  ) {}
 
   /**
    * Compose a basket from the caller's chosen sources.
@@ -76,18 +80,39 @@ export class GeneratedListController {
     );
   }
 
-  /** The caller's baskets, newest first. Archived ones are hidden by default. */
+  /**
+   * The caller's baskets, newest first. Archived ones are hidden by default.
+   *
+   * The page comes back from core with everything but one number: how many
+   * people are in each basket right now (plan 0053, section 2). Presence is a
+   * Redis room the realtime service writes and core cannot see, so it is filled
+   * in here, on the way out, from the same store the sockets broadcast.
+   *
+   * One pipelined read for the whole page rather than a request per card, which
+   * is what velista `0049` section 4 refuses to spend, and it costs the captions
+   * rather than the page when Redis is unreachable.
+   */
   @Get()
   @ApiContractResponse(GENERATED_LIST_PATTERNS.listMine)
   @ApiProblemResponses({ auth: true })
-  listMine(
+  async listMine(
     @AuthUser() user: CurrentUser,
     @Query() query: ListGeneratedListsQueryDto
   ): Promise<GeneratedListPage> {
-    return this.nats.send<GeneratedListPage>(GENERATED_LIST_PATTERNS.listMine, {
-      userId: user.userId,
-      ...query,
-    });
+    const page = await this.nats.send<GeneratedListPage>(
+      GENERATED_LIST_PATTERNS.listMine,
+      { userId: user.userId, ...query }
+    );
+    const present = await this.presence.countsFor(
+      page.items.map((item) => item.id)
+    );
+    return {
+      ...page,
+      items: page.items.map((item) => ({
+        ...item,
+        presentCount: present.get(item.id) ?? 0,
+      })),
+    };
   }
 
   @Get(':id')

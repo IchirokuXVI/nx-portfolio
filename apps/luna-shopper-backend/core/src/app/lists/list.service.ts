@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  LIST_HOLDING_ITEM_LIMITS,
   ListPermission,
   RealtimeEvent,
   ZoneRole,
@@ -13,6 +14,8 @@ import {
   type ListMyAccessChangedEvent,
   type ListOrder,
   type ListPage,
+  type ListsHoldingItemRequest,
+  type ListsHoldingItemResult,
   type ListView,
   type SetListAccessRequest,
   type UpdateListRequest,
@@ -22,6 +25,7 @@ import {
   decodeCursor,
   encodeCursor,
   ForbiddenException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, In, Repository, type SelectQueryBuilder } from 'typeorm';
 import { ListAccess, ShoppingList, ZoneMembership } from '../entities';
@@ -34,12 +38,24 @@ import {
   isZoneStaff,
   ListAccessService,
 } from './list-access.service';
+import {
+  LISTS_HOLDING_ITEM_SQL,
+  type ListHoldingItemRow,
+} from './list-holding.sql';
 import { EMPTY_LIST_COUNTS, toListView } from './list.mappers';
 import {
   SHARED_WITH_ZONE_PERMISSIONS,
   SharedListGrantService,
   type GrantedAccess,
 } from './shared-list-grant.service';
+
+/**
+ * Canonical UUID shape, for validating the cross-service catalog `itemId` (plan
+ * 0053, section 3). The same check `SettlementService` applies to the same field,
+ * for the same reason: core does not hold the catalog and cannot ask it.
+ */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ListCursor {
   order: ListOrder;
@@ -588,6 +604,58 @@ export class ListService {
         : null;
 
     return { items, nextCursor };
+  }
+
+  /**
+   * Which lists still want this product (plan 0053, section 3).
+   *
+   * The read behind a line screen's "also on Weekly shop" indicator, which until
+   * now was computed from whatever lists the client happened to have loaded and
+   * therefore under reported without being able to say so.
+   *
+   * **Not paginated, and capped instead.** What it feeds is a caption, and a
+   * cursor would turn it into a listing of every readable list that happens to
+   * want milk, which is the search plan 0049 section 3 stopped the catalog being.
+   * One row past the cap is read so the answer can say the cap bit.
+   *
+   * **No zone membership is required up front**, unlike every other read here:
+   * the question spans zones by definition, and there is no one zone to be
+   * approved in. The filtering is the whole of the authorization, applied per
+   * candidate row at request time, so a zone the caller has left contributes
+   * nothing the moment they leave it.
+   *
+   * The item id is checked for shape rather than existence. Core does not hold
+   * the catalog and asking it would be a round trip to learn nothing this read
+   * needs: an id that names no product simply matches no line. What the check
+   * does buy is that a caller with **no** product cannot ask this question by
+   * accident and read an empty array as "on no other list" (velista `0047`
+   * section 5 draws the two differently and has to be able to tell).
+   */
+  async holdingItem(
+    req: ListsHoldingItemRequest
+  ): Promise<ListsHoldingItemResult> {
+    if (!UUID_PATTERN.test(req.itemId ?? '')) {
+      throw new ValidationException('itemId must be a valid item reference', {
+        messageArgs: { field: 'itemId' },
+      });
+    }
+
+    const cap = LIST_HOLDING_ITEM_LIMITS.maxLists;
+    const rows = await this.lists.query<ListHoldingItemRow[]>(
+      LISTS_HOLDING_ITEM_SQL,
+      [req.itemId, req.userId, req.excludeListId ?? null, cap + 1]
+    );
+
+    return {
+      lists: rows.slice(0, cap).map((row) => ({
+        listId: row.listId,
+        name: row.name,
+        zoneId: row.zoneId,
+        zoneName: row.zoneName,
+        quantity: row.quantity,
+      })),
+      hasMore: rows.length > cap,
+    };
   }
 
   /**

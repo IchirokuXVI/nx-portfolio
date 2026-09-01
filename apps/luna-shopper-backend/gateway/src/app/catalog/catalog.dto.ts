@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ITEM_LOOKUP_LIMITS,
   ItemCategory,
   PriceScopeKind,
   UnitOfMeasure,
@@ -30,6 +31,27 @@ import {
  * cannot turn a search into a scan of every price in the catalog.
  */
 const MAX_PRICE_SCOPES = 20;
+
+/**
+ * The products a screen needs the names of, by id (plan 0053, section 1).
+ *
+ * **The cap is enforced here and not merely documented.** A batch read with no
+ * ceiling is a listing, and plan 0049 section 3 deliberately stopped the catalog
+ * being listable; {@link ITEM_LOOKUP_LIMITS.maxIds} is spread from the contract
+ * rather than written again, so the route and the message cannot disagree about
+ * what five hundred means.
+ *
+ * Every id is checked for shape, which costs nothing and means a malformed id
+ * fails as a bad request rather than reaching a `WHERE id = ANY(...)` as a cast
+ * error from inside catalog.
+ */
+export class LookupItemsDto {
+  @ApiProperty({ type: [String], maxItems: ITEM_LOOKUP_LIMITS.maxIds })
+  @IsArray()
+  @ArrayMaxSize(ITEM_LOOKUP_LIMITS.maxIds)
+  @IsUUID('all', { each: true })
+  ids!: string[];
+}
 
 /** A localized text value carrying at least English and Spanish (plan 0012). */
 export class LocalizedTextDto {

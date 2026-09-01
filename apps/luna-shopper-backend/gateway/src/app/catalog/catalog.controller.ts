@@ -23,6 +23,8 @@ import {
   SUPERMARKET_PATTERNS,
   type CatalogScopeView,
   type CatalogSuggestResponse,
+  type GetItemsRequest,
+  type GetItemsResult,
   type ItemPage,
   type ItemView,
   type PriceScopePage,
@@ -56,6 +58,7 @@ import {
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
   ListProductGroupsQueryDto,
+  LookupItemsDto,
   PriceScopedQueryDto,
   SearchItemsQueryDto,
   SearchOffersQueryDto,
@@ -369,6 +372,49 @@ export class CatalogItemsController {
       cursor: query.cursor,
       limit: query.limit,
     });
+  }
+
+  /**
+   * Several known products, in one round trip (plan 0053, section 1).
+   *
+   * A line carries a **set** of products (`0048`'s `itemSetHash` hashes that
+   * set), so resolving one line's names through `GET :id` is one request per
+   * product from a sheet that opens on a tap. That is what velista shipped a
+   * fixture instead of, and what this exists to replace.
+   *
+   * Three things about its shape:
+   *
+   * - **Unknown ids are omitted, not an error.** A line can outlive a product. A
+   *   sheet that fails to open because one of five products was withdrawn is a
+   *   worse failure than a sheet that names four, so the caller matches the
+   *   answer back by id and draws what it got.
+   * - **Unscoped**, exactly as reading one product is: a line may reference an
+   *   item nobody near the caller sells, and the product existing and the price
+   *   being absent are different answers.
+   * - **`POST` for a read**, which is the one uncomfortable thing here and is
+   *   forced by the cap. Five hundred UUIDs is roughly eighteen kilobytes of
+   *   query string, comfortably past Node's sixteen kilobyte header limit, so a
+   *   `GET` carrying repeated `id` parameters would answer 431 at exactly the
+   *   size the contract says is allowed. The ids go in the body instead.
+   *
+   * It therefore answers **201**, like every other POST in this gateway, and
+   * nothing is created. 200 would read better, and so would it on
+   * `POST /v1/assistant`; the whole surface follows Nest's default statuses with
+   * no `@HttpCode` anywhere and `openapi-document.spec.ts` enforces that as a
+   * house rule, so breaking it here to be tidier would cost a red test and a
+   * precedent.
+   *
+   * Account authenticated, and **not** the guest path. A basket's composition
+   * stays inside the participant authenticated surface where velista `0044` put
+   * it: a guest reaching a general catalog route is a wider hole than a guest
+   * reading the names in the basket they were invited to.
+   */
+  @Post('lookup')
+  @ApiContractResponse(ITEM_PATTERNS.getMany, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
+  lookup(@Body() dto: LookupItemsDto): Promise<GetItemsResult> {
+    const req: GetItemsRequest = { ids: dto.ids };
+    return this.nats.send<GetItemsResult>(ITEM_PATTERNS.getMany, req);
   }
 
   /**

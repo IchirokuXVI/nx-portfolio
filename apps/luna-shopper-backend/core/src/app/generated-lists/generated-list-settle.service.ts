@@ -27,12 +27,14 @@ import {
   LineSettlement,
   ListLine,
   ListLineItem,
+  ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
 import { LineClaimService } from './line-claim.service';
+import { namesOfLists } from './list-names';
 
 /**
  * Settling a basket back to the lines it came from (plan 0051, section 6).
@@ -73,6 +75,10 @@ export class GeneratedListSettleService {
     private readonly origins: Repository<GeneratedListLineOrigin>,
     @InjectRepository(GeneratedListLineOption)
     private readonly options: Repository<GeneratedListLineOption>,
+    // Read only, and only to name an origin this settle could not reach, for a
+    // reader who passes section 5.2 (plan 0053, section 4).
+    @InjectRepository(ShoppingList)
+    private readonly shoppingLists: Repository<ShoppingList>,
     private readonly sharing: GeneratedListSharingService,
     private readonly generated: GeneratedListService,
     private readonly claims: LineClaimService,
@@ -130,6 +136,11 @@ export class GeneratedListSettleService {
           lineId: origin.lineId,
           listId: origin.listId,
           reason: 'ACCESS_GONE',
+          // Filled in on the way out, for a reader entitled to them (plan 0053,
+          // section 4). Null here rather than absent so the shape is complete
+          // whichever branch of the redaction the answer takes.
+          listName: null,
+          zoneName: null,
         });
         continue;
       }
@@ -178,6 +189,8 @@ export class GeneratedListSettleService {
             lineId: origin.lineId,
             listId: origin.listId,
             reason: 'ORIGIN_DELETED',
+            listName: null,
+            zoneName: null,
           });
           continue;
         }
@@ -342,14 +355,35 @@ export class GeneratedListSettleService {
     // The count survives the redaction and the names do not (section 6.4): a
     // shopper who reached two households out of three has to be told, and only
     // whose the third was is gated.
-    return seesZoneData
-      ? {
-          line: view,
-          skippedCount: skipped.length,
-          settlements: written,
-          skipped,
-        }
-      : { line: view, skippedCount: skipped.length };
+    if (!seesZoneData) {
+      return { line: view, skippedCount: skipped.length };
+    }
+
+    // Named only now, and only on this branch (plan 0053, section 4). The basket
+    // screen reaches no zone list store and deliberately never will
+    // (velista `settle-sheet.ts:333`), so an unreachable origin was a count and
+    // never a name; the composition belongs on this side, where the access
+    // question has already been answered.
+    //
+    // One query for every skipped origin rather than one each, and none at all
+    // in the ordinary case, which is the one where nothing was skipped.
+    const names = await namesOfLists(
+      this.shoppingLists,
+      skipped.map((entry) => entry.listId)
+    );
+    return {
+      line: view,
+      skippedCount: skipped.length,
+      settlements: written,
+      skipped: skipped.map((entry) => {
+        const named = names.get(entry.listId);
+        return {
+          ...entry,
+          listName: named?.name ?? null,
+          zoneName: named?.zoneName ?? null,
+        };
+      }),
+    };
   }
 
   /**

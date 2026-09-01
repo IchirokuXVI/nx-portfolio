@@ -129,6 +129,68 @@ export const ACTIVE_OVERLAP_SQL = `
     AND o."lineId" = ANY($2)
 `;
 
+/**
+ * The four numbers a history row shows, for a whole page of baskets (plan 0053,
+ * section 2). `$1` is the basket ids.
+ *
+ * `lineCount` and `settledLineCount` are exactly what the query builder this
+ * replaced computed, down to the `>=` that defines finished; the two outcome
+ * counts are what plan 0053 adds, and `settledLineCount` is deliberately still
+ * their sum rather than being redefined as one of them. `NOT_AVAILABLE` closes a
+ * line's outstanding amount exactly as a purchase does, so it has always meant
+ * "nothing left to do on this line" and it still does.
+ *
+ * Raw SQL rather than the query builder it grew out of, because the outcome is
+ * not on the line: it is the newest settlement's, and TypeORM does not express a
+ * `LEFT JOIN LATERAL` and does not rewrite camelCase columns inside a raw
+ * `addSelect` expression either, so half of this was going to be hand quoted
+ * whichever way it was written.
+ *
+ * The lateral is `LIMIT 1` per line over `generated_list_lines`' settlements,
+ * which is the same "what did the last act on this line say" that
+ * `GeneratedListService.lastOutcomes` answers for a basket being drawn. A line
+ * with no settlement produces a null outcome and is counted by neither filter,
+ * which is right: a finished line always has one, and an unfinished line is
+ * outside both filters anyway.
+ *
+ * Ordering by `createdAt` and then `id` matches `lastOutcomes` exactly. A settle
+ * writes one row per origin it touched and all of them carry the same outcome,
+ * so which of a single act's rows comes last cannot change the answer.
+ */
+export const GENERATED_LIST_COUNTS_SQL = `
+  SELECT l."generatedListId" AS "generatedListId",
+         count(*)::int AS "lineCount",
+         count(*) FILTER (
+           WHERE l."settledQuantity" >= l.quantity
+         )::int AS "settledLineCount",
+         count(*) FILTER (
+           WHERE l."settledQuantity" >= l.quantity AND s."outcome" = 'BOUGHT'
+         )::int AS "boughtLineCount",
+         count(*) FILTER (
+           WHERE l."settledQuantity" >= l.quantity
+             AND s."outcome" = 'NOT_AVAILABLE'
+         )::int AS "notAvailableLineCount"
+  FROM "generated_list_lines" l
+  LEFT JOIN LATERAL (
+    SELECT ls."outcome"
+    FROM "line_settlements" ls
+    WHERE ls."generatedListLineId" = l.id
+    ORDER BY ls."createdAt" DESC, ls.id DESC
+    LIMIT 1
+  ) s ON TRUE
+  WHERE l."generatedListId" = ANY($1::uuid[])
+  GROUP BY l."generatedListId"
+`;
+
+/** One row of {@link GENERATED_LIST_COUNTS_SQL}. */
+export interface GeneratedListCountsRow {
+  generatedListId: string;
+  lineCount: number;
+  settledLineCount: number;
+  boughtLineCount: number;
+  notAvailableLineCount: number;
+}
+
 /** One row of {@link WRITABLE_LISTS_SQL}. */
 export interface WritableListRow {
   listId: string;

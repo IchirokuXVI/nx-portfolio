@@ -14,7 +14,7 @@ import {
   UnauthorizedException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import {
   GeneratedList,
   GeneratedListLine,
@@ -22,9 +22,10 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { toBasketView } from './generated-list.mappers';
 import { GeneratedListService } from './generated-list.service';
-import { GeneratedListSharingService } from './generated-list-sharing.service';
+import { namesOfLists } from './list-names';
 
 /**
  * The basket as the person holding it reads it, and the one edit any of them may
@@ -123,25 +124,14 @@ export class GeneratedListBasketService {
   private async sourceNames(
     list: GeneratedList
   ): Promise<GeneratedListSourceName[]> {
-    const listIds = [
-      ...new Set(list.sourceSnapshot.sources.map((source) => source.listId)),
-    ];
-    if (listIds.length === 0) {
-      return [];
-    }
-
-    const rows = await this.shoppingLists.find({
-      where: { id: In(listIds) },
-      relations: { zone: true },
-    });
-
-    return rows.map((row) => ({
-      listId: row.id,
-      name: row.name,
-      // Null rather than absent: the list is nameable and its zone was simply
-      // not loaded, which is a different thing from "you may not see this".
-      zoneName: row.zone?.name ?? null,
-    }));
+    const named = await namesOfLists(
+      this.shoppingLists,
+      list.sourceSnapshot.sources.map((source) => source.listId)
+    );
+    // A list that has since been deleted is absent from the map and therefore
+    // from the captions, which is the intended answer: naming fewer households
+    // is better than an error or a raw id.
+    return [...named.values()];
   }
 
   /**

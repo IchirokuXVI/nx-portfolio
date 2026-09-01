@@ -56,6 +56,9 @@ export const LIST_SCHEMA_IDS = {
   settleLineRequest: schemaId('msg/line.settle/request'),
   lineSettlementsRequest: schemaId('msg/line.settlements/request'),
   itemSettlementsRequest: schemaId('msg/line.itemSettlements/request'),
+  listHoldingItemView: schemaId('list/ListHoldingItemView'),
+  listsHoldingItemRequest: schemaId('msg/list.holdingItem/request'),
+  listsHoldingItemResult: schemaId('msg/list.holdingItem/response'),
   reorderRequest: schemaId('msg/line.reorder/request'),
   deleteLineRequest: schemaId('msg/line.delete/request'),
   listLinesRequest: schemaId('msg/line.list/request'),
@@ -497,6 +500,48 @@ const itemSettlementsRequest = object(
   },
   ['userId', 'itemId']
 );
+
+/**
+ * Which lists still want a product (plan 0053, section 3).
+ *
+ * `excludeListId` is nullable rather than merely optional: a basket line belongs
+ * to no one list and says so by sending null, which is a different statement from
+ * a client that forgot the field.
+ */
+const listsHoldingItemRequest = object(
+  LIST_SCHEMA_IDS.listsHoldingItemRequest,
+  {
+    userId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    excludeListId: nullableString(),
+  },
+  ['userId', 'itemId']
+);
+
+const listHoldingItemView = object(
+  LIST_SCHEMA_IDS.listHoldingItemView,
+  {
+    listId: nonEmptyString(),
+    name: string(),
+    zoneId: nonEmptyString(),
+    zoneName: string(),
+    quantity: integer({ minimum: 0 }),
+  },
+  ['listId', 'name', 'zoneId', 'zoneName', 'quantity']
+);
+
+/**
+ * Capped rather than paginated, so the response says whether the cap bit rather
+ * than offering a cursor into a listing this read refuses to be.
+ */
+const listsHoldingItemResult = object(
+  LIST_SCHEMA_IDS.listsHoldingItemResult,
+  {
+    lists: array(ref(LIST_SCHEMA_IDS.listHoldingItemView)),
+    hasMore: boolean(),
+  },
+  ['lists', 'hasMore']
+);
 const reorderRequest = object(
   LIST_SCHEMA_IDS.reorderRequest,
   {
@@ -606,6 +651,9 @@ export const listSchemas: JsonSchema[] = [
   settleLineRequest,
   lineSettlementsRequest,
   itemSettlementsRequest,
+  listHoldingItemView,
+  listsHoldingItemRequest,
+  listsHoldingItemResult,
   reorderRequest,
   deleteLineRequest,
   listLinesRequest,
@@ -643,6 +691,10 @@ export const listMessageContracts: Record<
   [LIST_PATTERNS.list]: {
     request: LIST_SCHEMA_IDS.listListsRequest,
     response: LIST_SCHEMA_IDS.listPage,
+  },
+  [LIST_PATTERNS.holdingItem]: {
+    request: LIST_SCHEMA_IDS.listsHoldingItemRequest,
+    response: LIST_SCHEMA_IDS.listsHoldingItemResult,
   },
   [LINE_PATTERNS.add]: {
     request: LIST_SCHEMA_IDS.addLineRequest,

@@ -213,6 +213,18 @@ function build(options: {
     },
   } as unknown as GeneratedListSharingService;
 
+  // The names behind the skipped origins (plan 0053, section 4). `LIST_B` is the
+  // one every skip case in this file names; `LIST_A` is here so the fake is not
+  // shaped around the assertion, and an id it does not know drops out of the
+  // answer exactly as a deleted list does.
+  const shoppingLists = {
+    find: async ({ where }: { where: { id: { _value: string[] } } }) =>
+      [
+        { id: LIST_A, name: 'Weekly shop', zone: { name: 'Flat 3B' } },
+        { id: LIST_B, name: 'Parents', zone: { name: null } },
+      ].filter((row) => where.id._value.includes(row.id)),
+  } as never;
+
   const generated = {
     lineViewFor: async () => ({
       id: BASKET_LINE,
@@ -256,6 +268,7 @@ function build(options: {
           ? { itemId: where.itemId }
           : null,
     } as never,
+    shoppingLists,
     sharing,
     generated,
     claims.service,
@@ -433,7 +446,16 @@ describe('a settle is authorized by the owner, never the actor (section 6.4)', (
     const result = await settle(harness);
 
     expect(result.skipped).toEqual([
-      { lineId: 'zl-2', listId: LIST_B, reason: 'ACCESS_GONE' },
+      {
+        lineId: 'zl-2',
+        listId: LIST_B,
+        reason: 'ACCESS_GONE',
+        // Named, because this reader passes section 5.2 (plan 0053, section 4).
+        // The zone is null because this fixture's zone has no name, which is a
+        // different thing from the reader not being allowed one.
+        listName: 'Parents',
+        zoneName: null,
+      },
     ]);
     // Nothing was written to the list the owner lost.
     expect(harness.settlements.every((row) => row.listId === LIST_A)).toBe(
@@ -450,7 +472,13 @@ describe('a settle is authorized by the owner, never the actor (section 6.4)', (
     const result = await settle(harness);
 
     expect(result.skipped).toEqual([
-      { lineId: 'zl-2', listId: LIST_B, reason: 'ORIGIN_DELETED' },
+      {
+        lineId: 'zl-2',
+        listId: LIST_B,
+        reason: 'ORIGIN_DELETED',
+        listName: 'Parents',
+        zoneName: null,
+      },
     ]);
   });
 
@@ -713,7 +741,16 @@ describe('what a settle tells the person who made it (section 5.2)', () => {
 
     expect(result.skippedCount).toBe(1);
     expect(result.skipped).toEqual([
-      { lineId: 'zl-2', listId: LIST_B, reason: 'ACCESS_GONE' },
+      {
+        lineId: 'zl-2',
+        listId: LIST_B,
+        reason: 'ACCESS_GONE',
+        // Named, because this reader passes section 5.2 (plan 0053, section 4).
+        // The zone is null because this fixture's zone has no name, which is a
+        // different thing from the reader not being allowed one.
+        listName: 'Parents',
+        zoneName: null,
+      },
     ]);
     expect(result.settlements).toHaveLength(1);
   });

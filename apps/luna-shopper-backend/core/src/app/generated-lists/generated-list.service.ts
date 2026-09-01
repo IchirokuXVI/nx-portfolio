@@ -35,18 +35,22 @@ import {
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ProfileService } from '../profiles/profile.service';
 import {
+  NO_GENERATED_LINE_COUNTS,
   toBasketLineView,
   toGeneratedLineView,
   toGeneratedListSummaryView,
   toGeneratedListView,
+  type GeneratedListLineCounts,
 } from './generated-list.mappers';
 import {
   ACTIVE_OVERLAP_SQL,
   CANDIDATE_LINE_ITEMS_SQL,
   CANDIDATE_LINES_SQL,
+  GENERATED_LIST_COUNTS_SQL,
   WRITABLE_LISTS_SQL,
   type ActiveOverlapRow,
   type CandidateLineRow,
+  type GeneratedListCountsRow,
   type WritableListRow,
 } from './generated-list.sql';
 import { LineClaimService } from './line-claim.service';
@@ -523,7 +527,7 @@ export class GeneratedListService {
       items: page.map((row) =>
         toGeneratedListSummaryView(
           row,
-          counts.get(row.id) ?? { lineCount: 0, settledLineCount: 0 }
+          counts.get(row.id) ?? NO_GENERATED_LINE_COUNTS
         )
       ),
       nextCursor:
@@ -533,36 +537,32 @@ export class GeneratedListService {
     };
   }
 
-  /** The two numbers a history row shows, for a whole page, in one query. */
+  /**
+   * The numbers a history row shows, for a whole page, in one query (plan 0053,
+   * section 2).
+   *
+   * A basket whose id is absent from the answer had no lines at all, so the
+   * caller defaults it rather than this inserting a zero row per id: `GROUP BY`
+   * produces nothing for an empty group, and inventing one here would only move
+   * the same default a line earlier.
+   */
   private async countsFor(
     listIds: string[]
-  ): Promise<Map<string, { lineCount: number; settledLineCount: number }>> {
-    const counts = new Map<
-      string,
-      { lineCount: number; settledLineCount: number }
-    >();
+  ): Promise<Map<string, GeneratedListLineCounts>> {
+    const counts = new Map<string, GeneratedListLineCounts>();
     if (listIds.length === 0) {
       return counts;
     }
-    const rows = await this.lines
-      .createQueryBuilder('l')
-      .select('l."generatedListId"', 'generatedListId')
-      .addSelect('count(*)::int', 'lineCount')
-      .addSelect(
-        'count(*) FILTER (WHERE l."settledQuantity" >= l.quantity)::int',
-        'settledLineCount'
-      )
-      .where('l."generatedListId" IN (:...listIds)', { listIds })
-      .groupBy('l."generatedListId"')
-      .getRawMany<{
-        generatedListId: string;
-        lineCount: number;
-        settledLineCount: number;
-      }>();
+    const rows = await this.lines.query<GeneratedListCountsRow[]>(
+      GENERATED_LIST_COUNTS_SQL,
+      [listIds]
+    );
     for (const row of rows) {
       counts.set(row.generatedListId, {
         lineCount: row.lineCount,
         settledLineCount: row.settledLineCount,
+        boughtLineCount: row.boughtLineCount,
+        notAvailableLineCount: row.notAvailableLineCount,
       });
     }
     return counts;
