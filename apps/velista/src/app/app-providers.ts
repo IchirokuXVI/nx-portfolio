@@ -18,6 +18,8 @@ import {
   AssistantApi,
   AUTH_SERVICE,
   AuthApi,
+  BASKET_SERVICE,
+  BasketApi,
   CATALOG_SERVICE,
   CatalogApi,
   COMMENT_SERVICE,
@@ -220,6 +222,7 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // so they are a different service on a different credential and not a wider version
   // of this one.
   provideService(GENERATED_LIST_SERVICE, GeneratedListApi),
+  provideService(BASKET_SERVICE, BasketApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches
