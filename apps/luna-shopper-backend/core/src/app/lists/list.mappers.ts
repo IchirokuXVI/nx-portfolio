@@ -140,6 +140,11 @@ export function toLineSettlementView(
     quantity: settlement.quantity,
     settledByUserId: settlement.settledByUserId,
     settledAt: settlement.settledAt.toISOString(),
+    // Served, and marked, rather than filtered out (plan 0054, section 3.3):
+    // somebody said they got this and then took it back, which is a truer
+    // history than a gap. `revertedByParticipantId` stays unserved for the
+    // reason the three columns above it are, being meaningless to a zone reader.
+    revertedAt: settlement.revertedAt?.toISOString() ?? null,
   };
 }
 

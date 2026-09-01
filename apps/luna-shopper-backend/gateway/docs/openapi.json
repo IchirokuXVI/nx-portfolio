@@ -7129,6 +7129,104 @@
               }
             }
           },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/lines/{lineId}/reopen": {
+      "post": {
+        "operationId": "GeneratedListParticipantController_reopen_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `generatedList.reopenLine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.ReopenResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -16477,6 +16575,12 @@
               "null"
             ]
           },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "guestNumber": {
             "type": [
               "integer",
@@ -16514,11 +16618,29 @@
           "id",
           "kind",
           "displayName",
+          "username",
           "guestNumber",
           "userId",
           "joinedAt",
           "lastSeenAt",
           "shareLinkId"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.ReopenResult": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/generated-list-sharing.BasketLineView"
+          },
+          "skippedCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "line",
+          "skippedCount"
         ],
         "additionalProperties": false
       },
@@ -17868,6 +17990,12 @@
           "settledAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "revertedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -17878,7 +18006,8 @@
           "outcome",
           "quantity",
           "settledByUserId",
-          "settledAt"
+          "settledAt",
+          "revertedAt"
         ],
         "additionalProperties": false
       },
