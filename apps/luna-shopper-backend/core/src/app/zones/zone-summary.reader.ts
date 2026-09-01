@@ -30,7 +30,9 @@ export function readZoneMemberCounts(row: SummaryRow): {
   pendingRequestCount: number;
 } {
   const raw = row?.[ZONE_SUMMARY_COLUMNS.memberCounts] as
-    { memberCount?: unknown; pendingRequestCount?: unknown } | null | undefined;
+    | { memberCount?: unknown; pendingRequestCount?: unknown }
+    | null
+    | undefined;
   return {
     memberCount: count(raw?.memberCount),
     pendingRequestCount: count(raw?.pendingRequestCount),
@@ -77,7 +79,7 @@ export function readZoneListsPreview(row: SummaryRow): ZoneListPreview[] {
       id: String(preview['id']),
       name: String(preview['name']),
       lineCount: count(preview['lineCount']),
-      readyCount: count(preview['readyCount']),
+      wantedCount: count(preview['wantedCount']),
     };
   });
 }

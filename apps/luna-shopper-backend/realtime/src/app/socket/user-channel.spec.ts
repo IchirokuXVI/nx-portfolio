@@ -104,6 +104,13 @@ async function build(userId = 'u1', verifies = true) {
     verify: jest.fn(async () =>
       verifies ? { sub: userId } : Promise.reject(new Error('bad token'))
     ),
+    // Plan 0051 section 9: the handshake now asks which of the two kinds of
+    // identity the token carries. Every socket in this suite is an account one.
+    verifyIdentity: jest.fn(async () =>
+      verifies
+        ? { kind: 'user', userId }
+        : Promise.reject(new Error('bad token'))
+    ),
   };
   const coreAccess = {
     // Plan 0032 turned the zone check into one answer carrying the readable list

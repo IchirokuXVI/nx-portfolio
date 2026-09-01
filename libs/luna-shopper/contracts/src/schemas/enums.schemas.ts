@@ -7,11 +7,13 @@ import {
   UserKind,
   UsernamePropagation,
 } from '../lib/enums/auth.enums';
+import { ParticipantKind } from '../lib/enums/generated-list.enums';
 import {
   CommentTranscription,
   LineApprovalStatus,
   LineStatus,
   ListPermission,
+  SettlementOutcome,
 } from '../lib/enums/list.enums';
 import { MergeRequestStatus } from '../lib/enums/merge.enums';
 import {
@@ -37,10 +39,13 @@ export const ENUM_IDS = {
   listPermission: schemaId('enums/ListPermission'),
   lineApprovalStatus: schemaId('enums/LineApprovalStatus'),
   lineStatus: schemaId('enums/LineStatus'),
+  settlementOutcome: schemaId('enums/SettlementOutcome'),
   commentTranscription: schemaId('enums/CommentTranscription'),
   mergeRequestStatus: schemaId('enums/MergeRequestStatus'),
   assistantRole: schemaId('enums/AssistantRole'),
   listResolutionBranch: schemaId('enums/ListResolutionBranch'),
+  /** Who is acting on a shared basket (plan 0051, section 3). */
+  participantKind: schemaId('enums/ParticipantKind'),
 } as const;
 
 export const enumSchemas: JsonSchema[] = [
@@ -53,8 +58,10 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.listPermission, Object.values(ListPermission)),
   enumOf(ENUM_IDS.lineApprovalStatus, Object.values(LineApprovalStatus)),
   enumOf(ENUM_IDS.lineStatus, Object.values(LineStatus)),
+  enumOf(ENUM_IDS.settlementOutcome, Object.values(SettlementOutcome)),
   enumOf(ENUM_IDS.commentTranscription, Object.values(CommentTranscription)),
   enumOf(ENUM_IDS.mergeRequestStatus, Object.values(MergeRequestStatus)),
   enumOf(ENUM_IDS.assistantRole, Object.values(AssistantRole)),
   enumOf(ENUM_IDS.listResolutionBranch, Object.values(ListResolutionBranch)),
+  enumOf(ENUM_IDS.participantKind, Object.values(ParticipantKind)),
 ];

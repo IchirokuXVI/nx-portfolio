@@ -3,8 +3,8 @@ import {
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
   LineApprovalStatus,
-  LineStatus,
   ListResolutionBranch,
+  SettlementOutcome,
   UsernamePropagation,
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
@@ -482,7 +482,10 @@ const queryLists: AssistantTool = {
         const matching = lines.filter(
           (line) =>
             (!item || mentionsProduct(line, item)) &&
-            (!pendingOnly || line.status === LineStatus.PENDING)
+            // Wanted, since plan 0047: a line's quantity is the only thing
+            // that says whether the household still needs it, and a line at zero
+            // is one nobody has to go and get.
+            (!pendingOnly || line.quantity > 0)
         );
 
         runtime.link.list(list);
@@ -503,7 +506,6 @@ const queryLists: AssistantTool = {
             id: line.id,
             product: line.content,
             quantity: line.quantity,
-            status: line.status,
             approval: line.approvalStatus,
           })),
         });
@@ -780,14 +782,27 @@ const removeLines: AssistantTool = {
 };
 
 // ---------------------------------------------------------------------------
-// 0043.4 set_line_status
+// 0047.4 settle_lines
 // ---------------------------------------------------------------------------
 
-const setLineStatus: AssistantTool = {
+/**
+ * The same sentence said out loud, mapped onto a settlement (plan 0047, section
+ * 2.4).
+ *
+ * It replaced `set_line_status`, whose subject went with the trip status a zone
+ * line no longer carries. The array shape and the resolution rule plan 0043 gave
+ * that tool are unaffected and are kept verbatim: ids from this turn or nothing
+ * is written, and every line they named goes in one call.
+ *
+ * The third value is gone with the state machine. "Put the bread back" is a
+ * quantity, not an outcome, and nothing here writes one: the person is looking at
+ * the screen that has the control on it.
+ */
+const settleLines: AssistantTool = {
   declaration: {
-    name: 'set_line_status',
+    name: 'settle_lines',
     description:
-      'Mark lines as bought, as not available in the shop, or as still needed. It works only with line ids that came back from query_lists in this same turn, so look the list up first and never write an id yourself. Pass every line they mentioned in one call: "we have got the milk and the bread" is one call with two ids. Do not ask them to confirm first, and do not ask afterwards either: it is reversible and they are looking at the screen it changes.',
+      'Record that lines were bought, or that the shop did not have them. It works only with line ids that came back from query_lists in this same turn, so look the list up first and never write an id yourself. Pass every line they mentioned in one call: "we have got the milk and the bread" is one call with two ids. Do not ask them to confirm first, and do not ask afterwards either: they are looking at the screen it changes.',
     parameters: {
       type: 'object',
       properties: {
@@ -799,21 +814,40 @@ const setLineStatus: AssistantTool = {
             'The ids of the lines to settle, exactly as query_lists gave them to you in this turn.',
           items: { type: 'string' },
         },
-        status: {
+        outcome: {
           type: 'string',
-          enum: Object.values(LineStatus),
+          enum: Object.values(SettlementOutcome),
           description:
-            'READY when they have it: "got the milk", "we have got the bread", "that is in the trolley". NOT_AVAILABLE when the shop did not have it: "they had no eggs", "there was none left". These two are not the same thing and must never be swapped: READY means that errand is done, NOT_AVAILABLE means somebody still has to go somewhere else for it. PENDING puts a line back to still being needed, for "no, put the bread back".',
+            'BOUGHT when they have it: "got the milk", "we have got the bread", "that is in the trolley". NOT_AVAILABLE when the shop did not have it: "they had no eggs", "there was none left". These two are not the same thing and must never be swapped: BOUGHT means that errand is done and takes the units off what is still wanted, NOT_AVAILABLE means somebody still has to go somewhere else for it and changes nothing about how many are needed.',
+        },
+        quantity: {
+          type: 'integer',
+          minimum: 1,
+          description:
+            'How many were bought, when they said a number: "I got two of the milk". Leave it out for "we got the milk", which is one. It has no meaning when the shop did not have it, so do not send it then.',
         },
       },
-      required: ['lineIds', 'status'],
+      required: ['lineIds', 'outcome'],
     },
   },
 
   async execute(args, runtime) {
-    const status = readStatus(args['status']);
-    if (status === undefined) {
-      return { ok: false, problem: 'that is not a status a line can have' };
+    const outcome = readOutcome(args['outcome']);
+    if (outcome === undefined) {
+      return {
+        ok: false,
+        problem: 'that is not something that can happen to a line',
+      };
+    }
+    const quantity = readQuantity(args['quantity']);
+    if (quantity !== undefined && outcome === SettlementOutcome.NOT_AVAILABLE) {
+      // Refused here rather than passed on, because core refuses it too and the
+      // model has plainly misread the two fields for each other.
+      return {
+        ok: false,
+        problem:
+          'a line the shop did not have carries no quantity. Say what happened, or say how many they bought, not both',
+      };
     }
 
     const ids = readIds(args['lineIds']);
@@ -849,25 +883,29 @@ const setLineStatus: AssistantTool = {
     }
 
     // **No confirmation**, and that is a decision rather than an omission: it is
-    // reversible, it is visible, and confirming a tick is nagging.
-    const results: StatusResult[] = [];
+    // visible, it is one tap to put right on the screen they are looking at, and
+    // confirming every "got it" is nagging.
+    const results: SettleResult[] = [];
     const touched = new Set<string>();
     let firstFailure: unknown;
 
     for (const known of resolved) {
       try {
-        const line = await runtime.api.setLineStatus(
+        const { line, settlement } = await runtime.api.settleLine(
           runtime.context.caller,
           known.line.id,
-          status
+          outcome,
+          quantity
         );
         touched.add(known.list.listId);
         runtime.link.list(known.list);
         results.push({
           product: line.content,
-          // The server's value, reported rather than assumed to be the one that
-          // was asked for.
-          status: line.status,
+          // The server's values, reported rather than assumed to be the ones
+          // that were asked for: how many it recorded, and how many are still
+          // wanted afterwards, which is what makes a partial settle sayable.
+          settled: settlement.quantity,
+          stillWanted: line.quantity,
           list: known.list.listName,
         });
       } catch (error) {
@@ -892,7 +930,7 @@ const setLineStatus: AssistantTool = {
       runtime.noteForRecord({ list: [...touched].join(',') });
     }
 
-    return { ok: true, status, lines: results };
+    return { ok: true, outcome, lines: results };
   },
 };
 
@@ -900,7 +938,7 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
   upsertLines,
   queryLists,
   removeLines,
-  setLineStatus,
+  settleLines,
   renameMe,
 ];
 
@@ -921,16 +959,16 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
  * refusal it has to be told how to handle.
  *
  * All four of the plan's tools are here now that plan 0043 has built
- * `remove_lines` and `set_line_status`. Both belong on this list for the reason
- * `rename_me` does not: they are operations on a list, and taking something off
- * the list in front of you or ticking it as bought is among the likeliest things
- * to be said into that microphone.
+ * `remove_lines` and the tool plan 0047 turned into `settle_lines`. Both belong
+ * on this list for the reason `rename_me` does not: they are operations on a
+ * list, and taking something off the list in front of you or saying you have got
+ * it is among the likeliest things to be said into that microphone.
  */
 export const SCOPED_TOOLS: AssistantTool[] = [
   upsertLines,
   queryLists,
   removeLines,
-  setLineStatus,
+  settleLines,
 ];
 
 export const TOOL_DECLARATIONS: ModelToolDeclaration[] = ASSISTANT_TOOLS.map(
@@ -1127,10 +1165,13 @@ function describeScope(propagation: UsernamePropagation): string {
   }
 }
 
-/** What one line of a `set_line_status` call ended up saying. */
-interface StatusResult {
+/** What one line of a `settle_lines` call ended up saying. */
+interface SettleResult {
   product: string;
-  status?: LineStatus;
+  /** Units recorded, and 0 when the shop did not have it. */
+  settled?: number;
+  /** What the line still asks for afterwards, which a partial settle leaves. */
+  stillWanted?: number;
   list?: string;
   refused?: true;
   reason?: string;
@@ -1171,16 +1212,16 @@ function readIds(value: unknown): string[] {
 }
 
 /**
- * The status asked for, or `undefined` for anything that is not one of the three.
+ * The outcome asked for, or `undefined` for anything that is not one of the two.
  *
- * Matched against the enum rather than lowercased and mapped, because the three
+ * Matched against the enum rather than lowercased and mapped, because the two
  * values are what the tool schema offers and what the gateway takes, and a
  * spelling this does not recognize is a call that should fail here rather than
- * be turned into whichever of the three looks closest.
+ * be turned into whichever of the two looks closest.
  */
-function readStatus(value: unknown): LineStatus | undefined {
+function readOutcome(value: unknown): SettlementOutcome | undefined {
   const wanted = readString(value);
-  return Object.values(LineStatus).find((status) => status === wanted);
+  return Object.values(SettlementOutcome).find((outcome) => outcome === wanted);
 }
 
 /** Lists to read: the named one, else the named zone's, else all of them. */
@@ -1232,6 +1273,14 @@ function readString(value: unknown): string | undefined {
     : undefined;
 }
 
+/**
+ * A count a tool argument carries, or `undefined` when it carries none.
+ *
+ * Shared by `upsert_lines` and `settle_lines`. Anything that is not a number at
+ * least one is dropped rather than refused, and the caller then uses its own
+ * default: a model that answered "a couple" has still said the thing was bought,
+ * and losing the count is a smaller error than losing the purchase.
+ */
 function readQuantity(value: unknown): number | undefined {
   const quantity = typeof value === 'number' ? Math.round(value) : Number.NaN;
   return Number.isFinite(quantity) && quantity >= 1 ? quantity : undefined;

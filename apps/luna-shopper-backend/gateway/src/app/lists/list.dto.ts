@@ -5,8 +5,8 @@ import {
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
+  SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Type } from 'class-transformer';
@@ -238,10 +238,43 @@ export class SetApprovalDto {
   approvalStatus!: LineApprovalStatus;
 }
 
-export class SetStatusDto {
-  @ApiProperty({ enum: LineStatus })
-  @IsEnum(LineStatus)
-  status!: LineStatus;
+/**
+ * What happened to a line on a trip (plan 0047, section 4).
+ *
+ * It replaced `SetStatusDto`, which moved a line between trip states a zone line
+ * no longer carries. **Skipping is not one of the values**: leaving a line alone
+ * writes nothing at all, so it is the absence of this call.
+ *
+ * The `quantity` rules are conditional and are stated in core rather than here,
+ * because core is where the line is read: `BOUGHT` takes a whole number of units
+ * defaulting to one, and `NOT_AVAILABLE` refuses one outright rather than
+ * quietly writing zero over it.
+ */
+export class SettleLineDto {
+  @ApiProperty({ enum: SettlementOutcome })
+  @IsEnum(SettlementOutcome)
+  outcome!: SettlementOutcome;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: LINE_QUANTITY_MAX,
+    description:
+      'How many were bought. Defaults to one, and may exceed what the line asks for: the extra unit is real and belongs in the consumption history. Not allowed when the shop did not have it.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(LINE_QUANTITY_MAX)
+  quantity?: number;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards.",
+  })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
 }
 
 export class ReorderLinesDto {

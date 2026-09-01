@@ -309,6 +309,50 @@ export class ProfileService {
     };
   }
 
+  /**
+   * Which zones and lists a generation run should draw from (plan 0049, section
+   * 1; consumed by plan 0050, section 2).
+   *
+   * The counterpart of {@link resolveScopes} for the other half of a profile.
+   * That one answers where the caller shops, this one answers what they shop
+   * for, and both follow the same rule: with no `profileId` it is the default
+   * profile, created on the spot if the user has none, so a run from a brand new
+   * account resolves rather than failing on a missing row.
+   *
+   * A scope of `ALL` answers **no sources at all**, and that is the honest
+   * answer rather than an empty one: "every list I can reach" is a question only
+   * the caller's access can answer, and access lives in the list tables rather
+   * than here. Plan 0050 expands it, which keeps the one definition of a
+   * writable list in the module that owns lists.
+   */
+  async resolveGenerationSources(req: ResolveProfileScopesRequest): Promise<{
+    profileId: string;
+    scope: GenerationScope;
+    sources: { zoneId: string; listId: string | null }[];
+  }> {
+    const profile = req.profileId
+      ? await this.load(req.userId, req.profileId)
+      : await this.defaultProfile(req.userId);
+
+    if (profile.generationScope !== GenerationScope.SELECTED) {
+      return {
+        profileId: profile.id,
+        scope: profile.generationScope,
+        sources: [],
+      };
+    }
+
+    const rows = await this.sources.find({
+      where: { profileId: profile.id },
+      order: { createdAt: 'ASC' },
+    });
+    return {
+      profileId: profile.id,
+      scope: profile.generationScope,
+      sources: rows.map((row) => ({ zoneId: row.zoneId, listId: row.listId })),
+    };
+  }
+
   // --- Reading ---------------------------------------------------------------
 
   /**

@@ -4,7 +4,9 @@ import {
   REALTIME_ACCESS_PATTERNS,
   type AccessCheckResult,
   type CheckListAccessRequest,
+  type CheckParticipantAccessRequest,
   type CheckZoneAccessRequest,
+  type ParticipantPresenceEntry,
 } from '@portfolio/luna-shopper/contracts';
 import {
   buildNatsHeaders,
@@ -199,6 +201,34 @@ export class CoreAccessClient {
     return this.fresh(listAccessKey(listId), userId, () =>
       this.check(REALTIME_ACCESS_PATTERNS.checkList, req)
     );
+  }
+
+  /**
+   * Whether this participant may still hold a shared basket's rooms (plan 0051,
+   * section 7).
+   *
+   * **Uncached, deliberately**, which is the one place this client departs from
+   * the pattern above. Section 3.3 promises that revoking a participant bites
+   * immediately and that there is no cache to wait out, and core answers it with
+   * a single indexed read. Putting a TTL in front of that would trade the promise
+   * for nothing: these fire on a subscribe and on a revocation sweep, over the
+   * handful of sockets one basket has, and never on ordinary traffic.
+   */
+  async checkParticipant(
+    participantId: string,
+    generatedListId: string
+  ): Promise<ParticipantPresenceEntry | undefined> {
+    const req: CheckParticipantAccessRequest = {
+      participantId,
+      generatedListId,
+    };
+    const answer = await this.send(
+      REALTIME_ACCESS_PATTERNS.checkParticipant,
+      req
+    );
+    // The entry rides back with the yes, so admitting a socket and seeding its
+    // presence are one round trip rather than two.
+    return answer.allowed ? answer.participant : undefined;
   }
 
   /**

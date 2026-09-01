@@ -63,9 +63,64 @@ describeIntegration('core schema (real Postgres)', () => {
       'merge_requests',
       // Plan 0048: a line holds a set of products.
       'list_line_items',
+      // Plan 0047: what happened to a line on a trip.
+      'line_settlements',
     ]) {
       expect(names.has(table)).toBe(true);
     }
+  });
+
+  it('retired the trip status for a quantity (plan 0047, section 2)', async () => {
+    const columns = await dataSource.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'list_lines'`
+    );
+    const names = new Set(
+      columns.map((c: { column_name: string }) => c.column_name)
+    );
+    // Gone, and so is its type: nothing in core stores a `LineStatus` any more,
+    // and the enum survives in the contracts for the basket line plan 0051 puts
+    // it on.
+    expect(names.has('status')).toBe(false);
+    const types = await dataSource.query(
+      `SELECT typname FROM pg_type WHERE typname = 'line_status'`
+    );
+    expect(types).toEqual([]);
+  });
+
+  it('records a settlement, and cascades it with its line', async () => {
+    // The foreign key is the one thing that keeps deleting a line honest: it is
+    // the gesture that discards the history (plan 0047, section 2.2), so the
+    // rows have to go with it rather than outlive it as orphans.
+    const list = await dataSource.query(
+      `SELECT id FROM "shopping_lists" LIMIT 1`
+    );
+    if (list.length === 0) {
+      return;
+    }
+    const [line] = await dataSource.query(
+      `INSERT INTO "list_lines" ("listId", "content", "quantity", "position", "createdByUserId")
+       VALUES ($1, 'Settled milk', 2, 900, gen_random_uuid()) RETURNING id`,
+      [list[0].id]
+    );
+    await dataSource.query(
+      `INSERT INTO "line_settlements" ("lineId", "listId", "outcome", "quantity", "settledByUserId", "settledAt")
+       VALUES ($1, $2, 'BOUGHT', 2, gen_random_uuid(), now())`,
+      [line.id, list[0].id]
+    );
+
+    const before = await dataSource.query(
+      `SELECT count(*)::int AS n FROM "line_settlements" WHERE "lineId" = $1`,
+      [line.id]
+    );
+    expect(before[0].n).toBe(1);
+
+    await dataSource.query(`DELETE FROM "list_lines" WHERE id = $1`, [line.id]);
+
+    const after = await dataSource.query(
+      `SELECT count(*)::int AS n FROM "line_settlements" WHERE "lineId" = $1`,
+      [line.id]
+    );
+    expect(after[0].n).toBe(0);
   });
 
   it('retired the single line itemId for a set and a hash (plan 0048, section 1.1)', async () => {

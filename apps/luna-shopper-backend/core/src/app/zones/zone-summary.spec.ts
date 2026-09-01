@@ -49,8 +49,8 @@ function row(overrides: Record<string, unknown> = {}): SummaryRow {
     [ZONE_SUMMARY_COLUMNS.ownerUsername]: 'Marc',
     [ZONE_SUMMARY_COLUMNS.listCount]: 2,
     [ZONE_SUMMARY_COLUMNS.listsPreview]: [
-      { id: 'l1', name: 'Groceries', lineCount: 12, readyCount: 7 },
-      { id: 'l2', name: 'Hardware', lineCount: 3, readyCount: 0 },
+      { id: 'l1', name: 'Groceries', lineCount: 12, wantedCount: 7 },
+      { id: 'l2', name: 'Hardware', lineCount: 3, wantedCount: 0 },
     ],
     ...overrides,
   };
@@ -97,8 +97,8 @@ describe('zone summary reader', () => {
 
   it('reads the preview, and gives an empty array rather than null', () => {
     expect(readZoneListsPreview(row())).toEqual([
-      { id: 'l1', name: 'Groceries', lineCount: 12, readyCount: 7 },
-      { id: 'l2', name: 'Hardware', lineCount: 3, readyCount: 0 },
+      { id: 'l1', name: 'Groceries', lineCount: 12, wantedCount: 7 },
+      { id: 'l2', name: 'Hardware', lineCount: 3, wantedCount: 0 },
     ]);
     expect(
       readZoneListsPreview(row({ [ZONE_SUMMARY_COLUMNS.listsPreview]: null }))
@@ -287,7 +287,7 @@ describe('the my-zone view (plan 0017, sections 3 and 7)', () => {
       id: 'l1',
       name: 'Groceries',
       lineCount: 12,
-      readyCount: 7,
+      wantedCount: 7,
     });
   });
 

@@ -1920,7 +1920,7 @@
           ]
         },
         {
-          "name": "Mark it ready",
+          "name": "Say we bought some of it",
           "request": {
             "method": "POST",
             "header": [
@@ -1930,7 +1930,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/v1/lines/{{lineId}}/status",
+              "raw": "{{baseUrl}}/v1/lines/{{lineId}}/settle",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -1938,12 +1938,12 @@
                 "v1",
                 "lines",
                 "{{lineId}}",
-                "status"
+                "settle"
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"READY\"\n}",
+              "raw": "{\n  \"outcome\": \"BOUGHT\",\n  \"quantity\": 4\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1959,8 +1959,53 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
-                  "pm.test('status is READY', function () {",
-                  "  pm.expect(pm.response.json().status).to.eql('READY');",
+                  "const b = pm.response.json();",
+                  "pm.test('it records what was bought', function () {",
+                  "  pm.expect(b.settlement.outcome).to.eql('BOUGHT');",
+                  "  pm.expect(b.settlement.quantity).to.eql(4);",
+                  "});",
+                  "pm.test('and takes it off what is still wanted, leaving the line where it is', function () {",
+                  "  pm.expect(b.line.id).to.eql(pm.collectionVariables.get('lineId'));",
+                  "  pm.expect(b.line.quantity).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read what this line has been bought",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/lines/{{lineId}}/settlements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "lines",
+                "{{lineId}}",
+                "settlements"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const b = pm.response.json();",
+                  "pm.test('the settle just made is the newest row', function () {",
+                  "  pm.expect(b.items.length).to.be.above(0);",
+                  "  pm.expect(b.items[0].quantity).to.eql(4);",
+                  "});",
+                  "pm.test('and it says nothing about a basket', function () {",
+                  "  pm.expect(b.items[0]).to.not.have.property('generatedListLineId');",
                   "});"
                 ]
               }
@@ -2206,9 +2251,9 @@
                 "exec": [
                   "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
                   "const l = pm.response.json().items.find(function (x) { return x.id === pm.collectionVariables.get('listId'); });",
-                  "pm.test('lineCount is 2 and readyCount is 1', function () {",
+                  "pm.test('lineCount is 2 and wantedCount is 1', function () {",
                   "  pm.expect(l.counts.lineCount).to.eql(2);",
-                  "  pm.expect(l.counts.readyCount).to.eql(1);",
+                  "  pm.expect(l.counts.wantedCount).to.eql(1);",
                   "});"
                 ]
               }
@@ -2275,7 +2320,7 @@
           ]
         }
       ],
-      "description": "The core collaborative surface: a list, its lines, their status/approval, reordering, comments, and the counters that hang off them."
+      "description": "The core collaborative surface: a list, its lines, what was bought off them, their approval, reordering, comments, and the counters that hang off them."
     },
     {
       "name": "06 · Catalog (read)",

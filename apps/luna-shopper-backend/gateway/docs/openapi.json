@@ -3698,9 +3698,9 @@
         ]
       }
     },
-    "/v1/lines/{id}/status": {
+    "/v1/lines/{id}/settle": {
       "post": {
-        "operationId": "LinesController_setStatus_v1",
+        "operationId": "LinesController_settle_v1",
         "parameters": [
           {
             "name": "id",
@@ -3716,18 +3716,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetStatusDto"
+                "$ref": "#/components/schemas/SettleLineDto"
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "The `line.setStatus` contract response.",
+            "description": "The `line.settle` contract response.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/list.LineView"
+                  "$ref": "#/components/schemas/list.LineSettlementResult"
                 }
               }
             }
@@ -3738,6 +3738,91 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lines"
+        ]
+      }
+    },
+    "/v1/lines/{id}/settlements": {
+      "get": {
+        "operationId": "LinesController_settlements_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `line.settlements` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/list.LineSettlementPage"
                 }
               }
             }
@@ -4201,6 +4286,91 @@
         ],
         "tags": [
           "comments"
+        ]
+      }
+    },
+    "/v1/items/{id}/settlements": {
+      "get": {
+        "operationId": "ItemHistoryController_settlements_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `line.itemSettlements` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/list.LineSettlementPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lines"
         ]
       }
     },
@@ -5263,6 +5433,1594 @@
         ],
         "tags": [
           "account"
+        ]
+      }
+    },
+    "/v1/generated-lists": {
+      "post": {
+        "operationId": "GeneratedListController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGeneratedListDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `generatedList.create` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list.GeneratedListRunResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      },
+      "get": {
+        "operationId": "GeneratedListController_listMine_v1",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "The `nextCursor` of the previous page. Opaque.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "includeArchived",
+            "required": false,
+            "in": "query",
+            "description": "Include archived baskets, which the default listing leaves out without deleting them.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.listMine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list.GeneratedListPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}": {
+      "get": {
+        "operationId": "GeneratedListController_get_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.get` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list.GeneratedListView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      },
+      "patch": {
+        "operationId": "GeneratedListController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGeneratedListDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `generatedList.update` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list.GeneratedListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      },
+      "delete": {
+        "operationId": "GeneratedListController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.delete` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/lines": {
+      "post": {
+        "operationId": "GeneratedListController_addLine_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddGeneratedListLineDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `generatedList.addLine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list.GeneratedListLineView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/lines/{lineId}": {
+      "patch": {
+        "operationId": "GeneratedListController_updateLine_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGeneratedListLineDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `generatedList.updateLine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list.GeneratedListLineView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      },
+      "delete": {
+        "operationId": "GeneratedListController_deleteLine_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.deleteLine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/lines/order": {
+      "post": {
+        "operationId": "GeneratedListController_reorderLines_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderGeneratedListLinesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `generatedList.reorderLines` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list.GeneratedListView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/share-link": {
+      "put": {
+        "operationId": "GeneratedListShareController_ensureLink_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnsureShareLinkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `generatedList.shareLink.ensure` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.ShareLinkView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      },
+      "get": {
+        "operationId": "GeneratedListShareController_getLink_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.shareLink.get` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.ShareLinkResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      },
+      "delete": {
+        "operationId": "GeneratedListShareController_revokeLink_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revokeParticipants",
+            "required": false,
+            "in": "query",
+            "description": "Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.shareLink.revoke` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.generatedList.shareLink.revoke.response"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/participants": {
+      "get": {
+        "operationId": "GeneratedListShareController_listParticipants_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.participant.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.ParticipantListResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/participants/{participantId}": {
+      "delete": {
+        "operationId": "GeneratedListShareController_revokeParticipant_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "participantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.participant.revoke` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.generatedList.participant.revoke.response"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/share-links/{secret}": {
+      "get": {
+        "operationId": "ShareLinkController_preview_v1",
+        "parameters": [
+          {
+            "name": "secret",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.shareLink.preview` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.LinkPreview"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/share-links/{secret}/join": {
+      "post": {
+        "operationId": "ShareLinkController_join_v1",
+        "parameters": [
+          {
+            "name": "secret",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user-agent",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinGeneratedListDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Composed by the gateway from more than one service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.JoinResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/lines/{lineId}/settle": {
+      "post": {
+        "operationId": "GeneratedListParticipantController_settle_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettleGeneratedListLineDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `generatedList.settleLine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.SettleResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/participants/mine": {
+      "get": {
+        "operationId": "GeneratedListParticipantController_listParticipants_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `generatedList.participant.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.ParticipantListResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
+        ]
+      }
+    },
+    "/v1/generated-lists/{id}/participant-token": {
+      "post": {
+        "operationId": "GeneratedListParticipantController_refreshToken_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Composed by the gateway from more than one service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/generated-list-sharing.ParticipantTokenResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "generated-lists"
         ]
       }
     },
@@ -11472,7 +13230,7 @@
           },
           "quantity": {
             "type": "number",
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 100000
           },
           "itemIds": {
@@ -11529,7 +13287,7 @@
           },
           "quantity": {
             "type": "number",
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 100000
           },
           "itemIds": {
@@ -11573,20 +13331,30 @@
           "approvalStatus"
         ]
       },
-      "SetStatusDto": {
+      "SettleLineDto": {
         "type": "object",
         "properties": {
-          "status": {
+          "outcome": {
             "type": "string",
             "enum": [
-              "PENDING",
-              "READY",
+              "BOUGHT",
               "NOT_AVAILABLE"
             ]
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "How many were bought. Defaults to one, and may exceed what the line asks for: the extra unit is real and belongs in the consumption history. Not allowed when the shop did not have it."
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards."
           }
         },
         "required": [
-          "status"
+          "outcome"
         ]
       },
       "AddCommentDto": {
@@ -11810,6 +13578,240 @@
             }
           }
         }
+      },
+      "GeneratedListSourceDto": {
+        "type": "object",
+        "properties": {
+          "zoneId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "listId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Null means every list in the zone the caller may draw from, rather than one list within it."
+          }
+        },
+        "required": [
+          "zoneId"
+        ]
+      },
+      "CreateGeneratedListDto": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "maxItems": 100,
+            "description": "The zones and lists to draw from. Omitted falls back to the profile named below, then to the caller default profile, which draws from everything they may write to.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedListSourceDto"
+            }
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The shopping profile whose stored generation sources the run should use. Only consulted when no sources are given."
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120,
+            "description": "Null renders as the generation date on the client. The default is never stored, because the server does not know the reader locale."
+          },
+          "defaultTargetListId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The list every line added to this basket should also be written into. A default on new lines, never a retroactive sweep over lines already added."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Repeat the same key to get the basket the first call produced, rather than a second basket."
+          }
+        }
+      },
+      "UpdateGeneratedListDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "COMPLETED",
+              "ARCHIVED"
+            ]
+          },
+          "defaultTargetListId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        }
+      },
+      "AddGeneratedListLineDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 9999
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The product this line means to buy. Null for a free text line."
+          },
+          "options": {
+            "description": "The products the pick may be switched between.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targetListId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The zone list to also create this line in, through the ordinary add path. Omitted falls back to the basket default; an explicit null means this basket alone, whatever the default says."
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "UpdateGeneratedListLineDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "Zero is allowed on an edit: a line at zero is one the basket knows about and does not currently need."
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Switch the pick to another of this line options. An id that is not one of them is refused."
+          },
+          "targetListId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Send an added line into a zone list. Only meaningful on a line added to this basket, and it promotes the line once."
+          }
+        }
+      },
+      "ReorderGeneratedListLinesDto": {
+        "type": "object",
+        "properties": {
+          "lineIds": {
+            "description": "Every line of the basket, in the order it should now be in. A partial order is refused.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "lineIds"
+        ]
+      },
+      "EnsureShareLinkDto": {
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the invitation lapses. Defaults to the cap; a longer value is capped rather than refused, since an unauthenticated read of somebody’s shopping habits should not outlive the trip."
+          }
+        }
+      },
+      "JoinGeneratedListDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "What to call this person on the screen. Unverified text on an unauthenticated link, so it is never treated as identity; skipping it gets them \"Guest N\"."
+          }
+        }
+      },
+      "SettlementOutcome": {
+        "type": "string",
+        "enum": [
+          "BOUGHT",
+          "NOT_AVAILABLE"
+        ]
+      },
+      "GeneratedListAllocationDto": {
+        "type": "object",
+        "properties": {
+          "listId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9999
+          }
+        },
+        "required": [
+          "listId",
+          "quantity"
+        ]
+      },
+      "SettleGeneratedListLineDto": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SettlementOutcome"
+              }
+            ]
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 9999,
+            "description": "Units settled. Absent means the whole outstanding amount. Ignored for NOT_AVAILABLE, which is an outcome rather than a quantity."
+          },
+          "allocations": {
+            "description": "The allocation sheet: the same operation with the allocation supplied instead of derived. Refused for a caller who may not see zone data, since naming source lists is naming zone data.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedListAllocationDto"
+            }
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The product actually in the trolley, when it is not the line’s current pick. Must be one of the line’s own options."
+          }
+        },
+        "required": [
+          "outcome"
+        ]
       },
       "LocalizedTextDto": {
         "type": "object",
@@ -13619,6 +15621,22 @@
           "REJECTED"
         ]
       },
+      "enums.GeneratedLineOrigin": {
+        "type": "string",
+        "enum": [
+          "DERIVED",
+          "ADDED"
+        ]
+      },
+      "enums.GeneratedListStatus": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "ACTIVE",
+          "COMPLETED",
+          "ARCHIVED"
+        ]
+      },
       "enums.GenerationScope": {
         "type": "string",
         "enum": [
@@ -13696,14 +15714,6 @@
           "REJECTED"
         ]
       },
-      "enums.LineStatus": {
-        "type": "string",
-        "enum": [
-          "PENDING",
-          "READY",
-          "NOT_AVAILABLE"
-        ]
-      },
       "enums.ListPermission": {
         "type": "string",
         "enum": [
@@ -13740,6 +15750,14 @@
           "CANCELLED"
         ]
       },
+      "enums.ParticipantKind": {
+        "type": "string",
+        "enum": [
+          "OWNER",
+          "REGISTERED",
+          "GUEST"
+        ]
+      },
       "enums.PriceScopeKind": {
         "type": "string",
         "enum": [
@@ -13758,6 +15776,13 @@
           "ADMIN",
           "USER_RECEIPT",
           "USER_REPORTED"
+        ]
+      },
+      "enums.SettlementOutcome": {
+        "type": "string",
+        "enum": [
+          "BOUGHT",
+          "NOT_AVAILABLE"
         ]
       },
       "enums.UnitOfMeasure": {
@@ -13792,6 +15817,591 @@
           "ACTIVE",
           "MARKED_FOR_DELETION"
         ]
+      },
+      "generated-list-sharing.JoinResult": {
+        "type": "object",
+        "properties": {
+          "generatedListId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "participant": {
+            "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
+          },
+          "sessionSecret": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "socketToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "socketTokenExpiresAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "generatedListId",
+          "participant",
+          "sessionSecret",
+          "socketToken",
+          "socketTokenExpiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.LinkPreview": {
+        "type": "object",
+        "properties": {
+          "joinable": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "participantCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "joinable"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.ParticipantListResult": {
+        "type": "object",
+        "properties": {
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
+            }
+          }
+        },
+        "required": [
+          "participants"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.ParticipantTokenResult": {
+        "type": "object",
+        "properties": {
+          "socketToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "socketTokenExpiresAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "participant": {
+            "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
+          }
+        },
+        "required": [
+          "socketToken",
+          "socketTokenExpiresAt",
+          "participant"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.ParticipantView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.ParticipantKind"
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "guestNumber": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "userId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "joinedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "shareLinkId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "userAgent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "displayName",
+          "guestNumber",
+          "userId",
+          "joinedAt",
+          "lastSeenAt",
+          "shareLinkId"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.SettlementRef": {
+        "type": "object",
+        "properties": {
+          "settlementId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "settlementId",
+          "lineId",
+          "listId",
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.SettleResult": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/generated-list.GeneratedListLineView"
+          },
+          "settlements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.SettlementRef"
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.SettleSkip"
+            }
+          }
+        },
+        "required": [
+          "line",
+          "settlements",
+          "skipped"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.SettleSkip": {
+        "type": "object",
+        "properties": {
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "ACCESS_GONE",
+              "ORIGIN_DELETED"
+            ]
+          }
+        },
+        "required": [
+          "lineId",
+          "listId",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.ShareLinkResult": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "$ref": "#/components/schemas/generated-list-sharing.ShareLinkView"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "generated-list-sharing.ShareLinkView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "generatedListId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "secret": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdByParticipantId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "participantCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "generatedListId",
+          "secret",
+          "createdByParticipantId",
+          "createdAt",
+          "expiresAt",
+          "participantCount"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list.GeneratedListLineOriginView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lineVersion": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "zoneId",
+          "listId",
+          "lineId",
+          "quantity",
+          "lineVersion"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list.GeneratedListLineView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledQuantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "origin": {
+            "$ref": "#/components/schemas/enums.GeneratedLineOrigin"
+          },
+          "targetListId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "origins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list.GeneratedListLineOriginView"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "content",
+          "quantity",
+          "settledQuantity",
+          "itemId",
+          "options",
+          "origin",
+          "targetListId",
+          "position",
+          "origins"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list.GeneratedListPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list.GeneratedListSummaryView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "generated-list.GeneratedListRunResult": {
+        "type": "object",
+        "properties": {
+          "list": {
+            "$ref": "#/components/schemas/generated-list.GeneratedListView"
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list.GeneratedListSkippedLineView"
+            }
+          }
+        },
+        "required": [
+          "list",
+          "skipped"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list.GeneratedListSkippedLineView": {
+        "type": "object",
+        "properties": {
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "carriedByGeneratedListId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "zoneId",
+          "listId",
+          "lineId",
+          "content",
+          "carriedByGeneratedListId"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list.GeneratedListSourceSnapshot": {
+        "type": "object",
+        "properties": {
+          "profileId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list.GeneratedListSourceSnapshotEntry"
+            }
+          }
+        },
+        "required": [
+          "profileId",
+          "sources"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list.GeneratedListSourceSnapshotEntry": {
+        "type": "object",
+        "properties": {
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "zoneId",
+          "listId"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list.GeneratedListSummaryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.GeneratedListStatus"
+          },
+          "generatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledLineCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "generatedAt",
+          "lineCount",
+          "settledLineCount"
+        ],
+        "additionalProperties": false
+      },
+      "generated-list.GeneratedListView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.GeneratedListStatus"
+          },
+          "generatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceSnapshot": {
+            "$ref": "#/components/schemas/generated-list.GeneratedListSourceSnapshot"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list.GeneratedListLineView"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "generatedAt",
+          "sourceSnapshot",
+          "lines"
+        ],
+        "additionalProperties": false
       },
       "harvest.DiscoveredPlaceGroup": {
         "type": "object",
@@ -14578,6 +17188,94 @@
           }
         }
       },
+      "list.LineSettlementPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.LineSettlementView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "list.LineSettlementResult": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/list.LineView"
+          },
+          "settlement": {
+            "$ref": "#/components/schemas/list.LineSettlementView"
+          }
+        },
+        "required": [
+          "line",
+          "settlement"
+        ],
+        "additionalProperties": false
+      },
+      "list.LineSettlementView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.SettlementOutcome"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledByUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "settledAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "lineId",
+          "listId",
+          "itemId",
+          "outcome",
+          "quantity",
+          "settledByUserId",
+          "settledAt"
+        ],
+        "additionalProperties": false
+      },
       "list.LineView": {
         "type": "object",
         "properties": {
@@ -14614,9 +17312,6 @@
           "approvalStatus": {
             "$ref": "#/components/schemas/enums.LineApprovalStatus"
           },
-          "status": {
-            "$ref": "#/components/schemas/enums.LineStatus"
-          },
           "createdByUserId": {
             "type": "string",
             "minLength": 1
@@ -14648,7 +17343,6 @@
           "itemSetHash",
           "position",
           "approvalStatus",
-          "status",
           "createdByUserId",
           "approvedByUserId",
           "version",
@@ -14710,14 +17404,14 @@
             "type": "integer",
             "minimum": 0
           },
-          "readyCount": {
+          "wantedCount": {
             "type": "integer",
             "minimum": 0
           }
         },
         "required": [
           "lineCount",
-          "readyCount"
+          "wantedCount"
         ],
         "additionalProperties": false
       },
@@ -14901,6 +17595,32 @@
           "reply",
           "link",
           "choices"
+        ],
+        "additionalProperties": false
+      },
+      "msg.generatedList.participant.revoke.response": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "msg.generatedList.shareLink.revoke.response": {
+        "type": "object",
+        "properties": {
+          "revoked": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "revoked"
         ],
         "additionalProperties": false
       },
@@ -15476,7 +18196,7 @@
             "type": "integer",
             "minimum": 0
           },
-          "readyCount": {
+          "wantedCount": {
             "type": "integer",
             "minimum": 0
           }
@@ -15485,7 +18205,7 @@
           "id",
           "name",
           "lineCount",
-          "readyCount"
+          "wantedCount"
         ],
         "additionalProperties": false
       },

@@ -3,11 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import {
   AssistantRole,
   LineApprovalStatus,
-  LineStatus,
   ListResolutionBranch,
+  SettlementOutcome,
   UsernamePropagation,
   type AssistantTurnRequest,
   type AssistantVoiceRequest,
+  type LineSettlementResult,
   type LineView,
   type ListView,
   type MyZoneView,
@@ -149,24 +150,38 @@ class RecordingApi {
     );
   }
 
-  async setLineStatus(
+  async settleLine(
     caller: ApiCaller,
     lineId: string,
-    status: LineStatus
-  ): Promise<LineView> {
-    this.record('setLineStatus', caller, { lineId, status });
+    outcome: SettlementOutcome,
+    quantity?: number
+  ): Promise<LineSettlementResult> {
+    this.record('settleLine', caller, { lineId, outcome, quantity });
     this.throwIfArmed();
     const existing = this.findLine(lineId);
+    const wanted = existing?.quantity ?? 1;
+    const settled = outcome === SettlementOutcome.BOUGHT ? (quantity ?? 1) : 0;
     return {
-      ...line(
-        lineId,
-        existing?.listId ?? 'list-flat',
-        existing?.content ?? 'leche',
-        existing?.quantity ?? 1
-      ),
       // The server's answer, which is what the tool reports rather than the
-      // value it asked for.
-      status,
+      // values it asked for: what came off, and what is still wanted.
+      line: {
+        ...line(
+          lineId,
+          existing?.listId ?? 'list-flat',
+          existing?.content ?? 'leche',
+          Math.max(0, wanted - settled)
+        ),
+      },
+      settlement: {
+        id: `settlement-${lineId}`,
+        lineId,
+        listId: existing?.listId ?? 'list-flat',
+        itemId: null,
+        outcome,
+        quantity: settled,
+        settledByUserId: 'user-1',
+        settledAt: '2026-08-30T00:00:00.000Z',
+      },
     };
   }
 
@@ -190,6 +205,14 @@ class RecordingApi {
     this.record('setUsername', caller, { username, propagation });
     this.throwIfArmed();
     return { username } as UserProfileView;
+  }
+
+  /** How many of one line the list asks for, for the partial settle cases. */
+  setQuantity(lineId: string, quantity: number): void {
+    const found = this.findLine(lineId);
+    if (found) {
+      found.quantity = quantity;
+    }
   }
 
   private findLine(lineId: string): LineView | undefined {
@@ -1116,7 +1139,7 @@ describe('AssistantService', () => {
         'upsert_lines',
         'query_lists',
         'remove_lines',
-        'set_line_status',
+        'settle_lines',
         'rename_me',
       ]);
     });
@@ -1725,7 +1748,6 @@ function line(
     itemId: null,
     position: 0,
     approvalStatus: LineApprovalStatus.APPROVED,
-    status: LineStatus.PENDING,
     createdByUserId: 'user-1',
     approvedByUserId: null,
     version: 1,
@@ -1973,9 +1995,9 @@ describe('a turn that may only touch one list (plan 0044)', () => {
     });
 
     it('leaves the tools that name no list alone', () => {
-      // `remove_lines` and `set_line_status` take line ids, so a scope changes
+      // `remove_lines` and `settle_lines` take line ids, so a scope changes
       // nothing about what they can be asked and they declare once.
-      for (const name of ['remove_lines', 'set_line_status']) {
+      for (const name of ['remove_lines', 'settle_lines']) {
         expect(scopedDeclaration(name).description).toBe(
           TOOL_DECLARATIONS.find((tool) => tool.name === name)?.description
         );
@@ -2218,16 +2240,16 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
     });
   });
 
-  describe('4 set_line_status', () => {
-    it.each([LineStatus.READY, LineStatus.NOT_AVAILABLE, LineStatus.PENDING])(
-      'sets %s without asking anybody to confirm',
-      async (status) => {
+  describe('4 settle_lines', () => {
+    it.each([SettlementOutcome.BOUGHT, SettlementOutcome.NOT_AVAILABLE])(
+      'records %s without asking anybody to confirm',
+      async (outcome) => {
         const api = withLines('leche');
         const provider = new FakeModelProvider([
           FakeModelProvider.calls('query_lists', {}),
-          FakeModelProvider.calls('set_line_status', {
+          FakeModelProvider.calls('settle_lines', {
             lineIds: ['line-0'],
-            status,
+            outcome,
           }),
           FakeModelProvider.says('Hecho.'),
         ]);
@@ -2235,19 +2257,65 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
 
         await service.turn(turnRequest('tengo la leche'));
 
-        const calls = api.of('setLineStatus');
+        const calls = api.of('settleLine');
         expect(calls).toHaveLength(1);
-        expect(calls[0].detail['status']).toBe(status);
+        expect(calls[0].detail['outcome']).toBe(outcome);
       }
     );
+
+    it('passes on the number they said, and reports what is still wanted', async () => {
+      // A partial settle is the ordinary case rather than an edge one (plan
+      // 0047, section 4.1): three were asked for, two came back, and the line
+      // is still wanted.
+      const api = withLines('leche');
+      api.setQuantity('line-0', 3);
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.calls('settle_lines', {
+          lineIds: ['line-0'],
+          outcome: SettlementOutcome.BOUGHT,
+          quantity: 2,
+        }),
+        FakeModelProvider.says('Hecho, dos.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('he cogido dos leches'));
+
+      expect(api.of('settleLine')[0].detail['quantity']).toBe(2);
+      const result = lastToolResult(provider);
+      const lines = result['lines'] as Record<string, unknown>[];
+      expect(lines[0]['settled']).toBe(2);
+      expect(lines[0]['stillWanted']).toBe(1);
+    });
+
+    it('refuses a quantity on a line the shop did not have, and writes nothing', async () => {
+      // The two fields have been read for each other, which core would refuse
+      // too. It is caught here so the turn says something useful about it.
+      const api = withLines('leche');
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('query_lists', {}),
+        FakeModelProvider.calls('settle_lines', {
+          lineIds: ['line-0'],
+          outcome: SettlementOutcome.NOT_AVAILABLE,
+          quantity: 3,
+        }),
+        FakeModelProvider.says('No había.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('no había leche'));
+
+      expect(api.of('settleLine')).toHaveLength(0);
+    });
 
     it('settles two lines in one call', async () => {
       const api = withLines('leche', 'pan');
       const provider = new FakeModelProvider([
         FakeModelProvider.calls('query_lists', {}),
-        FakeModelProvider.calls('set_line_status', {
+        FakeModelProvider.calls('settle_lines', {
           lineIds: ['line-0', 'line-1'],
-          status: LineStatus.READY,
+          outcome: SettlementOutcome.BOUGHT,
         }),
         FakeModelProvider.says('Hecho, leche y pan.'),
       ]);
@@ -2257,17 +2325,17 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
 
       // One breath, one call. The alternative is a loop of round trips through
       // the gateway inside a turn that is already being waited on.
-      expect(
-        api.of('setLineStatus').map((call) => call.detail['lineId'])
-      ).toEqual(['line-0', 'line-1']);
+      expect(api.of('settleLine').map((call) => call.detail['lineId'])).toEqual(
+        ['line-0', 'line-1']
+      );
     });
 
     it('refuses an id this turn has not read, and writes nothing', async () => {
       const api = withLines('leche');
       const provider = new FakeModelProvider([
-        FakeModelProvider.calls('set_line_status', {
+        FakeModelProvider.calls('settle_lines', {
           lineIds: ['line-0'],
-          status: LineStatus.READY,
+          outcome: SettlementOutcome.BOUGHT,
         }),
         FakeModelProvider.says('Déjame mirar la lista.'),
       ]);
@@ -2275,7 +2343,7 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
 
       await service.turn(turnRequest('tengo la leche'));
 
-      expect(api.of('setLineStatus')).toHaveLength(0);
+      expect(api.of('settleLine')).toHaveLength(0);
       expect(lastToolResult(provider)['notInContext']).toBe(true);
     });
 
@@ -2289,9 +2357,9 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
 
       const provider = new FakeModelProvider([
         FakeModelProvider.calls('query_lists', {}),
-        FakeModelProvider.calls('set_line_status', {
+        FakeModelProvider.calls('settle_lines', {
           lineIds: ['line-0'],
-          status: LineStatus.READY,
+          outcome: SettlementOutcome.BOUGHT,
         }),
         FakeModelProvider.says('Solo puedes leer esa lista.'),
       ]);
@@ -2313,9 +2381,9 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
       const service = build(
         new FakeModelProvider([
           FakeModelProvider.calls('query_lists', {}),
-          FakeModelProvider.calls('set_line_status', {
+          FakeModelProvider.calls('settle_lines', {
             lineIds: ['line-0', 'line-1'],
-            status: LineStatus.READY,
+            outcome: SettlementOutcome.BOUGHT,
           }),
           FakeModelProvider.says('Hecho.'),
         ]),
@@ -2452,7 +2520,7 @@ describe('the assistant removes a line, and settles one (plan 0043)', () => {
       );
 
       expect(names).toContain('remove_lines');
-      expect(names).toContain('set_line_status');
+      expect(names).toContain('settle_lines');
       // Still not this one (plan 0044, section 2.2).
       expect(names).not.toContain('rename_me');
     });

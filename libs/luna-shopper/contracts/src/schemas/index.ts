@@ -2,6 +2,22 @@
 // `builders.ts` are deliberately not re-exported to keep `string`/`object` out of
 // the package API.
 
+export { buildAsyncApiDocument } from './asyncapi';
+export { COMMON_IDS } from './common.schemas';
+export { ENUM_IDS } from './enums.schemas';
+export { IDENTITY_EVENT_SCHEMA_IDS } from './events/identity.schemas';
+export { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';
+export { AUTH_SCHEMA_IDS } from './messages/auth.schemas';
+export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';
+export { GENERATED_LIST_SHARING_SCHEMA_IDS } from './messages/generated-list-sharing.schemas';
+export { GENERATED_LIST_SCHEMA_IDS } from './messages/generated-list.schemas';
+export { HARVEST_SCHEMA_IDS } from './messages/harvest.schemas';
+export { LIST_SCHEMA_IDS } from './messages/list.schemas';
+export { MERGE_SCHEMA_IDS } from './messages/merge.schemas';
+export { PROFILE_SCHEMA_IDS } from './messages/profile.schemas';
+export { REALTIME_SCHEMA_IDS } from './messages/realtime.schemas';
+export { STATS_SCHEMA_IDS } from './messages/stats.schemas';
+export { ZONE_SCHEMA_IDS } from './messages/zone.schemas';
 export {
   allSchemas,
   eventContracts,
@@ -23,17 +39,3 @@ export {
   validateSchema,
 } from './validator';
 export type { ValidationResult } from './validator';
-export { buildAsyncApiDocument } from './asyncapi';
-export { ENUM_IDS } from './enums.schemas';
-export { COMMON_IDS } from './common.schemas';
-export { AUTH_SCHEMA_IDS } from './messages/auth.schemas';
-export { ZONE_SCHEMA_IDS } from './messages/zone.schemas';
-export { LIST_SCHEMA_IDS } from './messages/list.schemas';
-export { MERGE_SCHEMA_IDS } from './messages/merge.schemas';
-export { PROFILE_SCHEMA_IDS } from './messages/profile.schemas';
-export { REALTIME_SCHEMA_IDS } from './messages/realtime.schemas';
-export { STATS_SCHEMA_IDS } from './messages/stats.schemas';
-export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';
-export { HARVEST_SCHEMA_IDS } from './messages/harvest.schemas';
-export { IDENTITY_EVENT_SCHEMA_IDS } from './events/identity.schemas';
-export { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';

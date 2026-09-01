@@ -9,6 +9,7 @@ import { runOnce } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { Zone, ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { GeneratedListService } from '../generated-lists/generated-list.service';
 import { ZoneCountsService } from '../zones/zone-counts.service';
 import { toMembershipView, toZoneView } from '../zones/zone.mappers';
 import { anonymizedUsername } from './anonymize';
@@ -30,7 +31,8 @@ export class AccountDeletionService {
     private readonly memberships: Repository<ZoneMembership>,
     private readonly events: CoreEventsPublisher,
     private readonly zoneCounts: ZoneCountsService,
-    private readonly store: ProcessedEventStore
+    private readonly store: ProcessedEventStore,
+    private readonly generatedLists: GeneratedListService
   ) {}
 
   /** Handle `user.deleted`, at most once per user (plan 0011, section 2). */
@@ -41,6 +43,16 @@ export class AccountDeletionService {
   }
 
   private async apply(userId: string): Promise<void> {
+    // Their baskets go first, and outside the loop below, because a generated
+    // list belongs to a person rather than to a zone: somebody who left every
+    // group still has their shopping history, and the membership loop would
+    // never reach it (plan 0050, section 7).
+    //
+    // The `LineSettlement` rows those baskets wrote are **not** deleted with
+    // them. A settlement is a zone fact and the purchase is the household's
+    // (plan 0047, section 3.1); only the basket it came from was ever private.
+    await this.generatedLists.deleteForUser(userId);
+
     const memberships = await this.memberships.find({ where: { userId } });
     for (const membership of memberships) {
       const zone = await this.zones.findOne({

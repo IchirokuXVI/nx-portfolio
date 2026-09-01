@@ -136,3 +136,17 @@ export const listViewersKey = (listId: string) =>
   `presence:list:${listId}:viewers`;
 export const listEditorsKey = (listId: string) =>
   `presence:list:${listId}:editors`;
+
+/**
+ * Who is in a shared basket right now (plan 0051, section 7).
+ *
+ * A **hash** keyed by socket id rather than a sorted set like the two rooms
+ * above, and the difference is forced by what an entry has to carry. A zone or
+ * list entry is a user id, so `userId:socketId` in a scored set says everything
+ * there is to say. A participant entry carries `participantId`, `kind`, the
+ * display name or the guest number, and `userId` only when there is one, which is
+ * a record rather than a key, so it is stored the way `listEditorsKey` stores an
+ * editor: JSON per socket, with its own `seenAt` for pruning.
+ */
+export const generatedListPresenceKey = (generatedListId: string) =>
+  `presence:generated:${generatedListId}`;

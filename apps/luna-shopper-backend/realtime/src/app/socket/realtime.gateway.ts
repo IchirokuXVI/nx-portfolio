@@ -9,6 +9,8 @@ import {
   type OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import {
+  generatedListPresenceRoom,
+  generatedListRoom,
   listPresenceRoom,
   listRoom,
   RealtimeClientMessage,
@@ -141,10 +143,44 @@ export class RealtimeGateway
    */
   async handleConnection(client: Socket): Promise<void> {
     try {
-      const claims = await this.tokenVerifier.verify(this.tokenOf(client));
-      client.data.userId = claims.sub;
-      await client.join(userRoom(claims.sub));
-      this.presence.register(client.id, claims.sub);
+      const identity = await this.tokenVerifier.verifyIdentity(
+        this.tokenOf(client)
+      );
+
+      // A participant socket (plan 0051, section 9) has no user room to join,
+      // because it names no user. It is pinned to the one basket its token's
+      // audience names and can reach nothing else, so the room is joined here for
+      // the same reason `user:{id}` is: the token is the claim, and it was
+      // verified a line earlier. Liveness is still asked of core below, because
+      // unlike a user id a participant can be revoked mid trip.
+      if (identity.kind === 'participant') {
+        // Liveness is asked even though the signature held: unlike a user id, a
+        // participant can be revoked mid trip, and section 3.3 promises that
+        // biting immediately. The answer carries who they are, so this is also
+        // where presence gets its name, fresh rather than from the token.
+        const entry = await this.coreAccess.checkParticipant(
+          identity.participantId,
+          identity.generatedListId
+        );
+        if (!entry) {
+          client.disconnect(true);
+          return;
+        }
+        client.data.participantId = identity.participantId;
+        client.data.generatedListId = identity.generatedListId;
+        await client.join(generatedListRoom(identity.generatedListId));
+        await client.join(generatedListPresenceRoom(identity.generatedListId));
+        this.presence.registerParticipant(client.id, entry);
+        await this.presence.joinGeneratedList(
+          client.id,
+          identity.generatedListId
+        );
+        return;
+      }
+
+      client.data.userId = identity.userId;
+      await client.join(userRoom(identity.userId));
+      this.presence.register(client.id, identity.userId);
     } catch {
       // Unauthenticated sockets never join a room; drop the connection.
       client.disconnect(true);

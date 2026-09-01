@@ -27,6 +27,17 @@ export enum RealtimeRoom {
    * is the claim, and it was verified a line earlier.
    */
   User = 'user',
+  /**
+   * A shared basket (plan 0051, section 7): the one room whose members are
+   * **participants** rather than users.
+   *
+   * It is a room of its own rather than a filter over the owner's room because a
+   * guest has no user id to address, and it follows plan 0032's rule that the
+   * room is the access control rather than a filter applied to a broadcast: a
+   * socket is admitted to it by presenting a live participant credential, and
+   * everything published there is a thing every participant may see.
+   */
+  GeneratedList = 'generated',
 }
 
 /**

@@ -23,6 +23,14 @@ import {
   catalogSchemas,
 } from './messages/catalog.schemas';
 import {
+  generatedListSharingMessageContracts,
+  generatedListSharingSchemas,
+} from './messages/generated-list-sharing.schemas';
+import {
+  generatedListMessageContracts,
+  generatedListSchemas,
+} from './messages/generated-list.schemas';
+import {
   harvestMessageContracts,
   harvestSchemas,
 } from './messages/harvest.schemas';
@@ -57,6 +65,8 @@ export const messageContracts: Record<string, MessageContract> = {
   ...harvestMessageContracts,
   ...statsMessageContracts,
   ...assistantMessageContracts,
+  ...generatedListMessageContracts,
+  ...generatedListSharingMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -80,6 +90,8 @@ export const allSchemas: JsonSchema[] = [
   ...harvestSchemas,
   ...statsSchemas,
   ...assistantSchemas,
+  ...generatedListSchemas,
+  ...generatedListSharingSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
 ];
