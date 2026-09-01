@@ -77,9 +77,26 @@
             <span [class.is-guest-ring]="row.isGuest" class="avatar">
               {{ row.initials }}
             </span>
-            <span class="person-name">
-              {{ row.isMe ? ('basket.people.you' | rokuT) : row.label }}
-            </span>
+            <!--
+              **Everybody's name, the reader's included** (plan 0052, section 2.1).
+
+              This row used to draw "You" for the reader and a name for everybody
+              else, and the phone this sheet is read on is very often not the
+              reader's: four people work one list in a shop and pass a device over
+              a trolley, and "You" is the only label here whose meaning depends on
+              whose hand it is in.
+            -->
+            <span class="person-name">{{ row.label }}</span>
+
+            <!--
+              So the reader can still find themselves in the list. A quiet chip
+              beside the name rather than in place of it, taking the treatment the
+              sheet already has for a word that qualifies a name.
+            -->
+            @if (row.isMe) {
+              <span class="you-tag">{{ 'basket.people.you' | rokuT }}</span>
+            }
+
             <!--
               The guest mark is a word as well as a dashed ring. Never colour
               alone (section 7), and never a form that could be mistaken for a

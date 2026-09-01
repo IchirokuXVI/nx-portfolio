@@ -93,6 +93,29 @@ export interface BasketServiceI {
   ): Promise<BasketSettleResult>;
 
   /**
+   * Take a finished line back to fully outstanding
+   * (`POST .../lines/:lineId/reopen`), luna `0054` section 3.
+   *
+   * **The whole line, never a number of units.** That is the gesture the row's status
+   * control makes, and a partial reopen has no honest answer to which of several
+   * settlements it is undoing.
+   *
+   * The history is **not deleted** by it: each settlement this line produced is marked
+   * reverted and is still served by the settlement pane, because "somebody said they
+   * got this and then took it back" is a truer history than a gap.
+   *
+   * Answers the same shape as {@link settle}, and for the same reason: an origin whose
+   * line has been deleted since cannot have its units put back, and the caller has to
+   * be told something did not land.
+   *
+   * **Any live participant may, guests included** (luna `0054`, section 3.5). A reopen
+   * is not a wider act than a settle: it touches exactly the origins this line's own
+   * settlements touched, and refusing it to the person who just made the mistake would
+   * leave the mistake standing.
+   */
+  reopen(generatedListId: string, lineId: string): Promise<BasketSettleResult>;
+
+  /**
    * Swap a line's pick (`POST .../lines/:lineId/pick`).
    *
    * **Anybody may, guests included.** The options are catalog products and never
@@ -105,7 +128,9 @@ export interface BasketServiceI {
   ): Promise<BasketLine>;
 
   /** Everybody on the basket (`GET .../participants/mine`), for presence. */
-  listParticipants(generatedListId: string): Promise<readonly BasketParticipant[]>;
+  listParticipants(
+    generatedListId: string
+  ): Promise<readonly BasketParticipant[]>;
 
   /**
    * A fresh socket token (`POST .../participant-token`).
@@ -147,6 +172,25 @@ export interface BasketServiceI {
     participantId: string
   ): Promise<void>;
 }
+
+/**
+ * Whether the deployment serves the reopen route, which is luna `0054`'s to ship.
+ *
+ * A constant rather than a runtime probe, exactly as `VERIFY_RESEND_AVAILABLE` is and
+ * for its reasons: there is nothing to discover at runtime that is not already known
+ * at build time, and a probe would spend a request per basket read learning something
+ * a one line edit says better.
+ *
+ * What it gates is **one control's behaviour and not its existence** (plan 0052,
+ * section 10). A finished row still draws its status glyph while this is false; the
+ * glyph is a state indicator rather than a button, because a control you may not use
+ * is not drawn (`0030`) and offering an act that would 404 is the same mistake wearing
+ * a different hat. The settle direction works in full either way, and it is most of
+ * the value.
+ *
+ * Flipping it to `true` is the whole of the frontend work when the route ships.
+ */
+export const BASKET_REOPEN_AVAILABLE = false;
 
 /**
  * Inject this, typed as the interface, never a concrete class.

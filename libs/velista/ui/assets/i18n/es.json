@@ -1001,7 +1001,7 @@
       "failed": "No ha funcionado. Inténtalo de nuevo."
     },
     "history": {
-      "open": "Qué ha pasado con esta línea",
+      "open": "Ver el historial de la línea",
       "title": "Qué ha pasado aquí",
       "loading": "Cargando lo que ha pasado",
       "failed": "Esto no se ha podido cargar",
@@ -1014,6 +1014,23 @@
       "someone": "Alguien",
       "you": "Tú",
       "close": "Cerrar"
+    },
+    "error": {
+      "alreadyFinished": "Alguien ya ha terminado esta línea",
+      "accessChanged": "Tu acceso a una de las listas de esta línea ha cambiado",
+      "ownerOnly": "Esto solo lo puede hacer quien hizo la lista",
+      "gone": "Esta lista ya no está",
+      "tooFast": "Demasiado rápido. Inténtalo dentro de un momento",
+      "failed": "No se ha guardado. Inténtalo de nuevo",
+      "reference": "ref {{correlationId}}"
+    },
+    "status": {
+      "got": "Marcar {{name}} como conseguido",
+      "rest": "Marcar el resto de {{name}} como conseguido",
+      "undoGot": "{{name}} está conseguido. Deshacerlo",
+      "undoNone": "{{name}} no estaba disponible. Deshacerlo",
+      "isGot": "{{name}} está conseguido",
+      "isNone": "{{name}} no estaba disponible"
     }
   },
   "getList": {

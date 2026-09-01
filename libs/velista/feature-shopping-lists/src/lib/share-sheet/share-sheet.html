@@ -1,6 +1,7 @@
 <lib-sheet-shell
   (dismiss)="close()"
   [dismissible]="!busy()"
+  [hasFooter]="true"
   labelledBy="share-title"
 >
   @switch (pane()) {
@@ -17,7 +18,9 @@
         <div class="link-row">
           <code class="link-url">{{ url() }}</code>
           <button (click)="copy()" class="copy" type="button">
-            {{ (copied() ? 'basket.share.copied' : 'basket.share.copy') | rokuT }}
+            {{
+              (copied() ? 'basket.share.copied' : 'basket.share.copy') | rokuT
+            }}
           </button>
         </div>
 
@@ -28,19 +31,11 @@
         }
 
         <p class="note">{{ 'basket.share.note' | rokuT }}</p>
-
-        <button (click)="askRevoke()" class="revoke" type="button">
-          {{ 'basket.share.revoke' | rokuT }}
-        </button>
       } @else {
         <p aria-live="polite" class="minting" role="status">
           {{ 'basket.share.minting' | rokuT }}
         </p>
       }
-
-      <button (click)="close()" class="quiet" type="button">
-        {{ 'basket.share.close' | rokuT }}
-      </button>
     }
 
     <!--
@@ -49,7 +44,9 @@
       people already shopping, whose own sessions authorize them.
     -->
     @case ('revoke') {
-      <h2 class="title" id="share-title">{{ 'basket.revoke.title' | rokuT }}</h2>
+      <h2 class="title" id="share-title">
+        {{ 'basket.revoke.title' | rokuT }}
+      </h2>
 
       <p class="body">
         @if (joinedCount() > 0) {
@@ -63,6 +60,9 @@
         The cascade is a second, explicit choice with its own sentence, and it is
         off by default: throwing three people out of a shop is a different
         intention from stopping a link spreading, and must be stated.
+
+        The label is the tap target and the box inside it is not (plan 0052,
+        section 5), which is why the target is declared on this element.
       -->
       @if (joinedCount() > 0) {
         <label class="cascade">
@@ -81,8 +81,69 @@
           </span>
         </label>
       }
+    }
+  }
 
-      <div class="actions">
+  <!--
+    Both panes' controls, in the footer, and the order of the second one is the
+    fix (plan 0052, section 4).
+
+    The panel is anchored to the bottom of the viewport and grows upward, so the
+    last control in a pane is always the same distance from the bottom of the
+    screen whichever pane is showing. The link pane ended `[Revoke], [Close]` and
+    the revoke pane ended `[Revoke], [Keep it]`, so the destructive confirm
+    rendered within a few pixels of the trigger that summoned it, and the second
+    tap of a double tap landed on it. The panes do not animate between each
+    other, so there is not even a transition to absorb the second press.
+
+    **The safe answer takes the position the trigger occupied.** `Keep it` is
+    first here, so a stray second tap at the trigger's coordinates cancels. The
+    confirm lands where `Close` was, which does not move the bug: `Close`
+    dismisses the sheet, so its second tap arrives after the sheet is gone, and
+    `Revoke the link` is the only control on the link pane that switches panes.
+
+    In the **footer** rather than in the body, and that is what makes the
+    alignment a rule rather than a coincidence: the footer is `flex: 0 0 auto`
+    outside the scroll (plan 0040, section 2), so its children are pinned to the
+    bottom of the panel and index 0 of one stack is exactly index 0 of the other
+    however much copy is above them. In the body they depended on it, and the
+    revoke pane's body is a paragraph shorter and a checkbox taller than the link
+    pane's.
+
+    One footer element and not one per pane. A selective slot is filled from the
+    component's own content, and a node inside an `@switch` branch is in an
+    embedded view rather than in that content, so a footer written into each pane
+    would project nothing at all.
+
+    No timer and no disabled window. A control that ignores a real tap for a few
+    hundred milliseconds is indistinguishable from a control that is broken, and
+    this screen is used by somebody walking.
+  -->
+  <div class="footer" sheetFooter>
+    @switch (pane()) {
+      @case ('link') {
+        @if (link()) {
+          <button (click)="askRevoke()" class="revoke" type="button">
+            {{ 'basket.share.revoke' | rokuT }}
+          </button>
+        }
+
+        <button (click)="close()" class="quiet" type="button">
+          {{ 'basket.share.close' | rokuT }}
+        </button>
+      }
+
+      @case ('revoke') {
+        <!--
+          The same treatment as the trigger it stands in for, so the two rows are
+          the same height and the coordinates actually line up. A `.quiet` cancel
+          here is shorter than the `Revoke the link` it replaces, and the whole
+          geometry would be off by the difference.
+        -->
+        <button (click)="keepIt()" class="cancel" type="button">
+          {{ 'basket.revoke.cancel' | rokuT }}
+        </button>
+
         <!--
           Says what it does rather than "OK": the button and the tick above it
           are two different acts, and the label has to make that readable.
@@ -95,10 +156,7 @@
         >
           {{ 'basket.revoke.confirm' | rokuT }}
         </button>
-        <button (click)="keepIt()" class="quiet" type="button">
-          {{ 'basket.revoke.cancel' | rokuT }}
-        </button>
-      </div>
+      }
     }
-  }
+  </div>
 </lib-sheet-shell>

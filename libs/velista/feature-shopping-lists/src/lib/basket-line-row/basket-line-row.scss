@@ -4,30 +4,86 @@
   display: block;
 }
 
+// The row is a **container** now and not a control (plan 0052, section 6.2): a
+// button cannot contain a button, and the status control at the leading edge is
+// one. Everything that made this a control — the target, the hover, the focus
+// ring, the cursor — moves onto the two buttons inside it.
 .row {
-  @include shared.tap-target;
-
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: var(--app-space-3);
   inline-size: 100%;
   padding: var(--app-space-3) var(--app-space-4);
-  border: none;
   border-block-end: 1px solid var(--app-border-subtle);
+}
+
+// The state, at the leading edge, on the side a thumb reaches. Square at the
+// touch target so the shape sits in the middle of a real 44px of it, and `flex:
+// none` so a long line of content never squeezes the one thing a person is
+// aiming at.
+.status {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  // Pulled back level with the first line of the content: the row is top aligned
+  // because it is three lines deep, and a 44px box beside a 20px line otherwise
+  // centres the glyph against the wrong one.
+  margin-block-start: calc(var(--app-space-1) * -1);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-full);
   background: transparent;
-  font-family: inherit;
-  text-align: start;
+  color: var(--app-text-muted);
   cursor: pointer;
 
   &:hover {
     background: var(--app-surface-raised);
+    color: var(--app-text-secondary);
   }
 
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: calc(var(--app-focus-ring-offset) * -1);
   }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+// A finished line with no reopen route behind it. It states rather than offers, so
+// it takes no hover and no pointer: there is nothing here to press, and a control
+// shaped like one that does nothing is worse than a mark.
+.is-static {
+  cursor: default;
+
+  &:hover {
+    background: transparent;
+  }
+}
+
+.status-glyph {
+  font-size: var(--app-icon-md);
+}
+
+// The three finished shapes take their own colour, and **never instead of the
+// shape** (plan 0044, section 7): empty, half, filled and struck through are what
+// tell them apart, and these only make the difference easier for somebody who does
+// see it. `--app-action-quiet-fg` is this app's amber; `--app-status-attention-*`
+// is violet despite its name.
+.is-partly,
+.is-unavailable {
+  color: var(--app-action-quiet-fg);
+}
+
+.is-bought {
+  color: var(--app-status-success-fg);
 }
 
 // A finished line is drawn **quietly**, not removed and not struck through: it
@@ -44,11 +100,36 @@
   }
 }
 
+// The row proper, and the control that opens the sheet. It takes the whole space
+// between the status and the numbers so a tap anywhere on the words reaches it,
+// which is what the row was before it was split.
 .body {
+  @include shared.tap-target;
+
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--app-space-1);
+  flex: 1;
   min-inline-size: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+    border-radius: var(--app-radius-sm);
+  }
+}
+
+// The hover moves to the row, so pointing at the words still lights the whole line
+// as it did before the split, and pointing at the status control lights only it.
+.row:has(.body:hover) {
+  background: var(--app-surface-raised);
 }
 
 .content {

@@ -24,8 +24,8 @@ import {
 } from '../mapping/basket-mappers';
 import { mapArray } from '../mapping/primitives';
 import { required } from '../mapping/required';
-import { BasketSessionStore } from './basket-session-store';
 import type { BasketServiceI } from './basket-service';
+import { BasketSessionStore } from './basket-session-store';
 
 /**
  * The header a guest presents their session secret on.
@@ -133,6 +133,24 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasketSettleResult(answer), 'basket.settle');
+  }
+
+  async reopen(
+    generatedListId: string,
+    lineId: string
+  ): Promise<BasketSettleResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._line(generatedListId, lineId)}/reopen`,
+        {},
+        // The same participant credential as the settle, because it is the same
+        // authorization: any live participant may reopen a line, guests included
+        // (luna `0054`, section 3.5).
+        this._participantOptions(generatedListId, 'basket.reopen')
+      )
+    );
+
+    return required(toBasketSettleResult(answer), 'basket.reopen');
   }
 
   async setPick(

@@ -5,7 +5,12 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore, LINE_SERVICE } from '@portfolio/velista/data-access';
+import {
+  BasketStore,
+  GatewayError,
+  LINE_SERVICE,
+  SessionStore,
+} from '@portfolio/velista/data-access';
 import type {
   BasketLine,
   BasketParticipant,
@@ -44,6 +49,7 @@ function participant(
     id,
     kind,
     displayName: null,
+    username: null,
     guestNumber: null,
     userId: null,
     joinedAt: null,
@@ -107,6 +113,8 @@ interface World {
   readonly refuses?: readonly string[];
   /** What one page holds, so the paging test can ask for a second. */
   readonly pageSize?: number;
+  /** The reader's own account name, or null for somebody with no name to give. */
+  readonly ownName?: string | null;
 }
 
 /** Every settlement read the sheet made, so a test can assert it asked both origins. */
@@ -154,6 +162,7 @@ function storeDouble(world: World) {
     open: jest.fn().mockResolvedValue(undefined),
     refresh: jest.fn().mockResolvedValue(undefined),
     settle: jest.fn().mockResolvedValue(null),
+    reopen: jest.fn().mockResolvedValue(null),
     setPick: jest.fn().mockResolvedValue(null),
     apply: jest.fn(),
     loadShareLink: jest.fn().mockResolvedValue(undefined),
@@ -204,6 +213,12 @@ async function render(world: World = {}) {
       provideVelistaTesting({ basePath: '/velista' }),
       { provide: BasketStore, useValue: store },
       { provide: LINE_SERVICE, useValue: lineService },
+      // The reader's own account name, which the sheet uses for their own row in the
+      // history and for the caption on a finished line (plan 0052, section 2.1).
+      {
+        provide: SessionStore,
+        useValue: { username: signal(world.ownName ?? 'Ana') },
+      },
       {
         provide: SheetNavigation,
         useValue: {
@@ -594,5 +609,137 @@ describe('SettleSheet: the origins a settle missed', () => {
     const fixture = await settleWith({ line: line(), skippedCount: 0 });
 
     expect(fixture.componentInstance['missed']()).toBeNull();
+  });
+});
+
+/**
+ * Plan 0052, section 7.1: a finished line is not offered two buttons that fail.
+ *
+ * A finished line stays tappable on purpose (`0043` section 3.2), so this sheet opens
+ * on one. The plural rule picked `all_other` for a count of zero, so the primary read
+ * "Got all 0", and pressing either it or "They had none" sent a settle that core
+ * refuses because `outstanding === 0`.
+ */
+describe('SettleSheet: a line with nothing left to settle', () => {
+  /** A line settled up to its asked quantity, by somebody, in a shop that had it. */
+  const done = (overrides: Partial<BasketLine> = {}) =>
+    line({ settled: 4, touchedBy: 'me', lastOutcome: 'BOUGHT', ...overrides });
+
+  const control = (fixture: ComponentFixture<SettleSheet>, selector: string) =>
+    (fixture.nativeElement as HTMLElement).querySelector(selector);
+
+  it('offers no settle target at all', async () => {
+    const { fixture } = await render({ lines: [done()] });
+
+    // Both of the reported controls, gone. Not disabled: a control you may not use is
+    // not drawn (`0030`), and a dimmed "Got all 0" would still be a wrong sentence.
+    expect(control(fixture, '.actions')).toBeNull();
+    expect(control(fixture, '.primary')).toBeNull();
+  });
+
+  it('says what happened instead of how many are outstanding', async () => {
+    // "0 outstanding" is true and answers the wrong question: somebody opened a
+    // finished line to see what they bought.
+    const { fixture } = await render({ lines: [done()] });
+
+    expect(control(fixture, '.outstanding')).toBeNull();
+    expect(control(fixture, '.happened')?.textContent).toContain(
+      'basket.touched.got'
+    );
+  });
+
+  it('draws the same sentence the row does, so the two cannot disagree', async () => {
+    // `touchedCaption` composes both. A shop that had none is a different sentence
+    // from a purchase, because `NOT_AVAILABLE` closes the outstanding amount without
+    // buying anything.
+    const { fixture } = await render({
+      lines: [done({ lastOutcome: 'NOT_AVAILABLE' })],
+    });
+
+    expect(control(fixture, '.happened')?.textContent).toContain(
+      'basket.touched.none'
+    );
+  });
+
+  it('keeps the settle targets on a line that still has something outstanding', async () => {
+    // The guard is on the numbers and not on the sheet: an ordinary line is untouched
+    // by any of this.
+    const { fixture } = await render({ lines: [line({ settled: 1 })] });
+
+    expect(control(fixture, '.primary')).not.toBeNull();
+  });
+});
+
+/**
+ * Plan 0052, section 7.2: the failure gets a sentence.
+ *
+ * One `basket.settle.failed` used to be drawn for every failure the screen can suffer,
+ * so the backend said something specific and the screen said "That did not save."
+ */
+describe('SettleSheet: what a failure says', () => {
+  async function failWith(error: unknown) {
+    const { fixture, store } = await render();
+    store.error.set(error);
+    store.settle.mockResolvedValue(null);
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.primary')
+      ?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    return fixture;
+  }
+
+  it('says the line is already finished on a conflict', async () => {
+    // Two people work one list in a shop, so somebody else finishing a line between
+    // the sheet opening and the tap landing is the ordinary case (luna `0054`,
+    // section 4).
+    const fixture = await failWith(
+      new GatewayError({ code: 'conflict', status: 409, correlationId: 'r1' })
+    );
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.failed')
+        ?.textContent
+    ).toContain('basket.error.alreadyFinished');
+  });
+
+  it('does not give every failure the generic sentence', async () => {
+    const fixture = await failWith(
+      new GatewayError({ code: 'forbidden', status: 403, correlationId: 'r2' })
+    );
+
+    const said =
+      (fixture.nativeElement as HTMLElement).querySelector('.failed')
+        ?.textContent ?? '';
+    expect(said).toContain('basket.error.accessChanged');
+    expect(said).not.toContain('basket.error.failed');
+  });
+
+  it('puts the correlation id beside a sentence that has one', async () => {
+    // The reference is a string somebody may have to quote, so it is drawn rather
+    // than only logged.
+    //
+    // Asserted on the value the template is handed and on the presence of the element
+    // that draws it, never on the rendered string: the testing translator echoes keys
+    // without interpolating, so `{{correlationId}}` never reaches the text here.
+    const fixture = await failWith(
+      new GatewayError({ code: 'internal', status: 500, correlationId: 'r3' })
+    );
+
+    expect(fixture.componentInstance['correlationId']()).toBe('r3');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.reference')
+        ?.textContent
+    ).toContain('basket.error.reference');
+  });
+
+  it('says nothing before anything has failed', async () => {
+    const { fixture } = await render();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.failed')
+    ).toBeNull();
   });
 });
