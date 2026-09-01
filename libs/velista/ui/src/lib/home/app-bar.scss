@@ -19,6 +19,22 @@
   min-width: 0;
 }
 
+// The lockup as a link. It keeps the wordmark's own colour rather than taking the
+// link colour, because it is the identity first and a control second, and an amber
+// sailboat in the corner of every screen would read as the page's primary action.
+// The only thing it gains visually is the focus ring and a pointer.
+.lockup-link {
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--app-radius-md);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
 // The wordmark **is** the lockup: it draws the mark and the name itself. The header
 // used to place a second `lib-brand-mark` beside it, which is why the sailboat
 // appeared twice and why the identity had two accessible names (plan 0007,

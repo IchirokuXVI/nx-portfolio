@@ -253,6 +253,16 @@ export class GroupPage {
    */
   readonly connected = this._realtime.connected;
 
+  /**
+   * Where the header's lockup leads. Home, from every screen that is not home.
+   *
+   * Built with `appPath` like every other link this page makes, so the locale and the
+   * mount are the ones actually in force rather than a string written down twice.
+   */
+  readonly homeUrl = computed(() =>
+    appPath(this._locale(), this._basePath, 'home')
+  );
+
   readonly accountInitial = computed(() => {
     const username = this._session.username();
     return username === null
