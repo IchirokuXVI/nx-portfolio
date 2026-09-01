@@ -1,5 +1,6 @@
 import { CommentAudio } from './comment-audio.entity';
 import { LineComment } from './line-comment.entity';
+import { LineSettlement } from './line-settlement.entity';
 import { ListAccess } from './list-access.entity';
 import { ListLineItem } from './list-line-item.entity';
 import { ListLine } from './list-line.entity';
@@ -16,6 +17,7 @@ import { Zone } from './zone.entity';
 export { BaseEntity } from './base.entity';
 export { CommentAudio } from './comment-audio.entity';
 export { LineComment } from './line-comment.entity';
+export { LineSettlement } from './line-settlement.entity';
 export { ListAccess } from './list-access.entity';
 export { ListLineItem } from './list-line-item.entity';
 export { ListLine } from './list-line.entity';
@@ -38,6 +40,8 @@ export const CORE_ENTITIES = [
   ListLine,
   ListLineItem,
   LineComment,
+  // What happened to a line on a trip (plan 0047). After the line it references.
+  LineSettlement,
   CommentAudio,
   MergeRequest,
   ProcessedEvent,

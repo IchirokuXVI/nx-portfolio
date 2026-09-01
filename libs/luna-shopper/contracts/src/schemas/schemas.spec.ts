@@ -248,7 +248,7 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    it('line.add response (both enum states, free text line)', () => {
+    it('line.add response (a free text line, and no trip status on it)', () => {
       expect(
         validateMessageResponse('line.add', {
           id: 'l',
@@ -261,12 +261,67 @@ describe('contract schemas', () => {
           itemSetHash: null,
           position: 1,
           approvalStatus: 'PENDING',
-          status: 'PENDING',
           createdByUserId: 'u',
           approvedByUserId: null,
           version: 1,
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
+        }).valid
+      ).toBe(true);
+    });
+
+    it('line.settle response (the line as it now stands, and the settlement)', () => {
+      expect(
+        validateMessageResponse('line.settle', {
+          line: {
+            id: 'l',
+            listId: 'li',
+            content: 'Milk',
+            // Two were asked for, two were bought, and the line stays where it
+            // is at zero (plan 0047, section 1).
+            quantity: 0,
+            itemIds: ['3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13'],
+            itemSetHash: 'h',
+            position: 1,
+            approvalStatus: 'APPROVED',
+            createdByUserId: 'u',
+            approvedByUserId: 'u',
+            version: 2,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+          settlement: {
+            id: 's',
+            lineId: 'l',
+            listId: 'li',
+            itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
+            outcome: 'BOUGHT',
+            quantity: 2,
+            settledByUserId: 'u',
+            settledAt: '2026-01-01T00:00:00.000Z',
+          },
+        }).valid
+      ).toBe(true);
+    });
+
+    it('line.settlements response (a free text line, so a null itemId)', () => {
+      expect(
+        validateMessageResponse('line.settlements', {
+          items: [
+            {
+              id: 's',
+              lineId: 'l',
+              listId: 'li',
+              itemId: null,
+              // Nothing was bought and the line did not move, which is a
+              // settlement of zero rather than the absence of one (section 4).
+              outcome: 'NOT_AVAILABLE',
+              quantity: 0,
+              settledByUserId: 'u',
+              settledAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          nextCursor: null,
         }).valid
       ).toBe(true);
     });
@@ -444,8 +499,10 @@ describe('contract schemas', () => {
       // No scopes is not an error. It means no prices, and the suggestions still
       // work; resolving a default from the profile is plan 0049.
       expect(
-        validateMessageRequest('item.searchOffers', { userId: 'u', query: 'leche' })
-          .valid
+        validateMessageRequest('item.searchOffers', {
+          userId: 'u',
+          query: 'leche',
+        }).valid
       ).toBe(true);
     });
 
@@ -568,7 +625,9 @@ describe('contract schemas', () => {
             pendingRequestCount: 1,
             firstPendingRequesterName: 'Ines',
           },
-          lists: [{ id: 'l', name: 'Groceries', lineCount: 12, readyCount: 7 }],
+          lists: [
+            { id: 'l', name: 'Groceries', lineCount: 12, wantedCount: 7 },
+          ],
           ownerUsername: 'Marc',
         }).valid
       ).toBe(true);
@@ -709,7 +768,7 @@ describe('contract schemas', () => {
           zoneId: 'z',
           name: 'Groceries',
           createdByUserId: 'u',
-          counts: { lineCount: 0, readyCount: 0 },
+          counts: { lineCount: 0, wantedCount: 0 },
           autoApproveLines: false,
           sharedWithZone: true,
           myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],

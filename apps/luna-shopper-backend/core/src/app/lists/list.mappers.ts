@@ -1,14 +1,20 @@
 import {
   ListPermission,
   type CommentView,
+  type LineSettlementView,
   type LineView,
   type ListCounts,
   type ListView,
 } from '@portfolio/luna-shopper/contracts';
-import type { LineComment, ListLine, ShoppingList } from '../entities';
+import type {
+  LineComment,
+  LineSettlement,
+  ListLine,
+  ShoppingList,
+} from '../entities';
 
 /** A list with no lines yet, which is every list at the moment it is created. */
-export const EMPTY_LIST_COUNTS: ListCounts = { lineCount: 0, readyCount: 0 };
+export const EMPTY_LIST_COUNTS: ListCounts = { lineCount: 0, wantedCount: 0 };
 
 /**
  * Maps a list entity to the client view. The counts are passed in rather than
@@ -65,7 +71,10 @@ const PERMISSION_ORDER: readonly ListPermission[] = [
  * right one. An argument the compiler insists on means every caller has to say
  * what the set is, and there is exactly one service that calls this.
  */
-export function toLineView(line: ListLine, itemIds: readonly string[]): LineView {
+export function toLineView(
+  line: ListLine,
+  itemIds: readonly string[]
+): LineView {
   return {
     id: line.id,
     listId: line.listId,
@@ -75,12 +84,35 @@ export function toLineView(line: ListLine, itemIds: readonly string[]): LineView
     itemSetHash: line.itemSetHash,
     position: line.position,
     approvalStatus: line.approvalStatus,
-    status: line.status,
     createdByUserId: line.createdByUserId,
     approvedByUserId: line.approvedByUserId,
     version: line.version,
     createdAt: line.createdAt.toISOString(),
     updatedAt: line.updatedAt.toISOString(),
+  };
+}
+
+/**
+ * A settlement on the wire (plan 0047, section 3).
+ *
+ * Three stored columns do not appear, and their absence is the point.
+ * `generatedListLineId` is the basket the purchase came out of, which is private
+ * where the purchase itself is a zone fact (section 3.1); `pricePaidCents` and
+ * `supermarketLocationId` are declared for backlog 0004 and written by nothing
+ * yet, so serving them would promise a number this plan never fills in.
+ */
+export function toLineSettlementView(
+  settlement: LineSettlement
+): LineSettlementView {
+  return {
+    id: settlement.id,
+    lineId: settlement.lineId,
+    listId: settlement.listId,
+    itemId: settlement.itemId,
+    outcome: settlement.outcome,
+    quantity: settlement.quantity,
+    settledByUserId: settlement.settledByUserId,
+    settledAt: settlement.settledAt.toISOString(),
   };
 }
 

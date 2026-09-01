@@ -1,21 +1,22 @@
 import type { ConfigService } from '@nestjs/config';
 import {
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
   MembershipStatus,
+  SettlementOutcome,
   VOICE_COMMENT_CONTENT_TYPES,
   ZoneRole,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource } from 'typeorm';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
+import { LineSettlement, ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { ListLineItem } from '../entities';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { CommentService } from './comment.service';
 import { fakeLineItems } from './line-items.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
+import { SettlementService } from './settlement.service';
 
 /**
  * The permission matrix (plan 0036, acceptance items 2 to 6).
@@ -41,6 +42,7 @@ const MEMBERSHIP_ID = 'm1';
 interface World {
   listAccess: ListAccessService;
   lines: LineService;
+  settlements: SettlementService;
   comments: CommentService;
   saved: Partial<ListLine>[];
   deleted: string[];
@@ -81,7 +83,6 @@ function world(options: {
     itemSetHash: null,
     position: 10,
     approvalStatus: LineApprovalStatus.PENDING,
-    status: LineStatus.PENDING,
     createdByUserId: 'author',
     approvedByUserId: null,
     version: 1,
@@ -165,11 +166,26 @@ function world(options: {
   // about products, but every write path now touches a set.
   const lineItems = fakeLineItems();
 
+  // What a settle writes (plan 0047). Nothing here reads it back: this file
+  // asks who may settle, and the history reads are their own spec.
+  const settlementRepo = {
+    create: (data: Record<string, unknown>) => data,
+    save: async (row: Record<string, unknown>) => ({
+      ...row,
+      id: 's1',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    }),
+  };
+
   const dataSource = {
     transaction: async <T>(run: (m: unknown) => Promise<T>) =>
       run({
-        getRepository: (entity: unknown) =>
-          entity === ListLineItem ? lineItems.repo : lineRepo,
+        getRepository: (entity: unknown) => {
+          if (entity === ListLineItem) {
+            return lineItems.repo;
+          }
+          return entity === LineSettlement ? settlementRepo : lineRepo;
+        },
       }),
   } as unknown as DataSource;
 
@@ -184,6 +200,13 @@ function world(options: {
     dataSource,
     lineRepo as never,
     lineItems.repo as never,
+    listAccess,
+    publisher
+  );
+
+  const settlements = new SettlementService(
+    dataSource,
+    settlementRepo as never,
     listAccess,
     publisher
   );
@@ -222,7 +245,16 @@ function world(options: {
     config
   );
 
-  return { listAccess, lines, comments, saved, deleted, events, list };
+  return {
+    listAccess,
+    lines,
+    settlements,
+    comments,
+    saved,
+    deleted,
+    events,
+    list,
+  };
 }
 
 const READ_ONLY = [ListPermission.READ];
@@ -379,15 +411,17 @@ describe('a member holding {READ, WRITE} (acceptance 3)', () => {
     ).rejects.toThrow();
   });
 
-  it('is refused when it ticks a line off', async () => {
-    // The stated cost of the migration (plan 0036, section 3.1): ticking off has
-    // moved into DECIDE, so yesterday's WRITER needs it granting once.
+  it('is refused when it says it bought something', async () => {
+    // The stated cost of the migration (plan 0036, section 3.1), inherited by
+    // the settle that replaced ticking off (plan 0047, section 4): saying what
+    // happened in the shop is DECIDE, so yesterday's WRITER needs it granting
+    // once.
     const w = world({ permissions: WRITER });
     await expect(
-      w.lines.setStatus({
+      w.settlements.settle({
         userId: USER_ID,
         lineId: 'li1',
-        status: LineStatus.READY,
+        outcome: SettlementOutcome.BOUGHT,
       })
     ).rejects.toThrow();
   });
@@ -428,14 +462,18 @@ describe('a member holding {READ, DECIDE} (acceptance 4)', () => {
     expect(view.approvalStatus).toBe(LineApprovalStatus.REJECTED);
   });
 
-  it('sets a line to NOT_AVAILABLE', async () => {
+  it('records that the shop did not have it, and moves nothing', async () => {
     const w = world({ permissions: DECIDER });
-    const view = await w.lines.setStatus({
+    const { line, settlement } = await w.settlements.settle({
       userId: USER_ID,
       lineId: 'li1',
-      status: LineStatus.NOT_AVAILABLE,
+      outcome: SettlementOutcome.NOT_AVAILABLE,
     });
-    expect(view.status).toBe(LineStatus.NOT_AVAILABLE);
+    expect(settlement.outcome).toBe(SettlementOutcome.NOT_AVAILABLE);
+    // Nothing was bought, so nothing came off what the household still wants
+    // (plan 0047, section 4).
+    expect(settlement.quantity).toBe(0);
+    expect(line.quantity).toBe(3);
   });
 
   it('comments', async () => {
@@ -605,13 +643,13 @@ describe('the whole call site table (plan 0036, section 4)', () => {
         }),
     },
     {
-      operation: 'line.setStatus',
+      operation: 'line.settle',
       needs: ListPermission.DECIDE,
       run: (w) =>
-        w.lines.setStatus({
+        w.settlements.settle({
           userId: USER_ID,
           lineId: 'li1',
-          status: LineStatus.READY,
+          outcome: SettlementOutcome.BOUGHT,
         }),
     },
     {

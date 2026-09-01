@@ -124,9 +124,9 @@ const zoneListPreview = object(
     id: nonEmptyString(),
     name: nonEmptyString(),
     lineCount: integer({ minimum: 0 }),
-    readyCount: integer({ minimum: 0 }),
+    wantedCount: integer({ minimum: 0 }),
   },
-  ['id', 'name', 'lineCount', 'readyCount']
+  ['id', 'name', 'lineCount', 'wantedCount']
 );
 
 const myZoneCounts = object(

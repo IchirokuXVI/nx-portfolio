@@ -3698,9 +3698,9 @@
         ]
       }
     },
-    "/v1/lines/{id}/status": {
+    "/v1/lines/{id}/settle": {
       "post": {
-        "operationId": "LinesController_setStatus_v1",
+        "operationId": "LinesController_settle_v1",
         "parameters": [
           {
             "name": "id",
@@ -3716,18 +3716,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetStatusDto"
+                "$ref": "#/components/schemas/SettleLineDto"
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "The `line.setStatus` contract response.",
+            "description": "The `line.settle` contract response.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/list.LineView"
+                  "$ref": "#/components/schemas/list.LineSettlementResult"
                 }
               }
             }
@@ -3738,6 +3738,91 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lines"
+        ]
+      }
+    },
+    "/v1/lines/{id}/settlements": {
+      "get": {
+        "operationId": "LinesController_settlements_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `line.settlements` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/list.LineSettlementPage"
                 }
               }
             }
@@ -4201,6 +4286,91 @@
         ],
         "tags": [
           "comments"
+        ]
+      }
+    },
+    "/v1/items/{id}/settlements": {
+      "get": {
+        "operationId": "ItemHistoryController_settlements_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `line.itemSettlements` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/list.LineSettlementPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lines"
         ]
       }
     },
@@ -11472,7 +11642,7 @@
           },
           "quantity": {
             "type": "number",
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 100000
           },
           "itemIds": {
@@ -11529,7 +11699,7 @@
           },
           "quantity": {
             "type": "number",
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 100000
           },
           "itemIds": {
@@ -11573,20 +11743,30 @@
           "approvalStatus"
         ]
       },
-      "SetStatusDto": {
+      "SettleLineDto": {
         "type": "object",
         "properties": {
-          "status": {
+          "outcome": {
             "type": "string",
             "enum": [
-              "PENDING",
-              "READY",
+              "BOUGHT",
               "NOT_AVAILABLE"
             ]
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "How many were bought. Defaults to one, and may exceed what the line asks for: the extra unit is real and belongs in the consumption history. Not allowed when the shop did not have it."
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards."
           }
         },
         "required": [
-          "status"
+          "outcome"
         ]
       },
       "AddCommentDto": {
@@ -13696,14 +13876,6 @@
           "REJECTED"
         ]
       },
-      "enums.LineStatus": {
-        "type": "string",
-        "enum": [
-          "PENDING",
-          "READY",
-          "NOT_AVAILABLE"
-        ]
-      },
       "enums.ListPermission": {
         "type": "string",
         "enum": [
@@ -13758,6 +13930,13 @@
           "ADMIN",
           "USER_RECEIPT",
           "USER_REPORTED"
+        ]
+      },
+      "enums.SettlementOutcome": {
+        "type": "string",
+        "enum": [
+          "BOUGHT",
+          "NOT_AVAILABLE"
         ]
       },
       "enums.UnitOfMeasure": {
@@ -14578,6 +14757,94 @@
           }
         }
       },
+      "list.LineSettlementPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.LineSettlementView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "list.LineSettlementResult": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "$ref": "#/components/schemas/list.LineView"
+          },
+          "settlement": {
+            "$ref": "#/components/schemas/list.LineSettlementView"
+          }
+        },
+        "required": [
+          "line",
+          "settlement"
+        ],
+        "additionalProperties": false
+      },
+      "list.LineSettlementView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.SettlementOutcome"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledByUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "settledAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "lineId",
+          "listId",
+          "itemId",
+          "outcome",
+          "quantity",
+          "settledByUserId",
+          "settledAt"
+        ],
+        "additionalProperties": false
+      },
       "list.LineView": {
         "type": "object",
         "properties": {
@@ -14614,9 +14881,6 @@
           "approvalStatus": {
             "$ref": "#/components/schemas/enums.LineApprovalStatus"
           },
-          "status": {
-            "$ref": "#/components/schemas/enums.LineStatus"
-          },
           "createdByUserId": {
             "type": "string",
             "minLength": 1
@@ -14648,7 +14912,6 @@
           "itemSetHash",
           "position",
           "approvalStatus",
-          "status",
           "createdByUserId",
           "approvedByUserId",
           "version",
@@ -14710,14 +14973,14 @@
             "type": "integer",
             "minimum": 0
           },
-          "readyCount": {
+          "wantedCount": {
             "type": "integer",
             "minimum": 0
           }
         },
         "required": [
           "lineCount",
-          "readyCount"
+          "wantedCount"
         ],
         "additionalProperties": false
       },
@@ -15476,7 +15739,7 @@
             "type": "integer",
             "minimum": 0
           },
-          "readyCount": {
+          "wantedCount": {
             "type": "integer",
             "minimum": 0
           }
@@ -15485,7 +15748,7 @@
           "id",
           "name",
           "lineCount",
-          "readyCount"
+          "wantedCount"
         ],
         "additionalProperties": false
       },

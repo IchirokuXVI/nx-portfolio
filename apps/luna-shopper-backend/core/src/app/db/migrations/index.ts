@@ -4,6 +4,7 @@ import { ListSharedWithZone1756000300000 } from './1756000300000-ListSharedWithZ
 import { VoiceComments1756000400000 } from './1756000400000-VoiceComments';
 import { LineProductSet1756000600000 } from './1756000600000-LineProductSet';
 import { ShoppingProfiles1756000700000 } from './1756000700000-ShoppingProfiles';
+import { LineSettlements1756000800000 } from './1756000800000-LineSettlements';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -21,4 +22,5 @@ export const CORE_MIGRATIONS = [
   VoiceComments1756000400000,
   LineProductSet1756000600000,
   ShoppingProfiles1756000700000,
+  LineSettlements1756000800000,
 ];
