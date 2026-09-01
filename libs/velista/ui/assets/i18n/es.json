@@ -399,9 +399,6 @@
     "readOnly": {
       "banner": "Puedes ver esta lista, no cambiarla"
     },
-    "ticking": {
-      "notMine": "Añade lo que haga falta. Marcar lo comprado es cosa de quien va a la tienda"
-    },
     "line": {
       "awaitingApproval": "Esperando aprobación",
       "rejected": "Rechazado",
@@ -575,6 +572,9 @@
       "body": "Su historial de compras se va con ella. Una línea a cero conserva su historial y no molesta; borrar es para lo que esta lista ya no debería saber.",
       "confirm": "Borrar la línea",
       "cancel": "Déjala"
+    },
+    "buying": {
+      "notMine": "Cualquiera puede añadir a esta lista. Comprar es de quien hace la compra"
     }
   },
   "account": {

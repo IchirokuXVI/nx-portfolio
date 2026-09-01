@@ -289,10 +289,15 @@ describe('toLine', () => {
     listId: 'l1',
     content: 'Milk',
     quantity: 2,
-    itemId: null,
+    // A product set, where this was a single nullable `itemId` that was null on every
+    // line ever created (backend plan 0048, section 1.1).
+    itemIds: ['item-milk'],
     position: 3,
     approvalStatus: 'APPROVED',
-    status: 'READY',
+    // The two derived indicators, which replaced the trip status (backend plan 0047,
+    // section 5). There is no `status` on a line any more.
+    boughtCount: 4,
+    lastSettlementOutcome: 'BOUGHT',
     createdByUserId: 'u1',
     approvedByUserId: 'u2',
     version: 7,
@@ -319,8 +324,36 @@ describe('toLine', () => {
     ).toBe(0);
   });
 
-  it('falls back to PENDING for an unknown line status', () => {
-    expect(toLine({ ...valid, status: 'ON_ORDER' })?.status).toBe('PENDING');
+  it('reads a free text line as a free text line', () => {
+    // Empty and null are what the server sends for a line carrying no products, and
+    // both have to survive: a set that arrived as something else must not become a
+    // product reference nobody can resolve.
+    expect(toLine({ ...valid, itemIds: [] })?.itemIds).toEqual([]);
+    expect(toLine({ ...valid, itemIds: undefined })?.itemIds).toEqual([]);
+    expect(toLine({ ...valid, itemIds: [1, null, 'ok'] })?.itemIds).toEqual([
+      'ok',
+    ]);
+  });
+
+  it('reads no history at all as no history, in the safe direction', () => {
+    // Both default to "nothing has ever happened to this line", which draws no
+    // indicator. Defaulting the other way would put a bought mark on a line over an
+    // absent field.
+    const bare = toLine({
+      ...valid,
+      boughtCount: undefined,
+      lastSettlementOutcome: undefined,
+    });
+
+    expect(bare?.boughtCount).toBe(0);
+    expect(bare?.lastSettlementOutcome).toBeNull();
+  });
+
+  it('reads an outcome it has never heard of as the quiet one', () => {
+    // `NOT_AVAILABLE` moves no quantity and counts as no purchase, so an unknown value
+    // reports a trip that happened and claims nothing about what the household has.
+    expect(toLine({ ...valid, lastSettlementOutcome: 'REFUNDED' })
+      ?.lastSettlementOutcome).toBe('NOT_AVAILABLE');
   });
 });
 
