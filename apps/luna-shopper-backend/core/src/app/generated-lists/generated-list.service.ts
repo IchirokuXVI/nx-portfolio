@@ -24,7 +24,7 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
+import { DataSource, In, IsNull, QueryFailedError, Repository } from 'typeorm';
 import {
   GeneratedList,
   GeneratedListLine,
@@ -799,7 +799,11 @@ export class GeneratedListService {
       return new Map();
     }
     const rows = await this.settlements.find({
-      where: { generatedListLineId: In(lineIds) },
+      // A settlement somebody took back says nothing about the line any more
+      // (plan 0054, section 3.3). Without this a reopened line would keep the
+      // caption of the settle that was undone, which is the one field on the row
+      // that cannot be derived from the numbers.
+      where: { generatedListLineId: In(lineIds), revertedAt: IsNull() },
       order: { createdAt: 'ASC', id: 'ASC' },
       // No `select` projection: TypeORM's typed form rejects a partial entity
       // here, and the rows are small and bounded by one basket's settlements.

@@ -4,7 +4,10 @@ import {
   SettlementOutcome,
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
-import { DomainException } from '@portfolio/luna-shopper/platform';
+import {
+  ConflictException,
+  DomainException,
+} from '@portfolio/luna-shopper/platform';
 import type { DataSource } from 'typeorm';
 import {
   GeneratedListLine,
@@ -381,9 +384,14 @@ describe('settling from the basket (section 6)', () => {
     expect(harness.basketLine.settledQuantity).toBe(2);
   });
 
-  it('refuses a line that is already finished', async () => {
+  it('refuses a line that is already finished, as a conflict', async () => {
     const harness = build({ quantity: 2, settledQuantity: 2 });
-    await expect(settle(harness)).rejects.toBeInstanceOf(DomainException);
+    // A conflict and not a validation failure (plan 0054, section 4). The
+    // instance is the assertion, because `validation_failed` is also what a
+    // malformed quantity raises and `messageArgs.field` never reaches the
+    // client: a client keying its copy on the code could not tell a state it can
+    // explain from a bug it cannot.
+    await expect(settle(harness)).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('closes the outstanding amount for NOT_AVAILABLE and decrements nothing', async () => {

@@ -17,6 +17,7 @@ import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineService } from './generated-list-line.service';
+import { GeneratedListReopenService } from './generated-list-reopen.service';
 import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingController } from './generated-list-sharing.controller';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
@@ -73,6 +74,10 @@ import { LineClaimModule } from './line-claim.module';
     GeneratedListLineService,
     GeneratedListSharingService,
     GeneratedListSettleService,
+    // The reverse of the settle (plan 0054, section 3), and a provider of its
+    // own for the same reason: it is the other operation here that reaches a
+    // zone list, with its own transaction and its own announcements.
+    GeneratedListReopenService,
     GeneratedListBasketService,
   ],
   // Exported so account deletion (plan 0011) can drop a departing user's baskets
