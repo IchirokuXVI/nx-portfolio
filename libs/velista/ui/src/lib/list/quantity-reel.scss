@@ -1,0 +1,115 @@
+:host {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--app-quantity-width);
+  // The row's full height is the target (plan 0043, section 7). A thumb aiming at a
+  // number two digits wide while walking is the failure this exists to avoid, and it
+  // is why the host stretches rather than wrapping the pill tightly.
+  min-height: var(--app-touch-target);
+  // Without this the browser reads a horizontal drag that wanders vertically as a
+  // scroll of the page and takes the gesture away mid movement. It is the same line
+  // the reorder grip needs, and for the same reason.
+  touch-action: none;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+:host(.dragging) {
+  cursor: grabbing;
+}
+
+:host(.readonly) {
+  cursor: default;
+}
+
+:host(:focus-visible) {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  outline-offset: var(--app-focus-ring-offset);
+  border-radius: var(--app-radius-md);
+}
+
+// The resting state, and what the row draws when nothing is happening.
+.pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--app-quantity-width);
+  height: var(--app-quantity-height);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  // A column of them has to line up, and the digits change under a moving thumb.
+  font-variant-numeric: tabular-nums;
+  // The snap. It is the only confirmation the gesture gives, so it has to be felt:
+  // short, eased, and on the thing that moved rather than on the row around it.
+  transition:
+    transform var(--app-motion-fast) var(--app-motion-ease),
+    color var(--app-motion-fast) var(--app-motion-ease);
+}
+
+// A line the household does not currently want. Quiet, present, and emphatically not
+// crossed out: there is nothing finished about being stocked.
+.pill.zero {
+  background: transparent;
+  border-color: var(--app-border-subtle);
+  color: var(--app-text-muted);
+}
+
+:host(.dragging) .pill {
+  // Out of the way rather than gone: the overlay sits over it, and removing it would
+  // collapse the row's width under the finger.
+  opacity: 0;
+}
+
+// The overlay, which is the reel proper: previous, current, next.
+.overlay {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-6);
+  height: var(--app-reel-height);
+  padding: 0 var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-reel-radius);
+  background: var(--app-surface-overlay);
+  box-shadow: var(--app-sheet-shadow);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+// The neighbours keep their width even when empty, so the current number does not
+// slide sideways as the reel reaches zero.
+.neighbour {
+  min-width: var(--app-reel-digit-width);
+  text-align: center;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.current {
+  min-width: var(--app-reel-digit-width);
+  text-align: center;
+  font-size: var(--app-text-xl);
+  font-weight: 700;
+  color: var(--app-action-quiet-fg);
+}
+
+// Somebody who has asked not to be moved gets the number and none of the motion. The
+// control still works; it simply arrives rather than travels.
+@media (prefers-reduced-motion: reduce) {
+  .pill {
+    transition: none;
+  }
+}

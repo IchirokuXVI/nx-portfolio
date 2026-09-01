@@ -41,14 +41,14 @@ export class ResumeListCard {
 
   /** Percentage ready, or null when the counts have not arrived. */
   readonly progress = computed(() => {
-    const { lineCount, readyCount } = this.list();
+    const { lineCount, wantedCount } = this.list();
     if (
       lineCount === undefined ||
-      readyCount === undefined ||
+      wantedCount === undefined ||
       lineCount === 0
     ) {
       return null;
     }
-    return Math.round((readyCount / lineCount) * 100);
+    return Math.round((wantedCount / lineCount) * 100);
   });
 }

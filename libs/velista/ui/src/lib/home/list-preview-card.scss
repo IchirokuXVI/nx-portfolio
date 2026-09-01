@@ -67,26 +67,12 @@
   min-height: var(--app-preview-row-height);
 }
 
-.status {
-  font-size: var(--app-icon-md);
-}
-
-.status-ready {
-  color: var(--app-status-success-fg);
-}
-
-.status-missing {
-  color: var(--app-status-danger-fg);
-}
-
-.status-pending {
-  color: var(--app-text-muted);
-}
-
+// The content stacks now, because a line can carry an indicator under it exactly as
+// the real row does. It was a single row with a glyph at its head.
 .content {
   display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
+  flex-direction: column;
+  gap: var(--app-space-hair);
   flex: 1;
   min-width: 0;
 }
@@ -99,24 +85,48 @@
   white-space: nowrap;
 }
 
-.done {
+// Muted, and pointedly **not** struck through. There is nothing crossed out about a
+// line saying the household is stocked: it keeps everything it knows about itself and
+// somebody drags it back up in a fortnight (velista plan 0043, section 3.2).
+.settled {
   color: var(--app-text-muted);
-  text-decoration: line-through;
 }
 
-.chip {
-  flex-shrink: 0;
-  padding: var(--app-chip-padding-block) var(--app-space-2);
-  border: 1px solid var(--app-status-danger-border);
-  border-radius: var(--app-chip-radius);
-  color: var(--app-status-danger-fg);
+.mark {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-1);
   font-size: var(--app-text-2xs);
-  font-weight: 600;
   white-space: nowrap;
 }
 
+.mark-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.mark-bought {
+  color: var(--app-status-success-fg);
+}
+
+.mark-missing {
+  color: var(--app-status-danger-fg);
+}
+
+// Tabular, so a column of them lines up, and sized like a value rather than like an
+// annotation: it is the state of the line now, not a note about it.
 .quantity {
-  font-size: var(--app-text-xs);
+  flex-shrink: 0;
+  min-width: var(--app-preview-quantity-width);
+  text-align: center;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+
+// Zero is drawn quietly rather than absent. A line the household does not currently
+// want is still a line, and the number is what says so.
+.zero {
   color: var(--app-text-muted);
 }
 

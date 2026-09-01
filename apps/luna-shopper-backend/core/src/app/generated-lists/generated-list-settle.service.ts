@@ -8,6 +8,7 @@ import {
   type GeneratedListSettleResult,
   type GeneratedListSettleSkip,
   type GeneratedListSettlementRef,
+  type LineSettlementSummary,
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -221,6 +222,21 @@ export class GeneratedListSettleService {
           // an argument precisely so a line with two products is never reported
           // as a free text line.
           itemIds: await this.zoneLineItemIds(manager, zoneLine.id),
+          // And the two indicators, for the same reason and with more force
+          // (plan 0047, section 5). This is the path a purchase normally takes,
+          // so announcing the zero summary here would take the bought indicator
+          // off the household's line at the exact moment somebody bought it.
+          //
+          // Counted inside the transaction, after the insert, so it includes the
+          // row just written; the most recent outcome needs no query, being that
+          // row by construction. One settlement per zone line per call, because
+          // each origin is settled once.
+          settlementSummary: {
+            boughtCount: await settlements.count({
+              where: { lineId: zoneLine.id, outcome: SettlementOutcome.BOUGHT },
+            }),
+            lastOutcome: req.outcome,
+          },
         });
       }
 
@@ -250,7 +266,11 @@ export class GeneratedListSettleService {
         RealtimeEvent.LineSettled,
         announcement.zoneId,
         {
-          line: toLineView(announcement.line, announcement.itemIds),
+          line: toLineView(
+            announcement.line,
+            announcement.itemIds,
+            announcement.settlementSummary
+          ),
           settlement: toLineSettlementView(announcement.settlement),
         },
         announcement.listId
@@ -437,6 +457,16 @@ interface ZoneAnnouncement {
   line: ListLine;
   settlement: LineSettlement;
   itemIds: string[];
+  /**
+   * The zone line's two indicators as this settle leaves them (plan 0047,
+   * section 5).
+   *
+   * Captured inside the transaction rather than recomputed out here, for the
+   * same reason `itemIds` is: the announcement carries a whole `LineView` and a
+   * client reconciles off it, so a summary read after the commit would be a
+   * second query answering a question this loop already knew.
+   */
+  settlementSummary: LineSettlementSummary;
 }
 
 /**

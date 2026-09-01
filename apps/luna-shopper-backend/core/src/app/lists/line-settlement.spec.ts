@@ -13,6 +13,7 @@ import { LineSettlement, ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineItems } from './line-items.fake';
+import { fakeLineSettlements } from './line-settlements.fake';
 import { ListAccessService } from './list-access.service';
 import { SettlementService } from './settlement.service';
 
@@ -80,7 +81,6 @@ function build(options: {
   } as ListLine;
 
   const saved: Partial<ListLine>[] = [];
-  const written: Partial<LineSettlement>[] = [];
   const events: { event: RealtimeEvent; payload: LineSettlementResult }[] = [];
 
   const lineRepo = {
@@ -95,18 +95,13 @@ function build(options: {
     },
   };
 
-  const settlementRepo = {
-    create: (data: Partial<LineSettlement>) => ({ ...data }),
-    save: async (row: Partial<LineSettlement>) => {
-      const stored = {
-        ...row,
-        id: `s${written.length + 1}`,
-        createdAt: new Date('2026-01-02T00:00:00.000Z'),
-      };
-      written.push(stored);
-      return stored;
-    },
-  };
+  // The shared fake rather than a save-only stub: the settle reads the table
+  // back after the insert, to count what the line has now been bought (plan
+  // 0047, section 5). Its own row list is what the assertions read, so what is
+  // asserted is what the service could have gone on to read.
+  const settlements = fakeLineSettlements();
+  const settlementRepo = settlements.repo;
+  const written = settlements.rows;
 
   const memberships = {
     findOne: async () =>
@@ -196,6 +191,91 @@ describe('line.settle (plan 0047, section 4)', () => {
     expect(line.quantity).toBe(0);
     expect(w.saved).toHaveLength(1);
     expect(w.written).toHaveLength(1);
+  });
+
+  /**
+   * The two indicators the list page draws every row from (section 5).
+   *
+   * They are on the answer rather than left to a second read because the client
+   * cannot compute either: `quantity = 0` alone cannot tell a thing that has just
+   * been bought from a thing somebody typed and has never needed, and "they did
+   * not have it" is a fact about the last trip that expires the moment somebody
+   * does buy it.
+   */
+  describe('the two indicators it carries back', () => {
+    it('counts the purchase it has just written, not the one before it', async () => {
+      const w = build({ quantity: 2 });
+
+      const { line } = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 2,
+      });
+
+      // One, and not zero: the count is read after the insert, inside the same
+      // transaction, so a line that is at zero because it was just bought is
+      // distinguishable from one that has never been wanted.
+      expect(line.boughtCount).toBe(1);
+      expect(line.lastSettlementOutcome).toBe(SettlementOutcome.BOUGHT);
+    });
+
+    it('accumulates across settles', async () => {
+      const w = build({ quantity: 3 });
+
+      await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 2,
+      });
+      const second = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 1,
+      });
+
+      expect(second.line.boughtCount).toBe(2);
+    });
+
+    it('reports a missing product without counting it as a purchase', async () => {
+      const w = build({ quantity: 1 });
+
+      const { line } = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.NOT_AVAILABLE,
+      });
+
+      // Nothing was bought, so nothing is counted, and the line still wants one.
+      // What changed is only the most recent outcome, which is what draws "not in
+      // the shop last time" on a line that is emphatically still wanted.
+      expect(line.boughtCount).toBe(0);
+      expect(line.lastSettlementOutcome).toBe(SettlementOutcome.NOT_AVAILABLE);
+      expect(line.quantity).toBe(1);
+    });
+
+    it('lets a purchase clear a previous not available', async () => {
+      const w = build({ quantity: 1 });
+
+      await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.NOT_AVAILABLE,
+      });
+      const bought = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 1,
+      });
+
+      // The most recent one wins, which is the whole reason it is read off the
+      // top of the history rather than stored as a flag somebody has to clear.
+      expect(bought.line.lastSettlementOutcome).toBe(SettlementOutcome.BOUGHT);
+      expect(bought.line.boughtCount).toBe(1);
+    });
   });
 
   it('leaves the remainder wanted, and a second settle finishes it', async () => {

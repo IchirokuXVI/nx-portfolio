@@ -11,10 +11,15 @@ import {
   viewChild,
   type ElementRef,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  RokuLocaleStore,
+  RokuTranslatorPipe,
+} from '@portfolio/localization/rokutranslator-angular';
+import {
+  inLocale,
   LINE_CONTENT_COUNTER_FROM,
   LINE_CONTENT_MAX_LENGTH,
+  type CatalogSuggestion,
   type RecordedAudio,
 } from '@portfolio/velista/models';
 import {
@@ -24,9 +29,11 @@ import {
   type SilenceWatch,
 } from '@portfolio/velista/platform';
 import {
+  BasketIcon,
   MicIcon,
   PlusIcon,
   SpinnerIcon,
+  ProductIcon,
   StopIcon,
   TrashIcon,
 } from '../icons/icons';
@@ -119,8 +126,10 @@ export type LineComposerButton = 'add' | 'record';
   selector: 'lib-line-composer',
   imports: [
     RokuTranslatorPipe,
+    BasketIcon,
     PlusIcon,
     MicIcon,
+    ProductIcon,
     StopIcon,
     TrashIcon,
     SpinnerIcon,
@@ -172,7 +181,36 @@ export class LineComposer {
    */
   readonly keepListening = input(false);
 
-  readonly submitted = output<{ content: string; quantity: number }>();
+  /**
+   * What the composer offers under the field, in the **server's** order.
+   *
+   * Handed down rather than fetched here, which is rule D1: this component knows what
+   * a suggestion looks like and nothing about where it came from, and the container
+   * owns the debounce, the scope and the request. It is also what keeps the ordering
+   * honest, since a component that fetched would eventually be tempted to re-rank.
+   *
+   * Empty draws no list at all rather than an empty one. A dropdown that says "no
+   * matches" is a screen telling somebody their shopping list is wrong; free text is
+   * first class and typing something the catalog has never heard of is an ordinary
+   * thing to do (velista plan 0043, section 6).
+   */
+  readonly suggestions = input<readonly CatalogSuggestion[]>([]);
+
+  /**
+   * What has been typed, raw and on every keystroke.
+   *
+   * The **container** debounces it and decides when three characters have been
+   * reached. Both of those are facts about how often a request may be made, which is
+   * not a question a text field can answer, and putting the timer here would mean two
+   * components with a timer each the moment anything else wanted suggestions.
+   */
+  readonly queryChanged = output<string>();
+
+  readonly submitted = output<{
+    content: string;
+    quantity: number;
+    itemIds?: readonly string[];
+  }>();
 
   /**
    * Something somebody said, for the page to post to the list scoped assistant.
@@ -198,6 +236,16 @@ export class LineComposer {
   readonly canSubmit = computed(() => this.content().trim() !== '');
 
   private readonly _field = viewChild<ElementRef<HTMLInputElement>>('field');
+
+  /**
+   * The reader's language, for the catalog's two-language product names.
+   *
+   * Read rather than flattened in the mapper, which is the convention every other
+   * catalog name in this app follows: a response parsed once must not carry the
+   * language it happened to be parsed in, or switching language leaves the old words
+   * on screen until something evicts the cache.
+   */
+  private readonly _locale = inject(RokuLocaleStore).locale;
 
   private readonly _recorder = inject(AudioRecorder);
   private readonly _detector = inject<SilenceDetectorI>(SILENCE_DETECTOR);
@@ -266,7 +314,48 @@ export class LineComposer {
   }
 
   onInput(event: Event): void {
-    this.content.set((event.target as HTMLInputElement).value);
+    const typed = (event.target as HTMLInputElement).value;
+    this.content.set(typed);
+    this.queryChanged.emit(typed);
+  }
+
+  /**
+   * A suggestion was chosen, which **adds the line** rather than filling the field.
+   *
+   * One tap and not two, because the list is offered under a field somebody is already
+   * typing into and filling it in would leave them looking at their own word with a
+   * send button still to press. Choosing is the whole gesture (section 6).
+   *
+   * A group sends the group's products; an item sends the one. That is the difference
+   * the ranking exists to express: somebody typing "milk" wants milk, and the household
+   * decides which brand later, on the line page, by trimming a set it already has.
+   */
+  choose(suggestion: CatalogSuggestion): void {
+    const content =
+      suggestion.kind === 'group'
+        ? inLocale(suggestion.group.name, this._locale())
+        : inLocale(suggestion.item.name, this._locale());
+    const itemIds =
+      suggestion.kind === 'group' ? suggestion.itemIds : [suggestion.item.id];
+
+    this._send(content, itemIds);
+  }
+
+  /** What a group row says it will do, so choosing it is not a surprise. */
+  groupSummaryArgs(suggestion: CatalogSuggestion): { count: number } {
+    return {
+      count:
+        suggestion.kind === 'group'
+          ? (suggestion.itemIds.length || suggestion.group.itemCount)
+          : 0,
+    };
+  }
+
+  /** One suggestion's name, in the reader's language. */
+  nameOf(suggestion: CatalogSuggestion): string {
+    return suggestion.kind === 'group'
+      ? inLocale(suggestion.group.name, this._locale())
+      : inLocale(suggestion.item.name, this._locale());
   }
 
   /** The one button, pressed. */
@@ -418,13 +507,37 @@ export class LineComposer {
       return;
     }
 
+    // No products: typing something and ignoring the list adds a plain line, with no
+    // warning and no nagging. "Something for dinner" is a legitimate line, and the
+    // moment the composer starts insisting on a match, adding things becomes a fight
+    // (section 6).
+    this._send(this.content().trim(), undefined);
+  }
+
+  /**
+   * Send one line and stay ready for the next.
+   *
+   * The field is cleared and the quantity reset **here**, before the request resolves,
+   * because the add is optimistic and the row is already on screen: leaving the text in
+   * the field until a response arrived would show the same item twice and invite a
+   * second submit of it.
+   *
+   * Focus is taken back explicitly. Clearing an input does not move focus, but the
+   * button or the suggestion that was tapped has it, and on a phone that is enough to
+   * drop the keyboard between two adds.
+   */
+  private _send(content: string, itemIds: readonly string[] | undefined): void {
     this.submitted.emit({
-      content: this.content().trim(),
+      content,
       quantity: this.quantity(),
+      ...(itemIds === undefined || itemIds.length === 0 ? {} : { itemIds }),
     });
 
     this.content.set('');
     this.quantity.set(1);
+    // The dropdown goes with the words that produced it. Leaving it up over an empty
+    // field would offer matches for something nobody is typing any more.
+    this.queryChanged.emit('');
     this._field()?.nativeElement.focus();
   }
 }

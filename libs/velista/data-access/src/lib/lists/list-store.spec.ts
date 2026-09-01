@@ -19,7 +19,7 @@ function list(
     name: 'Weekly shop',
     createdByUserId: 'u1',
     lineCount: 12,
-    readyCount: 7,
+    wantedCount: 7,
     autoApproveLines: false,
     myPermissions: ['READ', 'WRITE', 'DECIDE'],
     ...overrides,
@@ -119,7 +119,7 @@ describe('ListStore', () => {
         zoneId: ZONE,
         name: 'Cleaning',
         createdByUserId: 'u2',
-        counts: { lineCount: 0, readyCount: 0 },
+        counts: { lineCount: 0, wantedCount: 0 },
       });
 
       expect(store.listsIn(ZONE).map((row) => row.id)).toEqual([
@@ -138,7 +138,7 @@ describe('ListStore', () => {
         zoneId: 'zone-elsewhere',
         name: 'Cleaning',
         createdByUserId: 'u2',
-        counts: { lineCount: 0, readyCount: 0 },
+        counts: { lineCount: 0, wantedCount: 0 },
       });
 
       expect(store.listsIn('zone-elsewhere')).toEqual([]);
@@ -158,7 +158,7 @@ describe('ListStore', () => {
       expect(store.listsIn(ZONE)[0]).toMatchObject({
         name: 'Big shop',
         lineCount: 12,
-        readyCount: 7,
+        wantedCount: 7,
       });
     });
 

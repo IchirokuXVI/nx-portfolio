@@ -18,6 +18,8 @@ import {
   AssistantApi,
   AUTH_SERVICE,
   AuthApi,
+  CATALOG_SERVICE,
+  CatalogApi,
   COMMENT_SERVICE,
   CommentApi,
   ConnectionRecovery,
@@ -200,6 +202,14 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // about the screen rather than about the transport, and both are the same base URL
   // through the same `HttpClient`.
   provideService(SHOPPING_PROFILE_SERVICE, ShoppingProfileApi),
+
+  // The catalog search behind the composer's suggestions (plan 0043, section 6). A
+  // tenth time, and separate from the profile service beside it even though both
+  // touch `/v1/catalog`: that one reads the chains a profile is filled in from, and
+  // this one searches products while somebody types. They are bound apart because
+  // they fail apart, and this one fails softly by design — a search that does not
+  // answer must never be able to stop a line being added.
+  provideService(CATALOG_SERVICE, CatalogApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches

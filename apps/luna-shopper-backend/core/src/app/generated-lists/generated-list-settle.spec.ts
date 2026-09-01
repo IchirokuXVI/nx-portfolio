@@ -2,6 +2,7 @@ import {
   ParticipantKind,
   RealtimeEvent,
   SettlementOutcome,
+  type LineView,
 } from '@portfolio/luna-shopper/contracts';
 import { DomainException } from '@portfolio/luna-shopper/platform';
 import type { DataSource } from 'typeorm';
@@ -11,6 +12,7 @@ import {
   ListLine,
   ListLineItem,
 } from '../entities';
+import { fakeLineSettlements } from '../lists/line-settlements.fake';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
   allocateOldestFirst,
@@ -63,6 +65,8 @@ interface Harness {
     listId?: string;
     generatedListId?: string;
     userIds?: string[];
+    /** Captured so the zone event's own `LineView` can be asserted, not just its name. */
+    payload?: unknown;
   }[];
 }
 
@@ -133,7 +137,11 @@ function build(options: {
       ])
   );
 
-  const settlements: Partial<LineSettlement>[] = [];
+  // The shared fake rather than a save-only stub: the settle reads the table back
+  // after each insert, to say how many times the zone line has now been bought
+  // (plan 0047, section 5), which is what the zone event carries.
+  const settlementRows = fakeLineSettlements();
+  const settlements = settlementRows.rows;
   const events: Harness['events'] = [];
 
   const manager = {
@@ -152,14 +160,7 @@ function build(options: {
         };
       }
       if (entity === LineSettlement) {
-        return {
-          create: (data: Partial<LineSettlement>) => ({ ...data }),
-          save: async (row: Partial<LineSettlement>) => {
-            const saved = { ...row, id: `s-${settlements.length + 1}` };
-            settlements.push(saved);
-            return saved;
-          },
-        };
+        return settlementRows.repo;
       }
       if (entity === ListLineItem) {
         return { find: async () => [] };
@@ -242,8 +243,12 @@ function build(options: {
     sharing,
     generated,
     {
-      emit: (event: RealtimeEvent, _zoneId: string, _payload: unknown, listId?: string) =>
-        events.push({ event, listId }),
+      emit: (
+        event: RealtimeEvent,
+        _zoneId: string,
+        payload: unknown,
+        listId?: string
+      ) => events.push({ event, listId, payload }),
       emitToGeneratedList: (event: RealtimeEvent, generatedListId: string) =>
         events.push({ event, generatedListId }),
       // The owner's own sessions, which is a different audience from the room:
@@ -514,15 +519,76 @@ describe('what the settle tells the rest of the system (section 10)', () => {
     const harness = build({});
     await settle(harness);
 
-    expect(harness.events).toEqual([
+    expect(
+      harness.events.map(({ event, listId, generatedListId, userIds }) => ({
+        event,
+        listId,
+        generatedListId,
+        userIds,
+      }))
+    ).toEqual([
       // The ordinary plan 0047 event: the household sees the bread was got.
-      { event: RealtimeEvent.LineSettled, listId: LIST_A },
+      {
+        event: RealtimeEvent.LineSettled,
+        listId: LIST_A,
+        generatedListId: undefined,
+        userIds: undefined,
+      },
       // The basket's own room, so four people in a shop agree.
-      { event: RealtimeEvent.GeneratedListLineSettled, generatedListId: BASKET },
+      {
+        event: RealtimeEvent.GeneratedListLineSettled,
+        listId: undefined,
+        generatedListId: BASKET,
+        userIds: undefined,
+      },
       // And the owner's own sessions, because the owner is usually **not** in
-      // the room: they are at home on the dashboard while somebody else shops.
-      { event: RealtimeEvent.GeneratedListLineSettled, userIds: [OWNER] },
+      // the room: they are at home on the dashboard while somebody else shops,
+      // and velista 0045's dashboard card counts settled lines.
+      {
+        event: RealtimeEvent.GeneratedListLineSettled,
+        listId: undefined,
+        generatedListId: undefined,
+        userIds: [OWNER],
+      },
     ]);
+  });
+
+  /**
+   * The zone event carries the line's two indicators, and this is the path that
+   * normally moves them (plan 0047, section 5).
+   *
+   * A regression guard rather than a feature test. The event carries a **whole**
+   * `LineView` and a phone at home reconciles off it, so announcing the zero
+   * summary here would take the bought indicator off the household's line at the
+   * exact moment somebody in a shop bought the thing. It is silent, it only shows
+   * up on a second device, and it is one forgotten argument away at all times.
+   */
+  it('tells the zone that the line has now been bought', async () => {
+    const harness = build({});
+    await settle(harness);
+
+    const zoneEvent = harness.events.find(
+      (entry) => entry.event === RealtimeEvent.LineSettled
+    );
+    const { line } = zoneEvent?.payload as { line: LineView };
+
+    expect(line.boughtCount).toBe(1);
+    expect(line.lastSettlementOutcome).toBe(SettlementOutcome.BOUGHT);
+  });
+
+  it('tells the zone a trip found nothing, without counting a purchase', async () => {
+    const harness = build({});
+    await settle(harness, { outcome: SettlementOutcome.NOT_AVAILABLE });
+
+    const zoneEvent = harness.events.find(
+      (entry) => entry.event === RealtimeEvent.LineSettled
+    );
+    const { line } = zoneEvent?.payload as { line: LineView };
+
+    // The indicator moves and the count does not, which is what draws "not in the
+    // shop last time" on a line the household still wants.
+    expect(line.boughtCount).toBe(0);
+    expect(line.lastSettlementOutcome).toBe(SettlementOutcome.NOT_AVAILABLE);
   });
 });
 

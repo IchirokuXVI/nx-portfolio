@@ -97,7 +97,7 @@ function list(
     createdByUserId: ME,
     autoApproveLines: false,
     lineCount: 12,
-    readyCount: 7,
+    wantedCount: 7,
     // Everything, so a spec that is not about permissions reads as it did before plan
     // 0030. One that is says so by passing `permissions`.
     myPermissions: ADMIN,

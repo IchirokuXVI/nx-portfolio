@@ -156,7 +156,7 @@ function toListRow(
     id: list.id,
     name: list.name,
     lineCount: list.lineCount,
-    readyCount: list.readyCount,
+    wantedCount: list.wantedCount,
     viewers,
   };
 }

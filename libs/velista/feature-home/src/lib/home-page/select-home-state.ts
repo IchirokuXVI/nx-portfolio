@@ -151,7 +151,7 @@ function selectResume(
         listName: list.name,
         zoneName: zone.name,
         lineCount: list.lineCount,
-        readyCount: list.readyCount,
+        wantedCount: list.wantedCount,
         // Advisory, and it may be empty for two different reasons that render the
         // same: nobody else is there, or nobody's name resolved (plan 0004, section
         // 6.7). The card simply omits the row, which is the right answer to both.
@@ -218,7 +218,7 @@ function toListRow(
     id: string;
     name: string;
     lineCount?: number;
-    readyCount?: number;
+    wantedCount?: number;
   },
   viewers: readonly string[]
 ): ListRowVm {
@@ -226,7 +226,7 @@ function toListRow(
     id: list.id,
     name: list.name,
     lineCount: list.lineCount,
-    readyCount: list.readyCount,
+    wantedCount: list.wantedCount,
     viewers,
   };
 }

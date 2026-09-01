@@ -1,7 +1,7 @@
 import type {
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
+  SettlementOutcome,
   ZoneRole,
 } from './enums';
 
@@ -115,17 +115,73 @@ export interface SetListAccessRequest {
 export interface AddLineRequest {
   readonly content: string;
   readonly quantity?: number;
-  readonly itemId?: string;
+  /**
+   * The catalog products this line stands for (backend plan 0048, section 1.1).
+   *
+   * A **set**, where this was a single optional `itemId` that nothing ever sent,
+   * because `0012` put the catalog out of scope. Choosing a group in the composer
+   * sends that group's products here; choosing one item sends one; typing
+   * something and ignoring the list sends none, and that stays first class
+   * (velista plan 0043, section 6).
+   */
+  readonly itemIds?: readonly string[];
 }
 
 export interface UpdateLineRequest {
   readonly content?: string;
   readonly quantity?: number;
-  readonly itemId?: string | null;
+  /**
+   * Replace the whole product set. An empty array clears it back to free text.
+   *
+   * A whole set rather than an add or a remove, for the same reason the reorder
+   * request takes the whole order: two people editing a line's products would
+   * otherwise each send a delta against a set neither of them still has.
+   */
+  readonly itemIds?: readonly string[];
 }
 
-export interface SetLineStatusRequest {
-  readonly status: LineStatus;
+/**
+ * Move a line's quantity by a **signed delta** (backend plan 0040, section 3).
+ *
+ * Not an absolute number, and that is the whole design of the reel (velista plan
+ * 0043, section 4.1). Absolute writes from a moving control race each other and
+ * the loser silently wins; a delta is applied atomically under the row's lock and
+ * cannot. One per settled adjustment, sent when the overlay closes rather than
+ * during the drag, so it is one request however many times the thumb went back
+ * for more inside that window.
+ *
+ * Never zero. The server refuses it, and a gesture that ended where it started is
+ * not an adjustment to send.
+ */
+export interface AddLineQuantityRequest {
+  readonly delta: number;
+}
+
+/**
+ * Say what happened to a line on a trip (backend plan 0047, section 4).
+ *
+ * There is no `SKIPPED`. Deciding not to buy something today has to leave the
+ * line exactly as it was and must not look like it was dealt with, so it is the
+ * absence of this call rather than a third outcome on it.
+ */
+export interface SettleLineRequest {
+  readonly outcome: SettlementOutcome;
+  /**
+   * How many were bought. Omitted for a trip that found nothing, where the server
+   * refuses a number outright.
+   *
+   * May exceed what the line asks for, and the excess is recorded rather than
+   * clamped: the extra unit is real and belongs in the consumption history even
+   * though it satisfies no demand.
+   */
+  readonly quantity?: number;
+  /**
+   * Which of the line's products was bought, on a line carrying more than one.
+   *
+   * Recorded on the settlement **as it was at the time**, because the line's set
+   * can change afterwards and what somebody carried home cannot.
+   */
+  readonly itemId?: string;
 }
 
 /**

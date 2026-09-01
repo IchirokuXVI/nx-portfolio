@@ -74,6 +74,98 @@
   </div>
 } @else {
   <!--
+    The suggestions, above the field and below nothing (plan 0043, section 6).
+
+    Above, because the keyboard is under the field and a list drawn beneath it would be
+    behind the keys on every phone. Nearest the field first would be the reverse of the
+    server's ranking, so the order is kept and the whole block sits above: a group is
+    the top row and it is the row closest to what somebody typed.
+
+    **No empty state, ever.** An absent list is the ordinary case for two characters, a
+    rare word, or a shop the catalog has not been taught, and "no matches" would be a
+    screen telling somebody their shopping list is wrong. The free text row below is
+    always the last one, so there is always something to press.
+  -->
+  @if (suggestions().length > 0) {
+    <ul
+      [attr.aria-label]="'list.add.suggestions' | rokuT"
+      class="suggestions"
+      role="listbox"
+    >
+      @for (suggestion of suggestions(); track $index) {
+        <li role="none">
+          <button
+            (click)="choose(suggestion)"
+            [class.group]="suggestion.kind === 'group'"
+            class="suggestion"
+            role="option"
+            type="button"
+          >
+            <span aria-hidden="true" class="suggestion-glyph">
+              @if (suggestion.kind === 'group') {
+                <lib-basket-icon />
+              } @else {
+                <lib-product-icon />
+              }
+            </span>
+
+            <span class="suggestion-body">
+              <span class="suggestion-name">{{ nameOf(suggestion) }}</span>
+
+              @if (suggestion.kind === 'group') {
+                <!--
+                  What choosing it will do, said before it is pressed. A group adds
+                  several products at once, and a row that quietly did that would be a
+                  surprise the first three times.
+                -->
+                <span class="suggestion-note">{{
+                  'list.add.groupAdds' | rokuT: groupSummaryArgs(suggestion)
+                }}</span>
+              } @else if (suggestion.item.brand) {
+                <span class="suggestion-note">{{ suggestion.item.brand }}</span>
+              }
+            </span>
+
+            <!--
+              The word as well as the glyph and the tint. A group and an item are the
+              one distinction this list has to make, and it is made three ways because
+              nobody has been taught what a basket outline means here.
+            -->
+            @if (suggestion.kind === 'group') {
+              <span class="suggestion-badge">{{
+                'list.add.groupBadge' | rokuT
+              }}</span>
+            }
+          </button>
+        </li>
+      }
+
+      <!--
+        Free text, always reachable and never nagged. It is the last row rather than a
+        hint under the field, so choosing to ignore the catalog is the same kind of
+        gesture as choosing something from it.
+      -->
+      <li role="none">
+        <button
+          (click)="submit()"
+          class="suggestion plain"
+          role="option"
+          type="button"
+        >
+          <span aria-hidden="true" class="suggestion-glyph">
+            <lib-plus-icon />
+          </span>
+          <span class="suggestion-body">
+            <span class="suggestion-name">{{
+              'list.add.asWritten' | rokuT: { text: content() }
+            }}</span>
+          </span>
+        </button>
+      </li>
+    </ul>
+  }
+
+  <!--
   A form, so Enter on the field submits without a keydown handler and the phone's
   keyboard offers a Go key rather than a newline.
 -->

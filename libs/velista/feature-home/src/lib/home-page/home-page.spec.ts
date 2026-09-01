@@ -46,7 +46,7 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
       pendingRequestCount: 0,
       firstPendingRequesterName: null,
     },
-    lists: [{ id: 'l1', name: 'Weekly shop', lineCount: 12, readyCount: 7 }],
+    lists: [{ id: 'l1', name: 'Weekly shop', lineCount: 12, wantedCount: 7 }],
     ...overrides,
   };
 }

@@ -7,7 +7,9 @@ import {
   LINE_QUANTITY_MIN,
   LineApprovalStatus,
   ListPermission,
+  NO_LINE_SETTLEMENTS,
   RealtimeEvent,
+  SettlementOutcome,
   type AddLineQuantityRequest,
   type AddLineRequest,
   type AddLinesItem,
@@ -15,6 +17,7 @@ import {
   type DeleteLineRequest,
   type LineOrder,
   type LinePage,
+  type LineSettlementSummary,
   type LineView,
   type ListLinesRequest,
   type ReorderLinesRequest,
@@ -37,10 +40,16 @@ import {
   type EntityManager,
   type SelectQueryBuilder,
 } from 'typeorm';
-import { ListLine, ListLineItem, ShoppingList } from '../entities';
+import {
+  LineSettlement,
+  ListLine,
+  ListLineItem,
+  ShoppingList,
+} from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { itemSetHash } from './item-set-hash';
 import { ListAccessService } from './list-access.service';
+import { readLineSettlementSummaries } from './settlement.sql';
 import { toLineView } from './list.mappers';
 
 interface LineCursor {
@@ -64,6 +73,8 @@ interface WrittenLine {
   view: LineView;
   line: ListLine;
   itemIds: string[];
+  /** Carried so the announcement says what a read would, not the zero summary. */
+  settlements: LineSettlementSummary;
 }
 
 /** Canonical UUID shape, for validating the cross-service catalog `itemId`. */
@@ -77,6 +88,13 @@ export class LineService {
     @InjectRepository(ListLine) private readonly lines: Repository<ListLine>,
     @InjectRepository(ListLineItem)
     private readonly lineItems: Repository<ListLineItem>,
+    // Read only, and never written here: what a shopper found is
+    // `SettlementService`'s to record. This service reads it because every line
+    // it answers with carries the two indicators derived from it (plan 0047,
+    // section 5), and a line read that left them out would make a settled line
+    // indistinguishable from one nobody has ever wanted.
+    @InjectRepository(LineSettlement)
+    private readonly settlements: Repository<LineSettlement>,
     private readonly listAccess: ListAccessService,
     private readonly events: CoreEventsPublisher
   ) {}
@@ -144,6 +162,55 @@ export class LineService {
   }
 
   /**
+   * The two derived indicators for a whole page of lines, in one query (plan
+   * 0047, section 5).
+   *
+   * One aggregate over `ix_settlements_line` rather than a read per row, which is
+   * the same rule {@link itemIdsOfMany} follows: the list page asks this question
+   * about every line it draws, so answering it one line at a time would be a
+   * request per row of a screen somebody opens in a shop.
+   *
+   * Raw SQL, because both halves are things a query builder states badly. The
+   * count is a `FILTER` over one outcome, and the most recent outcome is the
+   * first element of an ordered aggregate, which is how it is read without a
+   * correlated subquery per line or a window over the whole table.
+   *
+   * A line with no settlements has **no row here at all**, and the map's default
+   * is what makes that the honest answer rather than an absent one: never bought,
+   * nothing to report.
+   */
+  private async settlementsOfMany(
+    lineIds: string[]
+  ): Promise<Map<string, LineSettlementSummary>> {
+    return readLineSettlementSummaries(
+      (sql, parameters) => this.dataSource.query(sql, parameters),
+      lineIds
+    );
+  }
+
+  /**
+   * One line's summary, for the paths that answer with a single line.
+   *
+   * Two repository reads rather than the aggregate above, and the difference is
+   * deliberate. The aggregate exists because a page asks the question about
+   * twenty lines at once; for one line it is two index lookups on
+   * `ix_settlements_line`, which is cheaper to read here and needs no raw SQL on
+   * a path that is already an edit rather than a report.
+   */
+  private async settlementsOf(lineId: string): Promise<LineSettlementSummary> {
+    const [boughtCount, latest] = await Promise.all([
+      this.settlements.count({
+        where: { lineId, outcome: SettlementOutcome.BOUGHT },
+      }),
+      this.settlements.findOne({
+        where: { lineId },
+        order: { settledAt: 'DESC', id: 'DESC' },
+      }),
+    ]);
+    return { boughtCount, lastOutcome: latest?.outcome ?? null };
+  }
+
+  /**
    * Replace a line's product set (plan 0048, section 1.1).
    *
    * Delete then insert, rather than a diff, because the request states a whole
@@ -166,13 +233,30 @@ export class LineService {
     }
   }
 
+  /**
+   * Announce a line, exactly as a read of it would answer.
+   *
+   * The settlement summary is a parameter with no default here, unlike on the
+   * mapper, and that is deliberate: every event carries a **whole** line, and a
+   * client reconciles the fields it is not itself writing straight off it. An
+   * edit that announced the zero summary would take the bought indicator off a
+   * settled line on every other phone in the household, for no reason other than
+   * somebody having renamed it. A line that has just been created is the one case
+   * where zero is the truth, and it says so at the call site.
+   */
   private emit(
     event: RealtimeEvent,
     zoneId: string,
     line: ListLine,
-    itemIds: string[]
+    itemIds: string[],
+    settlements: LineSettlementSummary
   ): void {
-    this.events.emit(event, zoneId, toLineView(line, itemIds), line.listId);
+    this.events.emit(
+      event,
+      zoneId,
+      toLineView(line, itemIds, settlements),
+      line.listId
+    );
   }
 
   /**
@@ -234,8 +318,16 @@ export class LineService {
             return line;
           });
 
-    this.emit(RealtimeEvent.LineAdded, list.zoneId, saved, itemIds);
-    return toLineView(saved, itemIds);
+    // A line cannot have been bought in the same breath as being added, so the
+    // zero summary is the truth here rather than a stand in for an unread one.
+    this.emit(
+      RealtimeEvent.LineAdded,
+      list.zoneId,
+      saved,
+      itemIds,
+      NO_LINE_SETTLEMENTS
+    );
+    return toLineView(saved, itemIds, NO_LINE_SETTLEMENTS);
   }
 
   /**
@@ -318,9 +410,17 @@ export class LineService {
     // a correct list. The burst is exactly the fan out the N separate requests it
     // replaces would have produced anyway.
     for (const [index, row] of saved.entries()) {
-      this.emit(RealtimeEvent.LineAdded, list.zoneId, row, itemSets[index]);
+      this.emit(
+        RealtimeEvent.LineAdded,
+        list.zoneId,
+        row,
+        itemSets[index],
+        NO_LINE_SETTLEMENTS
+      );
     }
-    return saved.map((row, index) => toLineView(row, itemSets[index]));
+    return saved.map((row, index) =>
+      toLineView(row, itemSets[index], NO_LINE_SETTLEMENTS)
+    );
   }
 
   /**
@@ -482,9 +582,12 @@ export class LineService {
       // write is a last-writer-wins race over a value somebody deliberately
       // chose, and there is nothing to lock it against.
       const saved = await this.lines.save(line);
-      const itemIds = await this.itemIdsOf(saved.id);
-      this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved, itemIds);
-      return toLineView(saved, itemIds);
+      const [itemIds, settlements] = await Promise.all([
+        this.itemIdsOf(saved.id),
+        this.settlementsOf(saved.id),
+      ]);
+      this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved, itemIds, settlements);
+      return toLineView(saved, itemIds, settlements);
     }
 
     // The set and the line have to move together, or a stored hash outlives the
@@ -639,9 +742,20 @@ export class LineService {
     // Whatever the line now holds: the set that was just written, or the one it
     // already had when this edit did not touch it.
     const itemIds = nextItemIds ?? (await this.itemIdsOf(line.id, manager));
+    // Read outside the caller's manager on purpose. It is the settlement history
+    // as it stood before this transaction and this edit cannot have changed it:
+    // the only thing that writes a settlement is `SettlementService`, and an edit
+    // that took the summary from inside a lock it holds would be reading its own
+    // uncommitted view of a table it never touched.
+    const settlements = await this.settlementsOf(line.id);
 
     const saved = await repo.save(line);
-    return { view: toLineView(saved, itemIds), line: saved, itemIds };
+    return {
+      view: toLineView(saved, itemIds, settlements),
+      line: saved,
+      itemIds,
+      settlements,
+    };
   }
 
   /** Emits what a committed write produced, and answers with its view. */
@@ -650,7 +764,8 @@ export class LineService {
       RealtimeEvent.LineUpdated,
       list.zoneId,
       written.line,
-      written.itemIds
+      written.itemIds,
+      written.settlements
     );
     return written.view;
   }
@@ -710,9 +825,12 @@ export class LineService {
       req.approvalStatus === LineApprovalStatus.PENDING ? null : req.userId;
     line.version += 1;
     const saved = await this.lines.save(line);
-    const itemIds = await this.itemIdsOf(saved.id);
-    this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved, itemIds);
-    return toLineView(saved, itemIds);
+    const [itemIds, settlements] = await Promise.all([
+      this.itemIdsOf(saved.id),
+      this.settlementsOf(saved.id),
+    ]);
+    this.emit(RealtimeEvent.LineUpdated, list.zoneId, saved, itemIds, settlements);
+    return toLineView(saved, itemIds, settlements);
   }
 
   /**
@@ -809,9 +927,20 @@ export class LineService {
     const rows = await qb.getMany();
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
-    // One query for the whole page's product sets, not one per line.
-    const sets = await this.itemIdsOfMany(page.map((line) => line.id));
-    const items = page.map((line) => toLineView(line, sets.get(line.id) ?? []));
+    const pageIds = page.map((line) => line.id);
+    // Two queries for the page, not two per row: the product sets, and the
+    // settlement summary the indicators are drawn from.
+    const [sets, settlements] = await Promise.all([
+      this.itemIdsOfMany(pageIds),
+      this.settlementsOfMany(pageIds),
+    ]);
+    const items = page.map((line) =>
+      toLineView(
+        line,
+        sets.get(line.id) ?? [],
+        settlements.get(line.id) ?? NO_LINE_SETTLEMENTS
+      )
+    );
     const last = page[page.length - 1];
     const nextCursor =
       hasMore && last

@@ -145,6 +145,14 @@ const lineView = object(
     createdByUserId: nonEmptyString(),
     approvedByUserId: nullableString(),
     version: integer(),
+    // The two derived indicators (plan 0047, section 5). Both required, because a
+    // line with no history answers them with 0 and null rather than by leaving
+    // them out: an absent field would make "never bought" indistinguishable from
+    // "this build of the server does not say".
+    boughtCount: integer({ minimum: 0 }),
+    lastSettlementOutcome: {
+      anyOf: [ref(ENUM_IDS.settlementOutcome), { type: 'null' }],
+    },
     ...timestamps,
   },
   [
@@ -159,6 +167,8 @@ const lineView = object(
     'createdByUserId',
     'approvedByUserId',
     'version',
+    'boughtCount',
+    'lastSettlementOutcome',
     ...timestampKeys,
   ]
 );

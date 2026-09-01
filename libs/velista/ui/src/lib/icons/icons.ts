@@ -813,3 +813,47 @@ export class TrashIcon {
       import('./trash-icon.svg?raw')
   );
 }
+
+/**
+ * A shopping basket: the glyph on a **group** in the composer's suggestions.
+ *
+ * It marks the row that adds several products at once, which is the one thing a
+ * person choosing between "Milk" and "Leche entera Pascual, 1 L" needs to be able
+ * to tell apart at a glance (plan 0043, section 6). The badge beside it says the
+ * same thing in a word, because a glyph alone is not a distinction anybody has
+ * been taught yet.
+ */
+@Component({
+  selector: 'lib-basket-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class BasketIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./basket-icon.svg?raw')
+  );
+}
+
+/**
+ * A carton: the glyph on one catalog **product**, and on a product chip.
+ *
+ * Deliberately quieter than the basket beside it. A group ranks above an item and
+ * is the answer most people want, so the item rows are the ordinary weight and the
+ * group is the one that stands out.
+ */
+@Component({
+  selector: 'lib-product-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class ProductIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./product-icon.svg?raw')
+  );
+}

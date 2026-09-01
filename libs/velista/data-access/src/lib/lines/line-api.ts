@@ -1,21 +1,28 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
+  AddLineQuantityRequest,
   AddLineRequest,
   Line,
   LineApprovalStatus,
   LineOrder,
-  LineStatus,
+  LineSettlement,
   Page,
   ReorderLinesRequest,
   SetLineApprovalRequest,
-  SetLineStatusRequest,
+  SettleLineRequest,
+  SettlementOutcome,
   UpdateLineRequest,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
-import { toDeletedId, toLine, toPage } from '../mapping/mappers';
+import {
+  toDeletedId,
+  toLine,
+  toLineSettlement,
+  toPage,
+} from '../mapping/mappers';
 import { required } from '../mapping/required';
 import type { LineServiceI } from './line-service';
 
@@ -63,14 +70,22 @@ export class LineApi implements LineServiceI {
   async addLine(
     listId: string,
     content: string,
-    quantity?: number
+    quantity?: number,
+    itemIds?: readonly string[]
   ): Promise<Line> {
     // Built as the request type rather than spread from anything, because the
     // gateway's pipe runs with `forbidNonWhitelisted` and an unexpected property is a
     // 400. `quantity` is omitted rather than sent as 1, so the server's own default
     // stays the single source of it.
-    const request: AddLineRequest =
-      quantity === undefined ? { content } : { content, quantity };
+    //
+    // `itemIds` is omitted rather than sent empty for the same reason, and there is
+    // no difference between the two on the server: a free text line is what an
+    // absent set means, and it stays first class (plan 0043, section 6).
+    const request: AddLineRequest = {
+      content,
+      ...(quantity === undefined ? {} : { quantity }),
+      ...(itemIds === undefined || itemIds.length === 0 ? {} : { itemIds }),
+    };
 
     const body = await firstValueFrom(
       this._http.post<unknown>(`${this._list(listId)}/lines`, request, {
@@ -83,7 +98,11 @@ export class LineApi implements LineServiceI {
 
   async updateLine(
     lineId: string,
-    changes: { content?: string; quantity?: number }
+    changes: {
+      content?: string;
+      quantity?: number;
+      itemIds?: readonly string[];
+    }
   ): Promise<Line> {
     const request: UpdateLineRequest = {};
     if (changes.content !== undefined) {
@@ -91,6 +110,12 @@ export class LineApi implements LineServiceI {
     }
     if (changes.quantity !== undefined) {
       (request as { quantity?: number }).quantity = changes.quantity;
+    }
+    // An empty array is **sent**, unlike on an add: there it means "say nothing
+    // about products", here it means "clear the set back to free text", and the
+    // server tells them apart by absence.
+    if (changes.itemIds !== undefined) {
+      (request as { itemIds?: readonly string[] }).itemIds = changes.itemIds;
     }
 
     const body = await firstValueFrom(
@@ -102,16 +127,98 @@ export class LineApi implements LineServiceI {
     return required(toLine(body), 'lines.update');
   }
 
-  async setStatus(lineId: string, status: LineStatus): Promise<Line> {
-    const request: SetLineStatusRequest = { status };
+  async addQuantity(lineId: string, delta: number): Promise<Line> {
+    const request: AddLineQuantityRequest = { delta };
 
     const body = await firstValueFrom(
-      this._http.post<unknown>(`${this._line(lineId)}/status`, request, {
-        context: operation('lines.setStatus'),
+      this._http.post<unknown>(`${this._line(lineId)}/quantity`, request, {
+        context: operation('lines.addQuantity'),
       })
     );
 
-    return required(toLine(body), 'lines.setStatus');
+    return required(toLine(body), 'lines.addQuantity');
+  }
+
+  async settle(
+    lineId: string,
+    outcome: SettlementOutcome,
+    options?: { quantity?: number; itemId?: string }
+  ): Promise<{ line: Line; settlement: LineSettlement }> {
+    // `quantity` is refused outright on a trip that found nothing, so it is
+    // dropped here rather than sent and rejected: the whitelist would answer 400
+    // for a field the caller never meant to set.
+    const request: SettleLineRequest = {
+      outcome,
+      ...(outcome === 'NOT_AVAILABLE' || options?.quantity === undefined
+        ? {}
+        : { quantity: options.quantity }),
+      ...(options?.itemId === undefined ? {} : { itemId: options.itemId }),
+    };
+
+    const body = await firstValueFrom(
+      this._http.post<unknown>(`${this._line(lineId)}/settle`, request, {
+        context: operation('lines.settle'),
+      })
+    );
+
+    const record = body as Record<string, unknown> | null;
+    return {
+      line: required(toLine(record?.['line']), 'lines.settle'),
+      settlement: required(
+        toLineSettlement(record?.['settlement']),
+        'lines.settle'
+      ),
+    };
+  }
+
+  async listSettlements(
+    lineId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<Page<LineSettlement>> {
+    return this._settlements(
+      `${this._line(lineId)}/settlements`,
+      'lines.settlements',
+      options
+    );
+  }
+
+  async listItemSettlements(
+    itemId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<Page<LineSettlement>> {
+    return this._settlements(
+      this._urls.gateway(`/v1/items/${itemId}/settlements`),
+      'lines.itemSettlements',
+      options
+    );
+  }
+
+  /**
+   * Both history reads, which differ only in their URL and their label.
+   *
+   * Collapsed into one helper where {@link _list} and {@link _line} deliberately
+   * are not: those two stay apart because they say something about which id a
+   * route needs, and these two say nothing except that a page of settlements is
+   * a page of settlements.
+   */
+  private async _settlements(
+    url: string,
+    label: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<Page<LineSettlement>> {
+    let params = new HttpParams();
+    if (options?.cursor !== undefined) {
+      params = params.set('cursor', options.cursor);
+    }
+    if (options?.limit !== undefined) {
+      params = params.set('limit', clampLimit(options.limit));
+    }
+
+    const body = await firstValueFrom(
+      this._http.get<unknown>(url, { params, context: operation(label) })
+    );
+
+    return toPage(body, toLineSettlement);
   }
 
   async setApproval(

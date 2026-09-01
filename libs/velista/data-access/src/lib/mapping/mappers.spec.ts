@@ -130,7 +130,7 @@ describe('toMyZone', () => {
         pendingRequestCount: 3,
         firstPendingRequesterName: 'Ines',
       },
-      lists: [{ id: 'l1', name: 'Weekly', lineCount: 12, readyCount: 7 }],
+      lists: [{ id: 'l1', name: 'Weekly', lineCount: 12, wantedCount: 7 }],
     });
 
     expect(zone?.counts).toEqual({
@@ -140,7 +140,7 @@ describe('toMyZone', () => {
       firstPendingRequesterName: 'Ines',
     });
     expect(zone?.lists).toEqual([
-      { id: 'l1', name: 'Weekly', lineCount: 12, readyCount: 7 },
+      { id: 'l1', name: 'Weekly', lineCount: 12, wantedCount: 7 },
     ]);
   });
 
@@ -166,12 +166,12 @@ describe('toMyZone', () => {
     // number on the page.
     const zone = toMyZone({
       id: 'z1',
-      lists: [{ id: 'l1', lineCount: 5, readyCount: 9 }],
+      lists: [{ id: 'l1', lineCount: 5, wantedCount: 9 }],
     });
 
     expect(zone?.lists[0]).toMatchObject({
       lineCount: 5,
-      readyCount: 5,
+      wantedCount: 5,
     });
   });
 

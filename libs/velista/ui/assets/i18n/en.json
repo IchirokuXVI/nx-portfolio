@@ -122,8 +122,11 @@
     }
   },
   "line": {
-    "status": {
-      "notAvailable": "NOT AVAILABLE"
+    "indicator": {
+      "bought": "Bought",
+      "notAvailable": "Not in the shop last time",
+      "claimed": "Somebody is buying this",
+      "claimedBy": "{{name}} is buying this"
     }
   },
   "connection": {
@@ -382,7 +385,11 @@
       "notHeard": "I did not catch that",
       "voiceFailed": "That did not send. Nothing was added, so try again or type it",
       "voiceBusy": "A lot of people are asking at once. Try again in {{count}} seconds",
-      "dismissHeard": "Close"
+      "dismissHeard": "Close",
+      "suggestions": "Matching products",
+      "groupAdds": "adds its {{count}} products",
+      "groupBadge": "GROUP",
+      "asWritten": "Add “{{text}}” as written"
     },
     "empty": {
       "title": "Nothing on this list yet",
@@ -398,12 +405,9 @@
     "line": {
       "awaitingApproval": "Waiting for approval",
       "rejected": "Turned down",
-      "notAvailable": "Not in the shop",
       "approve": "Add it",
       "reject": "Not this",
       "restore": "Put it back",
-      "markNotAvailable": "Mark as not in the shop",
-      "markPending": "Put it back on the list",
       "edit": "Change this",
       "editing": "Editing",
       "comments": "Comments",
@@ -413,7 +417,9 @@
       "overwrittenBySomeone": "Somebody else changed this while you were editing",
       "failed": "That did not save. Tap to try again",
       "move": "Move",
-      "movedTo": "Moved to position {{position}} of {{total}}"
+      "movedTo": "Moved to position {{position}} of {{total}}",
+      "quantityFor": "How many {{name}}",
+      "quantityChanged": "{{name}}, now {{quantity}}"
     },
     "reorder": {
       "enter": "Put them in order",
@@ -518,6 +524,57 @@
       "roleChanged": "Your role in this group changed",
       "tooFast": "Slow down for a moment and try again",
       "failed": "That did not work. Try again in a moment"
+    },
+    "detail": {
+      "title": "About this line",
+      "products": {
+        "none": "Not linked to a product",
+        "one": "{{name}}",
+        "many": "{{count}} products",
+        "lastBought": "{{count}} products · last bought {{name}}"
+      },
+      "lastBought": "Last bought",
+      "lastBoughtValue": "{{when}} · {{count}}",
+      "never": "Never bought",
+      "rate": "You buy this about",
+      "rateValue": "every {{days}} days",
+      "rateRough": "every few weeks",
+      "bought": "I bought this",
+      "notAvailable": "They did not have it",
+      "everything": "Everything about this line",
+      "howMany": "How many did you get?",
+      "howManyNote": "Prefilled with the whole outstanding quantity. Buying fewer leaves the rest wanted",
+      "whichOne": "Which one did you get?",
+      "record": "Record it",
+      "cancel": "Cancel",
+      "failed": "That did not save. Try again"
+    },
+    "page": {
+      "where": "on {{list}}, in {{zone}}",
+      "noProducts": "No products yet",
+      "products": "PRODUCTS ON THIS LINE",
+      "addProduct": "Add a product",
+      "add": "Add",
+      "removeProduct": "Remove {{name}}",
+      "thisList": "ON THIS LIST",
+      "everywhere": "EVERYWHERE YOU SHOP",
+      "alsoOn": "ALSO ON",
+      "noHistory": "Nothing bought yet",
+      "more": "Show more",
+      "prices": "Where to buy it, and for how much: drawn here once prices exist. Nothing is shown until then.",
+      "delete": "Delete this line",
+      "rate": "about how often you buy it",
+      "lastBought": "last bought, {{count}}",
+      "boughtBy": "Bought {{count}} · {{who}}",
+      "missingBy": "Not in the shop · {{who}}",
+      "you": "you",
+      "someone": "somebody"
+    },
+    "confirmDelete": {
+      "title": "Delete “{{name}}”?",
+      "body": "Its buy history goes with it. A line at zero keeps its history and costs nothing; deleting is for things this list should not know about any more.",
+      "confirm": "Delete the line",
+      "cancel": "Keep it"
     }
   },
   "account": {

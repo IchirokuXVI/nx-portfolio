@@ -1,9 +1,10 @@
+import type { LocalizedName } from './shopping-profile';
 import type {
   CommentTranscription,
   LineApprovalStatus,
-  LineStatus,
   ListPermission,
   MembershipStatus,
+  SettlementOutcome,
   UserKind,
   ZoneRole,
   ZoneStatus,
@@ -104,7 +105,16 @@ export interface ListPreview {
   readonly id: string;
   readonly name: string;
   readonly lineCount: number;
-  readonly readyCount: number;
+  /**
+   * How many of this list's lines the household currently wants: `quantity > 0`.
+   *
+   * It was `readyCount`, counting lines somebody had ticked on some trip, and the
+   * rename is a change of subject rather than of wording (backend plan 0047,
+   * section 2.3). "Four things needed" is the figure a card should have been
+   * showing all along; "four things already bought" never was, and it stopped
+   * being computable at all when the trip status was dropped.
+   */
+  readonly wantedCount: number;
 }
 
 /** Someone's membership of a zone. */
@@ -174,7 +184,16 @@ export interface ShoppingList {
  */
 export interface ShoppingListSummary extends ShoppingList {
   readonly lineCount: number;
-  readonly readyCount: number;
+  /**
+   * How many of this list's lines the household currently wants: `quantity > 0`.
+   *
+   * It was `readyCount`, counting lines somebody had ticked on some trip, and the
+   * rename is a change of subject rather than of wording (backend plan 0047,
+   * section 2.3). "Four things needed" is the figure a card should have been
+   * showing all along; "four things already bought" never was, and it stopped
+   * being computable at all when the trip status was dropped.
+   */
+  readonly wantedCount: number;
   /**
    * What **this caller** may do on this list, including the derived group staff grant
    * (backend plan 0036, section 7).
@@ -205,15 +224,144 @@ export interface Line {
   readonly id: string;
   readonly listId: string;
   readonly content: string;
+  /**
+   * How many of this the household wants **right now**, and the line's only
+   * state (velista plan 0043, section 1).
+   *
+   * There is no `status` beside it any more, and its absence is the plan. A tick
+   * was a fact about one shopping trip written onto a record that outlives every
+   * trip, so a shared list filled with ticked lines and the only ways out were
+   * deleting what you knew about the thing or resetting it by hand every week.
+   * Buying decrements this instead, zero means stocked, and the line stays
+   * exactly where it is holding everything it knows about itself.
+   */
   readonly quantity: number;
-  readonly itemId: string | null;
+  /**
+   * The catalog products this line stands for, in the order they were attached
+   * (backend plan 0048, section 1.1). Empty is a free text line, which stays
+   * first class.
+   *
+   * A **set**, where this was a single nullable `itemId` that was null on every
+   * line ever created, because `0012` put the catalog out of scope. Picking a
+   * group in the composer copies that group's members here and the line
+   * references no group afterwards: a line is its own hand made group, so
+   * dropping a brand the household never buys is an ordinary edit rather than a
+   * change to somebody else's taxonomy.
+   */
+  readonly itemIds: readonly string[];
   readonly position: number;
   readonly approvalStatus: LineApprovalStatus;
-  readonly status: LineStatus;
+  /**
+   * How many times this line has ever been bought (backend plan 0047, section 5).
+   *
+   * Half of an indicator rather than a number anything draws. `quantity = 0`
+   * alone cannot tell a thing the household has just bought from a thing
+   * somebody typed and has never needed, and those two rows are drawn
+   * differently on purpose (section 3.2), so the count is what separates them.
+   *
+   * It is on the line because it cannot be computed from anything else the line
+   * carries, and asking per row would be a request per line on a screen somebody
+   * opens in a shop.
+   */
+  readonly boughtCount: number;
+  /**
+   * What the most recent settlement on this line said, or null when it has none.
+   *
+   * The most recent one and not a flag, which is the point: "they did not have
+   * it" is a fact about the last trip and expires the moment somebody does buy
+   * it, so there is nothing to store and nothing for anybody to clear.
+   */
+  readonly lastSettlementOutcome: SettlementOutcome | null;
   readonly createdByUserId: string;
   readonly approvedByUserId: string | null;
   readonly version: number;
 }
+
+/**
+ * One thing that happened to a line on one trip (backend plan 0047, section 3).
+ *
+ * Written once and never edited, which is what makes it a history rather than a
+ * state. Most rows are purchases and the screen calls the `BOUGHT` subset the buy
+ * history, but a row saying the shop did not have it is not a purchase, and that
+ * is why the type is named for the act rather than for the happy case.
+ */
+export interface LineSettlement {
+  readonly id: string;
+  readonly lineId: string;
+  readonly listId: string;
+  /**
+   * Which product was bought, **as it was at the time**, or null on a free text
+   * line.
+   *
+   * Copied onto the settlement rather than read back through the line, because a
+   * line's product set can change afterwards and what somebody actually carried
+   * home cannot (section 3.2).
+   */
+  readonly itemId: string | null;
+  readonly outcome: SettlementOutcome;
+  /** Units bought. Zero for a trip that found nothing. */
+  readonly quantity: number;
+  /**
+   * Who settled it, or null when a shared basket did (backend plan 0051).
+   *
+   * Null does not mean nobody: it means the settle came off a basket, where the
+   * person holding it may be a guest with no account. The row says "somebody"
+   * rather than naming an id.
+   */
+  readonly settledByUserId: string | null;
+  readonly settledAt: Date;
+}
+
+/**
+ * One catalog product, as much of it as this app draws.
+ *
+ * Far narrower than the gateway's `ItemView`, and deliberately: the suggestion
+ * row and the product chip need a name and a brand, and every price field on the
+ * wire is out of scope until the backend's backlog `0004` exists (velista plan
+ * 0043, section 9). Widening it later is a mapper change; carrying fields nothing
+ * renders is a promise the screen cannot keep.
+ */
+export interface CatalogItem {
+  readonly id: string;
+  /**
+   * The pair, resolved with `inLocale` where it is drawn.
+   *
+   * Not flattened in the mapper, which is the convention every other catalog name in
+   * this app follows (`Supermarket`, `ProductGroup` beside it). The mapper has no
+   * locale and should not be given one: it runs once per response, the reader can
+   * change language without a refetch, and a name flattened at parse time would then
+   * be the old language until something evicted the cache.
+   */
+  readonly name: LocalizedName;
+  readonly brand: string | null;
+  readonly productGroupId: string | null;
+}
+
+/** One catalog group: the thing "milk" means before it means a brand of it. */
+export interface ProductGroup {
+  readonly id: string;
+  readonly name: LocalizedName;
+  /** How many products it carries, which is what the composer row says it adds. */
+  readonly itemCount: number;
+}
+
+/**
+ * One row of the composer's dropdown (backend plan 0048, section 3).
+ *
+ * A discriminated union rather than an object with two nullable halves, because
+ * every consumer of it does exactly one thing per kind and the wire's shape
+ * (`{ kind, group, item }`, both nullable) makes "a group suggestion with no
+ * group on it" representable. The mapper drops those; nothing downstream has to
+ * consider them.
+ */
+export type CatalogSuggestion =
+  | {
+      readonly kind: 'group';
+      readonly group: ProductGroup;
+      /** The group's products, which choosing it attaches to the line whole. */
+      readonly itemIds: readonly string[];
+    }
+  | { readonly kind: 'item'; readonly item: CatalogItem };
 
 /**
  * A recording somebody just made, on its way to being sent (velista plan 0039).

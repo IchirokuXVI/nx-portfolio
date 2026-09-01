@@ -51,10 +51,6 @@
   background: var(--app-surface-sunken);
 }
 
-.state {
-  flex-shrink: 0;
-}
-
 .body {
   display: flex;
   flex-direction: column;
@@ -71,14 +67,18 @@
   white-space: nowrap;
 }
 
-// Struck through **and** muted, so the state survives a monochrome screen. Colour is
-// never the only signal on this row (section 7).
-.row.struck .content {
-  text-decoration: line-through;
+// A settled line: at zero, with a purchase behind it. Muted, and **never struck
+// through**. The strikethrough went with the tick that drew it (plan 0043, section
+// 3.2): there is nothing crossed out about a line saying the household is stocked, and
+// a line through it would say the record itself was finished with, when in fact it is
+// the thing that survives every trip.
+.row.settled .content {
   color: var(--app-text-muted);
 }
 
-// Only three things produce a caption, and an ordinary row never grows one.
+// Only approval and the read only note produce a caption, and an ordinary row never
+// grows one. The indicators below are **not** captions: a row can carry two of them at
+// once, which one line of text cannot.
 .caption {
   font-size: var(--app-text-2xs);
   color: var(--app-text-muted);
@@ -88,16 +88,52 @@
   color: var(--app-status-attention-fg);
 }
 
-.row.unavailable .caption {
+// The three indicators (section 3.3). A row wraps them rather than truncating,
+// because the combined case is real: missing last trip, wanted again, and somebody is
+// out getting it now.
+.indicators {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2) var(--app-space-4);
+}
+
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  font-size: var(--app-text-2xs);
+  white-space: nowrap;
+}
+
+.indicator-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.indicator-bought {
+  color: var(--app-status-success-fg);
+}
+
+.indicator-notAvailable {
   color: var(--app-status-danger-fg);
 }
 
-// Tabular, so a column of quantities lines up rather than wandering with the digits.
-.quantity {
+// Somebody is out buying this. Informational rather than a warning or a success,
+// because it is neither: it is a thing happening right now that will stop happening,
+// and it must never read as the line having been dealt with.
+.indicator-claimed {
+  color: var(--app-status-info-fg);
+}
+
+// A dot rather than a glyph, which is the same mark presence uses everywhere else in
+// this app. It is what tells this indicator apart from the two beside it at a glance:
+// those are records, this is a person.
+.indicator-dot {
   flex-shrink: 0;
-  font-size: var(--app-text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--app-text-secondary);
+  width: var(--app-dot-size);
+  height: var(--app-dot-size);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-info-fg);
 }
 
 // Somebody else is editing this line. Subdued on purpose: it is a thing to notice out

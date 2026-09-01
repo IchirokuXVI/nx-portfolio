@@ -150,9 +150,9 @@ function selectHeader(input: ListStateInput): ListHeaderVm {
   return {
     listName: list?.name ?? null,
     zoneName: input.zoneName,
-    readyCount: counted
+    wantedCount: counted
       ? lines.filter((line) => line.status === 'READY').length
-      : (list?.readyCount ?? 0),
+      : (list?.wantedCount ?? 0),
     lineCount: counted ? lines.length : (list?.lineCount ?? 0),
     viewers: input.viewers,
     live: input.live,

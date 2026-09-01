@@ -1,6 +1,7 @@
 import {
   LineApprovalStatus,
   ListPermission,
+  NO_LINE_SETTLEMENTS,
   RealtimeEvent,
   ZoneRole,
   type ListCounts,
@@ -65,7 +66,7 @@ describe('list mappers (plan 0017, sections 3.4 and 7)', () => {
       updatedAt: new Date('2026-03-02T00:00:00.000Z'),
     } as ListLine;
 
-    const view = toLineView(line, []);
+    const view = toLineView(line, [], NO_LINE_SETTLEMENTS);
     expect(view.createdAt).toBe('2026-03-01T00:00:00.000Z');
     expect(view.updatedAt).toBe('2026-03-02T00:00:00.000Z');
     // A free text line, which is what most lines are: an empty set and a null
