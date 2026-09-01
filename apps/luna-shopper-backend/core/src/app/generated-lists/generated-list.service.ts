@@ -4,6 +4,7 @@ import {
   GENERATED_LIST_LIMITS,
   GeneratedLineOrigin,
   GeneratedListStatus,
+  isLiveGeneratedList,
   RealtimeEvent,
   SettlementOutcome,
   type CreateGeneratedListRequest,
@@ -41,13 +42,14 @@ import {
 } from './generated-list.mappers';
 import {
   ACTIVE_OVERLAP_SQL,
-  CANDIDATE_LINES_SQL,
   CANDIDATE_LINE_ITEMS_SQL,
+  CANDIDATE_LINES_SQL,
   WRITABLE_LISTS_SQL,
   type ActiveOverlapRow,
   type CandidateLineRow,
   type WritableListRow,
 } from './generated-list.sql';
+import { LineClaimService } from './line-claim.service';
 import { mergeKey } from './line-dedup';
 
 /** Postgres unique-violation, raised by the partial index on the idempotency key. */
@@ -122,6 +124,7 @@ export class GeneratedListService {
     @InjectRepository(LineSettlement)
     private readonly settlements: Repository<LineSettlement>,
     private readonly profiles: ProfileService,
+    private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher
   ) {}
 
@@ -193,6 +196,16 @@ export class GeneratedListService {
       [req.userId],
       view
     );
+    // The one zone event a generated list emits (plan 0052, section 3.1), and
+    // the declared exception to plan 0050 section 8 rather than a contradiction
+    // to be discovered later. Every origin the run took is now claimed, in one
+    // event per zone room: two people in one household putting the same milk in
+    // two trolleys is the entire reason the indicator exists.
+    //
+    // Named as the **owner** and never as a participant (section 2): a basket
+    // shared with three guests is still one person's trip from the household's
+    // point of view.
+    this.claims.announce(true, req.userId, await this.claims.refsOf(saved.id));
     return { list: view, skipped };
   }
 
@@ -560,6 +573,7 @@ export class GeneratedListService {
   /** Rename a basket, move it between statuses, or change its default target. */
   async update(req: UpdateGeneratedListRequest): Promise<GeneratedListView> {
     const list = await this.load(req.userId, req.generatedListId);
+    const wasLive = isLiveGeneratedList(list.status);
     if (req.name !== undefined) {
       list.name = checkName(req.name);
     }
@@ -576,6 +590,24 @@ export class GeneratedListService {
       [req.userId],
       view
     );
+
+    // A basket leaving the live statuses unclaims every line it still holds
+    // (plan 0052, section 3.2): the trip is over, or it has been put away, and
+    // the household should stop being told somebody is out buying the bread.
+    // The other direction is announced too, because a basket put back into
+    // `DRAFT` claims its lines again and the read would say so on the next cold
+    // load; an event that only ever released would leave a live socket showing
+    // less than a refresh.
+    const isLive = isLiveGeneratedList(saved.status);
+    if (wasLive && !isLive) {
+      await this.claims.announceReleased(await this.claims.refsOf(saved.id));
+    } else if (!wasLive && isLive) {
+      this.claims.announce(
+        true,
+        saved.ownerUserId,
+        await this.claims.refsOf(saved.id)
+      );
+    }
     return view;
   }
 
@@ -588,10 +620,18 @@ export class GeneratedListService {
    */
   async delete(req: GeneratedListIdRequest): Promise<{ id: string }> {
     const list = await this.load(req.userId, req.generatedListId);
+    // **Before** the delete, because the provenance rows go with it and there
+    // would be nothing left to ask afterwards (plan 0052, section 3.2). The
+    // announcement is still made after the write, so a client is never told a
+    // line is free while the basket holding it is still there.
+    const refs = isLiveGeneratedList(list.status)
+      ? await this.claims.refsOf(list.id)
+      : [];
     await this.lists.delete({ id: list.id });
     this.events.emitToUsers(RealtimeEvent.GeneratedListDeleted, [req.userId], {
       id: list.id,
     });
+    await this.claims.announceReleased(refs);
     return { id: list.id };
   }
 

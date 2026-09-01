@@ -269,6 +269,11 @@ describe('contract schemas', () => {
           // section 5).
           boughtCount: 0,
           lastSettlementOutcome: null,
+          // And the third one, which nothing can be a moment after it was typed
+          // (plan 0052, section 4). Stated for the same reason: absent would
+          // read as "this server does not say".
+          claimed: false,
+          claimedByUserId: null,
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
         }).valid
@@ -298,6 +303,10 @@ describe('contract schemas', () => {
             // from one somebody typed and never needed.
             boughtCount: 1,
             lastSettlementOutcome: 'BOUGHT',
+            // Settled through, so whoever was carrying it has let it go (plan
+            // 0052, section 3.3).
+            claimed: false,
+            claimedByUserId: null,
             createdAt: '2026-01-01T00:00:00.000Z',
             updatedAt: '2026-01-01T00:00:00.000Z',
           },

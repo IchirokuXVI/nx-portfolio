@@ -10,6 +10,7 @@ import {
   ShoppingList,
   ZoneMembership,
 } from '../entities';
+import { LineClaimModule } from '../generated-lists/line-claim.module';
 import { ZonesModule } from '../zones/zones.module';
 import { CommentService } from './comment.service';
 import { LineService } from './line.service';
@@ -38,6 +39,10 @@ import { SharedListGrantModule } from './shared-list-grant.module';
     ]),
     ZonesModule,
     SharedListGrantModule,
+    // The third indicator on a line (plan 0052). A module of its own rather than
+    // `GeneratedListsModule`, which imports this one, on exactly the reasoning
+    // `SharedListGrantModule` above it exists for.
+    LineClaimModule,
   ],
   controllers: [ListController],
   providers: [

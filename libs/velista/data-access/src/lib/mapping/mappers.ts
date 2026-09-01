@@ -368,6 +368,11 @@ export function toLine(raw: unknown): Line | null {
             SETTLEMENT_OUTCOMES,
             SETTLEMENT_OUTCOME_FALLBACK
           ),
+    // The third indicator (backend plan 0052, section 4), and it defaults the same
+    // safe way: absent draws nothing. A row that claimed somebody was out buying
+    // this over a missing field would read as the line having been dealt with.
+    claimed: raw['claimed'] === true,
+    claimedByUserId: nullableStr(raw['claimedByUserId']),
     createdByUserId: strOr(raw['createdByUserId'], ''),
     approvedByUserId: nullableStr(raw['approvedByUserId']),
     // A missing version defaults to 0, which loses every reconciliation race rather

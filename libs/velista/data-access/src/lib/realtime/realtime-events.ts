@@ -29,6 +29,12 @@ import type {
  *   "approval changed" event to listen for. It no longer fires for a trip status,
  *   because there is no longer one: what a shopper found is `line.settled`.
  */
+/** One line named by a claim change, with the list that holds it. */
+export interface LineClaimRef {
+  readonly lineId: string;
+  readonly listId: string;
+}
+
 export type RealtimeEvent =
   | {
       /**
@@ -160,28 +166,30 @@ export type RealtimeEvent =
       readonly settlement: LineSettlement;
     }
   /**
-   * A line is, or is no longer, in somebody's active basket (backend plan 0051,
-   * section 5.3), on the **zone** room.
+   * Some lines are, or are no longer, in somebody's live basket (backend plan
+   * 0052), on the **zone** room.
    *
    * The one zone event a generated list emits, so a line can show that somebody is out
-   * buying it. The payload says **that** a line is claimed and **whose**, and nothing
-   * else: not what else is in the basket, not where they are shopping, not what it
-   * costs.
+   * buying it. The payload says **that** those lines are claimed and **whose**, and
+   * nothing else: not what else is in the basket, not where they are shopping, not
+   * what it costs, and never which basket.
    *
-   * `claimedByUserId` is null when the claim is released, which is what makes this one
-   * event serve both directions rather than needing a second one to undo it.
+   * `claimed` is false when the claim is released, which is what makes one event serve
+   * both directions rather than needing a second one to undo it. `claimedByUserId` is
+   * null on a release, and also null on a claim whose owner has since left the zone:
+   * the line is still claimed and the name is no longer this reader's to have.
    *
-   * **Nothing publishes this yet.** The subject is in the contracts and the enum
-   * member exists; no payload schema and no publisher do (backend plan 0051 specifies
-   * it, velista `0044` is the screen that will want it). It is declared here because
-   * the alternative is an indicator with no way in, and the mapper below refuses a
-   * payload it does not recognise rather than guessing one.
+   * **Many lines and not one.** A run takes every wanted line of every list it drew
+   * from, so the server sends one event per zone rather than a hundred into a
+   * household room (backend plan 0052, section 3.1). The single line transitions use
+   * the same shape carrying one entry, so there is one payload to read and not two.
    */
   | {
       readonly type: 'line.claimChanged';
-      readonly lineId: string;
-      readonly listId: string;
+      readonly zoneId: string;
+      readonly claimed: boolean;
       readonly claimedByUserId: string | null;
+      readonly lines: readonly LineClaimRef[];
     }
   | {
       readonly type: 'line.reordered';

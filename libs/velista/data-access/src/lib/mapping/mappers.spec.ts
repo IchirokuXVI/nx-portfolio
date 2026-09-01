@@ -301,6 +301,10 @@ describe('toLine', () => {
     // section 5). There is no `status` on a line any more.
     boughtCount: 4,
     lastSettlementOutcome: 'BOUGHT',
+    // The third one (backend plan 0052, section 4), which the other two cannot
+    // stand in for: bought is history and this is right now.
+    claimed: true,
+    claimedByUserId: 'u9',
     createdByUserId: 'u1',
     approvedByUserId: 'u2',
     version: 7,
@@ -350,6 +354,28 @@ describe('toLine', () => {
 
     expect(bare?.boughtCount).toBe(0);
     expect(bare?.lastSettlementOutcome).toBeNull();
+  });
+
+  it('reads an absent claim as nobody buying it, in the safe direction', () => {
+    // Same rule as the two above. A row that said somebody was out buying this over
+    // a missing field would be read as the line having been dealt with.
+    const bare = toLine({
+      ...valid,
+      claimed: undefined,
+      claimedByUserId: undefined,
+    });
+
+    expect(bare?.claimed).toBe(false);
+    expect(bare?.claimedByUserId).toBeNull();
+  });
+
+  it('keeps a claim whose owner has left the zone, without the name', () => {
+    // Backend plan 0052, section 6: the household still needs to know somebody has
+    // it, and who that was has stopped being this reader's to have.
+    const anonymous = toLine({ ...valid, claimedByUserId: null });
+
+    expect(anonymous?.claimed).toBe(true);
+    expect(anonymous?.claimedByUserId).toBeNull();
   });
 
   it('reads an outcome it has never heard of as the quiet one', () => {

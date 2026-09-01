@@ -22,6 +22,7 @@ import { GeneratedListSharingController } from './generated-list-sharing.control
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListController } from './generated-list.controller';
 import { GeneratedListService } from './generated-list.service';
+import { LineClaimModule } from './line-claim.module';
 
 /**
  * Generated shopping lists (plan 0050): the four tables, the run that composes
@@ -62,6 +63,9 @@ import { GeneratedListService } from './generated-list.service';
     ProfilesModule,
     ListsModule,
     ZonesModule,
+    // The one zone event a basket emits (plan 0052). `ListsModule` imports it
+    // too, which is why it is a module rather than a provider declared here.
+    LineClaimModule,
   ],
   controllers: [GeneratedListController, GeneratedListSharingController],
   providers: [

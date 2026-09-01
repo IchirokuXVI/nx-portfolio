@@ -17702,6 +17702,15 @@
               }
             ]
           },
+          "claimed": {
+            "type": "boolean"
+          },
+          "claimedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -17725,6 +17734,8 @@
           "version",
           "boughtCount",
           "lastSettlementOutcome",
+          "claimed",
+          "claimedByUserId",
           "createdAt",
           "updatedAt"
         ],

@@ -764,6 +764,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         approvalStatus: addedApproval,
         boughtCount: 0,
         lastSettlementOutcome: null,
+        claimed: false,
+        claimedByUserId: null,
         createdByUserId,
         approvedByUserId: null,
         version: 1,

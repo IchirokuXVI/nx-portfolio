@@ -12,14 +12,15 @@ import {
   ListLine,
   ListLineItem,
 } from '../entities';
-import { fakeLineSettlements } from '../lists/line-settlements.fake';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { fakeLineSettlements } from '../lists/line-settlements.fake';
 import {
   allocateOldestFirst,
   GeneratedListSettleService,
 } from './generated-list-settle.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
 import type { GeneratedListService } from './generated-list.service';
+import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
 
 /**
  * Settling a basket back to the lines it came from (plan 0051, section 6).
@@ -58,7 +59,10 @@ interface OriginSeed {
 interface Harness {
   service: GeneratedListSettleService;
   settlements: Partial<LineSettlement>[];
-  zoneLines: Map<string, { id: string; listId: string; quantity: number; version: number }>;
+  zoneLines: Map<
+    string,
+    { id: string; listId: string; quantity: number; version: number }
+  >;
   basketLine: Partial<GeneratedListLine>;
   events: {
     event: RealtimeEvent;
@@ -68,6 +72,7 @@ interface Harness {
     /** Captured so the zone event's own `LineView` can be asserted, not just its name. */
     payload?: unknown;
   }[];
+  claims: FakeLineClaims;
 }
 
 function build(options: {
@@ -150,7 +155,11 @@ function build(options: {
         return {
           findOne: async ({ where }: { where: { id: string } }) =>
             zoneLines.get(where.id) ?? null,
-          save: async (row: { id: string; quantity: number; version: number }) => {
+          save: async (row: {
+            id: string;
+            quantity: number;
+            version: number;
+          }) => {
             const existing = zoneLines.get(row.id);
             if (existing) {
               zoneLines.set(row.id, { ...existing, ...row });
@@ -178,7 +187,8 @@ function build(options: {
   };
 
   const dataSource = {
-    transaction: async (fn: (m: typeof manager) => Promise<unknown>) => fn(manager),
+    transaction: async (fn: (m: typeof manager) => Promise<unknown>) =>
+      fn(manager),
   } as unknown as DataSource;
 
   const seesZoneData = options.actorSeesZoneData ?? true;
@@ -211,10 +221,7 @@ function build(options: {
     }),
     // The projected line, which is what both the response and the basket room's
     // broadcast now carry (section 5.2).
-    basketLineViewFor: async (
-      _line: unknown,
-      lineSeesZoneData: boolean
-    ) => ({
+    basketLineViewFor: async (_line: unknown, lineSeesZoneData: boolean) => ({
       id: BASKET_LINE,
       quantity: basketLine.quantity,
       settledQuantity: basketLine.settledQuantity,
@@ -224,6 +231,16 @@ function build(options: {
     }),
   } as unknown as GeneratedListService;
 
+  // The basket line claims its origins until it is settled through (section
+  // 3.3), which is what the release below is asserted against.
+  const claims = fakeLineClaims({}, () =>
+    origins.map((origin) => ({
+      zoneId: origin.zoneId,
+      listId: origin.listId,
+      lineId: origin.lineId,
+    }))
+  );
+
   const service = new GeneratedListSettleService(
     dataSource,
     {
@@ -231,8 +248,7 @@ function build(options: {
     } as never,
     { findOne: async () => basketLine } as never,
     {
-      find: async () =>
-        [...origins].sort((a, b) => a.order - b.order),
+      find: async () => [...origins].sort((a, b) => a.order - b.order),
     } as never,
     {
       findOne: async ({ where }: { where: { itemId: string } }) =>
@@ -242,6 +258,7 @@ function build(options: {
     } as never,
     sharing,
     generated,
+    claims.service,
     {
       emit: (
         event: RealtimeEvent,
@@ -265,6 +282,7 @@ function build(options: {
     zoneLines: zoneLines as Harness['zoneLines'],
     basketLine,
     events,
+    claims,
   };
 }
 
@@ -279,8 +297,7 @@ function settle(harness: Harness, body: Record<string, unknown> = {}) {
 }
 
 describe('the default allocation is oldest origin first (section 6.2)', () => {
-  const origin = (id: string, quantity: number) =>
-    ({ id, quantity }) as never;
+  const origin = (id: string, quantity: number) => ({ id, quantity }) as never;
 
   it('is the obvious answer when a line has exactly one origin', () => {
     const only = origin('o-1', 3);
@@ -374,7 +391,9 @@ describe('settling from the basket (section 6)', () => {
     const harness = build({});
     await settle(harness);
 
-    expect(harness.settlements[0].settledByParticipantId).toBe(GUEST_PARTICIPANT);
+    expect(harness.settlements[0].settledByParticipantId).toBe(
+      GUEST_PARTICIPANT
+    );
     expect(harness.settlements[0].settledByUserId).toBeNull();
   });
 
@@ -387,8 +406,22 @@ describe('settling from the basket (section 6)', () => {
 
 describe('a settle is authorized by the owner, never the actor (section 6.4)', () => {
   const twoOrigins: OriginSeed[] = [
-    { id: 'o-1', lineId: 'zl-1', listId: LIST_A, zoneId: ZONE_A, quantity: 2, order: 1 },
-    { id: 'o-2', lineId: 'zl-2', listId: LIST_B, zoneId: ZONE_B, quantity: 1, order: 2 },
+    {
+      id: 'o-1',
+      lineId: 'zl-1',
+      listId: LIST_A,
+      zoneId: ZONE_A,
+      quantity: 2,
+      order: 1,
+    },
+    {
+      id: 'o-2',
+      lineId: 'zl-2',
+      listId: LIST_B,
+      zoneId: ZONE_B,
+      quantity: 1,
+      order: 2,
+    },
   ];
 
   it('skips and reports an origin the owner may no longer write', async () => {
@@ -403,9 +436,9 @@ describe('a settle is authorized by the owner, never the actor (section 6.4)', (
       { lineId: 'zl-2', listId: LIST_B, reason: 'ACCESS_GONE' },
     ]);
     // Nothing was written to the list the owner lost.
-    expect(
-      harness.settlements.every((row) => row.listId === LIST_A)
-    ).toBe(true);
+    expect(harness.settlements.every((row) => row.listId === LIST_A)).toBe(
+      true
+    );
   });
 
   it('reports an origin whose zone line has been deleted', async () => {
@@ -438,8 +471,22 @@ describe('a settle is authorized by the owner, never the actor (section 6.4)', (
 
 describe('the allocation sheet overrides the default (section 6.3)', () => {
   const twoOrigins: OriginSeed[] = [
-    { id: 'o-1', lineId: 'zl-1', listId: LIST_A, zoneId: ZONE_A, quantity: 2, order: 1 },
-    { id: 'o-2', lineId: 'zl-2', listId: LIST_B, zoneId: ZONE_B, quantity: 1, order: 2 },
+    {
+      id: 'o-1',
+      lineId: 'zl-1',
+      listId: LIST_A,
+      zoneId: ZONE_A,
+      quantity: 2,
+      order: 1,
+    },
+    {
+      id: 'o-2',
+      lineId: 'zl-2',
+      listId: LIST_B,
+      zoneId: ZONE_B,
+      quantity: 1,
+      order: 2,
+    },
   ];
 
   it('writes the same settlements with the allocation supplied', async () => {
@@ -496,7 +543,10 @@ describe('the allocation sheet overrides the default (section 6.3)', () => {
 
 describe('swapping the product at the shelf (section 6.1)', () => {
   it('records the product actually bought, not the one planned', async () => {
-    const harness = build({ itemId: 'item-planned', optionIds: ['item-bought'] });
+    const harness = build({
+      itemId: 'item-planned',
+      optionIds: ['item-bought'],
+    });
     await settle(harness, { itemId: 'item-bought' });
 
     expect(harness.settlements[0].itemId).toBe('item-bought');
@@ -507,7 +557,10 @@ describe('swapping the product at the shelf (section 6.1)', () => {
   it('refuses a product that is not one of the line’s own options', async () => {
     // A swap is a gesture at the shelf, not a way to write an arbitrary catalog
     // id into a household's purchase history.
-    const harness = build({ itemId: 'item-planned', optionIds: ['item-bought'] });
+    const harness = build({
+      itemId: 'item-planned',
+      optionIds: ['item-bought'],
+    });
     await expect(
       settle(harness, { itemId: 'item-never-offered' })
     ).rejects.toBeInstanceOf(DomainException);
@@ -602,8 +655,22 @@ describe('what the settle tells the rest of the system (section 10)', () => {
  */
 describe('what a settle tells the person who made it (section 5.2)', () => {
   const twoOrigins: OriginSeed[] = [
-    { id: 'o-1', lineId: 'zl-1', listId: LIST_A, zoneId: ZONE_A, quantity: 2, order: 1 },
-    { id: 'o-2', lineId: 'zl-2', listId: LIST_B, zoneId: ZONE_B, quantity: 1, order: 2 },
+    {
+      id: 'o-1',
+      lineId: 'zl-1',
+      listId: LIST_A,
+      zoneId: ZONE_A,
+      quantity: 2,
+      order: 1,
+    },
+    {
+      id: 'o-2',
+      lineId: 'zl-2',
+      listId: LIST_B,
+      zoneId: ZONE_B,
+      quantity: 1,
+      order: 2,
+    },
   ];
 
   it('names no list to a guest, in the settlements or in the skips', async () => {
@@ -664,5 +731,54 @@ describe('what a settle tells the person who made it (section 5.2)', () => {
     expect(guest.basketLine.settledQuantity).toBe(
       writer.basketLine.settledQuantity
     );
+  });
+});
+
+describe('settling releases the claim (plan 0052, section 3.3)', () => {
+  it('releases every origin once the basket line is settled through', async () => {
+    const w = build({ quantity: 2 });
+
+    await w.service.settle({
+      generatedListId: BASKET,
+      participantId: GUEST_PARTICIPANT,
+      lineId: BASKET_LINE,
+      outcome: SettlementOutcome.BOUGHT,
+      quantity: 2,
+    });
+
+    expect(w.claims.calls).toEqual([
+      { claimed: false, claimedByUserId: null, lineIds: ['zl-1'] },
+    ]);
+  });
+
+  it('keeps the claim while the line still has something outstanding', async () => {
+    // Nothing about settling is terminal (plan 0047, section 4.1), so a line
+    // bought two of three is still a line somebody is out buying.
+    const w = build({ quantity: 3 });
+
+    await w.service.settle({
+      generatedListId: BASKET,
+      participantId: GUEST_PARTICIPANT,
+      lineId: BASKET_LINE,
+      outcome: SettlementOutcome.BOUGHT,
+      quantity: 2,
+    });
+
+    expect(w.claims.calls).toEqual([]);
+  });
+
+  it('releases on NOT_AVAILABLE, which closes the outstanding amount', async () => {
+    const w = build({ quantity: 3 });
+
+    await w.service.settle({
+      generatedListId: BASKET,
+      participantId: GUEST_PARTICIPANT,
+      lineId: BASKET_LINE,
+      outcome: SettlementOutcome.NOT_AVAILABLE,
+    });
+
+    expect(w.claims.calls).toEqual([
+      { claimed: false, claimedByUserId: null, lineIds: ['zl-1'] },
+    ]);
   });
 });

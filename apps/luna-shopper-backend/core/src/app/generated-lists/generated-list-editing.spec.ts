@@ -14,6 +14,7 @@ import type { LineService } from '../lists/line.service';
 import type { ListAccessService } from '../lists/list-access.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import type { GeneratedListService } from './generated-list.service';
+import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
 
 /**
  * Editing a basket (plan 0050, section 5), which is one rule tested from every
@@ -42,6 +43,7 @@ interface Harness {
   promotions: unknown[][];
   saved: Partial<GeneratedListLine>[];
   events: RealtimeEvent[];
+  claims: FakeLineClaims;
 }
 
 function build(options: {
@@ -49,6 +51,8 @@ function build(options: {
   line?: Partial<GeneratedListLine>;
   lines?: Partial<GeneratedListLine>[];
   optionRows?: Partial<GeneratedListLineOption>[];
+  /** The zone lines this basket line came from (plan 0052, section 3.3). */
+  claiming?: { zoneId: string; listId: string; lineId: string }[];
 }): Harness {
   const basket = {
     id: BASKET,
@@ -153,16 +157,19 @@ function build(options: {
     },
   } as unknown as CoreEventsPublisher;
 
+  const claims = fakeLineClaims({}, () => options.claiming ?? []);
+
   const service = new GeneratedListLineService(
     lineRepo as never,
     optionRepo as never,
     generatedLists,
     listAccess,
     zoneLines,
+    claims.service,
     publisher
   );
 
-  return { service, zoneAdds, promotions, saved, events };
+  return { service, zoneAdds, promotions, saved, events, claims };
 }
 
 describe('editing a basket line', () => {
@@ -256,6 +263,25 @@ describe('editing a basket line', () => {
     // "I decided not to buy this today" must not look like "somebody bought it".
     expect(zoneAdds).toEqual([]);
     expect(events).toEqual([RealtimeEvent.GeneratedListUpdated]);
+  });
+
+  it('lets go of the zone lines it was carrying (plan 0052, section 3.3)', async () => {
+    // The line leaves the basket, so nobody is out buying it any more. The zone
+    // line itself is untouched and stays wanted, which is the distinction the
+    // test above is about and this one does not disturb.
+    const { service, claims } = build({
+      claiming: [{ zoneId: ZONE, listId: TARGET_LIST, lineId: 'zl-1' }],
+    });
+
+    await service.deleteLine({
+      userId: OWNER,
+      generatedListId: BASKET,
+      lineId: 'gll-1',
+    });
+
+    expect(claims.calls).toEqual([
+      { claimed: false, claimedByUserId: null, lineIds: ['zl-1'] },
+    ]);
   });
 });
 

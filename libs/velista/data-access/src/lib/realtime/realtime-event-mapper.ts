@@ -191,20 +191,32 @@ export function toRealtimeEvent(
       if (!isRecord(payload)) {
         return null;
       }
-      const lineId = str(payload['lineId']);
-      const claimListId = str(payload['listId']);
-      if (lineId === null || claimListId === null) {
+      const zoneId = str(payload['zoneId']);
+      if (zoneId === null) {
         return null;
       }
-      // Null is a **release** rather than a missing value, which is what lets one
-      // event serve both directions. An absent field reads the same way, and that is
-      // the safe direction: an indicator that says somebody is shopping when nobody
-      // is would be read as the line having been dealt with.
+      // Every entry or none of the malformed ones: a ref missing either half names
+      // no row this store can find, so it is dropped rather than carried as a hole.
+      const lines = mapArray(payload['lines'], (entry) => {
+        if (!isRecord(entry)) {
+          return null;
+        }
+        const lineId = str(entry['lineId']);
+        const listId = str(entry['listId']);
+        return lineId === null || listId === null ? null : { lineId, listId };
+      });
+      if (lines.length === 0) {
+        return null;
+      }
+      // An absent `claimed` reads as a release, and that is the safe direction: an
+      // indicator that says somebody is shopping when nobody is would be read as the
+      // line having been dealt with.
       return {
         type: name,
-        lineId,
-        listId: claimListId,
+        zoneId,
+        claimed: payload['claimed'] === true,
         claimedByUserId: nullableStr(payload['claimedByUserId']),
+        lines,
       };
     }
 

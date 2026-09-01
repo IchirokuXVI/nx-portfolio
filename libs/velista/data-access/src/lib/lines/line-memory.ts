@@ -137,6 +137,10 @@ export class LineMemory implements LineServiceI {
       approvalStatus: decides || auto ? 'APPROVED' : 'PENDING',
       boughtCount: 0,
       lastSettlementOutcome: null,
+      // Nothing can be in a basket a moment after it was typed, and the seed puts
+      // nothing in one either (backend plan 0052).
+      claimed: false,
+      claimedByUserId: null,
       createdByUserId: caller,
       approvedByUserId: decides ? caller : null,
       version: 1,

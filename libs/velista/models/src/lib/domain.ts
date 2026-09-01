@@ -272,6 +272,30 @@ export interface Line {
    * it, so there is nothing to store and nothing for anybody to clear.
    */
   readonly lastSettlementOutcome: SettlementOutcome | null;
+  /**
+   * Whether somebody is out buying this right now (backend plan 0052).
+   *
+   * The third indicator, and the one that is not derived from the line's own
+   * history: the line is in a basket somebody has composed and not yet finished,
+   * so putting it in a second trolley buys the household two of it.
+   *
+   * It is **on the line**, where velista `0043` held it beside them as presence.
+   * Backend plan 0052 section 4 is the reason it moved: an event tells a
+   * connected client what changed and tells a client that connects afterwards
+   * nothing at all, and a shopping trip lasts an hour while a phone sleeps in a
+   * pocket. An indicator that is right only for whoever happened to be watching
+   * is worse than absent, because it is intermittently right.
+   */
+  readonly claimed: boolean;
+  /**
+   * Who is out buying it, or null.
+   *
+   * Null in two different situations and the row draws the same either way: the
+   * line is not claimed at all, or it is claimed by somebody who has since left
+   * the zone and whose name is therefore no longer this reader's to have. Pair it
+   * with {@link claimed} to tell them apart.
+   */
+  readonly claimedByUserId: string | null;
   readonly createdByUserId: string;
   readonly approvedByUserId: string | null;
   readonly version: number;

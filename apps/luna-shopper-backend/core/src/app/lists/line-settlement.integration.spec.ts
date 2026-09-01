@@ -20,6 +20,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
+import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { ListAccessService } from './list-access.service';
 import { SettlementService } from './settlement.service';
@@ -144,6 +145,7 @@ describeIntegration('the settlement history (real Postgres)', () => {
       dataSource,
       dataSource.getRepository(LineSettlement),
       listAccess,
+      fakeLineClaims().service,
       { emit: jest.fn() } as never
     );
 

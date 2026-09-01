@@ -24,6 +24,31 @@ export enum GeneratedListStatus {
 }
 
 /**
+ * The statuses of a basket somebody is still going to shop (plan 0052, section
+ * 3), which is the set the line claim in plan 0052 derives from.
+ *
+ * `DRAFT` is in it, and that is the whole reason this constant exists rather than
+ * a comparison against `ACTIVE` written out at each call site. A run composes a
+ * `DRAFT`, so a claim that counted only `ACTIVE` would announce nothing at
+ * generation time and plan 0052 section 3.1 asks for the opposite: the lines a
+ * run took are claimed the moment it took them, because that is the moment two
+ * people in one household would otherwise both put the milk in a trolley.
+ *
+ * `GeneratedListSharingService.listAccepts` draws the same line for a different
+ * reason (plan 0051, section 11), and the two agreeing is not a coincidence: a
+ * basket that may still take people is a basket somebody is still going to shop.
+ */
+export const LIVE_GENERATED_LIST_STATUSES: readonly GeneratedListStatus[] = [
+  GeneratedListStatus.DRAFT,
+  GeneratedListStatus.ACTIVE,
+] as const;
+
+/** Whether this basket is one somebody is still going to shop. */
+export function isLiveGeneratedList(status: GeneratedListStatus): boolean {
+  return LIVE_GENERATED_LIST_STATUSES.includes(status);
+}
+
+/**
  * How a line got into a generated list (plan 0050, section 1).
  *
  * `DERIVED` came from zone lines and carries a provenance row per contributing

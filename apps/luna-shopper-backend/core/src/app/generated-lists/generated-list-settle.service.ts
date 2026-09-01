@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  NO_LINE_CLAIM,
   RealtimeEvent,
   SettlementOutcome,
   type GeneratedListAllocationEntry,
@@ -8,6 +9,7 @@ import {
   type GeneratedListSettleResult,
   type GeneratedListSettleSkip,
   type GeneratedListSettlementRef,
+  type LineClaim,
   type LineSettlementSummary,
   type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -30,6 +32,7 @@ import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
+import { LineClaimService } from './line-claim.service';
 
 /**
  * Settling a basket back to the lines it came from (plan 0051, section 6).
@@ -72,6 +75,7 @@ export class GeneratedListSettleService {
     private readonly options: Repository<GeneratedListLineOption>,
     private readonly sharing: GeneratedListSharingService,
     private readonly generated: GeneratedListService,
+    private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher
   ) {}
 
@@ -114,10 +118,9 @@ export class GeneratedListSettleService {
     });
 
     // Section 6.4: the owner's standing, now, on each origin's list.
-    const writable = await this.sharing.writableAmong(
-      list.ownerUserId,
-      [...new Set(origins.map((origin) => origin.listId))]
-    );
+    const writable = await this.sharing.writableAmong(list.ownerUserId, [
+      ...new Set(origins.map((origin) => origin.listId)),
+    ]);
 
     const skipped: GeneratedListSettleSkip[] = [];
     const eligible: GeneratedListLineOrigin[] = [];
@@ -140,6 +143,9 @@ export class GeneratedListSettleService {
         : allocateOldestFirst(eligible, units);
 
     const written: GeneratedListSettlementRef[] = [];
+    // Whether this settle finished the basket line, which is what decides
+    // between a claim that moved and one that ended (plan 0052, section 3.3).
+    let finished = false;
     // Collected inside the transaction and published after it commits, which is
     // the convention everywhere in core: an event for a write that then rolled
     // back is a client showing something that never happened.
@@ -255,6 +261,19 @@ export class GeneratedListSettleService {
       line.lastEditedByParticipantId = req.participantId;
       line.lastEditedAt = now;
       await basketLines.save(line);
+
+      // After the basket line is saved and still inside the transaction, so the
+      // derivation sees the settle that has just happened (plan 0052, section
+      // 3.3). A line settled all the way through releases its origins, and this
+      // is the read that says so on the very event announcing the purchase.
+      const claims = await this.claims.claimsOf(
+        announcements.map((entry) => entry.line.id),
+        manager
+      );
+      for (const entry of announcements) {
+        entry.claim = claims.get(entry.line.id) ?? NO_LINE_CLAIM;
+      }
+      finished = line.settledQuantity >= line.quantity;
     });
 
     for (const announcement of announcements) {
@@ -269,7 +288,8 @@ export class GeneratedListSettleService {
           line: toLineView(
             announcement.line,
             announcement.itemIds,
-            announcement.settlementSummary
+            announcement.settlementSummary,
+            announcement.claim ?? NO_LINE_CLAIM
           ),
           settlement: toLineSettlementView(announcement.settlement),
         },
@@ -308,12 +328,27 @@ export class GeneratedListSettleService {
       announcement
     );
 
+    // A basket line settled all the way through has left the basket in every
+    // sense that matters to a zone (plan 0052, section 3.3), so the lines it
+    // came from stop being claimed. Every origin and not only the ones this call
+    // allocated to: a line that is finished is finished for the skipped ones too.
+    if (finished) {
+      await this.claims.announceReleased(
+        await this.claims.refsOfBasketLine(line.id)
+      );
+    }
+
     const view = await this.generated.basketLineViewFor(line, seesZoneData);
     // The count survives the redaction and the names do not (section 6.4): a
     // shopper who reached two households out of three has to be told, and only
     // whose the third was is gated.
     return seesZoneData
-      ? { line: view, skippedCount: skipped.length, settlements: written, skipped }
+      ? {
+          line: view,
+          skippedCount: skipped.length,
+          settlements: written,
+          skipped,
+        }
       : { line: view, skippedCount: skipped.length };
   }
 
@@ -366,9 +401,12 @@ export class GeneratedListSettleService {
       return outstanding;
     }
     if (!Number.isInteger(req.quantity) || req.quantity <= 0) {
-      throw new ValidationException('quantity must be a positive whole number', {
-        messageArgs: { field: 'quantity' },
-      });
+      throw new ValidationException(
+        'quantity must be a positive whole number',
+        {
+          messageArgs: { field: 'quantity' },
+        }
+      );
     }
     // Capped at the outstanding amount rather than refused: a shopper who taps
     // settle twice on a line of three has bought three, not six, and the second
@@ -442,9 +480,12 @@ export class GeneratedListSettleService {
       where: { generatedListLineId: line.id, itemId },
     });
     if (!option) {
-      throw new ValidationException('That product is not one of this line’s options', {
-        messageArgs: { field: 'itemId' },
-      });
+      throw new ValidationException(
+        'That product is not one of this line’s options',
+        {
+          messageArgs: { field: 'itemId' },
+        }
+      );
     }
     return itemId;
   }
@@ -467,6 +508,16 @@ interface ZoneAnnouncement {
    * second query answering a question this loop already knew.
    */
   settlementSummary: LineSettlementSummary;
+  /**
+   * The zone line's third indicator, filled in after the basket line is saved
+   * and before the transaction closes (plan 0052, section 3.3).
+   *
+   * Written in a second pass rather than inside the loop, because the loop runs
+   * before the settle is applied to the basket line and the derivation asks
+   * exactly that question: whether the basket still has anything outstanding on
+   * this line. Undefined until then, which no announcement is ever emitted with.
+   */
+  claim?: LineClaim;
 }
 
 /**
