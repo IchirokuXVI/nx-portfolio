@@ -88,17 +88,36 @@ export class LineSettlement {
   quantity!: number;
 
   /**
-   * Who settled it.
+   * Who settled it, when an account holder settled it from the list page.
    *
-   * Non nullable, because without baskets the only people who can settle are
-   * account holders with access to the list. Plan 0051 introduces guests, who
-   * settle and are not users; it makes this column nullable and adds
-   * `settledByParticipantId` beside it with exactly one of the two set (section
-   * 3.3). That migration belongs to that plan and is named here only so the shape
-   * is not a surprise.
+   * Nullable since plan 0051, which introduced people who settle and are not
+   * users. Exactly one of this and {@link settledByParticipantId} is set, and
+   * that is a check constraint (`ck_line_settlements_actor`) rather than a
+   * service rule: a row attributed to both or to neither would be an
+   * unattributable purchase in a shared household's history, which is the failure
+   * this table exists to prevent.
    */
-  @Column({ type: 'uuid' })
-  settledByUserId!: string;
+  @Column({ type: 'uuid', nullable: true })
+  settledByUserId!: string | null;
+
+  /**
+   * Who settled it, when it was settled from a shared basket (plan 0051,
+   * section 6).
+   *
+   * **Always the participant and never the user on that path**, including when
+   * the person settling is the owner with a perfectly good account. Every actor
+   * on a basket is a participant (section 3.2), so attributing some basket
+   * settles to a user and others to a participant would make "who got the bread"
+   * two questions instead of one.
+   *
+   * No foreign key, and that is not an oversight: a settlement is a **zone fact**
+   * and the basket is not, so deleting a basket, or a departing user's account
+   * taking their participants with it (plan 0011), must leave the purchase
+   * standing with its attribution nulled rather than delete what the household
+   * bought.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  settledByParticipantId!: string | null;
 
   @Column({ type: 'timestamptz' })
   settledAt!: Date;

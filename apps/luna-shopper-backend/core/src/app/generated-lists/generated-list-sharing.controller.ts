@@ -7,6 +7,7 @@ import {
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
+  type GeneratedListSettleResult,
   type GeneratedListShareLinkView,
   type GeneratedListShareRequest,
   type JoinGeneratedListRequest,
@@ -15,7 +16,9 @@ import {
   type ResolveParticipantRequest,
   type RevokeParticipantRequest,
   type RevokeShareLinkRequest,
+  type SettleGeneratedListLineRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 
 /**
@@ -31,7 +34,10 @@ import { GeneratedListSharingService } from './generated-list-sharing.service';
  */
 @Controller()
 export class GeneratedListSharingController {
-  constructor(private readonly sharing: GeneratedListSharingService) {}
+  constructor(
+    private readonly sharing: GeneratedListSharingService,
+    private readonly settle: GeneratedListSettleService
+  ) {}
 
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.linkEnsure)
   ensureLink(
@@ -93,5 +99,19 @@ export class GeneratedListSharingController {
     @Payload() req: ResolveParticipantRequest
   ): Promise<GeneratedListParticipantContext> {
     return this.sharing.resolveParticipant(req);
+  }
+
+  /**
+   * Settle a basket line back to its origins (plan 0051, section 6).
+   *
+   * The one operation here that reaches a zone list, and the one authorized by
+   * somebody other than the caller: section 6.4 checks the basket **owner's**
+   * `WRITE` on each origin, never the actor's, because a guest has none.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.settleLine)
+  settleLine(
+    @Payload() req: SettleGeneratedListLineRequest
+  ): Promise<GeneratedListSettleResult> {
+    return this.settle.settle(req);
   }
 }

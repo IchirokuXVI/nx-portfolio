@@ -157,6 +157,10 @@ export class SettlementService {
           outcome: req.outcome,
           quantity,
           settledByUserId: req.userId,
+          // Explicitly none: a settle straight from the list page is attributed
+          // to an account holder, and the check constraint plan 0051 adds allows
+          // exactly one of the two (plan 0047, section 3.3).
+          settledByParticipantId: null,
           settledAt: new Date(),
           generatedListLineId: null,
           pricePaidCents: null,

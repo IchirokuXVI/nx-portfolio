@@ -1,4 +1,6 @@
 import type { ParticipantKind } from '../enums/generated-list.enums';
+import type { SettlementOutcome } from '../enums/list.enums';
+import type { GeneratedListLineView } from './generated-list.messages';
 
 /**
  * Sharing a generated list with people who have no account (plan 0051).
@@ -64,6 +66,15 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
   participantResolve: 'generatedList.participant.resolve',
   /** Exchange a live participant credential for a fresh socket token (section 9). */
   participantRefresh: 'generatedList.participant.refresh',
+  /**
+   * Settle a basket line back to the zone lines it came from (section 6).
+   *
+   * The one gesture here that reaches a zone list at all, and the replacement for
+   * plan 0050 section 6's `applyStatuses`: a settlement is an append rather than
+   * a contested update, so the version reconciliation that plan needed evaporated
+   * with the trip status plan 0047 deleted.
+   */
+  settleLine: 'generatedList.settleLine',
 } as const;
 
 /**
@@ -400,6 +411,111 @@ export interface ListParticipantsRequest {
 /** The people on a basket, newest last, revoked ones omitted. */
 export interface GeneratedListParticipantListResult {
   participants: GeneratedListParticipantView[];
+}
+
+// --- Settling from the basket ----------------------------------------------
+
+/**
+ * Settle a basket line (plan 0051, section 6): the half of the plan that does
+ * real work, and the half plan 0047 was shaped to receive.
+ *
+ * ## Three gestures, one message
+ *
+ * Settle the whole outstanding amount, submit a number you type, or allocate per
+ * source list by hand. They are one request because they are the same act with
+ * progressively more of it supplied: no `quantity` means the whole outstanding
+ * amount, a `quantity` means that many allocated by section 6.2, and
+ * `allocations` means the caller supplied the allocation too.
+ *
+ * **A guest must never have to know which household a tin of tomatoes belongs
+ * to.** They are in a shop with a list. So the first two ask for a number at
+ * most, and the allocation is the system's problem.
+ */
+export interface SettleGeneratedListLineRequest {
+  generatedListId: string;
+  /** The basket line, not the zone line. */
+  lineId: string;
+  /** The actor, resolved from their credential by the gateway's guard. */
+  participantId: string;
+  outcome: SettlementOutcome;
+  /**
+   * Units settled. Absent means the whole outstanding amount.
+   *
+   * Ignored for `NOT_AVAILABLE`, which is an **outcome rather than a quantity**:
+   * it closes the outstanding amount, writes settlements that decrement nothing,
+   * and sets the indicator plan 0047 section 5 derives.
+   */
+  quantity?: number;
+  /**
+   * The allocation sheet (section 6.3), which is the accurate version of the same
+   * act: the same operation with the allocation supplied instead of derived.
+   *
+   * It is the only way to say "two for us, one for my parents" correctly when the
+   * default guessed otherwise. **Refused for a caller who does not pass
+   * section 5.2**, because naming source lists is naming zone data.
+   */
+  allocations?: GeneratedListAllocationEntry[];
+  /**
+   * The product actually in the trolley, when it is not the line's current pick.
+   *
+   * Swapping the pick is a gesture any participant may make, guests included,
+   * because options are catalog products and never zone data (section 6.1). The
+   * settlement records what was bought rather than what was planned (plan 0047,
+   * section 3.2).
+   */
+  itemId?: string;
+}
+
+/** One line of the allocation sheet (plan 0051, section 6.3). */
+export interface GeneratedListAllocationEntry {
+  listId: string;
+  quantity: number;
+}
+
+/**
+ * A settlement this act wrote, as the basket reports it (plan 0051, section 6.2).
+ *
+ * Every origin touched gets its own row, each carrying the basket line's id, so
+ * the allocation is **auditable afterwards** rather than being a rule that ran
+ * once and left no trace.
+ */
+export interface GeneratedListSettlementRef {
+  settlementId: string;
+  /** The zone line this landed on. */
+  lineId: string;
+  listId: string;
+  quantity: number;
+}
+
+/**
+ * An origin this act could not touch (plan 0051, section 6.4).
+ *
+ * Reported rather than failing the call, which is the one piece of plan 0050
+ * section 6 that survives intact: a partial settle is a real outcome, and a
+ * shopper who has already bought the thing should not be told the whole act
+ * failed because one household's access moved last week.
+ */
+export interface GeneratedListSettleSkip {
+  lineId: string;
+  listId: string;
+  /**
+   * `ACCESS_GONE` when the basket's **owner** may no longer write that list, and
+   * `ORIGIN_DELETED` when the zone line is not there any more.
+   */
+  reason: 'ACCESS_GONE' | 'ORIGIN_DELETED';
+}
+
+/**
+ * What one basket settle did.
+ *
+ * The skipped list is as much the answer as the settlements are, for the reason
+ * in {@link GeneratedListSettleSkip}, and a client that ignores it will silently
+ * under report what the shopper actually bought.
+ */
+export interface GeneratedListSettleResult {
+  line: GeneratedListLineView;
+  settlements: GeneratedListSettlementRef[];
+  skipped: GeneratedListSettleSkip[];
 }
 
 // --- Presence --------------------------------------------------------------

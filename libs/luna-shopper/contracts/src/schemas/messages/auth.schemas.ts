@@ -35,6 +35,10 @@ export const AUTH_SCHEMA_IDS = {
   googleLoginRequest: schemaId('msg/auth.googleLogin/request'),
   oAuthStatePayload: schemaId('auth/OAuthStatePayload'),
   mintOAuthStateResult: schemaId('auth/MintOAuthStateResult'),
+  // The basket scoped socket token (plan 0051, section 9): the one token auth
+  // signs that names no user.
+  mintParticipantTokenRequest: schemaId('auth/MintParticipantTokenRequest'),
+  mintParticipantTokenResult: schemaId('auth/MintParticipantTokenResult'),
   consumeOAuthStateRequest: schemaId('msg/auth.consumeOAuthState/request'),
   setUsernameRequest: schemaId('msg/auth.setUsername/request'),
   getProfileRequest: schemaId('msg/auth.getProfile/request'),
@@ -197,6 +201,22 @@ const consumeOAuthStateRequest = object(
   ['state']
 );
 
+const mintParticipantTokenRequest = object(
+  AUTH_SCHEMA_IDS.mintParticipantTokenRequest,
+  {
+    participantId: nonEmptyString(),
+    generatedListId: nonEmptyString(),
+    kind: nonEmptyString(),
+  },
+  ['participantId', 'generatedListId', 'kind']
+);
+
+const mintParticipantTokenResult = object(
+  AUTH_SCHEMA_IDS.mintParticipantTokenResult,
+  { socketToken: nonEmptyString(), socketTokenExpiresAt: nonEmptyString() },
+  ['socketToken', 'socketTokenExpiresAt']
+);
+
 const setUsernameRequest = object(
   AUTH_SCHEMA_IDS.setUsernameRequest,
   {
@@ -244,6 +264,8 @@ export const authSchemas: JsonSchema[] = [
   oAuthStatePayload,
   mintOAuthStateResult,
   consumeOAuthStateRequest,
+  mintParticipantTokenRequest,
+  mintParticipantTokenResult,
   setUsernameRequest,
   getProfileRequest,
   userProfileView,
@@ -313,5 +335,9 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.getProfile]: {
     request: AUTH_SCHEMA_IDS.getProfileRequest,
     response: AUTH_SCHEMA_IDS.userProfileView,
+  },
+  [AUTH_PATTERNS.mintParticipantToken]: {
+    request: AUTH_SCHEMA_IDS.mintParticipantTokenRequest,
+    response: AUTH_SCHEMA_IDS.mintParticipantTokenResult,
   },
 };

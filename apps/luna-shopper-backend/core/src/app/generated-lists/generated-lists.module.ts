@@ -7,11 +7,15 @@ import {
   GeneratedListLineOrigin,
   GeneratedListParticipant,
   GeneratedListShareLink,
+  LineSettlement,
+  ListLine,
+  ListLineItem,
 } from '../entities';
 import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListLineService } from './generated-list-line.service';
+import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingController } from './generated-list-sharing.controller';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListController } from './generated-list.controller';
@@ -45,6 +49,11 @@ import { GeneratedListService } from './generated-list.service';
       // Sharing (plan 0051): the link and the people who arrived by it.
       GeneratedListShareLink,
       GeneratedListParticipant,
+      // Settling reaches the zone lines the basket came from (section 6), and
+      // writes plan 0047's table with a participant instead of a user.
+      ListLine,
+      ListLineItem,
+      LineSettlement,
     ]),
     ProfilesModule,
     ListsModule,
@@ -55,6 +64,7 @@ import { GeneratedListService } from './generated-list.service';
     GeneratedListService,
     GeneratedListLineService,
     GeneratedListSharingService,
+    GeneratedListSettleService,
   ],
   // Exported so account deletion (plan 0011) can drop a departing user's baskets
   // without reaching into the repositories itself. The sharing service is

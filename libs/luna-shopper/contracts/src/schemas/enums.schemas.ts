@@ -7,6 +7,7 @@ import {
   UserKind,
   UsernamePropagation,
 } from '../lib/enums/auth.enums';
+import { ParticipantKind } from '../lib/enums/generated-list.enums';
 import {
   CommentTranscription,
   LineApprovalStatus,
@@ -43,6 +44,8 @@ export const ENUM_IDS = {
   mergeRequestStatus: schemaId('enums/MergeRequestStatus'),
   assistantRole: schemaId('enums/AssistantRole'),
   listResolutionBranch: schemaId('enums/ListResolutionBranch'),
+  /** Who is acting on a shared basket (plan 0051, section 3). */
+  participantKind: schemaId('enums/ParticipantKind'),
 } as const;
 
 export const enumSchemas: JsonSchema[] = [
@@ -60,4 +63,5 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.mergeRequestStatus, Object.values(MergeRequestStatus)),
   enumOf(ENUM_IDS.assistantRole, Object.values(AssistantRole)),
   enumOf(ENUM_IDS.listResolutionBranch, Object.values(ListResolutionBranch)),
+  enumOf(ENUM_IDS.participantKind, Object.values(ParticipantKind)),
 ];

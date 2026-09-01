@@ -499,7 +499,22 @@ export interface LineSettlementView {
   outcome: SettlementOutcome;
   /** Units bought, and 0 for `NOT_AVAILABLE`. */
   quantity: number;
-  settledByUserId: string;
+  /**
+   * Who settled it, and **null when a shared basket did** (plan 0051,
+   * section 6).
+   *
+   * Null does not mean nobody. It means the settle came off a basket, where the
+   * actor is a participant rather than a user and may be a guest with no account
+   * at all. The participant id is deliberately **not** served here, for the same
+   * reason `generatedListLineId` is not: a participant id is meaningless to a
+   * zone reader who cannot resolve it, and serving one would hand the zone a
+   * handle on a private basket's membership in exchange for nothing.
+   *
+   * What a zone reader learns from a null is that somebody shopping on a basket
+   * got it, which is the disclosure plan 0051 section 5.3 already makes
+   * deliberately and plan 0050 section 8 already called acceptable.
+   */
+  settledByUserId: string | null;
   /** ISO 8601 UTC. */
   settledAt: string;
 }
