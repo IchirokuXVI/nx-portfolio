@@ -175,3 +175,24 @@ function groupPageOf(zoneId: string) {
       : appPath(locale, basePath, 'zones', zoneId)
   );
 }
+
+/**
+ * **`shopping-lists/:generatedListId` matches only a UUID** (velista 0044).
+ *
+ * Rule G1 again, and it is added before the collision exists rather than after.
+ * Plan 0045 owns `shopping-lists` as a listing, and the first thing anybody will
+ * want beside it is a `shopping-lists/new`, or a `shopping-lists/archive`, at
+ * which point the parameterised route declared before the empty path would
+ * swallow the word and fire a read for a basket called "new".
+ *
+ * The same `canMatch` and not `canActivate`, for the same reason: a declined
+ * match carries on to the next route, and an aborted activation does not.
+ */
+export const generatedListIdGuard: CanMatchFn = (
+  _route: Route,
+  segments: UrlSegment[]
+) => {
+  // `shopping-lists` then the id, read positionally: at `canMatch` time the route
+  // has not been matched and there are no params to read.
+  return UUID.test(segments[1]?.path ?? '');
+};

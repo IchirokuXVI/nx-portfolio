@@ -1,4 +1,4 @@
-import { APP_DEFAULT_LOCALE } from '@portfolio/velista/ui';
+import { appPath } from '@portfolio/velista/platform';
 
 /**
  * Where a basket and its join screen live in the route table, in one place.
@@ -7,67 +7,66 @@ import { APP_DEFAULT_LOCALE } from '@portfolio/velista/ui';
  * history rows, and `0044`'s own join screen on the way in — so the segments are
  * constants rather than string literals repeated in each. A route table is the
  * one thing a typo in cannot fail at compile time and will not fail at test time
- * either, because a `routerLink` to a path that does not exist simply does
- * nothing when tapped.
+ * either: a `routerLink` to a path that does not exist simply does nothing when
+ * it is tapped.
  *
- * They are **segments and not a whole URL**: every path in this app is
- * `/{mount}/{locale}/{rest}` (plan 0001), so the caller supplies the mount from
- * `APP_BASE_PATH` and the locale it is currently rendering in, and these say only
- * what comes after.
+ * These are **segments and not URLs**. Every path in this app is
+ * `/{mount}/{locale}/{rest}` (plan 0001), which `appPath` already assembles, so
+ * nothing here reimplements it.
  */
 export const BASKET_PATHS = {
-  /** The history listing (`0045`), and the prefix everything else here shares. */
+  /** The history listing (`0045`), and the prefix the basket sits under. */
   list: 'shopping-lists',
   /** One basket, the screen `0044` is about. Takes a generated list id. */
   basket: 'shopping-lists/:generatedListId',
   /**
    * The guest join screen, on a short segment because it is the one path in this
-   * app that gets pasted into a group chat and typed by hand.
+   * app that gets pasted into a group chat and read aloud.
    *
    * Deliberately **not** under `shopping-lists/`: a stranger holding this link
-   * has no shopping lists and is not browsing a section of the app, and the
-   * shorter the string the fewer ways it arrives broken.
+   * has no shopping lists and is not browsing a section of the app, and every
+   * segment is another way for the link to arrive broken.
    */
   join: 's/:secret',
 } as const;
 
-/**
- * A router link to one basket, as an array the way `routerLink` wants it.
- *
- * @param mount `APP_BASE_PATH`: `/velista` under the shell, `''` standalone.
- * @param locale the locale currently being rendered, which is the segment
- *   immediately after the mount (plan 0005).
- */
-export function basketLink(
-  mount: string,
+/** The path to one basket. `appPath` puts the mount and the locale in front. */
+export function basketPath(
   locale: string,
+  basePath: string,
   generatedListId: string
-): unknown[] {
-  return [mount || '/', locale, BASKET_PATHS.list, generatedListId];
+): string {
+  return appPath(locale, basePath, BASKET_PATHS.list, generatedListId);
+}
+
+/** The path to the join screen for one link secret. */
+export function joinPath(
+  locale: string,
+  basePath: string,
+  secret: string
+): string {
+  return appPath(locale, basePath, 's', secret);
 }
 
 /**
- * The URL an owner copies out of the share sheet, absolute and locale free.
+ * The URL an owner copies out of the share sheet: absolute, and **locale free**.
  *
- * **No locale segment, on purpose.** The link goes to somebody whose language
- * this app has no way to know, and `localeGuard` inserts the *recipient's*
- * locale when a URL arrives without one (plan 0005, its "insert a missing one"
- * case). Baking the sender's locale in would open the app in the wrong language
- * for exactly the person it was sent to.
+ * No locale segment on purpose. The link goes to somebody whose language this app
+ * has no way to know, and `localeGuard` inserts the *recipient's* locale when a
+ * URL arrives without one (plan 0005, its "insert a missing one" case). Baking
+ * the sender's in would open the app in the wrong language for exactly the person
+ * it was sent to, which is the one reader whose experience this screen exists to
+ * protect.
  *
- * @param origin where velista is served from, which is its own domain in the
- *   standalone build and the portfolio's under the shell.
+ * @param origin where velista is served from: its own domain in the standalone
+ *   build, the portfolio's under the shell.
+ * @param basePath the mount, `''` standalone and `/velista` under the shell.
  */
-export function shareUrl(origin: string, mount: string, secret: string): string {
-  const base = `${origin.replace(/\/$/, '')}${mount}`;
-  return `${base}/${BASKET_PATHS.join.replace(':secret', secret)}`;
+export function shareUrl(
+  origin: string,
+  basePath: string,
+  secret: string
+): string {
+  const base = `${origin.replace(/\/$/, '')}${basePath}`;
+  return `${base}/s/${encodeURIComponent(secret)}`;
 }
-
-/**
- * The locale to build a link with when nothing better is to hand.
- *
- * Re exported rather than imported twice: a link built with no locale at all
- * would be rewritten by the guard on arrival, which works but costs a
- * redirect on every tap.
- */
-export const BASKET_FALLBACK_LOCALE = APP_DEFAULT_LOCALE;

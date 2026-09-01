@@ -1,0 +1,140 @@
+<main class="page">
+  <header class="header">
+    <!--
+      No back arrow for a guest: there is nowhere back to go. They arrived on a
+      link and this screen is the whole app to them (section 4.1).
+    -->
+    @if (isOwner()) {
+      <button
+        (click)="back()"
+        [attr.aria-label]="'basket.back' | rokuT"
+        class="back"
+        type="button"
+      >
+        &larr;
+      </button>
+    }
+
+    <h1 class="title">{{ title() }}</h1>
+
+    <!--
+      Guests and registered people in one row, guests marked by a dashed ring.
+      No sentence: a row of faces does the job, and the word "anonymous" appears
+      nowhere in this product (section 5.1).
+    -->
+    <button
+      (click)="openPeople()"
+      [attr.aria-label]="'basket.people.open' | rokuT"
+      class="faces"
+      type="button"
+    >
+      @for (face of faces(); track face.id) {
+        <span [class.is-guest]="face.isGuest" class="face">
+          {{ face.initials }}
+        </span>
+      }
+      @if (overflow() > 0) {
+        <span class="face is-overflow">
+          {{ 'basket.people.more' | rokuT: { count: overflow() } }}
+        </span>
+      }
+    </button>
+
+    <!--
+      The one thing that stays the owner's, even for a registered participant who
+      passes the all or nothing rule everywhere else (section 4.1).
+    -->
+    @if (isOwner()) {
+      <button
+        (click)="openShare()"
+        [attr.aria-label]="'basket.share.open' | rokuT"
+        class="share"
+        type="button"
+      >
+        &#8599;
+      </button>
+    }
+  </header>
+
+  @switch (state()) {
+    @case ('loading') {
+      <!--
+        The shape of the list rather than a spinner, so the page does not jump
+        when the lines land. Announced, because a page that is silently empty for
+        a second is a page somebody thinks is broken.
+      -->
+      <div aria-live="polite" class="skeleton" role="status">
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span aria-hidden="true" class="skeleton-row"></span>
+        <span class="visually-hidden">{{ 'basket.loading' | rokuT }}</span>
+      </div>
+    }
+
+    @case ('failed') {
+      <div class="notice" role="alert">
+        <p class="notice-title">{{ 'basket.failed' | rokuT }}</p>
+        <button (click)="retry()" class="notice-action" type="button">
+          {{ 'basket.retry' | rokuT }}
+        </button>
+      </div>
+    }
+
+    <!--
+      Removed while their phone was in their hand. It says so, and it offers the
+      one thing that might work: the link they still have. It does not offer a
+      retry, because the credential is gone and trying again would fail the same
+      way (backend 0051, section 3.3).
+    -->
+    @case ('revoked') {
+      <div class="notice" role="alert">
+        <p class="notice-title">{{ 'basket.revoked.title' | rokuT }}</p>
+        <p class="notice-body">{{ 'basket.revoked.body' | rokuT }}</p>
+      </div>
+    }
+
+    @case ('needsJoin') {
+      <div class="notice" role="status">
+        <p class="notice-title">{{ 'basket.join.dead' | rokuT }}</p>
+        <p class="notice-body">{{ 'basket.join.deadBody' | rokuT }}</p>
+      </div>
+    }
+
+    @default {
+      @if (lines().length === 0) {
+        <div class="empty">
+          <p class="empty-title">{{ 'basket.empty' | rokuT }}</p>
+          <p class="empty-body">{{ 'basket.emptyHint' | rokuT }}</p>
+        </div>
+      } @else {
+        <p class="progress">
+          {{
+            'basket.progress'
+              | rokuT: { done: progress().done, total: progress().total }
+          }}
+        </p>
+
+        <ul class="lines">
+          @for (line of lines(); track line.id) {
+            <li>
+              <lib-basket-line-row
+                (open)="openLine(line)"
+                [busy]="isBusy(line)"
+                [line]="line"
+                [meId]="meId()"
+                [people]="participantsById()"
+                [products]="products()"
+              />
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+</main>
+
+<!--
+  The sheets, as children of the page they cover (rule E1, plan 0008): the page
+  keeps its scroll underneath and Android's back button dismisses them.
+-->
+<router-outlet />

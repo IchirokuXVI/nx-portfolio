@@ -6,6 +6,7 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
+import { BasketStore } from '@portfolio/velista/data-access';
 import { sheetFallGuard } from '@portfolio/velista/platform';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import {
@@ -15,6 +16,7 @@ import {
 } from './auth-guards';
 import { APP_USABLE_LOCALES } from './usable-locales';
 import {
+  generatedListIdGuard,
   listIdGuard,
   zoneIdGuard,
   zoneMemberGuard,
@@ -516,6 +518,86 @@ export const AppShellRoutes: Route[] = [
             loadComponent: () =>
               import('@portfolio/velista/feature-install').then(
                 (m) => m.InstallPage
+              ),
+          },
+          {
+            /**
+             * The shared basket (plan 0044). The screen somebody carries around a
+             * shop, which is very often not the person who wrote the list.
+             *
+             * **No `authenticatedGuard`, and that is the feature.** A guest holding
+             * a link has no account and never will through this route; what
+             * authorizes them is their participant session, which the server checks
+             * on every request. A guard here would refuse exactly the reader this
+             * plan exists for.
+             *
+             * Declared before the empty path, and before plan 0045's
+             * `shopping-lists` listing when that lands, with `generatedListIdGuard`
+             * so a future `shopping-lists/new` cannot be swallowed as a basket id
+             * (rule G1).
+             *
+             * The path is a literal rather than `BASKET_PATHS.basket`: importing it
+             * here is a static import of a lazy loaded library, which eslint refuses
+             * and which would pull these pages into the shell's initial payload.
+             * `routes.spec.ts` asserts the path, so a rename cannot land half done.
+             */
+            path: 'shopping-lists/:generatedListId',
+            canMatch: [generatedListIdGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shopping-lists').then(
+                (m) => m.BasketPage
+              ),
+            providers: [BasketStore],
+            children: [
+              // Rule E1: each sheet covers the page without losing it, and Android's
+              // back button dismisses it. None is guarded, because which of them a
+              // caller may **use** is decided from the caller's own facts by the
+              // page, and the server refuses the rest regardless of what is drawn.
+              sheet({
+                path: 'lines/:lineId/settle',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.SettleSheet
+                  ),
+              }),
+              sheet({
+                path: 'people',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.PeopleSheet
+                  ),
+              }),
+              sheet({
+                path: 'share',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shopping-lists').then(
+                    (m) => m.ShareSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            /**
+             * The guest join screen (plan 0044, section 3).
+             *
+             * A short top level segment because this is the one path in the app that
+             * gets pasted into a group chat and read aloud, and **not** under
+             * `shopping-lists/`: a stranger holding this link has no shopping lists
+             * and is not browsing a section of the app.
+             *
+             * Public and full screen, like `join/:code` below it and for the same
+             * reason: it is a cold arrival from somebody else's message, so there is
+             * no page underneath to render over (plan 0008, section 4.1).
+             *
+             * The URL the owner copies carries **no locale**, on purpose:
+             * `localeGuard` inserts the recipient's, and baking the sender's in
+             * would open the app in the wrong language for exactly the person it was
+             * sent to.
+             */
+            path: 's/:secret',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shopping-lists').then(
+                (m) => m.JoinPage
               ),
           },
           {

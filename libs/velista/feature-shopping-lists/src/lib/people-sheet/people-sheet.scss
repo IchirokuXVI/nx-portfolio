@@ -1,0 +1,148 @@
+@use '../basket-shared' as shared;
+
+.title {
+  margin: 0 0 var(--app-space-2);
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.how {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person-button {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+  padding: var(--app-space-2);
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-surface-raised);
+  }
+
+  // Nothing to inspect: a guest does not get to inspect another guest, so the
+  // row is inert rather than drawn as a broken control.
+  &[aria-disabled='true'] {
+    cursor: default;
+
+    &:hover {
+      background: transparent;
+    }
+  }
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--app-avatar-md);
+  block-size: var(--app-avatar-md);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  font-size: var(--app-text-xs);
+  text-transform: uppercase;
+  color: var(--app-text-secondary);
+}
+
+// A guest is marked by a **dashed ring** and by the word beside the name, never
+// by colour alone (section 7). The two together survive a bright aisle and a
+// reader who does not distinguish the hues.
+.is-guest-ring {
+  @include shared.guest-ring;
+}
+
+.person-name {
+  flex: 1;
+  min-inline-size: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.guest-tag {
+  flex: none;
+  padding: 0 var(--app-space-2);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-status-neutral-bg);
+  font-size: var(--app-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-status-neutral-fg);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--app-space-2) var(--app-space-4);
+  margin: 0 0 var(--app-space-5);
+
+  dt {
+    font-size: var(--app-text-xs);
+    color: var(--app-text-muted);
+  }
+
+  dd {
+    margin: 0;
+    font-size: var(--app-text-sm);
+    color: var(--app-text-secondary);
+    overflow-wrap: anywhere;
+  }
+}
+
+.destructive {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-status-danger-border);
+  border-radius: var(--app-button-radius);
+  background: var(--app-status-danger-bg);
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-status-danger-fg);
+  cursor: pointer;
+}
+
+.quiet {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  margin-block-start: var(--app-space-3);
+  padding: var(--app-space-2);
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  cursor: pointer;
+}

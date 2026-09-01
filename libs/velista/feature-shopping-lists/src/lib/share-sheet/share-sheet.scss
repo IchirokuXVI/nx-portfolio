@@ -1,0 +1,162 @@
+@use '../basket-shared' as shared;
+
+.title {
+  margin: 0 0 var(--app-space-2);
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: var(--app-space-2) var(--app-space-2) var(--app-space-2)
+    var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-sunken);
+}
+
+.link-url {
+  flex: 1;
+  min-inline-size: 0;
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+  // The whole link, wrapped rather than truncated: somebody may read it aloud or
+  // copy it by hand, and an ellipsis in the middle of a secret is useless.
+  overflow-wrap: anywhere;
+}
+
+.copy {
+  @include shared.tap-target;
+
+  flex: none;
+  padding: var(--app-space-2) var(--app-space-3);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-on-action);
+  cursor: pointer;
+}
+
+.joined {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.note {
+  margin: var(--app-space-4) 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+}
+
+.minting {
+  margin: var(--app-space-4) 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.revoke {
+  @include shared.secondary-button;
+
+  color: var(--app-status-danger-fg);
+  border-color: var(--app-status-danger-border);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin-block-start: var(--app-space-5);
+}
+
+.destructive {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-status-danger-border);
+  border-radius: var(--app-button-radius);
+  background: var(--app-status-danger-bg);
+  font-family: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-status-danger-fg);
+  cursor: pointer;
+}
+
+// The second, explicit choice. Its own sentence under its own label, because the
+// tick and the button are two different acts and the difference between them is
+// whether three people are thrown out of a shop.
+.cascade {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-sunken);
+  cursor: pointer;
+
+  input {
+    @include shared.tap-target;
+
+    flex: none;
+    margin: 0;
+  }
+}
+
+.cascade-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}
+
+.cascade-label {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+}
+
+.cascade-hint {
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+}
+
+.quiet {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  margin-block-start: var(--app-space-3);
+  padding: var(--app-space-2);
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  cursor: pointer;
+}

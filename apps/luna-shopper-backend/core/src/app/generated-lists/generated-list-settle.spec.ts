@@ -58,7 +58,12 @@ interface Harness {
   settlements: Partial<LineSettlement>[];
   zoneLines: Map<string, { id: string; listId: string; quantity: number; version: number }>;
   basketLine: Partial<GeneratedListLine>;
-  events: { event: RealtimeEvent; listId?: string; generatedListId?: string }[];
+  events: {
+    event: RealtimeEvent;
+    listId?: string;
+    generatedListId?: string;
+    userIds?: string[];
+  }[];
 }
 
 function build(options: {
@@ -241,6 +246,11 @@ function build(options: {
         events.push({ event, listId }),
       emitToGeneratedList: (event: RealtimeEvent, generatedListId: string) =>
         events.push({ event, generatedListId }),
+      // The owner's own sessions, which is a different audience from the room:
+      // the owner is usually not in it, and velista 0045's dashboard card counts
+      // settled lines while somebody else is doing the shopping.
+      emitToUsers: (event: RealtimeEvent, userIds: string[]) =>
+        events.push({ event, userIds }),
     } as unknown as CoreEventsPublisher
   );
 
@@ -507,8 +517,11 @@ describe('what the settle tells the rest of the system (section 10)', () => {
     expect(harness.events).toEqual([
       // The ordinary plan 0047 event: the household sees the bread was got.
       { event: RealtimeEvent.LineSettled, listId: LIST_A },
-      // And the basket's own room, so four people in a shop agree.
+      // The basket's own room, so four people in a shop agree.
       { event: RealtimeEvent.GeneratedListLineSettled, generatedListId: BASKET },
+      // And the owner's own sessions, because the owner is usually **not** in
+      // the room: they are at home on the dashboard while somebody else shops.
+      { event: RealtimeEvent.GeneratedListLineSettled, userIds: [OWNER] },
     ]);
   });
 });

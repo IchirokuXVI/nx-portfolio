@@ -788,5 +788,136 @@
       "save": "That did not save. Try again",
       "delete": "That did not go through. Try again"
     }
+  },
+  "basket": {
+    "title": "Shopping list",
+    "loading": "Loading the list",
+    "progress": "{{done}} of {{total}} got",
+    "empty": "Nothing on this list",
+    "emptyHint": "Whoever made it has not put anything on it yet.",
+    "failed": "This list would not load",
+    "retry": "Try again",
+    "back": "Back",
+    "unnamed": "Shopping list",
+    "revoked": {
+      "title": "You are no longer on this list",
+      "body": "Whoever shared it has taken it back. If you still have the link, you can join again.",
+      "rejoin": "Use the link again"
+    },
+    "line": {
+      "open": "Settle {{name}}",
+      "outstanding_one": "{{count}} outstanding",
+      "outstanding_other": "{{count}} outstanding",
+      "partly": "{{settled}} of {{total}} got",
+      "wanted": "×{{count}}",
+      "free": "No product chosen",
+      "busy": "Saving"
+    },
+    "touched": {
+      "got": "{{name}} got it",
+      "gotSome": "{{name}} got {{count}}",
+      "none": "{{name}} says they had none",
+      "you": "you"
+    },
+    "from": {
+      "one": "from {{first}}",
+      "two": "from {{first}} and {{second}}",
+      "more": "from {{first}} and {{count}} more"
+    },
+    "settle": {
+      "title": "{{name}}",
+      "all_one": "Got it",
+      "all_other": "Got all {{count}}",
+      "some": "Got some",
+      "someTitle": "How many did you get?",
+      "none": "They had none",
+      "cancel": "Cancel",
+      "submit": "Record it",
+      "quantity": "How many",
+      "more": "One more",
+      "fewer": "One fewer",
+      "failed": "That did not save. Try again.",
+      "missed_one": "One household on this line could not be updated.",
+      "missed_other": "{{count}} households on this line could not be updated.",
+      "missedNamed": "Not updated: {{lists}}"
+    },
+    "product": {
+      "change": "Change",
+      "title": "Which one did you get?",
+      "hint": "Any of these counts as this line. Pick the one in your trolley.",
+      "current": "Chosen",
+      "none": "This line names no product"
+    },
+    "allocate": {
+      "open": "Split between lists",
+      "title": "{{name}} · got {{count}}",
+      "hint": "Which list gets how many. Starts from oldest first, which is what one tap would have done.",
+      "wanted": "wanted {{count}}",
+      "total": "Allocated",
+      "totalValue": "{{allocated}} of {{total}}",
+      "over": "That is more than you got",
+      "submit": "Record it",
+      "cancel": "Cancel"
+    },
+    "people": {
+      "title": "On this list",
+      "open": "See who is on this list",
+      "hereNow": "{{count}} on this list",
+      "more": "+{{count}}",
+      "guest": "Guest",
+      "guestNumbered": "Guest {{count}}",
+      "you": "You",
+      "joined": "Joined",
+      "device": "Device",
+      "deviceUnknown": "Not recorded",
+      "viaLink": "joined with the list’s link",
+      "viaOwner": "made this list",
+      "remove": "Remove from this list",
+      "close": "Close"
+    },
+    "share": {
+      "open": "Share this list",
+      "title": "Share this list",
+      "body": "Anyone with the link can shop it, no account needed. They see the lines, never your groups.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "joinedWith_one": "{{count}} person joined with it",
+      "joinedWith_other": "{{count}} people joined with it",
+      "made": "made {{date}}",
+      "note": "This is the list’s one link. Copy it again whenever you need it, for as many people as you like. It stops working when the list is done or when you revoke it.",
+      "revoke": "Revoke the link",
+      "close": "Close",
+      "minting": "Making a link"
+    },
+    "revoke": {
+      "title": "Revoke the link?",
+      "body_one": "Nobody new will be able to join, and the list will have no link until you share it again. The {{count}} person already shopping keeps working.",
+      "body_other": "Nobody new will be able to join, and the list will have no link until you share it again. The {{count}} people already shopping keep working.",
+      "bodyNone": "Nobody new will be able to join, and the list will have no link until you share it again.",
+      "cascade_one": "Also remove the {{count}} guest who joined with it",
+      "cascade_other": "Also remove the {{count}} guests who joined with it",
+      "cascadeHint": "They lose the list on their next action. Only tick this if the link reached the wrong hands.",
+      "confirm": "Revoke the link",
+      "cancel": "Keep it"
+    },
+    "join": {
+      "invited": "You’ve been invited to shop",
+      "people_one": "{{count}} person is on it",
+      "people_other": "{{count}} people are on it",
+      "nameLabel": "Your name",
+      "optional": "Optional",
+      "nameHint": "So people know who got the bread",
+      "continue": "Continue as guest",
+      "or": "or, if you use Velista",
+      "google": "Continue with Google",
+      "email": "Sign in with email",
+      "install": "Keep it on your home screen while you shop",
+      "installAction": "Install",
+      "dead": "This link is no longer accepting people",
+      "deadBody": "Ask whoever sent it for a new one. If you were already shopping this list, your own link in this browser still works.",
+      "checking": "Checking the link",
+      "joining": "Joining",
+      "failed": "That did not work. Try again."
+    }
   }
 }

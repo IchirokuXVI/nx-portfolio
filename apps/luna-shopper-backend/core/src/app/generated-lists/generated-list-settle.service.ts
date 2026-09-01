@@ -276,6 +276,17 @@ export class GeneratedListSettleService {
       list.id,
       announcement
     );
+    // And the owner's own sessions, which is a different audience and not a
+    // duplicate of the room: the owner is usually **not** in the basket's room.
+    // They are at home looking at the dashboard while somebody else shops, and
+    // velista 0045's card counts settled lines, so without this it is stale until
+    // they open the basket. An owner who happens to be in both hears it twice,
+    // which costs nothing: the client merges one line by id, idempotently.
+    this.events.emitToUsers(
+      RealtimeEvent.GeneratedListLineSettled,
+      [list.ownerUserId],
+      announcement
+    );
 
     const view = await this.generated.basketLineViewFor(line, seesZoneData);
     // The count survives the redaction and the names do not (section 6.4): a
