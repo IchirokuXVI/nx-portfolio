@@ -163,12 +163,14 @@
   -->
   @if (!reordering()) {
     <lib-quantity-reel
+      (autoClosed)="onReelAutoClosed()"
+      (click)="$event.stopPropagation()"
       (committed)="quantityChanged.emit({ lineId: line().id, delta: $event })"
       (pointerdown)="$event.stopPropagation()"
-      (click)="$event.stopPropagation()"
       [label]="'list.line.quantityFor' | rokuT: { name: line().content }"
       [readonly]="!line().adjustable"
       [value]="line().quantity"
+      #reel
     />
   }
 
