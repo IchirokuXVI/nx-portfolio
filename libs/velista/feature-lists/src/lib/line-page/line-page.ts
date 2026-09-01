@@ -37,6 +37,7 @@ import {
   appPath,
   lineIdOf,
   listIdOf,
+  PageNavigation,
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import { ChevronLeftIcon, SuggestionList } from '@portfolio/velista/ui';
@@ -98,6 +99,7 @@ export class LinePage {
   private readonly _profiles = inject(ShoppingProfileStore);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _localeStore = inject(RokuLocaleStore);
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -458,8 +460,9 @@ export class LinePage {
     );
   }
 
+  /** Back to whatever was on screen before this line, its list being the usual one. */
   async back(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._pages.back(
       appPath(
         this._localeStore.locale(),
         this._basePath,

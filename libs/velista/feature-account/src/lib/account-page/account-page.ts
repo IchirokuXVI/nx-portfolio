@@ -33,6 +33,7 @@ import {
   appPath,
   BrowserFacade,
   InstallStore,
+  PageNavigation,
   VoicePreferences,
 } from '@portfolio/velista/platform';
 import {
@@ -120,6 +121,7 @@ export class AccountPage {
   private readonly _tokens = inject(TokenStore);
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -269,9 +271,7 @@ export class AccountPage {
 
   /** Back to the dashboard, which is where this screen is opened from. */
   async back(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'home')
-    );
+    await this._pages.back(appPath(this._locale(), this._basePath, 'home'));
   }
 
   /** The assistant (plan 0032), which is the one app bar button that works from here. */

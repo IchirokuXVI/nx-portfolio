@@ -20,7 +20,7 @@ import {
   type AuthServiceI,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, PageNavigation } from '@portfolio/velista/platform';
 import {
   AuthScreen,
   EmailField,
@@ -82,6 +82,7 @@ export class UpgradePage {
   private readonly _tokens = inject(TokenStore);
   private readonly _notice = inject(AccountNotice);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _t = inject(RokuTranslatorService);
@@ -149,11 +150,12 @@ export class UpgradePage {
     }
   }
 
-  /** Not now. Back to the dashboard, where the banner will ask again next session. */
+  /**
+   * Not now. Back to the screen that offered this, which is the dashboard or the
+   * account page, and the banner asks again next session either way.
+   */
   back(): void {
-    void this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'home')
-    );
+    void this._pages.back(appPath(this._locale(), this._basePath, 'home'));
   }
 
   /**

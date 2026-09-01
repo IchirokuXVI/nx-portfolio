@@ -17,7 +17,7 @@ import {
   type AuthServiceI,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, PageNavigation } from '@portfolio/velista/platform';
 import {
   AuthScreen,
   EmailField,
@@ -61,6 +61,7 @@ export class SignInPage {
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -147,7 +148,7 @@ export class SignInPage {
   }
 
   back(): void {
-    void this._router.navigateByUrl(appPath(this._locale(), this._basePath));
+    void this._pages.back(appPath(this._locale(), this._basePath));
   }
 
   createAccount(): void {
