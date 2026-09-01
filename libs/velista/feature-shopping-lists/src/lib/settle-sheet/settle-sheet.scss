@@ -222,8 +222,21 @@
 }
 
 .allocation-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.allocation-name {
   font-size: var(--app-text-sm);
-  color: var(--app-text-secondary);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.allocation-wanted {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
 }
 
 .allocation-field {

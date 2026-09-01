@@ -171,9 +171,29 @@ export class SettleSheet {
    */
   protected readonly allocationRows = computed(() => {
     const origins = this.line()?.origins ?? [];
-    return origins.map((origin) => ({
-      listId: origin.listId,
-      wanted: origin.quantity,
+    const names = this._store.listNames();
+
+    // **Grouped by list, not one row per origin.** Two lines in the same list
+    // both wanting milk merge into one basket line and contribute an origin
+    // each, so a straight map produces two rows with the same `listId`: two
+    // duplicate `track` keys, and two fields overwriting each other in the
+    // allocation map. The sheet asks which *household* gets how many, and a
+    // household is a list, so the origins on one are summed.
+    const byList = new Map<string, number>();
+    for (const origin of origins) {
+      byList.set(
+        origin.listId,
+        (byList.get(origin.listId) ?? 0) + origin.quantity
+      );
+    }
+
+    return [...byList].map(([listId, wanted]) => ({
+      listId,
+      wanted,
+      // Named where a name is known. A reader who reaches this pane passes the
+      // rule, so `listNames` is populated for them by construction; the fallback
+      // covers a list deleted since the run rather than a redacted one.
+      name: names.get(listId) ?? null,
     }));
   });
 

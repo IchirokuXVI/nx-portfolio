@@ -199,15 +199,22 @@
           <li class="allocation-row">
             <span class="allocation-label">
               <!--
-                The list's own name is not reachable from this screen, so the row
-                is identified by what it wanted, which is the number the person is
-                correcting anyway.
+                Named, so "two for us, one for my parents" can actually be said.
+                A reader who reaches this pane passes the all or nothing rule, so
+                the names are theirs to see by construction.
               -->
-              {{ 'basket.allocate.wanted' | rokuT: { count: row.wanted } }}
+              @if (row.name) {
+                <span class="allocation-name">{{ row.name }}</span>
+              }
+              <span class="allocation-wanted">
+                {{ 'basket.allocate.wanted' | rokuT: { count: row.wanted } }}
+              </span>
             </span>
             <input
               (input)="setAllocation(row.listId, +$any($event.target).value)"
-              [attr.aria-label]="'basket.allocate.wanted' | rokuT: { count: row.wanted }"
+              [attr.aria-label]="
+                row.name || ('basket.allocate.wanted' | rokuT: { count: row.wanted })
+              "
               [max]="row.wanted"
               [value]="allocation().get(row.listId) ?? 0"
               class="allocation-field"
