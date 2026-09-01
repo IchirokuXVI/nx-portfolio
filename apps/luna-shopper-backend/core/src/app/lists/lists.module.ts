@@ -38,8 +38,13 @@ import { SharedListGrantModule } from './shared-list-grant.module';
   ],
   controllers: [ListController],
   providers: [ListService, LineService, CommentService, ListAccessService],
-  // Exported so the realtime access checks (plan 0009) can reuse list-access
-  // resolution rather than re-implementing it.
-  exports: [ListAccessService],
+  // `ListAccessService` is exported so the realtime access checks (plan 0009)
+  // can reuse list-access resolution rather than re-implementing it.
+  //
+  // `LineService` is exported for the basket write back (plan 0050, section 5):
+  // an added line with a target list is created through `add` rather than by an
+  // insert of its own, so the ordinary access check, the ordinary approval rules
+  // and the ordinary `line.added` event all apply to it.
+  exports: [ListAccessService, LineService],
 })
 export class ListsModule {}
