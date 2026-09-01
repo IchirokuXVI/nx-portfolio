@@ -126,6 +126,18 @@ export interface GeneratedListShareLinkView {
 }
 
 /**
+ * Whether this basket is shared right now (plan 0051, section 3).
+ *
+ * A wrapper with an **optional** link rather than a bare nullable view, because
+ * a basket having zero links or one is the ordinary state: absent means it is not
+ * shared, and the shape stays a plain object that a schema and an OpenAPI
+ * component can both describe without a top level union.
+ */
+export interface GeneratedListShareLinkResult {
+  link?: GeneratedListShareLinkView;
+}
+
+/**
  * One person acting on a shared basket (plan 0051, section 3).
  *
  * `displayName` is what a guest typed and is **unverified text on an

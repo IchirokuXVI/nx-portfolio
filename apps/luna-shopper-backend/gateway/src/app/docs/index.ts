@@ -3,6 +3,7 @@
 // helpers.
 
 export {
+  ApiComposedResponse,
   ApiContractResponse,
   type ContractResponseOptions,
 } from './api-contract-response.decorator';

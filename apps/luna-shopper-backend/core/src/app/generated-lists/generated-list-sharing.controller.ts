@@ -8,6 +8,7 @@ import {
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
   type GeneratedListSettleResult,
+  type GeneratedListShareLinkResult,
   type GeneratedListShareLinkView,
   type GeneratedListShareRequest,
   type JoinGeneratedListRequest,
@@ -49,7 +50,7 @@ export class GeneratedListSharingController {
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.linkGet)
   getLink(
     @Payload() req: GeneratedListShareRequest
-  ): Promise<GeneratedListShareLinkView | null> {
+  ): Promise<GeneratedListShareLinkResult> {
     return this.sharing.getLink(req);
   }
 

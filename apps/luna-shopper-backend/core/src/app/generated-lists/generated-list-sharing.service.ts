@@ -11,6 +11,7 @@ import {
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
   type GeneratedListParticipantView,
+  type GeneratedListShareLinkResult,
   type GeneratedListShareLinkView,
   type GeneratedListShareRequest,
   type JoinGeneratedListRequest,
@@ -130,13 +131,19 @@ export class GeneratedListSharingService {
     }
   }
 
-  /** The live link if there is one, without minting. */
+  /**
+   * The live link if there is one, without minting.
+   *
+   * An absent `link` is the ordinary answer for a basket nobody has shared, not
+   * an error: a basket has zero links or one (section 3), and both are states
+   * rather than failures.
+   */
   async getLink(
     req: GeneratedListShareRequest
-  ): Promise<GeneratedListShareLinkView | null> {
+  ): Promise<GeneratedListShareLinkResult> {
     const list = await this.loadOwned(req.userId, req.generatedListId);
     const live = await this.liveLink(list.id);
-    return live ? await this.linkView(live) : null;
+    return live ? { link: await this.linkView(live) } : {};
   }
 
   /**

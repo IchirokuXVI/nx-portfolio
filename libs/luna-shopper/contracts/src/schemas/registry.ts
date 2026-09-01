@@ -23,6 +23,10 @@ import {
   catalogSchemas,
 } from './messages/catalog.schemas';
 import {
+  generatedListSharingMessageContracts,
+  generatedListSharingSchemas,
+} from './messages/generated-list-sharing.schemas';
+import {
   generatedListMessageContracts,
   generatedListSchemas,
 } from './messages/generated-list.schemas';
@@ -62,6 +66,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...statsMessageContracts,
   ...assistantMessageContracts,
   ...generatedListMessageContracts,
+  ...generatedListSharingMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -86,6 +91,7 @@ export const allSchemas: JsonSchema[] = [
   ...statsSchemas,
   ...assistantSchemas,
   ...generatedListSchemas,
+  ...generatedListSharingSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
 ];

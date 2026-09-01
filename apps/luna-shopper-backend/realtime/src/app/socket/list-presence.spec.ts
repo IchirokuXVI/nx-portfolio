@@ -73,7 +73,15 @@ function gatewayWith(core: ReturnType<typeof access>): RealtimeGateway {
   } as unknown as PresenceService;
 
   return new RealtimeGateway(
-    { verify: jest.fn().mockResolvedValue({ sub: 'u1' }) } as never,
+    {
+      // Plan 0051 section 9 split the handshake into two kinds of identity, so
+      // the gateway asks `verifyIdentity` rather than `verify`. This suite is
+      // about an account socket, which is the `user` answer.
+      verify: jest.fn().mockResolvedValue({ sub: 'u1' }),
+      verifyIdentity: jest
+        .fn()
+        .mockResolvedValue({ kind: 'user', userId: 'u1' }),
+    } as never,
     core as unknown as CoreAccessClient,
     presence,
     { stream$: { subscribe: jest.fn() } } as never,

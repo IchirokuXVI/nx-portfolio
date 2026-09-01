@@ -49,3 +49,30 @@ export function ApiContractResponse(
     schema: componentRef(name),
   });
 }
+
+/**
+ * Documents a response the **gateway composes**, by naming a contract schema
+ * directly rather than a broker pattern (plan 0051, section 4).
+ *
+ * The sibling of {@link ApiContractResponse} for the handful of routes whose body
+ * is not any one service's answer. Joining a shared basket is the case that
+ * forced it: core owns the participant and auth owns the signing key, so the body
+ * is core's result plus auth's token and no single pattern describes it.
+ *
+ * It is deliberately not a general escape hatch. The id still has to be a schema
+ * the contracts library publishes, so an unknown one throws at decoration time,
+ * which is process startup; what it drops is only the requirement that the shape
+ * belong to a request/reply pair.
+ */
+export function ApiComposedResponse(
+  schemaId: string,
+  options: Omit<ContractResponseOptions, 'envelope'> = {}
+): MethodDecorator {
+  const name = hoistContractSchema(schemaId);
+  return ApiResponse({
+    status: options.status ?? HttpStatus.OK,
+    description:
+      options.description ?? 'Composed by the gateway from more than one service.',
+    schema: componentRef(name),
+  });
+}

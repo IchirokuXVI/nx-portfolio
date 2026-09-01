@@ -9,6 +9,7 @@ export { IDENTITY_EVENT_SCHEMA_IDS } from './events/identity.schemas';
 export { DOMAIN_EVENT_SCHEMA_IDS } from './events/realtime.schemas';
 export { AUTH_SCHEMA_IDS } from './messages/auth.schemas';
 export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';
+export { GENERATED_LIST_SHARING_SCHEMA_IDS } from './messages/generated-list-sharing.schemas';
 export { GENERATED_LIST_SCHEMA_IDS } from './messages/generated-list.schemas';
 export { HARVEST_SCHEMA_IDS } from './messages/harvest.schemas';
 export { LIST_SCHEMA_IDS } from './messages/list.schemas';
