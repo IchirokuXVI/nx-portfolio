@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -13,13 +13,19 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { BasketStore } from '@portfolio/velista/data-access';
 import {
+  APP_BASE_PATH,
   inLocale,
   outstanding,
   QUANTITY_REEL_PAGE_STEP,
   type BasketLine,
   type BasketSettleResult,
 } from '@portfolio/velista/models';
+import {
+  generatedListIdOf,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
+import { basketPath } from '../basket-paths';
 
 /**
  * Which pane of the sheet is showing.
@@ -94,10 +100,14 @@ const STEP_FOR: Readonly<Record<string, number>> = {
 })
 export class SettleSheet {
   private readonly _store = inject(BasketStore);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
+  private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
+
+  /** The basket underneath, which is where closing this sheet goes. */
+  private readonly _generatedListId = generatedListIdOf(this._route);
 
   private readonly _lineId = this._route.snapshot.paramMap.get('lineId') ?? '';
   private readonly _pane = signal<Pane>('settle');
@@ -311,8 +321,24 @@ export class SettleSheet {
     this.step(step);
   }
 
+  /**
+   * Cancel, Escape, the scrim, the back button, and a settle that landed cleanly.
+   *
+   * The basket's **whole** URL rather than a relative `..`, and that is the fix
+   * rather than a preference. This sheet's path is three segments,
+   * `lines/:lineId/settle`, and `..` climbs exactly one of them: closing left the
+   * URL on `lines/:lineId`, which no route under the basket declares, so the
+   * sheet dismissed onto the app's own 404. Every other sheet in the app already
+   * names its page in full for the same reason (plan 0031).
+   *
+   * Through `SheetNavigation`, so this pops the entry the sheet was opened with
+   * instead of pushing a second one: back from the basket goes on to whatever the
+   * person was looking at before, and never reopens a spent sheet.
+   */
   protected close(): void {
-    void this._router.navigate(['..'], { relativeTo: this._route });
+    void this._sheet.dismiss(
+      basketPath(this._locale(), this._basePath, this._generatedListId())
+    );
   }
 
   /**

@@ -10,6 +10,8 @@ import { TokenStore } from './auth/token-store';
 import { ItemNames } from './catalog/item-names';
 import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
+import { BasketSessionStore } from './generated-lists/basket-session-store';
+import { BasketStore } from './generated-lists/basket-store';
 import { GeneratedListMemory } from './generated-lists/generated-list-memory';
 import { GeneratedListStore } from './generated-lists/generated-list-store';
 import { LineMemory } from './lines/line-memory';
@@ -154,4 +156,6 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ShoppingProfileStore,
   GeneratedListMemory,
   GeneratedListStore,
+  BasketSessionStore,
+  BasketStore,
 ];

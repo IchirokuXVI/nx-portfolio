@@ -54,6 +54,7 @@ import {
   lineQueryOf,
   listIdOf,
   NOTIFICATION_TONE,
+  PageNavigation,
   RECORDING_LIMITS,
   StorageKeys,
   VoicePreferences,
@@ -167,6 +168,7 @@ export class ListPage {
   private readonly _session = inject(SessionStore);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _browser = inject(BrowserFacade);
   private readonly _translator = inject(RokuTranslatorService);
@@ -600,7 +602,10 @@ export class ListPage {
     });
   }
 
-  /** Back to the group. A destination's back, not a sheet's dismiss. */
+  /**
+   * Back to wherever this list was opened from, which on the dashboard's own rows is
+   * the dashboard and not this list's group.
+   */
   async back(): Promise<void> {
     if (this.reordering()) {
       // Android's back ends the mode rather than leaving the page, which is what makes
@@ -609,7 +614,7 @@ export class ListPage {
       return;
     }
 
-    await this._router.navigateByUrl(
+    await this._pages.back(
       appPath(this._locale(), this._basePath, 'zones', this.zoneId())
     );
   }

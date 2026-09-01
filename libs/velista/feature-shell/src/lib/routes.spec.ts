@@ -65,13 +65,25 @@ describe('AppShellRoutes', () => {
 
     it('offers the same two over the dashboard, beside its own', () => {
       // Both pages offer both entry actions, so those two copies come from one
-      // function and cannot drift apart. `get` is the dashboard's alone (plan 0045):
-      // Get shopping list is the primary action of this page and of no other, so it is
-      // written here rather than added to `entrySheetRoutes`.
+      // function and cannot drift apart.
       expect(sheetsOf('home').map((route) => route.path)).toEqual([
         'get',
         'zones/new',
         'zones/join',
+      ]);
+    });
+
+    /**
+     * Get shopping list is offered by two screens, so it is a sheet over both.
+     *
+     * It used to be the dashboard's alone, and the history's button opened that copy:
+     * the page under the sheet was swapped for the dashboard on the way in and the
+     * person was dropped back on the history on the way out. A sheet has to cover the
+     * page it was opened from, which means one child route per page that offers it.
+     */
+    it('draws Get shopping list over the history as well as the dashboard', () => {
+      expect(sheetsOf('shopping-lists').map((route) => route.path)).toEqual([
+        'get',
       ]);
     });
 
@@ -82,10 +94,29 @@ describe('AppShellRoutes', () => {
         'landing',
         'landing',
       ]);
-      // `get` carries no `returnTo`: it is offered over the dashboard and nowhere
-      // else, so where Cancel goes is not a question it has to be told the answer to.
       expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual(
-        [undefined, 'home', 'home']
+        ['home', 'home', 'home']
+      );
+      expect(
+        sheetsOf('shopping-lists').map((route) => route.data?.['returnTo'])
+      ).toEqual(['shopping-lists']);
+    });
+
+    /**
+     * The history grew a child, and a parent only matches when one of its children
+     * matches the remainder. So `shopping-lists` now declines `shopping-lists/<uuid>`,
+     * and the basket would be reached only by the router backtracking to a later
+     * sibling. Stating the order makes the match a decision rather than a piece of luck
+     * about how backtracking works, which is the same reason `zones/:zoneId/lists/:listId`
+     * sits before `zones/:zoneId`.
+     */
+    it('declares the basket before the history that now has children', () => {
+      const paths = pages.map((route) => route.path);
+
+      expect(paths).toContain('shopping-lists/:generatedListId');
+      expect(paths).toContain('shopping-lists');
+      expect(paths.indexOf('shopping-lists/:generatedListId')).toBeLessThan(
+        paths.indexOf('shopping-lists')
       );
     });
 
@@ -102,7 +133,12 @@ describe('AppShellRoutes', () => {
     it('keeps every page lazy, sheets included', () => {
       // The shell's initial payload carries the layout and the locale guard, and a
       // visitor downloads the one screen they are shown.
-      const everyRoute = [...pages, ...sheetsOf(''), ...sheetsOf('home')];
+      const everyRoute = [
+        ...pages,
+        ...sheetsOf(''),
+        ...sheetsOf('home'),
+        ...sheetsOf('shopping-lists'),
+      ];
 
       expect(
         everyRoute.every((route) => route.loadComponent !== undefined)
@@ -185,7 +221,12 @@ describe('AppShellRoutes', () => {
     it('keeps every page lazy after plan 0009 added five', () => {
       // The shell's initial payload carries the layout and the locale guard, and a
       // visitor downloads the one screen they are shown.
-      const everyRoute = [...pages, ...sheetsOf(''), ...sheetsOf('home')];
+      const everyRoute = [
+        ...pages,
+        ...sheetsOf(''),
+        ...sheetsOf('home'),
+        ...sheetsOf('shopping-lists'),
+      ];
 
       expect(
         everyRoute.every((route) => route.loadComponent !== undefined)

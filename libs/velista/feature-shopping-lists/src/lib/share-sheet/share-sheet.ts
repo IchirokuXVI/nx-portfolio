@@ -5,16 +5,23 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { ActivatedRoute } from '@angular/router';
+import {
+  RokuLocaleStore,
+  RokuTranslatorPipe,
+} from '@portfolio/localization/rokutranslator-angular';
 import { BasketStore } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   APP_STANDALONE_ORIGIN,
 } from '@portfolio/velista/models';
-import { BrowserFacade } from '@portfolio/velista/platform';
+import {
+  BrowserFacade,
+  generatedListIdOf,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
-import { shareUrl } from '../basket-paths';
+import { basketPath, shareUrl } from '../basket-paths';
 
 /** Which half of the sheet is showing: the link, or the question about revoking. */
 type Pane = 'link' | 'revoke';
@@ -60,11 +67,15 @@ type Pane = 'link' | 'revoke';
 })
 export class ShareSheet {
   private readonly _store = inject(BasketStore);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _browser = inject(BrowserFacade);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _standaloneOrigin = inject(APP_STANDALONE_ORIGIN);
+  private readonly _locale = inject(RokuLocaleStore).locale;
+
+  /** The basket underneath, which is where closing this sheet goes. */
+  private readonly _generatedListId = generatedListIdOf(this._route);
 
   private readonly _pane = signal<Pane>('link');
   private readonly _busy = signal(false);
@@ -140,7 +151,18 @@ export class ShareSheet {
     this._pane.set('link');
   }
 
+  /**
+   * Cancel, Escape, the scrim, the back button, and a revoke that went through.
+   *
+   * The basket's whole URL, through `SheetNavigation`, like every other sheet in
+   * the app: a relative `..` climbs one segment of whatever path the sheet
+   * happens to sit on, which is a fact about the route table that changes without
+   * this file being touched, and an ordinary `navigate` pushes, leaving the sheet
+   * one back press from reopening (plan 0031).
+   */
   protected close(): void {
-    void this._router.navigate(['..'], { relativeTo: this._route });
+    void this._sheet.dismiss(
+      basketPath(this._locale(), this._basePath, this._generatedListId())
+    );
   }
 }

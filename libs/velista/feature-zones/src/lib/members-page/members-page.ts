@@ -28,7 +28,7 @@ import {
   type Membership,
   type MembersState,
 } from '@portfolio/velista/models';
-import { appPath, zoneIdOf } from '@portfolio/velista/platform';
+import { appPath, PageNavigation, zoneIdOf } from '@portfolio/velista/platform';
 import {
   AppBar,
   ChevronLeftIcon,
@@ -103,6 +103,7 @@ export class MembersPage {
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _session = inject(SessionStore);
   private readonly _router = inject(Router);
+  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
@@ -291,9 +292,9 @@ export class MembersPage {
     inject(DestroyRef).onDestroy(() => this._releaseStaffRoom());
   }
 
-  /** Back to the group, which is where this screen was opened from. */
+  /** Back to wherever this screen was opened from, its group being the usual one. */
   async back(): Promise<void> {
-    await this._router.navigateByUrl(
+    await this._pages.back(
       appPath(this._locale(), this._basePath, 'zones', this.zoneId())
     );
   }

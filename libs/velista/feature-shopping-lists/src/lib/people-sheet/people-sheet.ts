@@ -5,16 +5,24 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { BasketStore } from '@portfolio/velista/data-access';
-import type { BasketParticipant } from '@portfolio/velista/models';
+import {
+  APP_BASE_PATH,
+  type BasketParticipant,
+} from '@portfolio/velista/models';
+import {
+  generatedListIdOf,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
 import { participantName } from '../basket-labels';
+import { basketPath } from '../basket-paths';
 
 /**
  * Who is on this basket, and what is known about one of them (plan 0044,
@@ -55,8 +63,12 @@ import { participantName } from '../basket-labels';
 })
 export class PeopleSheet {
   private readonly _store = inject(BasketStore);
-  private readonly _router = inject(Router);
+  private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
+  private readonly _basePath = inject(APP_BASE_PATH);
+
+  /** The basket underneath, which is where closing this sheet goes. */
+  private readonly _generatedListId = generatedListIdOf(this._route);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
 
@@ -155,7 +167,18 @@ export class PeopleSheet {
     this._openId.set(null);
   }
 
+  /**
+   * Cancel, Escape, the scrim and the back button all arrive here.
+   *
+   * The basket's whole URL, through `SheetNavigation`, like every other sheet in
+   * the app: a relative `..` climbs one segment of whatever path the sheet
+   * happens to sit on, which is a fact about the route table that changes without
+   * this file being touched, and an ordinary `navigate` pushes, leaving the sheet
+   * one back press from reopening (plan 0031).
+   */
   protected close(): void {
-    void this._router.navigate(['..'], { relativeTo: this._route });
+    void this._sheet.dismiss(
+      basketPath(this._locale(), this._basePath, this._generatedListId())
+    );
   }
 }
