@@ -320,6 +320,36 @@ describe('GetListSheet', () => {
     });
   });
 
+  /**
+   * Plan 0045 section 3.1. The dashboard's History link lives in the shopping list
+   * card's header, so it goes away with the card; somebody whose baskets are all
+   * finished has no card and would otherwise have no route to their own history at all.
+   * This sheet is where the plan puts it, and the test exists because the failure is
+   * invisible: nothing breaks, a page simply becomes unreachable.
+   */
+  describe('the way to the history', () => {
+    it('offers it from the header, even with no active basket to have a card', async () => {
+      const fixture = await render();
+
+      expect(query(fixture, '.history')).not.toBeNull();
+    });
+
+    it('is drawn beside the title rather than beside the submit', async () => {
+      const fixture = await render();
+
+      expect(query(fixture, '.head-row .history')).not.toBeNull();
+    });
+
+    it('is offered even when there is nowhere to draw from', async () => {
+      // The one case where the sheet can do nothing else for you is exactly the case
+      // where looking at what you already have is the useful thing left.
+      const fixture = await render({ zones: [] });
+
+      expect(fixture.componentInstance.noSources()).toBe(true);
+      expect(query(fixture, '.history')).not.toBeNull();
+    });
+  });
+
   describe('the profile row', () => {
     // A chooser with one choice is furniture (plan 0046, section 3.2).
     it('is absent for somebody with one profile', async () => {

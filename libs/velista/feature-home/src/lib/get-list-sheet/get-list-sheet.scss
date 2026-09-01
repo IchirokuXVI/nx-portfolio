@@ -18,6 +18,35 @@
   }
 }
 
+// The title and the History link share a row, so the link sits at the top of the sheet
+// where the eye already is rather than competing with the submit at the bottom.
+.head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+}
+
+// Quiet, and matching the dashboard's own History link, because it is the same control
+// in the one place the card's copy of it is not drawn.
+.history {
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--app-button-radius);
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
 .title {
   margin: 0 0 var(--app-space-hair);
   font-size: var(--app-text-xl);
