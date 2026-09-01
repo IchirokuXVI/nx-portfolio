@@ -528,8 +528,12 @@ describe('ListPage', () => {
 
       await fixture.componentInstance.back();
 
+      // Replacing rather than pushing, because nothing of ours is behind this page in
+      // the spec's history and the walk to the group stands in for it. See
+      // `page-navigation.spec.ts`, where a push put the list back one press away.
       expect(router.navigateByUrl).toHaveBeenCalledWith(
-        `/velista/en/zones/${ZONE_ID}`
+        `/velista/en/zones/${ZONE_ID}`,
+        { replaceUrl: true }
       );
     });
 

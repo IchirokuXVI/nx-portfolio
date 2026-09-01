@@ -43,6 +43,8 @@ interface FakeStore {
   readonly present: WritableSignal<readonly BasketPresenceEntry[]>;
   readonly participants: WritableSignal<readonly BasketParticipant[]>;
   readonly opened: string[];
+  /** Every time the page said the shopper has gone. See the teardown test. */
+  readonly leave: jest.Mock<void, []>;
 }
 
 interface Options {
@@ -107,6 +109,7 @@ async function render(options: Options = {}): Promise<{
     present: signal(options.present ?? []),
     participants: signal(options.participants ?? []),
     opened: [],
+    leave: jest.fn(),
   };
 
   const paramMap = convertToParamMap({ generatedListId: 'basket-saturday' });
@@ -164,6 +167,7 @@ async function render(options: Options = {}): Promise<{
             store.opened.push(id);
             return Promise.resolve();
           },
+          leave: store.leave,
           refresh: () => Promise.resolve(),
         },
       },
@@ -344,5 +348,23 @@ describe('the basket header, live', () => {
     const { store } = await render();
 
     expect(store.opened).toEqual(['basket-saturday']);
+  });
+
+  it('lets the basket go when the screen is destroyed', async () => {
+    // The one test standing between this screen and a participant socket that
+    // outlives it. Both the store and the socket are provided by the basket route,
+    // and a route's environment injector is cached on the route config: Angular
+    // destroys it only under `withExperimentalAutoCleanupInjectors()`, which this app
+    // does not enable. So every `DestroyRef` inside those two services is silent, and
+    // the connection stayed up, holding the room, for the rest of the page's life.
+    // A component's destruction is real, so the assertion belongs here rather than in
+    // a service spec where `TestBed` teardown would flatter it.
+    const { fixture, store } = await render();
+
+    expect(store.leave).not.toHaveBeenCalled();
+
+    fixture.destroy();
+
+    expect(store.leave).toHaveBeenCalledTimes(1);
   });
 });

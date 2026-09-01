@@ -80,7 +80,13 @@ const KNOWN_EVENT_NAMES: ReadonlySet<string> = new Set(REALTIME_EVENT_NAMES);
  * - **Nothing here may import `@angular/core/rxjs-interop`.** It is a secondary entry
  *   point module federation does not dedupe, so `toSignal` and `takeUntilDestroyed`
  *   throw `NG0203` against a perfectly correct DI graph. The signals are written by
- *   hand and the teardown goes through `DestroyRef`.
+ *   hand and the teardown is a plain method call.
+ *
+ * ## What closes it
+ *
+ * {@link BasketStore.leave}, called by the page when the component is destroyed. Not
+ * this class's own `DestroyRef`, which never fires in the running app: see the
+ * constructor.
  */
 // Provided by the basket route, not the app and not root: it is one screen's
 // connection and its lifetime is that screen's (rule D5, plan 0004 section 9).
@@ -144,6 +150,16 @@ export class BasketSocket {
   readonly revoked = this._revoked.asReadonly();
 
   constructor() {
+    // A backstop, and **not** what closes this socket when the shopper leaves. This
+    // class is provided by the basket route, and Angular caches a route's environment
+    // injector on the route config, destroying it only under
+    // `withExperimentalAutoCleanupInjectors()`, which this app does not enable. So in
+    // the running app this hook never fires at all, and it read for a while as though
+    // it did: the connection survived the screen by the whole session, holding the
+    // room and taking a broadcast for a basket nobody was looking at. `BasketPage`
+    // calls `BasketStore.leave()` from its own teardown, which is a component's and
+    // therefore real. This stays for the injectors that *are* destroyed, `TestBed`'s
+    // among them.
     inject(DestroyRef).onDestroy(() => this.close());
   }
 

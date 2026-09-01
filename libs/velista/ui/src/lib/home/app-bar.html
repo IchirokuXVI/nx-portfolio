@@ -1,7 +1,25 @@
 <header [class.bordered]="bordered()" class="bar">
-  <div class="lockup">
-    <lib-brand-wordmark class="wordmark" />
-  </div>
+  <!--
+    The identity is the way back to the dashboard, which is what a lockup in a header
+    is taken to be everywhere else. It is an anchor and not a button so it can be
+    opened in a new tab and so its destination shows in the status bar, and it carries
+    no `aria-label` of its own: the wordmark already names it, and a label that did not
+    contain the visible word would break the visible name.
+
+    Only when the page hands one over. The front door and the dashboard both pass null,
+    because on those two the destination is the page being looked at, and a control
+    that leads nowhere is worse than no control (the same reasoning as the offline
+    mark below).
+  -->
+  @if (homeUrl(); as url) {
+    <a [routerLink]="url" class="lockup lockup-link">
+      <lib-brand-wordmark class="wordmark" />
+    </a>
+  } @else {
+    <div class="lockup">
+      <lib-brand-wordmark class="wordmark" />
+    </div>
+  }
 
   @if (signedIn()) {
     <div class="actions">

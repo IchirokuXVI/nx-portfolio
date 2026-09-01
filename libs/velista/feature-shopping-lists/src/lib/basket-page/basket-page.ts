@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
@@ -226,6 +227,19 @@ export class BasketPage {
 
   constructor() {
     void this._store.open(this._id);
+
+    /**
+     * The socket is closed from **here**, and it has to be.
+     *
+     * `BasketStore` and `BasketSocket` are provided by this route, and a route's
+     * environment injector is cached on the route config: Angular destroys it only
+     * under `withExperimentalAutoCleanupInjectors()`, which this app does not enable.
+     * So a `DestroyRef` reached from either of those services never fires, and the
+     * participant connection outlived the screen by the whole session. This component
+     * is destroyed on leaving for certain, which makes it the only honest place to say
+     * the shopper has gone.
+     */
+    inject(DestroyRef).onDestroy(() => this._store.leave());
   }
 
   protected isBusy(line: BasketLine): boolean {
